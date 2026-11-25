@@ -27,7 +27,8 @@
  * ==============================
  * `schedule_run_report` ends a run, once, from the session serving it. Without one, what the session does decides:
  * an engine that ended, or whose session's phase is IDLE (no SubAgent, `bg_run` job or engine turn executing) with no
- * turn still to answer, is NO_REPORT, which a report from that session still replaces once a person has written to it
+ * turn still to answer and nothing set to wake it (a scheduled wake-up, a RESUME_SESSION watch, an armed retry), is
+ * NO_REPORT, which a report from that session still replaces once a person has written to it
  * (`acceptsLateReport`);
  * a run past its limit is interrupted, RUN_LIMIT; a card nobody
  * answered for two hours interrupts it, APPROVAL_TIMEOUT. Whether the run reached its engine is read from its first
@@ -53,7 +54,7 @@ import { SCHEDULE_COPY, scheduleFill, RunFailureKind, runFailureIs } from '@orbi
 import { Prisma, RunStatus, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
-import { isSessionExecuting } from '../common/session-working';
+import { isSessionExecuting, SESSION_WILL_WAKE_WHERE } from '../common/session-working';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
@@ -746,12 +747,15 @@ export class ScheduleRunsService {
     // executes for it (sessions/session-phase.ts): a dispatched turn, the engine's own turn, a SubAgent (background
     // `delegate` calls included) or a `bg_run` job, silent or not, since a job waiting on a lock writes nothing. A turn
     // not yet answered, such as the wake a job's or SubAgent's end files a moment after its end is reported, holds it
-    // too. Its working time still counts toward RUN_LIMIT above.
+    // too, and so does whatever will wake it without anybody writing (`sessionWillWake`): a `schedule_wakeup`, the
+    // watch a `task_await` or `session_await` leaves, an armed retry. Its working time still counts toward RUN_LIMIT
+    // above.
     const idle = deriveSessionPhase(session) === 'IDLE'
       && opening?.status === 'ANSWERED'
       && (await this.prisma.conversationTurn.count({
         where: { sessionId, status: { in: ['PENDING', 'IN_FLIGHT'] } },
-      })) === 0;
+      })) === 0
+      && (await this.prisma.session.count({ where: { AND: [{ id: sessionId }, SESSION_WILL_WAKE_WHERE] } })) === 0;
     if (idle) return this.fail(runId, 'NO_REPORT', { sessionId });
     if (run.state === 'AWAITING_APPROVAL') return this.moveInProgress(runId, 'AWAITING_APPROVAL', 'RUNNING');
     return 'UNCHANGED';

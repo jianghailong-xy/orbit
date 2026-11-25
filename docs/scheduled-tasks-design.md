@@ -583,8 +583,9 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - The report ends the run. The session's turn may go on, but nothing after it changes the run.
 - A session that ends or settles idle without a report fails the run with `NO_REPORT`. Silence never reads as "no
   change". A session is not idle while one of its `bg_run` jobs (job or watch, not a service) is still running or a
-  turn, such as that job's wake, is still to be answered: a run may end its turn to wait for a job, and its run limit
-  still counts that wait.
+  turn, such as that job's wake, is still to be answered, nor while something is set to wake it (`sessionWillWake`: a
+  `schedule_wakeup` still pending, the RESUME_SESSION watch a `task_await` or `session_await` leaves, an armed retry): a
+  run may end its turn to wait for any of these, and its run limit still counts that wait.
 - NO_REPORT is the server's reading of an idle session, not the agent's word, so it is the one failure a report can
   still replace. Once a person has written to the run's session after it was marked NO_REPORT, a report from that
   session is taken as if it had come in time: the run takes its outcome, the failure it counted is undone, its Waiting
