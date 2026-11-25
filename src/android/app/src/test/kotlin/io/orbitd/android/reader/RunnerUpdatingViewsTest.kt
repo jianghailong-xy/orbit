@@ -1,5 +1,6 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.directory.RunningOverLimit
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
@@ -99,6 +100,66 @@ class RunnerUpdatingViewsTest {
         compose.setContent { OrbitTheme { QueuedFoot {} } }
         assertTrue(compose.onAllNodesWithTag("runner-updating-foot", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Queued").assertExists()
+    }
+
+    private val full = QueuedGate("runner_at_capacity", 16, queuedLimit = 16, queuedHeldByJobs = 0, since = now.minusSeconds(5 * 60L).toString(),
+        runNowAvailable = true)
+
+    private fun openFull(gate: QueuedGate, press: () -> Unit) {
+        compose.setContent { OrbitTheme {
+            RunnerUpdatingFoot(gate, "HPC", now = now, runNow = { RunNowAction(gate, "HPC", 16, 16, pending = false, press = press) })
+        } }
+        compose.onNodeWithTag("runner-updating-foot:reason", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+    }
+
+    /** docs/mocks/queued-run-now ①. */
+    @Test fun aFullRunnersPopoverOffersRunNowWithWhatItDoesUnderIt() {
+        var pressed = 0
+        openFull(full) { pressed++ }
+        assertEquals("HPC is running 16 of 16 sessions. This message is sent as soon as one finishes.\nWaiting 5 min.", text("runner-updating-pop:text"))
+        assertEquals("Starts it as the 17th session on HPC. This turn only; the limit stays 16.", text("run-now:note"))
+        compose.onNodeWithTag("run-now").assertTextEquals("Run now").assertIsEnabled().performClick()
+        assertEquals(1, pressed)
+    }
+
+    /** ③: at the extra cap the button explains, it does not run. */
+    @Test fun aRefusedRunNowIsDisabledOverTheServersSentence() {
+        val refusal = "HPC is already 2 over its limit, the most it can take. Wait, or stop another session."
+        openFull(full.copy(queuedActive = 18, runNowAvailable = false, runNowRefusal = refusal)) {}
+        assertEquals(refusal, text("run-now:note"))
+        compose.onNodeWithTag("run-now").assertIsNotEnabled()
+    }
+
+    @Test fun aServerThatOffersNoRunNowDrawsNoButton() {
+        openFull(full.copy(runNowAvailable = false)) {}
+        compose.onNodeWithTag("runner-updating-pop:text").assertExists()
+        assertTrue(compose.onAllNodesWithTag("run-now").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test fun theUpdatesPopoverHasNoRunNow() {
+        compose.setContent { OrbitTheme { RunnerUpdatingFoot(gate, "HPC", now = now, runNow = { RunNowAction(full, "HPC", 16, 16, false) {} }) } }
+        compose.onNodeWithTag("runner-updating-foot:reason", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertTrue(compose.onAllNodesWithTag("run-now").fetchSemanticsNodes().isEmpty())
+    }
+
+    /** ②. */
+    @Test fun aTurnOverTheLimitReadsRunningWithItsTagWhichExplainsItself() {
+        compose.setContent { OrbitTheme { RunningOverLimitFoot(RunningOverLimit(17, 16, "HPC")) } }
+        compose.onNodeWithText("Running").assertExists()
+        assertEquals("over limit · 17/16", text("over-limit"))
+        compose.onNodeWithTag("over-limit", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertEquals("Started over HPC's limit by you", text("over-limit:hint"))
+    }
+
+    @Test fun theTagSitsUnderTheMessageThatOpenedTheTurnStillRunning() {
+        fun event(type: String, seq: Long, steer: Boolean = false) = io.orbitd.android.core.realtime.RunEvent(type, seq,
+            kotlinx.serialization.json.buildJsonObject { if (steer) put("steer", kotlinx.serialization.json.JsonPrimitive(true)) }, "t$seq")
+        assertEquals(1L, openTurnUserSeq(listOf(event("user", 1), event("assistant", 2), event("user", 3, steer = true))))
+        assertNull(openTurnUserSeq(listOf(event("user", 1), event("turn_end", 2))))
+        assertNull(openTurnUserSeq(emptyList()))
     }
 
     @Test fun onlyATurnWaitingForItsOwnTurnIsHeld() {
