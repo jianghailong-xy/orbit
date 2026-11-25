@@ -2241,6 +2241,13 @@ model Session {
   /// and add their own `kind: 'session'`, so a field called `kind` would be overwritten in the
   /// payload. The column keeps the short name.
   sessionKind          String    @default("CONVERSATION") @map("kind")
+  /// Where the session's turn stands for the runner (migration 1611): QUEUED, IN_FLIGHT, ABANDONED or null. A
+  /// dispatched turn (IN_FLIGHT) holds a runner slot. Until the writers move, a trigger keeps it from the stored word.
+  /// Never sent to a client: withSessionState strips it.
+  turnState            String?   @map("turn_state")
+  /// The session's state, PENDING, RUNNING or IDLE (migration 1611), kept by a trigger from the facts; no writer sets
+  /// it. A payload's `phase` is read by sessions/session-phase.ts.
+  phase                String?
   /// Who opened this conversation (migration 0670, docs/workspace-default-model-design.md §2.2):
   /// PERSON, or the Orbit door that opened it on its own — COORDINATOR, COORDINATOR_JUDGMENT,
   /// TASK_LIST_CONSOLE, WIKI_CHAT, FEISHU, SERVICE_TOKEN, MENTION_REPLY, or ORBIT for a row 0670 knew

@@ -340,7 +340,12 @@ function MotifSamples({ mark }: { mark: ProjectMotifMark }) {
       {mark.samples.map((sample) => (
         <TaskLink key={sample.taskId} className="pdg-fold-sample" taskId={sample.taskId}>
           <span className="pdg-fold-sample-title">{sample.title}</span>
-          <TaskStatusPill status={sample.status} running={sample.running} queued={sample.queued} />
+          <TaskStatusPill
+            status={sample.status}
+            running={sample.running}
+            queued={sample.queued}
+            runReason={sample.runReason}
+          />
         </TaskLink>
       ))}
     </div>
@@ -465,7 +470,12 @@ function GroupNode({ data }: NodeProps<GroupFlowNode>) {
         aria-label={`${data.task.title}, ${taskStatusLabel(live.status, live.running, live.queued)}, ${data.memberCount} subtask${data.memberCount === 1 ? '' : 's'}`}
       >
         <span className="pdg-group-title">{data.task.title}</span>
-        <TaskStatusPill status={live.status} running={live.running} queued={live.queued} />
+        <TaskStatusPill
+          status={live.status}
+          running={live.running}
+          queued={live.queued}
+          runReason={live.runReason}
+        />
       </TaskLink>
       {data.hasOutgoing && (
         <Handle

@@ -29,6 +29,10 @@ import io.orbitd.android.ui.LocalOrbitColors
 internal val DirectorySession.displayFacts: SessionDisplay.Facts get() = SessionDisplay.Facts(phase, released, lastTurnOutcome, waitingOn,
     endReason, workFinished, activity, pendingApprovals, runningBgCount ?: 0)
 
+/** A search hit's facts. A hit carries no approval count: `waitingOn` says who it waits on. */
+internal val SearchHit.displayFacts: SessionDisplay.Facts get() = SessionDisplay.Facts(phase, released, lastTurnOutcome, waitingOn,
+    endReason, workFinished, activity, runningBgCount = runningBgCount ?: 0)
+
 /** The state icon, in the quiet tone of the slot it sits in: a clock for Queued, the row's spinner for Running, an empty circle for Idle. */
 @Composable
 internal fun SessionStateGlyph(state: SessionDisplayState, modifier: Modifier = Modifier) {

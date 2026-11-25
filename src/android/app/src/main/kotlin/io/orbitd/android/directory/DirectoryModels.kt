@@ -155,7 +155,10 @@ data class SessionProjectMembership(val projectId: String, val projectTitle: Str
 @Serializable
 data class SearchHit(val id: String, val title: String, val status: String = "UNKNOWN",
     val runState: String? = null, val lifecycleState: String? = null,
-    val agent: WorkspaceRef? = null, val snippet: String? = null, val matchField: String = "message")
+    val agent: WorkspaceRef? = null, val snippet: String? = null, val matchField: String = "message",
+    /** The session facts and the Background mark's inputs, as [DirectorySession] reads them; all null from an older server. */
+    val phase: String? = null, val released: Boolean? = null, val lastTurnOutcome: String? = null, val waitingOn: String? = null,
+    val endReason: String? = null, val workFinished: Boolean? = null, val activity: String? = null, val runningBgCount: Int? = null)
 @Serializable
 data class SearchResults(val q: String = "", val contentSearched: Boolean = false,
     val hits: List<SearchHit> = emptyList(), val total: Int? = null)

@@ -43,7 +43,7 @@ import {
   type TaskDependencyVisualState,
 } from '../lib/taskDependencyGraph';
 import { useMediaQuery } from '../lib/useMediaQuery';
-import { TaskStatusPill, taskStatusLabel } from './TaskStatusPill';
+import { TaskStatusPill, taskStatusPillText } from './TaskStatusPill';
 import { Dialog } from './ui/Dialog';
 import { Popconfirm } from './ui/Popconfirm';
 import { Tooltip } from './ui/Tooltip';
@@ -169,9 +169,9 @@ const EDGE_DASH: Partial<Record<TaskDependencyVisualState, string>> = {
   failed: '7 4',
 };
 
-function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
+export function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
   const state = getTaskDependencyVisualState(data.task);
-  const label = taskStatusLabel(data.task.status, data.task.running, data.task.queued);
+  const label = taskStatusPillText(data.task);
   return (
     <div
       className={`tdg-node state-${state}${data.isFocus ? ' is-focus' : ''}`}
@@ -198,6 +198,8 @@ function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
           status={data.task.status}
           running={data.task.running}
           queued={data.task.queued}
+          queuedOnHold={data.task.queuedOnHold}
+          runReason={data.task.runReason}
         />
       </button>
       {data.isDirect && !data.isFocus && data.onRemoveDependency && (
