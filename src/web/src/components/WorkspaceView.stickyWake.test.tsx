@@ -378,3 +378,90 @@ describe('the sticky bar over a fact told to the coordinator', { timeout: 60_000
     expect(text('.chat-sticky-text')).toContain('has a revision of completion evidence');
   });
 });
+
+describe('the pill at the top over a turn Orbit opened', { timeout: 60_000 }, () => {
+  // The bar is hidden over a turn Orbit opened, and in a coordinator whose last page is nothing but
+  // such turns the person's own last message was out of reach: the pill offers it, found a page at a
+  // time once the reader has left the tail, and only once it is found.
+  const TOLD = 'From Orbit · project “Runner link v1” has a revision of completion evidence for you to decide';
+  const TAIL = [
+    {
+      seq: 300,
+      type: 'user',
+      payload: {
+        text: TOLD,
+        coordinatorDelivery: {
+          kind: 'EVIDENCE_SUBMITTED',
+          task: { id: TASK, title: 'Pause on the project row' },
+          revision: 1,
+          count: null,
+          deliveredAt: '2026-09-17T06:00:00.000Z',
+        },
+      },
+      turnId: 'turn-delivery',
+      ts: '2026-09-17T06:00:00Z',
+    },
+    { seq: 301, type: 'assistant', payload: { text: 'reading revision 1 of the evidence' }, turnId: 'turn-delivery', ts: '2026-09-17T06:00:20Z' },
+  ];
+  const OLDER = [
+    ...EVENTS.slice(0, 2),
+    ...Array.from({ length: 3 }, (_, i) => ({ seq: 10 + i, type: 'assistant', payload: { text: `step ${i}` }, turnId: 'turn-typed', ts: '2026-09-17T05:10:00Z' })),
+  ];
+
+  beforeEach(() => {
+    vi.mocked(getSessionEventPage).mockImplementation((async (_id: string, opts?: { before?: number }) =>
+      opts?.before == null ? { events: TAIL, hasMore: true } : { events: OLDER, hasMore: false }) as never);
+    // jsdom lays nothing out: every scroller here is a 5000 px transcript in a 500 px view, opened at
+    // its tail, so the top edge's own page load stays out of it.
+    const tops = new WeakMap<Element, number>();
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 5000 });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 500 });
+    Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+      configurable: true,
+      get(this: Element) { return tops.get(this) ?? 4500; },
+      set(this: Element, top: number) { tops.set(this, top); },
+    });
+  });
+  afterEach(() => {
+    for (const key of ['scrollHeight', 'clientHeight', 'scrollTop']) delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
+  });
+
+  const scroller = (): HTMLElement => mounted().querySelector<HTMLElement>('.workspace-sessions:not(.session-col-list)')!;
+  const scrollTo = async (top: number, byReader: boolean): Promise<void> => {
+    const el = scroller();
+    await act(async () => {
+      if (byReader) el.dispatchEvent(new Event('wheel'));
+      el.scrollTop = top;
+      el.dispatchEvent(new Event('scroll'));
+    });
+  };
+  const olderPagesAsked = (): number =>
+    vi.mocked(getSessionEventPage).mock.calls.filter(([, opts]) => (opts as { before?: number } | undefined)?.before != null).length;
+
+  it('loads nothing more while the reader stays at the tail', async () => {
+    await mountTranscript('.coordinator-delivery', false);
+    await scrollTo(4500, false);
+    await act(async () => {});
+
+    expect(olderPagesAsked()).toBe(0);
+    expect(mounted().querySelector('.chat-older-mine')).toBeNull();
+  });
+
+  it('finds the message on an older page once the reader scrolls up, and goes to it when pressed', async () => {
+    await mountTranscript('.coordinator-delivery', false);
+    await scrollTo(4500, false);
+    await scrollTo(2000, true);
+
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
+    expect(olderPagesAsked()).toBe(1);
+    // Still no bar: the turn above the view is Orbit's.
+    expect(mounted().querySelector('.chat-sticky-question')).toBeNull();
+    // The way back to the beginning sits beside it, as an icon that still says what it does.
+    expect(mounted().querySelector('.chat-older-start')?.getAttribute('aria-label')).toBe('Jump to the beginning');
+
+    await act(async () => {
+      mounted().querySelector<HTMLElement>('.chat-older-mine')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(scrolledTo).toEqual([mounted().querySelector('.chat-user[data-seq="1"]')]);
+  });
+});

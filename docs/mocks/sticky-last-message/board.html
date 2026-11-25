@@ -1,0 +1,118 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{--text-1:#1f2329;--text-2:#4e5969;--text-3:#86909c;--border:#e5e6eb;--border-subtle:#eef0f3;--bg-sunken:#f6f7f9;--bg-raised:#fff;--brand:#3370ff;--brand-tint:#e8f0ff}
+*{box-sizing:border-box}
+body{margin:0;background:#eceef2;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:var(--text-1)}
+.board{width:2360px;padding:40px;background:#eceef2}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--text-2);font-size:16px;margin-bottom:28px;line-height:1.6}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{width:740px}
+.tag{font-size:19px;font-weight:700;margin:0 0 4px}
+.tagnote{font-size:14px;color:var(--text-2);margin:0 0 12px;line-height:1.55;min-height:66px}
+.rec{display:inline-block;background:#00b42a;color:#fff;font-size:12px;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.pane{background:#fff;border-radius:10px;border:1px solid #dcdfe6;overflow:hidden;height:560px;display:flex;flex-direction:column;position:relative}
+.hdr{padding:16px 22px 12px;border-bottom:1px solid var(--border-subtle)}
+.hdr .t{font-size:19px;font-weight:700}.hdr .m{font-size:13px;color:var(--text-3);margin-top:6px}
+.chip{display:inline-block;background:#f2f3f5;border-radius:10px;padding:1px 8px;margin-left:6px;color:var(--text-2)}
+.bar{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border-subtle);background:var(--bg-sunken);font-size:13px;color:var(--text-1)}
+.bar .l{font-size:12px;color:var(--text-3);flex:none}.bar .x{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar.loading{color:var(--text-3)}
+.scroll{flex:1;position:relative;padding:18px 22px;overflow:hidden}
+.pills{position:absolute;top:10px;left:0;right:0;text-align:center;z-index:3;display:flex;justify-content:center;gap:8px}
+.pill{display:inline-flex;gap:6px;align-items:center;padding:4px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;color:var(--text-2);font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.pill.new{border-color:var(--brand);color:var(--brand)}
+.card{border:1px solid #c9d8ff;background:#f3f7ff;border-radius:8px;padding:12px 14px;margin:30px 0 14px}
+.card .h{color:var(--brand);font-weight:600;font-size:15px;display:flex;justify-content:space-between}.card .h span{color:var(--text-3);font-weight:400;font-size:12px}
+.card .b{font-size:13px;color:var(--text-2);margin-top:6px}
+.asst{font-size:13.5px;line-height:1.6;color:var(--text-1);margin:10px 0}
+.line{height:9px;background:#eef0f3;border-radius:4px;margin:9px 0}
+.user{margin-left:auto;width:fit-content;max-width:80%;background:var(--brand-tint);border-radius:10px;padding:8px 12px;font-size:13.5px;margin:12px 0}
+.mark{outline:3px solid #f53f3f;outline-offset:2px;border-radius:6px}
+.badge{position:absolute;background:#f53f3f;color:#fff;border-radius:50%;width:24px;height:24px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:9}
+.foot{font-size:13.5px;color:var(--text-2);line-height:1.6;margin-top:12px}
+.foot b{color:var(--text-1)}
+table{border-collapse:collapse;width:100%;font-size:14px;background:#fff;margin-top:30px}
+td,th{border:1px solid #dcdfe6;padding:8px 10px;text-align:left;vertical-align:top;line-height:1.5}th{background:#f6f7f9}
+.notes{display:flex;gap:28px;margin-top:28px}.notes>div{flex:1;background:#fff;border-radius:10px;padding:16px 20px;font-size:14px;line-height:1.65}
+.notes h3{margin:0 0 8px;font-size:16px}
+.todo{background:#fff7e8!important;border:1px solid #ffcf8b}
+code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:#f2f3f5;padding:0 4px;border-radius:3px}
+</style></head><body><div class="board">
+<h1>会话置顶栏：跳回「我上一条消息」</h1>
+<div class="sub">现象：会话默认只加载最后 200 条事件。会话「协调器行滑动交互设计」最后 200 条全是 Orbit 打开的轮次（Evidence to review、任务完成通知……），你最后一条亲手发的消息在窗口之外。<br>
+根因不只是 200 条：按 11-14 的裁定（机器消息不上置顶栏，在它上方时置顶栏隐藏），即使你的消息已经加载，只要视图上方最近的一轮是 Orbit 打开的，置顶栏也会隐藏。所以只多加载历史，置顶栏也回不来。</div>
+
+<div class="row">
+ <div class="col">
+  <div class="tag">① 现状</div>
+  <div class="tagnote">视图上方最近的一轮是 Orbit 打开的（Evidence to review），置顶栏隐藏。只剩「Jump to the beginning」，它一路翻到会话开头，而不是你上一条消息。</div>
+  <div class="pane">
+   <div class="hdr"><div class="t">协调器行滑动交互设计</div><div class="m">Waiting for your reply · Open · 11/22, 02:53 <span class="chip">● 功能扩展</span></div></div>
+   <div class="scroll">
+    <div class="pills"><span class="pill">↑ Jump to the beginning</span></div>
+    <div class="card"><div class="h">Evidence to review <span>11/22 2:40 AM</span></div><div class="b">Task “iOS/macOS: Pause/Resume on the project row” submitted revision 1.</div></div>
+    <div class="asst">Reading revision 1 of the evidence…</div><div class="line" style="width:92%"></div><div class="line" style="width:78%"></div><div class="line" style="width:85%"></div>
+    <div class="card" style="margin-top:18px"><div class="h">Task finished <span>11/22 2:47 AM</span></div><div class="b">Web: Pause/Resume on the project row — landed on main.</div></div>
+    <div class="line" style="width:88%"></div><div class="line" style="width:64%"></div>
+   </div>
+  </div>
+  <div class="foot">你的上一条消息：<b>不在已加载的 200 条里</b>，页面上找不到跳过去的入口。</div>
+ </div>
+
+ <div class="col">
+  <div class="tag">A　置顶栏改为显示你上一条消息 <span class="rec">推荐</span></div>
+  <div class="tagnote">在 Orbit 打开的轮次上方不再隐藏，而是显示你最近一条亲手发的消息（机器消息仍然不上栏，符合 11-14 裁定）。不在窗口内时先显示加载态，后台往前翻页直到找到它；点一下跳过去。</div>
+  <div class="pane">
+   <div class="hdr"><div class="t">协调器行滑动交互设计</div><div class="m">Waiting for your reply · Open · 11/22, 02:53 <span class="chip">● 功能扩展</span></div></div>
+   <div class="bar mark" id="a1"><span class="l">↑ Your question</span><span class="x">Pause 和 Resume 先做服务器和 Web，iOS 等设计图确认后再派</span></div>
+   <div class="scroll">
+    <div class="pills"><span class="pill">↑ Jump to the beginning</span></div>
+    <div class="card"><div class="h">Evidence to review <span>11/22 2:40 AM</span></div><div class="b">Task “iOS/macOS: Pause/Resume on the project row” submitted revision 1.</div></div>
+    <div class="asst">Reading revision 1 of the evidence…</div><div class="line" style="width:92%"></div><div class="line" style="width:78%"></div><div class="line" style="width:85%"></div>
+    <div class="card" style="margin-top:18px"><div class="h">Task finished <span>11/22 2:47 AM</span></div><div class="b">Web: Pause/Resume on the project row — landed on main.</div></div>
+    <div class="line" style="width:88%"></div>
+   </div>
+  </div>
+  <div class="foot">栏里的文字是示例，实际显示你最后一条亲手发的消息。<br><b>找到之前：</b></div>
+  <div class="bar loading" style="border:1px solid #dcdfe6;border-radius:6px;margin-top:6px"><span class="l">↑ Your question</span><span class="x">Loading earlier messages…</span></div>
+  <div class="foot">点栏 → 滚到你那条消息（它上方的消息照常按需加载）。</div>
+ </div>
+
+ <div class="col">
+  <div class="tag">B　置顶栏不变，加一个「Your last message」按钮</div>
+  <div class="tagnote">保留 11-14 的隐藏规则。离开底部时，在「Jump to the beginning」旁边多一个按钮，翻页直到你最近一条消息并停在那里。</div>
+  <div class="pane">
+   <div class="hdr"><div class="t">协调器行滑动交互设计</div><div class="m">Waiting for your reply · Open · 11/22, 02:53 <span class="chip">● 功能扩展</span></div></div>
+   <div class="scroll">
+    <div class="pills"><span class="pill">↑ Jump to the beginning</span><span class="pill new mark">↑ Your last message</span></div>
+    <div class="card"><div class="h">Evidence to review <span>11/22 2:40 AM</span></div><div class="b">Task “iOS/macOS: Pause/Resume on the project row” submitted revision 1.</div></div>
+    <div class="asst">Reading revision 1 of the evidence…</div><div class="line" style="width:92%"></div><div class="line" style="width:78%"></div><div class="line" style="width:85%"></div>
+    <div class="card" style="margin-top:18px"><div class="h">Task finished <span>11/22 2:47 AM</span></div><div class="b">Web: Pause/Resume on the project row — landed on main.</div></div>
+    <div class="line" style="width:88%"></div><div class="line" style="width:64%"></div>
+   </div>
+  </div>
+  <div class="foot">两颗药丸并排浮在顶部；看不到你在找哪条，按了才知道。在底部时两个都不显示（同现状）。</div>
+ </div>
+</div>
+
+<table>
+ <tr><th style="width:20%">情况</th><th>① 现状</th><th>A</th><th>B</th></tr>
+ <tr><td>视图上方最近一轮是你发的，已加载</td><td>栏显示它</td><td>同现状</td><td>同现状</td></tr>
+ <tr><td>视图上方没有任何已加载的轮次（长回答超过 200 条）</td><td>栏显示 Loading，往前翻页后显示它</td><td>同现状</td><td>同现状</td></tr>
+ <tr><td>视图上方最近一轮是 Orbit 打开的（Evidence to review、From Orbit、任务开始/完成）</td><td><b>栏隐藏</b></td><td>栏显示你更早最近一条消息；不在窗口内就先 Loading 再翻页</td><td>栏隐藏；顶部多一个「Your last message」</td></tr>
+ <tr><td>整个会话里你一条都没发过（任务会话）</td><td>栏隐藏</td><td>栏隐藏（翻到开头仍没有就停）</td><td>不显示按钮</td></tr>
+ <tr><td>翻页上限</td><td>—</td><td colspan="2">和 Jump to the beginning 一样最多 30 页，翻完没找到就隐藏/停</td></tr>
+</table>
+
+<div class="notes">
+ <div><h3>会改的文件（A）</h3>
+ <code>src/web/src/components/WorkspaceView.tsx</code> measure()：扫描到 Orbit 轮次时往上找最近一条 <code>.chat-user</code>；找不到且还有更早的页 → 加载态 + loadOlder。<br>
+ <code>src/macos/OrbitKit/…/StickySummary.swift</code>、iOS / macOS 的 recomputeStuck：同一规则（iOS 是参考，三端一起改）。<br>
+ <code>src/android/…</code> 对应的置顶栏逻辑。<br>
+ 测试：<code>WorkspaceView.stickyWake.test.tsx</code> 「over a fact told to the coordinator」改为期待显示上一条消息，加一个「消息在更早一页」的用例；StickySummaryTests 同步。</div>
+ <div class="todo"><h3>待你定</h3>
+ 1. 选 A 还是 B（或都不要，只保留现状）。<br>
+ 2. A 的标签：在 Orbit 轮次上方时仍叫 <b>“↑ Your question”</b>，还是改叫 <b>“↑ Your last message”</b>（因为此时下面的回答其实不是在回答它）？<br>
+ 3. 三端一起改，还是先只改 Web？</div>
+</div>
+</div></body></html>
