@@ -1,5 +1,5 @@
-import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { heldFilter } from '../common/session-release';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import type { PrismaService } from '../prisma/prisma.service';
 import { runnerIsOnline, type RunnerBeats } from './runner-presence';
 
@@ -56,7 +56,7 @@ export interface RunnerWithHolders {
 
 /**
  * How many sessions each runner is running, as its "N of M running" shows it: the distinct sessions that are either
- * assigned to it in a turn (ACTIVE_TURN_STATUSES), or named by its last beat as held by a background job and still open
+ * assigned to it in a turn (the turn state IN_FLIGHT, the slot fact), or named by its last beat as held by a background job and still open
  * and assigned to it. A session both ways counts once. Only a runner online by its presence row's own beat has its
  * holders counted: a stale report, or none (an older runner, a row a crash emptied), counts turns alone, as before.
  */
@@ -76,7 +76,7 @@ export async function runningSessionCounts(
     where: {
       assignedRunnerId: { in: runners.map((r) => r.id) },
       OR: [
-        { status: { in: ACTIVE_TURN_STATUSES } },
+        turnStateFilter(['IN_FLIGHT']),
         ...(held.length > 0 ? [{ ...heldFilter(), OR: held }] : []),
       ],
     },

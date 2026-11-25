@@ -81,7 +81,7 @@ function switchHarness(stored: boolean | null) {
       const { text } = renderRawQuery(args);
       if (/t\."status" = 'PENDING'/.test(text) && /'reload'/.test(text)) return [{ id: SESSION }];
       if (/j\."state" = 'QUEUED'/.test(text)) return [{ runnerId: RUNNER }];
-      if (/s\."status" = 'PENDING'/.test(text) && /SELECT DISTINCT s\."assigned_runner_id"/.test(text)) {
+      if (/\(CASE WHEN s\."finished_at" IS NULL THEN COALESCE\(s\."turn_state", session_turn_state_of_status\(s\."status"\)\) END\) = 'QUEUED'/.test(text) && /SELECT DISTINCT s\."assigned_runner_id"/.test(text)) {
         return [{ runnerId: QUEUED_RUNNER }];
       }
       return [];

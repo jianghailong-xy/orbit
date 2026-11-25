@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Logger } from '@nestjs/common';
-import { Prisma, RunStatus, type ManagedRunner } from '@prisma/client';
+import { Prisma, type ManagedRunner } from '@prisma/client';
 import {
   MANAGED_RUNNER_CAPACITY_UNAVAILABLE,
   MODEL_UNAVAILABLE,
@@ -14,6 +14,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { issueDriveMountCredential, revokeDriveMountCredentials } from '../drive/drive-mount-credential';
 import type { PrismaService } from '../prisma/prisma.service';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import type { ManagedKubeClient } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
 import {
@@ -2253,11 +2254,13 @@ export class ManagedRunnerManager {
           await tx.runner.updateMany({ where: { id: mapping.runnerId, status: { not: 'OFFLINE' } }, data: { status: 'OFFLINE' } });
         }
         if (opts.interruptSessions) {
-          // Reclaim can retain these open checkouts without starting their turns.
+          // Reclaim can retain these open checkouts without starting their turns. Their turns were in flight; the
+          // runner was stopped under them (ABANDONED, beside the word: deploy 2 writes both).
           await tx.session.updateMany({
-            where: { assignedRunnerId: mapping.runnerId, status: RunStatus.RUNNING },
+            where: { assignedRunnerId: mapping.runnerId, ...turnStateFilter(['IN_FLIGHT']) },
             data: {
               status: ABANDONED_TURN_STATUS,
+              turnState: 'ABANDONED',
               error: REPEATED_OOM_REASON,
               lastTurnOutcome: 'INTERRUPTED',
               engineTurnActive: false,

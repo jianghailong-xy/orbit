@@ -9,12 +9,11 @@
  * STORED word: here (`heldSessionWord`, which legacySessionStatus in session-legacy-words.ts reads too, the Prisma
  * filter and the SQL fragment below) and in that projector's SQL twin, and nowhere else. That read goes with the column's writers (task T14).
  *
- * A leaf: it imports nothing of the projects or tasks modules, so every one of them can import it.
+ * A leaf: it imports nothing of the projects or tasks modules, nor of common/, so every one of them can import it
+ * (common/session-release.ts and the slot helpers beside it read their turn states here).
  */
 import { Prisma } from '@prisma/client';
 import { RunStatus } from '@orbit/shared';
-
-import { isHeldStatus } from '../common/session-release';
 
 /**
  * Where a held session's turn stands for the runner (plan §1.3): it waits for a claim, a dispatched turn holds a
@@ -49,7 +48,7 @@ export function heldSessionWord(facts: TurnStateFacts): RunStatus {
   }
   // No turn state: parked, or not yet backfilled. A parked row stores AWAITING_INPUT, so both read the stored word.
   const session = facts;
-  return isHeldStatus(session.status) ? session.status as RunStatus : RunStatus.AWAITING_INPUT;
+  return Object.hasOwn(TURN_STATE_OF_HELD_WORD, session.status) ? session.status as RunStatus : RunStatus.AWAITING_INPUT;
 }
 
 /**

@@ -20,12 +20,6 @@ export interface SessionStatusUses {
 
 export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = {
   'auth/tenant-isolation-fixtures.ts': { writes: 3, alone: 3 },
-  'common/runner-drain-waiting.ts': { reads: 3 },
-  'common/session-generating.ts': { reads: 2, enums: 1 },
-  'common/session-release.ts': { reads: 3, enums: 1 },
-  'common/session-scheduling.ts': { enums: 1 },
-  'common/session-tree-sql.ts': { reads: 5 },
-  'common/session-working.ts': { reads: 5, enums: 1 },
   'deadlock/dependency-revision-fixture.ts': { writes: 1, alone: 1 },
   'deadlock/lock-order-fixture.ts': { writes: 2, alone: 2 },
   'deadlock/orbit-lock-fixture.ts': { reads: 2, writes: 1, alone: 1 },
@@ -36,30 +30,26 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'help/help-ask-reads.ts': { reads: 3, enums: 1 },
   'help/help-ask.ts': { reads: 1 },
   'link-previews/link-previews.service.ts': { reads: 1, enums: 1 },
-  'managed-runners/managed-runner-manager.ts': { reads: 1, writes: 1, alone: 1, enums: 1 },
-  'managed-runners/managed-runner-work.ts': { reads: 2 },
-  'managed-runners/managed-runner.service.ts': { reads: 2 },
-  'metrics/fleet-metrics.ts': { reads: 4 },
+  // Reads none (task T7). The out-of-memory stop writes the word and `turnState` together, as deploy 2 does; T14 takes
+  // it to 0.
+  'managed-runners/managed-runner-manager.ts': { writes: 1 },
   'projects/landing-session.ts': { writes: 2 },
   'projects/session-source.ts': { writes: 1 },
   'providers/account-health.service.ts': { reads: 2 },
-  'providers/account-move-capability.ts': { enums: 1 },
   'providers/active-sessions.ts': { reads: 2 },
   'providers/anthropic-gateway.service.ts': { reads: 1 },
   'providers/pool-login-gateway.service.ts': { reads: 1 },
   'providers/pool-pause.ts': { reads: 1 },
-  'push/push.service.ts': { reads: 4, enums: 1 },
-  'queue/dispatch-pause.service.ts': { reads: 1 },
-  'queue/queue.service.ts': { reads: 8, writes: 2, alone: 2 },
+  'push/push.service.ts': { reads: 3, enums: 1 },
+  // Reads none (task T7): claim, slots and dispatch read the turn state. The claim and its undo write the word and
+  // `turn_state` together, as deploy 2 does; T14 takes these to 0. common/, managed-runners/, runners/ and metrics/ read
+  // none and write none.
+  'queue/queue.service.ts': { writes: 2 },
   // Reads none (task T9). `forceFinalize` writes the word and `turnState` together, as deploy 2 does; T14 takes it to 0.
   'realtime/reaper.service.ts': { writes: 1 },
   // Reads none (task T8). Its runner-driven writers write the word and `turnState` together, as deploy 2 does; T14
   // takes these to 0.
   'runner-api/runner-api.controller.ts': { writes: 9 },
-  'runners/attention-fix.ts': { reads: 2 },
-  'runners/claude-account-swap.ts': { reads: 6 },
-  'runners/runner-background-holders.ts': { reads: 1 },
-  'runners/runners.service.ts': { reads: 6, enums: 1 },
   'schedules/schedule-runs.service.ts': { reads: 9, enums: 1 },
   'session-guests/session-guests.service.ts': { reads: 3, writes: 1, alone: 1, enums: 1 },
   // The reads added after the list was seeded: the one fallback for a held row with no `turn_state` (not yet

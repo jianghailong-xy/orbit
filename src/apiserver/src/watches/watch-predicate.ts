@@ -164,6 +164,7 @@ type WatchSessionFact = Extract<WatchTargetFact, { kind: 'SESSION' }>;
 function workingRow(fact: WatchSessionFact): SessionWorkingRow {
   return {
     status: fact.status as SessionWorkingRow['status'],
+    finishedAt: fact.finishedAt,
     engineTurnActive: fact.engineTurnActive,
     runningSubagents: fact.runningSubagents,
     runningBgJobs: fact.jobs.map((job) => job.id),

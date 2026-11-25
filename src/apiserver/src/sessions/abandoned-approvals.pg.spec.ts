@@ -757,7 +757,7 @@ test('a job card is collected when its job ends, not when the turn does', {
     assert.ok(row, 'the conversation is in this owner’s Open list');
     const session = await db.session.findUniqueOrThrow({
       where: { id: f.sessionId },
-      select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+      select: { id: true, taskId: true, status: true, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
     });
     const shown = await stack.sessions.listApprovals(f.ownerId, f.sessionId, 'PENDING');
     const live = await countLiveApprovals(db as never, session);

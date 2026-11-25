@@ -15,6 +15,7 @@ import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { Prisma, RunStatus, type DeviceToken } from '@prisma/client';
+import { TURN_STATE_SELECT, type TurnStateFacts } from '../sessions/session-turn-state';
 import { accountSubjectNames } from '../providers/account-health-subject';
 import { accountNeedsActionBody } from '../providers/account-health-copy';
 import type { AccountNeedsAction } from '../providers/account-health.service';
@@ -160,8 +161,7 @@ const OUTSIDE_TURN_CARD_SESSIONS: Prisma.SessionWhereInput = {
  * names none while the engine's own turn is generating. A job's card whose job has ended is the reap's, never counted.
  * SubAgent cards are the subagent half's and are not selected here.
  */
-function outsideTurnCards<T extends { backgroundJobId?: string | null; toolUseId?: string | null }>(session: {
-  status: RunStatus;
+function outsideTurnCards<T extends { backgroundJobId?: string | null; toolUseId?: string | null }>(session: TurnStateFacts & {
   engineTurnActive?: boolean | null;
   runningBgShells?: readonly string[] | null;
   approvals?: readonly T[] | null;
@@ -1793,7 +1793,8 @@ export class PushService {
         select: {
           id: true,
           taskId: true,
-          status: true,
+          // The turn state's columns, which isSessionGenerating reads (sessions/session-turn-state.ts).
+          ...TURN_STATE_SELECT,
           engineTurnActive: true,
           runningBgShells: true,
           approvals: {

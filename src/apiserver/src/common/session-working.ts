@@ -1,8 +1,8 @@
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 import { freshRunningBgJobs } from '../sessions/background-job-activity';
-import { sessionHeldIndexedSql } from './session-release';
-import { OPEN_SESSION_STATUSES } from './session-scheduling';
+import { sessionTurnStateSql, turnStateFilter, turnStateOf, type TurnStateFacts } from '../sessions/session-turn-state';
+import { heldFilter, isHeld, sessionHeldSql } from './session-release';
 
 /**
  * The one definition of "is this session working" (docs/session-three-state-design.md §11,
@@ -13,12 +13,17 @@ import { OPEN_SESSION_STATUSES } from './session-scheduling';
  * - **willWake**: nothing is executing, but something will give the session a turn without anybody
  *   sending it a message — a RESUME_SESSION watch it observes, a pending scheduled wake-up, an armed
  *   auto-retry;
- * - **holdsSlot**: a dispatched turn, and nothing wider. What the claim and the runner slot counts
- *   mean (`ACTIVE_TURN_STATUSES`); a background job never blocks dispatch.
+ * - **holdsSlot**: a dispatched turn, and nothing wider: the turn state IN_FLIGHT, the explicit runner-slot fact
+ *   (docs/session-status-retirement-plan.md §1.3). What the claim and the runner slot counts mean; a background job
+ *   never blocks dispatch, and `phase` (RUNNING for a background job too) never decides it.
  *
- * `status` moves only when a turn is dispatched and when the runner reports it complete, so the
- * work outside a turn — `engineTurnActive`, `runningSubagents`, `runningBgJobs` — leaves the row at
- * AWAITING_INPUT for its whole life. Those columns, not the status, say whether it is executing.
+ * The turn state moves only when a turn is dispatched and when the runner reports it complete, so the
+ * work outside a turn — `engineTurnActive`, `runningSubagents`, `runningBgJobs` — leaves the row parked
+ * (held, no turn state) for its whole life. Those columns, not the turn state, say whether it is executing.
+ * "Has not ended" is held: `finished_at IS NULL`.
+ *
+ * The turn state is read through sessions/session-turn-state.ts (`turnStateOf`, `turnStateFilter`,
+ * `sessionTurnStateSql`), which reads a held row's stored word only while its `turn_state` is not yet backfilled.
  *
  * Each question, and each fact it is built from, comes in three forms that answer alike on the same
  * row (session-working.pg.spec.ts holds them to it): a TypeScript predicate over a fetched row, a
@@ -31,9 +36,11 @@ import { OPEN_SESSION_STATUSES } from './session-scheduling';
  * engine's own background shells, which carry no kind at all.
  */
 
-/** The session columns the executing facts read. Absent reads as "not there", as for an old row. */
-export interface SessionExecutionRow {
-  status: RunStatus;
+/**
+ * The session columns the executing facts read: the turn state's (TURN_STATE_SELECT) and the work outside a turn.
+ * An absent execution column reads as "not there", as for an old row.
+ */
+export interface SessionExecutionRow extends TurnStateFacts {
   engineTurnActive?: boolean | null;
   runningSubagents?: readonly string[] | null;
   runningBgJobs?: readonly string[] | null;
@@ -60,20 +67,21 @@ export interface SessionFact<Row> {
   sql: (session: string) => string;
 }
 
-/** The status of a dispatched turn: the only member of `ACTIVE_TURN_STATUSES`. */
-const DISPATCHED_TURN_STATUS = RunStatus.RUNNING;
-
 const nonEmpty = (values: readonly string[] | null | undefined): boolean => (values?.length ?? 0) > 0;
 
-/** A turn dispatched through the inbox is executing: the one fact that holds a runner slot. */
-export const DISPATCHED_TURN: SessionFact<Pick<SessionExecutionRow, 'status'>> = {
-  holds: (row) => row.status === DISPATCHED_TURN_STATUS,
-  where: { status: DISPATCHED_TURN_STATUS },
-  sql: (s) => `${s}."status" = '${DISPATCHED_TURN_STATUS}'::"run_status"`,
+/**
+ * A turn dispatched through the inbox is executing: the one fact that holds a runner slot, the turn state IN_FLIGHT
+ * (what RUNNING said, plan §2.1: F). Its Prisma filter names `finishedAt` and `OR` (turnStateFilter), so it goes in an
+ * `OR` or `AND` list, never spread.
+ */
+export const DISPATCHED_TURN: SessionFact<TurnStateFacts> = {
+  holds: (row) => turnStateOf(row) === 'IN_FLIGHT',
+  where: turnStateFilter(['IN_FLIGHT']),
+  sql: (s) => `${sessionTurnStateSql(s).sql} = 'IN_FLIGHT'`,
 };
 
 /**
- * The engine is generating while `status` stays AWAITING_INPUT: a background-task notification or
+ * The engine is generating while the session stays parked: a background-task notification or
  * the engine's own wake-up restarted the model without passing through the inbox.
  */
 export const ENGINE_TURN: SessionFact<Pick<SessionExecutionRow, 'engineTurnActive'>> = {
@@ -129,29 +137,28 @@ export const ARMED_RETRY: SessionFact<Pick<SessionWakeRow, 'retryAt'>> = {
   sql: (s) => `${s}."retry_at" IS NOT NULL`,
 };
 
-/** Work that runs outside a dispatched turn, which leaves `status` where the last turn left it. */
+/** Work that runs outside a dispatched turn, which leaves the turn state where the last turn left it. */
 const OUTSIDE_TURN_FACTS = [ENGINE_TURN, RUNNING_SUBAGENT, RUNNING_BG_JOB] as const;
 const WAKE_FACTS = [RESUME_WATCH, PENDING_WAKEUP, ARMED_RETRY] as const;
 
-// Raw SQL reads the release column (plan step 4.3), with the held statuses beside it for the readers whose access path
-// is `session_assigned_runner_id_status_idx` (managed runner sleep); the predicate and the Prisma filters above still
-// read the open statuses, which session_release_fact_chk holds to the same rows.
-const openSql = (s: string): string => sessionHeldIndexedSql(s).sql;
+// "Has not ended" is held, the release column (plan step 4.3). A runner's held rows are read through
+// session_runner_held_idx (migration 1628), which answers `finished_at IS NULL` beside the runner (managed runner sleep).
+const openSql = (s: string): string => sessionHeldSql(s).sql;
 
 /**
  * Something is executing for the session: a dispatched turn, or — on a session that has not ended —
  * the engine's own turn, a subagent or a background job. An ended session's sets and flag are
- * cleared as it leaves the open statuses (sessions/running-work.ts), so one left behind is stale and
+ * cleared as it is released (sessions/running-work.ts), so one left behind is stale and
  * is not read.
  */
 export const isSessionExecuting = (row: SessionExecutionRow): boolean =>
   DISPATCHED_TURN.holds(row)
-  || (OPEN_SESSION_STATUSES.includes(row.status) && OUTSIDE_TURN_FACTS.some((fact) => fact.holds(row)));
+  || (isHeld(row) && OUTSIDE_TURN_FACTS.some((fact) => fact.holds(row)));
 
 const executingWhere = (outsideTurn: ReadonlyArray<SessionFact<never>>): Prisma.SessionWhereInput => ({
   OR: [
     DISPATCHED_TURN.where,
-    { status: { in: OPEN_SESSION_STATUSES }, OR: outsideTurn.map((fact) => fact.where) },
+    { ...heldFilter(), OR: outsideTurn.map((fact) => fact.where) },
   ],
 });
 
@@ -167,7 +174,7 @@ export const SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE: Prisma.SessionWhereInput =
 
 /** A session that has not ended with a background job in flight, quiet or not: executing. */
 export const SESSION_RUNNING_BG_JOB_WHERE: Prisma.SessionWhereInput = {
-  status: { in: OPEN_SESSION_STATUSES },
+  ...heldFilter(),
   ...RUNNING_BG_JOB.where,
 };
 
@@ -190,7 +197,7 @@ export function sessionExecutingOutsideTurnSql(session: string, alsoCounting: re
 
 /**
  * Nothing is executing, but something will give the session a turn without a message. Read on any
- * status: a watch, a wake-up and a retry each act on the session whatever it says.
+ * session, held or released: a watch, a wake-up and a retry each act on the session whatever it says.
  */
 export const sessionWillWake = (row: SessionWorkingRow): boolean =>
   !isSessionExecuting(row) && WAKE_FACTS.some((fact) => fact.holds(row));
@@ -206,7 +213,7 @@ export function sessionWillWakeSql(session: string): string {
 }
 
 /** A dispatched turn holds a runner slot; nothing else does. The claim and slot counts mean this. */
-export const sessionHoldsSlot = (row: Pick<SessionExecutionRow, 'status'>): boolean =>
+export const sessionHoldsSlot = (row: TurnStateFacts): boolean =>
   DISPATCHED_TURN.holds(row);
 
 export const SESSION_HOLDS_SLOT_WHERE: Prisma.SessionWhereInput = DISPATCHED_TURN.where;

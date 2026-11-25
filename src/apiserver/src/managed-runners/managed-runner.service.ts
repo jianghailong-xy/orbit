@@ -25,7 +25,8 @@ import {
 } from '@orbit/shared';
 
 import { generateToken, sha256 } from '../common/crypto.util';
-import { heldStatusFilter } from '../common/session-release';
+import { heldFilter } from '../common/session-release';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -452,12 +453,12 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    */
   private async busyWith(runnerId: string, report: StoredManagedWorkload | null): Promise<{ turns: ManagedRunnerBusyTurn[]; backgroundJobs: number }> {
     const running = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runnerId, status: 'RUNNING' },
+      where: { assignedRunnerId: runnerId, ...turnStateFilter(['IN_FLIGHT']) },
       select: { id: true, title: true, startedAt: true },
       orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
     });
     const open = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runnerId, status: heldStatusFilter() },
+      where: { assignedRunnerId: runnerId, ...heldFilter() },
       select: { runningBgShells: true },
     });
     const recorded = open.reduce((sum, s) => sum + s.runningBgShells.length, 0);

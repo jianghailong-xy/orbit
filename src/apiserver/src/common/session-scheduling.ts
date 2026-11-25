@@ -1,13 +1,13 @@
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
+import type { TurnState } from '../sessions/session-turn-state';
 import { HELD_SESSION_STATUSES } from './session-release';
 
 /**
- * A runner slot represents active execution, not a resident (warm) runtime process.
- * Keep this separate from the broader "open/live session" sets used by streaming,
- * cancellation and resumability.
+ * A runner slot represents active execution, not a resident (warm) runtime process: the turn state IN_FLIGHT
+ * (sessions/session-turn-state.ts, common/session-working.ts `sessionHoldsSlot`), never `phase`. Keep this separate
+ * from the broader "open/live session" sets used by streaming, cancellation and resumability.
  */
-export const ACTIVE_TURN_STATUSES: RunStatus[] = [RunStatus.RUNNING];
 
 /** Non-terminal sessions retained across runner restart (active ones plus cold/warm state): the held ones. */
 export const OPEN_SESSION_STATUSES: RunStatus[] = [...HELD_SESSION_STATUSES];
@@ -101,11 +101,20 @@ export const SPAWN_TREE_OUTSTANDING = 50;
 /** A held session parked on a turn that was abandoned before it answered. */
 export const ABANDONED_TURN_STATUS: RunStatus = RunStatus.INTERRUPTED;
 
-/** Queueing work onto an idle interactive session requires a fresh runner slot. */
-export function statusAfterTurnEnqueued(status: RunStatus): RunStatus {
+/**
+ * Queueing work onto an idle interactive session requires a fresh runner slot. Given the word the writer read and
+ * returns the word it writes; the turn state written beside it is that word's (turnStateOfWord,
+ * sessions/session-turn-state.ts), as turnStateAfterTurnEnqueued gives it from a turn state.
+ */
+export function statusAfterTurnEnqueued(status: RunStatus | string): RunStatus {
   return status === RunStatus.AWAITING_INPUT || status === ABANDONED_TURN_STATUS
     ? RunStatus.PENDING
-    : status;
+    : status as RunStatus;
+}
+
+/** statusAfterTurnEnqueued on the turn state (plan §1.4, dispatch): parked or abandoned is queued; the rest stays. */
+export function turnStateAfterTurnEnqueued(turnState: TurnState | null): TurnState {
+  return turnState === null || turnState === 'ABANDONED' ? 'QUEUED' : turnState;
 }
 
 /** Keep an already-held slot only when another executable turn is already queued. */
@@ -113,7 +122,12 @@ export function statusAfterTurnCompleted(hasPendingExecutableTurn: boolean): Run
   return hasPendingExecutableTurn ? RunStatus.RUNNING : RunStatus.AWAITING_INPUT;
 }
 
-/** Losing a runner is fatal only while that runner is actively executing work. */
-export function runnerOfflineIsFatal(status: RunStatus): boolean {
-  return status === RunStatus.RUNNING;
+/** statusAfterTurnCompleted on the turn state: the slot is kept (IN_FLIGHT) or freed (parked, null). */
+export function turnStateAfterTurnCompleted(hasPendingExecutableTurn: boolean): TurnState | null {
+  return hasPendingExecutableTurn ? 'IN_FLIGHT' : null;
+}
+
+/** Losing a runner is fatal only while that runner is actively executing work: a dispatched turn (IN_FLIGHT). */
+export function runnerOfflineIsFatal(turnState: TurnState | null): boolean {
+  return turnState === 'IN_FLIGHT';
 }

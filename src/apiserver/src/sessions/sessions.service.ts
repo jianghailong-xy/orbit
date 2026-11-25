@@ -51,6 +51,7 @@ import {
 } from '../common/session-working';
 import { readOneSessionBackgroundFields, readSessionBackgroundFields, sessionActivitySql } from './task-work-carrier';
 import { LEGACY_STATUS_SELECT, readLandingSettlements, withoutWordFacts } from './session-legacy-words';
+import { TURN_STATE_SELECT, type TurnStateFacts } from './session-turn-state';
 import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
@@ -493,8 +494,11 @@ const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
 /** How long a finished Open-list build answers the reads of its version (`sharedOpenList`). */
 const OPEN_LIST_BUILD_KEEP_MS = 5_000;
 
-/** What `listOverlay` reads a row's overlay from: the row's own columns, as the row query or the probe reads them. */
-type ListOverlayInput = {
+/**
+ * What `listOverlay` reads a row's overlay from: the row's own columns, as the row query or the probe reads them. The
+ * turn state's (TURN_STATE_SELECT's columns) are what isSessionGenerating reads.
+ */
+type ListOverlayInput = TurnStateFacts & {
   id: string;
   status: RunStatus;
   engineTurnActive: boolean | null;
@@ -4681,7 +4685,7 @@ export class SessionsService {
     };
     const rows = await this.prisma.$queryRaw<Probed[]>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
       SELECT
-        s.id, s.status,
+        s.id, s.status, s.finished_at AS "finishedAt", s.turn_state AS "turnState",
         s.engine_turn_active AS "engineTurnActive",
         s.task_id AS "taskId",
         s.running_bg_shells AS "runningBgShells",
@@ -4791,6 +4795,8 @@ export class SessionsService {
       return {
         id: row.id,
         status: row.status,
+        finishedAt: row.finishedAt,
+        turnState: row.turnState,
         engineTurnActive: row.engineTurnActive,
         taskId: row.taskId,
         runningBgShells: row.runningBgShells,
@@ -4853,7 +4859,7 @@ export class SessionsService {
     // Ask, no scheduled run, and a confined token's workspaces.
     const { query } = this.listShape(ownerId, { view: opts.view, confinedTo: opts.confinedTo });
     const members = await this.prisma.$queryRaw<Array<ListOverlayInput & { projectId: string }>>(Prisma.sql`
-      SELECT s.id, s.status,
+      SELECT s.id, s.status, s.finished_at AS "finishedAt", s.turn_state AS "turnState",
              s.engine_turn_active AS "engineTurnActive",
              s.task_id AS "taskId",
              s.running_bg_shells AS "runningBgShells",
@@ -5951,7 +5957,7 @@ export class SessionsService {
       } else {
         await this.createTurn(ownerId, repair.id, { ...message, intent: 'NEXT_TURN' }, {
           coalesce: async (tx, session) =>
-            isHeld(session) && !UNSETTLED_SESSION_STATUSES.includes(session.status)
+            isHeld(session) && !(UNSETTLED_SESSION_STATUSES as readonly string[]).includes(session.status)
               ? null
               : tx.conversationTurn.findFirst({ where: { sessionId: session.id }, orderBy: { seq: 'desc' } }),
         });
@@ -10869,7 +10875,7 @@ export class SessionsService {
   async listApprovals(ownerId: string, id: string, status?: string, toolName?: string): Promise<ApprovalInfo[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, status: true, engineTurnActive: true, runningBgShells: true,
+      select: { id: true, ...TURN_STATE_SELECT, engineTurnActive: true, runningBgShells: true,
         scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } } },
     });
     if (!session) throw new NotFoundException('session not found');
@@ -10894,9 +10900,8 @@ export class SessionsService {
   private async stillBeingAsked<
     T extends { id: string; toolUseId: string | null; backgroundJobId: string | null; subagentRunId?: string | null },
   >(
-    session: {
+    session: TurnStateFacts & {
       id: string;
-      status: RunStatus;
       engineTurnActive: boolean;
       runningBgShells: string[];
     },
