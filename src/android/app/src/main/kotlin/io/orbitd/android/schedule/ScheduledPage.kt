@@ -3,10 +3,10 @@ package io.orbitd.android.schedule
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -284,14 +284,13 @@ private fun ScheduleRenameDialog(store: ScheduledStore, renaming: Renaming, dism
     var draft by rememberSaveable(renaming.id, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(renaming.title, TextRange(0, renaming.title.length)))
     }
-    val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
     val savable = ScheduleDisplay.renameTitle(draft.text, renaming.title) != null
     fun save() {
         if (!savable) return
         val text = draft.text
         dismiss()
-        // On the store's scope: the dialog, and with it this scope, is gone once pressed.
+        // On the store's scope: the dialog is gone once pressed.
         store.renameNow(renaming.id, text, renaming.title)
     }
     AlertDialog(onDismissRequest = dismiss, modifier = Modifier.testTag("schedule-rename-dialog"),
