@@ -1554,6 +1554,8 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     }),
     (of) => of.wikiChatId,
   ),
+  // A wiki chat's read (contract `chat.read`): read as another account's chat, refused as a session this runner does not host.
+  'GET /runner/wiki/read header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {} }), (of) => of.wikiChatId),
   // Another account's card is no card of this chat to replace: answered WIKI_SCHEMA at replaces, as one that names nothing.
   'POST /runner/wiki/drafts body replaces': {
     as: RUNNER,
