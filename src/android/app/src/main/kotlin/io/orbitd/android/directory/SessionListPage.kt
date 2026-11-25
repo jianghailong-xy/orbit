@@ -99,7 +99,8 @@ internal object ScheduledRunsFolderCopy {
 internal object SessionListTime {
     fun format(session: DirectorySession, now: Instant = Instant.now()): String? =
         if (session.isRunning()) session.currentTurnStartedAt?.let { TaskTime.elapsed(it, now) }
-        else (session.listedAt ?: session.createdAt)?.let { WikiDate.relative(it, now) }
+        // The last message, not listedAt: a wake turn leaves the row where it is but still says when it last spoke (owner 2026-11-25).
+        else (session.lastTurnAt ?: session.createdAt)?.let { WikiDate.relative(it, now) }
 }
 
 /**

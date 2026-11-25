@@ -816,6 +816,8 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       target = { kind: 'project', id: projectId };
     }
     const latest = members.reduce((newest, session) => instant(session.listedAt ?? session.createdAt) > instant(newest.listedAt ?? newest.createdAt) ? session : newest);
+    // The member that spoke last dates the row, as on Apple and Android; `latest` only places it.
+    const spoke = members.reduce((newest, session) => instant(session.lastTurnAt ?? session.createdAt) > instant(newest.lastTurnAt ?? newest.createdAt) ? session : newest);
     const motions = opts.runnerOffline ? [] : members.map(opts.motion);
     const needsYou = members.some((session) => lines.get(session.id)?.tone === 'approval');
     const running = motions.includes('spinner');
@@ -833,7 +835,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       coordinator,
       folderId,
       pinnedAt: coordinator?.pinnedAt ?? null,
-      lastTurnAt: latest.lastTurnAt ?? latest.createdAt,
+      lastTurnAt: spoke.lastTurnAt ?? spoke.createdAt,
       listedAt: latest.listedAt ?? latest.createdAt,
       createdAt: coordinator?.createdAt ?? latest.createdAt,
       needsYou,
