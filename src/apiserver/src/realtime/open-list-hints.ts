@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { Observable } from 'rxjs';
 import type { PrismaService } from '../prisma/prisma.service';
 import { readOpenListVersionParts } from '../sessions/open-list-version';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 
 /** How often the account counters are summed, and so the soonest a hint follows a write. */
 export const LIST_CHANGED_COUNTER_EVERY_MS = 1_000;
@@ -236,7 +237,7 @@ export class OpenListHints {
  * workspaces of each OPEN request (rule 3), the same one twice when both peers sit in it, on session_request's
  * partial OPEN indexes; and, for an account whose `session` keys moved since they were last read (`held`: the
  * `session` total each account's were read at; an account not in it was never read), the workspaces holding an
- * Open PENDING row (rule 4), through session_owner_status_task_idx, marked by an `r` row with the `session`
+ * Open queued row (rule 4), through session_owner_held_task_idx, marked by an `r` row with the `session`
  * total they were read at. No branch scans an account's sessions.
  */
 export function openListTickStatement(ids: readonly string[], held: ReadonlyArray<readonly [string, string]>): Prisma.Sql {
@@ -273,7 +274,7 @@ export function openListTickStatement(ids: readonly string[], held: ReadonlyArra
       UNION ALL
       SELECT DISTINCT 'a', x.owner_id::text, x.workspace_id::text, NULL::text
         FROM session x
-       WHERE x.owner_id IN (SELECT owner_id FROM stale) AND x.status = 'PENDING'
+       WHERE x.owner_id IN (SELECT owner_id FROM stale) AND x.finished_at IS NULL AND ${sessionTurnStateSql('x')} = 'QUEUED'
          AND x.workspace_id IS NOT NULL AND ${listed('x')}`;
 }
 
