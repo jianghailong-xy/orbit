@@ -72,32 +72,32 @@ final class UnknownStatusPhaseReadingTests: XCTestCase {
     }
 
     func testTaskRunLabelReadsTheSessionFactsAndFallsBack() throws {
+        // With the facts: the state word from `phase` and the marks beside it (`SessionDisplay`, the approved board).
         let cases: [(String, String)] = [
-            (#""status":"MYSTERY","released":false,"phase":"IDLE""#, "Awaiting reply"),
+            (#""status":"MYSTERY","released":false,"phase":"IDLE""#, "Idle"),
             (#""status":"MYSTERY","released":false,"phase":"RUNNING""#, "Running"),
             (#""status":"MYSTERY","released":false,"phase":"PENDING""#, "Queued"),
-            (#""status":"MYSTERY","released":false,"phase":"IDLE","lastTurnOutcome":"INTERRUPTED""#, "Interrupted"),
-            (#""status":"RUNNING","released":true,"phase":"IDLE","endReason":"task_done""#, "Finished"),
-            (#""status":"RUNNING","released":true,"phase":"IDLE","lastTurnOutcome":"FAILED""#, "Failed"),
-            (#""status":"RUNNING","released":true,"phase":"IDLE","endReason":"ended","lastTurnOutcome":"FAILED""#, "Ended"),
+            (#""status":"MYSTERY","released":false,"phase":"IDLE","lastTurnOutcome":"INTERRUPTED""#, "Idle · Interrupted"),
+            // Finished is `workFinished` alone; an end reason is not re-read into it.
+            (#""status":"RUNNING","released":true,"phase":"IDLE","endReason":"task_done""#, "Idle · Ended"),
+            (#""status":"RUNNING","released":true,"phase":"IDLE","lastTurnOutcome":"FAILED""#, "Idle · Failed"),
+            (#""status":"RUNNING","released":true,"phase":"IDLE","endReason":"ended","lastTurnOutcome":"FAILED""#, "Idle · Ended"),
             // Absent fields: the legacy reading, as before.
             (#""status":"RUNNING""#, "Running"),
             (#""status":"SUCCEEDED""#, "Finished"),
             (#""status":"MYSTERY""#, "Ended"),
             (#""status":"RUNNING","released":true"#, "Running"),
-            // The server sends activity TURN on every queued or running row: a turn, not parked work.
             (#""status":"RUNNING","released":false,"phase":"RUNNING","activity":"TURN""#, "Running"),
             (#""status":"PENDING","released":false,"phase":"PENDING","activity":"TURN""#, "Queued"),
-            // A parked session whose engine runs its own turn stays parked: the status decides before the activity.
-            (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"TURN""#, "Awaiting reply"),
+            // A RUNNING phase is Running whatever runs: the engine's own turn, or a job (which wears its mark).
+            (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"TURN""#, "Running"),
             (#""status":"MYSTERY","released":false,"phase":"RUNNING","activity":"TURN""#, "Running"),
-            (#""status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Awaiting reply"),
-            // A job with no turn keeps the parked wording.
-            (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Awaiting reply"),
-            // A held queued run reads On hold; a finished run reads Finished by workFinished.
-            (#""status":"PENDING","released":false,"phase":"PENDING","activity":"TURN","waitingOn":"HOLD""#, "On hold"),
-            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","workFinished":true"#, "Finished"),
-            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED""#, "Ended"),
+            (#""status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Running · Background"),
+            (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Running · Background"),
+            // A held queued run is Queued with On hold beside it; a finished run wears Finished by workFinished.
+            (#""status":"PENDING","released":false,"phase":"PENDING","activity":"TURN","waitingOn":"HOLD""#, "Queued · On hold"),
+            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","workFinished":true"#, "Idle · Finished"),
+            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED""#, "Idle · Ended"),
         ]
         for (json, label) in cases {
             XCTAssertEqual(ShareMarkdown.runLabel(try run(json)), label, json)
