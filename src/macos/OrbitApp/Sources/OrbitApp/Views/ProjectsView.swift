@@ -2953,7 +2953,8 @@ private struct ProjectDoneSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var record: ProjectDoneRecord?
     @State private var error: String?
-    /// Settings › Translation: the coordinator's judgment and gaps flip back to its own words.
+    /// Settings › Translation: the project's title and criteria, and the coordinator's judgment and
+    /// gaps, flip back to the words they were written in.
     @State private var showOriginal = false
 
     var body: some View {
@@ -2984,8 +2985,8 @@ private struct ProjectDoneSheet: View {
             let digest = store.confirmation?.currentVersion.digest
             let owner = OwnerCardTranslations.ownerLanguage(model.user)
             ProjectDoneCard(
-                subject: subject,
                 // Drawn translated; Record as done sends `row`'s own request, as written.
+                subject: subject.shown(owner: owner, showOriginal: showOriginal),
                 request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),
                 askedAt: row?.waitingSince,
                 confirmedAt: store.confirmation?.confirmation?.confirmedAt,
@@ -3007,7 +3008,8 @@ private struct ProjectDoneSheet: View {
                     upload: { data, name, mime in
                         try await store.uploadConfirmationShot(data, filename: name, mimeType: mime)
                     }),
-                translationFoot: row?.translationFoot(owner: owner, showOriginal: showOriginal) ?? [],
+                translationFoot: OwnerCardTranslations.doneCardFoot(subject: subject, request: row, owner: owner,
+                                                                    showOriginal: showOriginal),
                 onFlipTranslation: { showOriginal.toggle() },
                 notYetRefused: store.doneDeclineRefusedUntranslated,
                 onNotYetAsWritten: notYet(row, sendAsWritten: true))

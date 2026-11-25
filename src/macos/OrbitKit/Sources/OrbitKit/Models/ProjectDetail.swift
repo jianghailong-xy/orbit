@@ -249,6 +249,9 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     /// The coordinator's cardless landing-check changes and the owner's own, newest first (§12.15
     /// P-R1). Nil from a server that predates them, which draws no Coordinator's changes row.
     public var settingChanges: [ProjectSettingChange]? = nil
+    /// Settings › Translation: the title and criteria in the owner's language, which the done cards
+    /// draw (`ProjectDoneSubject.shown`). Nil with translation off and from an older server.
+    public var translation: ProjectTextTranslation? = nil
 
     /// The explicit non-code mark: the page names it where it would name the branch.
     public var nonCode: Bool { followUps.nonCodeMark != nil }
@@ -260,7 +263,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
                            acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef,
                            projectID: id, nonCodeMark: followUps.nonCodeMark,
-                           criteriaMovedOut: followUps.criteriaMovedOut)
+                           criteriaMovedOut: followUps.criteriaMovedOut, translation: translation)
     }
 
     /// Whether the project has been started, read off `startedAt` and off nothing else — not off
@@ -318,7 +321,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         case id, title, status, goal, instructions, createdAt, updatedAt, coordinatorEnabled,
              configRevision, coordinatorSessionId, coordinatorWorkspaceId, acceptanceCriteriaItems, integration, tasksByStatus,
              blockers, startedAt, pausedAt, maxConcurrentTasks, derivedDone, doneBy, doneAt,
-             acceptedGaps, settingChanges
+             acceptedGaps, settingChanges, translation
         case counts = "_count"
     }
 
@@ -356,6 +359,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         // the whole list with it (as the second port on main did; kept when the two were merged).
         settingChanges = ((try? c.decodeIfPresent([LossyDecodable<ProjectSettingChange>].self,
                                                   forKey: .settingChanges)) ?? nil)?.compactMap(\.value)
+        translation = (try? c.decodeIfPresent(ProjectTextTranslation.self, forKey: .translation)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -385,6 +389,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(doneAt, forKey: .doneAt)
         if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
         try c.encodeIfPresent(settingChanges, forKey: .settingChanges)
+        try c.encodeIfPresent(translation, forKey: .translation)
     }
 }
 

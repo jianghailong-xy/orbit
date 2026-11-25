@@ -737,6 +737,9 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     public let integration: ProjectIntegrationSettings?
     /// The non-code mark and the criteria moved out, for the done card (`ProjectDoneFollowUps.swift`).
     public let followUps: ProjectDoneFollowUpFields
+    /// Settings › Translation: the title and criteria in the owner's language, which the done cards
+    /// draw (`ProjectDoneSubject.shown`). Nil with translation off and from an older server.
+    public var translation: ProjectTextTranslation? = nil
 
     /// What the done cards read off this document.
     public var doneSubject: ProjectDoneSubject {
@@ -749,7 +752,7 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
                            acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef,
                            projectID: id, nonCodeMark: followUps.nonCodeMark,
-                           criteriaMovedOut: followUps.criteriaMovedOut)
+                           criteriaMovedOut: followUps.criteriaMovedOut, translation: translation)
     }
     /// How many tasks the project holds — what the confirmation card's condition asks before it
     /// offers to start anything, because "Start the project" is a verb and this is its object.
@@ -818,6 +821,7 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         exceptionEscalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .exceptionEscalationSeconds)
         integration = try? c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
         followUps = (try? ProjectDoneFollowUpFields(from: decoder)) ?? ProjectDoneFollowUpFields()
+        translation = (try? c.decodeIfPresent(ProjectTextTranslation.self, forKey: .translation)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -837,12 +841,13 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         try c.encodeIfPresent(coordinatorSessionId, forKey: .coordinatorSessionId)
         try c.encodeIfPresent(exceptionEscalationSeconds, forKey: .exceptionEscalationSeconds)
         try c.encodeIfPresent(integration, forKey: .integration)
+        try c.encodeIfPresent(translation, forKey: .translation)
     }
 
     enum CodingKeys: String, CodingKey {
         case id, acceptanceCriteriaItems, title, status, coordinatorEnabled, startedAt
         case derivedDone, doneBy, doneAt, acceptedGaps
-        case coordinatorSessionId, exceptionEscalationSeconds, integration
+        case coordinatorSessionId, exceptionEscalationSeconds, integration, translation
         case counts = "_count"
     }
 }

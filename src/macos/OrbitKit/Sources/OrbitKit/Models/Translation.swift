@@ -1134,3 +1134,52 @@ public struct EvidenceTranslation: Codable, Equatable, Sendable {
         try c.encodeIfPresent(gaps, forKey: .gaps)
     }
 }
+
+/// A project's title and its criteria's text in the owner's language (`translation` on
+/// `GET /projects/:id`, @orbit/shared `ProjectTextTranslation`): what "Is this project done?", its
+/// Done when list and the why-not-done card draw. Served only in the owner's current language while
+/// it matches the project's words, and with translation on. `criteria` is keyed by the criterion's
+/// `id`, never by position. Read leniently, like `OwnerCardTranslation`: a field this build cannot
+/// read is one it does not draw.
+public struct ProjectTextTranslation: Codable, Equatable, Sendable {
+    public struct Criterion: Codable, Equatable, Sendable {
+        public var id: String
+        public var text: String
+        public init(id: String, text: String) {
+            self.id = id
+            self.text = text
+        }
+    }
+
+    public var lang: String
+    /// The project's words could not be translated: draw them as the agent wrote them.
+    public var failed: Bool
+    public var title: String?
+    public var criteria: [Criterion]?
+
+    public init(lang: String, failed: Bool = false, title: String? = nil, criteria: [Criterion]? = nil) {
+        self.lang = lang
+        self.failed = failed
+        self.title = title
+        self.criteria = criteria
+    }
+
+    private enum CodingKeys: String, CodingKey { case lang, failed, title, criteria }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lang = (try? c.decodeIfPresent(String.self, forKey: .lang)) ?? ""
+        failed = ((try? c.decodeIfPresent(Bool.self, forKey: .failed)) ?? nil) == true
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil
+        criteria = ((try? c.decodeIfPresent([LossyDecodable<Criterion>].self, forKey: .criteria)) ?? nil)?
+            .compactMap(\.value)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(lang, forKey: .lang)
+        if failed { try c.encode(true, forKey: .failed) }
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(criteria, forKey: .criteria)
+    }
+}
