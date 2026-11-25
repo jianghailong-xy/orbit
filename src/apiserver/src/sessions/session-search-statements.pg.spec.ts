@@ -6,6 +6,7 @@ import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@p
 
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
 import { pgAdapterFor } from '../prisma/prisma-client';
+import { countLiveApprovals, countLiveApprovalsBySession } from './abandoned-approvals';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
@@ -109,6 +110,15 @@ test('a search page costs the same statements for 50 hits as for 5, and each hit
       }
     }
     assert.deepEqual(differences, [], `\n${differences.join('\n')}\n`);
+    // The batch the page is counted with says, session by session, what the one-session count says.
+    const readers = await db.session.findMany({
+      where: { id: { in: large.ids } },
+      select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+    });
+    const batched = await countLiveApprovalsBySession(db as never, readers);
+    for (const reader of readers) {
+      assert.equal(batched.get(reader.id), await countLiveApprovals(db as never, reader), `batched count of ${reader.id}`);
+    }
     // The shapes holding a card wait on the person; the one holding nothing does not.
     const waiting = (fifty.answer.hits as unknown as Array<{ title: string; waitingOn: string | null }>)
       .map((hit) => [Number(hit.title.split(' ').pop()) % 4, hit.waitingOn] as const);

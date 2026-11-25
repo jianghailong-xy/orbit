@@ -431,9 +431,37 @@ export function readByRunningSubagent(
  */
 export async function countLiveApprovals(
   db: Prisma.TransactionClient,
-  session: LiveApprovalReader,
+  session: {
+    id: string;
+    taskId?: string | null;
+    runningBgShells: readonly string[];
+    /** The delegate calls of SubAgents still running: a parked conversation can be holding their cards too.
+     *  Every caller selects it; absent reads as none. */
+    runningSubagents?: readonly string[] | null;
+  } & Parameters<typeof isSessionGenerating>[0],
 ): Promise<number> {
-  return (await countLiveApprovalsBySession(db, [session])).get(session.id) ?? 0;
+  const generating = isSessionGenerating(session);
+  const subagentsUp = (session.runningSubagents?.length ?? 0) > 0;
+  if (!generating && session.runningBgShells.length === 0 && !subagentsUp) return 0;
+  // A conversation that is not generating holds the cards a reader outside its turn is still polling for:
+  // a runner-hosted job's, and a running SubAgent's (docs/subagent-design.md §5.3).
+  const subagentCards = !generating && subagentsUp ? await liveSubagentCards(db, { sessionId: session.id }) : [];
+  if (!generating && session.runningBgShells.length === 0) {
+    return session.taskId ? (await visibleQuestions(db, subagentCards)).length : subagentCards.length;
+  }
+  // A job's card counts only while its job is up, generating or not: its reader is the job, and the
+  // card listing (`SessionsService.stillBeingAsked`) shows it on that fact alone.
+  const where: Prisma.ApprovalWhereInput = { sessionId: session.id, status: 'PENDING',
+    ...(!generating
+      ? { backgroundJobId: { in: [...session.runningBgShells] } }
+      : { OR: [{ backgroundJobId: null }, { backgroundJobId: { in: [...session.runningBgShells] } }] }),
+  };
+  const count = (await db.approval.count({ where })) + subagentCards.length;
+  if (!session.taskId || count === 0) return count;
+  const questions = await db.approval.findMany({ where: { ...where, toolName: 'AskUserQuestion' }, select: { id: true, toolName: true } });
+  const subagentQuestions = subagentCards.filter((card) => card.toolName === 'AskUserQuestion');
+  return count - (questions.length - (await visibleQuestions(db, questions)).length)
+    - (subagentQuestions.length - (await visibleQuestions(db, subagentQuestions)).length);
 }
 
 /** The session columns `countLiveApprovals` reads. */
@@ -449,7 +477,9 @@ export type LiveApprovalReader = {
 /**
  * `countLiveApprovals` for many sessions at once, by id, in a number of statements that does not grow with them: one
  * read of the turn and job cards, one of the SubAgent cards (and their runs), and one of the question holds. A
- * session whose cards nothing could be holding reads nothing. The rule is the one above, and only here.
+ * session whose cards nothing could be holding reads nothing. The rule is the one above, read for a page: the PG specs
+ * that count with `countLiveApprovals` (abandoned-approvals, subagent-approvals, run-question, session-search-statements)
+ * hold the two equal on every shape they build.
  */
 export async function countLiveApprovalsBySession(
   db: Prisma.TransactionClient,
