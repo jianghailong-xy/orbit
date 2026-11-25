@@ -33,6 +33,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { AutoRetryService } from '../sessions/auto-retry.service';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { SessionsService } from '../sessions/sessions.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import {
   RELEASE_FACTS_SELECT,
   releaseFinishedTheWork,
@@ -150,7 +151,8 @@ test('the release questions answer alike in every spelling, and the auto-retry s
     const now = new Date();
 
     // The where clauses of the three queries (sessions/auto-retry.service.ts), with the failure arm given: the module's
-    // filter. Their other halves are copied as they stand.
+    // filter. Their other halves are copied as they stand. The parked arm is on the turn state since task T10 (turnStateFilter([null]):
+    // held with none, a row not yet backfilled by its stored word).
     const NOT_DISPATCH_HELD: Prisma.SessionWhereInput = {
       OR: [{ taskId: null }, { startsTaskWork: false }, { task: { dispatchHold: false } }],
     };
@@ -166,7 +168,7 @@ test('the release questions answer alike in every spelling, and the auto-retry s
         copy: (failed: Prisma.SessionWhereInput) => logged.session.findMany({
           where: {
             retryAt: { lte: now }, deletedAt: null, completedAt: null, sessionKind: 'CONVERSATION',
-            OR: [{ status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null }, failed],
+            OR: [{ ...turnStateFilter([null]), cancelRequestedAt: null }, failed],
             AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
           },
           orderBy: { retryAt: 'asc' }, take: 50, select: { id: true },
@@ -180,7 +182,7 @@ test('the release questions answer alike in every spelling, and the auto-retry s
           where: {
             retryAt: { gt: new Date(now.getTime() + ACCOUNT_RESET_WAIT_MS) }, deletedAt: null, completedAt: null,
             sessionKind: 'CONVERSATION',
-            OR: [{ status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null }, failed],
+            OR: [{ ...turnStateFilter([null]), cancelRequestedAt: null }, failed],
             AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
           },
           orderBy: { retryAt: 'desc' }, take: 50, select: { id: true },
@@ -193,7 +195,7 @@ test('the release questions answer alike in every spelling, and the auto-retry s
         copy: (failed: Prisma.SessionWhereInput) => logged.session.findMany({
           where: {
             retryClaimedAt: { lte: new Date(now.getTime() - RETRY_CLAIM_WINDOW_MS) }, retryAt: null, deletedAt: null,
-            completedAt: null, sessionKind: 'CONVERSATION', OR: [{ status: RunStatus.AWAITING_INPUT }, failed],
+            completedAt: null, sessionKind: 'CONVERSATION', OR: [turnStateFilter([null]), failed],
           },
           orderBy: { retryClaimedAt: 'asc' }, take: 50, select: { id: true },
         }),

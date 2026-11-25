@@ -96,11 +96,13 @@ export function sessionWakeSourceSql(session: string): string {
 export function sessionCarriesTaskSql(session: string): string {
   // Held, never with its turn abandoned (the out-of-memory stop), and a turn queued or in flight or, parked, a wake
   // source (plan §1.4's carrier). `finished_at IS NULL` is the claim index's predicate and the held index's
-  // (`session_owner_held_task_idx`), which the planner matches only by a predicate it can read here.
+  // (`session_owner_held_task_idx`), which the planner matches only by a predicate it can read here. Never NULL:
+  // callers negate it (a paused run to continue is NOT carried), and a parked row's NULL turn state compared with IN
+  // would make the whole predicate NULL, which NOT keeps NULL.
   return `(${session}."starts_task_work" = true
     AND ${session}."deleted_at" IS NULL
     AND ${session}."finished_at" IS NULL
-    AND (${turnSql(session)} IN ('QUEUED', 'IN_FLIGHT')
+    AND (COALESCE(${turnSql(session)}, 'PARKED') IN ('QUEUED', 'IN_FLIGHT')
       OR (${turnSql(session)} IS NULL AND ${sessionWakeSourceSql(session)})))`;
 }
 
