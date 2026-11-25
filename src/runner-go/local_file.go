@@ -34,6 +34,9 @@ var (
 	// driveStaleHomePaths are where earlier runners linked the drive (as Documents, before that Files). They are no
 	// longer the drive: ensureDriveLink removes one that is a link to the mount.
 	driveStaleHomePaths = []string{"/home/orbit/Documents", "/home/orbit/Files"}
+	// driveStaleLinkTargets are the mounts those earlier runners linked to, under the older drivers' roots: a link to
+	// one of them is the earlier runner's too, even in a Pod whose drive is now below /run/orbit-drive.
+	driveStaleLinkTargets = []string{"/run/orbit-documents/drive", "/run/orbit-files/drive"}
 )
 
 // pickDriveRoot is root, or else the first of legacy that is a directory: a Pod of an older CSI driver.
