@@ -48,7 +48,7 @@ test('reaper applies the startup watchdog to OpenCode sessions', async () => {
       null,
       'opencode runtime not initialized',
       {
-        expectedStatuses: [RunStatus.RUNNING],
+        expectedTurnStates: ['IN_FLIGHT'],
         onlyIfNotCancelling: true,
         // The attempt was lost rather than judged, and that is what the project's item records.
         taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
@@ -126,7 +126,7 @@ test('reaper applies the startup watchdog to Antigravity sessions that never rep
       null,
       'antigravity runtime not initialized',
       {
-        expectedStatuses: [RunStatus.RUNNING],
+        expectedTurnStates: ['IN_FLIGHT'],
         onlyIfNotCancelling: true,
         taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
         // Released for a runtime that never came up.

@@ -346,6 +346,8 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.api.activateLeases({ id: w.runnerId, ownerId: w.ownerId } as never, id, { leaseOwner: 'lease', leaseGeneration: '1' } as never),
   'POST /runner/sessions/:id/release-leases': (s, w, id) =>
     s.api.releaseLeases({ id: w.runnerId, ownerId: w.ownerId } as never, id, {} as never),
+  'POST /runner/sessions/:id/return-slot': (s, w, id) =>
+    s.api.returnSlot({ id: w.runnerId, ownerId: w.ownerId } as never, id, {} as never),
   'POST /runner/sessions/:id/orchestration-credential': (s, w, id) =>
     s.api.refreshOrchestrationCredential({ id: w.runnerId, ownerId: w.ownerId } as never, id),
   'POST /runner/sessions/:id/attachments': (s, w, id) =>

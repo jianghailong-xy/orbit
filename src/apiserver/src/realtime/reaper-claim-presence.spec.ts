@@ -49,6 +49,8 @@ function reaperFor(plan: Plan) {
         return { count: 1 };
       },
       count: async () => 0,
+      // The released row, read back for the STATUS event's word; the event is not asserted here.
+      findUnique: async () => null,
     },
     runner: { findUnique: async () => ({ status: 'ONLINE', lastHeartbeatAt: new Date(Date.now() - SLEPT_MS) }) },
     task: { updateMany: async () => ({ count: 1 }), findUnique: async () => null },

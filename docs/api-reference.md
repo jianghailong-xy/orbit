@@ -75,10 +75,10 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `public` | 41 |
 | `user` | 567 |
 | `admin` | 31 |
-| `runner` | 254 |
+| `runner` | 255 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **897** |
+| **Total** | **898** |
 
 ## Public routes
 
@@ -895,7 +895,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.pin` |
 | `POST` | `/api/runner/sessions/:id/finalize` | body `Object`; path `id` | `RunnerApiController.finalize` |
 | `POST` | `/api/runner/sessions/:id/import-result` | body `Object`; path `id` | `RunnerApiController.importResult` |
-| `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
+| `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `draining`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
 | `POST` | `/api/runner/sessions/:id/interrupt` | body `Object`; path `id` | `RunnerSessionsController.interruptSession` |
 | `POST` | `/api/runner/sessions/:id/merge` | body `Object`; path `id` | `RunnerSessionsController.mergeSession` |
 | `GET` | `/api/runner/sessions/:id/merge-receipts` | path `id`; query `limit` | `RunnerSessionsController.listMergeReceipts` |
@@ -908,6 +908,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/sessions/:id/orchestration-credential` | path `id` | `RunnerApiController.refreshOrchestrationCredential` |
 | `POST` | `/api/runner/sessions/:id/release` | body `Object`; path `id` | `RunnerApiController.release` |
 | `POST` | `/api/runner/sessions/:id/release-leases` | body `Object`; path `id` | `RunnerApiController.releaseLeases` |
+| `POST` | `/api/runner/sessions/:id/return-slot` | body `Object`; path `id` | `RunnerApiController.returnSlot` |
 | `POST` | `/api/runner/sessions/:id/scheduled-wakeup` | body `ScheduledWakeupDto`; path `id` | `RunnerApiController.scheduledWakeup` |
 | `POST` | `/api/runner/sessions/:id/source/pin` | body `Object`; path `id` | `RunnerApiController.pinSessionSource` |
 | `POST` | `/api/runner/sessions/:id/subagents` | body `SubagentRunCreateDto`; path `id` | `RunnerSubagentsController.openSubagentRun` |

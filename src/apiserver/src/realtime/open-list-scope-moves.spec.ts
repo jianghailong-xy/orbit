@@ -42,7 +42,7 @@ test('the tick statement keeps pairs in one workspace and reads no LANDING-roote
   const { sql } = openListTickStatement([A], []);
   assert.doesNotMatch(sql, /f\.workspace_id\s*<>\s*t\.workspace_id/, 'pairs in one workspace are dropped');
   assert.doesNotMatch(sql, /LANDING/, 'the tick reads LANDING-rooted rows, a scan of the account');
-  assert.match(sql, /x\.status = 'PENDING'/);
+  assert.match(sql, /x\.finished_at IS NULL AND [\s\S]*x\."turn_state"[\s\S]* = 'QUEUED'/);
 });
 
 test('the hints value declares list_scopes beside the others', () => {

@@ -82,7 +82,7 @@ note "probe started, signal $signal"
 psql_at -c "WITH running AS (
     SELECT s.id FROM \"session\" s
     WHERE s.\"kind\" = 'CONVERSATION' AND s.\"inbox_lease_owner\" IS NOT NULL
-      AND s.\"status\" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+      AND s.\"finished_at\" IS NULL
       AND s.\"assigned_runner_id\" IS NOT NULL),
   depth AS (SELECT r.id, (SELECT count(*) FROM \"run_event\" e WHERE e.\"session_id\" = r.id AND e.\"seq\" > 0) AS n FROM running r)
   SELECT json_build_object('sessions', count(*), 'events', coalesce(sum(n), 0),
@@ -93,7 +93,7 @@ psql_at -c "$db_exec_totals" > "$out/pgss-totals-before.json"
 # Each runner's sessions in its Hello: how many rows one welcome call asks for.
 psql_at -c "WITH per_runner AS (
     SELECT s.\"assigned_runner_id\" AS runner, count(*) AS n FROM \"session\" s
-    WHERE s.\"kind\" = 'CONVERSATION' AND s.\"status\" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+    WHERE s.\"kind\" = 'CONVERSATION' AND s.\"finished_at\" IS NULL
       AND s.\"assigned_runner_id\" IS NOT NULL GROUP BY 1)
   SELECT json_build_object('runners', count(*), 'mean', round(avg(n), 2), 'max', max(n)) FROM per_runner" > "$out/hello-sessions.json"
 
@@ -208,7 +208,7 @@ psql_at -c "$db_exec_totals" > "$out/pgss-totals-after.json"
 psql_at -c "WITH running AS (
     SELECT s.id FROM \"session\" s
     WHERE s.\"kind\" = 'CONVERSATION' AND s.\"inbox_lease_owner\" IS NOT NULL
-      AND s.\"status\" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED') AND s.\"assigned_runner_id\" IS NOT NULL),
+      AND s.\"finished_at\" IS NULL AND s.\"assigned_runner_id\" IS NOT NULL),
   depth AS (SELECT r.id, (SELECT count(*) FROM \"run_event\" e WHERE e.\"session_id\" = r.id AND e.\"seq\" > 0) AS n FROM running r)
   SELECT json_build_object('sessions', count(*), 'events', coalesce(sum(n), 0), 'mean', round(avg(n), 1),
     'min', min(n), 'max', max(n)) FROM depth" > "$out/depth-after.json"

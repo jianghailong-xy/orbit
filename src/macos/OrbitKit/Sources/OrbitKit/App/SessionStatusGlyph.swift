@@ -68,7 +68,10 @@ public struct SessionStatusGlyph: Equatable, Sendable {
              watchingLabel: watching?.word ?? (s.resumesOnItsOwn ? SessionHeader.waitingToResume : nil),
              waitingKind: s.waitingKind,
              underReview: s.confirmationUnderReview != nil,
-             heldLabel: ClaudeRegion.heldWords(s, machine: machine) ?? s.queueWord,
+             // A session a runner update holds reads "On hold" on the wire too (`waitingOn`): the update's own
+             // words outrank it here, as in the row and the header (web `StatusIcon`'s `queuedTitle`).
+             heldLabel: ClaudeRegion.heldWords(s, machine: machine)
+                 ?? (RunnerUpdating.holds(s) ? RunnerUpdating.title(s) : s.queueWord),
              successLabel: s.releasedRunState == .succeeded ? "Finished" : "Succeeded")
     }
 

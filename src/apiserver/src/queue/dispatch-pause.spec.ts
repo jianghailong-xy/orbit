@@ -289,10 +289,12 @@ test('the pause holds what starts a turn — message, shell, reload — and no c
   };
   assert.equal(arms.control.includes(PAUSED), false, 'interrupt, end and withdraw are held');
   assert.equal(arms.steer.includes(PAUSED), false, 'a steer into the running turn is held');
-  assert.ok(arms.reload.includes(`AND NOT ${PAUSED}`), 'a reload goes out while paused');
+  // A fetch that says its runner is draining for an update holds the same arms (runner-update-drain-design.md §7.1).
+  const held = `AND NOT (${PAUSED} OR ?::boolean)`;
+  assert.ok(arms.reload.includes(held), 'a reload goes out while paused');
   const pending = arms.executable.indexOf(`turn."status" = 'PENDING'`);
   const expired = arms.executable.indexOf(`turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now()`);
   assert.ok(pending > expired && expired >= 0);
   assert.equal(arms.executable.slice(0, pending).includes(PAUSED), false, 'a running turn is not re-delivered to its new process');
-  assert.ok(arms.executable.slice(pending).includes(`AND NOT ${PAUSED}`), 'a queued message or shell goes out while paused');
+  assert.ok(arms.executable.slice(pending).includes(held), 'a queued message or shell goes out while paused');
 });
