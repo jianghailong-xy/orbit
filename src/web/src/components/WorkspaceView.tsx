@@ -5030,6 +5030,8 @@ export function WorkspaceView({
   const translationBilingual = bilingualOn(me.data);
   const translationAgentLanguage = agentLanguageOf(me.data);
   const questionTranslations = useQuestionTranslations(selectedId ?? null, approvals, translationIsOn);
+  // Declared further down (it needs the composer); the failed message's Cancel reads it when pressed.
+  const restoreUndeliveredRef = useRef<typeof restoreUndelivered>(null);
   const translationActions = useMemo<TranslationActions>(() => {
     const settle = (res: TranslationActionResponse) =>
       setQueued((current) =>
@@ -5049,12 +5051,24 @@ export function WorkspaceView({
         selectedId
           ? sendTurnAsWritten(selectedId, turnId).then(settle, failed("Couldn't send the message"))
           : Promise.resolve(),
+      // Withdraw a message held because its translation failed: gone from the conversation, and what
+      // the owner wrote (not a translation) goes back into the composer, as a withdrawn queued message does.
+      cancelTurn: (turnId) => {
+        if (!selectedId) return Promise.resolve();
+        const held = queued.find((turn) => turn.turnId === turnId);
+        return cancelQueuedTurn(selectedId, turnId).then(() => {
+          setQueued((current) => current.filter((turn) => turn.turnId !== turnId));
+          const body = held ? (held.translation?.original ?? held.content) : '';
+          restoreUndeliveredRef.current?.(held?.shell ? `!${body}` : body, held?.attachments);
+        }, failed("Couldn't cancel the message"));
+      },
+      canCancelTurn: (turnId) => queued.some((turn) => turn.turnId === turnId && !turn.opening),
       retryReply: (seq) =>
         selectedId
           ? retryReplyTranslation(selectedId, seq).catch(failed("Couldn't retry the translation"))
           : Promise.resolve(),
     };
-  }, [translationIsOn, translationBilingual, translationAgentLanguage, selectedId, setQueued, message]);
+  }, [translationIsOn, translationBilingual, translationAgentLanguage, selectedId, queued, setQueued, message]);
   // Walk the pages back until the session's first message is loaded, then sit at the top.
   //
   // Scrolling up alone can't get there: each page lands with the reader's position anchored
@@ -8647,6 +8661,7 @@ export function WorkspaceView({
           },
     [selectedTrashed, selectedMissing],
   );
+  restoreUndeliveredRef.current = restoreUndelivered;
   // The main checkout behind this console (docs/main-checkout-git-contract.md): its card and result lines in the
   // conversation, its bar above the worktree bar, and the review drawer they open.
   const consoleWorkspace = workspacesForRunner.find((a) => a.id === consoleWorkspaceId);

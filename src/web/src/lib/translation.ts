@@ -32,6 +32,7 @@ export const TRANSLATION_COPY = {
   sendFailed: "Couldn't translate, so it wasn't sent",
   retry: 'Retry',
   sendAsWritten: 'Send as written',
+  cancel: 'Cancel',
   replyPending: 'Translates when the reply is done',
   replyFailed: "Couldn't translate this reply",
   // "Show both languages" (docs/mocks/session-translation/02-bilingual.png).
