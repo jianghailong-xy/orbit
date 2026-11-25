@@ -113,6 +113,12 @@ import {
 } from './criteria-pending-decisions';
 import { CRITERIA_CHANGE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
+import {
+  PROJECT_TEXT_FIELDS,
+  projectTextDigest,
+  type StoredProjectTextTranslation,
+  usableProjectTextTranslation,
+} from './project-text-translation';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import { type CriteriaDecisionReply, sendCriteriaDecisionReply } from './criteria-decision-reply';
 import {
@@ -1990,6 +1996,62 @@ export class ProjectsService {
   }
 
   /**
+   * Queue the translation of a project's title and its criteria's text into the owner's language
+   * (sessions/card-translation.ts, project-text-translation.ts), kept in project_text_translation with the digest of
+   * the words it was made from. A stored one made from the words the project still has, in this language, is left
+   * alone; one made from older words is replaced. Once written, the project is announced changed, as an edit of it
+   * is, so the clients read the document again. Returns at once: true when it queued one.
+   */
+  queueProjectTextTranslation(ownerId: string, projectId: string, langs: TranslationLanguages): boolean {
+    // What read() saw, so write() attaches the ids and the digest of exactly the words that were translated.
+    let ids: string[] = [];
+    let texts: string[] = [];
+    let digest = '';
+    return queueOwnerCardTranslation({
+      key: `project-text:${projectId}`,
+      read: async () => {
+        const project = await this.prisma.project.findFirst({
+          where: { id: projectId, ownerId },
+          select: {
+            title: true,
+            acceptanceCriterionDefinitions: { orderBy: { ordinal: 'asc' }, select: { id: true, text: true } },
+            textTranslation: { select: { translation: true } },
+          },
+        });
+        if (!project) return null;
+        const criteria = project.acceptanceCriterionDefinitions;
+        ids = criteria.map((criterion) => criterion.id);
+        texts = criteria.map((criterion) => criterion.text);
+        digest = projectTextDigest(project.title, criteria);
+        const stored = (project.textTranslation?.translation ?? null) as { sourceDigest?: unknown } | null;
+        return {
+          source: { title: project.title, criteria: texts.map((text) => ({ text })) },
+          fields: PROJECT_TEXT_FIELDS,
+          translation: stored?.sourceDigest === digest ? stored : null,
+        };
+      },
+      write: async (translation) => {
+        const translated = translation as { criteria?: Array<{ text?: string }> };
+        const stored = {
+          ...translation,
+          ...(translated.criteria
+            ? { criteria: translated.criteria.map((entry, at) => ({ id: ids[at], text: entry.text ?? texts[at] })) }
+            : {}),
+          sourceDigest: digest,
+        } as StoredProjectTextTranslation;
+        const value = stored as unknown as Prisma.InputJsonValue;
+        await this.prisma.projectTextTranslation.upsert({
+          where: { projectId },
+          create: { projectId, ownerId, translation: value },
+          update: { translation: value },
+        });
+        return true;
+      },
+      published: () => this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, projectId),
+    }, langs);
+  }
+
+  /**
    * ── THE DECISION DOOR ──────────────────────────────────────────────────────────────────────
    *
    * The account owner answering one held criteria proposal. `APPROVE` applies the edit that was
@@ -2953,6 +3015,8 @@ export class ProjectsService {
       moveRecord,
       rulings,
       settingChanges,
+      langs,
+      storedTextTranslation,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -3019,7 +3083,19 @@ export class ProjectsService {
       readLiveRulings(this.prisma, ownerId, id),
       // And the coordinator's cardless landing-check changes, newest first (§12.15 P-R1): one statement.
       readSettingChanges(this.prisma, ownerId, id),
+      // Settings › Translation (migration 1600): the owner's languages, one statement (none with no translator
+      // configured), and the stored translation of the title and criteria, one statement by primary key.
+      translationLanguages(this.prisma, ownerId),
+      this.prisma.projectTextTranslation.findUnique({ where: { projectId: id }, select: { translation: true } }),
     ]);
+    // Served only in the owner's current language and while made from the words the project has now; otherwise one
+    // is queued (decision 1A), and this read serves none.
+    const textTranslation = usableProjectTextTranslation(
+      storedTextTranslation?.translation,
+      langs,
+      projectTextDigest(project.title, project.acceptanceCriterionDefinitions),
+    );
+    if (langs && !textTranslation) this.queueProjectTextTranslation(ownerId, id, langs);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
       landingBranchesFor(codebase),
@@ -3075,6 +3151,8 @@ export class ProjectsService {
       rulings,
       // The coordinator's cardless landing-check changes, newest first, each one the owner can revert.
       settingChanges,
+      // The title and criteria in the owner's language (ProjectTextTranslation); absent with translation off.
+      ...(textTranslation ? { translation: textTranslation } : {}),
       blockers,
       integration: {
         ...projectIntegrationView(codebase, project.exceptionEscalationSeconds, project),

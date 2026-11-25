@@ -503,6 +503,23 @@ export interface OwnerCardTranslation {
 }
 
 /**
+ * A project's title and its acceptance criteria's text in the owner's language (`translation` on `GET /projects/:id`):
+ * what the "Is this project done?" card, the project page's Done when list and the why-not-done card draw. Served only
+ * in the owner's current language, while it matches the project's current title and criteria, and with translation
+ * on; otherwise absent, and the server queues a new one. Stored in project_text_translation; the project's own fields
+ * stay exactly what the agent wrote. A criterion's `verificationMethod` is not translated.
+ */
+export interface ProjectTextTranslation {
+  lang: TranslationLanguage;
+  /** The project's words could not be translated: draw them as the agent wrote them. Nothing else is set. */
+  failed?: true;
+  /** The project's `title`. */
+  title?: string;
+  /** Each criterion's `text`, keyed by the criterion's `id` (`acceptanceCriteriaItems[].id`), in ordinal order. */
+  criteria?: Array<{ id: string; text: string }>;
+}
+
+/**
  * A completion-evidence revision's `claim` and `gaps` in the owner's language (`translation` on a
  * pending evidence judgment). `gaps` goes index for index with the envelope's. Absent until it is
  * translated, and on every revision translation is off for.
