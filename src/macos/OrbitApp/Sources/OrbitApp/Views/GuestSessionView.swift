@@ -468,19 +468,53 @@ private struct GuestConversationPage: View {
 
     // MARK: Head
 
+    /// The title and who shared it, then the status; the marks of a narrow window go under the title.
     private var head: some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(SharedWithMe.firstLine(conversation.title))
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(GuestCopy.sharedBy(conversation.owner))
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 10) {
+                headTitle.frame(minWidth: 120, idealWidth: 160, maxWidth: .infinity, alignment: .leading)
+                headBadges
             }
-            Spacer(minLength: 8)
-            statusPill
+            VStack(alignment: .leading, spacing: 6) {
+                headTitle
+                headBadges
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var headTitle: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(SharedWithMe.firstLine(conversation.title))
+                .font(.headline)
+                .lineLimit(1)
+            Text(GuestCopy.sharedBy(conversation.owner))
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    /// The status, then, with the session facts, its marks and Completed for a filed session
+    /// (web `SharedSessionStatus`), and the Guest badge.
+    private var headBadges: some View {
+        HStack(spacing: 6) {
+            if let state = SessionDisplay.state(conversation.state.displayFacts) {
+                statePill(state)
+                SessionMarkPills(marks: SessionDisplay.marks(conversation.state.displayFacts) ?? [])
+                if conversation.state.completed {
+                    Text("Completed")
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.35), lineWidth: 0.5))
+                }
+            } else {
+                statusPill
+            }
             Text(GuestCopy.guestBadge)
                 .font(.orbitMeta.weight(.semibold))
                 .padding(.horizontal, 7)
@@ -488,10 +522,23 @@ private struct GuestConversationPage: View {
                 .background(Capsule().fill(Color.accentColor.opacity(0.14)))
                 .foregroundStyle(Color.accentColor)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
     }
 
+    /// The state icon and word from `phase` (`SessionDisplay`), blue while Running only.
+    private func statePill(_ state: SessionDisplayState) -> some View {
+        HStack(spacing: 5) {
+            StatusGlyphView(glyph: state.glyph)
+                .accessibilityHidden(true)
+            Text(state.word).font(.orbitLabel)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill((state == .running ? Color.blue : .gray).opacity(0.12)))
+        .accessibilityElement(children: .combine)
+        .fixedSize()
+    }
+
+    /// The pill an older server's session draws.
     private var statusPill: some View {
         let state = conversation.state
         return HStack(spacing: 5) {
