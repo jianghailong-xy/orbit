@@ -546,7 +546,8 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		asyncWg.Add(1)
 		go func(turnID string) {
 			defer asyncWg.Done()
-			reqCtx, cancel := context.WithTimeout(workerCtx, codexInterruptTimeout)
+			deadline := time.Now().Add(codexInterruptTimeout)
+			reqCtx, cancel := context.WithDeadline(workerCtx, deadline)
 			defer cancel()
 			_, err := app.request(reqCtx, "turn/interrupt", map[string]interface{}{"threadId": threadID, "turnId": turnID})
 			if err != nil && workerCtx.Err() != nil {
@@ -558,6 +559,14 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				logln("codex turn/interrupt failed for", job.SessionID+":", err)
 				if errors.Is(err, context.DeadlineExceeded) {
 					err = fmt.Errorf("Codex did not confirm it within %s", codexInterruptTimeout)
+				} else if awaitCodexTurnEnd(workerCtx, &activeMu, &stop, turnID, deadline) {
+					// Refused because the turn ended on its own: its end answered the Stop
+					// (finalizeActive, or the hook for a turn Codex started itself), with the
+					// marker if it ended interrupted. No failure to tell; nothing left waiting.
+					takeCodexStop(&activeMu, &stop, "", true)
+					return
+				} else if workerCtx.Err() != nil {
+					return
 				}
 			}
 			if orbitTurnID, ok := takeCodexStop(&activeMu, &stop, "", true); ok {
@@ -901,7 +910,10 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			plan := planCodexStop(&activeMu, &active, &stop)
 			switch {
 			case plan.idle:
+				// Nothing was stopped, which is not the Interrupted marker's to say — but the
+				// person who pressed Stop still gets an answer.
 				logln("stop for", job.SessionID, "found no codex turn running")
+				emit(evSystem, codexStopNothingRunningPayload())
 			case plan.beforeStart:
 				// Codex never had the turn: finalizing it interrupted is the confirmation.
 				finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})

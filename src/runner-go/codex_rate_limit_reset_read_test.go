@@ -696,13 +696,15 @@ func runFakeCodexAppServer(dir string) int {
 // fakeCodexInterruptAnswer is how the fake answers one turn/interrupt (answerInterruptsWith): with
 // Result, or with Error, or — Silent — not at all; after WaitFor, a file in its dir the test writes
 // (releaseInterrupt), if it names one; and followed by Frames, as Codex follows a turn it stopped
-// with that turn's turn/completed.
+// with that turn's turn/completed — or preceded by them, FramesFirst, as a turn that ended on its
+// own just before the interrupt reached it.
 type fakeCodexInterruptAnswer struct {
-	Result  map[string]interface{}   `json:"result,omitempty"`
-	Error   string                   `json:"error,omitempty"`
-	Silent  bool                     `json:"silent,omitempty"`
-	WaitFor string                   `json:"waitFor,omitempty"`
-	Frames  []map[string]interface{} `json:"frames,omitempty"`
+	Result      map[string]interface{}   `json:"result,omitempty"`
+	Error       string                   `json:"error,omitempty"`
+	Silent      bool                     `json:"silent,omitempty"`
+	WaitFor     string                   `json:"waitFor,omitempty"`
+	Frames      []map[string]interface{} `json:"frames,omitempty"`
+	FramesFirst bool                     `json:"framesFirst,omitempty"`
 }
 
 // answerInterruptsWith lets the fake take turn/interrupt: answers[n] is how it answers the (n+1)th.
@@ -747,7 +749,14 @@ func fakeCodexInterrupt(dir string, id interface{}, n int) (served, ok bool) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	var out []byte
+	var out, frames []byte
+	for _, frame := range answer.Frames {
+		line, _ := json.Marshal(frame)
+		frames = append(append(frames, line...), '\n')
+	}
+	if answer.FramesFirst {
+		out = append(out, frames...)
+	}
 	if !answer.Silent {
 		reply := map[string]interface{}{"id": id}
 		if answer.Error != "" {
@@ -758,11 +767,10 @@ func fakeCodexInterrupt(dir string, id interface{}, n int) (served, ok bool) {
 			reply["result"] = map[string]interface{}{}
 		}
 		line, _ := json.Marshal(reply)
-		out = append(line, '\n')
-	}
-	for _, frame := range answer.Frames {
-		line, _ := json.Marshal(frame)
 		out = append(append(out, line...), '\n')
+	}
+	if !answer.FramesFirst {
+		out = append(out, frames...)
 	}
 	if _, err := os.Stdout.Write(out); err != nil {
 		return false, true

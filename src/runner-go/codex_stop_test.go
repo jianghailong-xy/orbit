@@ -45,6 +45,9 @@ type codexStopSession struct {
 	cursor string
 	events []RunEvent
 	stops  int
+	// hold, when set, is called with every event the session emits before it is recorded, on the
+	// goroutine emitting it: a test holds the notification reader on one with it.
+	hold func(kind string, payload map[string]interface{})
 }
 
 // newCodexStopSession starts a session whose thread/start is followed by sessionFrames, whose Orbit
@@ -80,8 +83,11 @@ func newCodexStopSession(t *testing.T, sessionFrames []map[string]interface{}, t
 	}
 	emit := func(kind string, payload map[string]interface{}) {
 		s.mu.Lock()
-		turnID := s.cursor
+		turnID, hold := s.cursor, s.hold
 		s.mu.Unlock()
+		if hold != nil {
+			hold(kind, payload)
+		}
 		record(turnID, kind, payload)
 	}
 	setTurn := func(turnID string) { s.mu.Lock(); s.cursor = turnID; s.mu.Unlock() }
@@ -216,10 +222,13 @@ func isStopFailure(e RunEvent) bool {
 	return e.Type == evError && strings.HasPrefix(message, "could not stop the current turn: ")
 }
 
-func shortenCodexInterruptTimeout(t *testing.T) {
+func shortenCodexInterruptTimeout(t *testing.T, to ...time.Duration) {
 	t.Helper()
 	saved := codexInterruptTimeout
 	codexInterruptTimeout = 300 * time.Millisecond
+	if len(to) > 0 {
+		codexInterruptTimeout = to[0]
+	}
 	t.Cleanup(func() { codexInterruptTimeout = saved })
 }
 
@@ -365,5 +374,78 @@ func TestCodexStopThatFailsOrIsNotConfirmedWritesAVisibleError(t *testing.T) {
 			default:
 			}
 		})
+	}
+}
+
+// A turn/interrupt Codex refuses because the turn already ended on its own is no failed stop: the
+// turn ended, and the transcript says nothing of a stop that did not take — in whichever order the
+// refusal and the turn's turn/completed are read. The notification reader is held on the turn's
+// last words for a moment, inside the window a refusal waits, so that the refusal is in hand
+// before the turn's end is, as it is whenever the reader is behind.
+func TestCodexStopRefusedForATurnThatEndedOnItsOwnWritesNoFailure(t *testing.T) {
+	const window = time.Second
+	for name, framesFirst := range map[string]bool{"ended then refused": true, "refused then ended": false} {
+		t.Run(name, func(t *testing.T) {
+			shortenCodexInterruptTimeout(t, window)
+			s := newCodexStopSession(t, nil, [][]map[string]interface{}{codexRunningTurn()}, fakeCodexInterruptAnswer{
+				Error: "no active turn to interrupt", FramesFirst: framesFirst,
+				Frames: []map[string]interface{}{
+					{"method": "item/agentMessage/delta", "params": map[string]interface{}{"threadId": codexStopThread, "delta": " finishing up"}},
+					{"method": "turn/completed", "params": map[string]interface{}{
+						"threadId": codexStopThread, "turn": map[string]interface{}{"id": "turn-fake-session", "status": "completed"},
+					}},
+				},
+			})
+			s.startTurn()
+			s.mu.Lock()
+			s.hold = func(kind string, payload map[string]interface{}) {
+				if kind == evTextDelta && payload["text"] == " finishing up" {
+					time.Sleep(150 * time.Millisecond)
+				}
+			}
+			s.mu.Unlock()
+
+			s.stop()
+			if req := s.completedTurn(10 * time.Second); req.Status != stSucceeded {
+				t.Fatalf("the turn that ended on its own completed %q, want %q", req.Status, stSucceeded)
+			}
+			// Past the window a refusal waits in, however it went.
+			time.Sleep(window + 300*time.Millisecond)
+			for _, e := range s.snapshot() {
+				if isStopFailure(e) {
+					t.Fatalf("a stop refused for a turn that had ended on its own was reported as failed: %s", describeRunEvents(s.snapshot()))
+				}
+			}
+			if n := s.count(evInterrupt); n != 0 {
+				t.Fatalf("a turn that ended on its own was marked Interrupted: %s", describeRunEvents(s.snapshot()))
+			}
+		})
+	}
+}
+
+// A Stop with neither an Orbit turn nor a Codex turn running still answers in the transcript: a
+// line that there was no running turn to stop — not the Interrupted marker, and not a turn/interrupt
+// addressed to nothing.
+func TestCodexStopWithNothingRunningSaysSo(t *testing.T) {
+	s := newCodexStopSession(t, nil, nil)
+	s.waitFor("the session to start", 30*time.Second, func(e RunEvent) bool {
+		return e.Type == evSystem && e.Payload["subtype"] == "init"
+	})
+
+	s.stop()
+	s.waitFor("the transcript to say there was nothing to stop", 5*time.Second, func(e RunEvent) bool {
+		notice, _ := e.Payload["notice"].(string)
+		return e.Type == evSystem && strings.Contains(notice, "no running turn to stop")
+	})
+	if n := s.count(evInterrupt); n != 0 {
+		t.Fatalf("a Stop that stopped nothing was marked Interrupted: %s", describeRunEvents(s.snapshot()))
+	}
+	if got := s.interrupts(); len(got) != 0 {
+		t.Fatalf("a Stop with nothing running sent turn/interrupt: %v", got)
+	}
+	for _, e := range s.snapshot() {
+		if isStopFailure(e) {
+			t.Fatalf("a Stop with nothing running reported a failure: %s", describeRunEvents(s.snapshot()))
+		}
 	}
 }

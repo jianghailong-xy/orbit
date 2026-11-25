@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,18 @@ type codexStopState struct {
 	// started itself.
 	waiting     bool
 	orbitTurnID string
+	// lastEnded is the Codex turn whose turn/completed came last, and ended is closed, then replaced,
+	// each time one comes: a Stop Codex refused waits on them for its turn's own end.
+	lastEnded string
+	ended     chan struct{}
+}
+
+// codexStopNothingRunningNotice answers a Stop that found no turn running, in place of the
+// Interrupted marker: nothing was stopped, and the person who pressed Stop is told so.
+const codexStopNothingRunningNotice = "There was no running turn to stop."
+
+func codexStopNothingRunningPayload() map[string]interface{} {
+	return map[string]interface{}{"noticeKind": "codex-stop-nothing-running", "provider": providerCodex, "notice": codexStopNothingRunningNotice}
 }
 
 // codexStopPlan is what one Stop does now.
@@ -118,6 +131,14 @@ func trackCodexRunningTurn(threadID string, msg codexRPCMessage, activeMu *sync.
 		id := firstString(turn, "id")
 		activeMu.Lock()
 		defer activeMu.Unlock()
+		stop.lastEnded = id
+		if id == "" {
+			stop.lastEnded = stop.running
+		}
+		if stop.ended != nil {
+			close(stop.ended)
+		}
+		stop.ended = make(chan struct{})
 		if stop.running != "" && id != "" && id != stop.running {
 			return false, false
 		}
@@ -125,4 +146,32 @@ func trackCodexRunningTurn(threadID string, msg codexRPCMessage, activeMu *sync.
 		return true, strings.ToLower(firstString(turn, "status")) == "interrupted"
 	}
 	return false, false
+}
+
+// awaitCodexTurnEnd waits until Codex has reported codexTurnID ended, or deadline passes or ctx
+// ends, and says whether it ended. A turn/interrupt Codex refused because the turn was already
+// ending on its own is no failed stop, and that turn's turn/completed can be read just before the
+// refusal or just after it.
+func awaitCodexTurnEnd(ctx context.Context, activeMu *sync.Mutex, stop *codexStopState, codexTurnID string, deadline time.Time) bool {
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	for {
+		activeMu.Lock()
+		if stop.lastEnded == codexTurnID {
+			activeMu.Unlock()
+			return true
+		}
+		if stop.ended == nil {
+			stop.ended = make(chan struct{})
+		}
+		ended := stop.ended
+		activeMu.Unlock()
+		select {
+		case <-ended:
+		case <-timer.C:
+			return false
+		case <-ctx.Done():
+			return false
+		}
+	}
 }
