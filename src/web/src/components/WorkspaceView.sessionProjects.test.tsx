@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { conversationProjectPage, setConversationProjectPage } from '../lib/conversationProjectPage';
 import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -121,13 +122,22 @@ let remoteRows: Array<ReturnType<typeof row>> = [];
 let projects: Array<ReturnType<typeof project>> = [];
 let folders: Array<typeof FOLDER> = [];
 let listCalls: string[] = [];
-let location = '';
+/** The router's own address. */
+let address = '';
+/** Where the console is: its address, and beside a conversation the project page the console keeps
+ *  (lib/conversationProjectPage), spelled as a list's address spells it. A conversation's address names
+ *  no project page itself (owner 2026-11-25); `address` is what a copied link holds. */
+const shown = (): string => {
+  const kept = conversationProjectPage();
+  if (!kept || !/^\/(?:sessions\/[^/?]+|projects\/[^/?]+\/landings)(?:\?|$)/.test(address)) return address;
+  return `${address}${address.includes('?') ? '&' : '?'}project=${kept.project}${kept.completed ? '&view=completed' : ''}`;
+};
 let routerNavigate: NavigateFunction;
 
 function LocationProbe() {
   const l = useLocation();
   routerNavigate = useNavigate();
-  location = `${l.pathname}${l.search}`;
+  address = `${l.pathname}${l.search}`;
   return null;
 }
 const mounted = (): HTMLDivElement => {
@@ -168,8 +178,8 @@ async function settle(): Promise<void> {
  *  never see it. This checks between short scopes instead. */
 async function untilAt(path: string): Promise<void> {
   const deadline = Date.now() + 20_000;
-  while (location !== path && Date.now() < deadline) await settle();
-  expect(location).toBe(path);
+  while (shown() !== path && Date.now() < deadline) await settle();
+  expect(shown()).toBe(path);
 }
 async function mount(
   ready: () => void = () => expect(projectRows()).toHaveLength(1),
@@ -226,7 +236,8 @@ beforeEach(() => {
   projects = [project()];
   folders = [];
   listCalls = [];
-  location = '';
+  address = '';
+  setConversationProjectPage(null);
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.mocked(apiModule.getSessionEventPage).mockReset();
@@ -432,8 +443,8 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     await mount();
     await click(projectRow(), 'the project entry');
     await until(() => expect(mounted().querySelector('.session-project-column')).not.toBeNull());
-    expect(location.split('?')[0]).toBe(`/sessions/${COORDINATOR.id}`);
-    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBeTruthy();
+    expect(shown().split('?')[0]).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(new URLSearchParams(shown().split('?')[1]).get('project')).toBeTruthy();
     expect(mounted().querySelector('.session-project-page')).toBeNull();
     expect(projectRows()).toHaveLength(1);
   });
@@ -717,16 +728,16 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     const column = (): Element | null => mounted().querySelector('.session-project-column');
     await until(() => expect(column()).not.toBeNull());
     // The member opens with its project's column beside it, and the list stays this workspace's.
-    await until(() => expect(location.split('?')[0]).toBe(`/sessions/${TASK.id}`));
-    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(encodeId(PROJECT_ID));
+    await until(() => expect(shown().split('?')[0]).toBe(`/sessions/${TASK.id}`));
+    expect(new URLSearchParams(shown().split('?')[1]).get('project')).toBe(encodeId(PROJECT_ID));
     expect(titles()).toEqual(THREE);
     // ✕ folds the column; the address keeps the project so the title bar's button can bring it back.
     await click(column()!.querySelector('.session-folder-back'), 'the column ✕');
     await until(() => expect(column()).toBeNull());
-    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(encodeId(PROJECT_ID));
+    expect(new URLSearchParams(shown().split('?')[1]).get('project')).toBe(encodeId(PROJECT_ID));
     await until(() => expect(titles()).toEqual(THREE));
     await click(sessionRow('Build the package').querySelector('.session-title'), 'the member’s title');
-    await until(() => expect(location.split('?')[0]).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(shown().split('?')[0]).toBe(`/sessions/${TASK.id}`));
     expect(column()).toBeNull();
   });
 
@@ -735,15 +746,15 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
     await mount(() => expect(titles()).toEqual(THREE));
     await press('ArrowDown');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}`));
     expect(sessionRow('Build the package').classList.contains('active')).toBe(true);
     expect(titles()).toEqual(THREE);
     await press('ArrowDown');
-    await until(() => expect(location).toBe(`/sessions/${OLDER.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${OLDER.id}`));
     await press('ArrowUp');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}`));
     await press('ArrowUp');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
     expect(listCalls.some((p) => p.includes(`workspaceId=${OTHER_WORKSPACE_ID}`))).toBe(false);
   });
 
@@ -778,9 +789,9 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     await mount(() => expect(titles()).toEqual(['Loose conversation', 'Project Alpha', 'Older conversation']));
     expect(preview()?.textContent).toBe('No coordinator');
     await press('ArrowDown');
-    await until(() => expect(location).toBe(`/sessions/${OLDER.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${OLDER.id}`));
     await press('ArrowUp');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
   });
 
   it('opens the coordinator from its entry in the coordinator’s own workspace', async () => {
@@ -789,7 +800,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     expect(titles()).toEqual(['Loose conversation', 'Project Alpha']);
     // Wider than a phone, stepping onto the project's row opens its column beside the coordinator, as a click does.
     await press('ArrowDown');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${encodeId(PROJECT_ID)}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${encodeId(PROJECT_ID)}`));
   });
 
   it('stays on a folder’s page when the arrow keys open a coordinator with a question for the owner', async () => {
@@ -802,8 +813,8 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     await mount(() => expect(projectRows()).toHaveLength(1), `/sessions/${BELOW.id}`);
     expect(titles()).toEqual(['Project Alpha', 'Older conversation']);
     await press('ArrowUp');
-    await until(() => expect(location.split('?')[0]).toBe(`/sessions/${COORDINATOR.id}`));
-    const search = new URLSearchParams(location.split('?')[1]);
+    await until(() => expect(shown().split('?')[0]).toBe(`/sessions/${COORDINATOR.id}`));
+    const search = new URLSearchParams(shown().split('?')[1]);
     expect(search.get('item')).toBe(ITEM_ID);
     expect(search.get('folder')).toBeNull();
     expect(mounted().querySelector('.session-folder-title')?.textContent).toBe(FOLDER.name);
@@ -832,7 +843,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
         ? held.then(() => fixtureApi(path, ...rest))
         : fixtureApi(path, ...rest)) as unknown as typeof apiModule.api);
     await mount(() => expect(titles()).toEqual(['Project Alpha', 'Older conversation']), `/workspaces/${here.workspaceId}`);
-    expect(location).toBe(`/workspaces/${here.workspaceId}`);
+    expect(shown()).toBe(`/workspaces/${here.workspaceId}`);
     await act(async () => answer());
     await untilAt(`/sessions/${TASK.id}`);
     expect(titles()).toEqual(['Build the package', 'Older conversation']);

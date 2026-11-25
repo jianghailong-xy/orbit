@@ -100,6 +100,7 @@ import {
 } from '../lib/transcriptDeepLink';
 import { plainPreview } from '../lib/plainPreview';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
+import { setConversationProjectPage, useConversationProjectPage } from '../lib/conversationProjectPage';
 import {
   type ComponentProps,
   type Dispatch,
@@ -2608,7 +2609,13 @@ export function WorkspaceView({
   // docs/mocks/project-sessions-column board 5), or null while it is closed. The sheet draws the same
   // page the column does, from the same reads, so while it is open it is the page's project.
   const [sheetProjectId, setSheetProjectId] = useState<string | null>(null);
-  const addressProjectId = routeId(searchParams.get('project'));
+  // A conversation's address names no list page, its project's included (owner 2026-11-25): there the
+  // page is lib/conversationProjectPage's, and a list's own address keeps it as `?project=`.
+  const conversationRoute = !!selectedId || !!landingsProjectId;
+  const urlProject = searchParams.get('project');
+  const urlProjectCompleted = searchParams.get('view') === 'completed';
+  const storedProjectPage = useConversationProjectPage();
+  const addressProjectId = routeId(conversationRoute ? storedProjectPage?.project : urlProject);
   useEffect(() => { setSheetProjectId(null); }, [selectedId, isMobile]);
   const openProjectId = (isMobile ? sheetProjectId : null) ?? addressProjectId;
   // Latest selectedId, readable from async callbacks (loadOlder) to bail if the user has
@@ -2649,12 +2656,53 @@ export function WorkspaceView({
     showsConversation(window.location.pathname) ? undefined : { paneFromList: true };
   const arrivedFromList = (): boolean =>
     (window.history.state?.usr as { paneFromList?: boolean } | null)?.paneFromList === true;
-  // Where `?project=` draws the project's sessions page (owner 2026-11-11,
+  // Where the project page draws the project's sessions page (owner 2026-11-11,
   // docs/mocks/project-sessions-column): at phone width it still takes the list's place; wider, the
   // list stays the workspace's and the page is a column at the conversation's right edge.
   const listProjectId = isMobile ? addressProjectId : null;
   const columnProjectId = isMobile ? null : openProjectId;
-  const projectView = listProjectId ? (searchParams.get('view') === 'completed' ? 'completed' : 'open') : null;
+  const projectView = listProjectId
+    ? ((conversationRoute ? storedProjectPage?.completed : urlProjectCompleted) ? 'completed' : 'open') : null;
+  // A list's address hands its project page on to the conversation opened from it. A link that still
+  // names one on a conversation (an older link, the sidebar's) is read once, and the address drops it.
+  useLayoutEffect(() => {
+    const fromUrl = urlProject ? { project: urlProject, completed: urlProjectCompleted } : null;
+    if (!conversationRoute) {
+      setConversationProjectPage(fromUrl);
+      return;
+    }
+    if (fromUrl) setConversationProjectPage(fromUrl);
+  }, [conversationRoute, urlProject, urlProjectCompleted]);
+  // The router drops a navigation made before its own effects run, so the address is put right in an
+  // effect of its own.
+  const urlNamesProjectPage = !!urlProject || searchParams.has('view');
+  useEffect(() => {
+    if (!conversationRoute || !urlNamesProjectPage) return;
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('project');
+      next.delete('view');
+      return next;
+    }, { replace: true });
+  }, [conversationRoute, urlNamesProjectPage, setSearchParams]);
+  // The project page shown in place: the address on a list, the store beside a conversation.
+  const setProjectPage = (projectId: string | null, completed = false, replace = false): void => {
+    if (conversationRoute) {
+      setConversationProjectPage(projectId ? { project: encodeId(projectId), completed } : null);
+      return;
+    }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (projectId) next.set('project', encodeId(projectId));
+      else next.delete('project');
+      if (projectId && completed) next.set('view', 'completed');
+      else next.delete('view');
+      return next;
+    }, { replace });
+  };
+  // The project page a conversation about to open shows, wherever the console is now.
+  const carryProjectPage = (projectId: string): void =>
+    setConversationProjectPage({ project: encodeId(projectId), completed: false });
   // Installed-PWA / standalone is the only mode where ⌘N actually reaches the page
   // (a normal tab hands it to the browser). Gate the on-button shortcut hint on it.
   const isStandalone = useMediaQuery('(display-mode: standalone)');
@@ -3187,7 +3235,7 @@ export function WorkspaceView({
   // page. A conversation's address does not (owner 2026-11-25): a copied `/sessions/<id>` has to
   // open the same way anywhere, so there the page is the console's own, and a conversation the page
   // does not list takes the list to where it is filed (the effect after `listedSessions`).
-  const pageInUrl = !selectedId && !landingsProjectId;
+  const pageInUrl = !conversationRoute;
   const urlFolder = searchParams.get('folder');
   const [conversationPage, setConversationPage] = useState<string | null>(urlFolder);
   if (pageInUrl && conversationPage !== urlFolder) setConversationPage(urlFolder);
@@ -3909,36 +3957,22 @@ export function WorkspaceView({
   });
   const scheduledRuns = (scheduledRunsQ.data ?? []).filter((row) =>
     row.runSource === 'SCHEDULE' && row.workspace?.id === scopeWorkspaceId);
-  // Where a session opened from the project's page lives: the page goes along, in the list on a
-  // phone and in the column beside the conversation wider.
+  // The project's page on a list's own address (a phone's list): beside a conversation the console
+  // keeps it instead (lib/conversationProjectPage).
   const projectSearch = openProjectId
     ? `?project=${encodeId(openProjectId)}${listProjectId && effectiveView === 'completed' ? '&view=completed' : ''}` : '';
   const listSearch = listProjectId
     ? `${projectSearch}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : folderSearch;
-  // A conversation's address names no list page (`pageInUrl` above): only the project page beside it.
-  const conversationSearch = listProjectId ? projectSearch : '';
-  // The project each project row of the list stands for, by its coordinator, and the project of each
-  // member row marked with one (a member whose coordinator runs in another workspace).
-  const listedSessionProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
-    entry.kind === 'project'
-      ? entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : []
-      : entry.projectMark ? [[entry.id, entry.projectMark.projectId] as const] : [])), [folderListing]);
   // The project each project row of the list stands for, by its coordinator alone.
   const listedCoordinatorProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
     entry.kind === 'project' && entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : [])), [folderListing]);
-  // Wider than a phone an open column follows the selection (owner 2026-11-11, board 3; 2026-11-13): a
-  // member of its project keeps it, a project row's coordinator or another project's member switches it
-  // to that project, and a session in no project closes it. With no column open, a project row's own
-  // click or the arrow keys onto it (`stepSession`) open one.
-  const searchFor = useCallback((id: string): string => {
-    if (isMobile || !openProjectId) return conversationSearch;
-    if (allProjectMembers.some((s) => s.id === id)) return projectSearch;
-    const rowProjectId = listedSessionProjects.get(id);
-    return rowProjectId ? `?project=${encodeId(rowProjectId)}` : conversationSearch;
-  }, [isMobile, conversationSearch, openProjectId, allProjectMembers, projectSearch, listedSessionProjects]);
-  const sessionPath = useCallback((id: string, search?: string) => `/sessions/${encodeId(id)}${search ?? searchFor(id)}`,
-    [searchFor]);
-  const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }, search = searchFor(session.id)) => {
+  // A conversation's address is the session alone. Wider than a phone an open column follows the
+  // selection (owner 2026-11-11, board 3; 2026-11-13; the column effect below): a member of its project
+  // keeps it, a project row's coordinator or another project's member switches it to that project, and
+  // a session in no project closes it. With no column open, a project row's own click or the arrow keys
+  // onto it (`stepSession`) open one.
+  const sessionPath = useCallback((id: string, search = '') => `/sessions/${encodeId(id)}${search}`, []);
+  const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }, search = '') => {
     const item = [...(session.ownerItems ?? [])]
       .filter((candidate) => candidate.itemId)
       .sort((a, b) => {
@@ -3947,11 +3981,11 @@ export function WorkspaceView({
         return (Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at)
           - (Number.isNaN(bt) ? Number.MAX_SAFE_INTEGER : bt);
       })[0];
-    // A session waiting on the owner opens at that item's card, and the list's page goes along too.
+    // A session waiting on the owner opens at that item's card.
     return item?.itemId
       ? `${sessionItemHref(session.id, item.itemId)}${search.replace(/^\?/, '&')}`
       : sessionPath(session.id, search);
-  }, [sessionPath, searchFor]);
+  }, [sessionPath]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
@@ -4040,7 +4074,7 @@ export function WorkspaceView({
   const sections = listProjectId ? projectSections : workspaceSections;
   // Beside a conversation of the project, or its Landings window; never over a new session's draft.
   const showProjectColumn = !!columnProjectId && (!!selectedId || !!landingsProjectId);
-  // Folded by hand, the column hides and ?project= stays, so the title bar's button brings it back.
+  // Folded by hand, the column hides and its project page stays, so the title bar's button brings it back.
   // Too narrow, it is folded by itself unless the button asked for it; that fold is not a hand fold, so
   // the column comes back once the window is wide enough.
   const projectColumnOpen = showProjectColumn && !projectColumnFolded && (!projectColumnCrowds || projectColumnOnDemand);
@@ -4112,21 +4146,17 @@ export function WorkspaceView({
       const membership = selectedSession?.projectMembership;
       if (membership?.projectId === columnProjectId) return;
       if (!columnEntered.current) {
-        setSearchParams((current) => {
-          const next = new URLSearchParams(current);
-          if (membership) next.set('project', encodeId(membership.projectId));
-          else next.delete('project');
-          next.delete('view');
-          return next;
-        }, { replace: true });
+        setProjectPage(membership?.projectId ?? null, false, true);
         return;
       }
     }
     const target = pageCoordinator ?? projectMembers[0];
-    if (target) navigate(sessionPath(target.id, projectSearch), { replace: true });
+    if (!target) return;
+    carryProjectPage(columnProjectId);
+    navigate(sessionPath(target.id), { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setProjectPage and carryProjectPage are rebuilt each render
   }, [columnProjectId, landingsProjectId, composingRoute, projectSessionsQ.isSuccess, completedProjectSessionsQ.isSuccess,
-    selectedId, allProjectMembers, selectedSession, selectedMissing, pageCoordinator, projectMembers, navigate, sessionPath,
-    projectSearch, setSearchParams]);
+    selectedId, allProjectMembers, selectedSession, selectedMissing, pageCoordinator, projectMembers, navigate, sessionPath]);
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
   // server sort — Completed arrives ordered by completion time but buckets by last activity,
@@ -4221,9 +4251,8 @@ export function WorkspaceView({
       // Wider than a phone, stepping onto a project row opens its column beside the coordinator, as
       // the row's click does, even with none open (owner 2026-11-14).
       const rowProjectId = isMobile ? undefined : listedCoordinatorProjects.get(target.id);
-      navigate(rowProjectId
-        ? sessionItemPath(target, `?project=${encodeId(rowProjectId)}`)
-        : sessionItemPath(target));
+      if (rowProjectId) carryProjectPage(rowProjectId);
+      navigate(sessionItemPath(target));
       return true;
     },
     [orderedSessions, selectedId, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects],
@@ -9036,33 +9065,18 @@ export function WorkspaceView({
     setMenuOpenId(null);
     if (!isMobile) {
       if (openId) {
-        navigate(`/sessions/${encodeId(openId)}?project=${encodeId(projectId)}`, { state: stampFromList() });
+        carryProjectPage(projectId);
+        navigate(`/sessions/${encodeId(openId)}`, { state: stampFromList() });
         return;
       }
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.set('project', encodeId(projectId));
-        next.delete('view');
-        return next;
-      });
+      setProjectPage(projectId);
       return;
     }
-    navigateWithPaneSlide('push', () => setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.set('project', encodeId(projectId));
-      if (effectiveView === 'completed') next.set('view', 'completed');
-      else next.delete('view');
-      return next;
-    }), { swapsPane: false });
+    navigateWithPaneSlide('push', () => setProjectPage(projectId, effectiveView === 'completed'), { swapsPane: false });
   };
   const leaveProjectSessions = (): void => {
     setView(effectiveView);
-    navigateWithPaneSlide('pop', () => setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete('project');
-      next.delete('view');
-      return next;
-    }), { swapsPane: false });
+    navigateWithPaneSlide('pop', () => setProjectPage(null), { swapsPane: false });
   };
   // The title bar's Project sessions button (owner 2026-11-11, boards 2-4): it folds and unfolds the
   // column of the open conversation's project, and opens that column where the address names none.
@@ -9078,12 +9092,7 @@ export function WorkspaceView({
       return;
     }
     foldProjectColumn(false);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.set('project', encodeId(titleBarProjectId));
-      next.delete('view');
-      return next;
-    });
+    setProjectPage(titleBarProjectId);
   };
   const startNewFolder = (): void => setFolderEdit({ id: null, draft: '', error: null, saving: false });
   // New Folder… and Rename… save on Return (or when the field is left with a name in it); an empty
@@ -10387,7 +10396,7 @@ export function WorkspaceView({
       )}
       <ProjectMergeStrip key={`merge:${projectId}`} projectId={projectId}
         onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
-          navigate(sessionPath(pageCoordinator.id, projectSearch), { state: stampFromList() })) : null} />
+          navigate(sessionPath(pageCoordinator.id), { state: stampFromList() })) : null} />
       <ProjectStaleDoneRow view={pageOpenItemsQ.data} />
       <ProjectDoneDeclineRow items={pageOpenItemsQ.data} />
     </>
@@ -10467,7 +10476,7 @@ export function WorkspaceView({
     sec.key === 'Landings' && landingsSummary && pageProjectId ? (
       <SessionProjectLandings key={sec.key} summary={landingsSummary}
         onOpen={() => navigateWithPaneSlide('push', () => navigate(
-          `/projects/${encodeId(pageProjectId)}/landings${projectSearch}`, { state: stampFromList() },
+          `/projects/${encodeId(pageProjectId)}/landings`, { state: stampFromList() },
         ))} />
     ) : (
     <section key={sec.key} className={pageProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
@@ -10714,11 +10723,11 @@ export function WorkspaceView({
               // in the open conversation's place, so ← still returns to the list behind it (board 5).
               if (pageProjectId && sheetProjectId) {
                 setSheetProjectId(null);
-                navigate(sessionItemPath(actionSession, conversationSearch), { replace: true, state: window.history.state?.usr });
+                navigate(sessionItemPath(actionSession), { replace: true, state: window.history.state?.usr });
                 return;
               }
               navigateWithPaneSlide('push', () =>
-                navigate(sessionItemPath(actionSession, pageProjectId ? projectSearch : undefined), { state: stampFromList() }),
+                navigate(sessionItemPath(actionSession), { state: stampFromList() }),
               );
             }}
           >
