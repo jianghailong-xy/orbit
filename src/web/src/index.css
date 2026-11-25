@@ -2829,15 +2829,15 @@ button.toast--pill:focus-visible {
 }
 
 /* shared column grid: check | status | title | assignee. The status column fits a run's pill with its mark beside it
-   ("Queued" + "On hold", docs/mocks/session-display-three-states). */
+   ("Running" + "Background" is the widest, docs/mocks/session-display-three-states). */
 .orbit-tasklist {
-  --cols: 28px 152px minmax(160px, 1fr) 160px;
+  --cols: 28px 180px minmax(160px, 1fr) 160px;
   border-top: 1px solid var(--border-subtle);
 }
 /* Detail panel open, or every row shares one assignee → drop the assignee column so the
    title keeps its width. */
 .orbit-tasklist.no-assignee {
-  --cols: 28px 152px minmax(160px, 1fr);
+  --cols: 28px 180px minmax(160px, 1fr);
 }
 /* Multi-select checkbox column (header + per row). */
 .task-check {
