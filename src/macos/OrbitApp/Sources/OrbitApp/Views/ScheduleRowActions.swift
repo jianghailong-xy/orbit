@@ -28,6 +28,7 @@ struct ScheduleRowActions {
     private typealias SC = ScheduleCopy
 
     init(_ kind: ScheduleRowKind, model: AppModel, scheduled: ScheduledModel,
+         askRename: @escaping (ScheduleView) -> Void,
          askDelete: @escaping (ScheduleView) -> Void, askStop: @escaping (ScheduleRunView) -> Void,
          openTask: @escaping (String) -> Void) {
         switch kind {
@@ -49,6 +50,10 @@ struct ScheduleRowActions {
                 scheduled.inspectedID = nil
                 model.openChangeConversation(for: s)
             }
+            // In the long-press / right-click menu only: the swipes stay Pause / Resume and Delete / Change….
+            let rename = RowSwipeAction(title: SC.Actions.rename, systemImage: "pencil", tint: .gray) {
+                askRename(s)
+            }
             let delete = Self.delete { askDelete(s) }
             let lastSession = (scheduled.detail(s.id)?.lastRun ?? s.lastRun)?.sessionId
             let openLastRun = lastSession.map { session in
@@ -59,7 +64,7 @@ struct ScheduleRowActions {
             leading = [toggle] + [runNow].compactMap { $0 }
             leadingFullSwipe = true
             trailing = [delete, change]
-            menu = [[runNow, toggle, change, openLastRun].compactMap { $0 }, [delete]]
+            menu = [[runNow, toggle, rename, change, openLastRun].compactMap { $0 }, [delete]]
         case .run(let s, let run):
             let underWay = ["QUEUED", "RUNNING", "AWAITING_APPROVAL"].contains(run.state)
             let openRun = run.sessionId.map { session in
