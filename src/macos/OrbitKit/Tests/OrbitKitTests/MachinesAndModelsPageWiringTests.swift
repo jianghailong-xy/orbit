@@ -95,9 +95,11 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                           "the page's blocks")
         XCTAssertTrue(page.contains(".navigationTitle(title)"))
         XCTAssertTrue(page.contains("case .all:       return AppSection.runners.title"))
-        // iOS Settings shows it in two halves, Machines and Providers, as the web's Settings nav groups them.
+        // iOS Settings shows its Providers half, as the web's Settings nav has that group; the machines are
+        // Settings' own Machines group.
+        XCTAssertTrue(page.contains("enum Part { case all, providers }"))
         try assertInOrder(body, ["if part != .providers {", "ForEach(movable)", "RunnerAddSection { addingRunner = true }",
-                                 "if part != .machines {", "MachinesAndModelsPoolsSection("], "the two halves")
+                                 "MachinesAndModelsPoolsSection("], "the machines, then the pools")
         // The machines are read again while the page is up, so a row's Offline and its "N / M running"
         // never come from two different reads' worth of time.
         try assertInOrder(page, ["await runners.load()",

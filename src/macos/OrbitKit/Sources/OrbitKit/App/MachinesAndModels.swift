@@ -18,6 +18,8 @@ public enum MachinesAndModels {
     /// card of their own, with no heading.
     public static let needsYou = "Needs you"
     public static let machines = "Machines"
+    /// The last row of Settings' Machines group on a phone: the Add Runner sheet.
+    public static let addMachine = "Add machine"
     public static let machinesDetail = "Subscriptions signed in here are spent only by sessions on that machine."
     public static let details = "Details"
     public static let manage = "Manage"

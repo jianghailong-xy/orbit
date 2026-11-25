@@ -24,7 +24,6 @@ final class AppSectionTests: XCTestCase {
     func testTheRunnersSectionIsMachinesAndModels() {
         XCTAssertEqual(AppSection.runners.title, "Machines & models")
         XCTAssertEqual(AppSection.runners.systemImage, "desktopcomputer")
-        XCTAssertEqual(SettingsHome.systemImage(.machines), AppSection.runners.systemImage)
         XCTAssertFalse(AppSection.allCases.map(\.title).contains("Runners"))
         XCTAssertFalse(AppSection.allCases.map(\.title).contains("Providers"))
     }

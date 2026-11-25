@@ -172,10 +172,10 @@ final class SettingsStackWiringTests: XCTestCase {
         for page in SettingsPage.allCases {
             XCTAssertTrue(pages.contains("case .\(page.rawValue):"), "no view for .\(page.rawValue)")
         }
-        // Machines and Providers are the two halves of the page the Machines & models section shows,
-        // pushing onto the stack on screen, as the web's Settings nav has them as two groups.
-        XCTAssertTrue(pages.contains("case .machines:       RunnersListView(rowNavigation: .push, part: .machines)"))
+        // Providers is the pools half of the page the Machines & models section shows, pushing onto the
+        // stack on screen; the machines are the list's own Machines group, with no page of their own.
         XCTAssertTrue(pages.contains("case .providers:      RunnersListView(rowNavigation: .push, part: .providers)"))
+        XCTAssertFalse(pages.contains("part: .machines"))
         XCTAssertFalse(pages.contains("AdminUsersView"), "Admin is the drawer's, as the web's Settings has none")
     }
 
@@ -190,13 +190,26 @@ final class SettingsStackWiringTests: XCTestCase {
                       "a group without a header draws none")
         XCTAssertFalse(list.contains("versionLine"), "the web's Settings has no build line")
         let rows = try slice(list, from: "@ViewBuilder private func row(_ row: SettingsHome.Row) -> some View {",
-                             to: "private var machinesValue:")
+                             to: "private var providersValue:")
         for row in SettingsHome.Row.allCases {
             XCTAssertTrue(rows.contains(".\(row.rawValue)"), "the list has no drawing for .\(row.rawValue)")
         }
         // A form row that opens a page is a link, and draws the platform's arrow — the settings
         // shape, where every row that goes somewhere says so.
-        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(row == .machines ? .machines : .providers))"))
+        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(.providers))"))
+        // The Machines group lists the machines themselves (owner, 2026-11-25): in the page's order, drawn
+        // as its rows, each opening its record on Settings' stack — then Add machine, the page's Add sheet.
+        XCTAssertTrue(list.contains("if group == .machines {"))
+        XCTAssertTrue(list.contains("SettingsMachinesSection()"))
+        let machines = try slice(list, from: "private struct SettingsMachinesSection: View {", to: "private var machinesValue:")
+        for piece in ["ManagedRunnerBanner(display: onboarding",
+                      "ForEach(RunnerPageFormat.managedFirst(runners?.runners ?? [], managedRunnerID: managedID))",
+                      "NavigationLink(value: NavNode.runnerDetail(runnerID: r.id))", "RunnerRow(runner: r",
+                      "Label(MachinesAndModels.addMachine, systemImage: \"plus\")",
+                      ".sheet(isPresented: $addingRunner) { AddRunnerSheet() }",
+                      "SettingsHeader(MachinesAndModels.machines)"] {
+            XCTAssertTrue(machines.contains(piece), "the Machines group draws \(piece)")
+        }
         XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(page))"))
         // Machines' and Providers' values are their pages' Needs you, counted the page's own way and split
         // between them, in amber while they hold anything — over lists the list reads for them, pools

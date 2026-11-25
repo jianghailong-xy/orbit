@@ -23,8 +23,8 @@ extension View {
 }
 
 /// Settings' own stack: the list at its root, and each page it opens as a frame of
-/// `NavState.settingsPath` — the `SettingsPage`s; from Machines a machine's record and its engine
-/// and name pages, and from Providers a pool's page. A form row pushes with its
+/// `NavState.settingsPath` — the `SettingsPage`s; from the Machines group a machine's record and its
+/// engine and name pages, and from Providers a pool's page. A form row pushes with its
 /// `NavigationLink` value; a list row inside a page pushes through `AppModel.push`, which lands here
 /// while the sheet is up.
 struct SettingsSheet: View {
@@ -82,8 +82,8 @@ private struct SettingsPageView: View {
         case .sharedLinks:    SharedLinksSettingsPage()
         case .accessTokens:   AccessTokensSettingsPage()
         case .terminals:      TerminalsSettingsPage()
-        // The Machines & models page in its two halves, as the web's Settings nav has Machines and Providers.
-        case .machines:       RunnersListView(rowNavigation: .push, part: .machines)
+        // The Machines & models page's pools half, as the web's Settings nav has Providers; the machines
+        // are the list's own Machines group.
         case .providers:      RunnersListView(rowNavigation: .push, part: .providers)
         case .changePassword: ChangePasswordPage()
         }
@@ -113,12 +113,16 @@ struct SettingsHomeView: View {
             header
             if alertsAllowed == false { alertsOffCard }
             ForEach(SettingsHome.Group.allCases, id: \.self) { group in
-                Section {
-                    ForEach(SettingsHome.rows(group), id: \.self) { row in
-                        self.row(row)
+                if group == .machines {
+                    SettingsMachinesSection()
+                } else {
+                    Section {
+                        ForEach(SettingsHome.rows(group), id: \.self) { row in
+                            self.row(row)
+                        }
+                    } header: {
+                        if let header = SettingsHome.header(group) { SettingsHeader(header) }
                     }
-                } header: {
-                    if let header = SettingsHome.header(group) { SettingsHeader(header) }
                 }
             }
             signOutSection
@@ -146,8 +150,8 @@ struct SettingsHomeView: View {
             Task { await model.savePreferences(UpdatePreferencesRequest(theme: value)) }
         }
         .onAppear(perform: seed)
-        // Each row's value is its own read, so they are asked for side by side. Machines' and Providers'
-        // are what their pages' Needs you holds: the machines, and the pools — a Codex one of the
+        // Each row's value is its own read, so they are asked for side by side. The Machines group's count
+        // and Providers' value are what Needs you holds: the machines, and the pools — a Codex one of the
         // account's own with its people and keys, which say whether it can run.
         .task { alertsAllowed = await model.notifications.alertsAllowed() }
         .task { await model.runners?.load() }
@@ -231,10 +235,10 @@ struct SettingsHomeView: View {
                 Text("Light").tag("light")
                 Text("Dark").tag("dark")
             } label: { label }
-        case .machines, .providers:
-            NavigationLink(value: NavNode.settingsPage(row == .machines ? .machines : .providers)) {
+        case .providers:
+            NavigationLink(value: NavNode.settingsPage(.providers)) {
                 LabeledContent {
-                    if let value = row == .machines ? machinesValue : providersValue {
+                    if let value = providersValue {
                         // What needs a person is said in amber, as the mock's row says it.
                         Text(value.text)
                             .foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
@@ -248,14 +252,6 @@ struct SettingsHomeView: View {
                 }
             }
         }
-    }
-
-    /// Only an answer the server gave — never the empty list a model starts with: how many of the
-    /// machines' lines the page's Needs you holds, or with none how many machines are online.
-    private var machinesValue: (text: String, needsYou: Bool)? {
-        guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
-        let needsYou = MachinesAndModelsLists(model).attention.filter(\.isMachine).count
-        return (SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
     }
 
     /// How many pools the Providers page's Needs you holds, once every list has answered; nothing else.
@@ -314,6 +310,69 @@ private struct EditBadge: View {
             .frame(width: 30, height: 30)
             .background(Color(uiColor: .systemGray5), in: Circle())
             .overlay(Circle().strokeBorder(Color(uiColor: .systemGroupedBackground), lineWidth: 2))
+    }
+}
+
+/// Settings' Machines group (owner, 2026-11-25): every machine, in the Machines & models page's order
+/// and drawn as its rows are, each opening its own record on Settings' stack — one tap from the list,
+/// where a Machines row and its page made it two — then Add machine. The header says what the old
+/// row did: how many of the machines' lines need a person, or with none how many are online. The
+/// managed runner's setup card leads the group while the server offers it, as it leads the page.
+private struct SettingsMachinesSection: View {
+    @Environment(AppModel.self) private var model
+    @State private var addingRunner = false
+
+    var body: some View {
+        let runners = model.runners
+        let status = model.managedRunner?.status
+        let managedID = model.managedRunner?.display == nil ? nil : status?.runnerId
+        let onboarding = runners?.loadState.hasLoaded == true
+            ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners?.runners.count ?? 0)
+            : nil
+        Section {
+            if let onboarding {
+                ManagedRunnerBanner(display: onboarding, runnerID: status?.runnerId,
+                                    confirmsSetup: ManagedRunnerLogic.confirmsSetup(
+                                        runnerCount: runners?.runners.count ?? 0,
+                                        workspaceCount: model.agents?.items.count ?? 0)) { id in
+                    Task { await model.runners?.load() }
+                    model.push(.runnerDetail(runnerID: id))
+                }
+            }
+            ForEach(RunnerPageFormat.managedFirst(runners?.runners ?? [], managedRunnerID: managedID)) { r in
+                let managed = ManagedRunnerLogic.row(runnerID: r.id, status: status)
+                NavigationLink(value: NavNode.runnerDetail(runnerID: r.id)) {
+                    RunnerRow(runner: r, workspaces: runners?.agents(forRunner: r.id) ?? [],
+                              latestVersion: runners?.latestVersion, managed: managed,
+                              isManaged: RunnerPageFormat.isManaged(r, managedRunnerID: managedID),
+                              updateAvailable: managed != nil && ManagedRunnerUpdateLogic.showsDot(status))
+                }
+            }
+            Button { addingRunner = true } label: {
+                Label(MachinesAndModels.addMachine, systemImage: "plus")
+            }
+            .sheet(isPresented: $addingRunner) { AddRunnerSheet() }
+        } header: {
+            HStack(alignment: .firstTextBaseline) {
+                SettingsHeader(MachinesAndModels.machines)
+                Spacer(minLength: 8)
+                if let value = machinesValue {
+                    // What needs a person is said in amber, as the old row said it.
+                    Text(value.text)
+                        .font(.subheadline)
+                        .foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
+                        .textCase(nil)
+                }
+            }
+        }
+    }
+
+    /// Only an answer the server gave — never the empty list a model starts with: how many of the
+    /// machines' lines the page's Needs you holds, or with none how many machines are online.
+    private var machinesValue: (text: String, needsYou: Bool)? {
+        guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
+        let needsYou = MachinesAndModelsLists(model).attention.filter(\.isMachine).count
+        return (SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
     }
 }
 

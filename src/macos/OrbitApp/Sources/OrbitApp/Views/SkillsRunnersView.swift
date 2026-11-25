@@ -85,11 +85,11 @@ struct SkillRow: View {
 /// and the API keys. Every way out stays in the app: an engine is signed in on its page, a machine on its
 /// record, a pool on its page — iOS's own; the Mac has none.
 ///
-/// iOS Settings opens it twice, as the web's Settings nav has two groups: Machines (what needs a person
-/// about a machine, the machines, Add) and Providers (what needs a person about a pool, the pools, the
-/// keys, the model tiers). Everywhere else it is the whole page.
+/// iOS Settings opens its Providers half (what needs a person about a pool, the pools, the keys, the
+/// model tiers), as the web's Settings nav has that group; Settings lists the machines itself, in its
+/// own Machines group. Everywhere else it is the whole page.
 struct RunnersListView: View {
-    enum Part { case all, machines, providers }
+    enum Part { case all, providers }
 
     @Environment(AppModel.self) private var model
     /// How this list's rows navigate. Defaults to the three-column shape; the compact shell and Settings,
@@ -157,15 +157,13 @@ struct RunnersListView: View {
                     }
                     RunnerAddSection { addingRunner = true }
                 }
-                if part != .machines {
-                    MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
-                                               open: opensPools ? push : nil)
-                    MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
-                                              cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
-                                              open: opensPools ? push : nil)
-                    if let agents = model.agents {
-                        InfrastructureModelTiersSection(agents: agents)
-                    }
+                MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
+                                           open: opensPools ? push : nil)
+                MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
+                                          cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
+                                          open: opensPools ? push : nil)
+                if let agents = model.agents {
+                    InfrastructureModelTiersSection(agents: agents)
                 }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -230,7 +228,6 @@ struct RunnersListView: View {
     private var title: String {
         switch part {
         case .all:       return AppSection.runners.title
-        case .machines:  return SettingsPage.machines.title
         case .providers: return SettingsPage.providers.title
         }
     }
@@ -239,7 +236,6 @@ struct RunnersListView: View {
     private func shows(_ item: MachinesAndModels.Attention) -> Bool {
         switch part {
         case .all:       return true
-        case .machines:  return item.isMachine
         case .providers: return !item.isMachine
         }
     }

@@ -6,7 +6,7 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 /// A page Settings opens from its list, each one a frame of Settings' own stack
 /// (`NavNode.settingsPage`). Change password is the one opened from a page rather than the list: Profile's.
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case general, notifications, profile, sharedLinks, accessTokens, terminals, github, machines, providers, changePassword
+    case general, notifications, profile, sharedLinks, accessTokens, terminals, github, providers, changePassword
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
@@ -18,7 +18,6 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
         case .accessTokens:   return SettingsHome.title(.accessTokens)
         case .terminals:      return SettingsHome.title(.terminals)
         case .github:         return SettingsHome.title(.github)
-        case .machines:       return SettingsHome.title(.machines)
         case .providers:      return SettingsHome.title(.providers)
         case .changePassword: return SettingsCopy.changePassword
         }
@@ -30,41 +29,43 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 /// value, and the explanation behind it lives on the page it opens — so the view draws exactly this
 /// and nothing of its own.
 ///
-/// The groups and rows are the web Settings nav's (`SettingsLayout.tsx`, `settingsIndex.ts`), in its
-/// order: Personal — General, Notifications, Appearance, Profile, Shared links, Access tokens,
-/// Terminals — then Integrations' GitHub (docs/github-workspace-design.md §8), then Machines, then
-/// Providers. The web's pages the app has no page for yet (Storage, Feishu, Workspaces) are left out; a phone shows each of Machines and Providers as one row
-/// opening its page, where the web lists their items in the nav itself.
+/// The groups and rows are the web Settings nav's (`SettingsLayout.tsx`, `settingsIndex.ts`):
+/// Personal — General, Notifications, Appearance, Profile, Shared links, Access tokens, Terminals —
+/// then Machines, then Integrations' GitHub (docs/github-workspace-design.md §8), then Providers.
+/// Machines comes up to second (owner, 2026-11-25): a machine is what a person opens Settings for
+/// most, so the group lists the machines themselves, each opening its own page, and ends in Add
+/// machine — as the web nav lists them; it holds no fixed rows, and the view draws it from the
+/// machines. Providers stays one row opening its page. The web's pages the app has no page for yet
+/// (Storage, Feishu, Workspaces) are left out.
 public enum SettingsHome {
     public enum Group: String, CaseIterable, Sendable {
-        case personal, integrations, machines, providers
+        case personal, machines, integrations, providers
     }
 
     public enum Row: String, CaseIterable, Sendable {
         case general, notifications, appearance, profile, sharedLinks, accessTokens, terminals
         /// Settings → GitHub (docs/github-workspace-design.md §8): the web's Integrations group's GitHub page.
         case github
-        case machines
         case providers
     }
 
-    /// A group's header. Machines and Providers have none: each holds the one row that says that name,
-    /// and a header over it would say it twice.
+    /// A group's header. Providers has none: it holds the one row that says that name, and a header over
+    /// it would say it twice.
     public static func header(_ group: Group) -> String? {
         switch group {
         case .personal:  return "Personal"
         case .integrations: return GithubCopy.INTEGRATIONS
-        case .machines:  return nil
+        case .machines:  return MachinesAndModels.machines
         case .providers: return nil
         }
     }
 
-    /// The rows a group shows, in order.
+    /// The rows a group shows, in order. Machines has none of its own: its rows are the machines.
     public static func rows(_ group: Group) -> [Row] {
         switch group {
         case .personal:  return [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals]
         case .integrations: return [.github]
-        case .machines:  return [.machines]
+        case .machines:  return []
         case .providers: return [.providers]
         }
     }
@@ -80,7 +81,6 @@ public enum SettingsHome {
         case .accessTokens:  return AccessTokensList.title
         case .terminals:     return Terminals.title
         case .github:        return GithubCopy.TITLE
-        case .machines:      return MachinesAndModels.machines
         case .providers:     return "Providers"
         }
     }
@@ -96,7 +96,6 @@ public enum SettingsHome {
         case .accessTokens:  return "key.horizontal"
         case .terminals:     return "terminal"
         case .github:        return "chevron.left.forwardslash.chevron.right"
-        case .machines:      return AppSection.runners.systemImage
         case .providers:     return "cloud"
         }
     }
@@ -112,7 +111,6 @@ public enum SettingsHome {
         case .accessTokens:  return .accessTokens
         case .terminals:     return .terminals
         case .github:        return .github
-        case .machines:      return .machines
         case .providers:     return .providers
         }
     }
@@ -120,7 +118,7 @@ public enum SettingsHome {
     // MARK: - What a row says
 
     /// "1 needs you" — how many lines the Machines & models page's Needs you holds; with none, how many of
-    /// the account's machines can take work right now. Settings' Machines row says it of the machines'
+    /// the account's machines can take work right now. Settings' Machines header says it of the machines'
     /// lines alone, the Mac's Machines & models row of them all.
     public static func machinesAndModelsValue(needsYou: Int, runners: [Runner]) -> String {
         needsYouValue(needsYou) ?? runnersValue(runners)

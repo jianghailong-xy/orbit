@@ -281,8 +281,8 @@ final class SettingsCopyParityTests: XCTestCase {
     func testMachinesAndModelssSectionsSayWhatTheWebPageSays() throws {
         XCTAssertEqual(MachinesAndModels.subtitle, "Where your agents run, and whose model quota they spend.")
         assertSays(try web(Self.settingsNav), "<NavGroup title=\"\(MachinesAndModels.machines)\"", in: Self.settingsNav)
-        // iOS Settings' Machines and Providers rows are the web nav's two groups, by name.
-        XCTAssertEqual(SettingsHome.title(.machines), MachinesAndModels.machines)
+        // iOS Settings' Machines group and Providers row are the web nav's two groups, by name.
+        XCTAssertEqual(SettingsHome.header(.machines), MachinesAndModels.machines)
         assertSays(try web(Self.settingsNav), "<NavGroup title=\"\(SettingsHome.title(.providers))\"", in: Self.settingsNav)
         XCTAssertEqual(MachinesAndModels.machinesDetail,
                        "Subscriptions signed in here are spent only by sessions on that machine.")

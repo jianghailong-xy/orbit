@@ -12,11 +12,13 @@ final class SettingsHomeTests: XCTestCase {
 
     // MARK: - The list
 
-    /// The web Settings nav's groups and rows, in its order (`settingsIndex.ts`, `SettingsLayout.tsx`):
-    /// Personal, then Integrations, then Machines, then Providers — the pages the app has no page for left out.
+    /// The web Settings nav's groups and rows (`settingsIndex.ts`, `SettingsLayout.tsx`): Personal, then
+    /// Machines — up to second, what a person opens Settings for most (owner, 2026-11-25) — then
+    /// Integrations, then Providers; the pages the app has no page for left out.
     func testTheGroupsReadAsTheWebsNavDoes() {
-        // Machines and Providers have no header: each one row says that name.
-        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), ["Personal", "Integrations", nil, nil])
+        XCTAssertEqual(SettingsHome.Group.allCases, [.personal, .machines, .integrations, .providers])
+        // Providers has no header: its one row says that name. Machines' rows are the machines.
+        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), ["Personal", "Machines", "Integrations", nil])
         XCTAssertEqual(SettingsHome.rows(.personal),
                        [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals])
         // Integrations, as the web's settings nav groups it: GitHub's page (docs/github-workspace-design.md §8).
@@ -25,7 +27,8 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.githubValue(nil), nil)
         XCTAssertEqual(SettingsHome.githubValue(GithubIntegration(available: true, connected: true, login: "ada")), "@ada")
         XCTAssertEqual(SettingsHome.githubValue(GithubIntegration(available: true, connected: false)), nil)
-        XCTAssertEqual(SettingsHome.rows(.machines), [.machines])
+        XCTAssertEqual(SettingsHome.rows(.machines), [], "the view lists the machines themselves, then Add machine")
+        XCTAssertEqual(MachinesAndModels.addMachine, "Add machine")
         XCTAssertEqual(SettingsHome.rows(.providers), [.providers])
     }
 
@@ -43,8 +46,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(Set(rows.map(SettingsHome.systemImage)).count, rows.count, "two rows share a glyph")
         XCTAssertEqual(rows.map(SettingsHome.title),
                        ["General", "Notifications", "Appearance", "Profile", "Shared links", "Access tokens",
-                        "Terminals", "GitHub", "Machines", "Providers"])
-        XCTAssertEqual(SettingsHome.systemImage(.machines), AppSection.runners.systemImage)
+                        "Terminals", "GitHub", "Providers"])
     }
 
     /// The rows that open a page open their own, titled as the row is; Appearance's menu opens nothing,
