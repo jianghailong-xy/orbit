@@ -507,6 +507,75 @@ D3, D4 and D5 (first one-sentence reply-files text), `B-claude` is `A` without `
 
 3,500 bytes is not reached: what remains is mostly units whose guarding case fails without them (step 5's table).
 
+## I3 background on Codex after the migration: the cause and the fix
+
+The final eval at `5d4471c494` had `I3-delegate-subagent/background` on Codex 0.172.0 at 14/20 against 20/20 on the
+step-0 commit. Played again on 2026-11-25, 20 runs of the cell on each step's tip, Claude Code 2.1.331
+(`claude-sonnet-5-5`) and Codex 0.172.0 as before. Reports: [`agent-eval/instructions-i3b/`](agent-eval/instructions-i3b/).
+
+| Commit | Step | I3b on Codex |
+| --- | --- | --- |
+| `ab56654795` | step 0 | 20/20 |
+| `b2402a477e` | step 4 tip | 20/20 |
+| `05fb49e208` | step 5 (a), one handoff unit | 16/20 |
+| `4c265665c6` | step 5 tip | 19/20 |
+| `5e21b26296` | step 6 tip | 14/20 |
+| `ca849e1e0e` | step 7a | 19/20 |
+| `1f59499d9a` | project tip | 16/20 |
+
+40/40 before (a), 84/100 from (a) on. Step 6 (D1 drops the sub-agents clause on Claude Code only; D2 drops `alwaysLoad`,
+which Codex's profile does not read) and step 7a left the cell where (a) put it: Codex's composed context for this
+shape differs from step 0's in the handoff and orchestration paragraphs, and delegate's description only by the
+`alwaysLoad` mark.
+
+**The cause.** (a) moved the hand-off half of the orchestration-off paragraph ("task_start the work if task_list
+shows it recorded, else record it as a task") into the handoff unit. What it left, "Without session_* tools, do not
+try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration",
+reads to Codex as covering delegate too. The scenario runs with orchestration off, and every failure at every commit
+from (a) on called task_list, then said the background investigation could not start because Session orchestration
+was off, and either named the switch or filed a task; none called delegate.
+
+**The fix.** Each candidate, I3b on Codex at 20 runs:
+
+| Candidate | Rung | I3b | E5 on Codex, beside step 0 in the same rounds |
+| --- | --- | --- | --- |
+| step 0's "Use delegate whenever you would start a subagent or run an independent piece in the background", Codex only | conditional line | 16/20 | not played |
+| delegate's description: "It needs no Session orchestration: it is served, and works, with the session_* tools off." (`0d76239a56`) | description | 20/20 | 38/120 against 72/120 |
+| the handoff unit: "use delegate (it needs no Session orchestration switch)", Codex only | conditional line | 20/20 | 14/40 against 25/40 |
+| the orchestration paragraph narrowed to "or claim a session you did not start; if one was asked for, tell the user the switch is..." | conditional line | 20/20 | 11/38 against 31/40 |
+| the description, plus `project_get`'s projectId naming where the id comes from (`8534197f30`) | description, schema | 15/15 (+5 err), then 20/20 | 30/30 against 19/30; E5/plan 17/17 against 10/18 |
+
+Every change that fixed I3b lowered `E5-read-only-project` on Codex. Its failure is step 0's: the first call is
+`project_get` with an id made from the project's name (`C.no_invented_ids`), where a passing run reads its own task
+with task_get first. It failed 57 of 160 runs on the step-0 commit, 19 of 40 on the project tip, and 82 of 120 with the
+description alone. So the delivered fix is the description plus the schema: projectId is now "a task's projectId
+(task_get with no taskId reads this session's own task) or the id in its web UI URL (/projects/<id>), never one made
+from its name". Neither adds always-on text: every shape's bytes and rules, and the caps, are unchanged. Delegate's
+description is served to every engine, since `orbit mcp` cannot tell it is serving Codex (`ORBIT_MCP_ENGINE` is set only
+for Claude Code); its sentence is true on every engine.
+
+**On the delivered code** (`8534197f30`, 2026-11-25), 20 runs each beside the step-0 commit on the same day:
+
+| Cell on Codex | Delivered | Step 0 |
+| --- | --- | --- |
+| I3-delegate-subagent/background | 20/20 | 20/20 |
+| I3-delegate-subagent | 20/20 | 20/20 |
+| E2-private-plan | 19/20 | 19/20 |
+| E5-read-only-project | 20/20 | 14/20 |
+
+The full suites on the delivered code at the baseline's run counts (5 runs per E and X scenario, 10 per I scenario,
+`v2full-*.json`) put two cells below step 0's baseline, both on Codex, and neither below the step-0 commit beside it:
+
+| Cell on Codex | Baseline | Delivered | Step 0, same day |
+| --- | --- | --- | --- |
+| E1-record-task/dontAsk | 5/5 | 4/5, then 20/20 | 20/20 |
+| X1-mcp-missing-cli-fallback | 5/5 | 0/5 | 0/5, and 0/10 earlier the same day |
+
+X1 is step 5's finding again: Codex declines the CLI call before it runs, on the step-0 commit's binary as on every
+later one, so whatever changed is outside the repository. Every other cell on both engines is at or above its
+baseline. Earlier the same day, I4 on Claude Code (1/10 in one full pass) was 16/20 on the delivered fix against 16/20 on
+step 0, and I9 on Codex (9/10) was 20/20 against 20/20.
+
 ## How it was run
 
 ```bash
