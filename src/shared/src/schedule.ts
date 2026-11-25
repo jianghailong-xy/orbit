@@ -454,7 +454,10 @@ export const SCHEDULE_COPY = {
   push: {
     failedBody: 'The last run {reason}. It keeps running until you pause it.',
     goalReachedTitle: '{title} ended itself',
-    /** §7.1: a run marked NO_REPORT that reported after the owner wrote to its session; replaces the failure banner. */
+    /**
+     * §7.1: a run failed NO_REPORT or ENGINE_CRASHED that reported after the owner wrote to its session; replaces the
+     * failure banner.
+     */
     reportedLateTitle: '{title} reported after all',
     /** §8.5: a planned end (endAt or maxRuns) reached; also the ENDED row's read. */
     stoppedAsPlanned: 'Stopped as planned after {runs}',
@@ -2057,7 +2060,7 @@ export function scheduleGoalReachedPushTitle(title: string): string {
   return scheduleFill(C.push.goalReachedTitle, { title });
 }
 
-/** A NO_REPORT run that reported late, after the owner stepped in: "Nightly audit reported after all". */
+/** A run failed NO_REPORT or ENGINE_CRASHED that reported late, once the owner stepped in: "Nightly audit reported after all". */
 export function scheduleReportedLatePushTitle(title: string): string {
   return scheduleFill(C.push.reportedLateTitle, { title });
 }

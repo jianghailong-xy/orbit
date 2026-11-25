@@ -28,7 +28,7 @@
  * `schedule_run_report` ends a run, once, from the session serving it. Without one, what the session does decides:
  * an engine that ended, or whose session's phase is IDLE (no SubAgent, `bg_run` job or engine turn executing) with no
  * turn still to answer and nothing set to wake it (a scheduled wake-up, a RESUME_SESSION watch, an armed retry), is
- * NO_REPORT, which a report from that session still replaces once a person has written to it
+ * NO_REPORT, which (like ENGINE_CRASHED) a report from that session still replaces once a person has written to it
  * (`acceptsLateReport`);
  * a run past its limit is interrupted, RUN_LIMIT; a card nobody
  * answered for two hours interrupts it, APPROVAL_TIMEOUT. Whether the run reached its engine is read from its first
@@ -236,6 +236,12 @@ const LIVE_SESSION: Prisma.SessionWhereInput = {
 };
 
 type Tx = Prisma.TransactionClient;
+
+/**
+ * §7.1: the failures the server inferred from the run's session, which a late report from that session may replace.
+ * RUN_LIMIT, APPROVAL_TIMEOUT and the owner's stop end the run on purpose and stay final.
+ */
+const LATE_REPORT_FAILURES: ReadonlySet<string> = new Set<ScheduleFailureReason>(['NO_REPORT', 'ENGINE_CRASHED']);
 
 const IN_PROGRESS = ['RUNNING', 'AWAITING_APPROVAL'] as const;
 
@@ -965,9 +971,9 @@ export class ScheduleRunsService {
   // -------------------------------------------------------------------------------------------------------------
 
   /**
-   * `schedule_run_report`, from the session serving a run: once per run, and it ends the run. A run already FAILED
-   * with NO_REPORT takes a late one when the owner stepped back in (`acceptsLateReport`): the report then replaces
-   * the failure as if it had come in time.
+   * `schedule_run_report`, from the session serving a run: once per run, and it ends the run. A run the server failed
+   * by its reading of the session (LATE_REPORT_FAILURES) takes a late one when the owner stepped back in
+   * (`acceptsLateReport`): the report then replaces the failure as if it had come in time.
    */
   async report(
     ownerId: string,
@@ -991,20 +997,20 @@ export class ScheduleRunsService {
         if (!schedule || !run || run.sessionId !== sessionId) {
           throw refusal('FORBIDDEN', 'SCHEDULE_RUN_REPORT_NOT_A_RUN', 'This session no longer serves its run.');
         }
-        const noReport = run.state === 'FAILED' && run.failureReason === 'NO_REPORT';
-        const late = noReport && (await this.acceptsLateReport(tx, schedule, run));
+        const inferred = run.state === 'FAILED' && LATE_REPORT_FAILURES.has(run.failureReason ?? '');
+        const late = inferred && (await this.acceptsLateReport(tx, schedule, run));
         if (!late && run.state !== 'RUNNING' && run.state !== 'AWAITING_APPROVAL') {
           const reported = run.state === 'NO_CHANGE' || run.state === 'CHANGED' || run.failureReason === 'REPORTED_FAILED';
           throw refusal(
             'CONFLICT',
             reported ? 'SCHEDULE_RUN_ALREADY_REPORTED' : 'SCHEDULE_RUN_ENDED',
             reported ? 'This run has already been reported; a run reports once.'
-              : noReport ? 'This run has already ended (FAILED, NO_REPORT). It takes a late report only after the '
+              : inferred ? `This run has already ended (FAILED, ${run.failureReason}). It takes a late report only after the `
                 + 'owner writes in this session, and only until a newer run of the schedule starts.'
               : `This run has already ended (${run.state}).`,
           );
         }
-        // A late report undoes the failure NO_REPORT counted; no newer run has counted anything since.
+        // A late report undoes the failure the server counted; no newer run has counted anything since.
         const failures = late ? Math.max(0, schedule.consecutiveFailures - 1) : schedule.consecutiveFailures;
         const now = this.clock();
         const alerts: ScheduleAlert[] = [];
@@ -1074,7 +1080,7 @@ export class ScheduleRunsService {
           consecutiveFailures: report.outcome === 'FAILED' ? failures + 1 : 0,
           late,
         });
-        // The NO_REPORT failure was pushed; a late success replaces its banner (a late FAILED's own push does).
+        // The failure was pushed; a late success replaces its banner (a late FAILED's own push does).
         if (late && report.outcome !== 'FAILED') {
           alerts.push({
             kind: 'REPORTED_LATE',
@@ -1098,8 +1104,8 @@ export class ScheduleRunsService {
   }
 
   /**
-   * §7.1: NO_REPORT is the server's reading of a session gone idle, not the agent's word. When a person has written
-   * to the run's session since it was marked so, they decided the run is not over, and a report from that session
+   * §7.1: NO_REPORT and ENGINE_CRASHED are the server's reading of the session, not the agent's word, and the
+   * session can come back after either. When a person has written to the run's session since the run was failed so, they decided the run is not over, and a report from that session
    * still counts, until a newer run of the schedule starts (one run's result never lands over the next one's). A
    * schedule that was deleted takes none.
    */
@@ -1410,7 +1416,7 @@ export class ScheduleRunsService {
           scheduleId: schedule.id,
           scheduleRunId: run.id,
           workspaceId: schedule.workspaceId,
-          // A late report's failure replaces the NO_REPORT item just withdrawn, so it is keyed apart from it.
+          // A late report's failure replaces the item of the failure just withdrawn, so it is keyed apart from it.
           key: `schedule-failed:${run.id}${failure.late ? ':reported' : ''}`,
           title: copy.title,
           why: copy.why,

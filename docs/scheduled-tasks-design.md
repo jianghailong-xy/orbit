@@ -586,12 +586,14 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
   turn, such as that job's wake, is still to be answered, nor while something is set to wake it (`sessionWillWake`: a
   `schedule_wakeup` still pending, the RESUME_SESSION watch a `task_await` or `session_await` leaves, an armed retry): a
   run may end its turn to wait for any of these, and its run limit still counts that wait.
-- NO_REPORT is the server's reading of an idle session, not the agent's word, so it is the one failure a report can
-  still replace. Once a person has written to the run's session after it was marked NO_REPORT, a report from that
+- NO_REPORT and ENGINE_CRASHED are the server's reading of the session, not the agent's word, and the session can
+  come back after either, so they are the failures a report can still replace. Once a person has written to the run's
+  session after the run was failed so, a report from that
   session is taken as if it had come in time: the run takes its outcome, the failure it counted is undone, its Waiting
   on you item is withdrawn (a late FAILED files its own), and a push replaces the failure's banner
   (`REPORTED_LATE`, or the late FAILED's own). It is refused (`SCHEDULE_RUN_ENDED`) before anyone has written, once a
-  newer run of the schedule has started, and on a deleted schedule. Every other failure stays final.
+  newer run of the schedule has started, and on a deleted schedule. Every other failure stays final: RUN_LIMIT and
+  APPROVAL_TIMEOUT interrupt the run on purpose, so its session is stopped rather than read.
 
 ### 7.2 Failure reasons and retries
 

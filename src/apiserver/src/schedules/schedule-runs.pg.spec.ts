@@ -879,6 +879,37 @@ test('§7.1 a late FAILED report keeps one failure counted and files its own ite
   assert.equal(pushed[1].collapseId, pushed[0].collapseId);
 });
 
+test('§7.1 an ENGINE_CRASHED run the owner revives takes a late report; a RUN_LIMIT one never does', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('late-crashed');
+  const { schedule, run, sessionId } = await runningRun(w);
+  await db.session.update({
+    where: { id: sessionId },
+    data: { status: 'FAILED', lastTurnOutcome: 'FAILED', finishedAt: clockNow, error: 'engine exited' },
+  });
+  assert.equal(await runs.reconcileRun(run.id), 'FAILED');
+  assert.equal((await runOf(run.id)).failureReason, 'ENGINE_CRASHED');
+  assert.equal((await scheduleOf(schedule.id)).consecutiveFailures, 1);
+  await refusedWith(runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'done' }), 'SCHEDULE_RUN_ENDED');
+  await turnAfterEnd(sessionId, 2, true);
+  await runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'done after the revive' });
+  const reported = await runOf(run.id);
+  assert.equal(reported.state, 'NO_CHANGE');
+  assert.equal(reported.failureReason, null);
+  assert.equal((await scheduleOf(schedule.id)).consecutiveFailures, 0);
+  assert.equal(pushed.at(-1)!.kind, 'REPORTED_LATE');
+
+  at('2026-11-14T00:00:00Z');
+  const w2 = await world('late-run-limit');
+  const { run: r2, sessionId: s2 } = await runningRun(w2, { runLimitMinutes: 20 });
+  advance(20 * MINUTE);
+  assert.equal(await runs.reconcileRun(r2.id), 'FAILED');
+  assert.equal((await runOf(r2.id)).failureReason, 'RUN_LIMIT');
+  await turnAfterEnd(s2, 2, true);
+  await refusedWith(runs.report(w2.ownerId, s2, { outcome: 'NO_CHANGE', summary: 'late' }), 'SCHEDULE_RUN_ENDED');
+});
+
 test('§7.1 no late report once a newer run of the schedule has started', { skip }, async () => {
   reset();
   at('2026-11-14T00:00:00Z');
