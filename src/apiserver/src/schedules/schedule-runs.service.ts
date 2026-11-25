@@ -49,7 +49,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { SCHEDULE_COPY, scheduleFill, RunFailureKind, runFailureIs } from '@orbit/shared';
-import { Prisma, RunStatus, type Schedule, type ScheduleRun } from '@prisma/client';
+import { Prisma, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
 import { isSessionExecuting } from '../common/session-working';
@@ -59,6 +59,7 @@ import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { openingTurnKey } from '../sessions/orbit-authored-turn';
 import { sessionHeldByCapacity } from '../sessions/queued-reason-sql';
 import { deriveSessionPhase } from '../sessions/session-phase';
+import { isParked, TURN_STATE_SELECT, turnStateFilter, turnStateOf } from '../sessions/session-turn-state';
 import {
   SCHEDULE_NOTIFIER,
   approvalCopy,
@@ -104,6 +105,7 @@ import {
   releaseFinishedTheWork,
   releaseWasFailure,
   releaseWasFailureFilter,
+  releasedFilter,
 } from '../common/session-release';
 
 const MINUTE = 60_000;
@@ -654,7 +656,7 @@ export class ScheduleRunsService {
       ? await this.prisma.session.findUnique({
           where: { id: sessionId },
           select: {
-            status: true, finishedAt: true, endReason: true, lastTurnOutcome: true, completedAt: true, archivedAt: true,
+            ...TURN_STATE_SELECT, endReason: true, lastTurnOutcome: true, completedAt: true, archivedAt: true,
             deletedAt: true,
             cancelRequestedAt: true, error: true, failureKind: true,
             engineTurnActive: true, runningSubagents: true, runningBgJobs: true,
@@ -782,18 +784,18 @@ export class ScheduleRunsService {
   private async landRun(run: ScheduleRun): Promise<void> {
     const session = run.sessionId ? await this.prisma.session.findUnique({ where: { id: run.sessionId } }) : null;
     // Released for anything but its work finishing (decision D5, design §12.3: the end reason, never the terminal
-    // status) is a run that ended unsuccessfully, an engine that exited by itself included; INTERRUPTED is a held run
-    // stopped mid-turn.
+    // status) is a run that ended unsuccessfully, an engine that exited by itself included; an abandoned turn is a held
+    // run stopped mid-turn.
     const released = session != null && isReleased(session);
     if (!session || session.deletedAt || (released && !releaseFinishedTheWork(session))
-        || session.status === RunStatus.INTERRUPTED || session.cancelRequestedAt) {
+        || turnStateOf(session) === 'ABANDONED' || session.cancelRequestedAt) {
       await this.settleLanding(run.id, 'FAILED', null, 'The run session ended unsuccessfully; nothing was landed.');
       return;
     }
-    // The tool reports during the turn. A commit and its final worktree report may still be on the way, and
-    // AWAITING_INPUT says only that the turn is over: a background job, a subagent or an engine turn still
+    // The tool reports during the turn. A commit and its final worktree report may still be on the way, and a parked
+    // session says only that the turn is over: a background job, a subagent or an engine turn still
     // executing can commit more. The worker's next pass looks again; the run limit bounds the wait.
-    if ((!released && session.status !== RunStatus.AWAITING_INPUT) || isSessionExecuting(session)) {
+    if ((!released && !isParked(session)) || isSessionExecuting(session)) {
       // Reporting does not exempt the rest of a LAND run from its run limit.
       const opening = await this.prisma.conversationTurn.findFirst({
         where: { sessionId: session.id, clientTurnId: openingTurnKey(session.id) }, select: { deliveredAt: true },
@@ -932,7 +934,8 @@ export class ScheduleRunsService {
         runSource: 'SCHEDULE',
         completedAt: null,
         deletedAt: null,
-        status: { notIn: [RunStatus.PENDING, RunStatus.RUNNING] },
+        // No turn queued or in flight: released, parked, or its turn abandoned.
+        OR: [releasedFilter(), turnStateFilter([null, 'ABANDONED'])],
         scheduleRun: { state: 'NO_CHANGE', OR: [{ landingStatus: null }, { landingStatus: { in: ['LANDED', 'NO_COMMITS'] } }] },
       },
       take: batch,
@@ -1763,8 +1766,10 @@ export class ScheduleRunsService {
   }
 
   private async completeIfSettled(ownerId: string, sessionId: string): Promise<void> {
-    const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { status: true, completedAt: true } });
-    if (!session || session.completedAt || session.status === RunStatus.RUNNING || session.status === RunStatus.PENDING) return;
+    const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { ...TURN_STATE_SELECT, completedAt: true } });
+    if (!session || session.completedAt) return;
+    const turn = turnStateOf(session);
+    if (turn === 'IN_FLIGHT' || turn === 'QUEUED') return;
     await this.quietly(() => this.sessions.complete(ownerId, sessionId), 'complete');
   }
 
