@@ -70,7 +70,8 @@ test('the five legacy fields are the golden ones for every stored combination', 
       sessionState: projected.sessionState,
       filingState: projected.filingState,
     });
-    const then = JSON.stringify(byKey.get(key));
+    const { kind: _kind, was: _was, ...fields } = byKey.get(key)!;
+    const then = JSON.stringify(fields);
     if (now !== then) differences.push(`${key}: base ${then}, now ${now}`);
   }
   assert.deepEqual(differences, [], `\n${differences.join('\n')}\n`);
