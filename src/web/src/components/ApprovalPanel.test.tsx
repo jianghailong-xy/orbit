@@ -1132,6 +1132,8 @@ describe('one waiting completion decision on the session page', () => {
       // The session list's Needs you row reads the terminals asking to be approved: none here.
       if (path === '/terminals/requests') return reply({ requests: [] });
       if (path.startsWith('/owner-requests')) return reply({ requests: [] });
+      // The managed-runner gate reads what the server offers: none here.
+      if (path === '/auth/capabilities') return reply({ managedRunners: { enabled: false } });
       unstubbed.push(path);
       return reply([]);
     });
