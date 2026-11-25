@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Schedule rename: prototype board</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef0f3; font: 15px/1.55 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
+  .b-part { width: 2300px; padding: 40px 48px 48px; background: #f5f6f8; border-bottom: 1px solid #dde0e5; font: 15px/1.55 Inter, "Noto Sans SC", sans-serif; }
+  .b-part > h1 { margin: 0 0 4px; font-size: 30px; }
+  .b-part > .b-sub { margin: 0 0 28px; color: #6b6f76; font-size: 17px; }
+  .b-row { display: flex; gap: 40px; align-items: flex-start; }
+  .b-stage { display: flex; flex-direction: column; gap: 12px; }
+  .b-stage > h2 { margin: 0; font-size: 19px; }
+  .b-stage > h2 small { font-weight: 400; color: #6b6f76; margin-left: 8px; font-size: 15px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-right: 8px; vertical-align: 2px; }
+  .b-tag.today { background: #e5e7eb; color: #4b5563; }
+  .b-tag.new { background: #dbeafe; color: #1d4ed8; }
+  .b-n { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e8590c; color: #fff; font: 700 12px/22px Inter, sans-serif; justify-content: center; flex: none; }
+  .b-pin { position: absolute; z-index: 5; }
+  .b-ring { position: absolute; border: 2px dashed #e8590c; border-radius: 10px; pointer-events: none; z-index: 4; }
+
+  /* ---- web window ---- */
+  .w-win { width: 1075px; height: 660px; background: #fff; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,.12); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .w-bar { height: 38px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; padding: 0 14px; gap: 7px; }
+  .w-bar i { width: 12px; height: 12px; border-radius: 50%; background: #d1d5db; display: block; }
+  .w-body { flex: 1; display: flex; min-height: 0; }
+  .w-list { flex: 1; padding: 22px 28px; overflow: hidden; }
+  .w-list h3 { margin: 0 0 10px; font-size: 22px; }
+  .w-list h3 small { font-size: 15px; color: #8a8f98; font-weight: 400; margin-left: 8px; }
+  .w-r { display: flex; gap: 14px; padding: 11px 10px; border-bottom: 1px solid #eef0f2; position: relative; border-radius: 8px; }
+  .w-r.sel { background: #eaf1fe; outline: 2px solid #2b63d9; outline-offset: -2px; }
+  .w-c { width: 22px; height: 22px; border: 2px solid #c8ccd2; border-radius: 50%; flex: none; margin-top: 2px; }
+  .w-t { font-size: 16px; }
+  .w-m { font-size: 13px; color: #8a8f98; }
+  .w-time { margin-left: auto; color: #6b6f76; font-size: 15px; }
+  .w-insp { width: 400px; border-left: 1px solid #e5e7eb; padding: 22px 24px; position: relative; background: #fbfbfc; }
+  .w-insp h4 { margin: 0 0 4px; font-size: 20px; line-height: 1.3; }
+  .w-insp .meta { color: #8a8f98; font-size: 13px; margin-bottom: 14px; }
+  .w-insp .lbl { font-size: 12px; color: #8a8f98; text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 3px; }
+  .w-insp p { margin: 0; font-size: 14px; }
+  .w-btns { display: flex; gap: 8px; margin: 16px 0 4px; }
+  .w-btn { border: 1px solid #d6d9de; background: #fff; border-radius: 7px; padding: 3px 11px; font-size: 13px; }
+  .w-field { width: 100%; font: 600 20px/1.3 Inter, "Noto Sans SC", sans-serif; border: 2px solid #2b63d9; border-radius: 7px; padding: 3px 7px; background: #fff; box-shadow: 0 0 0 4px rgba(43,99,217,.15); }
+  .w-hint { font-size: 12px; color: #8a8f98; margin-top: 5px; }
+  .w-hist { font-size: 13px; padding: 7px 0; border-bottom: 1px solid #eef0f2; display: flex; gap: 8px; align-items: baseline; }
+  .w-hist .who { color: #8a8f98; }
+  .w-hist .undo { margin-left: auto; color: #2b63d9; }
+  .w-hist.fresh { background: #f0f6ff; margin: 0 -8px; padding: 7px 8px; border-radius: 6px; }
+  .w-menu { position: absolute; background: rgba(255,255,255,.98); border: 1px solid #d6d9de; border-radius: 9px; box-shadow: 0 8px 28px rgba(0,0,0,.16); padding: 5px; width: 210px; z-index: 3; font-size: 14px; }
+  .w-menu div { padding: 5px 10px; border-radius: 5px; }
+  .w-menu div.on { background: #2b63d9; color: #fff; }
+  .w-menu hr { border: 0; border-top: 1px solid #e5e7eb; margin: 4px 0; }
+  .w-menu .danger { color: #d92d20; }
+
+  /* ---- phone ---- */
+  .p-ph { width: 393px; height: 760px; background: #f2f2f7; border-radius: 48px; border: 10px solid #1d1d1f; overflow: hidden; position: relative; }
+  .p-status { height: 50px; display: flex; justify-content: space-between; align-items: center; padding: 6px 30px 0; font-weight: 600; font-size: 15px; }
+  .p-nav { padding: 4px 18px 8px; font-size: 30px; font-weight: 700; }
+  .p-grp { padding: 10px 18px 4px; font-size: 18px; font-weight: 700; }
+  .p-grp small { font-weight: 400; color: #8a8a8d; font-size: 14px; margin-left: 6px; }
+  .p-r { display: flex; gap: 12px; padding: 10px 18px; background: #fff; border-bottom: 1px solid #ececef; position: relative; }
+  .p-r .w-c { width: 22px; height: 22px; }
+  .p-r .t { font-size: 16px; }
+  .p-r .m { font-size: 12.5px; color: #8a8a8d; }
+  .p-r .tm { margin-left: auto; color: #8a8a8d; font-size: 14px; }
+  .p-dim { position: absolute; inset: 0; background: rgba(0,0,0,.28); backdrop-filter: blur(3px); z-index: 2; }
+  .p-lift { position: absolute; left: 14px; right: 14px; z-index: 3; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  .p-ctx { position: absolute; left: 14px; width: 250px; z-index: 3; background: rgba(248,248,250,.97); border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.25); font-size: 16px; }
+  .p-ctx div { padding: 11px 16px; border-bottom: 1px solid #e3e3e8; display: flex; justify-content: space-between; }
+  .p-ctx div.on { background: #e4e4ea; }
+  .p-ctx .danger { color: #ff3b30; }
+  .p-ctx .sep { height: 8px; padding: 0; background: #e3e3e8; border: 0; }
+  .p-alert { position: absolute; left: 50%; top: 250px; transform: translateX(-50%); width: 290px; z-index: 3; background: rgba(250,250,252,.98); border-radius: 18px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.25); overflow: hidden; }
+  .p-alert h5 { margin: 18px 16px 2px; font-size: 17px; }
+  .p-alert p { margin: 0 16px 12px; font-size: 13px; color: #555; }
+  .p-alert .fld { margin: 0 16px 16px; border: 1px solid #c7c7cc; background: #fff; border-radius: 8px; padding: 6px 8px; text-align: left; font-size: 14px; }
+  .p-alert .fld .cur { display: inline-block; width: 2px; height: 16px; background: #007aff; vertical-align: -3px; }
+  .p-alert .bt { display: flex; border-top: 1px solid #d1d1d6; }
+  .p-alert .bt div { flex: 1; padding: 11px; color: #007aff; font-size: 17px; }
+  .p-alert .bt div + div { border-left: 1px solid #d1d1d6; font-weight: 600; }
+  .p-kb { position: absolute; left: 0; right: 0; bottom: 0; height: 250px; background: #d1d3d9; z-index: 3; display: grid; grid-template-columns: repeat(10, 1fr); gap: 7px; padding: 10px 4px 40px; }
+  .p-kb i { background: #fff; border-radius: 5px; display: block; height: 40px; }
+  .p-sheet { position: absolute; left: 0; right: 0; top: 60px; bottom: 0; background: #f2f2f7; border-radius: 14px 14px 0 0; z-index: 3; padding: 18px; box-shadow: 0 -4px 20px rgba(0,0,0,.15); }
+  .p-sheet h4 { margin: 8px 0 2px; font-size: 22px; }
+  .p-sheet .meta { color: #8a8a8d; font-size: 13px; margin-bottom: 12px; }
+  .p-card { background: #fff; border-radius: 12px; padding: 4px 14px; margin-bottom: 14px; }
+  .p-card .w-hist { font-size: 13.5px; }
+  .p-card .w-hist:last-child { border: 0; }
+  .p-toolbar { display: flex; justify-content: space-between; color: #007aff; font-size: 17px; }
+
+  /* ---- notes ---- */
+  .b-notes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 34px; margin-top: 28px; }
+  .b-note { display: flex; gap: 10px; font-size: 15px; }
+  .b-note b { display: block; }
+  .b-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 28px; }
+  .b-card { background: #fff; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+  .b-card h3 { margin: 0 0 10px; font-size: 19px; }
+  .b-card ul, .b-card ol { margin: 0; padding-left: 20px; }
+  .b-card li { margin: 5px 0; }
+  .b-opt { border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 14px; margin: 10px 0; }
+  .b-opt.rec { border: 2px solid #2b63d9; background: #f5f8ff; }
+  .b-opt b { display: block; }
+  .b-q { font-weight: 700; margin-top: 18px; }
+  .b-q:first-of-type { margin-top: 0; }
+  code { font: 13px "JetBrains Mono", monospace; background: #f1f2f4; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ================= Part 1: web / macOS ================= -->
+<section class="b-part" id="part-1">
+  <h1>Renaming a schedule: web and macOS</h1>
+  <p class="b-sub">Today a title can only be changed by asking the agent (Change…). The proposal: a person names their schedule directly, the way a session or folder is renamed. Sample data only.</p>
+  <div class="b-row">
+
+    <div class="b-stage">
+      <h2><span class="b-tag today">Today</span>Inspector: the title is read-only</h2>
+      <div class="w-win">
+        <div class="w-bar"><i></i><i></i><i></i></div>
+        <div class="w-body">
+          <div class="w-list">
+            <h3>Today <small>Thu, Nov 26</small></h3>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">Hourly merge monitor v2</div><div class="w-m">↻ Every hour · tea-cli @ US · Check only</div></div><span class="w-time">02:00</span></div>
+            <div class="w-r sel"><span class="w-c"></span><div><div class="w-t">US app 1070 数据就绪巡检</div><div class="w-m">↻ Every day at 09:07 · tea-cli @ SG · Check only</div></div><span class="w-time">09:07</span></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">SG app 1070 data readiness</div><div class="w-m">↻ Every day at 09:17 · tea-cli @ SG · Check only</div></div><span class="w-time">09:17</span></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">[EU] app 3029 ready-day 18:00 check</div><div class="w-m">↻ Every day at 18:00 · tea-cli @ SG · Open a PR</div></div><span class="w-time">18:00</span></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">[US] app 3029 ready-day 18:00 check</div><div class="w-m">↻ Every day at 18:00 · tea-cli @ SG · Open a PR</div></div><span class="w-time">18:00</span></div>
+          </div>
+          <div class="w-insp">
+            <h4>US app 1070 数据就绪巡检</h4>
+            <div class="meta">↻ Every day at 09:07 · tea-cli @ SG · Check only</div>
+            <div class="w-btns"><span class="w-btn">Pause</span><span class="w-btn">Run now</span><span class="w-btn">Change…</span><span class="w-btn">⋯</span></div>
+            <div class="lbl">What was asked</div>
+            <p>“Every morning check that yesterday's app 1070 data in the US region is ready.”</p>
+            <div class="lbl">History</div>
+            <div class="w-hist"><span>Created</span><span class="who">you · Nov 20</span></div>
+          </div>
+        </div>
+      </div>
+      <p style="margin:0;color:#6b6f76;max-width:1100px">The title was written by the agent, in the language of the request. The only way to change it is Change…, which opens a conversation, starts an engine and waits for a reply.</p>
+    </div>
+
+    <div class="b-stage">
+      <h2><span class="b-tag new">Proposal</span>Rename… from the row's menu, or click the title</h2>
+      <div class="w-win" id="w-new">
+        <div class="w-bar"><i></i><i></i><i></i></div>
+        <div class="w-body">
+          <div class="w-list">
+            <h3>Today <small>Thu, Nov 26</small></h3>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">Hourly merge monitor v2</div><div class="w-m">↻ Every hour · tea-cli @ US · Check only</div></div><span class="w-time">02:00</span></div>
+            <div class="w-r sel" id="w-row"><span class="w-c"></span><div><div class="w-t">US app 1070 数据就绪巡检</div><div class="w-m">↻ Every day at 09:07 · tea-cli @ SG · Check only</div></div><span class="w-time">09:07</span></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">SG app 1070 data readiness</div><div class="w-m">↻ Every day at 09:17 · tea-cli @ SG · Check only</div></div><span class="w-time">09:17</span></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">[EU] app 3029 ready-day 18:00 check</div><div class="w-m">↻ Every day at 18:00 · tea-cli @ SG · Open a PR</div></div><span class="w-time">18:00</span></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">[US] app 3029 ready-day 18:00 check</div><div class="w-m">↻ Every day at 18:00 · tea-cli @ SG · Open a PR</div></div><span class="w-time">18:00</span></div>
+            <div class="w-menu" id="w-menu" style="left:300px;top:150px">
+              <div>Run now</div><div>Pause</div><div class="on">Rename…</div><div>Change…</div><hr><div class="danger">Delete…</div>
+            </div>
+          </div>
+          <div class="w-insp">
+            <input class="w-field" id="w-field" value="US app 1070 data readiness">
+            <div class="w-hint">Return to save · Esc to cancel · up to 200 characters</div>
+            <div class="meta" style="margin-top:8px">↻ Every day at 09:07 · tea-cli @ SG · Check only</div>
+            <div class="w-btns"><span class="w-btn">Pause</span><span class="w-btn">Run now</span><span class="w-btn">Change…</span><span class="w-btn" id="w-more">⋯</span></div>
+            <div class="lbl">What was asked</div>
+            <p>“Every morning check that yesterday's app 1070 data in the US region is ready.”</p>
+            <div class="lbl">History</div>
+            <div class="w-hist fresh" id="w-hist"><span>Renamed from “US app 1070 数据就绪巡检”</span><span class="who">you · now</span><span class="undo">Undo</span></div>
+            <div class="w-hist"><span>Created</span><span class="who">you · Nov 20</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="b-notes" style="grid-template-columns:1fr 1fr;max-width:1075px;margin-top:10px">
+        <div class="b-note"><span class="b-n">1</span><div><b>Rename… in the row's menu</b>Right-click, or the inspector's ⋯. Same item, same place as on a session row.</div></div>
+        <div class="b-note"><span class="b-n">2</span><div><b>The title becomes a field in place</b>Click the inspector title (or pick Rename…). Return or leaving the field saves the trimmed text; Esc, an empty field or unchanged text saves nothing.</div></div>
+        <div class="b-note"><span class="b-n">3</span><div><b>One line in History, with Undo</b>Recorded as yours (<code>changedBy = USER</code>), like every other change. No card, no engine, no new run.</div></div>
+        <div class="b-note"><span class="b-n">4</span><div><b>Everywhere the title shows, it updates</b>List row, inspector, Waiting on you, future run sessions and notifications. Past run sessions keep the name they ran under.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Part 2: iOS (Android follows) ================= -->
+<section class="b-part" id="part-2">
+  <h1>Renaming a schedule: iOS (Android follows iOS)</h1>
+  <p class="b-sub">The same action and the same rules. The row's long-press menu and the inspector sheet's ⋯ both have Rename…, which opens the system alert with a text field.</p>
+  <div class="b-row">
+
+    <div class="b-stage">
+      <h2>① Long-press a row <small>the existing menu gains Rename…</small></h2>
+      <div class="p-ph">
+        <div class="p-status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="p-nav">Scheduled</div>
+        <div class="p-grp">Today <small>Thu, Nov 26</small></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t">Hourly merge monitor v2</div><div class="m">↻ Every hour · Check only</div></div><span class="tm">02:00</span></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t">US app 1070 数据就绪巡检</div><div class="m">↻ Every day at 09:07 · Check only</div></div><span class="tm">09:07</span></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t">SG app 1070 data readiness</div><div class="m">↻ Every day at 09:17 · Check only</div></div><span class="tm">09:17</span></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t">[EU] app 3029 18:00 check</div><div class="m">↻ Every day at 18:00 · Open a PR</div></div><span class="tm">18:00</span></div>
+        <div class="p-dim"></div>
+        <div class="p-lift" style="top:228px"><div class="p-r" style="border:0"><span class="w-c"></span><div><div class="t">US app 1070 数据就绪巡检</div><div class="m">↻ Every day at 09:07 · Check only</div></div><span class="tm">09:07</span></div></div>
+        <div class="p-ctx" id="p-ctx" style="top:300px">
+          <div>Run now <span>▷</span></div><div>Pause <span>⏸</span></div><div class="on">Rename… <span>✎</span></div><div>Change… <span>💬</span></div><div class="sep"></div><div class="danger">Delete… <span>🗑</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="b-stage">
+      <h2>② Type the new name <small>Save is off while the field is empty or unchanged</small></h2>
+      <div class="p-ph">
+        <div class="p-status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="p-nav">Scheduled</div>
+        <div class="p-grp">Today <small>Thu, Nov 26</small></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t">Hourly merge monitor v2</div><div class="m">↻ Every hour · Check only</div></div><span class="tm">02:00</span></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t">US app 1070 数据就绪巡检</div><div class="m">↻ Every day at 09:07 · Check only</div></div><span class="tm">09:07</span></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t">SG app 1070 data readiness</div><div class="m">↻ Every day at 09:17 · Check only</div></div><span class="tm">09:17</span></div>
+        <div class="p-dim"></div>
+        <div class="p-alert" id="p-alert" style="top:180px">
+          <h5>Rename Schedule</h5>
+          <p>Only the name changes. When it runs and what it does stay the same.</p>
+          <div class="fld">US app 1070 data readiness<span class="cur"></span></div>
+          <div class="bt"><div>Cancel</div><div>Save</div></div>
+        </div>
+        <div class="p-kb"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+
+    <div class="b-stage">
+      <h2>③ Saved <small>the sheet's History has the change and Undo</small></h2>
+      <div class="p-ph">
+        <div class="p-status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="p-nav">Scheduled</div>
+        <div class="p-dim" style="background:rgba(0,0,0,.18)"></div>
+        <div class="p-sheet">
+          <div class="p-toolbar"><span>Done</span><span>⋯</span></div>
+          <h4 id="p-title">US app 1070 data readiness</h4>
+          <div class="meta">↻ Every day at 09:07 · tea-cli @ SG · Check only</div>
+          <div class="p-card" style="padding:12px 14px;font-size:14px">Next run today at 09:07<br><span style="color:#8a8a8d">Last run: nothing new · yesterday 09:08</span></div>
+          <div style="font-size:13px;color:#8a8a8d;margin:0 4px 4px">HISTORY</div>
+          <div class="p-card">
+            <div class="w-hist fresh" id="p-hist" style="margin:0 -14px;padding:9px 14px;border-radius:12px 12px 0 0"><span>Renamed from “US app 1070 数据就绪巡检”</span><span class="undo" style="color:#007aff">Undo</span></div>
+            <div class="w-hist"><span>Ran · nothing new</span><span class="who">yesterday 09:08</span></div>
+            <div class="w-hist"><span>Created</span><span class="who">you · Nov 20</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="b-stage" style="width:520px">
+      <h2>Notes</h2>
+      <div class="b-card">
+        <div class="b-note" style="margin-bottom:12px"><span class="b-n">1</span><div><b>Rename… in the menus that exist</b>Long-press on a row and the sheet's ⋯. No new swipe action: the row's swipe stays Pause / Delete.</div></div>
+        <div class="b-note" style="margin-bottom:12px"><span class="b-n">2</span><div><b>The system alert with a field</b>The pattern iOS already uses for folders and Drive files. The field starts with the current name selected.</div></div>
+        <div class="b-note" style="margin-bottom:12px"><span class="b-n">3</span><div><b>History + Undo</b>The same record the web shows. The other devices update over the live stream.</div></div>
+        <div class="b-note"><span class="b-n">4</span><div><b>Android</b>Same menu item; a Material dialog with one text field, Cancel / Save.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Part 3: rules, decisions, delivery ================= -->
+<section class="b-part" id="part-3">
+  <h1>Rules, open decisions, delivery</h1>
+  <p class="b-sub">The scheduled-tasks design (§2) says “no surface has a field: changes are said”. Renaming would be its first exception, so the decisions below are yours to make.</p>
+  <div class="b-cols">
+    <div class="b-card">
+      <h3>What a rename does</h3>
+      <ul>
+        <li>Changes <code>title</code> only. Intent, prompt, rule, access and envelope stay the same.</li>
+        <li>Trimmed, 1–200 characters (the limit <code>schedule_update</code> already has). Same text after trimming = no-op, no record.</li>
+        <li>Writes a <code>ScheduleRevision</code> (<code>changedBy USER</code>, before/after title) → History + Undo. Undo is the existing <code>POST /schedules/:id/undo</code>.</li>
+        <li>Inside the envelope by definition: no card, no Allow, applies at once.</li>
+        <li>Allowed in every state but ENDED (paused, held, running). A run in progress keeps the revision it started with; its session title does not change.</li>
+        <li>Owner channel and personal tokens with <code>sessions:write</code>, like Pause. An acting session uses <code>schedule_update</code>, as today.</li>
+        <li>Other devices update through the schedule's existing realtime event.</li>
+      </ul>
+    </div>
+    <div class="b-card">
+      <h3>To decide</h3>
+      <div class="b-q">D1 · How does a rename reach the server?</div>
+      <div class="b-opt rec"><b>A (recommended) · A narrow REST door</b><code>POST /api/schedules/:id/rename {title}</code>: title only, beside pause/resume. The name is a label, not goal, risk, budget or authority, so §2's rule still holds for everything that is. The surface spec is updated to list it.</div>
+      <div class="b-opt"><b>B · Keep it said</b>Rename… opens the Change… conversation with “Rename it to: ” typed in. No new door, but every rename starts an engine and costs a turn.</div>
+      <div class="b-q">D2 · May an agent rename it afterwards?</div>
+      <div class="b-opt rec"><b>A (recommended) · A person's name sticks</b>Once a person has named it, a run's <code>schedule_update</code> with a new title is refused (<code>SCHEDULE_TITLE_SET_BY_OWNER</code>). A session the person is talking in may still rename it, when asked. Undoing the rename lifts the hold.</div>
+      <div class="b-opt"><b>B · No hold</b>Any change is recorded with Undo; an agent may overwrite the name.</div>
+    </div>
+    <div class="b-card">
+      <h3>Delivery (cheapest first)</h3>
+      <ol>
+        <li><b>Server</b>: the rename door + <code>titleSetBy</code> column (D2 A), revision record, spec for the surface list and the run refusal. Shared copy for “Rename…”, “Renamed from …”.</li>
+        <li><b>Web</b>: Rename… in the row menu and inspector ⋯; the inspector title as a field (reuses the session-row rename field). Vitest.</li>
+        <li><b>macOS + iOS</b>: the menu item, the inline field on macOS and the alert on iOS; OrbitKit API call; History line.</li>
+        <li><b>Android</b>: the menu item and a dialog, following iOS.</li>
+        <li><b>Docs</b>: scheduled-tasks design §2, §8.4 and §9.1 name the exception.</li>
+      </ol>
+      <p style="margin:14px 0 0;color:#6b6f76">Older clients need nothing: they read <code>title</code> as before, and a revision record they cannot name shows as a generic change.</p>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Numbered marks over the proposal frames, placed after layout.
+  window.drawMarks = () => {
+    const mark = (id, n, dx = -30, dy = -8, ring = true) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const part = el.closest('.b-part');
+      part.style.position = 'relative';
+      const p = part.getBoundingClientRect(), r = el.getBoundingClientRect();
+      if (ring) {
+        const g = document.createElement('div');
+        g.className = 'b-ring';
+        Object.assign(g.style, { left: r.left - p.left - 5 + 'px', top: r.top - p.top - 5 + 'px', width: r.width + 10 + 'px', height: r.height + 10 + 'px' });
+        part.appendChild(g);
+      }
+      const b = document.createElement('span');
+      b.className = 'b-n b-pin';
+      b.textContent = n;
+      Object.assign(b.style, { left: r.left - p.left + dx + 'px', top: r.top - p.top + dy + 'px' });
+      part.appendChild(b);
+    };
+    mark('w-menu', 1, 6, -30); mark('w-field', 2); mark('w-hist', 3); mark('w-row', 4);
+    mark('p-ctx', 1); mark('p-alert', 2); mark('p-hist', 3);
+  };
+</script>
+</body>
+</html>
