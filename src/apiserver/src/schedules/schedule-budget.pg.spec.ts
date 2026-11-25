@@ -6,15 +6,17 @@
  *      runs per week in any trailing 7 days; the extra slots are MISSED (OVER_BUDGET), the schedule stays ACTIVE,
  *      the owner is told once, and the run list reads the reason in English;
  *   2. two replicas racing on the last slot of the budget start exactly one run, and none past it;
- *   3. the owner's Run now starts over budget and counts toward later automatic starts; a session's is refused
- *      (SCHEDULE_OVER_BUDGET);
+ *   3. the owner's Run now starts and counts toward no budget; a session's counts toward a budget of its own, apart
+ *      from the automatic slots, and is refused over it (SCHEDULE_OVER_BUDGET);
  *   4. a start that never reached its engine and was retried is one start, not four;
  *   5. a personal access token's Run now is refused over budget like a session's;
  *   6. a ONCE slot over budget follows the missed-ONCE rule;
  *   7. runs already started stay counted when the envelope is narrowed mid-week;
  *   a–c. a schedule whose rule fills its envelope never trips it, whatever each start's latency (DAILY over 15 days,
  *      WEEKLY over 4 weeks, one run 3 hours late after a runner outage, across a daylight-saving change);
- *   e. the owner's Run now inside a full week starts, and the next automatic slot is then over budget.
+ *   e. the owner's Run now inside a full week starts, and the next automatic slot still starts; presses by sessions
+ *      never take a daily slot's place;
+ *   f–g. a run that never reached its engine costs nothing, a live one holds its place.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/schedules/schedule-budget.pg.spec.ts
  *
@@ -247,7 +249,7 @@ test('1. a rule moved to a few minutes from now after every run starts at most r
   const history = (await runs.history(w.ownerId, s.id)) as Array<{ id: string; state: string; failureReason: string | null; reasonText?: string | null }>;
   const row = history.find((r) => r.id === over[0].id)!;
   assert.equal(row.failureReason, 'OVER_BUDGET');
-  assert.match(row.reasonText ?? '', /^Not started: it had already started as many runs in the past 7 days as you allowed/);
+  assert.match(row.reasonText ?? '', /^Not started: it had already started as many scheduled runs in the past 7 days as you allowed/);
   assert.ok(!/[一-鿿]/.test(row.reasonText ?? ''), 'English');
   const ok = history.find((r) => r.state === 'NO_CHANGE')!;
   assert.equal(ok.reasonText, null, 'a run without a reason has no reason text');
@@ -297,7 +299,7 @@ test('2. two replicas racing on the last slot of the budget start exactly one ru
   assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).state, 'ACTIVE');
 });
 
-test('3. the owner\'s Run now starts over budget and counts; a session\'s Run now over budget is refused', { skip }, async () => {
+test('3. the owner\'s Run now starts and counts toward no budget; a session\'s counts toward its own, apart from the slots', { skip }, async () => {
   pushed = [];
   at('2026-11-16T09:58:00Z');
   const w = await world('budget-run-now');
@@ -305,64 +307,52 @@ test('3. the owner\'s Run now starts over budget and counts; a session\'s Run no
   const s = await created(w, { rule: weekly('10:00') });
   assert.equal(s.envelopeRunsPerWeek, 1);
 
-  // A session's Run now, inside the budget: allowed, and it is the week's one start.
+  // A session's Run now, inside its budget: allowed, and it is the week's one press by a session or a token.
   const mine = await runs.runNow(w.agent, s.id);
   const first = await db.scheduleRun.findUniqueOrThrow({ where: { id: mine.id } });
   assert.equal(first.state, 'RUNNING', 'inside the budget a session may run it now');
+  assert.equal(first.byOwner, false);
   await delivered(first.sessionId!);
   advance(MINUTE);
   await runs.report(w.ownerId, first.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
 
-  // Now over budget: a session's Run now is refused with a named code, and writes no run.
-  const runsBefore = await db.scheduleRun.count({ where: { scheduleId: s.id } });
-  await assert.rejects(runs.runNow(w.agent, s.id), (error: unknown) => {
+  // Now over it: a session's Run now is refused with a named code, and writes no run.
+  const refusedOne = (error: unknown) => {
     assert.equal(code(error), 'SCHEDULE_OVER_BUDGET');
     assert.equal(
       message(error),
-      'This schedule has started 1 run in the past 7 days; its owner allowed 1 a week. Only the owner can run it now.',
+      'Run now by a session or a token has started 1 run of this schedule in the past 7 days; ' +
+        'its owner allowed 1 a week. Only the owner can run it now.',
     );
     return true;
-  });
+  };
+  const runsBefore = await db.scheduleRun.count({ where: { scheduleId: s.id } });
+  await assert.rejects(runs.runNow(w.agent, s.id), refusedOne);
   assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id } }), runsBefore, 'a refused Run now writes no run');
 
-  // The owner's press starts even over budget.
+  // The owner's press starts, and records that it was theirs.
   const press = await runs.runNow(w.owner, s.id);
   const pressed = await db.scheduleRun.findUniqueOrThrow({ where: { id: press.id } });
   assert.equal(pressed.state, 'RUNNING', "the owner's Run now is the owner's own press");
+  assert.equal(pressed.byOwner, true);
   await delivered(pressed.sessionId!);
   advance(MINUTE);
   await runs.report(w.ownerId, pressed.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
 
-  // And it counts: the automatic slot, moved to a few minutes from now, is over budget.
+  // Neither press takes the automatic slot's place: the slot, moved to a few minutes from now, starts.
   await moveRule(w.agent, s.id, weekly);
   const [auto] = await nextSlot(s.id);
-  assert.equal(auto?.outcome, 'MISSED');
-  assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: auto.runId } })).failureReason, 'OVER_BUDGET');
+  assert.equal(auto?.outcome, 'STARTED', 'two presses in the window, and the rhythm still runs');
+  // The rule's own one run a week still bounds it: moved again, the next slot is over budget.
+  await runMovesAndEnds(w, auto.runId, s.id, weekly);
+  const [again] = await nextSlot(s.id);
+  assert.equal(again?.outcome, 'MISSED');
+  assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: again.runId } })).failureReason, 'OVER_BUDGET');
 
-  // The owner's Run now with only owner presses in the window: still starts.
-  const again = await runs.runNow(w.owner, s.id);
-  const thrice = await db.scheduleRun.findUniqueOrThrow({ where: { id: again.id } });
-  assert.equal(thrice.state, 'RUNNING');
-  await delivered(thrice.sessionId!);
-  advance(MINUTE);
-  await runs.report(w.ownerId, thrice.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
+  // The owner's press still starts, and a session's refusal still counts only the sessions' and tokens' presses.
   const last = await runs.runNow(w.owner, s.id);
-  const fourth = await db.scheduleRun.findUniqueOrThrow({ where: { id: last.id } });
-  assert.equal(fourth.state, 'RUNNING');
-  await delivered(fourth.sessionId!);
-  advance(MINUTE);
-  await runs.report(w.ownerId, fourth.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
-
-  // Four started of one allowed (the production case): the refusal names the four started, not the one allowed.
-  assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id, startedAt: { not: null } } }), 4);
-  await assert.rejects(runs.runNow(w.agent, s.id), (error: unknown) => {
-    assert.equal(code(error), 'SCHEDULE_OVER_BUDGET');
-    assert.equal(
-      message(error),
-      'This schedule has started 4 runs in the past 7 days; its owner allowed 1 a week. Only the owner can run it now.',
-    );
-    return true;
-  });
+  assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: last.id } })).state, 'RUNNING');
+  await assert.rejects(runs.runNow(w.agent, s.id), refusedOne);
 });
 
 test('4. a start that never reached its engine, retried three times, is one start', { skip }, async () => {
@@ -430,15 +420,14 @@ test('6. a ONCE slot over budget is MISSED (OVER_BUDGET) and follows the missed-
   pushed = [];
   at('2026-11-16T09:58:00Z');
   const w = await world('budget-once');
-  const s = await created(w, { rule: { kind: 'ONCE', at: '2026-11-16T10:00' } });
+  const s = await created(w, { rule: { kind: 'WEEKLY', time: '10:00', weekdays: ['MON'] } });
   assert.equal(s.envelopeRunsPerWeek, 1);
 
-  // The owner runs it now first: the one start of the week.
-  const press = await runs.runNow(w.owner, s.id);
-  const run = await db.scheduleRun.findUniqueOrThrow({ where: { id: press.id } });
-  await delivered(run.sessionId!);
-  advance(MINUTE);
-  await runs.report(w.ownerId, run.sessionId!, { outcome: 'NO_CHANGE', summary: 'healthy' });
+  // Its slot starts, and the run turns it into a ONCE a few minutes from now (inside the envelope): the one start of
+  // the week is spent. A Run now would not spend it (§8.4).
+  const [first] = await nextSlot(s.id);
+  assert.equal(first?.outcome, 'STARTED');
+  await runMovesAndEnds(w, first.runId, s.id, (time) => ({ kind: 'ONCE', at: `2026-11-16T${time}` }));
   pushed = [];
 
   const [slot] = await nextSlot(s.id);
@@ -553,13 +542,13 @@ test('c. one run 3 hours late after a runner outage, the next day on time: none 
   assert.equal(late.startedAt!.getTime() - late.plannedAt.getTime(), 3 * 60 * MINUTE, 'that run did start 3 hours late');
 });
 
-test('e. the owner\'s Run now inside a full week starts, and the next automatic slot is then over budget', { skip }, async () => {
+test('e. the owner\'s Run now inside a full week starts, and the next automatic slot still starts', { skip }, async () => {
   pushed = [];
   at('2026-11-16T09:58:00Z');
   const w = await world('budget-press-cost');
   const s = await created(w, { rule: daily('10:00') });
   await noneMissed(s.id, await runSlots(w, s.id, 6));
-  // The seventh day, before its slot: the owner presses Run now. Inside the budget (6 of 7), it starts.
+  // The seventh day, before its slot: the owner presses Run now. It starts.
   at('2026-11-22T08:00:00Z');
   const press = await runs.runNow(w.owner, s.id);
   const pressed = await db.scheduleRun.findUniqueOrThrow({ where: { id: press.id } });
@@ -567,57 +556,73 @@ test('e. the owner\'s Run now inside a full week starts, and the next automatic 
   await delivered(pressed.sessionId!);
   advance(MINUTE);
   await runs.report(w.ownerId, pressed.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
-  // That press was the seventh start: the day's 10:00 slot is the cost of it.
+  // The press is not the cost of the day's 10:00 slot: the rhythm the owner approved runs.
   const [slot] = await nextSlot(s.id);
-  assert.equal(slot?.outcome, 'MISSED');
-  assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: slot.runId } })).failureReason, 'OVER_BUDGET');
-  // The day after, the oldest slot has left the window: it runs again.
-  const [next] = await nextSlot(s.id);
-  assert.equal(next?.outcome, 'STARTED');
+  assert.equal(slot?.outcome, 'STARTED');
 });
 
-/** Six delivered runs in a week of a daily rule (envelope 7), then the owner's Run now on the 22nd, never delivered. */
-async function sixDeliveredThenUndeliveredPress(label: string) {
+/** The production case of 2026-11-20: six presses by sessions in three days, then the daily slots go on. */
+test('e2. presses by sessions and tokens up to their budget never take a daily slot\'s place', { skip }, async () => {
+  pushed = [];
+  at('2026-11-16T09:58:00Z');
+  const w = await world('budget-presses-apart');
+  const s = await created(w, { rule: daily('10:00') });
+  await noneMissed(s.id, await runSlots(w, s.id, 1));
+  for (let i = 0; i < 6; i++) {
+    advance(60 * MINUTE);
+    const asked = await runs.runNow(w.agent, s.id);
+    const run = await db.scheduleRun.findUniqueOrThrow({ where: { id: asked.id } });
+    assert.equal(run.state, 'RUNNING');
+    await delivered(run.sessionId!);
+    advance(MINUTE);
+    await runs.report(w.ownerId, run.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
+  }
+  await noneMissed(s.id, await runSlots(w, s.id, 6));
+});
+
+/**
+ * Six delivered slots of a rule that a run moved to a few minutes after each run (envelope 7), then the seventh slot
+ * started and never delivered.
+ */
+async function sixDeliveredThenUndeliveredSlot(label: string) {
   pushed = [];
   at('2026-11-16T09:58:00Z');
   const w = await world(label);
   const s = await created(w, { rule: daily('10:00') });
   assert.equal(s.envelopeRunsPerWeek, 7);
-  await noneMissed(s.id, await runSlots(w, s.id, 6));
-  at('2026-11-22T08:00:00Z');
-  const press = await runs.runNow(w.owner, s.id);
-  const pressed = await db.scheduleRun.findUniqueOrThrow({ where: { id: press.id } });
-  assert.equal(pressed.state, 'RUNNING');
-  assert.ok(pressed.startedAt && pressed.sessionId, 'the press opened a session');
-  assert.equal(await db.conversationTurn.count({ where: { sessionId: pressed.sessionId!, deliveredAt: { not: null } } }), 0, 'never delivered');
-  return { w, s, pressed };
+  for (let i = 0; i < 6; i++) {
+    const [slot] = await nextSlot(s.id);
+    assert.equal(slot?.outcome, 'STARTED');
+    await runMovesAndEnds(w, slot.runId, s.id, daily);
+  }
+  const [seventh] = await nextSlot(s.id);
+  assert.equal(seventh?.outcome, 'STARTED');
+  const started = await db.scheduleRun.findUniqueOrThrow({ where: { id: seventh.runId } });
+  assert.ok(started.startedAt && started.sessionId, 'the slot opened a session');
+  assert.equal(await db.conversationTurn.count({ where: { sessionId: started.sessionId!, deliveredAt: { not: null } } }), 0, 'never delivered');
+  await moveRule(w.agent, s.id, daily);
+  return { w, s, started };
 }
 
 test('f. six delivered runs plus a MISSED RUNNER_UNAVAILABLE run that never reached its engine: the next slot starts', { skip }, async () => {
-  const { s, pressed } = await sixDeliveredThenUndeliveredPress('budget-undelivered-missed');
+  const { s, started } = await sixDeliveredThenUndeliveredSlot('budget-undelivered-missed');
   // Five tries, none delivered, then MISSED: it keeps startedAt, as in production.
   await db.scheduleRun.update({
-    where: { id: pressed.id },
-    data: { state: 'MISSED', failureReason: 'RUNNER_UNAVAILABLE', endedAt: advance(10 * MINUTE) },
+    where: { id: started.id },
+    data: { state: 'MISSED', failureReason: 'RUNNER_UNAVAILABLE', endedAt: advance(MINUTE) },
   });
-  const row = await db.scheduleRun.findUniqueOrThrow({ where: { id: pressed.id } });
+  const row = await db.scheduleRun.findUniqueOrThrow({ where: { id: started.id } });
   assert.ok(row.startedAt, 'the missed run kept startedAt');
   const [slot] = await nextSlot(s.id);
   assert.equal(slot?.outcome, 'STARTED', 'an undelivered run does not cost the slot its place');
 });
 
-test('g. six delivered runs plus a RUNNING run not yet delivered: the next slot is OVER_BUDGET and the refusal reads the same count', { skip }, async () => {
-  const { w, s } = await sixDeliveredThenUndeliveredPress('budget-undelivered-live');
-  // A live run holds its place: a session's Run now is refused with 7 of 7.
-  await assert.rejects(runs.runNow(w.agent, s.id), (e) => {
-    assert.equal(code(e), 'SCHEDULE_OVER_BUDGET');
-    assert.match(message(e) ?? '', /has started 7 runs in the past 7 days; its owner allowed 7 a week/);
-    return true;
-  });
-  // The next slot (the 22nd, 10:00) is over budget. It would also wait behind the run in progress (start()'s busy
-  // check), so the budget is read the way start() reads it for that slot.
-  const slot = new Date('2026-11-22T10:00:00Z');
+test('g. six delivered runs plus a RUNNING run not yet delivered: the next slot is OVER_BUDGET', { skip }, async () => {
+  const { s } = await sixDeliveredThenUndeliveredSlot('budget-undelivered-live');
+  // A live run holds its place. The next slot would also wait behind the run in progress (start()'s busy check), so
+  // the budget is read the way start() reads it for that slot.
   const schedule = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
+  const slot = schedule.nextDueAt!;
   assert.equal(await scheduleBudgetStarts(db, schedule, slot), 7, 'six delivered plus the live undelivered run');
   assert.equal(await scheduleOverBudget(db, schedule, slot), true);
 });

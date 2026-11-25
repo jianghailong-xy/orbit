@@ -9,7 +9,7 @@ import type { Runner } from './TasksSidePanel';
 /**
  * The session list's Pinned section folds to its heading, as Notes' Pinned does (and as the iOS list
  * does, `AgentsView.swift`): its heading is a button, folding takes the pinned rows off the list and
- * out of Up/Down, and the fold is remembered across reloads.
+ * out of Up/Down, and the fold is remembered across reloads. Needs you folds the same way.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -55,6 +55,10 @@ const session = (n: number, title: string, pinnedAt: string | null) => ({
 });
 const PINNED = session(3, 'Release checklist', '2026-09-13T11:00:00Z');
 const OTHER = session(4, 'Fix login redirect loop', null);
+const NEEDS = { ...session(5, 'Approve the migration', null), needsYou: true };
+const NEEDS_FOLD_KEY = 'orbit.sessionNeedsYouCollapsed';
+// What the session list returns; a test that needs a Needs you row adds NEEDS.
+let listed: object[] = [PINNED, OTHER];
 
 class FakeEventSource {
   onmessage: ((e: { data: string }) => void) | null = null;
@@ -91,6 +95,7 @@ const waitForUi = async (assertion: () => void): Promise<void> => {
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   stored = {};
+  listed = [PINNED, OTHER];
   vi.stubGlobal('localStorage', {
     getItem: (k: string) => stored[k] ?? null,
     setItem: (k: string, v: string) => {
@@ -111,7 +116,7 @@ beforeEach(() => {
     if (path === '/workspaces') {
       return reply([{ id: WORKSPACE_PUBLIC, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z', lastProvider: 'claude' }]);
     }
-    const one = [PINNED, OTHER].find((s) => path.startsWith(`/sessions/${s.id}`));
+    const one = [PINNED, OTHER, NEEDS].find((s) => path.startsWith(`/sessions/${s.id}`));
     if (one) {
       if (path.includes('/events/page')) return reply({ events: [], hasMore: false });
       if (path.includes('/diff')) return reply({ files: [] });
@@ -119,7 +124,7 @@ beforeEach(() => {
       if (path.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
       return reply(one);
     }
-    if (path.startsWith('/sessions')) return reply([PINNED, OTHER]);
+    if (path.startsWith('/sessions')) return reply(listed);
     if (path.startsWith('/tasks/evidence-decisions/pending')) {
       return reply({ decidingSessionId: null, count: 0, oldestAgeSeconds: null, pending: [], waitingOnYou: [] });
     }
@@ -237,5 +242,36 @@ describe('the Pinned section folds', () => {
     await click(heading(page)!);
     await up();
     await waitForUi(() => expect(active()).toBe(PINNED.title));
+  });
+});
+
+describe('the Needs you section folds', () => {
+  const needsHeading = (el: HTMLElement) =>
+    [...el.querySelectorAll<HTMLButtonElement>('button.session-section-fold')].find((b) => b.textContent === 'Needs you');
+
+  it('folds to its heading and back, remembering each', async () => {
+    listed = [PINNED, NEEDS, OTHER];
+    const page = await mountList();
+    expect(needsHeading(page)!.getAttribute('aria-expanded')).toBe('true');
+    expect(rowTitles(page)).toEqual([PINNED.title, NEEDS.title, OTHER.title]);
+
+    await click(needsHeading(page)!);
+    expect(needsHeading(page)!.getAttribute('aria-expanded')).toBe('false');
+    expect(rowTitles(page)).toEqual([PINNED.title, OTHER.title]);
+    expect(stored[NEEDS_FOLD_KEY]).toBe('1');
+    // Pinned's fold is its own.
+    expect(heading(page)!.getAttribute('aria-expanded')).toBe('true');
+
+    await click(needsHeading(page)!);
+    expect(rowTitles(page)).toEqual([PINNED.title, NEEDS.title, OTHER.title]);
+    expect(stored[NEEDS_FOLD_KEY]).toBe('0');
+  });
+
+  it('opens folded when the fold was stored', async () => {
+    listed = [PINNED, NEEDS, OTHER];
+    stored[NEEDS_FOLD_KEY] = '1';
+    const page = await mountList();
+    expect(needsHeading(page)!.getAttribute('aria-expanded')).toBe('false');
+    expect(rowTitles(page)).toEqual([PINNED.title, OTHER.title]);
   });
 });

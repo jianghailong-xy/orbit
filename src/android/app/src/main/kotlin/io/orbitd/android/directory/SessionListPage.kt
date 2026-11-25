@@ -72,6 +72,8 @@ internal object SessionListCopy {
     const val COORDINATOR_LABEL = "Project coordinator"
     const val PINNED_SHOWS = "Shows the pinned sessions"
     const val PINNED_HIDES = "Hides the pinned sessions"
+    const val NEEDS_YOU_SHOWS = "Shows the sessions waiting for you"
+    const val NEEDS_YOU_HIDES = "Hides the sessions waiting for you"
     const val FOLDER_ACTIONS = "Folder actions"
     const val FOLDER_EMPTY = "Nothing in this folder"
     const val FOLDER_RUNNING = "Session running"
@@ -246,13 +248,14 @@ private fun HeadingText(title: String, modifier: Modifier = Modifier) {
 
 private val HEADING_PADDING = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp)
 
-/** The Pinned section's title, the whole band being the button: a chevron down while its rows show and right once folded away. */
+/** A folding section's title (Pinned, Needs you), the whole band being the button: a chevron down while its rows show and right once folded
+ * away. [shows] and [hides] are what a tap does, read out as its action. */
 @Composable
-internal fun PinnedHeading(title: String, collapsed: Boolean, toggle: () -> Unit) {
-    val turn by animateFloatAsState(if (collapsed) 0f else 90f, label = "pinned")
+internal fun FoldHeading(title: String, collapsed: Boolean, shows: String, hides: String, tag: String, toggle: () -> Unit) {
+    val turn by animateFloatAsState(if (collapsed) 0f else 90f, label = tag)
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-        .clickable(role = Role.Button, onClickLabel = if (collapsed) SessionListCopy.PINNED_SHOWS else SessionListCopy.PINNED_HIDES, onClick = toggle)
-        .testTag("pinned-heading").padding(HEADING_PADDING), verticalAlignment = Alignment.CenterVertically) {
+        .clickable(role = Role.Button, onClickLabel = if (collapsed) shows else hides, onClick = toggle)
+        .testTag(tag).padding(HEADING_PADDING), verticalAlignment = Alignment.CenterVertically) {
         HeadingText(title, Modifier.weight(1f))
         Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp).rotate(turn), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -273,13 +276,14 @@ internal fun TagHeading(tag: Tag?) {
 internal fun tagColor(hex: String?): Color =
     hex?.removePrefix("#")?.takeIf { it.length == 6 }?.toLongOrNull(16)?.let { Color(0xFF000000 or it) } ?: Color.Gray
 
-/** Whether the Pinned section is folded to its heading: this phone's, across workspaces and launches (iOS `sessionList.pinnedCollapsed`). */
+/** Whether a section is folded to its heading, stored under [key] ("pinnedCollapsed", "needsYouCollapsed"): this phone's, across workspaces
+ * and launches (iOS `sessionList.pinnedCollapsed` / `sessionList.needsYouCollapsed`). */
 @Composable
-internal fun rememberPinnedCollapsed(): MutableState<Boolean> {
+internal fun rememberSectionCollapsed(key: String): MutableState<Boolean> {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("orbit.sessionList", Context.MODE_PRIVATE) }
-    val state = remember { mutableStateOf(preferences.getBoolean("pinnedCollapsed", false)) }
-    LaunchedEffect(state.value) { preferences.edit { putBoolean("pinnedCollapsed", state.value) } }
+    val state = remember { mutableStateOf(preferences.getBoolean(key, false)) }
+    LaunchedEffect(state.value) { preferences.edit { putBoolean(key, state.value) } }
     return state
 }
 
