@@ -143,12 +143,17 @@ then §7.3 applies.
 
 On the control plane. The runner says it is draining on every inbox fetch and every turn completion,
 each in an optional request field, and the server decides from that request what it hands out and
-whether the slot is kept. The heartbeat's `draining` flag lags the runner, so it is not used for
+whether the slot is kept. On the inbox fetch the field is the query parameter `draining=1` (beside
+`acceptsSteer=1`, `GET /runner/sessions/:id/inbox`, over the link as over HTTPS); a fetch that
+does not drain leaves it out. The heartbeat's `draining` flag lags the runner, so it is not used for
 this.
 
 The runner's own hold (`heldForUpdate`) stays only as a backstop for a control plane too old to read
 those fields. It never stops the session loop from reading control turns: a held `message` or
-`shell` must not block an `interrupt`, `end` or other turn from §7.1 filed behind it.
+`shell` must not block an `interrupt`, `end` or other turn from §7.1 filed behind it. The inbox
+poller every engine loop shares holds such a turn while its permit does not come and goes on
+fetching (`inboxPoller.holdTurns`); an `interrupt` hands the held turn back unrun, as
+`INTERRUPTED`, before the loop handles the interrupt as it handles any.
 
 ### 7.3 A turn that ends on a draining runner
 

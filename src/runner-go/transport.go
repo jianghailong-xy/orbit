@@ -274,6 +274,10 @@ type Transport struct {
 	// releaseOffered is what the latest successful heartbeat answer said of the session-release protocol
 	// (session_release.go): false until one says it, and on the first that does not.
 	releaseOffered atomic.Bool
+	// draining is whether this runner's pool drains for an update (sessionPool.isDrainingForUpdate), which every
+	// inbox fetch says (draining=1, docs/runner-update-drain-design.md §7.2). Set by runLoop once it has a pool,
+	// before any session starts; nil on every other transport, whose fetches say nothing.
+	draining func() bool
 	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
 	observerMu sync.Mutex
 	observer   func(transportEvent)
@@ -662,6 +666,12 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	path := "/runner/sessions/" + sessionID + "/inbox?acceptsSteer=1"
 	if leaseGeneration != "" {
 		path += "&leaseGeneration=" + url.QueryEscape(leaseGeneration)
+	}
+	// While the pool drains for an update the control plane hands this fetch no new message, shell or reload, and
+	// still hands it every control turn. A control plane that predates the field ignores it, and the runner's own
+	// hold (heldForUpdate, and the poller's wait for a held turn's permit) is the backstop.
+	if t.draining != nil && t.draining() {
+		path += "&draining=1"
 	}
 	if err := t.do(ctx, "GET", path, nil, &r, fetchCallTimeout); err != nil {
 		return nil, err
