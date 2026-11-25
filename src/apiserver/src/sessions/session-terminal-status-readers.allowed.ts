@@ -121,6 +121,9 @@ export const CLIENT_WIRE: Readonly<Record<string, number>> = {
 
 /** (e) Hand-written sets that name no released value: activity, held-idle and held sets, and slot counts. */
 export const NO_RELEASED_VALUE: Readonly<Record<string, number>> = {
+  // Not a set: the repeated out-of-memory stop writes INTERRUPTED on the turns it parks (main 1baac761e8). It goes
+  // when that writer moves to `turn_state` (docs/session-status-retirement-plan.md, writer #1).
+  'src/apiserver/src/managed-runners/managed-runner-manager.ts': 1,
   // HELD_SESSION_STATUSES, for the filters whose status list is an index's access path.
   'src/apiserver/src/common/session-release.ts': 2,
   // UNSETTLED (a turn queued or running), and statusAfterTurnEnqueued's idle statuses (AWAITING_INPUT, INTERRUPTED).
