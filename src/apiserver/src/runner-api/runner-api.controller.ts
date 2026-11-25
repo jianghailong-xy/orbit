@@ -7936,7 +7936,8 @@ export class RunnerApiController {
       // A message a Stop overtook and the runner reports INTERRUPTED is not owed another delivery either: the Stop took
       // it down with every other message still waiting, though no engine said anything for it — the runner hands back
       // a follow-up it held for an update unrun that way (inboxPoller.handBackHeld, runner-update-drain-design.md §7.4).
-      const stoppedUnrun = dto.status === RunStatus.INTERRUPTED && completedTurn != null
+      const reportedInterrupted = dto.status === RunStatus.INTERRUPTED;
+      const stoppedUnrun = reportedInterrupted && completedTurn != null
         && await stopOvertookTarget(tx, sessionId, completedTurn.seq);
       const unanswered =
         !regionStopped
@@ -8322,7 +8323,6 @@ export class RunnerApiController {
       let currentWorkTerminalized = 0;
       let currentWorkRequeued = 0;
       let stoppedRequestsClosed: string[] = [];
-      const reportedInterrupted = dto.status === RunStatus.INTERRUPTED;
       if (
         completedTurn
         && !failSession
