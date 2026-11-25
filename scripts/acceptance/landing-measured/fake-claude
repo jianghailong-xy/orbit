@@ -49,6 +49,8 @@ run recorded under $LM_SCRATCH/onfix/, found by ORBIT_TASK_ID or by the checkout
   E2E-FAIL[-WHILE <flag>]: <text>   (any session) the turn fails with <text> as its error result, after writing
                         E2E_FAILED_WORK.md in the cwd (work a failed run leaves uncommitted). With -WHILE, only
                         while $LM_SCRATCH/<flag> exists; otherwise the turn is acknowledged.
+  E2E-HOLD-WHILE <flag>             (any session) the turn runs, holding its runner slot, while $LM_SCRATCH/<flag>
+                        exists (at most 600 s), and then goes on as any other turn
   E2E-SWALLOW-WHILE <flag>          (any session) while $LM_SCRATCH/<flag> exists, the message is read and echoed
                         and the turn ends with no reply at all (no assistant message): a delivery nobody answered.
 While $LM_SCRATCH/hold-commit-message exists, a one-shot `claude -p` asked for a commit message waits (up to 100 s)
@@ -440,6 +442,19 @@ def swallowing(prompt):
     return bool(m) and scratch_flag(m.group(1))
 
 
+def hold(prompt):
+    """E2E-HOLD-WHILE <flag>: wait while the flag exists, at most 600 s."""
+    m = re.search(r'^E2E-HOLD-WHILE\s+([A-Za-z0-9_.-]+)\s*$', prompt, re.M)
+    if not m:
+        return
+    import time
+    log('turn-hold', flag=m.group(1))
+    for _ in range(1200):
+        if not scratch_flag(m.group(1)):
+            break
+        time.sleep(0.5)
+
+
 def failing(prompt):
     """The error text an E2E-FAIL line makes this turn fail with, or None."""
     m = re.search(r'^E2E-FAIL(?:-WHILE\s+([A-Za-z0-9_.-]+))?:\s*(.+)$', prompt, re.M)
@@ -526,6 +541,10 @@ def main():
                      'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
                 out(result(sid, '', False))
                 continue
+            if re.search(r'^E2E-HOLD-WHILE\s', prompt, re.M):
+                out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'lm42-fake',
+                     'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
+                hold(prompt)
             text, is_error = turn(sid, prompt)
             log('turn', isError=is_error, prompt=prompt[:300], reply=text[:600])
             out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'lm42-fake',
