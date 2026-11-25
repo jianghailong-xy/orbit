@@ -274,9 +274,10 @@ describe('a session held for the Claude region', { timeout: 60_000 }, () => {
     expect(html.indexOf('data-run-never-started')).toBeGreaterThan(html.indexOf('Now do the same for the sign-up test.'));
   });
 
-  it('says Anthropic unavailable on HPC in the header and the list, with no working clock and no coded line', async () => {
+  // A wide header carries the title alone (docs/mocks/session-header-compact); the list row says it.
+  it('says Anthropic unavailable on HPC in the list, with no working clock and no coded line', async () => {
     await mount();
-    expect(mounted().querySelector('.workspace-sub')?.textContent).toContain('Anthropic unavailable on HPC');
+    expect(mounted().querySelector('.workspace-sub')).toBeNull();
     await waitFor(() =>
       expect([...mounted().querySelectorAll('.session-sub')].map((n) => n.textContent)).toContain('Anthropic unavailable on HPC'),
     );

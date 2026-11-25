@@ -305,6 +305,7 @@ import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionAgentsStrip } from './SessionAgentsStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
+import { WatchEditorModal } from './WatchEditor';
 import { WatchWakeNamesCtx } from './WatchWakeCard';
 import { ExchangeTreeCtx, type ExchangeTree } from './OrbitExchangeFold';
 import { idKey as exchangeIdKey, upstreamFromGraph } from '../lib/orbitExchangeFold';
@@ -2758,6 +2759,7 @@ export function WorkspaceView({
     pressTimer.current = undefined;
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  const [followOpen, setFollowOpen] = useState(false); // ⋯ → Follow…: a new watch on the open session
   const [agentToolsOpen, setAgentToolsOpen] = useState(false); // the open session's Agent tools drawer
   const [settingsOpen, setSettingsOpen] = useState(false); // the open session's settings: a column, a sheet on a phone
   // Goes up each time ⋯ Rename… asks the settings' Name field for focus.
@@ -10942,7 +10944,8 @@ export function WorkspaceView({
               {!composing && (
                 <CoordinatorBadge projectId={selectedSession?.projectId} />
               )}
-              {!composing && selected && selectedShared && (
+              {/* docs/mocks/session-header-compact: a wide window says Shared on the Share button beside ⋯. */}
+              {isMobile && !composing && selected && selectedShared && (
                 <button
                   type="button"
                   className="session-shared-pill"
@@ -10953,7 +10956,11 @@ export function WorkspaceView({
                 </button>
               )}
               {!composing && selectedId && !selectedTrashed && !selectedMissing && (
-                <SessionWatchBadges sessionId={selectedId} />
+                <SessionWatchBadges sessionId={selectedId} follow={isMobile} />
+              )}
+              {/* The status line is gone from a wide header, so a handoff in flight says so beside the title. */}
+              {!isMobile && !composing && handingOver && (
+                <span className="coordinator-badge">{COORDINATOR_HANDOFF_COPY.badgeHandingOver}</span>
               )}
               {/* Only a failed connection is said here; Connected, Starting and Not reported stay on the ⋯ row. */}
               {!composing && selected && !selectedTrashed && selectedAgentToolsStatus.tone === 'bad' && (
@@ -10968,7 +10975,9 @@ export function WorkspaceView({
                 </button>
               )}
             </div>
-            <div className="workspace-sub">
+            {/* docs/mocks/session-header-compact: a wide window's header is the title alone; the run word, the
+                lifecycle, the time and the tags stay on a phone's. */}
+            {(isMobile || !selected) && <div className="workspace-sub">
               {headSub}
               {/* The session's tags, seen without opening anything; a press opens ⋯ at its Tags level. */}
               {!composing && selected && !selectedTrashed && (
@@ -10981,7 +10990,7 @@ export function WorkspaceView({
                   }}
                 />
               )}
-            </div>
+            </div>}
             {/* A run of a task forked from a session says where its checkout came from, in the
                 server's own words (docs/task-fork-from-session-design.md §2.3). */}
             {!composing && detailForSelected?.forkSource && (
@@ -11002,6 +11011,16 @@ export function WorkspaceView({
                   onClick={isMobile ? () => setSheetProjectId(titleBarProjectId) : toggleProjectColumn}>
                   {titleBarSessionCount ?? undefined}
                 </Button>
+              )}
+              {!isMobile && !selectedTrashed && (
+                <Button
+                  variant="text"
+                  className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
+                  icon={<ExportOutlined />}
+                  title={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}
+                  aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
+                  onClick={() => setShareOpen(true)}
+                />
               )}
               <Menu
                 side="bottom"
@@ -11106,6 +11125,17 @@ export function WorkspaceView({
                           levelHeader: headerTagLevel.levelHeader,
                           levelFooter: headerTagLevel.levelFooter,
                         },
+                        ...(!isMobile
+                          ? [{
+                              key: 'follow',
+                              icon: <EyeOutlined />,
+                              label: 'Follow…',
+                              onSelect: () => {
+                                setHeaderMenuOpen(false);
+                                setFollowOpen(true);
+                              },
+                            }]
+                          : []),
                         { key: 'divider-share', type: 'separator' as const },
                         // Two words for two links (docs/share-links-design.md §8): Copy link is
                         // the signed-in address, for yourself; Share… is the public one. Keeping a
@@ -11119,7 +11149,8 @@ export function WorkspaceView({
                             copySessionLink(selected);
                           },
                         },
-                        {
+                        // A wide window has Share on its own button beside ⋯ (docs/mocks/session-header-compact).
+                        ...(isMobile ? [{
                           key: 'share',
                           icon: <GlobalOutlined className={selectedShared ? 'session-share-icon-live' : undefined} />,
                           label: selectedShared ? (
@@ -11133,7 +11164,7 @@ export function WorkspaceView({
                             setHeaderMenuOpen(false);
                             setShareOpen(true);
                           },
-                        },
+                        }] : []),
                         {
                           key: 'download-html',
                           icon: <DownloadOutlined />,
@@ -11208,6 +11239,12 @@ export function WorkspaceView({
           )}
         </div>}
 
+        {followOpen && selectedId && (
+          <WatchEditorModal
+            mode={{ kind: 'create', targets: [{ kind: 'SESSION', id: selectedId }] }}
+            onClose={() => setFollowOpen(false)}
+          />
+        )}
         {selected && !composing && (
           <AgentToolsDrawer
             mode="session"

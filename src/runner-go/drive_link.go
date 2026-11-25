@@ -12,12 +12,26 @@ import (
 // Made at every start, so a link an agent removed is back after the runner restarts (§5.9 row 61). Whatever else is at
 // that name is kept, as Drive.local-<time>, and the move logged. A runner without any of these directories (every
 // self-registered one) is not touched.
+// isDriveLinkTarget reports whether a link pointing at target was made to the drive: the mount, or a mount an older
+// driver had.
+func isDriveLinkTarget(target string) bool {
+	if target == driveMountPath {
+		return true
+	}
+	for _, old := range driveStaleLinkTargets {
+		if target == old {
+			return true
+		}
+	}
+	return false
+}
+
 func ensureDriveLink(logf func(format string, args ...interface{})) {
 	if info, err := os.Stat(filepath.Dir(driveMountPath)); err != nil || !info.IsDir() {
 		return
 	}
 	for _, stale := range driveStaleHomePaths {
-		if target, err := os.Readlink(stale); err == nil && target == driveMountPath {
+		if target, err := os.Readlink(stale); err == nil && isDriveLinkTarget(target) {
 			if err := os.Remove(stale); err == nil {
 				logf("removed %s, a link to the drive an earlier runner made: the drive is %s", stale, driveHomePath)
 			}

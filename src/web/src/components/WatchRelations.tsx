@@ -139,7 +139,7 @@ export function TaskFollowedBy({ taskId, hideWhenEmpty = false }: { taskId: stri
  * what it is waiting on — and Followed by — the live watches that name it. Each opens its watch rows;
  * Follow creates a watch on this session.
  */
-export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
+export function SessionWatchBadges({ sessionId, follow = true }: { sessionId: string; follow?: boolean }) {
   const watchesQ = useQuery(watchesQuery());
   const [following, setFollowing] = useState(false);
   const rows = rowsOf(watchesQ.data);
@@ -180,14 +180,15 @@ export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
           <WatchRowList watches={watchedBy} />
         </Popover>
       )}
-      <button
+      {/* A wide session header offers Follow… in its ⋯ instead (docs/mocks/session-header-compact). */}
+      {follow && <button
         type="button"
         className="watch-chip is-action"
         title="Follow this session: be notified, or resume another session, when it reaches a condition"
         onClick={() => setFollowing(true)}
       >
         Follow
-      </button>
+      </button>}
       {following && (
         <WatchEditorModal
           mode={{ kind: 'create', targets: [{ kind: 'SESSION', id: sessionId }] }}
