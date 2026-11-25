@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 567 |
+| `user` | 568 |
 | `admin` | 31 |
 | `runner` | 255 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **898** |
+| **Total** | **899** |
 
 ## Public routes
 
@@ -455,6 +455,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/schedules/:id/change` | path `id` | `SchedulesController.change` |
 | `POST` | `/api/schedules/:id/change` | body `ScheduleChangeDto`; path `id` | `SchedulesController.openChange` |
 | `POST` | `/api/schedules/:id/pause` | path `id` | `SchedulesController.pause` |
+| `POST` | `/api/schedules/:id/rename` | body `ScheduleRenameDto`; path `id` | `SchedulesController.rename` |
 | `POST` | `/api/schedules/:id/resume` | path `id` | `SchedulesController.resume` |
 | `POST` | `/api/schedules/:id/run` | path `id` | `SchedulesController.runNow` |
 | `GET` | `/api/schedules/:id/runs` | path `id`; query `before`, `limit` | `SchedulesController.listRuns` |

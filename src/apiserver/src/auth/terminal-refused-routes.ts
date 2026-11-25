@@ -534,6 +534,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /schedule-runs/:id/stop',
   'POST /schedules/:id/change',
   'POST /schedules/:id/pause',
+  'POST /schedules/:id/rename',
   'POST /schedules/:id/resume',
   'POST /schedules/:id/run',
   'POST /schedules/:id/undo',
