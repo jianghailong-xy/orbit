@@ -20624,17 +20624,88 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-3);
 }
-/* The ordinary empty state follows the mobile hierarchy: provider first, then the instruction,
-   then the model that this draft will actually send with. */
+/* The ordinary empty state: the engine, where it runs, then the instruction. The model is said once,
+   in the composer (docs/mocks/new-session-top ③). */
 .np-empty-copy {
   margin-top: 20px;
   font-size: 17px;
   color: var(--text-3);
 }
-.np-current-model {
-  margin-top: 5px;
-  font-size: 14px;
+/* `in [workspace ▾] › [folder ▾]` under the engine (docs/mocks/new-session-top ②⑤): quiet chips, grey on hover,
+   tinted while their menu is open, like the engine's name above them. */
+.np-place {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 6px;
+  max-width: 100%;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.np-place-in {
+  margin-right: 2px;
+}
+.np-place-sep {
   color: var(--text-4);
+}
+.np-place-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  max-width: 220px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.np-place-chip:hover {
+  background: var(--bg-hover);
+}
+.np-place-chip.open {
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+}
+.np-place-chip.open .np-chev {
+  color: var(--brand-strong);
+}
+.np-place-chip > .anticon {
+  flex: none;
+  font-size: 13px;
+}
+.np-place-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-place-list {
+  width: 260px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.np-place-list .np-row > .anticon {
+  flex: none;
+  color: var(--text-3);
+}
+.np-place-check {
+  margin-left: auto;
+  color: var(--brand);
+}
+/* A phone has no room for the icons: the names and their ▾ (board ⑥). */
+@media (max-width: 960px) {
+  .np-place-chip > .anticon {
+    display: none;
+  }
+  .np-place-chip {
+    max-width: 160px;
+  }
 }
 .np-card {
   display: inline-flex;
