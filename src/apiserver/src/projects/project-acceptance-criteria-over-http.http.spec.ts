@@ -193,6 +193,7 @@ function fakePrisma() {
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
     projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     // The row `update` locks before it writes. `config_revision` is a number for the same reason
     // `coordinatorGeneration` is; nothing in this probe compares it.
     $queryRaw: async () => [{

@@ -1,4 +1,4 @@
-import type { CriterionLandingReason, DoneRequest, ProjectDoneFinding, ProjectDoneBy, ProjectOpenItemsView, ProjectOpenItemRow } from '@orbit/shared';
+import type { CriterionLandingReason, DoneRequest, ProjectDoneFinding, ProjectDoneBy, ProjectOpenItemsView, ProjectOpenItemRow, ProjectTextTranslation } from '@orbit/shared';
 import { api } from '../api';
 import { DEFAULT_MAIN_BRANCH } from './projectStart';
 import { formatSpan } from './watches';
@@ -457,6 +457,8 @@ export type ProjectDoneDocument = {
   doneBy?: ProjectDoneBy | null;
   doneAt?: string | null;
   acceptedGaps?: readonly Record<string, unknown>[] | null;
+  /** `title` and the criteria's text in the owner's language (Settings › Translation). */
+  translation?: ProjectTextTranslation | null;
   /** The project's main branch, which the cards' "on main" names. */
   integration?: { upstreamRef?: string | null } | null;
   /** The explicit non-code mark (migration 0535) and who set it, when. */

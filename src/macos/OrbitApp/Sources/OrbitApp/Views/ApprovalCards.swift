@@ -3489,7 +3489,8 @@ private struct StartProjectCardView: View {
 private struct ProjectDoneCardView: View {
     let console: ConsoleModel
     @Environment(AppModel.self) private var model
-    /// Settings › Translation: the coordinator's judgment and gaps flip back to its own words.
+    /// Settings › Translation: the project's title and criteria, and the coordinator's judgment and
+    /// gaps, flip back to the words they were written in.
     @State private var showOriginal = false
     @Environment(\.opensPagesOverConsole) private var overConsole
     @State private var doneCheck: ProjectDoneCheck?
@@ -3525,8 +3526,8 @@ private struct ProjectDoneCardView: View {
             let row = console.doneRequestRow
             let owner = OwnerCardTranslations.ownerLanguage(model.user)
             ProjectDoneCard(
-                subject: subject,
                 // Drawn translated; Record as done sends the console's own request, as written.
+                subject: subject.shown(owner: owner, showOriginal: showOriginal),
                 request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),
                 askedAt: row?.waitingSince,
                 confirmedAt: console.acceptanceConfirmation?.confirmation?.confirmedAt,
@@ -3541,7 +3542,8 @@ private struct ProjectDoneCardView: View {
                 onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },
                 onReopen: { await console.reopenProject() },
                 followUps: followUps,
-                translationFoot: row?.translationFoot(owner: owner, showOriginal: showOriginal) ?? [],
+                translationFoot: OwnerCardTranslations.doneCardFoot(subject: subject, request: row, owner: owner,
+                                                                    showOriginal: showOriginal),
                 onFlipTranslation: { showOriginal.toggle() },
                 notYetRefused: console.doneDeclineRefusedUntranslated,
                 onNotYetAsWritten: row == nil ? nil : { await console.declineDoneRequest(note: $0, sendAsWritten: true) })
@@ -3558,11 +3560,13 @@ private struct ProjectDoneCardView: View {
 /// hands the card's facts to the coordinator this conversation is with.
 private struct ProjectNotDoneCardView: View {
     let console: ConsoleModel
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         if let subject = console.projectDone {
             ProjectNotDoneCard(
                 subject: subject,
+                owner: OwnerCardTranslations.ownerLanguage(model.user),
                 withCoordinator: console.openItems?.withCoordinator.count ?? 0,
                 askedAt: nil,
                 onAskCoordinator: { Task { await console.askCoordinatorAboutDone() } })
