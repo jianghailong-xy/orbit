@@ -41,8 +41,9 @@ session migration.
 ## Lock waits
 
 The writer loop (`writer-loop.cjs`) wrote as D1 code does, every 100 ms, with no lock timeout, timing every statement:
-9,390 event-ingestion updates (p50 4 ms, p99 10 ms) and 1,878 word changes, through D1, the backfill, the D2 hand-over,
-the post-backfill gate and every walk. **Two statements took over 100 ms, 1,006 ms and 1,135 ms, both while the plans
+19,336 event-ingestion updates (p50 5 ms, p99 10 ms) and 3,867 word writes, through D1, the backfill, the D2
+hand-over, the post-backfill gate and every walk (only 360 of the word writes changed a row: the session guard
+triggers skip a claim or revive written that way, which no server sends; each still took its locks). **Two statements took over 100 ms, 1,006 ms and 1,135 ms, both while the plans
 script's write measurement ran** (it disables `session_zz_phase` in a rolled-back transaction, which takes the
 table's lock, as its header says; rehearsal only). None waited on a migration, the backfill or the hand-over. The lock
 sampler (0.2 s) saw exactly those two waits: the writer's `UPDATE`, `RowExclusiveLock` on `session`, behind the plans
