@@ -300,7 +300,7 @@ private fun ScheduleRenameDialog(store: ScheduledStore, renaming: Renaming, dism
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(SC.RenameAlert.body)
                 OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth().focusRequester(focus).testTag("schedule-rename-field"),
-                    label = { Text(SC.History.fields.getValue("title")) }, singleLine = true,
+                    placeholder = { Text(SC.History.fields.getValue("title")) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { save() }))
                 LaunchedEffect(Unit) { focus.requestFocus() }
             }

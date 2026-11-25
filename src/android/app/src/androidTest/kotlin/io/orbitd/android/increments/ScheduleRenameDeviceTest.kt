@@ -33,7 +33,7 @@ class ScheduleRenameDeviceTest : IncrementDeviceTest() {
     private fun clock(hour: Int, minute: Int) = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 
     private val lastRun get() = """{"id":"r-us","scheduleId":"$us","scheduleRevision":1,"plannedAt":"${at(-1, 9, 7)}","trigger":"SCHEDULED",
-        "state":"NO_CHANGE","attempt":1,"startedAt":"${at(-1, 9, 8)}","endedAt":"${at(-1, 9, 11)}","notified":false}"""
+        "state":"NO_CHANGE","summary":"nothing new","attempt":1,"startedAt":"${at(-1, 9, 8)}","endedAt":"${at(-1, 9, 11)}","notified":false}"""
 
     private fun schedule(id: String, name: String, hour: Int, minute: Int, last: String = "null") = """{"id":"$id","title":"$name",
         "intent":"Check yesterday’s US app 1070 data and say what is missing.","prompt":"",
@@ -41,6 +41,8 @@ class ScheduleRenameDeviceTest : IncrementDeviceTest() {
         "agentId":"a1","engine":"claude","accessLevel":"CHECK_ONLY","runLimitMinutes":30,"runsPerWeek":7,
         "envelope":{"workspaceId":"$workspace","accessLevel":"CHECK_ONLY","runsPerWeek":7,"runLimitMinutes":30},"state":"ACTIVE",
         "revision":2,"nextDueAt":"${at(0, hour, minute)}","consecutiveFailures":0,"createdAt":"${ago(60 * 24 * 30)}","lastRun":$last}"""
+
+    override fun workspaceJson() = super.workspaceJson().replace("\"Alpha\"", "\"tea-cli\"")
 
     private fun usRow() = schedule(us, title, 9, 7, lastRun)
 
