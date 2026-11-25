@@ -11,15 +11,15 @@ import { SessionSearch, openSessionSearch } from './SessionSearch';
 
 /**
  * The ⌘K palette's session rows draw the state word and every mark (docs/mocks/session-display-three-states), over the
- * cross-client check's search cases. search-payloads.json is server-built: the check's seeded cases
- * (scripts/acceptance/session-three-state-check/display/server-payloads.cjs) read through
- * session-payloads.fixture.ts `readPayloads` on a real PostgreSQL, each hit beside its list row.
+ * cross-client check's search cases. search/search-payloads.json is server-built (search/make-search-payloads.cjs: each
+ * case's hit beside its list row, read through the server's services on a real PostgreSQL); Android's search tests
+ * read the same file.
  */
 
 type Row = { name: string; searchHit: Record<string, any>; listRow: Record<string, any> };
 const ROWS: Row[] = JSON.parse(
   readFileSync(
-    resolve(__dirname, '../../../../scripts/acceptance/session-three-state-check/search-payloads.json'),
+    resolve(__dirname, '../../../../scripts/acceptance/session-three-state-check/search/search-payloads.json'),
     'utf8',
   ),
 );
