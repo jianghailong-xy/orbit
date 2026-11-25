@@ -38,7 +38,7 @@ import {
   type SessionStateSource,
 } from '../lib/sessionState';
 import { sessionDisplayState, sessionMarks } from '../lib/sessionDisplay';
-import { SessionMarkChips } from '../components/SessionStateDisplay';
+import { SessionMarkChips, SessionStateGlyph } from '../components/SessionStateDisplay';
 import { shortDate } from '../lib/shareLinks';
 import { supersedesLiveDrafts } from '../lib/steerDelivery';
 import { streamAnchorAfter } from '../lib/streamAnchor';
@@ -150,18 +150,21 @@ export function sharedStateTone(head: SessionStateSource, canReply: boolean): st
 }
 
 /**
- * A shared or guest page's status: the pill with the state word, then, from a server that sends the facts, the marks
- * and, for a filed session, Completed after the state rather than instead of it (lib/sessionDisplay).
+ * A shared or guest page's status: the pill with the state word, then, from a server that sends the facts, the state's
+ * icon in the pill (the list row's), the marks and, for a filed session, Completed after the state rather than instead
+ * of it (lib/sessionDisplay).
  */
 export function SharedSessionStatus({ head, canReply }: { head: SessionStateSource; canReply: boolean }) {
   const tone = sharedStateTone(head, canReply);
+  const shown = sessionDisplayState(head);
+  const legacyIcon = tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />;
   const pill = (
     <span className={`status-pill ${tone}`}>
-      {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
+      {shown ? <SessionStateGlyph state={shown} size={12} /> : legacyIcon}
       {sessionStateWord(head, canReply ? {} : { canReply: false })}
     </span>
   );
-  if (!sessionDisplayState(head)) return pill;
+  if (!shown) return pill;
   return (
     <>
       {pill}
