@@ -357,6 +357,11 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { leaseOwner: of.runner.leaseOwner, leaseGeneration: of.runner.leaseGeneration },
     }),
   },
+  // A slot return names the process that holds the session (docs/runner-update-drain-design.md §7.3).
+  'POST /runner/sessions/:id/return-slot': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { leaseOwner: of.runner.leaseOwner } }),
+  },
   'POST /runner/sessions/:id/orchestration-credential': { as: RUNNER, request: (of) => ({ params: { id: of.runner.callingSessionId } }) },
   'GET /runner/sessions/:id/inbox': {
     as: RUNNER,

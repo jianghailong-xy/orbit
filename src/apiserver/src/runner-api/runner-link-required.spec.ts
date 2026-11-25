@@ -61,6 +61,7 @@ const REFUSED_OVER_HTTPS = [
   'POST /runner/sessions/takeover-leases',
   'POST /runner/sessions/:id/activate-leases',
   'POST /runner/sessions/:id/release-leases',
+  'POST /runner/sessions/:id/return-slot',
   'POST /runner/sessions/:id/orchestration-credential',
   'GET /runner/sessions/:id/inbox',
   'POST /runner/sessions/:id/artifacts/result',
@@ -167,9 +168,9 @@ async function through(interceptor: RunnerLinkRequiredInterceptor, context: Exec
 
 const door = () => new RunnerLinkRequiredInterceptor();
 
-test('RunnerApiController has 60 routes: 53 refused over HTTPS, 7 kept on HTTPS (D14); a new one fails here', () => {
+test('RunnerApiController has 61 routes: 54 refused over HTTPS, 7 kept on HTTPS (D14); a new one fails here', () => {
   const routes = routesOf(RunnerApiController);
-  assert.equal(REFUSED_OVER_HTTPS.length, 53);
+  assert.equal(REFUSED_OVER_HTTPS.length, 54);
   assert.deepEqual(
     sorted(routes.map((r) => r.route)),
     sorted([...REFUSED_OVER_HTTPS, ...STAYS_ON_HTTPS]),
