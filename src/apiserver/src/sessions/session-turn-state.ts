@@ -76,7 +76,9 @@ export function isParked(facts: TurnStateFacts): boolean {
 
 /**
  * Prisma filter: held, and its turn state is one of `states` (null for parked), as turnStateOf reads it. Its keys are
- * `finishedAt` and `OR`, so spread it only into a filter that names neither, or put it in an `AND` list.
+ * `finishedAt` and `OR`, so spread it only into a filter that names neither, or put it in an `AND` list. Never null in
+ * SQL (the `IN` is asked only beside `turn_state IS NOT NULL`), so a `NOT` of it is the rows it does not match: without
+ * that, a row not yet backfilled read NULL there and fell out of both a filter and its negation.
  */
 export function turnStateFilter(states: ReadonlyArray<TurnState | null>): Prisma.SessionWhereInput {
   const named = states.filter((state): state is TurnState => state !== null);
@@ -89,7 +91,7 @@ export function turnStateFilter(states: ReadonlyArray<TurnState | null>): Prisma
     : { turnState: null, status: { in: turnWords.filter((word) => words.includes(word)) } };
   return {
     finishedAt: null,
-    OR: [...(named.length > 0 ? [{ turnState: { in: named } }] : []), session],
+    OR: [...(named.length > 0 ? [{ turnState: { not: null, in: named } }] : []), session],
   };
 }
 
