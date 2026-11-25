@@ -4967,6 +4967,36 @@ button.toast--pill:focus-visible {
     }
   }
 }
+/* docs/mocks/session-header-compact: a wide window's session header is one short row with no rule
+   under it; the conversation fades out as it scrolls up to it, the way it fades into the composer.
+   The top padding is the fade's room, so at the top of the conversation nothing sits in it. A phone
+   keeps its ruled header (the mobile block further down). */
+@media (min-width: 961px) {
+  .workspace-header {
+    padding-bottom: 4px;
+    border-bottom: 0;
+  }
+  .workspace-name {
+    font-size: 15px;
+  }
+  .workspace-scroll-wrap > .workspace-sessions {
+    padding-top: 16px;
+    mask-image: linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 20px), transparent);
+  }
+}
+@media (min-width: 961px) and (hover: hover) and (pointer: fine) {
+  @supports selector(::-webkit-scrollbar) {
+    .workspace-scroll-wrap > .workspace-sessions {
+      mask-image:
+        linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 20px), transparent),
+        linear-gradient(#000, #000);
+    }
+  }
+}
+/* The header's Share button: grey, or the live link's green while the session is shared. */
+.workspace-header-share { flex: none; color: var(--text-2); }
+.workspace-header-share.is-live,
+.workspace-header-share.is-live:hover:where(:not(:disabled)) { color: var(--success); }
 /* Canonical completion-repair obligations sit outside the transcript scroller: the command has
    already finished, so burying this behind a stale Running transcript would recreate the product
    failure the obligation exists to explain. Read-only by design — repair actions belong to the
