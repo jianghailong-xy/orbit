@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 /** An already delivered turn finishes; a pause never authorizes a later turn on a warm gateway token. */
 export async function poolPauseBlocksRequest(
@@ -16,7 +17,7 @@ export async function poolPauseBlocksRequest(
       kind: { in: ['message', 'shell'] },
       status: 'IN_FLIGHT',
       deliveredAt: { lte: pause.pausedAt },
-      session: { status: 'RUNNING', deletedAt: null, completedAt: null },
+      session: { deletedAt: null, completedAt: null, ...turnStateFilter(['IN_FLIGHT']) },
     },
     select: {
       leaseGeneration: true,

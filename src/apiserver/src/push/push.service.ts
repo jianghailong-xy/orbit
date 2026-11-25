@@ -5,6 +5,7 @@ import { RELEASE_FACTS_SELECT } from '../common/session-release';
 import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
+import { TURN_STATE_SELECT, turnStateFilter } from '../sessions/session-turn-state';
 import { fitCollapseId } from './collapse-id';
 import { ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -14,8 +15,7 @@ import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coor
 import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
-import { Prisma, RunStatus, type DeviceToken } from '@prisma/client';
-import { TURN_STATE_SELECT, type TurnStateFacts } from '../sessions/session-turn-state';
+import { Prisma, type DeviceToken } from '@prisma/client';
 import { accountSubjectNames } from '../providers/account-health-subject';
 import { accountNeedsActionBody } from '../providers/account-health-copy';
 import type { AccountNeedsAction } from '../providers/account-health.service';
@@ -146,13 +146,13 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The sessions that can hold a card raised outside a dispatched turn, whose status that work leaves at AWAITING_INPUT
+ * The sessions that can hold a card raised outside a dispatched turn, which that work leaves parked
  * (docs/session-three-state-design.md §11.3 item 2): the engine's own turn, or a runner-hosted process still up. The
  * process is read off `runningBgShells`, the set `abandoned-approvals.ts` collects a job's card on, not
  * `runningBgJobs`: a card is answerable exactly while the reap would leave it, and the badge rings for no other.
  */
 const OUTSIDE_TURN_CARD_SESSIONS: Prisma.SessionWhereInput = {
-  OR: [{ status: RunStatus.AWAITING_INPUT, ...ENGINE_TURN.where }, { runningBgShells: { isEmpty: false } }],
+  OR: [{ AND: [turnStateFilter([null]), ENGINE_TURN.where] }, { runningBgShells: { isEmpty: false } }],
 };
 
 /**
@@ -161,11 +161,12 @@ const OUTSIDE_TURN_CARD_SESSIONS: Prisma.SessionWhereInput = {
  * names none while the engine's own turn is generating. A job's card whose job has ended is the reap's, never counted.
  * SubAgent cards are the subagent half's and are not selected here.
  */
-function outsideTurnCards<T extends { backgroundJobId?: string | null; toolUseId?: string | null }>(session: TurnStateFacts & {
-  engineTurnActive?: boolean | null;
-  runningBgShells?: readonly string[] | null;
-  approvals?: readonly T[] | null;
-}): T[] {
+function outsideTurnCards<T extends { backgroundJobId?: string | null; toolUseId?: string | null }>(
+  session: Parameters<typeof isSessionGenerating>[0] & {
+    runningBgShells?: readonly string[] | null;
+    approvals?: readonly T[] | null;
+  },
+): T[] {
   const generating = isSessionGenerating(session);
   return (session.approvals ?? []).filter((card) =>
     card.backgroundJobId == null
@@ -346,7 +347,7 @@ export class PushService {
           id: sessionId,
           // A running turn asks, and so does a SubAgent still running after its parent's turn ended
           // (docs/subagent-design.md §5.3); the "needs you" set below decides whether this card is one.
-          OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
+          OR: [turnStateFilter(['IN_FLIGHT']), { runningSubagents: { isEmpty: false } }],
           ...gates,
         },
         select,
@@ -1748,8 +1749,8 @@ export class PushService {
       this.prisma.session.findMany({
         where: {
           ownerId,
-          status: RunStatus.RUNNING,
-          // A LANDING row is never RUNNING; named anyway, so no status scan can ever count one.
+          ...turnStateFilter(['IN_FLIGHT']),
+          // A LANDING row never has a turn in flight; named anyway, so no scan can ever count one.
           sessionKind: 'CONVERSATION',
           completedAt: null,
           archivedAt: null,
@@ -1793,7 +1794,7 @@ export class PushService {
         select: {
           id: true,
           taskId: true,
-          // The turn state's columns, which isSessionGenerating reads (sessions/session-turn-state.ts).
+          // isSessionGenerating's (common/session-generating.ts).
           ...TURN_STATE_SELECT,
           engineTurnActive: true,
           runningBgShells: true,

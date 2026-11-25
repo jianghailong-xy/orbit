@@ -104,7 +104,7 @@ export const ABANDONED_TURN_STATUS: RunStatus = RunStatus.INTERRUPTED;
 /**
  * Queueing work onto an idle interactive session requires a fresh runner slot. Given the word the writer read and
  * returns the word it writes; the turn state written beside it is that word's (turnStateOfWord,
- * sessions/session-turn-state.ts), as turnStateAfterTurnEnqueued gives it from a turn state.
+ * sessions/session-turn-state.ts), as that module's turnStateAfterTurnEnqueued gives it from a turn state.
  */
 export function statusAfterTurnEnqueued(status: RunStatus | string): RunStatus {
   return status === RunStatus.AWAITING_INPUT || status === ABANDONED_TURN_STATUS
@@ -112,19 +112,9 @@ export function statusAfterTurnEnqueued(status: RunStatus | string): RunStatus {
     : status as RunStatus;
 }
 
-/** statusAfterTurnEnqueued on the turn state (plan §1.4, dispatch): parked or abandoned is queued; the rest stays. */
-export function turnStateAfterTurnEnqueued(turnState: TurnState | null): TurnState {
-  return turnState === null || turnState === 'ABANDONED' ? 'QUEUED' : turnState;
-}
-
 /** Keep an already-held slot only when another executable turn is already queued. */
 export function statusAfterTurnCompleted(hasPendingExecutableTurn: boolean): RunStatus {
   return hasPendingExecutableTurn ? RunStatus.RUNNING : RunStatus.AWAITING_INPUT;
-}
-
-/** statusAfterTurnCompleted on the turn state: the slot is kept (IN_FLIGHT) or freed (parked, null). */
-export function turnStateAfterTurnCompleted(hasPendingExecutableTurn: boolean): TurnState | null {
-  return hasPendingExecutableTurn ? 'IN_FLIGHT' : null;
 }
 
 /** Losing a runner is fatal only while that runner is actively executing work: a dispatched turn (IN_FLIGHT). */

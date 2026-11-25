@@ -8,7 +8,7 @@
  *       columns the word the fixture's facts derive, in TypeScript and in SQL
  *   (3) statusWordFilter(word) selects exactly the conversation sessions the projector gives that word
  *   (4) a held row with no turn_state, as one not yet backfilled has, answers its stored word for every held word, in
- *       TypeScript, in SQL and on the payload fields
+ *       TypeScript, in SQL and on the payload fields, and statusWordFilter of that word selects it (task T10)
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-legacy-words.pg.spec.ts
  */
@@ -173,5 +173,15 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
     }
     assert.deepEqual(answers, Object.fromEntries(HELD_WORDS.map((word) =>
       [word, { typescript: word, sql: word, status: word, runStatus: word }])));
+    // The ?status= condition matches an unfilled row by its stored word, and no other word's condition does.
+    const matched: Record<string, string[]> = {};
+    for (const word of Object.values(RunStatus)) {
+      const found = await db.session.findMany({
+        where: { AND: [{ ownerId, title: { startsWith: 'unfilled ' } }, statusWordFilter(word)!] }, select: { title: true },
+      });
+      matched[word] = found.map((row) => row.title);
+    }
+    assert.deepEqual(matched, Object.fromEntries(Object.values(RunStatus).map((word) =>
+      [word, (HELD_WORDS as readonly string[]).includes(word) ? [`unfilled ${word}`] : []])));
   });
 });

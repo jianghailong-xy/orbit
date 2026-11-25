@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE } from '../common/session-working';
-import { turnStateFilter } from './session-turn-state';
 import { BG_JOB_ACTIVITY_STALE_AFTER_MS } from './background-job-activity';
 import { SessionsService } from './sessions.service';
+import { turnStateFilter } from './session-turn-state';
 
 test('workspace counts separate queued activity from Session-list spinner work', async () => {
   const groupByCalls: any[] = [];
@@ -290,7 +290,9 @@ test('workspace counts separate queued activity from Session-list spinner work',
   });
 
   assert.equal(groupByCalls.length, 1);
-  assert.deepEqual(groupByCalls[0].where.status.in, [RunStatus.RUNNING, RunStatus.PENDING]);
+  // Admitted work: held with a turn queued or in flight (session-turn-state.ts).
+  assert.deepEqual(groupByCalls[0].where.OR, turnStateFilter(['QUEUED', 'IN_FLIGHT']).OR);
+  assert.equal(groupByCalls[0].where.finishedAt, null);
   // The blocked query carries an `OR` too (GENERATING_SESSION_FILTER), which is why it is ruled out
   // by its `approvals`.
   const runningQuery = findManyCalls.find((call) => call?.where?.OR && !call?.where?.approvals);

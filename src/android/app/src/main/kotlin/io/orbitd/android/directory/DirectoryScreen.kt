@@ -70,7 +70,8 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     var projectMenu by remember { mutableStateOf<SessionProjectRow?>(null) }
     var pulling by remember { mutableStateOf(false) }
-    var pinnedCollapsed by rememberPinnedCollapsed()
+    var pinnedCollapsed by rememberSectionCollapsed("pinnedCollapsed")
+    var needsYouCollapsed by rememberSectionCollapsed("needsYouCollapsed")
     val sidebar by rememberProjectSidebar(app, handle, api)
     val asks by app.realtime.directoryAsks.collectAsState()
     val trashing by app.trashing.ids.collectAsState()
@@ -223,16 +224,20 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                             }
                             content.groups.forEachIndexed { index, group ->
                                 val pinned = group.id == "time:0"
+                                val needsYou = group.id == NEEDS_YOU_GROUP
                                 // iOS: a list that opens on today would be saying what its rows say, and the title costs half a row.
                                 if (index != 0 || group.id != "time:1") stickyHeader(key = "heading:${group.id}") {
                                     when {
-                                        pinned -> PinnedHeading(group.title, pinnedCollapsed) { pinnedCollapsed = !pinnedCollapsed }
+                                        pinned -> FoldHeading(group.title, pinnedCollapsed, SessionListCopy.PINNED_SHOWS, SessionListCopy.PINNED_HIDES,
+                                            "pinned-heading") { pinnedCollapsed = !pinnedCollapsed }
+                                        needsYou -> FoldHeading(group.title, needsYouCollapsed, SessionListCopy.NEEDS_YOU_SHOWS, SessionListCopy.NEEDS_YOU_HIDES,
+                                            "needs-you-heading") { needsYouCollapsed = !needsYouCollapsed }
                                         group.id.startsWith("tag:") -> TagHeading(group.sessions.first().tags.first())
                                         group.id == "bucket:untagged" -> TagHeading(null)
                                         else -> ListHeading(group.title)
                                     }
                                 }
-                                if (!pinned || !pinnedCollapsed) items(group.sessions, key = { it.id }) { session ->
+                                if (!(pinned && pinnedCollapsed) && !(needsYou && needsYouCollapsed)) items(group.sessions, key = { it.id }) { session ->
                                     val project = content.projects[session.id]
                                     // A project's row opens its coordinator's conversation (owner 2026-11-11, docs/mocks/project-sessions-column
                                     // board 5), whose bar opens the project's sessions; a project with no coordinator opens them as a page. A row

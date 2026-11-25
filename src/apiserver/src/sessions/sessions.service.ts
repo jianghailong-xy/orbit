@@ -50,8 +50,13 @@ import {
   SESSION_RUNNING_BG_JOB_WHERE,
 } from '../common/session-working';
 import { readOneSessionBackgroundFields, readSessionBackgroundFields, sessionActivitySql } from './task-work-carrier';
-import { LEGACY_STATUS_SELECT, readLandingSettlements, withoutWordFacts } from './session-legacy-words';
-import { TURN_STATE_SELECT, type TurnStateFacts } from './session-turn-state';
+import {
+  LEGACY_STATUS_SELECT, legacySessionStatus, legacySessionStatusSql, readLandingSettlements, statusWordFilter, withoutWordFacts,
+} from './session-legacy-words';
+import {
+  heldWordOf, isParked, sessionTurnStateSql, type TurnState, type TurnStateFacts, TURN_STATE_SELECT, turnStateAfterTurnEnqueued,
+  turnStateFilter, turnStateOf,
+} from './session-turn-state';
 import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
@@ -312,8 +317,6 @@ import { replayableEventSql } from '../common/system-noise';
 import {
   SERVICE_TOKEN_CONCURRENCY,
   SPAWN_TREE_OUTSTANDING,
-  UNSETTLED_SESSION_STATUSES,
-  statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
 import {
   HELD_SESSION_STATUSES,
@@ -494,10 +497,7 @@ const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
 /** How long a finished Open-list build answers the reads of its version (`sharedOpenList`). */
 const OPEN_LIST_BUILD_KEEP_MS = 5_000;
 
-/**
- * What `listOverlay` reads a row's overlay from: the row's own columns, as the row query or the probe reads them. The
- * turn state's (TURN_STATE_SELECT's columns) are what isSessionGenerating reads.
- */
+/** What `listOverlay` reads a row's overlay from: the row's own columns, as the row query or the probe reads them. */
 type ListOverlayInput = TurnStateFacts & {
   id: string;
   status: RunStatus;
@@ -1895,6 +1895,8 @@ export class SessionsService {
         workSubdir,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
+        // Its first turn waits for a claim (plan §2.2 #18: deploy 2 writes both).
+        turnState: 'QUEUED',
         provider,
         providerBuiltin,
         // The engine it runs on for good (Session.engine): the runtime resolved above, which the
@@ -2455,6 +2457,8 @@ export class SessionsService {
             branch,
             prompt: '',
             status: RunStatus.PENDING,
+            // Its first turn waits for a claim (plan §2.2 #19).
+            turnState: 'QUEUED',
             provider: AgentProvider.CLAUDE,
             providerBuiltin: true,
             // A Claude Code transcript is a Claude Code conversation.
@@ -2888,13 +2892,13 @@ export class SessionsService {
     // (that is precisely when session_create(wait) returns), and it parks there indefinitely.
     // Charging for it would make this quota monotonic and wedge the tree for good.
     const outstanding = await this.prisma.session.count({
-      where: { rootSessionId, status: { in: UNSETTLED_SESSION_STATUSES } },
+      where: { rootSessionId, ...turnStateFilter(['QUEUED', 'IN_FLIGHT']) },
     });
     if (outstanding >= SPAWN_TREE_OUTSTANDING) {
       // The blockers by name, so the caller waits on them rather than on a timer: nothing but one
       // of these settling changes the answer. Not retryable, and no wait is offered.
       const blocking = await this.prisma.session.findMany({
-        where: { rootSessionId, status: { in: UNSETTLED_SESSION_STATUSES } },
+        where: { rootSessionId, ...turnStateFilter(['QUEUED', 'IN_FLIGHT']) },
         select: { id: true },
         orderBy: { createdAt: 'asc' },
         take: SessionsService.SPAWN_BLOCKERS_NAMED,
@@ -3365,7 +3369,7 @@ export class SessionsService {
    *  callers. */
   async listForOrchestration(
     ownerId: string,
-    filters: { status?: RunStatus; parentSessionId?: string; scope?: RunnerSessionScope },
+    filters: { status?: string; parentSessionId?: string; scope?: RunnerSessionScope },
   ) {
     const sessions = await this.prisma.session.findMany({
       where: {
@@ -3377,7 +3381,8 @@ export class SessionsService {
         sessionKind: SESSION_KIND_CONVERSATION,
         // A scheduled task's run is reached by id (session_get), not listed (scheduled-tasks-design.md §7.4).
         runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] },
-        ...(filters.status ? { status: filters.status } : {}),
+        // The rows the projector gives that word (plan §6), a held row not yet backfilled by its stored word.
+        ...(filters.status ? { AND: [statusWordFilter(filters.status) ?? {}] } : {}),
         ...(filters.parentSessionId ? { parentSessionId: filters.parentSessionId } : {}),
         ...runnerScopeWhere(filters.scope),
       },
@@ -3469,8 +3474,7 @@ export class SessionsService {
         prompt: true,
         // The facts the status words are derived from (session-legacy-words.ts), beside sessionKind, startedAt,
         // finishedAt and endReason below.
-        status: true,
-        turnState: true,
+        ...TURN_STATE_SELECT,
         lastTurnOutcome: true,
         importSourceCwd: true,
         completedAt: true,
@@ -3624,7 +3628,7 @@ export class SessionsService {
     type Row = {
       id: string;
       title: string;
-      status: RunStatus;
+      /** Resolved in SQL (sessionTurnStateSql): NULL when released or parked. */
       turnState: string | null;
       finishedAt: Date | null;
       lastTurnOutcome: string | null;
@@ -3896,8 +3900,8 @@ export class SessionsService {
           ),
           scored AS (
             SELECT
-              s.id, s.title, s.status,
-              s.turn_state   AS "turnState",
+              s.id, s.title,
+              ${sessionTurnStateSql('s')} AS "turnState",
               s.finished_at  AS "finishedAt",
               s.last_turn_outcome AS "lastTurnOutcome",
               s.started_at   AS "startedAt",
@@ -3990,7 +3994,7 @@ export class SessionsService {
             FROM scored
           )
           SELECT
-            id, title, status, "turnState", "finishedAt", "lastTurnOutcome", "startedAt", "importSourceCwd", "sessionKind",
+            id, title, "turnState", "finishedAt", "lastTurnOutcome", "startedAt", "importSourceCwd", "sessionKind",
             "workspaceId", "workspaceName", "runnerId", "taskId", "taskTitle",
             "lastTurnAt", "listedAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
             "matchField", "snippet", total::int AS "total"
@@ -4007,8 +4011,8 @@ export class SessionsService {
         `)
       : await this.prisma.$queryRaw<Row[]>(Prisma.sql`
           SELECT
-            s.id, s.title, s.status,
-            s.turn_state   AS "turnState",
+            s.id, s.title,
+            ${sessionTurnStateSql('s')} AS "turnState",
             s.finished_at  AS "finishedAt",
             s.last_turn_outcome AS "lastTurnOutcome",
             s.started_at   AS "startedAt",
@@ -4051,7 +4055,7 @@ export class SessionsService {
       ...withoutWordFacts(withSessionState({
         id: r.id,
         title: r.title,
-        status: r.status,
+        // Resolved in SQL (sessionTurnStateSql), so no stored word rides beside it.
         turnState: r.turnState,
         finishedAt: r.finishedAt,
         lastTurnOutcome: r.lastTurnOutcome,
@@ -4119,7 +4123,7 @@ export class SessionsService {
     const [active, running, jobs, blocked, jobCards] = await Promise.all([
       this.prisma.session.groupBy({
         by: ['workspaceId'],
-        where: { ...open, status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } },
+        where: { ...open, ...turnStateFilter(['QUEUED', 'IN_FLIGHT']) },
         _count: { _all: true },
       }),
       // Rows rather than a `groupBy`, so a session that needs you can be taken back out by id.
@@ -4685,7 +4689,9 @@ export class SessionsService {
     };
     const rows = await this.prisma.$queryRaw<Probed[]>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
       SELECT
-        s.id, s.status, s.finished_at AS "finishedAt", s.turn_state AS "turnState",
+        s.id, ${legacySessionStatusSql('s')} AS status,
+        -- The turn state's columns, which isSessionGenerating reads (session-turn-state.ts).
+        s.finished_at AS "finishedAt", s.turn_state AS "turnState",
         s.engine_turn_active AS "engineTurnActive",
         s.task_id AS "taskId",
         s.running_bg_shells AS "runningBgShells",
@@ -4701,7 +4707,7 @@ export class SessionsService {
         root.kind::text AS "rootKind",
         rt.project_id AS "rootTaskProjectId",
         rctx.project_id AS "rootContextProjectId",
-        CASE WHEN s.status IN ('RUNNING', 'PENDING') THEN (
+        CASE WHEN ${sessionTurnStateSql('s')} IN ('IN_FLIGHT', 'QUEUED') THEN (
           SELECT max(ct.delivered_at) FROM conversation_turn ct
            WHERE ct.session_id = s.id AND ct.answered_at IS NULL
         ) END AS "turnAt",
@@ -4859,7 +4865,7 @@ export class SessionsService {
     // Ask, no scheduled run, and a confined token's workspaces.
     const { query } = this.listShape(ownerId, { view: opts.view, confinedTo: opts.confinedTo });
     const members = await this.prisma.$queryRaw<Array<ListOverlayInput & { projectId: string }>>(Prisma.sql`
-      SELECT s.id, s.status, s.finished_at AS "finishedAt", s.turn_state AS "turnState",
+      SELECT s.id, ${legacySessionStatusSql('s')} AS status, s.finished_at AS "finishedAt", s.turn_state AS "turnState",
              s.engine_turn_active AS "engineTurnActive",
              s.task_id AS "taskId",
              s.running_bg_shells AS "runningBgShells",
@@ -5040,7 +5046,7 @@ export class SessionsService {
     // 0.1 ms. Each variant a connection has run holds ~3.4 MB of cached plan for the connection's life.
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
       SELECT
-        s.id, s.status, s.title,
+        s.id, ${legacySessionStatusSql('s')} AS status, s.title,
         -- What drives the session (LS6): a LANDING row is never in the flat list, but a reader that
         -- names sessions by id (link previews) gets the discriminator rather than a card that
         -- claims the platform's container is an ordinary conversation.
@@ -5058,7 +5064,7 @@ export class SessionsService {
         -- mid-turn so the subquery is skipped for the settled rows that make up most of a list;
         -- answered_at IS NULL is what makes it the *current* turn.
         -- (No backticks in here: this whole statement is a JS template literal.)
-        CASE WHEN s.status IN ('RUNNING', 'PENDING') THEN (
+        CASE WHEN ${sessionTurnStateSql('s')} IN ('IN_FLIGHT', 'QUEUED') THEN (
           SELECT max(ct.delivered_at)
             FROM conversation_turn ct
            WHERE ct.session_id = s.id
@@ -5265,11 +5271,11 @@ export class SessionsService {
         COALESCE(NULLIF(btrim(r.display_name), ''), r.name) AS "runnerLabel",
         -- A turn running over the limit (an overflow claim keeps the pass; an ordinary claim clears it): the
         -- runner's count against its limit, for "over limit · 17/16". Only such a row pays for the counts.
-        CASE WHEN s.status = 'RUNNING' AND s.over_capacity_turn_id IS NOT NULL THEN
+        CASE WHEN ${sessionTurnStateSql('s')} = 'IN_FLIGHT' AND s.over_capacity_turn_id IS NOT NULL THEN
           ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)}
             + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)}
         END AS "overLimitActive",
-        CASE WHEN s.status = 'RUNNING' AND s.over_capacity_turn_id IS NOT NULL THEN r.max_concurrent END AS "overLimitLimit",
+        CASE WHEN ${sessionTurnStateSql('s')} = 'IN_FLIGHT' AND s.over_capacity_turn_id IS NOT NULL THEN r.max_concurrent END AS "overLimitLimit",
         -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
         -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
         -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
@@ -5279,7 +5285,7 @@ export class SessionsService {
                           ORDER BY busy.last_turn_at, busy.id)
             FROM "session" busy
            WHERE busy.assigned_runner_id = s.assigned_runner_id
-             AND busy.status = 'RUNNING'
+             AND busy.finished_at IS NULL AND ${sessionTurnStateSql('busy')} = 'IN_FLIGHT'
              -- Named only to their owner; the count in queuedActive still covers every turn.
              AND busy.owner_id = s.owner_id
              AND busy.deleted_at IS NULL
@@ -5912,7 +5918,8 @@ export class SessionsService {
       where: { ownerId, parentSessionId: parent.id, source: 'merge-repair', deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
-    if (latest && (latest.status === RunStatus.PENDING || latest.status === RunStatus.RUNNING)) {
+    const latestTurn = latest ? turnStateOf(latest) : null;
+    if (latest && (latestTurn === 'QUEUED' || latestTurn === 'IN_FLIGHT')) {
       return withSessionState(latest);
     }
     // A repair that was not released by a failure (common/session-release.ts).
@@ -5957,7 +5964,8 @@ export class SessionsService {
       } else {
         await this.createTurn(ownerId, repair.id, { ...message, intent: 'NEXT_TURN' }, {
           coalesce: async (tx, session) =>
-            isHeld(session) && !(UNSETTLED_SESSION_STATUSES as readonly string[]).includes(session.status)
+            // Held with no turn queued or in flight: nothing to join.
+            isHeld(session) && !['QUEUED', 'IN_FLIGHT'].includes(turnStateOf(session) ?? '')
               ? null
               : tx.conversationTurn.findFirst({ where: { sessionId: session.id }, orderBy: { seq: 'desc' } }),
         });
@@ -5968,7 +5976,8 @@ export class SessionsService {
       // FOR SHARE waits for a revive still holding the row, so what it committed is read below.
       await this.prisma.$queryRaw`SELECT 1 FROM "session" WHERE id = ${repair.id}::uuid FOR SHARE`;
       const now = await this.prisma.session.findFirst({ where: { id: repair.id, ownerId, deletedAt: null } });
-      return now && (now.status === RunStatus.PENDING || now.status === RunStatus.RUNNING) ? now : null;
+      const turn = now ? turnStateOf(now) : null;
+      return turn === 'QUEUED' || turn === 'IN_FLIGHT' ? now : null;
     }
     return this.prisma.session.findUniqueOrThrow({ where: { id: repair.id } });
   }
@@ -6084,7 +6093,8 @@ export class SessionsService {
           startsTaskWork: target.startsTaskWork,
           taskId: target.taskId,
           OR: [
-            { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
+            // Parked (plan §2.1: A), no end asked.
+            { ...turnStateFilter([null]), cancelRequestedAt: null },
             // Released by a failure (common/session-release.ts).
             releaseWasFailureFilter(),
           ],
@@ -6689,7 +6699,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: {
-        id: true, status: true, finishedAt: true, sessionKind: true, assignedRunnerId: true,
+        id: true, finishedAt: true, sessionKind: true, assignedRunnerId: true,
         assignedRunner: { select: { capabilities: true } },
       },
     });
@@ -6743,7 +6753,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: {
-        id: true, status: true, finishedAt: true, assignedRunnerId: true,
+        id: true, finishedAt: true, assignedRunnerId: true,
         assignedRunner: { select: { capabilities: true, status: true, ...RUNNER_BEATS } },
       },
     });
@@ -7175,7 +7185,7 @@ export class SessionsService {
   async requestDiffRefresh(ownerId: string, id: string): Promise<void> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, status: true, finishedAt: true, sessionKind: true },
+      select: { id: true, ...TURN_STATE_SELECT, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
     // It queues a diff turn for the runner: an engine door like any other (§2.9 LS6).
@@ -7740,7 +7750,7 @@ export class SessionsService {
     tx: Prisma.TransactionClient,
     session: Session,
   ): Promise<Prisma.SessionUncheckedUpdateInput | null> {
-    if (session.status !== RunStatus.AWAITING_INPUT || !session.assignedRunnerId) return null;
+    if (!isParked(session) || !session.assignedRunnerId) return null;
     const engine: AccountEngine | null = isAccountEngine(session.provider) ? session.provider : null;
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
     const runner = await tx.runner.findUnique({
@@ -8214,11 +8224,13 @@ export class SessionsService {
       const sentByOrbit = dto.content
         ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
         : null;
-      const nextStatus = statusAfterTurnEnqueued(session.status);
+      // statusAfterTurnEnqueued on the turn state: parked or abandoned now waits for a claim (plan §2.2 #20).
+      const nextTurn = turnStateAfterTurnEnqueued(turnStateOf(session));
       await tx.session.update({
         where: { id },
         data: {
-          status: nextStatus,
+          status: heldWordOf(nextTurn),
+          turnState: nextTurn,
           lastTurnAt: new Date(),
           // A person's message moves the row; anything else that queues a turn leaves it where it is.
           ...(opts?.listed ? { listedAt: new Date() } : {}),
@@ -8268,8 +8280,8 @@ export class SessionsService {
       return {
         turn,
         placement,
-        wakeQueue: nextStatus === RunStatus.PENDING,
-        wakeInbox: nextStatus === RunStatus.RUNNING,
+        wakeQueue: nextTurn === 'QUEUED',
+        wakeInbox: nextTurn === 'IN_FLIGHT',
         idempotent: false,
       };
     }, loggedRetry(this.logger, 'sessions.createTurn', {
@@ -8463,7 +8475,7 @@ export class SessionsService {
     from: ReadonlyArray<'TRANSLATING' | 'FAILED'>,
   ): Promise<{ turn: ConversationTurn } | { ended: true } | null> {
     let runnerId: string | null = null;
-    let nextStatus: RunStatus | null = null;
+    let nextTurn: TurnState | null = null;
     const released = await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
@@ -8490,18 +8502,22 @@ export class SessionsService {
         },
       });
       runnerId = session.assignedRunnerId;
-      nextStatus = statusAfterTurnEnqueued(session.status);
-      if (nextStatus !== session.status) {
-        await tx.session.update({ where: { id: sessionId }, data: { status: nextStatus, lastTurnAt: new Date() } });
+      // statusAfterTurnEnqueued on the turn state (plan §2.2 #21): parked or abandoned now waits for a claim.
+      const turnBefore = turnStateOf(session);
+      nextTurn = turnStateAfterTurnEnqueued(turnBefore);
+      if (nextTurn !== turnBefore) {
+        await tx.session.update({
+          where: { id: sessionId }, data: { status: heldWordOf(nextTurn), turnState: nextTurn, lastTurnAt: new Date() },
+        });
       }
       return { turn: updated };
     }, loggedRetry(this.logger, 'sessions.releaseHeldTurn', { transaction: { maxWait: 10_000, timeout: 30_000 } }));
     if (!released || 'ended' in released) return released;
-    if (nextStatus === RunStatus.PENDING) {
+    if (nextTurn === 'QUEUED') {
       this.queue.notifySessionQueued(runnerId);
       await this.wakeManagedRunner(runnerId, 'turn');
     }
-    if (nextStatus === RunStatus.RUNNING) this.realtime.notifyInbox(sessionId);
+    if (nextTurn === 'IN_FLIGHT') this.realtime.notifyInbox(sessionId);
     this.realtime.publishQueuedTurnsChanged(sessionId);
     return released;
   }
@@ -8707,7 +8723,7 @@ export class SessionsService {
       const runnerDraining = session.assignedRunnerId != null
         && (await tx.runner.findUnique({ where: { id: session.assignedRunnerId }, select: { heartbeatDraining: true } }))
           ?.heartbeatDraining === true;
-      const queuedBehindUpdate = runnerDraining && session.status === RunStatus.PENDING && session.numTurns > 0
+      const queuedBehindUpdate = runnerDraining && turnStateOf(session) === 'QUEUED' && session.numTurns > 0
         && isHeld(session);
       let idleAfterStop = queuedBehindUpdate;
       // A committed follow-up is returned above even if the Session later ended or was filed in
@@ -8789,7 +8805,7 @@ export class SessionsService {
           ...(protectedTargetIds.length > 0 ? { id: { notIn: protectedTargetIds } } : {}),
         },
       });
-      if (session.status === RunStatus.RUNNING) {
+      if (turnStateOf(session) === 'IN_FLIGHT') {
         const executable = await tx.conversationTurn.count({
           where: {
             sessionId: id,
@@ -8814,7 +8830,10 @@ export class SessionsService {
         ...(interruptPayload ? { content: interruptPayload } : {}),
       });
       if (!followUp) {
-        if (idleAfterStop) await tx.session.update({ where: { id }, data: { status: RunStatus.AWAITING_INPUT, turnState: null } });
+        // Parked (plan §2.2: deploy 2 writes both).
+        if (idleAfterStop) {
+          await tx.session.update({ where: { id }, data: { status: RunStatus.AWAITING_INPUT, turnState: null } });
+        }
         return { turn: null, wakeQueue: false, wakeInbox: true, idempotent: false, idled: idleAfterStop };
       }
       // A claim can race the lazy first-turn seed, exactly as in createTurn: under this
@@ -8837,12 +8856,15 @@ export class SessionsService {
         ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
         : null;
       // A held follow-up moves nothing until it is released (releaseHeldTurn).
-      const stoppedStatus = idleAfterStop ? RunStatus.AWAITING_INPUT : session.status;
-      const nextStatus = heldFrom ? stoppedStatus : statusAfterTurnEnqueued(stoppedStatus);
+      // Stopped idle on a draining runner (below the drain check): parked, so the follow-up queues from there.
+      const turnBefore = idleAfterStop ? null : turnStateOf(session);
+      const nextTurn = heldFrom ? turnBefore : turnStateAfterTurnEnqueued(turnBefore);
       await tx.session.update({
         where: { id },
         data: {
-          status: nextStatus,
+          // Both, the unchanged value included (plan §2.2 #22).
+          status: heldWordOf(nextTurn),
+          turnState: nextTurn,
           lastTurnAt: new Date(),
           ...(opts?.listed ? { listedAt: new Date() } : {}),
           // The redirected message is what the session is waiting on now — previewed from here
@@ -8857,7 +8879,7 @@ export class SessionsService {
       });
       return {
         turn,
-        wakeQueue: nextStatus === RunStatus.PENDING,
+        wakeQueue: nextTurn === 'QUEUED',
         wakeInbox: true,
         idempotent: false,
         idled: idleAfterStop,
@@ -8926,7 +8948,7 @@ export class SessionsService {
       // And, for the active view, whether its opening is still only the prompt on the row (below).
       select: {
         id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true,
-        status: true, numTurns: true, importedAt: true, prompt: true, createdAt: true,
+        ...TURN_STATE_SELECT, numTurns: true, importedAt: true, prompt: true, createdAt: true,
       },
     });
     if (!session) throw new NotFoundException('session not found');
@@ -9130,14 +9152,14 @@ export class SessionsService {
    */
   private async unseededOpening(
     session: {
-      id: string; status: RunStatus; numTurns: number; importedAt: Date | null; prompt: string;
+      id: string; numTurns: number; importedAt: Date | null; prompt: string;
       wikiChatSpaceId: string | null; createdAt: Date;
-    },
+    } & TurnStateFacts,
     listed: ReadonlyArray<{ clientTurnId: string | null }>,
   ) {
     const key = SessionsService.initialTurnClientId(session.id);
     if (
-      (session.status !== RunStatus.PENDING && session.status !== RunStatus.RUNNING)
+      !['QUEUED', 'IN_FLIGHT'].includes(turnStateOf(session) ?? '')
       || session.numTurns !== 0 || session.importedAt || !session.prompt || session.wikiChatSpaceId
       || listed.some((turn) => turn.clientTurnId === key)
     ) {
@@ -9363,17 +9385,19 @@ export class SessionsService {
           status: { in: ['PENDING', 'IN_FLIGHT'] },
         },
       });
-      if (executable === 0 && session.status === RunStatus.RUNNING) {
+      const turn = turnStateOf(session);
+      if (executable === 0 && turn === 'IN_FLIGHT') {
         // Claim has already reserved a runner-local permit but the runner has not leased
         // this turn yet. Deleting the last executable turn would leave that handoff with
         // no /turn-complete capable of releasing its local permit. Roll the delete back;
         // from the user's perspective the message has crossed the "started" boundary.
         throw new ConflictException('message already started or not found');
       }
-      if (executable === 0 && session.status === RunStatus.PENDING) {
+      if (executable === 0 && turn === 'QUEUED') {
         await tx.session.update({
           where: { id },
-          data: { status: RunStatus.AWAITING_INPUT, lastTurnAt: new Date() },
+          // Parked again (plan §2.2 #23).
+          data: { status: RunStatus.AWAITING_INPUT, turnState: null, lastTurnAt: new Date() },
         });
       }
       return null;
@@ -9909,9 +9933,8 @@ export class SessionsService {
 
   /** {@link mergeToMain}'s "wait for the current turn to finish": the session is open and not parked
    *  idle, or it is being ended. */
-  private static mergeWaitsForTurn(session: { status: RunStatus; finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
-    return !isReleased(session) &&
-      (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt);
+  private static mergeWaitsForTurn(session: TurnStateFacts & { finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
+    return !isReleased(session) && (!isParked(session) || !!session.cancelRequestedAt);
   }
 
   /**
@@ -9945,7 +9968,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, ...RELEASE_WORK_SELECT, cancelRequestedAt: true, mergeStatus: true,
+          ownerId: true, ...TURN_STATE_SELECT, ...RELEASE_WORK_SELECT, cancelRequestedAt: true, mergeStatus: true,
           mergeAfterTurnAt: true, mergeAfterTurnTarget: true,
         },
       });
@@ -10006,7 +10029,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, finishedAt: true, cancelRequestedAt: true, mergeStatus: true,
+          ownerId: true, ...TURN_STATE_SELECT, cancelRequestedAt: true, mergeStatus: true,
           mergePullRequestId: true, mergeRequestedBy: true,
         },
       });
@@ -10071,7 +10094,7 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          ownerId: true, status: true, finishedAt: true, cancelRequestedAt: true, assignedRunnerId: true, mergeStatus: true,
+          ownerId: true, ...TURN_STATE_SELECT, cancelRequestedAt: true, assignedRunnerId: true, mergeStatus: true,
           commitStatus: true, mergeRecovery: true, mergeRepairTurnEndedAt: true,
         },
       });
@@ -10319,7 +10342,7 @@ export class SessionsService {
     if (!ended && session.cancelRequestedAt) {
       throw new ConflictException('the session has ended — its work is already committed');
     }
-    if (!ended && session.status !== RunStatus.AWAITING_INPUT) {
+    if (!ended && !isParked(session)) {
       throw new ConflictException('wait for the current turn to finish before committing');
     }
     if (!ended && session.runningSubagents.length > 0) {
@@ -10349,10 +10372,11 @@ export class SessionsService {
     // An ended session's race is the opposite one — it can only be RESUMED, which would put a turn
     // back in the checkout — so the predicate that has to hold is that it is still ended and still
     // reports work the branch does not have.
-    const idle = ended
-      ? { status: { notIn: [...SessionsService.LIVE] }, worktreeDirty: true }
+    // Not live (`LIVE`: held past its claim) is released or queued; idle is parked.
+    const idle: Prisma.SessionWhereInput = ended
+      ? { OR: [{ finishedAt: { not: null } }, turnStateFilter(['QUEUED'])], worktreeDirty: true }
       : {
-          status: RunStatus.AWAITING_INPUT,
+          ...turnStateFilter([null]),
           cancelRequestedAt: null,
           runningSubagents: { isEmpty: true },
         };
@@ -10382,7 +10406,7 @@ export class SessionsService {
       const stillCommittable =
         current != null &&
         (isHeldPastClaim(current)
-          ? current.status === RunStatus.AWAITING_INPUT &&
+          ? isParked(current) &&
             !current.cancelRequestedAt &&
             current.runningSubagents.length === 0
           : current.worktreeDirty === true);
@@ -10648,7 +10672,8 @@ export class SessionsService {
         return {
           changed: false,
           runnerId: session.assignedRunnerId,
-          status: session.status,
+          // The projected word (session-legacy-words.ts); an engine session is never a landing container.
+          status: legacySessionStatus(session),
           lifecycleState: deriveSessionLifecycleState(session),
           filingState: deriveSessionFilingState(session),
           endReason:
@@ -10711,7 +10736,7 @@ export class SessionsService {
       return {
         changed: false,
         runnerId: session.assignedRunnerId,
-        status: session.status,
+        status: legacySessionStatus(session),
         lifecycleState,
         filingState,
         endReason:
@@ -10743,13 +10768,16 @@ export class SessionsService {
       { sessionId, taskId: session.taskId },
       `its run was ended (${reason})`,
     );
-    if (session.status === RunStatus.PENDING) {
+    const queuedBeforeEnd = turnStateOf(session) === 'QUEUED';
+    if (queuedBeforeEnd) {
       await tx.session.update({
         where: { id: sessionId },
         data: {
           ...lifecycleData,
           ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
           status: RunStatus.CANCELLED,
+          // Released: no turn (plan §2.2 #24).
+          turnState: null,
           endReason: reason,
           cancelRequestedAt: now,
           finishedAt: now,
@@ -10811,7 +10839,8 @@ export class SessionsService {
     return {
       changed: true,
       runnerId: session.assignedRunnerId,
-      status: session.status === RunStatus.PENDING ? RunStatus.CANCELLED : session.status,
+      // The word the queued end wrote, else the session's projected word as it was read.
+      status: queuedBeforeEnd ? 'CANCELLED' as const : legacySessionStatus(session),
       lifecycleState,
       filingState,
       endReason: reason,
@@ -10875,6 +10904,7 @@ export class SessionsService {
   async listApprovals(ownerId: string, id: string, status?: string, toolName?: string): Promise<ApprovalInfo[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
+      // The turn state's columns for isSessionGenerating (common/session-generating.ts).
       select: { id: true, ...TURN_STATE_SELECT, engineTurnActive: true, runningBgShells: true,
         scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } } },
     });
@@ -11352,7 +11382,7 @@ export class SessionsService {
         where: { taskId, deletedAt: null, ...heldFilter(), NOT: { id } },
         select: {
           id: true,
-          status: true,
+          ...LEGACY_STATUS_SELECT,
           workspaceId: true,
           startsTaskWork: true,
           cancelRequestedAt: true,
@@ -11365,7 +11395,8 @@ export class SessionsService {
         const inTheWay = () => taskAlreadyRunning({
           taskPublicId: uuidToBase62(taskId),
           sessionPublicId: uuidToBase62(holder.id),
-          sessionStatus: holder.status,
+          // The projected word: a held run's, from its turn state.
+          sessionStatus: legacySessionStatus(holder),
           onAnotherAgent: holder.workspaceId != null && holder.workspaceId !== workspaceId,
           ending: holder.cancelRequestedAt != null,
           notWork: holder.startsTaskWork === false,
@@ -11414,7 +11445,7 @@ export class SessionsService {
           throw taskRunProviderSwitchConfirmation({
             taskPublicId: uuidToBase62(taskId),
             sessionPublicId: uuidToBase62(holder.id),
-            sessionStatus: holder.status,
+            sessionStatus: legacySessionStatus(holder),
             runningProvider,
             requestedProvider,
           });
@@ -11976,6 +12007,8 @@ export class SessionsService {
         where: { id },
         data: {
           status: RunStatus.PENDING,
+          // Held again with its turn waiting for a claim (plan §2.2 #25).
+          turnState: 'QUEUED',
           // A terminal revive starts a fresh runner-supervisor epoch. Keep the
           // reserved handoff owner in the claim snapshot until a capable runner
           // drains any predecessor and restores its process owner. Owner-fenced
@@ -12634,7 +12667,7 @@ export class SessionsService {
         },
       });
 
-      if (session.status === RunStatus.PENDING) return false;
+      if (turnStateOf(session) === 'QUEUED') return false;
       // A claim marks the row RUNNING before buildSession lazily seeds the opening prompt. A
       // config PATCH in that small window must seed it first; otherwise the control turn would
       // become the first turn and the claim path could mistake it for the opening message.
@@ -12778,8 +12811,8 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         select: {
-          status: true,
-          finishedAt: true,
+          // For isHeldPastClaim (common/session-release.ts).
+          ...TURN_STATE_SELECT,
           engine: true,
           provider: true,
           providerBuiltin: true,
@@ -12931,8 +12964,8 @@ export class SessionsService {
         const session = await tx.session.findUniqueOrThrow({
           where: { id },
           select: {
-            status: true,
-            finishedAt: true,
+            // For isHeldPastClaim (common/session-release.ts).
+            ...TURN_STATE_SELECT,
             engine: true,
             provider: true,
             providerBuiltin: true,
@@ -13502,7 +13535,8 @@ export class SessionsService {
     id: true,
     ownerId: true,
     title: true,
-    status: true,
+    // The turn state (session-move.ts), with the release column below.
+    ...TURN_STATE_SELECT,
     // A region sentence says the session waits on its machine's region (session-move.ts regionHeld).
     error: true,
     // The release column: only an ended session moves (session-move.ts); with the status, the end reason and the last
@@ -13591,7 +13625,7 @@ export class SessionsService {
     // Held in the queue for its runner's region (docs/claude-region-check-contract.md §11), with nothing of it out on a
     // delivery: the hold's sentence is on it, which the claim writes and clears.
     const regionHeld =
-      session.status === RunStatus.PENDING &&
+      turnStateOf(session) === 'QUEUED' &&
       isClaudeRegionError(session.error) &&
       (await db.conversationTurn.count({ where: { sessionId: id, status: 'IN_FLIGHT' } })) === 0;
     const verdict = sessionMoveVerdict({

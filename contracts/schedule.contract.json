@@ -299,7 +299,7 @@
       "LANDING_FAILED": "could not land on main"
     },
     "runReasonTexts": {
-      "OVER_BUDGET": "Not started: it had already started as many runs in the past 7 days as you allowed."
+      "OVER_BUDGET": "Not started: it had already started as many scheduled runs in the past 7 days as you allowed."
     },
     "failureReasonsWithSummary": {
       "REPORTED_FAILED": "reported a failure: {summary}",
@@ -565,6 +565,7 @@
     "push": {
       "failedBody": "The last run {reason}. It keeps running until you pause it.",
       "goalReachedTitle": "{title} ended itself",
+      "reportedLateTitle": "{title} reported after all",
       "stoppedAsPlanned": "Stopped as planned after {runs}"
     },
     "empty": {

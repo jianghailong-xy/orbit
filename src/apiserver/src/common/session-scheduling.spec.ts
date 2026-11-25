@@ -6,10 +6,8 @@ import {
   runnerOfflineIsFatal,
   statusAfterTurnCompleted,
   statusAfterTurnEnqueued,
-  turnStateAfterTurnCompleted,
-  turnStateAfterTurnEnqueued,
 } from './session-scheduling';
-import { turnStateOfWord } from '../sessions/session-turn-state';
+import { turnStateAfterTurnEnqueued, turnStateOfWord } from '../sessions/session-turn-state';
 
 test('reclaim retains every open session while only RUNNING is active', () => {
   assert.deepEqual(OPEN_SESSION_STATUSES, [
@@ -42,8 +40,5 @@ test('an offline runner does not invalidate an idle warm-or-cold session', () =>
 test('the turn-state helpers give the turn state of the word the word helpers give, one for one', () => {
   for (const word of [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED]) {
     assert.equal(turnStateAfterTurnEnqueued(turnStateOfWord(word)), turnStateOfWord(statusAfterTurnEnqueued(word)), word);
-  }
-  for (const queued of [true, false]) {
-    assert.equal(turnStateAfterTurnCompleted(queued), turnStateOfWord(statusAfterTurnCompleted(queued)));
   }
 });

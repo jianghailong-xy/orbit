@@ -23,24 +23,11 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'deadlock/dependency-revision-fixture.ts': { writes: 1, alone: 1 },
   'deadlock/lock-order-fixture.ts': { writes: 2, alone: 2 },
   'deadlock/orbit-lock-fixture.ts': { reads: 2, writes: 1, alone: 1 },
-  'feishu/feishu-group.service.ts': { reads: 1 },
-  'feishu/feishu-open-limits.ts': { reads: 1 },
-  'github/github-workspace.service.ts': { reads: 1 },
-  'help/help-ask-marker.ts': { reads: 2, enums: 1 },
-  'help/help-ask-reads.ts': { reads: 3, enums: 1 },
-  'help/help-ask.ts': { reads: 1 },
-  'link-previews/link-previews.service.ts': { reads: 1, enums: 1 },
   // Reads none (task T7). The out-of-memory stop writes the word and `turnState` together, as deploy 2 does; T14 takes
   // it to 0.
   'managed-runners/managed-runner-manager.ts': { writes: 1 },
   'projects/landing-session.ts': { writes: 2 },
   'projects/session-source.ts': { writes: 1 },
-  'providers/account-health.service.ts': { reads: 2 },
-  'providers/active-sessions.ts': { reads: 2 },
-  'providers/anthropic-gateway.service.ts': { reads: 1 },
-  'providers/pool-login-gateway.service.ts': { reads: 1 },
-  'providers/pool-pause.ts': { reads: 1 },
-  'push/push.service.ts': { reads: 3, enums: 1 },
   // Reads none (task T7): claim, slots and dispatch read the turn state. The claim and its undo write the word and
   // `turn_state` together, as deploy 2 does; T14 takes these to 0. common/, managed-runners/, runners/ and metrics/ read
   // none and write none.
@@ -48,40 +35,20 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   // Reads none (task T9). `forceFinalize` writes the word and `turnState` together, as deploy 2 does; T14 takes it to 0.
   'realtime/reaper.service.ts': { writes: 1 },
   // Reads none (task T8). Its runner-driven writers write the word and `turnState` together, as deploy 2 does; T14
-  // takes these to 0. The tenth is return-slot, which main's f49915d0b8 added after T8 and the merge of main brought in
-  // (dbdc84a638) reading and writing the word alone; task T7 moved it onto the turn state and writes both.
+  // takes these to 0.
+  // The tenth is main's return-slot (f49915d0b8), moved onto the facts with T10's landing merge.
   'runner-api/runner-api.controller.ts': { writes: 10 },
-  'schedules/schedule-runs.service.ts': { reads: 9, enums: 1 },
-  'session-guests/session-guests.service.ts': { reads: 3, writes: 1, alone: 1, enums: 1 },
+  'session-guests/session-guests.service.ts': { writes: 1 },
   // The reads added after the list was seeded: the one fallback for a held row with no `turn_state` (not yet
   // backfilled), which keeps its stored word (project rule of 2026-11-25: readers may reach production before the
   // backfill, task T3). Task T4 added it to the projector; task T11 moved it into session-turn-state.ts, beside the
   // turn state readers move onto (`heldSessionWord`, `turnStateOf`, `turnStateFilter`, `sessionTurnStateSql`), so the
   // projector and every moved reader ask the same function. The projector's SQL twin takes the word as an argument
   // (`legacySessionStatusSql` hands it over), and LEGACY_STATUS_SELECT / TURN_STATE_SELECT select it for them. Goes
-  // with the column's writers (T14).
+  // with the column's writers (T14). Since task T10 these two are the only reads left in sessions/ and session-guests/:
+  // every other reader there asks them, and `?status=` (statusWordFilter) matches an unfilled held row through them.
   'sessions/session-legacy-words.ts': { reads: 1 },
-  'sessions/session-turn-state.ts': { reads: 5 },
-  'sessions/auto-retry-eligibility.ts': { reads: 2, enums: 1 },
-  'sessions/auto-retry.service.ts': { reads: 22, enums: 1 },
-  'sessions/open-list-version.ts': { reads: 2 },
-  'sessions/queued-reason-sql.ts': { reads: 2 },
-  'sessions/run-now.ts': { reads: 2 },
-  'sessions/session-move.ts': { reads: 3, enums: 1 },
-  'sessions/session-phase.ts': { reads: 4, enums: 1 },
-  'sessions/session-reach.ts': { reads: 1 },
-  'sessions/session-request.ts': { reads: 3 },
-  'sessions/sessions.controller.ts': { enums: 1 },
-  // The ninth write is the interrupt's idle-after-Stop, which main's f49915d0b8 added and the merge of main brought in
-  // (dbdc84a638); it writes `turnState` beside the word (task T7), so `alone` stays 8.
-  'sessions/sessions.service.ts': { reads: 59, writes: 9, alone: 8, enums: 1 },
-  'sessions/task-work-carrier.ts': { reads: 6, enums: 1 },
-  'share-links/share-links.service.ts': { reads: 1 },
-  'watches/watch-delivery.service.ts': { reads: 1 },
-  'watches/watch-evaluator.service.ts': { reads: 1 },
-  'watches/watches.service.ts': { reads: 4 },
-  'wiki/wiki-chat.ts': { reads: 3, enums: 1 },
-  'wiki/wiki-dossier.ts': { reads: 2 },
-  'wiki/wiki-maintenance.ts': { reads: 2 },
-  'workspaces/main-checkout.service.ts': { reads: 1 },
+  'sessions/session-turn-state.ts': { reads: 4 },
+  // Nine writers, each writing `turnState` beside the word; the ninth is main's Stop on a draining runner (f49915d0b8).
+  'sessions/sessions.service.ts': { writes: 9, enums: 1 },
 };

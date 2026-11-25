@@ -52,6 +52,10 @@ interface Row {
   cancelRequestedAt: Date | null;
   retryAt: Date | null;
   retryClaimedAt: Date | null;
+  /** What the watch refusal derives its run state from, beside the above (session-legacy-words.ts). */
+  startedAt: Date | null;
+  importSourceCwd: string | null;
+  sessionKind: string;
   ownerId: string;
 }
 
@@ -82,6 +86,9 @@ function rowOf(status: string, lastTurnOutcome: string | null, endReason: string
     retryAt: retry === 'armed' ? NOW : null,
     retryClaimedAt: retry === 'claimed' ? new Date(NOW.getTime() - 1000)
       : retry === 'claim lapsed' ? new Date(NOW.getTime() - RETRY_CLAIM_WINDOW_MS - 1000) : null,
+    startedAt: NOW,
+    importSourceCwd: null,
+    sessionKind: 'CONVERSATION',
     ownerId: 'owner',
   };
 }

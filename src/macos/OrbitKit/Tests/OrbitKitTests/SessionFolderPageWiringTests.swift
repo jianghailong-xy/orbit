@@ -356,7 +356,8 @@ final class SessionFolderPageWiringTests: XCTestCase {
         for part in ["@State private var renamingFolder: SessionFolder?",
                      "@State private var deletingFolder: SessionFolderDeletion?",
                      "@AppStorage(\"sessionList.pinnedCollapsed\") private var pinnedCollapsed = false",
-                     "private func pinnedSectionHeader(_ title: String) -> some View",
+                     "@AppStorage(\"sessionList.needsYouCollapsed\") private var needsYouCollapsed = false",
+                     "private func foldSectionHeader(_ title: String, folded: Binding<Bool>) -> some View",
                      "@State private var namingFolder = false", "private func createFolderFromMenu() {"] {
             XCTAssertEqual(try branches(of: part, in: agents), [], "`\(part)` is every platform's")
         }

@@ -150,9 +150,12 @@ test('link previews: five kinds of card, one answer for everything out of reach,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         ...extra,
-        ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
-          ? { finishedAt: extra.finishedAt ?? new Date()}
-          : status === RunStatus.CANCELLED ? { finishedAt: extra.finishedAt ?? new Date()} : {}),
+        // A release as the server writes it: the facts the card's word is derived from (session-legacy-words.ts).
+        ...(status === RunStatus.SUCCEEDED
+          ? { finishedAt: extra.finishedAt ?? new Date(), startedAt: new Date(), endReason: 'task_done' }
+          : status === RunStatus.FAILED
+            ? { finishedAt: extra.finishedAt ?? new Date(), lastTurnOutcome: 'FAILED' }
+            : status === RunStatus.CANCELLED ? { finishedAt: extra.finishedAt ?? new Date() } : {}),
       },
     });
     return id;
@@ -178,7 +181,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
       provider: 'claude',
       model: 'claude-opus-5',
       numTurns: 12,
-      status: RunStatus.FAILED, finishedAt: new Date(), 
+      status: RunStatus.FAILED, finishedAt: new Date(), lastTurnOutcome: 'FAILED',
       error: 'engine exited with code 1',
       retryAt: new Date(now + 30_000),
       startedAt: new Date(now - 2 * HOUR),

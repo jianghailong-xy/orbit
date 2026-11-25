@@ -21,12 +21,13 @@ import { Prisma } from '@prisma/client';
 import { RunStatus, SessionEndReason } from '@orbit/shared';
 
 import { landingContainerStatus } from '../projects/landing-session';
-import { heldSessionWord } from './session-turn-state';
+import { heldSessionWord, turnStateFilter } from './session-turn-state';
 
 /** The session columns the projector reads. */
 export interface LegacyStatusFacts {
-  /** The stored word, read only for a held row with no turn state (see above). Task T14 removes it. */
-  status: string;
+  /** The stored word, read only for a held row with no turn state (see above); absent when the turn state was
+   *  resolved in SQL (sessionTurnStateSql). Task T14 removes it. */
+  status?: string;
   finishedAt: Date | string | null;
   turnState: string | null;
   endReason: string | null;
@@ -131,7 +132,9 @@ const releasedFinished: Prisma.SessionWhereInput = {
 /**
  * The condition that selects exactly the CONVERSATION sessions the projector gives `word`: what `?status=` means
  * (plan §6). A LANDING container's word comes from another table (P3) and the lists that filter by status show
- * conversations only, so the condition never selects one. A word the protocol does not have gives undefined.
+ * conversations only, so the condition never selects one. A held word reads the turn state as heldSessionWord does: a
+ * held row with no turn state (not yet backfilled) matches by its stored word (turnStateFilter). A word the protocol
+ * does not have gives undefined.
  */
 export function statusWordFilter(word: string): Prisma.SessionWhereInput | undefined {
   const conversation = (where: Prisma.SessionWhereInput): Prisma.SessionWhereInput =>
@@ -139,13 +142,13 @@ export function statusWordFilter(word: string): Prisma.SessionWhereInput | undef
   const released: Prisma.SessionWhereInput = { finishedAt: { not: null } };
   switch (word) {
     case RunStatus.PENDING:
-      return conversation({ finishedAt: null, turnState: 'QUEUED' });
+      return conversation(turnStateFilter(['QUEUED']));
     case RunStatus.RUNNING:
-      return conversation({ finishedAt: null, turnState: 'IN_FLIGHT' });
+      return conversation(turnStateFilter(['IN_FLIGHT']));
     case RunStatus.INTERRUPTED:
-      return conversation({ finishedAt: null, turnState: 'ABANDONED' });
+      return conversation(turnStateFilter(['ABANDONED']));
     case RunStatus.AWAITING_INPUT:
-      return conversation({ finishedAt: null, turnState: null });
+      return conversation(turnStateFilter([null]));
     case RunStatus.FAILED:
       return conversation({ AND: [released, { OR: releasedByAFailure }] });
     case RunStatus.SUCCEEDED:

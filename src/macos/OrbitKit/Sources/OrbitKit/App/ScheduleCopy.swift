@@ -169,7 +169,7 @@ public enum ScheduleCopy {
         "OVER_BUDGET": "was over what you allowed this week",
     ]
     public static let runReasonTexts: [String: String] = [
-        "OVER_BUDGET": "Not started: it had already started as many runs in the past 7 days as you allowed.",
+        "OVER_BUDGET": "Not started: it had already started as many scheduled runs in the past 7 days as you allowed.",
     ]
     public static let failureReasonsWithSummary: [String: String] = [
         "LANDING_FAILED": "could not land on main: {summary}",

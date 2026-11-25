@@ -598,6 +598,8 @@ test('§6.3 the run is a new session: runSource SCHEDULE, scheduleRunId, the mod
       '  Note from the last run: release notes moved to github.com/openai/codex/releases, the old changelog URL is 404.',
       '  Access: CHECK_ONLY. Limit: 30 minutes.',
       '  When you are done, call mcp__orbit__schedule_run_report exactly once.',
+      '  Ending your turn without it fails this run (NO_REPORT) unless something is set to wake you: a bg_run job, a '
+        + 'SubAgent, schedule_wakeup, task_await or session_await. Your run limit counts the wait.',
       '</scheduled-run>',
       'Check the latest stable Codex release against the pinned version.',
     ].join('\n'),
@@ -776,6 +778,122 @@ test('§7.1 an idle session waiting on a bg_run job, or on the wake its end file
   advance(20 * MINUTE);
   assert.equal(await runs.reconcileRun(r2.id), 'FAILED');
   assert.equal((await runOf(r2.id)).failureReason, 'RUN_LIMIT');
+});
+
+test('§7.1 an idle session set to wake, by a schedule_wakeup or a task_await watch, is still working', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('no-report-wakeup');
+  const { run, sessionId } = await runningRun(w, { runLimitMinutes: 120 });
+  await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
+  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  const wakeup = await db.sessionScheduledWakeup.create({
+    data: { sessionId, delaySeconds: 1800, reason: 'wait for the release', dueAt: advance(30 * MINUTE) },
+  });
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'a pending wake-up holds the run');
+  await db.sessionScheduledWakeup.update({ where: { id: wakeup.id }, data: { state: 'DELIVERED', settledAt: clockNow } });
+
+  const watch = await db.watch.create({
+    data: {
+      ownerId: w.ownerId, observerType: 'SESSION', observerSessionId: sessionId, action: 'RESUME_SESSION',
+      predicate: { kind: 'task_status', in: ['DONE'] }, expiresAt: FUTURE,
+    },
+  });
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'the watch task_await leaves holds the run');
+  await db.watch.update({ where: { id: watch.id }, data: { state: 'CANCELLED' } });
+
+  assert.equal(await runs.reconcileRun(run.id), 'FAILED', 'nothing left to wake it');
+  assert.equal((await runOf(run.id)).failureReason, 'NO_REPORT');
+});
+
+/** Settle the run's session idle with no report: the reading that fails it NO_REPORT. */
+async function noReport(runId: string, sessionId: string) {
+  await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
+  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  assert.equal(await runs.reconcileRun(runId), 'FAILED');
+  assert.equal((await runOf(runId)).failureReason, 'NO_REPORT');
+}
+
+/** A turn written to the session after the run ended: by a person (the owner stepping in), or by Orbit. */
+async function turnAfterEnd(sessionId: string, seq: number, byPerson: boolean) {
+  await db.conversationTurn.create({
+    data: {
+      sessionId, seq, clientTurnId: `${byPerson ? 'owner' : 'watch:v1'}-${seq}-${sessionId}`, content: 'finish and report',
+      status: 'ANSWERED', byPerson, createdAt: advance(MINUTE),
+    },
+  });
+}
+
+test('§7.1 a NO_REPORT run takes a late report once the owner writes to its session, and only then', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('late-report');
+  const { schedule, run, sessionId } = await runningRun(w);
+  await noReport(run.id, sessionId);
+  assert.equal((await scheduleOf(schedule.id)).consecutiveFailures, 1);
+  assert.deepEqual(pushed.map((a) => a.kind), ['FAILED']);
+
+  await refusedWith(runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'nothing new' }), 'SCHEDULE_RUN_ENDED');
+  await turnAfterEnd(sessionId, 2, false);
+  await refusedWith(
+    runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'nothing new' }),
+    'SCHEDULE_RUN_ENDED',
+  );
+
+  await turnAfterEnd(sessionId, 3, true);
+  await runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'nothing new' });
+  const reported = await runOf(run.id);
+  assert.equal(reported.state, 'NO_CHANGE');
+  assert.equal(reported.failureReason, null);
+  assert.equal((await scheduleOf(schedule.id)).consecutiveFailures, 0, 'the NO_REPORT failure is undone');
+  const items = await db.ownerRequest.findMany({ where: { scheduleRunId: run.id, kind: 'SCHEDULE_FAILED' } });
+  assert.deepEqual(items.map((i) => i.state), ['WITHDRAWN']);
+  const late = pushed.at(-1)!;
+  assert.equal(late.kind, 'REPORTED_LATE');
+  assert.equal(late.collapseId, pushed[0].collapseId, 'it replaces the failure banner');
+  assert.equal(late.title, `${schedule.title} reported after all`);
+
+  await refusedWith(
+    runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'again' }),
+    'SCHEDULE_RUN_ALREADY_REPORTED',
+  );
+});
+
+test('§7.1 a late FAILED report keeps one failure counted and files its own item', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('late-failed');
+  const { schedule, run, sessionId } = await runningRun(w);
+  await noReport(run.id, sessionId);
+  await turnAfterEnd(sessionId, 2, true);
+  await runs.report(w.ownerId, sessionId, { outcome: 'FAILED', summary: 'the registry was down' });
+  const reported = await runOf(run.id);
+  assert.equal(reported.state, 'FAILED');
+  assert.equal(reported.failureReason, 'REPORTED_FAILED');
+  assert.equal((await scheduleOf(schedule.id)).consecutiveFailures, 1);
+  const items = await db.ownerRequest.findMany({
+    where: { scheduleRunId: run.id, kind: 'SCHEDULE_FAILED' }, orderBy: { createdAt: 'asc' },
+  });
+  assert.deepEqual(items.map((i) => i.state), ['WITHDRAWN', 'PENDING']);
+  assert.deepEqual(pushed.map((a) => a.kind), ['FAILED', 'FAILED']);
+  assert.equal(pushed[1].collapseId, pushed[0].collapseId);
+});
+
+test('§7.1 no late report once a newer run of the schedule has started', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('late-newer');
+  const { schedule, run, sessionId } = await runningRun(w);
+  await noReport(run.id, sessionId);
+  await db.scheduleRun.create({
+    data: {
+      scheduleId: schedule.id, scheduleRevision: run.scheduleRevision, plannedAt: advance(MINUTE), trigger: 'MANUAL',
+      state: 'NO_CHANGE', startedAt: clockNow, endedAt: clockNow,
+    },
+  });
+  await turnAfterEnd(sessionId, 2, true);
+  await refusedWith(runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'late' }), 'SCHEDULE_RUN_ENDED');
+  assert.equal((await runOf(run.id)).failureReason, 'NO_REPORT');
 });
 
 test('§7.2 RUN_LIMIT: a run past runLimitMinutes from its delivery is interrupted and fails', { skip }, async () => {

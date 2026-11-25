@@ -250,10 +250,12 @@ The inspector shows what was used: "This month: 14 runs · 41 min", with a cost 
 
 **Runs per week bounds the runs that start, not only the rule.** Moving the time of day or the weekdays is inside
 the envelope, and a session that moved its rule to "a few minutes from now" after every run would otherwise run back
-to back. So before a run starts (§6.1) the server counts, under the schedule lock the start takes (so two replicas
-cannot both pass), **the schedule's runs that actually started and count (below), of every trigger, whose planned slot (`plannedAt`; a
-MANUAL run's is when it was asked for) lies after the same local time 7 days before this run's own slot, in the
-schedule's time zone.** The window is on planned slots, not start times, so how late a start is (the worker's pass,
+to back. So before an automatic run starts (§6.1) the server counts, under the schedule lock the start takes (so two
+replicas cannot both pass), **the schedule's automatic runs (every trigger but MANUAL) that actually started and count
+(below), whose planned slot (`plannedAt`) lies after the same local time 7 days before this run's own slot, in the
+schedule's time zone.** No Run now is in this count: the rhythm the owner approved always runs, however often anyone
+pressed Run now that week (2026-11-23: six presses in three days had cost a daily schedule its next three slots). Run
+now has its own count, §8.4. The window is on planned slots, not start times, so how late a start is (the worker's pass,
 a runner back after an outage) never moves a run into or out of it: a rule inside its envelope never trips it, and a
 rule moved to "a few minutes from now" still gives each run its own slot. It is local time, not 7×24 hours, so a
 week across a daylight-saving change is still a week. At `envelope.runsPerWeek` or more, the slot is not started: it is MISSED with
@@ -262,10 +264,10 @@ usual. A start retried because it never reached its engine (§7.2) is one start.
 was delivered (`delivered_at`, §7.2) or it is still live (QUEUED, RUNNING or AWAITING_APPROVAL with a start), so an
 in-flight run holds its place and two quick starts cannot overshoot.** A run that ended without ever being
 delivered (MISSED, CANCELLED, or FAILED with `RUNNER_UNAVAILABLE`, `QUOTA` or `ENGINE_CRASHED_BEFORE_START`) counts 0:
-it did nothing, so it must not cost a later slot its place. The `SCHEDULE_OVER_BUDGET` refusal of §8.4 reports this same
-count. The owner is told once, by push,
+it did nothing, so it must not cost a later slot its place. The `SCHEDULE_OVER_BUDGET` refusal of §8.4 reads the same
+window and the same rule, over Run now presses instead. The owner is told once, by push,
 for a slot over budget, and not again for the next ones in a row; the run list says "Not started: it had already
-started as many runs in the past 7 days as you allowed." Run now follows §8.4.
+started as many scheduled runs in the past 7 days as you allowed." Run now follows §8.4.
 
 The count is of starts already made, read against the envelope as it is now. When the owner narrows runs per week
 mid-week, the runs that already started in the window stay counted against the new, smaller number, so the
@@ -581,8 +583,15 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - The report ends the run. The session's turn may go on, but nothing after it changes the run.
 - A session that ends or settles idle without a report fails the run with `NO_REPORT`. Silence never reads as "no
   change". A session is not idle while one of its `bg_run` jobs (job or watch, not a service) is still running or a
-  turn, such as that job's wake, is still to be answered: a run may end its turn to wait for a job, and its run limit
-  still counts that wait.
+  turn, such as that job's wake, is still to be answered, nor while something is set to wake it (`sessionWillWake`: a
+  `schedule_wakeup` still pending, the RESUME_SESSION watch a `task_await` or `session_await` leaves, an armed retry): a
+  run may end its turn to wait for any of these, and its run limit still counts that wait.
+- NO_REPORT is the server's reading of an idle session, not the agent's word, so it is the one failure a report can
+  still replace. Once a person has written to the run's session after it was marked NO_REPORT, a report from that
+  session is taken as if it had come in time: the run takes its outcome, the failure it counted is undone, its Waiting
+  on you item is withdrawn (a late FAILED files its own), and a push replaces the failure's banner
+  (`REPORTED_LATE`, or the late FAILED's own). It is refused (`SCHEDULE_RUN_ENDED`) before anyone has written, once a
+  newer run of the schedule has started, and on a deleted schedule. Every other failure stays final.
 
 ### 7.2 Failure reasons and retries
 
@@ -759,7 +768,7 @@ Each is a `ScheduleRevision` with `changedBy = RUN` and **Undo**. A run asking t
 | --- | --- |
 | Pause | ACTIVE → PAUSED, `nextDueAt` = NULL, a QUEUED run becomes CANCELLED. A RUNNING run continues. |
 | Resume | PAUSED or HELD → ACTIVE, next slot after now. From HELD the §6.1 checks run first. Slots missed while paused are not caught up. |
-| Run now | Writes a MANUAL run under the overlap rule. Allowed when PAUSED; refused when ENDED. Only the owner's own press (the owner-interactive channel) starts over the weekly budget. A session's or a personal access token's Run now is refused over budget (`SCHEDULE_OVER_BUDGET`): a token is what an agent with a shell on the runner holds, so exempting it would let the budget be passed without the owner. Inside the budget both work as before. Either counts as a start toward later automatic runs (§4), and that is the cost of the press: the owner's Run now inside a full week starts, and the next automatic slot is then MISSED (`OVER_BUDGET`). |
+| Run now | Writes a MANUAL run under the overlap rule, recording whether the owner pressed it (`by_owner`). Allowed when PAUSED; refused when ENDED. The owner's own press (the owner-interactive channel) always starts and counts toward no budget. A session's or a personal access token's press counts toward a budget of its own: the same window, the same delivered-or-live rule and the same `envelope.runsPerWeek` as §4, over those presses alone, and over it the press is refused (`SCHEDULE_OVER_BUDGET`). A token is what an agent with a shell on the runner holds, so exempting it would let the budget be passed without the owner. No press takes an automatic slot's place (§4). A run's own session cannot press Run now at all (`SCHEDULE_RUN_SESSION_SCOPE`), so the loop the weekly count guards against is a rule moved to "a few minutes from now", which §4 bounds. Presses still count toward a planned end by count (`maxRuns`, §8.5). |
 | Stop this run | Interrupts the run's session, run → CANCELLED (`CANCELLED_BY_OWNER`). The schedule is unchanged. |
 | Delete | ENDED (`DELETED`), a QUEUED run is cancelled, a RUNNING one continues. Runs and findings are kept. |
 

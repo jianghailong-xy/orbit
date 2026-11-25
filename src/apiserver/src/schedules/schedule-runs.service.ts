@@ -27,7 +27,9 @@
  * ==============================
  * `schedule_run_report` ends a run, once, from the session serving it. Without one, what the session does decides:
  * an engine that ended, or whose session's phase is IDLE (no SubAgent, `bg_run` job or engine turn executing) with no
- * turn still to answer, is NO_REPORT;
+ * turn still to answer and nothing set to wake it (a scheduled wake-up, a RESUME_SESSION watch, an armed retry), is
+ * NO_REPORT, which a report from that session still replaces once a person has written to it
+ * (`acceptsLateReport`);
  * a run past its limit is interrupted, RUN_LIMIT; a card nobody
  * answered for two hours interrupts it, APPROVAL_TIMEOUT. Whether the run reached its engine is read from its first
  * turn's `delivered_at`: a run that never did (RUNNER_UNAVAILABLE, QUOTA, ENGINE_CRASHED_BEFORE_START) has its
@@ -49,16 +51,17 @@ import {
   Optional,
 } from '@nestjs/common';
 import { SCHEDULE_COPY, scheduleFill, RunFailureKind, runFailureIs } from '@orbit/shared';
-import { Prisma, RunStatus, type Schedule, type ScheduleRun } from '@prisma/client';
+import { Prisma, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
-import { isSessionExecuting } from '../common/session-working';
+import { isSessionExecuting, SESSION_WILL_WAKE_WHERE } from '../common/session-working';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { openingTurnKey } from '../sessions/orbit-authored-turn';
 import { sessionHeldByCapacity } from '../sessions/queued-reason-sql';
 import { deriveSessionPhase } from '../sessions/session-phase';
+import { isParked, TURN_STATE_SELECT, turnStateFilter, turnStateOf } from '../sessions/session-turn-state';
 import {
   SCHEDULE_NOTIFIER,
   approvalCopy,
@@ -72,6 +75,7 @@ import {
   onceMissedCopy,
   overBudgetCopy,
   plannedEndCopy,
+  reportedLateCopy,
   runReasonText,
   scheduleHomeSession,
   sendAlerts,
@@ -83,7 +87,7 @@ import type { ConditionFiring } from '../conditions/conditions.service';
 import { sampleHolds } from '../conditions/condition-evaluation';
 import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
 import {
-  scheduleBudgetStarts,
+  scheduleAgentPressStarts,
   scheduleOverBudget,
   scheduleOverBudgetMessage,
   scheduleRunsStarted,
@@ -104,6 +108,7 @@ import {
   releaseFinishedTheWork,
   releaseWasFailure,
   releaseWasFailureFilter,
+  releasedFilter,
 } from '../common/session-release';
 
 const MINUTE = 60_000;
@@ -508,9 +513,9 @@ export class ScheduleRunsService {
           }
           return { outcome: 'HELD', alerts };
         }
-        // §4: the envelope's runs per week bound the runs that start, not only the rule, counted on the slots they
-        // were planned for. A slot over budget is MISSED (OVER_BUDGET) and the schedule goes on; a MANUAL run is the
-        // owner's press (runNow refuses anyone else's over budget).
+        // §4: the envelope's runs per week bound the automatic runs that start, not only the rule, counted on the
+        // slots they were planned for. A slot over budget is MISSED (OVER_BUDGET) and the schedule goes on. A MANUAL
+        // run was checked when it was pressed (runNow), and no Run now counts here.
         if (run.trigger !== 'MANUAL' && (await scheduleOverBudget(tx, schedule, run.plannedAt))) {
           return { outcome: 'MISSED', alerts: await this.missOverBudget(tx, schedule, run, now) };
         }
@@ -654,7 +659,7 @@ export class ScheduleRunsService {
       ? await this.prisma.session.findUnique({
           where: { id: sessionId },
           select: {
-            status: true, finishedAt: true, endReason: true, lastTurnOutcome: true, completedAt: true, archivedAt: true,
+            ...TURN_STATE_SELECT, endReason: true, lastTurnOutcome: true, completedAt: true, archivedAt: true,
             deletedAt: true,
             cancelRequestedAt: true, error: true, failureKind: true,
             engineTurnActive: true, runningSubagents: true, runningBgJobs: true,
@@ -744,12 +749,15 @@ export class ScheduleRunsService {
     // executes for it (sessions/session-phase.ts): a dispatched turn, the engine's own turn, a SubAgent (background
     // `delegate` calls included) or a `bg_run` job, silent or not, since a job waiting on a lock writes nothing. A turn
     // not yet answered, such as the wake a job's or SubAgent's end files a moment after its end is reported, holds it
-    // too. Its working time still counts toward RUN_LIMIT above.
+    // too, and so does whatever will wake it without anybody writing (`sessionWillWake`): a `schedule_wakeup`, the
+    // watch a `task_await` or `session_await` leaves, an armed retry. Its working time still counts toward RUN_LIMIT
+    // above.
     const idle = deriveSessionPhase(session) === 'IDLE'
       && opening?.status === 'ANSWERED'
       && (await this.prisma.conversationTurn.count({
         where: { sessionId, status: { in: ['PENDING', 'IN_FLIGHT'] } },
-      })) === 0;
+      })) === 0
+      && (await this.prisma.session.count({ where: { AND: [{ id: sessionId }, SESSION_WILL_WAKE_WHERE] } })) === 0;
     if (idle) return this.fail(runId, 'NO_REPORT', { sessionId });
     if (run.state === 'AWAITING_APPROVAL') return this.moveInProgress(runId, 'AWAITING_APPROVAL', 'RUNNING');
     return 'UNCHANGED';
@@ -782,18 +790,18 @@ export class ScheduleRunsService {
   private async landRun(run: ScheduleRun): Promise<void> {
     const session = run.sessionId ? await this.prisma.session.findUnique({ where: { id: run.sessionId } }) : null;
     // Released for anything but its work finishing (decision D5, design §12.3: the end reason, never the terminal
-    // status) is a run that ended unsuccessfully, an engine that exited by itself included; INTERRUPTED is a held run
-    // stopped mid-turn.
+    // status) is a run that ended unsuccessfully, an engine that exited by itself included; an abandoned turn is a held
+    // run stopped mid-turn.
     const released = session != null && isReleased(session);
     if (!session || session.deletedAt || (released && !releaseFinishedTheWork(session))
-        || session.status === RunStatus.INTERRUPTED || session.cancelRequestedAt) {
+        || turnStateOf(session) === 'ABANDONED' || session.cancelRequestedAt) {
       await this.settleLanding(run.id, 'FAILED', null, 'The run session ended unsuccessfully; nothing was landed.');
       return;
     }
-    // The tool reports during the turn. A commit and its final worktree report may still be on the way, and
-    // AWAITING_INPUT says only that the turn is over: a background job, a subagent or an engine turn still
+    // The tool reports during the turn. A commit and its final worktree report may still be on the way, and a parked
+    // session says only that the turn is over: a background job, a subagent or an engine turn still
     // executing can commit more. The worker's next pass looks again; the run limit bounds the wait.
-    if ((!released && session.status !== RunStatus.AWAITING_INPUT) || isSessionExecuting(session)) {
+    if ((!released && !isParked(session)) || isSessionExecuting(session)) {
       // Reporting does not exempt the rest of a LAND run from its run limit.
       const opening = await this.prisma.conversationTurn.findFirst({
         where: { sessionId: session.id, clientTurnId: openingTurnKey(session.id) }, select: { deliveredAt: true },
@@ -932,7 +940,8 @@ export class ScheduleRunsService {
         runSource: 'SCHEDULE',
         completedAt: null,
         deletedAt: null,
-        status: { notIn: [RunStatus.PENDING, RunStatus.RUNNING] },
+        // No turn queued or in flight: released, parked, or its turn abandoned.
+        OR: [releasedFilter(), turnStateFilter([null, 'ABANDONED'])],
         scheduleRun: { state: 'NO_CHANGE', OR: [{ landingStatus: null }, { landingStatus: { in: ['LANDED', 'NO_COMMITS'] } }] },
       },
       take: batch,
@@ -955,7 +964,11 @@ export class ScheduleRunsService {
   // The report (§7.1)
   // -------------------------------------------------------------------------------------------------------------
 
-  /** `schedule_run_report`, from the session serving a run: once per run, and it ends the run. */
+  /**
+   * `schedule_run_report`, from the session serving a run: once per run, and it ends the run. A run already FAILED
+   * with NO_REPORT takes a late one when the owner stepped back in (`acceptsLateReport`): the report then replaces
+   * the failure as if it had come in time.
+   */
   async report(
     ownerId: string,
     sessionId: string,
@@ -978,14 +991,21 @@ export class ScheduleRunsService {
         if (!schedule || !run || run.sessionId !== sessionId) {
           throw refusal('FORBIDDEN', 'SCHEDULE_RUN_REPORT_NOT_A_RUN', 'This session no longer serves its run.');
         }
-        if (run.state !== 'RUNNING' && run.state !== 'AWAITING_APPROVAL') {
+        const noReport = run.state === 'FAILED' && run.failureReason === 'NO_REPORT';
+        const late = noReport && (await this.acceptsLateReport(tx, schedule, run));
+        if (!late && run.state !== 'RUNNING' && run.state !== 'AWAITING_APPROVAL') {
           const reported = run.state === 'NO_CHANGE' || run.state === 'CHANGED' || run.failureReason === 'REPORTED_FAILED';
           throw refusal(
             'CONFLICT',
             reported ? 'SCHEDULE_RUN_ALREADY_REPORTED' : 'SCHEDULE_RUN_ENDED',
-            reported ? 'This run has already been reported; a run reports once.' : `This run has already ended (${run.state}).`,
+            reported ? 'This run has already been reported; a run reports once.'
+              : noReport ? 'This run has already ended (FAILED, NO_REPORT). It takes a late report only after the '
+                + 'owner writes in this session, and only until a newer run of the schedule starts.'
+              : `This run has already ended (${run.state}).`,
           );
         }
+        // A late report undoes the failure NO_REPORT counted; no newer run has counted anything since.
+        const failures = late ? Math.max(0, schedule.consecutiveFailures - 1) : schedule.consecutiveFailures;
         const now = this.clock();
         const alerts: ScheduleAlert[] = [];
         const waitsForLanding = run.accessLevel === 'LAND' && report.outcome !== 'FAILED';
@@ -1005,7 +1025,9 @@ export class ScheduleRunsService {
           where: { id: schedule.id },
           data: {
             ...(report.note !== undefined ? { note: report.note } : {}),
-            ...(waitsForLanding ? {} : { consecutiveFailures: report.outcome === 'FAILED' ? { increment: 1 } : 0 }),
+            ...(waitsForLanding
+              ? (late ? { consecutiveFailures: failures } : {})
+              : { consecutiveFailures: report.outcome === 'FAILED' ? failures + 1 : 0 }),
           },
         });
         let newFinding = false;
@@ -1049,8 +1071,22 @@ export class ScheduleRunsService {
         if (!waitsForLanding) await this.settleItems(tx, schedule, run, report.outcome === 'FAILED' ? 'FAILED' : 'SUCCEEDED', now, alerts, {
           reason: 'REPORTED_FAILED',
           summary: report.summary,
-          consecutiveFailures: report.outcome === 'FAILED' ? schedule.consecutiveFailures + 1 : 0,
+          consecutiveFailures: report.outcome === 'FAILED' ? failures + 1 : 0,
+          late,
         });
+        // The NO_REPORT failure was pushed; a late success replaces its banner (a late FAILED's own push does).
+        if (late && report.outcome !== 'FAILED') {
+          alerts.push({
+            kind: 'REPORTED_LATE',
+            ownerId: schedule.ownerId,
+            scheduleId: schedule.id,
+            runId: run.id,
+            opens: { sessionId },
+            ownerRequestId: null,
+            ...reportedLateCopy(schedule.title, report.summary),
+            collapseId: `schedule-failed-${run.id}`,
+          });
+        }
         return { run: ended, newFinding, scheduleId: schedule.id, alerts };
       },
       loggedRetry(this.logger, 'scheduleRuns.report'),
@@ -1059,6 +1095,25 @@ export class ScheduleRunsService {
     if (result.run.state === 'NO_CHANGE' && result.run.accessLevel !== 'LAND') await this.completeIfSettled(ownerId, sessionId);
     await this.startNext(result.scheduleId);
     return { run: result.run, newFinding: result.newFinding };
+  }
+
+  /**
+   * §7.1: NO_REPORT is the server's reading of a session gone idle, not the agent's word. When a person has written
+   * to the run's session since it was marked so, they decided the run is not over, and a report from that session
+   * still counts, until a newer run of the schedule starts (one run's result never lands over the next one's). A
+   * schedule that was deleted takes none.
+   */
+  private async acceptsLateReport(tx: Tx, schedule: Schedule, run: ScheduleRun): Promise<boolean> {
+    if (!run.sessionId || !run.endedAt || !run.startedAt) return false;
+    if (schedule.state === 'ENDED' && schedule.endedReason === 'DELETED') return false;
+    const stepIn = await tx.conversationTurn.count({
+      where: { sessionId: run.sessionId, byPerson: true, createdAt: { gt: run.endedAt } },
+    });
+    if (stepIn === 0) return false;
+    const newer = await tx.scheduleRun.count({
+      where: { scheduleId: schedule.id, id: { not: run.id }, startedAt: { gt: run.startedAt } },
+    });
+    return newer === 0;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -1078,11 +1133,12 @@ export class ScheduleRunsService {
           throw refusal('CONFLICT', 'SCHEDULE_HELD', `The schedule is held (${schedule.heldReason}); resume it first.`);
         }
         const now = this.clock();
-        // §8.4: only the owner's own press (the owner-interactive channel) starts over budget. A session, or a personal
-        // access token (what an agent with a shell on the runner holds), may not spend runs the owner did not allow.
-        // The run it would write is planned at now.
-        if (actor.kind !== 'OWNER') {
-          const started = await scheduleBudgetStarts(tx, schedule, now);
+        // §8.4: the owner's own press (the owner-interactive channel) counts toward no budget. A session's or a personal
+        // access token's (what an agent with a shell on the runner holds) counts toward a budget of its own, kept apart
+        // from the automatic runs', so it never takes a slot's place. The run it would write is planned at now.
+        const byOwner = actor.kind === 'OWNER';
+        if (!byOwner) {
+          const started = await scheduleAgentPressStarts(tx, schedule, now);
           if (started >= schedule.envelopeRunsPerWeek) {
             throw refusal(
               'CONFLICT',
@@ -1093,7 +1149,7 @@ export class ScheduleRunsService {
         }
         await this.skipQueued(tx, scheduleId, now);
         return tx.scheduleRun.create({
-          data: { scheduleId, scheduleRevision: schedule.revision, plannedAt: now, trigger: 'MANUAL', state: 'QUEUED' },
+          data: { scheduleId, scheduleRevision: schedule.revision, plannedAt: now, trigger: 'MANUAL', state: 'QUEUED', byOwner },
         });
       },
       loggedRetry(this.logger, 'scheduleRuns.runNow'),
@@ -1317,7 +1373,7 @@ export class ScheduleRunsService {
     how: 'FAILED' | 'SUCCEEDED',
     now: Date,
     alerts: ScheduleAlert[],
-    failure: { reason: string; summary: string | null; consecutiveFailures: number },
+    failure: { reason: string; summary: string | null; consecutiveFailures: number; late?: boolean },
   ): Promise<void> {
     await closeScheduleItems(
       tx,
@@ -1327,7 +1383,11 @@ export class ScheduleRunsService {
     await closeScheduleItems(
       tx,
       { scheduleId: schedule.id, kinds: ['SCHEDULE_FAILED'] },
-      { state: 'WITHDRAWN', note: how === 'FAILED' ? 'A later run failed too.' : 'A later run succeeded.', now },
+      {
+        state: 'WITHDRAWN',
+        note: failure.late ? 'The run reported after all.' : how === 'FAILED' ? 'A later run failed too.' : 'A later run succeeded.',
+        now,
+      },
     );
     if (how !== 'FAILED') return;
     // An ended or deleted schedule has nothing left to wait on the owner for: a run that outlived it and then failed is
@@ -1350,7 +1410,8 @@ export class ScheduleRunsService {
           scheduleId: schedule.id,
           scheduleRunId: run.id,
           workspaceId: schedule.workspaceId,
-          key: `schedule-failed:${run.id}`,
+          // A late report's failure replaces the NO_REPORT item just withdrawn, so it is keyed apart from it.
+          key: `schedule-failed:${run.id}${failure.late ? ':reported' : ''}`,
           title: copy.title,
           why: copy.why,
         })
@@ -1763,8 +1824,10 @@ export class ScheduleRunsService {
   }
 
   private async completeIfSettled(ownerId: string, sessionId: string): Promise<void> {
-    const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { status: true, completedAt: true } });
-    if (!session || session.completedAt || session.status === RunStatus.RUNNING || session.status === RunStatus.PENDING) return;
+    const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { ...TURN_STATE_SELECT, completedAt: true } });
+    if (!session || session.completedAt) return;
+    const turn = turnStateOf(session);
+    if (turn === 'IN_FLIGHT' || turn === 'QUEUED') return;
     await this.quietly(() => this.sessions.complete(ownerId, sessionId), 'complete');
   }
 

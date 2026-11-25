@@ -208,7 +208,7 @@ export const SCHEDULE_COPY = {
   },
   /** A run's reasonText as the server writes it (ScheduleRunView.reasonText), for the reasons whose sentence is shared. */
   runReasonTexts: {
-    OVER_BUDGET: 'Not started: it had already started as many runs in the past 7 days as you allowed.',
+    OVER_BUDGET: 'Not started: it had already started as many scheduled runs in the past 7 days as you allowed.',
   },
   /** A failure that reported what went wrong says it, in the failure card and its push (one line, 120 characters). */
   failureReasonsWithSummary: {
@@ -454,6 +454,8 @@ export const SCHEDULE_COPY = {
   push: {
     failedBody: 'The last run {reason}. It keeps running until you pause it.',
     goalReachedTitle: '{title} ended itself',
+    /** §7.1: a run marked NO_REPORT that reported after the owner wrote to its session; replaces the failure banner. */
+    reportedLateTitle: '{title} reported after all',
     /** §8.5: a planned end (endAt or maxRuns) reached; also the ENDED row's read. */
     stoppedAsPlanned: 'Stopped as planned after {runs}',
   },
@@ -2053,6 +2055,11 @@ export function scheduleFailedPush(input: Parameters<typeof scheduleFailedWaitin
 /** A run ending its own schedule: "Release 2.0 freeze watch ended itself". */
 export function scheduleGoalReachedPushTitle(title: string): string {
   return scheduleFill(C.push.goalReachedTitle, { title });
+}
+
+/** A NO_REPORT run that reported late, after the owner stepped in: "Nightly audit reported after all". */
+export function scheduleReportedLatePushTitle(title: string): string {
+  return scheduleFill(C.push.reportedLateTitle, { title });
 }
 
 /** §8.5: "Stopped as planned after 12 runs", "after 1 run": the planned-end push and an ENDED row's read. */
