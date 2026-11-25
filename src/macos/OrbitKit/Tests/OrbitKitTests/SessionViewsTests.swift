@@ -110,6 +110,19 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertEqual(SessionListTime.format(for: approval, now: now), "just now")
     }
 
+    /// A wake turn moves `lastTurnAt` but not `listedAt`: the row stays put and still says when it
+    /// last spoke (owner 2026-11-25).
+    func testASettledRowDatesItsLastMessageNotItsListing() throws {
+        let now = try XCTUnwrap(RelativeTime.parse("2026-08-26T12:00:00Z"))
+        let woken = Session(id: "woken", title: "Woken", status: .awaitingInput,
+                            agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
+                            branch: nil, updatedAt: nil,
+                            lastTurnAt: "2026-08-26T11:55:00Z",
+                            listedAt: "2026-08-19T12:00:00Z")
+
+        XCTAssertEqual(SessionListTime.format(for: woken, now: now), "5m ago")
+    }
+
     /// The list nests the agent — filtering must read `agent.id`, not the (absent) flat `agentId`.
     func testForAgentFiltersByNestedAgent() throws {
         let json = """
