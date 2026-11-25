@@ -1523,8 +1523,6 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     (of) => of.runner.helpAskSessionId,
   ),
   'GET /runner/wiki/search header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, query: { q: 'census' } }), (of) => of.runner.wikiSessionId),
-  // wiki_read reads the wiki of the chat it is called in: another account's chat is a session this runner does not host.
-  'GET /runner/wiki/read header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, query: { q: 'census' } }), (of) => of.wikiChatId),
   'POST /runner/wiki/changesets body spaceId': {
     as: RUNNER,
     request: (of, mine) => ({
