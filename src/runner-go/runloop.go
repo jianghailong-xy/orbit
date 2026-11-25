@@ -1564,6 +1564,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		startupConcurrency = 1
 	}
 	pool := newSessionPool(startupConcurrency)
+	t.draining = pool.isDrainingForUpdate // every inbox fetch says whether the pool drains for an update
 	// A managed instance claims nothing, and starts no reclaimed RUNNING session, while its container has less than one
 	// more turn's memory left (memory_reserve.go). Nil anywhere else: it admits.
 	turnMemory := newTurnMemoryGate(currentManagedInstance() != nil)
