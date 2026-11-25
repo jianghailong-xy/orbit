@@ -453,6 +453,14 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
        SELECT gen_random_uuid(), s.id, 2, 'explain2-' || s.id, 'message', 'PENDING'
          FROM session s WHERE s.owner_id = $1::uuid AND s.finished_at IS NULL`, [big],
     );
+    // A released run's history: the turns it answered before it ended, as production's runs carry several each. With
+    // one turn a session the whole turn table is small enough that a scan of it competes with the held sessions' index
+    // probes, and the plan flips between the two on ANALYZE's sample (task T7 measured both on this table).
+    await sql.query(
+      `INSERT INTO conversation_turn (id, session_id, seq, client_turn_id, kind, status)
+       SELECT gen_random_uuid(), s.id, g, 'explain-history-' || g || '-' || s.id, 'message', 'COMPLETED'
+         FROM session s, generate_series(3, 7) g WHERE s.owner_id = $1::uuid AND s.finished_at IS NOT NULL`, [big],
+    );
     await sql.query('ANALYZE session; ANALYZE conversation_turn; ANALYZE task');
     const sizes = (await sql.query(
       `SELECT (SELECT count(*) FROM session)::int AS sessions,
