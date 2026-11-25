@@ -47,6 +47,15 @@
 .ss-env-row.own .orbit-input { background: transparent; }
 .ss-env-new { grid-template-columns: minmax(0, 120px) 1fr auto; }
 .ss-copy-btn { display: inline-flex; align-items: center; gap: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+/* Beside the conversation (docs/mocks/session-settings-column): the project column's slot and padding
+   (.session-col), a head like its page head, and a body that scrolls by itself. */
+.ss-column { background: var(--bg-raised); padding-bottom: 0; }
+.ss-column-head { display: flex; align-items: center; gap: 10px; flex: none; height: 40px; padding-left: 2px; margin-bottom: 8px; }
+.ss-column-title { flex: 1; font-size: 15px; font-weight: 600; color: var(--text-1); }
+.ss-column-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 24px; }
+/* No room beside the conversation: over its right edge, as the project column unfolded on demand. */
+.ss-column-over { position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; border-left: 1px solid var(--border-subtle); box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08); }
+.ss-name { width: 100%; margin-top: 6px; font-weight: 600; }
 /* Phones: the drawer takes the whole screen (board r3 ⑤). */
 @media (max-width: 767px) {
   .orbit-drawer.ss-drawer { width: 100vw !important; max-width: 100vw; }
