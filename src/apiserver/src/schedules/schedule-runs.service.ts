@@ -27,7 +27,8 @@
  * ==============================
  * `schedule_run_report` ends a run, once, from the session serving it. Without one, what the session does decides:
  * an engine that ended, or whose session's phase is IDLE (no SubAgent, `bg_run` job or engine turn executing) with no
- * turn still to answer, is NO_REPORT;
+ * turn still to answer, is NO_REPORT, which a report from that session still replaces once a person has written to it
+ * (`acceptsLateReport`);
  * a run past its limit is interrupted, RUN_LIMIT; a card nobody
  * answered for two hours interrupts it, APPROVAL_TIMEOUT. Whether the run reached its engine is read from its first
  * turn's `delivered_at`: a run that never did (RUNNER_UNAVAILABLE, QUOTA, ENGINE_CRASHED_BEFORE_START) has its
@@ -72,6 +73,7 @@ import {
   onceMissedCopy,
   overBudgetCopy,
   plannedEndCopy,
+  reportedLateCopy,
   runReasonText,
   scheduleHomeSession,
   sendAlerts,
@@ -955,7 +957,11 @@ export class ScheduleRunsService {
   // The report (§7.1)
   // -------------------------------------------------------------------------------------------------------------
 
-  /** `schedule_run_report`, from the session serving a run: once per run, and it ends the run. */
+  /**
+   * `schedule_run_report`, from the session serving a run: once per run, and it ends the run. A run already FAILED
+   * with NO_REPORT takes a late one when the owner stepped back in (`acceptsLateReport`): the report then replaces
+   * the failure as if it had come in time.
+   */
   async report(
     ownerId: string,
     sessionId: string,
@@ -978,14 +984,21 @@ export class ScheduleRunsService {
         if (!schedule || !run || run.sessionId !== sessionId) {
           throw refusal('FORBIDDEN', 'SCHEDULE_RUN_REPORT_NOT_A_RUN', 'This session no longer serves its run.');
         }
-        if (run.state !== 'RUNNING' && run.state !== 'AWAITING_APPROVAL') {
+        const noReport = run.state === 'FAILED' && run.failureReason === 'NO_REPORT';
+        const late = noReport && (await this.acceptsLateReport(tx, schedule, run));
+        if (!late && run.state !== 'RUNNING' && run.state !== 'AWAITING_APPROVAL') {
           const reported = run.state === 'NO_CHANGE' || run.state === 'CHANGED' || run.failureReason === 'REPORTED_FAILED';
           throw refusal(
             'CONFLICT',
             reported ? 'SCHEDULE_RUN_ALREADY_REPORTED' : 'SCHEDULE_RUN_ENDED',
-            reported ? 'This run has already been reported; a run reports once.' : `This run has already ended (${run.state}).`,
+            reported ? 'This run has already been reported; a run reports once.'
+              : noReport ? 'This run has already ended (FAILED, NO_REPORT). It takes a late report only after the '
+                + 'owner writes in this session, and only until a newer run of the schedule starts.'
+              : `This run has already ended (${run.state}).`,
           );
         }
+        // A late report undoes the failure NO_REPORT counted; no newer run has counted anything since.
+        const failures = late ? Math.max(0, schedule.consecutiveFailures - 1) : schedule.consecutiveFailures;
         const now = this.clock();
         const alerts: ScheduleAlert[] = [];
         const waitsForLanding = run.accessLevel === 'LAND' && report.outcome !== 'FAILED';
@@ -1005,7 +1018,9 @@ export class ScheduleRunsService {
           where: { id: schedule.id },
           data: {
             ...(report.note !== undefined ? { note: report.note } : {}),
-            ...(waitsForLanding ? {} : { consecutiveFailures: report.outcome === 'FAILED' ? { increment: 1 } : 0 }),
+            ...(waitsForLanding
+              ? (late ? { consecutiveFailures: failures } : {})
+              : { consecutiveFailures: report.outcome === 'FAILED' ? failures + 1 : 0 }),
           },
         });
         let newFinding = false;
@@ -1049,8 +1064,22 @@ export class ScheduleRunsService {
         if (!waitsForLanding) await this.settleItems(tx, schedule, run, report.outcome === 'FAILED' ? 'FAILED' : 'SUCCEEDED', now, alerts, {
           reason: 'REPORTED_FAILED',
           summary: report.summary,
-          consecutiveFailures: report.outcome === 'FAILED' ? schedule.consecutiveFailures + 1 : 0,
+          consecutiveFailures: report.outcome === 'FAILED' ? failures + 1 : 0,
+          late,
         });
+        // The NO_REPORT failure was pushed; a late success replaces its banner (a late FAILED's own push does).
+        if (late && report.outcome !== 'FAILED') {
+          alerts.push({
+            kind: 'REPORTED_LATE',
+            ownerId: schedule.ownerId,
+            scheduleId: schedule.id,
+            runId: run.id,
+            opens: { sessionId },
+            ownerRequestId: null,
+            ...reportedLateCopy(schedule.title, report.summary),
+            collapseId: `schedule-failed-${run.id}`,
+          });
+        }
         return { run: ended, newFinding, scheduleId: schedule.id, alerts };
       },
       loggedRetry(this.logger, 'scheduleRuns.report'),
@@ -1059,6 +1088,25 @@ export class ScheduleRunsService {
     if (result.run.state === 'NO_CHANGE' && result.run.accessLevel !== 'LAND') await this.completeIfSettled(ownerId, sessionId);
     await this.startNext(result.scheduleId);
     return { run: result.run, newFinding: result.newFinding };
+  }
+
+  /**
+   * §7.1: NO_REPORT is the server's reading of a session gone idle, not the agent's word. When a person has written
+   * to the run's session since it was marked so, they decided the run is not over, and a report from that session
+   * still counts, until a newer run of the schedule starts (one run's result never lands over the next one's). A
+   * schedule that was deleted takes none.
+   */
+  private async acceptsLateReport(tx: Tx, schedule: Schedule, run: ScheduleRun): Promise<boolean> {
+    if (!run.sessionId || !run.endedAt || !run.startedAt) return false;
+    if (schedule.state === 'ENDED' && schedule.endedReason === 'DELETED') return false;
+    const stepIn = await tx.conversationTurn.count({
+      where: { sessionId: run.sessionId, byPerson: true, createdAt: { gt: run.endedAt } },
+    });
+    if (stepIn === 0) return false;
+    const newer = await tx.scheduleRun.count({
+      where: { scheduleId: schedule.id, id: { not: run.id }, startedAt: { gt: run.startedAt } },
+    });
+    return newer === 0;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -1318,7 +1366,7 @@ export class ScheduleRunsService {
     how: 'FAILED' | 'SUCCEEDED',
     now: Date,
     alerts: ScheduleAlert[],
-    failure: { reason: string; summary: string | null; consecutiveFailures: number },
+    failure: { reason: string; summary: string | null; consecutiveFailures: number; late?: boolean },
   ): Promise<void> {
     await closeScheduleItems(
       tx,
@@ -1328,7 +1376,11 @@ export class ScheduleRunsService {
     await closeScheduleItems(
       tx,
       { scheduleId: schedule.id, kinds: ['SCHEDULE_FAILED'] },
-      { state: 'WITHDRAWN', note: how === 'FAILED' ? 'A later run failed too.' : 'A later run succeeded.', now },
+      {
+        state: 'WITHDRAWN',
+        note: failure.late ? 'The run reported after all.' : how === 'FAILED' ? 'A later run failed too.' : 'A later run succeeded.',
+        now,
+      },
     );
     if (how !== 'FAILED') return;
     // An ended or deleted schedule has nothing left to wait on the owner for: a run that outlived it and then failed is
@@ -1351,7 +1403,8 @@ export class ScheduleRunsService {
           scheduleId: schedule.id,
           scheduleRunId: run.id,
           workspaceId: schedule.workspaceId,
-          key: `schedule-failed:${run.id}`,
+          // A late report's failure replaces the NO_REPORT item just withdrawn, so it is keyed apart from it.
+          key: `schedule-failed:${run.id}${failure.late ? ':reported' : ''}`,
           title: copy.title,
           why: copy.why,
         })
