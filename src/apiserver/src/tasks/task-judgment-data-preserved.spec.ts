@@ -3489,7 +3489,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1592_drive_tables',
       // 1600 creates project_text_translation (a project's title and criteria in the owner's language), keyed by and
       // cascading with project; no preserved relation, row, trigger, function or DONE fence changes.
-      '1600_project_text_translation'],
+      '1600_project_text_translation',
+      // 1601 adds one NOT NULL boolean, by_owner, to schedule_run with a constant default (whether the owner pressed a
+      // Run now); no row is rewritten, and no preserved relation, trigger, function or DONE fence changes.
+      '1601_schedule_run_by_owner'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
