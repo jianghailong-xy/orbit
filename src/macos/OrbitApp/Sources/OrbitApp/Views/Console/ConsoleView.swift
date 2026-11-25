@@ -2094,7 +2094,7 @@ struct TranscriptView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            headerStatus
+            headerStatusLine
                 .font(.caption)
             if let session = app.session(id: console.sessionID) {
                 SessionCoordinatorBadge(session: session)
@@ -2135,6 +2135,28 @@ struct TranscriptView: View {
         let tone = SessionStatusGlyph.make(for: session, watching: watching, now: now, machine: console.runnerName).tone
         return Text(word).fontWeight(.semibold).foregroundColor(Self.statusWordColor(tone))
             + Text(subtitle.dropFirst(word.count)).foregroundColor(.secondary)
+    }
+
+    /// With the session facts: the state word from `phase`, its marks, then "lifecycle · when"
+    /// (`SessionDisplay`). From an older server, `headerStatus` as it always was.
+    @ViewBuilder private var headerStatusLine: some View {
+        let watching = app.watches?.summary(for: console.sessionID)
+        let now = Date()
+        if let session = app.session(id: console.sessionID),
+           let state = SessionDisplay.state(session.displayFacts),
+           let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
+                                                 machine: console.runnerName) {
+            let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)
+            HStack(spacing: 4) {
+                Text(word).fontWeight(.semibold)
+                    .foregroundColor(word == state.word ? Self.statusWordColor(state.glyph.tone) : .primary)
+                SessionMarkPills(marks: SessionDisplay.marks(session.displayFacts) ?? [])
+                Text(subtitle.hasPrefix(word) ? String(subtitle.dropFirst(word.count)) : subtitle)
+                    .foregroundColor(.secondary)
+            }
+        } else {
+            headerStatus
+        }
     }
 
     private static func statusWordColor(_ tone: SessionStatusGlyph.Tone) -> Color {
