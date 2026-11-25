@@ -260,7 +260,7 @@ function record(over: Partial<ScheduleChangeRecord> & { scheduleId: string; titl
     undoneByRevision: null,
     askedText: null,
     createdAt: sh(14, '12:19'),
-    undo: { method: 'POST', path: `/schedules/${over.scheduleId}/undo`, body: { revision: over.revision } },
+    undo: { method: 'POST', path: `/api/schedules/${over.scheduleId}/undo`, body: { revision: over.revision } },
     ...over,
   };
 }

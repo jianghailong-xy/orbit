@@ -173,7 +173,8 @@ export function openScheduleChange(id: string, text: string) {
 /** Undo a recorded change through the door the record names. */
 export function undoScheduleRecord(record: Pick<ScheduleChangeRecord, 'undo' | 'scheduleId' | 'revision'>) {
   const door = record.undo;
-  return api(door?.path ?? `/schedules/${encodeURIComponent(record.scheduleId)}/undo`, {
+  // The record names the route from the server's root; `api` adds the `/api` itself.
+  return api(door?.path.replace(/^\/api(?=\/)/, '') ?? `/schedules/${encodeURIComponent(record.scheduleId)}/undo`, {
     method: 'POST',
     body: door?.body ?? { revision: record.revision },
   });

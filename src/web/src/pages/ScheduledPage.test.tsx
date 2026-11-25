@@ -606,7 +606,7 @@ describe('Rename… (§8.4 Rename; board docs/mocks/schedule-rename)', () => {
           scheduleId: 'sch-codex', title: 'Codex releases', revision: 9, changedBy: 'USER', sessionId: null,
           createdAt: SCHEDULE_NOW, askedText: null, changed: ['title'],
           before: { title: 'Codex stable check' }, after: { title: 'Codex releases' }, undoOfRevision: null,
-          undoneByRevision: null, undo: { method: 'POST', path: '/schedules/sch-codex/undo', body: { revision: 9 } },
+          undoneByRevision: null, undo: { method: 'POST', path: '/api/schedules/sch-codex/undo', body: { revision: 9 } },
         };
         return { outcome: 'APPLIED', changed: true, note: '', schedule, record };
       }
