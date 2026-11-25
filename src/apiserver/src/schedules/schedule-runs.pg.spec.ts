@@ -1748,6 +1748,31 @@ test('LAND: reports wait for the turn, then queue the ordinary merge check and r
   assert.equal((await runOf(run.id)).summary, landed.summary, 'replay does not append again');
 });
 
+test('LAND: after the report, a leftover watch or the owner\'s Stop still lands; an end asked for does not', { skip }, async () => {
+  for (const after of ['watch', 'stop', 'end'] as const) {
+    const { w, run, sessionId } = await landFixture(`land-after-${after}`);
+    await runs.report(w.ownerId, sessionId, { outcome: 'CHANGED', key: `engine@${after}`, summary: 'Bumped the engine.' });
+    if (after === 'watch') {
+      await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+      await resumeWatch(w.ownerId, sessionId);
+    } else if (after === 'stop') {
+      await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT', lastTurnOutcome: 'INTERRUPTED' } });
+    } else {
+      await db.session.update({
+        where: { id: sessionId }, data: { status: 'AWAITING_INPUT', completedAt: clockNow, cancelRequestedAt: clockNow, endReason: 'completed' },
+      });
+    }
+    await runs.landReportedRuns();
+    const landing = await runOf(run.id);
+    if (after === 'end') {
+      assert.equal(landing.state, 'FAILED', after);
+      assert.equal(landing.failureReason, 'LANDING_FAILED', after);
+    } else {
+      assert.equal(landing.landingStatus, 'MERGING', `${after}: the ordinary merge path was queued`);
+    }
+  }
+});
+
 test('LAND: NO_CHANGE with no commits lands nothing and can complete its session', { skip }, async () => {
   const { w, run, sessionId } = await landFixture('land-no-commits');
   await db.session.update({ where: { id: sessionId }, data: { branchSha: 'a'.repeat(40) } });

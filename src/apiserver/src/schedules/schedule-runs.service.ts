@@ -54,13 +54,12 @@ import { SCHEDULE_COPY, scheduleFill, RunFailureKind, runFailureIs } from '@orbi
 import { Prisma, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
-import { isSessionExecuting } from '../common/session-working';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { openingTurnKey } from '../sessions/orbit-authored-turn';
 import { sessionHeldByCapacity } from '../sessions/queued-reason-sql';
-import { isParked, TURN_STATE_SELECT, turnStateFilter, turnStateOf } from '../sessions/session-turn-state';
+import { TURN_STATE_SELECT, turnStateFilter, turnStateOf } from '../sessions/session-turn-state';
 import {
   SCHEDULE_NOTIFIER,
   approvalCopy,
@@ -104,8 +103,6 @@ import {
   type ScheduleActor,
 } from './schedules.service';
 import {
-  isReleased,
-  releaseFinishedTheWork,
   releasedFilter,
 } from '../common/session-release';
 
@@ -799,20 +796,24 @@ export class ScheduleRunsService {
   }
 
   private async landRun(run: ScheduleRun): Promise<void> {
+    // The session row for its merge facts (branch, base, merge status); what it is doing comes from its published
+    // state alone (schedule-run-session-reading.ts).
     const session = run.sessionId ? await this.prisma.session.findUnique({ where: { id: run.sessionId } }) : null;
+    const state = session ? (await readRunSessions(this.prisma, [session.id])).get(session.id) : undefined;
     // Released for anything but its work finishing (decision D5, design §12.3: the end reason, never the terminal
-    // status) is a run that ended unsuccessfully, an engine that exited by itself included; an abandoned turn is a held
-    // run stopped mid-turn.
-    const released = session != null && isReleased(session);
-    if (!session || session.deletedAt || (released && !releaseFinishedTheWork(session))
-        || turnStateOf(session) === 'ABANDONED' || session.cancelRequestedAt) {
+    // status), an engine that exited by itself included, or an end somebody asked for (Complete, Trash, End: its
+    // reason is written with the request), is a run that ended unsuccessfully. A run the owner stopped mid-turn after
+    // it reported still lands: the report stands, and the commits are its (owner decision 2026-11-26).
+    if (!session || !state
+        || ((state.fields.released || state.fields.endReason !== null) && !state.fields.workFinished)) {
       await this.settleLanding(run.id, 'FAILED', null, 'The run session ended unsuccessfully; nothing was landed.');
       return;
     }
-    // The tool reports during the turn. A commit and its final worktree report may still be on the way, and a parked
-    // session says only that the turn is over: a background job, a subagent or an engine turn still
-    // executing can commit more. The worker's next pass looks again; the run limit bounds the wait.
-    if ((!released && !isParked(session)) || isSessionExecuting(session)) {
+    // The tool reports during the turn. A commit and its final worktree report may still be on the way while anything
+    // executes for the session (a turn, the engine's own, a SubAgent, a background job) or a turn is queued. The
+    // worker's next pass looks again; the run limit bounds the wait. A watch or wake-up left behind after the report
+    // does not hold it: the report said the work is done.
+    if (state.reading === 'WORKING') {
       // Reporting does not exempt the rest of a LAND run from its run limit.
       const opening = await this.prisma.conversationTurn.findFirst({
         where: { sessionId: session.id, clientTurnId: openingTurnKey(session.id) }, select: { deliveredAt: true },
