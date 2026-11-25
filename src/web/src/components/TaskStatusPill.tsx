@@ -1,7 +1,7 @@
 import { LoadingOutlined } from '@ant-design/icons';
 import type { TaskRunReason } from '@orbit/shared';
 import { sessionDisplayState, sessionMarks } from '../lib/sessionDisplay';
-import { SessionMarkChips } from './SessionStateDisplay';
+import { SessionMarkChips, SessionStateGlyph } from './SessionStateDisplay';
 
 const STATUS_PILL: Record<string, { cls: string; label: string }> = {
   DONE: { cls: 'done', label: 'Done' },
@@ -39,10 +39,10 @@ export function TaskStatusPill({
   runReason?: TaskRunReason | null;
 }) {
   // A server that says whether the task's queued run is held (`queuedOnHold`) has the facts: the pill says the live
-  // run's state with its marks beside it (lib/sessionDisplay). A task's row carries the run as `running` / `queued`,
-  // `runReason` and `queuedOnHold`: a WAITING run is parked on a watch, a wake-up or a retry (Idle, Will resume), a
-  // BACKGROUND_JOB one wears Background, a held queue On hold. The run's other facts are not on the row. From an
-  // older server, the pill as before.
+  // run's state, with that state's icon and its marks beside it (lib/sessionDisplay). A task's row carries the run as
+  // `running` / `queued`, `runReason` and `queuedOnHold`: a WAITING run is parked on a watch, a wake-up or a retry
+  // (Idle, Will resume), a BACKGROUND_JOB one wears Background, a held queue On hold. The run's other facts are not on
+  // the row. From an older server, the pill as before.
   if ((running || queued) && typeof queuedOnHold === 'boolean') {
     const waiting = running && runReason === 'WAITING';
     const run = {
@@ -56,7 +56,7 @@ export function TaskStatusPill({
     if (shown) {
       const pill = (
         <span className={`status-pill ${PHASE_CLS[shown.phase]}`}>
-          {shown.phase === 'RUNNING' ? <LoadingOutlined spin /> : <span className="status-dot" />}
+          <SessionStateGlyph state={shown} size={12} />
           {shown.word}
         </span>
       );

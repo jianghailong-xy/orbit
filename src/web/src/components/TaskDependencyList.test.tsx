@@ -48,7 +48,7 @@ describe('TaskDependencyList', () => {
     );
     const html = renderToStaticMarkup(<TaskDependencyList graph={{ ...graph, nodes }} onOpenTask={() => undefined} />);
 
-    expect(html).toContain('<span class="status-dot"></span>Idle</span>');
+    expect(html).toMatch(/data-state="IDLE".*?>Idle<\/span>/);
     expect(html).toContain('data-mark="WILL_RESUME"');
     expect(html).not.toContain('Running');
   });

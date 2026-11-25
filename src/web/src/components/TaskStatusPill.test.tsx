@@ -13,7 +13,8 @@ const text = (props: Parameters<typeof TaskStatusPill>[0]) =>
 describe('TaskStatusPill queued word', () => {
   it('reads "Queued" with the On hold mark beside it for a queued row whose run is held (the approved board)', () => {
     const html = renderToStaticMarkup(<TaskStatusPill {...heldRow} />);
-    expect(html).toContain('<span class="status-dot"></span>Queued</span>');
+    expect(html).toMatch(/data-state="PENDING"[^>]*><span[^>]*anticon-clock-circle.*?<\/span><\/span>Queued<\/span>/);
+    expect(html).not.toContain('status-dot');
     expect(html).toContain('data-mark="ON_HOLD"');
     expect(text(heldRow)).toBe('QueuedOn hold');
     // The word function a graph's label reads is the legacy one, pinned by legacyBaseline.test.ts; no caller passes
@@ -25,6 +26,9 @@ describe('TaskStatusPill queued word', () => {
     expect(taskStatusLabel(plainRow.status, false, true, false)).toBe('Queued');
   });
   it('reads "Queued" when an older server sends no queuedOnHold', () => {
+    const html = renderToStaticMarkup(<TaskStatusPill {...olderServerRow} />);
+    expect(html).toContain('<span class="status-dot"></span>Queued</span>');
+    expect(html).not.toContain('data-state=');
     expect(text(olderServerRow)).toBe('Queued');
     expect(taskStatusLabel('IN_PROGRESS', false, true)).toBe('Queued');
   });
@@ -44,7 +48,7 @@ describe('TaskStatusPill on a live run, as the board draws it', () => {
   // taskRunOverlay answers WAITING for all three: a RESUME_SESSION watch, a scheduled wake-up, an armed retry.
   it('reads "Idle" with Will resume for a parked run a watch or an armed retry will wake', () => {
     const html = renderToStaticMarkup(<TaskStatusPill {...row} runReason="WAITING" />);
-    expect(html).toContain('<span class="status-pill todo"><span class="status-dot"></span>Idle</span>');
+    expect(html).toMatch(/^<span class="task-status-pill-run"><span class="status-pill todo">.*?data-state="IDLE".*?<circle .*?>Idle<\/span>/);
     expect(draw({ ...row, runReason: 'WAITING' })).toEqual({ text: 'IdleWill resume', marks: ['WILL_RESUME'] });
   });
   // A failed turn with a retry armed has released its session (Idle, Retrying on the session's own surfaces), so it

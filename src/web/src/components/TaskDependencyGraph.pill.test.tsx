@@ -23,7 +23,7 @@ describe('the dependency graph node pill', () => {
       </ReactFlowProvider>,
     );
 
-    expect(html).toContain('<span class="status-dot"></span>Idle</span>');
+    expect(html).toMatch(/data-state="IDLE".*?>Idle<\/span>/);
     expect(html).toContain('data-mark="WILL_RESUME"');
   });
 });
