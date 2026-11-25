@@ -1091,8 +1091,11 @@ const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 320;
 
-// Whether the session list's Pinned section is folded to its heading, persisted across reloads.
-const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
+// The session list's sections that fold to their heading, each with the key that persists it across reloads.
+const FOLD_KEYS: Record<string, string> = {
+  Pinned: 'orbit.sessionPinnedCollapsed',
+  'Needs you': 'orbit.sessionNeedsYouCollapsed',
+};
 
 // Two taps on the composer this close in time and place are one double-tap (the platforms' own
 // double-tap window).
@@ -2719,15 +2722,17 @@ export function WorkspaceView({
   // Both are view-local UI state (not persisted) — the same as the native list.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [groupByTag, setGroupByTag] = useState(false);
-  // The Pinned section folds to its heading, as Notes' Pinned does (and as on iOS). Unlike those two
-  // it is persisted, so a reload doesn't unfold it.
-  const [pinnedCollapsed, setPinnedCollapsed] = useState(
-    () => localStorage.getItem(PINNED_COLLAPSED_KEY) === '1',
+  // The Pinned and Needs you sections fold to their heading, as Notes' Pinned does (and as on iOS).
+  // Unlike those two the fold is persisted, so a reload doesn't unfold it.
+  const [foldedSections, setFoldedSections] = useState<ReadonlySet<string>>(
+    () => new Set(Object.keys(FOLD_KEYS).filter((title) => localStorage.getItem(FOLD_KEYS[title]) === '1')),
   );
-  const togglePinned = (): void => {
-    const next = !pinnedCollapsed;
-    setPinnedCollapsed(next);
-    localStorage.setItem(PINNED_COLLAPSED_KEY, next ? '1' : '0');
+  const toggleFold = (title: string): void => {
+    const next = new Set(foldedSections);
+    if (next.has(title)) next.delete(title);
+    else next.add(title);
+    setFoldedSections(next);
+    localStorage.setItem(FOLD_KEYS[title], next.has(title) ? '1' : '0');
   };
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
   // Each session row's ⋯ by session id: where focus goes back to when a confirmation its menu opened closes.
@@ -3969,10 +3974,10 @@ export function WorkspaceView({
           key: s.title,
           tag: null as SessionTagRef | null,
           ...s,
-          // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
-          sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
+          // Folded, a section keeps its heading but none of its rows — on screen or in the order below.
+          sessions: foldedSections.has(s.title) ? [] : s.sessions,
         })),
-    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed],
+    [folderListing, groupByTag, view, tagFilter, foldedSections],
   );
   // The project's page, in the list on a phone or in the column beside the conversation: its
   // coordinator, its Landings row and the timeline of its other members.
@@ -10446,16 +10451,16 @@ export function WorkspaceView({
         ))} />
     ) : (
     <section key={sec.key} className={pageProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
-      {sec.key === 'Pinned' ? (
+      {!pageProjectId && sec.key in FOLD_KEYS ? (
         <button
           type="button"
           className="session-section-head session-section-fold"
-          aria-expanded={!pinnedCollapsed}
-          onClick={togglePinned}
+          aria-expanded={!foldedSections.has(sec.key)}
+          onClick={() => toggleFold(sec.key)}
         >
           {sec.title}
           <RightOutlined
-            className={`session-section-chev${pinnedCollapsed ? '' : ' open'}`}
+            className={`session-section-chev${foldedSections.has(sec.key) ? '' : ' open'}`}
             aria-hidden
           />
         </button>
