@@ -100,6 +100,12 @@ data class DirectorySession(
     val queuedHeldByJobs: Int? = null,
     /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
     val queuedRunnerUpdate: JsonElement? = null,
+    /** Beside a capacity gate: whether Run now can start this queued message over the limit, and the server's sentence where it
+     *  cannot. False and null on any other row, and from an older server. */
+    val runNowAvailable: Boolean? = null, val runNowRefusal: String? = null,
+    /** On a turn started over its runner's limit, while it runs: `{active, limit, runnerName}`, kept as the JSON it came as and
+     *  read by [RunningOverLimit.of]. */
+    val runningOverLimit: JsonElement? = null,
     val runSource: String? = null,
     /** When the session last changed for its owner, the order the Open list keeps (contracts/session-list-order.fixtures.json). Unlike
      *  [lastTurnAt] it does not move with streamed text or background output. Null from an older server: the row reads as [createdAt]. */
