@@ -21,7 +21,7 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
 import type { ExternalTurnSender } from '../sessions/session-message';
 import { assertEngineSession } from '../sessions/engine-session';
 import { withSessionState } from '../sessions/session-state';
-import { readSessionActivities } from '../sessions/task-work-carrier';
+import { readSessionBackgroundFields } from '../sessions/task-work-carrier';
 import { readSessionPhaseFields } from '../sessions/session-phase';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 
@@ -325,7 +325,8 @@ export class SessionGuestsService {
         },
       },
     });
-    const activities = await readSessionActivities(this.prisma, rows.map(({ session }) => session.id));
+    // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
+    const background = await readSessionBackgroundFields(this.prisma, rows.map(({ session }) => session.id));
     // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
     const phases = await readSessionPhaseFields(this.prisma, rows.map(({ session }) => session.id));
     return {
@@ -338,7 +339,8 @@ export class SessionGuestsService {
           status: state.status,
           sessionState: state.sessionState,
           lifecycleState: state.lifecycleState,
-          activity: activities.get(session.id) ?? null,
+          activity: background.get(session.id)?.activity ?? null,
+          runningBgCount: background.get(session.id)?.runningBgCount ?? 0,
           ...phases.get(session.id),
           addedAt: addedAt.toISOString(),
           lastTurnAt: session.lastTurnAt?.toISOString() ?? null,

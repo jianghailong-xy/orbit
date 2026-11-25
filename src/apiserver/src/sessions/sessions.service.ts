@@ -49,7 +49,7 @@ import {
   SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE,
   SESSION_RUNNING_BG_JOB_WHERE,
 } from '../common/session-working';
-import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
+import { readOneSessionBackgroundFields, readSessionBackgroundFields, sessionActivitySql } from './task-work-carrier';
 import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
@@ -3998,8 +3998,15 @@ export class SessionsService {
           LIMIT ${take}::int
         `);
 
-    const hits = rows.map((r) =>
-      withSessionState({
+    // The six session facts and the Background mark's inputs, from the functions every other payload kind reads them
+    // through, so a hit draws as the same session's list row does.
+    const ids = rows.map((r) => r.id);
+    const [phases, background] = await Promise.all([
+      readSessionPhaseFields(this.prisma, ids),
+      readSessionBackgroundFields(this.prisma, ids),
+    ]);
+    const hits = rows.map((r) => ({
+      ...withSessionState({
         id: r.id,
         title: r.title,
         status: r.status,
@@ -4021,7 +4028,9 @@ export class SessionsService {
         // the finished snippet instead.
         snippet: r.snippet ? r.snippet.replace(/\s+/g, ' ').trim() : null,
       }),
-    );
+      ...phases.get(r.id),
+      ...background.get(r.id),
+    }));
     // Recents returns everything it has, so what it returned IS the total; a search carries the
     // pre-quota count out on every row.
     return { hits, total: norm ? (rows[0]?.total ?? 0) : hits.length };
@@ -5766,6 +5775,8 @@ export class SessionsService {
       engineVersion,
       // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
       ...(await readOneSessionPhaseFields(this.prisma, session.id)),
+      // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
+      ...(await readOneSessionBackgroundFields(this.prisma, session.id)),
     });
   }
 
@@ -6090,14 +6101,16 @@ export class SessionsService {
     const stateful = withSessionState(session);
     // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
     // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
-    const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
+    // And the jobs still running beside it: the Background mark's two inputs, as the list row reads them.
+    const background = await readOneSessionBackgroundFields(this.prisma, session.id);
     const phase = await readOneSessionPhaseFields(this.prisma, session.id);
     return {
       waitingOnOwner,
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
       status: stateful.status,
-      activity,
+      activity: background?.activity ?? null,
+      runningBgCount: background?.runningBgCount ?? 0,
       runStatus: stateful.runStatus,
       sessionState: stateful.sessionState,
       runState: stateful.runState,
