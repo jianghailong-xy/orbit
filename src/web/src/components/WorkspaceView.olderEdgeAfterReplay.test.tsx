@@ -284,7 +284,7 @@ describe('a transcript seeded by the stream’s replay', { timeout: 60_000 }, ()
     expect(shown()).not.toContain(FIRST);
 
     await scrollUpOffTail();
-    const jump = mounted().querySelector<HTMLElement>('.workspace-header-start');
+    const jump = mounted().querySelector<HTMLElement>('.chat-jump-start');
     expect(jump, 'history above the replay is offered').not.toBeNull();
     await act(async () => {
       jump!.dispatchEvent(new MouseEvent('click', { bubbles: true }));

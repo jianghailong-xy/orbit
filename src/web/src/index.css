@@ -4993,30 +4993,16 @@ button.toast--pill:focus-visible {
     }
   }
 }
-/* A wide window's way back up, in the header row beside Share and ⋯ and drawn like them: grey text
-   buttons with no box of their own, the last message cut to one line. */
+/* A wide window's top pill, moved up into the header row beside Share and ⋯ (the same pill the
+   transcript floats on a phone). */
 .workspace-header-jump {
   flex: 0 1 auto;
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 2px;
 }
-.workspace-header-jump .orbit-button {
-  color: var(--text-2);
-  font-weight: 400;
+.workspace-header-jump .chat-older-pill.chat-older-split {
+  max-width: 360px;
 }
-.workspace-header-mine {
-  min-width: 0;
-  max-width: 320px;
-}
-.workspace-header-mine-text {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.workspace-header-start { flex: none; }
 /* The header's Share button: grey, or the live link's green while the session is shared. */
 .workspace-header-share { flex: none; color: var(--text-2); }
 .workspace-header-share.is-live,

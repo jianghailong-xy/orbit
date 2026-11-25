@@ -272,7 +272,7 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
     // The tail page is all there is so far, and the session plainly starts somewhere above it.
     expect(shown()).not.toContain(FIRST);
     await scrollUpOffTail();
-    const jump = mounted().querySelector<HTMLElement>('.workspace-header-start');
+    const jump = mounted().querySelector<HTMLElement>('.chat-jump-start');
     expect(jump, 'the top of the window offers the way back').not.toBeNull();
 
     await act(async () => {
@@ -284,7 +284,7 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
     // page and a promise to fetch the rest if the reader scrolls again.
     expect(asked).toEqual([undefined, 5, 3]);
     // Nothing older remains, so the control has nothing left to offer and stands down.
-    expect(mounted().querySelector('.workspace-header-start')).toBeNull();
+    expect(mounted().querySelector('.chat-jump-start')).toBeNull();
     // And the reader is left looking at the start, not anchored where they were before the walk.
     expect(scrolls.at(-1)).toEqual({ top: 0 });
     expect(scrollTop).toBe(0);
@@ -304,7 +304,7 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
     await mountTranscript();
 
     expect(shown(), 'the first message came with the only page there was').toContain(FIRST);
-    expect(mounted().querySelector('.workspace-header-start')).toBeNull();
+    expect(mounted().querySelector('.chat-jump-start')).toBeNull();
   });
 
   it('still takes a reader scrolled up into a fully loaded session back to the top', async () => {
@@ -318,7 +318,7 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
 
     await mountTranscript();
     await scrollUpOffTail();
-    const jump = mounted().querySelector<HTMLElement>('.workspace-header-start');
+    const jump = mounted().querySelector<HTMLElement>('.chat-jump-start');
     expect(jump, 'scrolled up off the tail, the way to the top is on screen').not.toBeNull();
 
     await act(async () => {
@@ -332,7 +332,7 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
     await act(async () => {
       mounted().querySelector('.workspace-scroll-wrap .workspace-sessions')!.dispatchEvent(new Event('scroll'));
     });
-    expect(mounted().querySelector('.workspace-header-start')).toBeNull();
+    expect(mounted().querySelector('.chat-jump-start')).toBeNull();
   });
 
   it('is not offered to a reader who is still at the live tail', async () => {
@@ -342,7 +342,7 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
     // reader is at the newest message, where nobody is looking for the oldest one. The control
     // floats over the transcript, so offering it here only covers a message up.
     expect(
-      mounted().querySelector('.workspace-header-start'),
+      mounted().querySelector('.chat-jump-start'),
       'the tail is no place to offer the beginning',
     ).toBeNull();
 
@@ -350,7 +350,7 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
     // appears on the same leaving of the tail.
     await scrollUpOffTail();
     expect(
-      mounted().querySelector('.workspace-header-start'),
+      mounted().querySelector('.chat-jump-start'),
       'reading back through history, the way to the start is on screen',
     ).not.toBeNull();
   });

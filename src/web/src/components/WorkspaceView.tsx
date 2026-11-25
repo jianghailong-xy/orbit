@@ -59,7 +59,6 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
   UnorderedListOutlined,
-  VerticalAlignTopOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -2880,6 +2879,37 @@ export function WorkspaceView({
     const card = scrollRef.current?.querySelector<HTMLElement>(`.chat-user[data-seq="${lastMine.seq}"]`);
     revealCard(card, 'start', false);
   };
+  // The way back up while the reader is off the tail: the person's last message first, the way
+  // back to the beginning beside it as an icon; with no message of theirs, the way back alone. A
+  // wide window draws it in the header row, a phone over the top of the transcript.
+  const jumpUpPill = () => (lastMine && !atBottom ? (
+    // The person's last message first, the way back to the beginning beside it as an icon.
+    <span className="chat-older-pill chat-older-split">
+      <button
+        type="button"
+        className="chat-older-mine"
+        title={lastMine.text}
+        onClick={revealLastMine}
+      >
+        {lastMine.text}
+      </button>
+      <button
+        type="button"
+        className="chat-jump-start chat-older-start"
+        title="Jump to the beginning"
+        aria-label="Jump to the beginning"
+        onClick={() => void jumpToStart()}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
+        </svg>
+      </button>
+    </span>
+  ) : (
+    <button type="button" className="chat-older-pill chat-jump-start" onClick={() => void jumpToStart()}>
+      <ArrowUpOutlined /> Jump to the beginning
+    </button>
+  ));
   const mineSearchRef = useRef<{ session: string | null; pages: number }>({ session: null, pages: 0 });
   // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
   // stamped as one that wants the top (see prependAnchorRef).
@@ -11005,31 +11035,11 @@ export function WorkspaceView({
               <div className="workspace-sub" data-fork-source="">{detailForSelected.forkSource}</div>
             )}
           </div>
-          {/* Off the live tail, a wide window offers the way back up in the header row, drawn like the
-              header's own buttons: the person's last message, then the beginning. Floating over the
-              transcript it read as a sticker on the text. A phone keeps the pill (no room up here). */}
+          {/* Off the live tail, a wide window draws the transcript's top pill here in the header row,
+              where it sits beside the title instead of floating over the messages. A phone keeps it
+              over the transcript (no room up here). */}
           {!isMobile && selectedId && !composing && jumpUpOffered && (
-            <div className="workspace-header-jump">
-              {lastMine && (
-                <Button
-                  variant="text"
-                  className="workspace-header-mine"
-                  icon={<ArrowUpOutlined />}
-                  title={`Back to your message · ${lastMine.text}`}
-                  onClick={revealLastMine}
-                >
-                  <span className="workspace-header-mine-text">{lastMine.text}</span>
-                </Button>
-              )}
-              <Button
-                variant="text"
-                className="workspace-header-start"
-                icon={<VerticalAlignTopOutlined />}
-                title="Jump to the beginning"
-                aria-label="Jump to the beginning"
-                onClick={() => void jumpToStart()}
-              />
-            </div>
+            <div className="workspace-header-jump">{jumpUpPill()}</div>
           )}
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
           <RunnerUpdateIndicator runner={runner} machine={runnerShownName} />
@@ -11408,33 +11418,8 @@ export function WorkspaceView({
                 <div className="chat-older-top">
                   {loadingOlder && (!searchingMine || !isMobile) ? (
                     <span className="chat-older-pill">Loading earlier messages…</span>
-                  ) : lastMine && !atBottom ? (
-                    // The person's last message first, the way back to the beginning beside it as an icon.
-                    <span className="chat-older-pill chat-older-split">
-                      <button
-                        type="button"
-                        className="chat-older-mine"
-                        title={lastMine.text}
-                        onClick={revealLastMine}
-                      >
-                        {lastMine.text}
-                      </button>
-                      <button
-                        type="button"
-                        className="chat-jump-start chat-older-start"
-                        title="Jump to the beginning"
-                        aria-label="Jump to the beginning"
-                        onClick={() => void jumpToStart()}
-                      >
-                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
-                        </svg>
-                      </button>
-                    </span>
                   ) : (
-                    <button type="button" className="chat-older-pill chat-jump-start" onClick={() => void jumpToStart()}>
-                      <ArrowUpOutlined /> Jump to the beginning
-                    </button>
+                    jumpUpPill()
                   )}
                 </div>
               )}

@@ -295,7 +295,7 @@ async function mountTranscript(drawn: string | null = '.watch-wake', stayAtTail 
 /** Presses the pill's question. */
 const pressQuestion = async (): Promise<void> => {
   await act(async () => {
-    mounted().querySelector<HTMLElement>('.workspace-header-mine')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    mounted().querySelector<HTMLElement>('.chat-older-mine')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
 };
 
@@ -303,7 +303,7 @@ describe('the question over a turn a watch queued', { timeout: 60_000 }, () => {
   it('keeps naming the question the answer around it belongs to', async () => {
     await mountTranscript();
 
-    await waitForUi(() => expect(text('.workspace-header-mine')).toBe(TYPED));
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
     // The wake is still drawn, in its own words, as the line in the answer it is.
     expect(text('.watch-wake .bgwake-title')).toBe('Watch triggered');
     expect(text('.watch-wake-why')).toBe(IN_WORDS);
@@ -316,7 +316,7 @@ describe('the question over a turn a watch queued', { timeout: 60_000 }, () => {
 
   it('goes back to that question when tapped, not to the line in its answer', async () => {
     await mountTranscript();
-    await waitForUi(() => expect(text('.workspace-header-mine')).toBe(TYPED));
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
 
     const question = mounted().querySelector<HTMLElement>('.chat-user[data-seq="1"]')!;
     expect(question, 'the question is drawn as the person’s bubble').not.toBeNull();
@@ -331,7 +331,7 @@ describe('the question over a turn a watch queued', { timeout: 60_000 }, () => {
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: EVENTS.slice(0, 2), hasMore: false } as never);
     await mountTranscript(null);
 
-    await waitForUi(() => expect(text('.workspace-header-mine')).toBe(TYPED));
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
   });
 });
 
@@ -343,7 +343,7 @@ describe('the question at the live tail', { timeout: 60_000 }, () => {
     await mountTranscript(null, true);
     await act(async () => {});
 
-    expect(mounted().querySelector('.workspace-header-mine')).toBeNull();
+    expect(mounted().querySelector('.chat-older-mine')).toBeNull();
     expect(mounted().querySelector('.chat-sticky-question')).toBeNull();
   });
 
@@ -351,10 +351,10 @@ describe('the question at the live tail', { timeout: 60_000 }, () => {
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: EVENTS.slice(0, 2), hasMore: false } as never);
     await mountTranscript(null);
 
-    await waitForUi(() => expect(text('.workspace-header-mine')).toBe(TYPED));
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
     expect(mounted().querySelector('.chat-sticky-question')).toBeNull();
     // The way back to the beginning sits beside it, as an icon that still says what it does.
-    expect(mounted().querySelector('.workspace-header-start')?.getAttribute('aria-label')).toBe('Jump to the beginning');
+    expect(mounted().querySelector('.chat-older-start')?.getAttribute('aria-label')).toBe('Jump to the beginning');
   });
 });
 
@@ -368,7 +368,7 @@ describe('the question over a background job’s news', { timeout: 60_000 }, () 
     // The news itself draws nothing now (job-card board C1): the job's own card says it (JobCard).
     expect(mounted().querySelector('.bgwake')).toBeNull();
 
-    await waitForUi(() => expect(text('.workspace-header-mine')).toBe(TYPED));
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
 
     // And tapping it goes back to that question, not to the line in the middle of its answer.
     const question = mounted().querySelector<HTMLElement>('.chat-user[data-seq="1"]')!;
@@ -412,7 +412,7 @@ describe('the question over a fact told to the coordinator', { timeout: 60_000 }
 
     expect(mounted().querySelector('.coordinator-delivery[data-seq="3"]'), 'the delivery is drawn as its line').not.toBeNull();
     expect(mounted().querySelector('.chat-user[data-seq="3"]'), 'drawn as the owner’s bubble').toBeNull();
-    await waitForUi(() => expect(text('.workspace-header-mine')).toBe(TYPED));
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
     expect(text('.workspace-header-jump')).not.toContain('revision of completion evidence');
   });
 
@@ -422,7 +422,7 @@ describe('the question over a fact told to the coordinator', { timeout: 60_000 }
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: bare, hasMore: false } as never);
     await mountTranscript(null);
 
-    await waitForUi(() => expect(text('.workspace-header-mine')).toContain('has a revision of completion evidence'));
+    await waitForUi(() => expect(text('.chat-older-mine')).toContain('has a revision of completion evidence'));
   });
 });
 
@@ -489,14 +489,14 @@ describe('the question on a page not loaded yet', { timeout: 60_000 }, () => {
     await act(async () => {});
 
     expect(olderPagesAsked()).toBe(0);
-    expect(mounted().querySelector('.workspace-header-mine')).toBeNull();
+    expect(mounted().querySelector('.chat-older-mine')).toBeNull();
   });
 
   it('is found on an older page once the reader scrolls up, and goes to it when pressed', async () => {
     await mountTail();
     await scrollTo(2000, true);
 
-    await waitForUi(() => expect(text('.workspace-header-mine')).toBe(TYPED));
+    await waitForUi(() => expect(text('.chat-older-mine')).toBe(TYPED));
     expect(olderPagesAsked()).toBe(1);
 
     await pressQuestion();
