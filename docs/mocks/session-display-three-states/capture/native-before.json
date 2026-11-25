@@ -1,0 +1,2793 @@
+{
+ "mac": {
+  "rows": [
+   {
+    "row": 1,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "queued",
+     "motion": null,
+     "line": "Queued",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "Queued",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Queued"
+    },
+    "header": {
+     "icon": "clock",
+     "tone": "queued",
+     "motion": null,
+     "word": "Queued"
+    },
+    "link": {
+     "word": "Queued"
+    }
+   },
+   {
+    "row": 2,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "queued",
+     "motion": null,
+     "line": "Queued",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "Queued",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Queued"
+    },
+    "header": {
+     "icon": "clock",
+     "tone": "queued",
+     "motion": null,
+     "word": "Queued"
+    },
+    "link": {
+     "word": "Queued"
+    }
+   },
+   {
+    "row": 3,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "header": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "word": "Running"
+    },
+    "link": {
+     "word": "Running"
+    }
+   },
+   {
+    "row": 4,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "header": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "word": "Running"
+    },
+    "link": {
+     "word": "Running"
+    }
+   },
+   {
+    "row": 5,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "message",
+     "tone": "grey",
+     "motion": null,
+     "line": "Waiting for your reply",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "message",
+     "tone": "grey",
+     "motion": null,
+     "word": "Waiting for your reply"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 6,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "message",
+     "tone": "grey",
+     "motion": null,
+     "line": "Waiting for your reply",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "message",
+     "tone": "grey",
+     "motion": null,
+     "word": "Waiting for your reply"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 7,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "minus-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Interrupted",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Interrupted",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Interrupted"
+    },
+    "header": {
+     "icon": "minus-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Interrupted"
+    },
+    "link": {
+     "word": "Interrupted"
+    }
+   },
+   {
+    "row": 8,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "minus-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Interrupted",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Interrupted",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Interrupted"
+    },
+    "header": {
+     "icon": "minus-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Interrupted"
+    },
+    "link": {
+     "word": "Interrupted"
+    }
+   },
+   {
+    "row": 9,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle-filled",
+     "tone": "green",
+     "motion": null,
+     "line": "Finished",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Finished",
+     "tone": "green"
+    },
+    "md": {
+     "word": "Finished"
+    },
+    "header": {
+     "icon": "check-circle-filled",
+     "tone": "green",
+     "motion": null,
+     "word": "Finished"
+    },
+    "link": {
+     "word": "Succeeded"
+    }
+   },
+   {
+    "row": 10,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle-filled",
+     "tone": "green",
+     "motion": null,
+     "line": "Succeeded",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Finished",
+     "tone": "green"
+    },
+    "md": {
+     "word": "Finished"
+    },
+    "header": {
+     "icon": "check-circle-filled",
+     "tone": "green",
+     "motion": null,
+     "word": "Succeeded"
+    },
+    "link": {
+     "word": "Succeeded"
+    }
+   },
+   {
+    "row": 11,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "close-circle-filled",
+     "tone": "red",
+     "motion": null,
+     "line": "Failed",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Failed",
+     "tone": "red"
+    },
+    "md": {
+     "word": "Failed"
+    },
+    "header": {
+     "icon": "close-circle-filled",
+     "tone": "red",
+     "motion": null,
+     "word": "Failed"
+    },
+    "link": {
+     "word": "Failed"
+    }
+   },
+   {
+    "row": 12,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "close-circle-filled",
+     "tone": "red",
+     "motion": null,
+     "line": "Failed",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Failed",
+     "tone": "red"
+    },
+    "md": {
+     "word": "Failed"
+    },
+    "header": {
+     "icon": "close-circle-filled",
+     "tone": "red",
+     "motion": null,
+     "word": "Failed"
+    },
+    "link": {
+     "word": "Failed"
+    }
+   },
+   {
+    "row": 13,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "header": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Ended"
+    },
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 14,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "header": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Ended"
+    },
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 15,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "terminal",
+     "tone": "grey",
+     "motion": "breathing",
+     "line": "Background process running\u2026",
+     "lineTone": "background"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "terminal",
+     "tone": "grey",
+     "motion": "breathing",
+     "word": "Background process running"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 16,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "terminal",
+     "tone": "grey",
+     "motion": "breathing",
+     "line": "Background process running\u2026",
+     "lineTone": "background"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "terminal",
+     "tone": "grey",
+     "motion": "breathing",
+     "word": "Background process running"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 17,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "pause-circle",
+     "tone": "amber",
+     "motion": null,
+     "line": "Waiting for approval",
+     "lineTone": "approval"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "header": {
+     "icon": "pause-circle",
+     "tone": "amber",
+     "motion": null,
+     "word": "Waiting for approval"
+    },
+    "link": {
+     "word": "Running"
+    }
+   },
+   {
+    "row": 18,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "pause-circle",
+     "tone": "amber",
+     "motion": null,
+     "line": "Waiting for approval",
+     "lineTone": "approval"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "header": {
+     "icon": "pause-circle",
+     "tone": "amber",
+     "motion": null,
+     "word": "Waiting for approval"
+    },
+    "link": {
+     "word": "Running"
+    }
+   },
+   {
+    "row": 19,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "queued",
+     "motion": null,
+     "line": "On hold",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "On hold",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "On hold"
+    },
+    "header": {
+     "icon": "clock",
+     "tone": "queued",
+     "motion": null,
+     "word": "On hold"
+    },
+    "link": {
+     "word": "Queued"
+    }
+   },
+   {
+    "row": 20,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "queued",
+     "motion": null,
+     "line": "Queued",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "Queued",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Queued"
+    },
+    "header": {
+     "icon": "clock",
+     "tone": "queued",
+     "motion": null,
+     "word": "Queued"
+    },
+    "link": {
+     "word": "Queued"
+    }
+   },
+   {
+    "row": 21,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "header": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Ended"
+    },
+    "link": {
+     "word": "cancel not honored"
+    }
+   },
+   {
+    "row": 22,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "close-circle-filled",
+     "tone": "red",
+     "motion": null,
+     "line": "Failed",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Failed",
+     "tone": "red"
+    },
+    "md": {
+     "word": "Failed"
+    },
+    "header": {
+     "icon": "close-circle-filled",
+     "tone": "red",
+     "motion": null,
+     "word": "Failed"
+    },
+    "link": {
+     "word": "cancel not honored"
+    }
+   },
+   {
+    "row": 23,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "header": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Ended"
+    },
+    "link": {
+     "word": "Succeeded"
+    }
+   },
+   {
+    "row": 24,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle-filled",
+     "tone": "green",
+     "motion": null,
+     "line": "Succeeded",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Finished",
+     "tone": "green"
+    },
+    "md": {
+     "word": "Finished"
+    },
+    "header": {
+     "icon": "check-circle-filled",
+     "tone": "green",
+     "motion": null,
+     "word": "Succeeded"
+    },
+    "link": {
+     "word": "Succeeded"
+    }
+   },
+   {
+    "row": 25,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "minus-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Interrupted",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Interrupted",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Interrupted"
+    },
+    "header": {
+     "icon": "minus-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Interrupted"
+    },
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 26,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "header": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Ended"
+    },
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 27,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "word": "Running"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 28,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "word": "Running"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 29,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "line": "Running Agent\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "word": "Running Agent"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 30,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "line": "Running Agent\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "spinner",
+     "tone": "blue",
+     "motion": "spin",
+     "word": "Running Agent"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 31,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "eye",
+     "tone": "grey",
+     "motion": null,
+     "line": "Waiting to resume",
+     "lineTone": "watching"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "eye",
+     "tone": "grey",
+     "motion": null,
+     "word": "Waiting to resume"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 32,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "eye",
+     "tone": "grey",
+     "motion": null,
+     "line": "Waiting to resume",
+     "lineTone": "watching"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "eye",
+     "tone": "grey",
+     "motion": null,
+     "word": "Waiting to resume"
+    },
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 33,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "message",
+     "tone": "grey",
+     "motion": null,
+     "line": "Waiting for your reply",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "header": {
+     "icon": "message",
+     "tone": "grey",
+     "motion": null,
+     "word": "Waiting for your reply"
+    },
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 34,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "header": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Ended"
+    },
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 35,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "header": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Ended"
+    },
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 36,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "header": {
+     "icon": "check-circle",
+     "tone": "grey",
+     "motion": null,
+     "word": "Ended"
+    },
+    "link": {
+     "word": "Ended"
+    }
+   }
+  ],
+  "surfaces": [
+   [
+    "header",
+    "Session header word (SessionHeader.headerWord, Mac status bar)"
+   ],
+   [
+    "run",
+    "Task run label (SessionRef.resolvedRunState)"
+   ],
+   [
+    "link",
+    "Link card, session (OrbitLinkCard.statusWord)"
+   ],
+   [
+    "md",
+    "Shared Markdown, Runs line (ShareMarkdown.runLabel)"
+   ]
+  ],
+  "listNote": "Mac sidebar row: StatusGlyphView leads the row (AgentsView.swift:1771-1800); the orange approval count capsule stays as it is."
+ },
+ "iphone": {
+  "rows": [
+   {
+    "row": 1,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "grey",
+     "line": "Queued",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "Queued",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Queued"
+    },
+    "value": {
+     "word": "Queued"
+    },
+    "header": null,
+    "link": {
+     "word": "Queued"
+    }
+   },
+   {
+    "row": 2,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "grey",
+     "line": "Queued",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "Queued",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Queued"
+    },
+    "value": {
+     "word": "Queued"
+    },
+    "header": null,
+    "link": {
+     "word": "Queued"
+    }
+   },
+   {
+    "row": 3,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "value": {
+     "word": "Running"
+    },
+    "header": null,
+    "link": {
+     "word": "Running"
+    }
+   },
+   {
+    "row": 4,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "value": {
+     "word": "Running"
+    },
+    "header": null,
+    "link": {
+     "word": "Running"
+    }
+   },
+   {
+    "row": 5,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Waiting for your reply",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting for your reply"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 6,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Waiting for your reply",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting for your reply"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 7,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Interrupted",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Interrupted",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Interrupted"
+    },
+    "value": {
+     "word": "Interrupted"
+    },
+    "header": null,
+    "link": {
+     "word": "Interrupted"
+    }
+   },
+   {
+    "row": 8,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Interrupted",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Interrupted",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Interrupted"
+    },
+    "value": {
+     "word": "Interrupted"
+    },
+    "header": null,
+    "link": {
+     "word": "Interrupted"
+    }
+   },
+   {
+    "row": 9,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Finished",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Finished",
+     "tone": "green"
+    },
+    "md": {
+     "word": "Finished"
+    },
+    "value": {
+     "word": "Finished"
+    },
+    "header": null,
+    "link": {
+     "word": "Succeeded"
+    }
+   },
+   {
+    "row": 10,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Succeeded",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Finished",
+     "tone": "green"
+    },
+    "md": {
+     "word": "Finished"
+    },
+    "value": {
+     "word": "Succeeded"
+    },
+    "header": null,
+    "link": {
+     "word": "Succeeded"
+    }
+   },
+   {
+    "row": 11,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "red",
+     "line": "Failed",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Failed",
+     "tone": "red"
+    },
+    "md": {
+     "word": "Failed"
+    },
+    "value": {
+     "word": "Failed"
+    },
+    "header": null,
+    "link": {
+     "word": "Failed"
+    }
+   },
+   {
+    "row": 12,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "red",
+     "line": "Failed",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Failed",
+     "tone": "red"
+    },
+    "md": {
+     "word": "Failed"
+    },
+    "value": {
+     "word": "Failed"
+    },
+    "header": null,
+    "link": {
+     "word": "Failed"
+    }
+   },
+   {
+    "row": 13,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 14,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 15,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "terminal",
+     "tone": "grey",
+     "motion": "breathing",
+     "line": "Background process running\u2026",
+     "lineTone": "background"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Background process running"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 16,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "terminal",
+     "tone": "grey",
+     "motion": "breathing",
+     "line": "Background process running\u2026",
+     "lineTone": "background"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Background process running"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 17,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "amber",
+     "line": "Waiting for approval",
+     "lineTone": "approval"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "value": {
+     "word": "Waiting for approval"
+    },
+    "header": null,
+    "link": {
+     "word": "Running"
+    }
+   },
+   {
+    "row": 18,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "amber",
+     "line": "Waiting for approval",
+     "lineTone": "approval"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "value": {
+     "word": "Waiting for approval"
+    },
+    "header": null,
+    "link": {
+     "word": "Running"
+    }
+   },
+   {
+    "row": 19,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "grey",
+     "line": "On hold",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "On hold",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "On hold"
+    },
+    "value": {
+     "word": "On hold"
+    },
+    "header": null,
+    "link": {
+     "word": "Queued"
+    }
+   },
+   {
+    "row": 20,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "grey",
+     "line": "Queued",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "Queued",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Queued"
+    },
+    "value": {
+     "word": "Queued"
+    },
+    "header": null,
+    "link": {
+     "word": "Queued"
+    }
+   },
+   {
+    "row": 21,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": {
+     "word": "cancel not honored"
+    }
+   },
+   {
+    "row": 22,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "red",
+     "line": "Failed",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Failed",
+     "tone": "red"
+    },
+    "md": {
+     "word": "Failed"
+    },
+    "value": {
+     "word": "Failed"
+    },
+    "header": null,
+    "link": {
+     "word": "cancel not honored"
+    }
+   },
+   {
+    "row": 23,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": {
+     "word": "Succeeded"
+    }
+   },
+   {
+    "row": 24,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Succeeded",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Finished",
+     "tone": "green"
+    },
+    "md": {
+     "word": "Finished"
+    },
+    "value": {
+     "word": "Succeeded"
+    },
+    "header": null,
+    "link": {
+     "word": "Succeeded"
+    }
+   },
+   {
+    "row": 25,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Interrupted",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Interrupted",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Interrupted"
+    },
+    "value": {
+     "word": "Interrupted"
+    },
+    "header": null,
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 26,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 27,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Running"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 28,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Running"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 29,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running Agent\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Running Agent"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 30,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running Agent\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Running Agent"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 31,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "eye",
+     "tone": "grey",
+     "line": "Waiting to resume",
+     "lineTone": "watching"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting to resume"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 32,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "eye",
+     "tone": "grey",
+     "line": "Waiting to resume",
+     "lineTone": "watching"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting to resume"
+    },
+    "header": null,
+    "link": {
+     "word": "Waiting for your reply"
+    }
+   },
+   {
+    "row": 33,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Waiting for your reply",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting for your reply"
+    },
+    "header": null,
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 34,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 35,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": {
+     "word": "Ended"
+    }
+   },
+   {
+    "row": 36,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": {
+     "word": "Ended"
+    }
+   }
+  ],
+  "surfaces": [
+   [
+    "value",
+    "Row value, VoiceOver (SessionHeader.statusWord)"
+   ],
+   [
+    "header",
+    "Conversation header (no state word: the centre is the hand-over / waiting / question capsule)"
+   ],
+   [
+    "run",
+    "Task run label (SessionRef.resolvedRunState)"
+   ],
+   [
+    "link",
+    "Link card, session (OrbitLinkCard.statusWord)"
+   ],
+   [
+    "md",
+    "Shared Markdown, Runs line (ShareMarkdown.runLabel)"
+   ]
+  ],
+  "listNote": "iPhone row: SessionLiveIndicator sits on the first line before the time (AgentsView.swift:1841-1850, 1935-1977). After: the state icon keeps that slot; marks go to the right end of the second line."
+ },
+ "android": {
+  "rows": [
+   {
+    "row": 1,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "grey",
+     "line": "Queued",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "Queued",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Queued"
+    },
+    "value": {
+     "word": "Queued"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 2,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "grey",
+     "line": "Queued",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "Queued",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Queued"
+    },
+    "value": {
+     "word": "Queued"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 3,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "value": {
+     "word": "Running"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 4,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "value": {
+     "word": "Running"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 5,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Waiting for your reply",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting for your reply"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 6,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Waiting for your reply",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting for your reply"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 7,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Interrupted",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Interrupted",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Interrupted"
+    },
+    "value": {
+     "word": "Interrupted"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 8,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Interrupted",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Interrupted",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Interrupted"
+    },
+    "value": {
+     "word": "Interrupted"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 9,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Finished",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Finished",
+     "tone": "green"
+    },
+    "md": {
+     "word": "Finished"
+    },
+    "value": {
+     "word": "Finished"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 10,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Succeeded",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Finished",
+     "tone": "green"
+    },
+    "md": {
+     "word": "Finished"
+    },
+    "value": {
+     "word": "Succeeded"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 11,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "red",
+     "line": "Failed",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Failed",
+     "tone": "red"
+    },
+    "md": {
+     "word": "Failed"
+    },
+    "value": {
+     "word": "Failed"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 12,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "red",
+     "line": "Failed",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Failed",
+     "tone": "red"
+    },
+    "md": {
+     "word": "Failed"
+    },
+    "value": {
+     "word": "Failed"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 13,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 14,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 15,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "terminal",
+     "tone": "grey",
+     "motion": "breathing",
+     "line": "Background process running\u2026",
+     "lineTone": "background"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Background process running"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 16,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "terminal",
+     "tone": "grey",
+     "motion": "breathing",
+     "line": "Background process running\u2026",
+     "lineTone": "background"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Background process running"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 17,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "amber",
+     "line": "Waiting for approval",
+     "lineTone": "approval"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "value": {
+     "word": "Waiting for approval"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 18,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "amber",
+     "line": "Waiting for approval",
+     "lineTone": "approval"
+    },
+    "run": {
+     "word": "Running",
+     "tone": "blue"
+    },
+    "md": {
+     "word": "Running"
+    },
+    "value": {
+     "word": "Waiting for approval"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 19,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "grey",
+     "line": "On hold",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "On hold",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "On hold"
+    },
+    "value": {
+     "word": "On hold"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 20,
+    "group": "Working",
+    "groupAfter": "Working",
+    "list": {
+     "icon": "clock",
+     "tone": "grey",
+     "line": "Queued",
+     "lineTone": "queued"
+    },
+    "run": {
+     "word": "Queued",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Queued"
+    },
+    "value": {
+     "word": "Queued"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 21,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 22,
+    "group": "Needs you",
+    "groupAfter": "Needs you",
+    "list": {
+     "icon": "dot-filled",
+     "tone": "red",
+     "line": "Failed",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Failed",
+     "tone": "red"
+    },
+    "md": {
+     "word": "Failed"
+    },
+    "value": {
+     "word": "Failed"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 23,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 24,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Succeeded",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Finished",
+     "tone": "green"
+    },
+    "md": {
+     "word": "Finished"
+    },
+    "value": {
+     "word": "Succeeded"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 25,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Interrupted",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Interrupted",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Interrupted"
+    },
+    "value": {
+     "word": "Interrupted"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 26,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 27,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Running"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 28,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Running"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 29,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running Agent\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Running Agent"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 30,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "spinner",
+     "tone": "grey",
+     "motion": "spin",
+     "line": "Running Agent\u2026",
+     "lineTone": "running"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Running Agent"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 31,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "eye",
+     "tone": "grey",
+     "line": "Waiting to resume",
+     "lineTone": "watching"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting to resume"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 32,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "eye",
+     "tone": "grey",
+     "line": "Waiting to resume",
+     "lineTone": "watching"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting to resume"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 33,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Waiting for your reply",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Awaiting reply",
+     "tone": "amber"
+    },
+    "md": {
+     "word": "Awaiting reply"
+    },
+    "value": {
+     "word": "Waiting for your reply"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 34,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "\u2014",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "\u2014"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 35,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "Ended",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "Ended"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": null
+   },
+   {
+    "row": 36,
+    "group": "-",
+    "groupAfter": "-",
+    "list": {
+     "icon": "none",
+     "line": "Ended",
+     "lineTone": "preview"
+    },
+    "run": {
+     "word": "\u2014",
+     "tone": "grey"
+    },
+    "md": {
+     "word": "\u2014"
+    },
+    "value": {
+     "word": "Ended"
+    },
+    "header": null,
+    "link": null
+   }
+  ],
+  "surfaces": [
+   [
+    "value",
+    "Row value, TalkBack (SessionHeader.statusWord)"
+   ],
+   [
+    "header",
+    "Conversation header (no state word: centre capsule, as iOS)"
+   ],
+   [
+    "run",
+    "Task run label (TaskLogic resolvedRunState)"
+   ],
+   [
+    "md",
+    "Copied task Markdown, Runs line"
+   ]
+  ],
+  "listNote": "Android row: SessionLiveMark sits on the first line before the time (SessionListPage.kt:131-134, 153-170). After: as iPhone."
+ }
+}
