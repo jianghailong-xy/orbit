@@ -322,7 +322,9 @@ test('one session’s message to another is signed, delivered as such, and bound
       // A completed turn's spend is metered after it commits; nothing these sessions run is budgeted.
       { provide: AttemptBudgetMeterService, useValue: { meterQuietly: async () => undefined } },
       { provide: ProjectAcceptanceService, useValue: {} },
-      { provide: TasksService, useValue: {} },
+      // Every FAILED turn's end is offered to the refused-run replacement after it commits
+      // (docs/routing-account-health-design.md §7.3); none of these sessions runs a task, so it has nothing to replace.
+      { provide: TasksService, useValue: { replaceRefusedRun: async () => null } },
       { provide: MergeReceiptService, useValue: {} },
       RunnerAuthGuard,
     ],
