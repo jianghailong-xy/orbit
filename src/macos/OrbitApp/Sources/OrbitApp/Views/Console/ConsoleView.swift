@@ -2146,14 +2146,9 @@ struct TranscriptView: View {
            let state = SessionDisplay.state(session.displayFacts),
            let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
                                                  machine: console.runnerName) {
-            let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)
-            HStack(spacing: 4) {
-                Text(word).fontWeight(.semibold)
-                    .foregroundColor(word == state.word ? Self.statusWordColor(state.glyph.tone) : .primary)
-                SessionMarkPills(marks: SessionDisplay.marks(session.displayFacts) ?? [])
-                Text(subtitle.hasPrefix(word) ? String(subtitle.dropFirst(word.count)) : subtitle)
-                    .foregroundColor(.secondary)
-            }
+            SessionHeaderStateLine(session: session, state: state, subtitle: subtitle,
+                                   word: SessionHeader.headerWord(for: session, watching: watching, now: now,
+                                                                  machine: console.runnerName))
         } else {
             headerStatus
         }
@@ -2170,6 +2165,27 @@ struct TranscriptView: View {
     }
     #endif
 }
+
+#if os(macOS)
+/// The status bar's line with the session facts: the state word from `phase` (blue while Running), its marks, then
+/// "lifecycle · when" (`SessionDisplay`).
+struct SessionHeaderStateLine: View {
+    let session: Session
+    let state: SessionDisplayState
+    let subtitle: String
+    let word: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(word).fontWeight(.semibold)
+                .foregroundColor(word == state.word && state == .running ? .blue : .primary)
+            SessionMarkPills(marks: SessionDisplay.marks(session.displayFacts) ?? [])
+            Text(subtitle.hasPrefix(word) ? String(subtitle.dropFirst(word.count)) : subtitle)
+                .foregroundColor(.secondary)
+        }
+    }
+}
+#endif
 
 private extension View {
     /// No iOS 26 scroll-edge effect at the top: the transcript runs on up behind the nav bar as it
