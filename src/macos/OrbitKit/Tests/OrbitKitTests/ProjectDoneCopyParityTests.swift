@@ -102,6 +102,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("DONE_CHECK_TASK", ProjectDone.checkTask),
         ("DONE_CHECK_OWNER_ITEMS", ProjectDone.checkOwnerItems),
         ("DONE_CHECK_LANDINGS", ProjectDone.checkLandings),
+        ("DONE_CHECK_DEFERRED_LANDINGS", ProjectDone.checkDeferredLandings),
         ("DONE_CARD_FINDINGS_HEADING", ProjectDone.findingsHeading),
         ("DONE_CARD_FINDINGS_ACCEPTED", ProjectDone.findingsAccepted),
         ("DONE_CARD_RECORD_ANYWAY", ProjectDone.recordAsDoneAnyway),
