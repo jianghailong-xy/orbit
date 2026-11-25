@@ -1,8 +1,8 @@
 # Cross-client display check: the same state and marks on web, Mac, iPhone and Android?
 
-The check of project 353SgnUjvamRr06Sho0EZ criterion 7, run on the project tip 38d75a2d22 (web, Mac/iPhone and Android
-landed). The results are in [report.md](report.md), [display-table.md](display-table.md) (one row per case: state and each
-mark per client; older server; Needs you / Working groups) and [surfaces.md](surfaces.md) (every payload kind and surface).
+The check of project 353SgnUjvamRr06Sho0EZ criterion 7, last run on the project tip b0e9924cb1 (revision 2; revision 1
+ran on 38d75a2d22). The results are in [report.md](report.md), [display-table.md](display-table.md) (one row per case: state and each
+mark per client, for list rows and for search, Shared with me and the shared / guest head; older server; groups) and [surfaces.md](surfaces.md) (every payload kind and surface).
 [table-send.md](table-send.md) is the previous rig's own table (send, wait, words, run label) rerun on the same tip.
 
 ## Pieces
@@ -10,13 +10,15 @@ mark per client; older server; Needs you / Working groups) and [surfaces.md](sur
 - `server-payloads.cjs`: seeds 23 cases as real rows (the server's `session-payloads.fixture.ts` plus the board's cases
   and the marks it lacks) and writes all eight payload kinds as the tip's server code builds them.
 - `walk-cross.mjs` / `run-walk.sh`: the built console on the tip's apiserver and PostgreSQL over those rows; reads and
-  screenshots every web surface and holds each to the board; also reads `GET /sessions/search`.
+  screenshots every web surface, the search palette per case included, and holds each to the board.
 - `make-rows.mjs`: the drivers' input: the rig's 36 `../fixture.json` rows plus the walk's server payloads.
 - `web-display.test.ts`, `AppleDisplayTests.swift`, `AndroidDisplayTest.kt`: one driver per client, calling the client's own
-  display functions and surface words on each row, decoding each payload kind as that client decodes it.
+  display functions and surface words on each row, decoding each payload kind as that client decodes it (an account event
+  a client never reads the facts of is marked `n/a`).
 - `*Groups*`: Needs you / Working membership only, run at the tip and at the commit before the display change.
-- `run-drivers.sh`, `make-display-table.mjs`: run the drivers and render the tables; the generator exits non-zero on any
-  difference from the board, between clients on a payload, or in a group.
+- `run-drivers.sh`, `make-display-table.mjs`: run the drivers and render the tables. The generator lists the surface
+  differences of table 1b, and exits non-zero on any other difference from the board, between clients on a payload, or in
+  a group (one known cause, Apple dropping `runningBgCount` on three payload kinds, is listed rather than fatal).
 
 ## Rerun
 

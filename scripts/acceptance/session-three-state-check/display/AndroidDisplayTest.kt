@@ -67,7 +67,9 @@ class AndroidDisplayTest {
                 surfaces["markdownRun"] = surfaces["runBadge"]!!
                 put("group", buildJsonObject { put("needsYou", s.needsOwner()); put("working", s.isWorkingForList()) })
             }
-            "taskRun", "sessionSummary", "sessionEnded" -> {
+            // An account event only asks for the list to be read again (`INVALIDATING_EVENTS`): nothing reads its facts.
+            "sessionSummary", "sessionEnded" -> put("notRead", "the list is read again")
+            "taskRun" -> {
                 put(SessionDisplay.facts(p)); surfaces["runBadge"] = TaskDetailLogic.runLabel(p)
             }
             "linkPreview" -> put(SessionDisplay.facts(p))   // Android has no link card; the two functions' reading only.

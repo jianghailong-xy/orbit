@@ -120,6 +120,7 @@ for (const r of rows.filter((x) => x.kind === 'fixture' && x.newFields)) {
 const KINDS = ['listRow', 'detail', 'sessionSummary', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead', 'taskRun', 'searchHit'];
 const t4 = ['| case | payload kind | state: web / Apple / Android | marks: web / Apple / Android | same as the list row | clients agree |', '|---|---|---|---|---|---|'];
 const kindGaps = new Map();
+const kindApple = new Map();
 for (const r of rows.filter((x) => KINDS.includes(x.kind))) {
   const got = CLIENTS.map((c) => out[c].get(r.id));
   got.forEach((g, k) => { if (g.error) failures.push(`driver error: ${CLIENTS[k]} ${r.id}: ${g.error}`); });
@@ -129,10 +130,12 @@ for (const r of rows.filter((x) => KINDS.includes(x.kind))) {
   const read = got.map((g) => (g.marks === undefined ? undefined : { state: g.state, marks: g.marks }));
   const present = read.filter((x) => x !== undefined);
   const agree = present.every((x) => same(x, present[0]));
-  // Apple's search hit hands its two functions the six facts alone (`SessionSearchHit.displayFacts`): no Background.
-  const searchBackground = !agree && r.kind === 'searchHit' && read[1] && read[0]
+  // Apple only, Background only: three Apple types do not hand their two functions `runningBgCount`
+  // (`SessionSearchHit`, `SessionRef`, `ControlSessionSummary`), so a mark that rests on it is missing there.
+  const appleBackground = !agree && ['searchHit', 'taskRun', 'sessionSummary'].includes(r.kind) && read[0] && read[1]
+    && (read[2] === undefined || same(read[2], read[0]))
     && read[1].state === read[0].state && same(read[1].marks, read[0].marks.filter((m) => m !== 'Background'));
-  if (searchBackground) explained.push(`${r.id}: Apple's search facts omit Background, web's reading has it`);
+  if (appleBackground) explained.push(`${r.id}: Apple omits Background`);
   else if (!agree) failures.push(`clients disagree on ${r.id}: ${JSON.stringify(read)}`);
   const w = read[0];
   const equalsList = !w || !listE ? '-' : same(w, listE) ? 'yes' : '**no**';
@@ -142,7 +145,8 @@ for (const r of rows.filter((x) => KINDS.includes(x.kind))) {
     const key = `${r.kind}|${w.state === null ? 'no facts on the payload' : `missing ${missing.join(', ') || '-'}; extra ${extra.join(', ') || '-'}`}`;
     kindGaps.set(key, [...(kindGaps.get(key) ?? []), r.name]);
   }
-  const show = (f) => read.map((x) => (x === undefined ? 'n/a' : f(x))).join(' / ');
+  if (appleBackground) kindApple.set(r.kind, [...(kindApple.get(r.kind) ?? []), r.name]);
+  const show = (f) => read.map((x, k) => (x === undefined ? (got[k].notRead ? `n/a (${got[k].notRead})` : 'n/a') : f(x))).join(' / ');
   t4.push(`| ${r.name} | ${r.kind} | ${show((x) => x.state ?? '(legacy)')} | ${show((x) => (x.marks ? x.marks.join(', ') || 'none' : '(legacy)'))} | ${equalsList} | ${agree ? 'yes' : '**NO**'} |`);
 }
 const t5 = ['| case | payload kind | surface | web | Apple | Android |', '|---|---|---|---|---|---|'];
@@ -227,6 +231,8 @@ writeFileSync(`${outDir}/surfaces.md`, [
   '## Payload kinds that draw differently from the list row', '',
   '| payload kind | difference | cases |', '|---|---|---|',
   ...[...kindGaps].map(([k, v]) => `| ${k.split('|')[0]} | ${k.split('|')[1]} | ${v.join('; ')} |`), '',
+  '## Apple differs from web: Background missing', '', '| payload kind | cases |', '|---|---|',
+  ...(kindApple.size ? [...kindApple].map(([k, v]) => `| ${k} | ${v.join('; ')} |`) : ['| none | |']), '',
   '## Words each surface writes', '', ...t5, '',
 ].join('\n'));
 console.log(`table 1: ${cases.length} cases; groups: ${rows.filter((x) => x.kind === 'fixture' || x.kind === 'listRow').length} rows; walk surfaces ${JSON.stringify(walk.checked)}`);
@@ -234,5 +240,6 @@ console.log(`moved (pre-existing) groups: ${moved.length}`);
 for (const [k, v] of kindGaps) console.log(`kind gap ${k}: ${v.length} cases`);
 for (const [k, v] of surfaceDiffs) console.log(`surface difference ${k}: ${v.length} cases`);
 console.log(`surface table: ${surfaceRows} rows, ${surfaceDiffs.size} kinds of difference; explained per-kind readings: ${explained.length}`);
+for (const [k, v] of kindApple) console.log(`Apple omits Background on ${k}: ${v.join('; ')}`);
 console.log(failures.length ? `FAILURES ${failures.length}:\n${failures.join('\n')}` : 'no unexplained disagreement in tables 1-3 and the per-kind function readings (table 1b differences are listed above)');
 process.exit(failures.length ? 1 : 0);

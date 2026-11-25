@@ -1,83 +1,83 @@
-# Cross-client check on the merged tip 38d75a2d22 (2026-11-25)
+# Cross-client check, revision 2: project tip b0e9924cb1 (2026-11-25)
 
 Criterion 7: "Web, Mac, iPhone and Android agree, for every fixture case, on the state shown and on each mark shown, and the
 membership of the Needs you and Working groups is the same as before this project."
 
-**Answer.** It holds for the session list row (state, every mark, group), and for the two display functions on every
-payload kind they read. It does **not** hold on the guest surfaces (Apple and Android guest view and Shared with me), and
-the search surfaces draw the old seven states on all clients. Those are gaps G1 and G2 below; G3 to G5 are differences
-between web surfaces and the board that no client disagrees with another about.
+**Answer.** It now holds on the session list row, the guest view and Shared with me (every state and mark, all four
+clients), and on the groups. It still does **not** hold on search (G1, G2) or for the Background mark on three Apple
+surfaces (G3). G4 and G5 are narrower.
 
-## Client work on the tip
+## Fixes on the tip
 
-The commits the task names landed rebased with identical patch ids: web c19357b8fe → 0b613ed33b, web test fix 7127773722 →
-2ba5b5ce8d, Android 0e787ea088 → 38d75a2d22; Apple 475239dbc5 is an ancestor. All three display files exist.
+web e28fe934ab (and the follow-up c43dbbe301, the Queued clock in the Tasks list pill) and Android 1e40021b32 are
+ancestors; Apple 30b8b4251a landed as b2dde67dac and server dd1f34e4a9 as 40030b7fe4, with identical patch ids.
 
-## What was compared
+## Results
 
-Reference: `docs/mocks/session-display-three-states/capture/rules.mjs`, Disconnected drawn as Failed (owner, 2026-11-25).
+Reference: `docs/mocks/session-display-three-states/capture/rules.mjs`, Disconnected drawn as Failed. The expected answer
+of a case on any surface is its list row's.
 
 | Check | Result |
 |---|---|
-| Table 1: 41 cases (18 fixture rows with facts, 23 server-built list rows) × 4 clients, state and 9 marks | all agree with the board ([display-table.md](display-table.md) §1) |
-| 18 facts-absent fixture rows: words and run labels | each equals its client's legacy baseline; both functions answer null (§2) |
-| Needs you / Working, 59 rows (36 fixture, 23 server) × 3 clients, tip against cf06a12e75 | identical on every row (§3) |
+| Table 1: 41 cases (18 fixture, 23 server-built list rows) × 4 clients, state and 9 marks | all agree with the board ([display-table.md](display-table.md) §1) |
+| Shared / guest head and Shared with me, 23 cases × 2 surfaces × 4 clients | all agree, state and every mark (§1b) |
+| Search, 22 cases × 4 clients | differs: G1, G2, G3 (§1b) |
+| Web real-stack walk: list row, header, task run, link card, shared page, guest page, Shared with me, 22 cases each | all match; the Background mark is now on every one |
+| The Background mark on every payload kind (server-built) | every kind carries it: web's reading of each kind equals the list row's ([surfaces.md](surfaces.md)); `session-payloads-phase.pg.spec.ts` 2/2 holds the server to it. Android's reading agrees wherever Android reads the payload. Apple misses it on three kinds (G3) |
+| 18 facts-absent fixture rows: words and run labels | each equals its client's legacy baseline (§2) |
+| Needs you / Working, 59 rows × 3 clients, tip against cf06a12e75 (before the display change) | identical on every row (§3) |
 | Recorded groups (`../legacy-baseline.*.json`) | web, Apple, Android 18/18 equal |
-| The two functions on 9 payload kinds (server-built) | clients agree on every payload ([surfaces.md](surfaces.md)) |
-| Web real-stack walk, 22 cases × 7 surfaces | list row, header and link card match on all 22; 13 differences are the Background mark missing from some payloads (G3), and 1 is the settled landing container, which the session list does not list |
-| Previous rig table (send, wait, word, run label) | send and wait columns equal the committed `../table.md`; word and run now say the state and marks; every flagged row is facts-absent and was flagged before ([table-send.md](table-send.md)) |
-| `session-payloads-legacy.pg.spec.ts` | 1 pass, 0 skipped; golden file, spec and fixture identical to main |
-| Named tests on the tip | web 56, Android 45 (incl. the Compose `SessionRow` draw test), OrbitKit 48, all pass |
-| Apple compile | client.yml run 45550520773 on 475239dbc5 (workflow_dispatch): macOS build + test and iOS build green; `src/macos`, `src/ios`, `src/web`, `src/shared` do not differ from the tip |
+| Previous rig table (send, wait, word, run label) | identical to revision 1's ([table-send.md](table-send.md)) |
+| `session-payloads-legacy.pg.spec.ts` | passes, 0 skipped; golden file and spec identical to main |
+| Named tests on the tip | web 165 (8 files), Android 107, OrbitKit 105, all pass |
+| Apple compile | client.yml run 45559219646 on 30b8b4251a: macOS build + test and iOS build green. The tip's `src/macos` differs from it in `AgentToolsGuide.generated.swift` and `SessionStateContractTests.swift` only |
 
-The generator fails (exit 1) on a planted missing mark, a planted group change and the resulting client disagreement.
-
-`../run-all.sh` now also builds the display table. Two lines of the previous drivers changed to read what the surfaces now
-draw: Apple's word is `SessionHeader.headerWord` (it was `statusWord`), web's run label includes the marks beside the badge.
-
-## Differences that are the board's own design
-
-- iPhone and Android list rows draw two marks and "+N" (table 1 shows `+N` on the one three-mark case). Web and Mac rows,
-  headers and task panels draw all.
-- iPhone and Android conversation headers have no state word. Android has no link card.
-- Rows F15, F27, F29: web puts them in Working, Apple and Android do not, as before.
-- Row F21 (end never confirmed): with the facts no client puts it in Needs you; the recorded facts-absent row does, on all
-  three. The commit before the display change answers the same, so this project did not move it.
-- Sessions stored with a status no client knows (F33, F35) cannot be stored in the database, so only the fixture covers them.
+The generator fails (exit 1) on a planted missing list-row mark and a planted group change, and lists a planted missing
+Shared with me mark.
 
 ## Gaps
 
-**G1. Apple and Android guest surfaces still draw the old words.** `GuestSessionState.word` (OrbitKit `GuestSession.swift`)
-and `GuestState.word` (Android `core/guests/GuestLogic.kt`) do not call the two display functions. On the server's own
-guest row and shared head, 19 of 23 cases differ from web, and no mark is drawn: web `Idle` + `Finished` / `Failed` /
-`Retrying`, native `Finished` / `Failed` / `Failed`; web `Running` for a background job or a sub-agent, native
-`Awaiting reply`. Apple and Android agree with each other. The board asks these surfaces to follow the shared header's
-rule. (Four cases read the same word, without the marks: queued, running, and the two approval cases.)
+**G1. Android search draws no facts at all (22 of 22 cases).** `SearchHit` (`directory/DirectoryModels.kt`) decodes none
+of the six facts, and the row in `DirectoryScreen.kt` writes `agent · lifecycle · runState`: "payloads-agent · OPEN ·
+AWAITING_INPUT" where web and Apple say Idle or Running. No marks. The server sends the facts on search hits since F1.
 
-**G2. Search draws the old seven states on every client.** `GET /sessions/search` hits carry none of the six facts, so the
-web palette (red cross, "Waiting for your reply"), the Apple search row and the Android search row use their legacy
-readings, which also differ from each other (web "Finished" / Apple "Succeeded" / Android "SUCCEEDED"; web "Waiting for
-slot" / Apple "Queued"). The board says the palette follows the row. The 22 cases with a hit are in surfaces.md.
+**G2. Web search draws no marks (17 of 22 cases).** The palette row (`SessionSearch.tsx`) draws the new state icon and
+word and no `SessionMarkChips`, so a failed, finished or waiting session reads plain "Idle" or "Running". Apple's search
+row draws the marks. (The five cases with no marks match.)
 
-**G3. The Background mark is missing where the payload does not carry its inputs.** `detail`, `session.created/updated`,
-`session.ended` and a task's `sessions[]` send neither `activity` nor `runningBgCount`; the guest row and shared head send
-`activity` but not `runningBgCount`. So on web: the task panel's run badge omits Background for a running job, a process
-left up, and both mixed cases; the shared page, guest page and Shared with me omit it for a process left up and the mixed
-cases. Native task run labels read the same payload and omit it too. Headers and list rows (which read the list row) draw
-it. Server payload gap; no client re-derives it.
+**G3. Apple drops the Background mark on three payload kinds**, because the type does not hand `runningBgCount` (or
+`activity`) to `SessionDisplay`:
+- search (`SessionSearchHit`): 4 cases, a running job included;
+- task run label and shared Markdown (`SessionRef.displayFacts`): 3 cases (a process left up, alone or beside an
+  approval or a stopped turn);
+- live updates: `Session.applying(_:)` (`SessionUpsert.swift`) keeps the held row's `activity` and `runningBgCount`, and
+  `ControlSessionSummary` does not decode the count, so a `session.updated` that starts background work shows no
+  Background until the list is read again: 4 cases, with the summary folded into a row listed before the work showed.
+  Android reads the list again on that event instead. Web's handling of the live event was not exercised.
 
-**G4. Web Tasks list pill.** It reads the task row's `running` / `queued` / `queuedOnHold`, so it says `Running` for runs
-whose session is `Idle` with Will resume (watch armed, retry armed), and draws no mark but On hold (an approval's Needs
-you is absent). Web only.
+**G4. Web Tasks list pill** draws no Needs you for a run waiting on an approval, nor its Background beside it (2 of 10
+live runs): the task's row carries neither. Every other live run's pill matches, Will resume included. A released run with
+a retry armed is not a live run, so its task reads "Open", with no Retrying mark. No other client has this pill.
 
-**G5. Web list row with three marks** (interrupted, process up, retry armed): at 1440 px the third chip is clipped at the
-row's edge and the line text is gone (`row-interrupted-a-process-up-retry-armed.png`). The marks are in the DOM.
+**G5. Not checked:** the dependency graph node's aria-label (task 353bY2EvEsLWOxWFBFuYH). That task's Queued clock is on
+the tip and drawn (`tasks-list.png`).
 
-## Not run
+## Differences that are the board's own design
 
-- No SwiftUI view was drawn: Mac and iPhone columns are OrbitKit's functions on Linux (`swift:6.1`), Mac = all marks,
-  iPhone = `phoneRowMarks`, as `AgentSessionRow` calls them. No Mac or iPhone screenshot was taken here.
-- No Android device or emulator: Android is JVM tests under Robolectric, without new screenshots. Search rows, task rows
-  and the guest page are read from their word functions (search: the line `DirectoryScreen` composes), not drawn.
-- Full web, Android, OrbitKit and apiserver suites were not run; this task changes nothing under `src/`.
-- Dark theme, and the macOS CI job on the tip itself (the tip's Apple code is that of 475239dbc5).
+- iPhone and Android list rows draw two marks and "+N" (table 1 shows `+N` on the three-mark case). The web list row now
+  wraps three chips under the line instead of clipping the third.
+- iPhone and Android conversation headers have no state word. Android has no link card.
+- Rows F15, F27, F29: web puts them in Working, Apple and Android do not, as before.
+- Row F21: with the facts no client puts it in Needs you; the recorded facts-absent row does, on all three. The commit
+  before the display change answers the same.
+- Statuses no client knows (F33, F35) cannot be stored in the database, so only the fixture covers them. The settled
+  landing container is in no session list or search, so web has no row for it.
+
+## How the columns were read, and what was not run
+
+- Web: the DOM of the built console on the tip's apiserver and PostgreSQL.
+- Mac and iPhone: OrbitKit on Linux (`swift:6.1`), calling what the views call; no SwiftUI view was drawn and no Mac or
+  iPhone screenshot taken. Mac = all marks, iPhone list row = `phoneRowMarks`.
+- Android: JVM tests (Robolectric in the named draw tests); no device or emulator and no new screenshot. The search line is
+  composed in the driver as `DirectoryScreen` composes it.
+- Full web, Android, OrbitKit and apiserver suites and dark theme were not run; this task changes nothing under `src/`.

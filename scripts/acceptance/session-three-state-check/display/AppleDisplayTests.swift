@@ -12,14 +12,22 @@ final class AppleDisplayTests: XCTestCase {
         let env = ProcessInfo.processInfo.environment
         let rows = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: env["ROWS"]!))) as! [[String: Any]]
         var out: [[String: Any]] = []
+        // The list row of each case, which a `session.updated` summary is folded into.
+        let listRows = Dictionary(uniqueKeysWithValues: rows.filter { $0["kind"] as! String == "listRow" }
+            .map { ($0["name"] as! String, $0["payload"] as! [String: Any]) })
         for r in rows {
             let kind = r["kind"] as! String
-            var payload = r["payload"] as! [String: Any]
-            // session.ended names its session `sessionId`; its facts are read here under the ref's `id`.
-            if kind == "sessionEnded", payload["id"] == nil { payload["id"] = payload["sessionId"] ?? "s" }
+            let payload = r["payload"] as! [String: Any]
             let data = try JSONSerialization.data(withJSONObject: payload)
             var row: [String: Any] = ["id": r["id"]!, "client": "apple"]
-            do { try fill(&row, kind: kind, data: data) } catch { row["error"] = "\(error)" }
+            do {
+                switch kind {
+                case "sessionSummary": try fillSummary(&row, summary: payload, listRow: listRows[r["name"] as! String]!)
+                // `session.ended` only takes the row off the Open list (ControlEventRoute `.sessionLeft`): nothing reads its facts.
+                case "sessionEnded": row["notRead"] = "the row leaves the list"
+                default: try fill(&row, kind: kind, data: data)
+                }
+            } catch { row["error"] = "\(error)" }
             out.append(row)
         }
         try JSONSerialization.data(withJSONObject: out, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: env["OUT"]!))
@@ -35,6 +43,24 @@ final class AppleDisplayTests: XCTestCase {
             row["phoneMarks"] = phone.shown.map(\.word) + (phone.more.map { [$0] } ?? [])
         }
         if let state { row["drawnIcon"] = state.glyph.label }
+    }
+
+    /// `session.updated` as the Open list takes it (OpenRowChange.merging): the summary folded into the row as listed before
+    /// any background work showed (no `activity`, no `runningBgCount`). A summary that asks for a snapshot instead is read
+    /// from the next list, so it says nothing of its own.
+    private func fillSummary(_ row: inout [String: Any], summary: [String: Any], listRow: [String: Any]) throws {
+        var before = listRow
+        before["activity"] = nil
+        before["runningBgCount"] = 0
+        var event = summary
+        event["id"] = event["id"] ?? before["id"]
+        let held = try JSONDecoder().decode(Session.self, from: JSONSerialization.data(withJSONObject: before))
+        let update = try JSONDecoder().decode(ControlSessionSummary.self, from: JSONSerialization.data(withJSONObject: event))
+        switch OpenRowChange.merging(update, into: [held]) {
+        case .replace(_, let merged): put(&row, merged.displayFacts)
+        case .unchanged: put(&row, held.displayFacts)
+        case .needsSnapshot: row["notRead"] = "the list is read again"
+        }
     }
 
     /// "Ana · Idle · Finished · Completed" -> the state and the marks it writes after the owner.
@@ -59,7 +85,7 @@ final class AppleDisplayTests: XCTestCase {
             surfaces["markdownRun"] = surfaces["runBadge"]
             let section = SessionTimeGrouping.sections([s], now: Self.now).map(\.title)
             row["group"] = ["needsYou": section.contains("Needs you"), "working": section.contains("Working")]
-        case "taskRun", "sessionSummary", "sessionEnded":
+        case "taskRun":
             let run = try d.decode(SessionRef.self, from: data)
             put(&row, run.displayFacts)
             surfaces["runBadge"] = ShareMarkdown.runLabel(run)
