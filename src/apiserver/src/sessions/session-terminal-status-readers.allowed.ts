@@ -98,7 +98,7 @@ export const RELEASE_WRITERS: Readonly<Record<string, number>> = {
 export const PROJECTOR: Readonly<Record<string, number>> = {
   // legacySessionStatus, which derives the status word from a session's facts, and statusWordFilter beside it
   // (docs/session-status-retirement-plan.md §3.1, §6).
-  'src/apiserver/src/sessions/session-legacy-words.ts': 9,
+  'src/apiserver/src/sessions/session-legacy-words.ts': 8,
   // deriveSessionRunState, deriveSessionState (deriveSessionLifecycleState and deriveSessionFilingState name none).
   'src/shared/src/enums.ts': 23,
 };
@@ -136,12 +136,6 @@ export const NO_RELEASED_VALUE: Readonly<Record<string, number>> = {
   'src/apiserver/src/common/session-tree-sql.ts': 1,
   // `paused`: held and stopped mid-turn (INTERRUPTED).
   'src/apiserver/src/help/help-ask-reads.ts': 1,
-  // Idle coordinators: AWAITING_INPUT or INTERRUPTED.
-  'src/apiserver/src/projects/coordinator-evidence-queue.service.ts': 2,
-  // A coordinator is busy unless AWAITING_INPUT or INTERRUPTED.
-  'src/apiserver/src/projects/pending-addressees.ts': 1,
-  // Tasks with a session queued or running.
-  'src/apiserver/src/projects/project-done-request.ts': 1,
   // Sessions per account: queued or running, and held-idle within a window.
   'src/apiserver/src/providers/active-sessions.ts': 3,
   // The claimed-and-held set (RUNNING, AWAITING_INPUT, INTERRUPTED) as an index condition.
@@ -152,12 +146,11 @@ export const NO_RELEASED_VALUE: Readonly<Record<string, number>> = {
   'src/apiserver/src/sessions/sessions.service.ts': 1,
   // Activity and the parked status in the carrier SQL.
   'src/apiserver/src/sessions/task-work-carrier.ts': 2,
+  // The one map between a turn state and its held word (plan §1.3), which the projector reads too: moved here from
+  // session-legacy-words.ts by task T11.
+  'src/apiserver/src/sessions/session-turn-state.ts': 1,
   // The derived run states still live on the public task page: QUEUED, RUNNING.
   'src/apiserver/src/share-links/public-task.ts': 1,
-  // The idle sweep's creator sessions: AWAITING_INPUT or INTERRUPTED.
-  'src/apiserver/src/tasks/evidence-review.service.ts': 1,
-  // Tasks with a session queued or running, and the held-idle sessions in raw SQL.
-  'src/apiserver/src/tasks/tasks.service.ts': 2,
 };
 
 export const ALLOW_LIST_SECTIONS = {

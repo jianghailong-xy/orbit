@@ -20,8 +20,8 @@
 import { Prisma } from '@prisma/client';
 import { RunStatus, SessionEndReason } from '@orbit/shared';
 
-import { isHeldStatus } from '../common/session-release';
 import { landingContainerStatus } from '../projects/landing-session';
+import { heldSessionWord } from './session-turn-state';
 
 /** The session columns the projector reads. */
 export interface LegacyStatusFacts {
@@ -85,23 +85,24 @@ export function withoutWordFacts<T>(row: T): Omit<T, Exclude<keyof LegacyStatusF
   return rest as unknown as Omit<T, Exclude<keyof LegacyStatusFacts, 'endReason' | 'status'>>;
 }
 
-const HELD_WORD_OF_TURN_STATE: Record<string, RunStatus> = {
-  QUEUED: RunStatus.PENDING,
-  IN_FLIGHT: RunStatus.RUNNING,
-  ABANDONED: RunStatus.INTERRUPTED,
-};
+/**
+ * Raw SQL: the word legacySessionStatus gives the session row the query names `sessionAlias`, through its SQL twin
+ * (migration 1621), with a LANDING container's settlement read from its `project_landing` row. Text.
+ */
+export function legacySessionStatusSql(sessionAlias: string): Prisma.Sql {
+  const session = Prisma.raw(sessionAlias);
+  return Prisma.sql`session_legacy_status(${session}."finished_at", ${session}."turn_state", ${session}."end_reason",
+    ${session}."last_turn_outcome", ${session}."started_at", ${session}."import_source_cwd", ${session}."kind",
+    (SELECT landing."settled_as" FROM "project_landing" landing WHERE landing."session_id" = ${session}."id"),
+    ${session}."status"::text)`;
+}
 
 /**
  * The word a session reads on the wire. `landing` is the `project_landing` row of a LANDING container (null or absent
  * for every other session, and for a landing with no row, which reads as unsettled-without-landing: CANCELLED).
  */
 export function legacySessionStatus(facts: LegacyStatusFacts, landing?: LandingSettlement | null): RunStatus {
-  if (facts.finishedAt == null) {
-    if (facts.turnState != null) return HELD_WORD_OF_TURN_STATE[facts.turnState] ?? RunStatus.AWAITING_INPUT;
-    // No turn state: parked, or not yet backfilled. A parked row stores AWAITING_INPUT, so both read the stored word.
-    const session = facts;
-    return isHeldStatus(session.status) ? session.status as RunStatus : RunStatus.AWAITING_INPUT;
-  }
+  if (facts.finishedAt == null) return heldSessionWord(facts);
   if (facts.endReason == null) {
     if (facts.lastTurnOutcome === 'FAILED') return RunStatus.FAILED;
     if (facts.lastTurnOutcome == null && facts.importSourceCwd != null) return RunStatus.FAILED;

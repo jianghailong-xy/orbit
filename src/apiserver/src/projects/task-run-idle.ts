@@ -1,6 +1,7 @@
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { sessionWakeSourceSql } from '../sessions/task-work-carrier';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
 import { runLastWords } from './run-last-words';
@@ -54,7 +55,8 @@ export async function findIdleRuns(
     where: {
       ...(filter.sessionId ? { id: filter.sessionId } : {}),
       startsTaskWork: true,
-      status: RunStatus.AWAITING_INPUT,
+      // Parked (plan §2.1: A).
+      ...turnStateFilter([null]),
       lastTurnAt: { not: null, lt: cutoff },
       task: {
         ...(filter.taskId ? { id: filter.taskId } : {}),

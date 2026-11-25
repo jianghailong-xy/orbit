@@ -3,11 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import {
   Prisma,
-  RunStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { RunStatus, uuidToBase62 } from '@orbit/shared';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { INTEGRATION_ITEM_KINDS } from './project-open-item';
@@ -278,6 +277,8 @@ export async function ensureLandingSession(
         prompt: LANDING_PROMPT,
         sessionKind: 'LANDING',
         status,
+        // A container never holds a turn: parked while its subject is open, released once it settled (plan §2.2 #2).
+        turnState: null,
         startsTaskWork: false,
         assignedRunnerId: null,
         taskId: null,
@@ -394,6 +395,8 @@ async function settleLanding(
         where: { id: locked.sessionId },
         data: {
           status: landingContainerStatus({ settledAt, settledAs }),
+          // Released: no turn (plan §2.2 #3).
+          turnState: null,
           completedAt: settledAt,
           // Released with the status (design §4.2).
           finishedAt: settledAt,
