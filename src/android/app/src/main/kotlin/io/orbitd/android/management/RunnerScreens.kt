@@ -1,5 +1,6 @@
 package io.orbitd.android.management
 
+import io.orbitd.android.directory.QueuedCapacity
 import android.content.Intent
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
@@ -829,6 +830,27 @@ private fun RunnerCapacity(runner: JsonObject, now: Long, model: RunnersModel, n
             }
         }
         HorizontalDivider()
+        // How far over Max Concurrent Run now may take this runner (docs/mocks/queued-run-now, decision C); 0 turns it off. Not drawn
+        // for a server that does not send it.
+        runner.int("burstConcurrent")?.let { burst ->
+            var picking by remember { mutableStateOf(false) }
+            Box {
+                Row(Modifier.fillMaxWidth().clickable(role = Role.DropdownList) { picking = true }.padding(vertical = 10.dp).testTag("runner-extra-sessions")) {
+                    Text(QueuedCapacity.EXTRA_SESSIONS_ON_DEMAND, Modifier.weight(1f)); Text("$burst", color = Ink.muted)
+                }
+                DropdownMenu(picking, { picking = false }) {
+                    (0..QueuedCapacity.MAX_EXTRA_SESSIONS).forEach { slots ->
+                        DropdownMenuItem(text = { Text("$slots") }, trailingIcon = if (slots == burst) { { Text("✓") } } else null, onClick = {
+                            picking = false
+                            if (slots != burst) scope.launch {
+                                model.press { api.patch("runners/$id", buildJsonObject { put("burstConcurrent", slots) }) }?.let(notice::show)
+                            }
+                        })
+                    }
+                }
+            }
+            HorizontalDivider()
+        }
         var expanded by remember { mutableStateOf(false) }
         val current = RunnerPage.keepFreeValue(runner.int("minFreeDiskMb"))
         Box {
