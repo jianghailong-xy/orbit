@@ -3507,7 +3507,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1631_session_root_in_flight_idx',
       '1632_session_over_capacity_queued_idx',
       '1633_session_owner_held_task_idx',
-      '1634_session_released_failed_idx'],
+      '1634_session_released_failed_idx',
+      // 1641 adds one read-only SQL function over a session row (session_held_turn_state), replaces the bodies of nine
+      // trigger functions (the five engine guards, open_list_bump_owner, session_listed_at_on_settle,
+      // session_request_recipient_ended, task_supersession_live_session_guard) and re-creates three ended-triggers
+      // with the same column lists, so each reads turn_state, finished_at and the projector's word instead of
+      // session.status (retirement plan §4.2, task T6). No row is written, no preserved relation is created, altered
+      // or dropped, and the DONE fence is unchanged.
+      '1641_session_triggers_read_facts'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
