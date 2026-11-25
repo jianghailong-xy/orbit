@@ -108,7 +108,7 @@ BEGIN;
 -- The previous run's running sessions are over; the reaper may have finished some of them already. A cancellation it
 -- queued for one would be handed to the runner's next process for five minutes (RealtimeService.drainCancellations).
 UPDATE session s SET status = 'SUCCEEDED', finished_at = now(), updated_at = now()
-  FROM loadgen.session ls WHERE ls.session_id = s.id AND ls.running AND s.status IN ('RUNNING', 'PENDING', 'INTERRUPTED');
+  FROM loadgen.session ls WHERE ls.session_id = s.id AND ls.running AND s.finished_at IS NULL AND s.turn_state IS NOT NULL;
 UPDATE session s SET cancel_requested_at = NULL
   FROM loadgen.owner o WHERE s.owner_id = o.user_id AND s.cancel_requested_at IS NOT NULL;
 DELETE FROM loadgen.session WHERE running;
@@ -148,7 +148,7 @@ disarm)
   log "ending the running sessions in $pg"
   psql_run <<'SQL'
 UPDATE session s SET status = 'SUCCEEDED', finished_at = now(), updated_at = now()
-  FROM loadgen.session ls WHERE ls.session_id = s.id AND ls.running AND s.status IN ('RUNNING', 'PENDING', 'INTERRUPTED');
+  FROM loadgen.session ls WHERE ls.session_id = s.id AND ls.running AND s.finished_at IS NULL AND s.turn_state IS NOT NULL;
 SQL
   ;;
 remove)

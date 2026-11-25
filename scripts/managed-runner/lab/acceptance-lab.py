@@ -595,7 +595,7 @@ def wait_text(owner_id, needle, timeout=300, after=None, model_marker=None, even
             raise Failed(f'no run event carrying {needle} within {timeout} s')
         time.sleep(1)
     event = rows[0]
-    session = wl.sql_json(f"select id, status, assigned_runner_id, task_id, provider, engine, runtime_session_id, created_at "
+    session = wl.sql_json(f"select id, {wl.session_word('session')} as status, assigned_runner_id, task_id, provider, engine, runtime_session_id, created_at "
                           f"from session where id = {wl.quote(event['session_id'])}")[0]
     log = SERVER / 'logs/fake-model.jsonl'
     requests = [json.loads(line) for line in log.read_text().splitlines() if (model_marker or needle) in line] if log.exists() else []
@@ -1676,7 +1676,7 @@ def off_again(ctx, step, label, quiet):
     for name, result in writes.items():
         step.check(f'{name}: every managed write is 404 MANAGED_RUNNER_DISABLED',
                    all(w['status'] == 404 and w['code'] == 'MANAGED_RUNNER_DISABLED' for w in result.values()), result)
-    pending = wl.sql_json(f"select s.status, t.status as turn from conversation_turn t join session s on s.id = t.session_id "
+    pending = wl.sql_json(f"select {wl.session_word('s')} as status, t.status as turn from conversation_turn t join session s on s.id = t.session_id "
                           f"where t.content like {wl.quote(marker + '-ANN%')}")
     step.check('ann\'s message waits, not failed', pending and pending[0]['status'] != 'FAILED', pending)
     pvcs = {name: (kget('pvc', ctx['identity'][name]['pvcName']) or {}).get('metadata', {}).get('uid') for name in (*USERS, THIRD)}
