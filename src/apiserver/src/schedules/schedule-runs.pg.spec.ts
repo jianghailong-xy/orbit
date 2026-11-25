@@ -52,6 +52,7 @@ import {
   type OpenRunSession,
   type ScheduleRunSessionPort,
 } from './schedule-runs.service';
+import { readRunSessions } from './schedule-run-session-reading';
 import { SchedulesService, type ScheduleActor, type ScheduleCreateInput } from './schedules.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -251,12 +252,11 @@ async function idleSettles(runId: string) {
 
 /** The sessions of a run that could still run: what must never be more than one. */
 async function liveSessionsOf(runId: string) {
-  return db.session.findMany({
-    where: {
-      scheduleRunId: runId, deletedAt: null, completedAt: null, cancelRequestedAt: null,
-      status: { notIn: ['SUCCEEDED', 'FAILED', 'CANCELLED'] },
-    },
-    select: { id: true },
+  const named = await db.session.findMany({ where: { scheduleRunId: runId }, select: { id: true }, orderBy: { createdAt: 'asc' } });
+  const readings = await readRunSessions(db as never, named.map((x) => x.id));
+  return named.filter((x) => {
+    const reading = readings.get(x.id);
+    return reading !== undefined && (!reading.fields.released || reading.wakes);
   });
 }
 
@@ -1325,6 +1325,33 @@ test('§7.2 A2: a process that died after retiring but before re-queueing, or a 
   const live = await liveSessionsOf(run.id);
   assert.equal(live.length, 1);
   assert.equal(live[0].id, (await runOf(run.id)).sessionId);
+});
+
+test('§7.2 a held stray with an end still to be honoured holds the start; a released one with only a watch left does not', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('stray-end-in-flight');
+  const s = await created(w);
+  at('2026-11-14T02:00:00Z');
+  const run = await runOf((await fireAndStart(s.id)).started[0].runId);
+  await db.session.update({ where: { id: run.sessionId! }, data: { status: 'CANCELLED', finishedAt: new Date(), cancelRequestedAt: clockNow } });
+  assert.equal(await runs.reconcileRun(run.id), 'RETRY');
+  const stray = randomUUID();
+  await db.session.create({
+    data: {
+      id: stray, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: 'stray', prompt: 'p',
+      provider: 'claude', engine: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER,
+      runSource: SessionRunSource.SCHEDULE, scheduleRunId: run.id,
+      status: 'AWAITING_INPUT', cancelRequestedAt: clockNow, endReason: 'ended',
+    },
+  });
+  advance(MINUTE);
+  assert.deepEqual((await runs.startDue(25, s.id)).map((r) => r.outcome), ['WAITING'], 'held until its end is honoured');
+  await db.session.update({ where: { id: stray }, data: { status: 'CANCELLED', finishedAt: clockNow } });
+  await resumeWatch(w.ownerId, stray);
+  assert.deepEqual((await runs.startDue(25, s.id)).map((r) => r.outcome), ['STARTED'], 'a leftover watch revives nothing');
+  const live = await liveSessionsOf(run.id);
+  assert.deepEqual(live.map((x) => x.id), [(await runOf(run.id)).sessionId]);
 });
 
 /** One turn running on the world's runner, which has one slot (the runner default): the runner is full. */

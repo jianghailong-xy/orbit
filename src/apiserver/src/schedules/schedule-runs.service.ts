@@ -86,6 +86,7 @@ import type { ConditionFiring } from '../conditions/conditions.service';
 import { sampleHolds } from '../conditions/condition-evaluation';
 import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
 import { readRunSessions, releasedByFailure } from './schedule-run-session-reading';
+import type { SessionPhaseReading } from '../sessions/session-phase';
 import {
   scheduleAgentPressStarts,
   scheduleOverBudget,
@@ -103,10 +104,8 @@ import {
   type ScheduleActor,
 } from './schedules.service';
 import {
-  heldFilter,
   isReleased,
   releaseFinishedTheWork,
-  releaseWasFailureFilter,
   releasedFilter,
 } from '../common/session-release';
 
@@ -220,19 +219,16 @@ export type ReconcileOutcome =
   | FailOutcome;
 
 /**
- * A session that may still run: not ended, not filed away, or released by a failure with an auto-retry that would
- * bring it back. Ended means released or an end requested (SessionsService.transitionEnd).
+ * A run's session that may still run (§7.2: one run never has two live sessions), read from the session's published
+ * state (schedule-run-session-reading.ts): held, whatever it is doing, an end still to be honoured included; or
+ * released with something that will revive it (an armed retry, a wake-up on a failure release). A released one that
+ * a wake-up would revive cannot be retired by an end, which a released session swallows: the start waits until the
+ * wake-up revives it, and the next pass retires it then. A stray is the session of a run that never reached its
+ * engine, so no agent ever ran there to ask for one.
  */
-const LIVE_SESSION: Prisma.SessionWhereInput = {
-  deletedAt: null,
-  completedAt: null,
-  archivedAt: null,
-  cancelRequestedAt: null,
-  OR: [
-    heldFilter(),
-    { AND: [releaseWasFailureFilter(), { retryAt: { not: null } }] },
-  ],
-};
+function mayStillRun(session: SessionPhaseReading): boolean {
+  return !session.fields.released || session.wakes;
+}
 
 type Tx = Prisma.TransactionClient;
 
@@ -507,9 +503,11 @@ export class ScheduleRunsService {
           return { outcome: 'CANCELLED' };
         }
         // Computed under the lock, so a session another replica opens for this run after this commits is never one.
-        const strays = await tx.session.findMany({
-          where: { scheduleRunId: runId, ...LIVE_SESSION },
-          select: { id: true, ownerId: true },
+        const named = await tx.session.findMany({ where: { scheduleRunId: runId }, select: { id: true, ownerId: true } });
+        const readings = await readRunSessions(tx, named.map((session) => session.id));
+        const strays = named.filter((session) => {
+          const reading = readings.get(session.id);
+          return reading !== undefined && mayStillRun(reading);
         });
         if (strays.length > 0) return { outcome: 'WAITING', strays };
         const check = await scheduleStartCheck(tx, schedule);
