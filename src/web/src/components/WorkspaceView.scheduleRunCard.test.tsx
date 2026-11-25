@@ -137,7 +137,7 @@ afterEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
-/** The run's history opens its session by id, on the Scheduled runs folder (scheduleRunSessionPath). */
+/** The run's history opens its session by id (scheduleRunSessionPath); the list goes to the Scheduled runs folder. */
 async function openFromRunHistory(): Promise<void> {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   container = document.createElement('div');
@@ -147,7 +147,7 @@ async function openFromRunHistory(): Promise<void> {
     root!.render(
       <QueryClientProvider client={client!}>
         <ControlPlaneProvider>
-          <MemoryRouter initialEntries={[`/sessions/${TRY_ID}?folder=scheduled`]}>
+          <MemoryRouter initialEntries={[`/sessions/${TRY_ID}`]}>
             <WorkspaceView runner={RUNNER} />
           </MemoryRouter>
         </ControlPlaneProvider>
@@ -166,6 +166,8 @@ describe('a run’s session where the run did not get under way', () => {
     scheduleCards = { run: { ...BUMP_MISSED_RUN, sessionId: TRY_ID }, runStatus: asThisSession(bumpMissedStatus()) };
     await openFromRunHistory();
     await until(() => expect(card()?.dataset.scheduleRunCard).toBe('DIDNT_RUN'));
+    // Its address names no list page: the list goes to Scheduled runs from the run's own session.
+    await until(() => expect(container!.querySelector('.session-folder-title')?.textContent).toBe('Scheduled runs'));
     expect(card()!.querySelector('.sched-run-title')!.textContent).toBe("Didn't run");
     expect(card()!.querySelector('.sched-run-body')!.textContent)
       .toBe("HPC didn't pick it up on any of 5 tries, so the run never started. Nothing was changed.");

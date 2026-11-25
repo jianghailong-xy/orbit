@@ -3541,6 +3541,12 @@ button.toast--pill:focus-visible {
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
+/* The session header's badge as the link to the project page (docs/mocks/session-header-project-link, C). */
+.coordinator-badge-link { gap: 3px; margin: 0; font-family: inherit; cursor: pointer; }
+.coordinator-badge-link .anticon { font-size: 8px; }
+.coordinator-badge-link:hover,
+.coordinator-badge-link:focus-visible { background: color-mix(in srgb, var(--brand) 14%, var(--bg-base)); border-color: var(--brand); }
+.coordinator-badge-link:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
 /* The title as the button that opens the session's settings (docs/mocks/session-settings-column ③): plain at
    rest and while the settings are open (owner 11-25: the open state needs no look of its own), a light ground and
    a › on hover. Keyboard focus shows as hover does, in place of the browser's ring. */
