@@ -124,10 +124,11 @@ class SessionFactsRowShotsTest {
     }
 
     /** The same five rows with the facts the server sends now: the state from `phase`, the other facts as the approved board's marks
-     * (docs/mocks/session-display-three-states). With nothing to preview, the line says the state word, as web's does. */
+     * (docs/mocks/session-display-three-states). With nothing to preview, the line says the state word, as web's does, and a held
+     * queue its queue word, as on the board. */
     @Test fun afterTheFactsAreSent() {
         draw(rows(true))
-        assertWords(listOf("Idle", "Queued", "Idle", "Idle", "Idle"),
+        assertWords(listOf("Idle", "On hold", "Idle", "Idle", "Idle"),
             listOf("Idle, Finished", "Queued, On hold", "Idle, Ended", "Idle, Ended", "Idle, Interrupted"))
         shot("list-after-session-facts")
     }
