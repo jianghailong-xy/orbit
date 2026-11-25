@@ -224,6 +224,7 @@ beforeEach(() => {
     }
     if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
     if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
+    if (path === '/auth/capabilities') return reply({ managedRunners: { enabled: false }, documents: { enabled: true } });
     if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/watches?following=true' || path === '/wiki/spaces') return reply([]);
     // The session list's Needs you row reads the terminals asking to be approved: none here.
     if (path === '/terminals/requests') return reply({ requests: [] });
