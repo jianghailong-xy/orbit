@@ -2,7 +2,8 @@
  * DEPLOY D1 OF THE session.status RETIREMENT: session.turn_state AND session.phase, KEPT FROM THE STORED WORD BY
  * TRIGGERS (migrations 1611 and 1612), EQUAL TO THEIR DERIVATION ON EVERY ROW SHAPE; THE BACKFILL AND THE CENSUS.
  *
- * docs/session-status-retirement-plan.md §1.2, §1.3, §4.1 (D1), §4.4 and §4.6; task T2. Against PostgreSQL:
+ * docs/session-status-retirement-plan.md §1.2, §1.3, §4.1 (D1), §4.4 and §4.6; task T2. What deploy D2 adds on top
+ * (the CHECKs, phase NOT NULL, the indexes) is session-turn-state-checks.pg.spec.ts's. Against PostgreSQL:
  *
  *   (1) on the database run-pg-spec.sh migrated from empty (every migration, 1611 and 1612 among them): the two
  *       columns, their validated value CHECKs, the two triggers with their events, `session_aa_…` the first and
@@ -14,7 +15,8 @@
  *   (3) UPDATE: each execution fact set and cleared by a statement naming only it, on every one of those shapes; every
  *       word moved to every other word (with finished_at, as session_release_fact_chk asks) with and without a
  *       background job running; the claim on an engine row skipped by its guard, and taken under the declaration
- *   (4) on a database that had every migration before 1611 and holds rows: the down script takes 1611 and 1612 away,
+ *   (4) on a database that holds rows and is put back to before 1611: the down script takes 1611 and 1612 away (D2's
+ *       CHECKs and indexes go with the columns, their migrations staying recorded, so what follows is a D1 database),
  *       prisma migrate deploy puts them back and writes no row; the census counts the unfilled rows; the backfill
  *       fills them 500 at a time, skipping a locked row until it is free; the census then answers 0 everywhere, and
  *       every row equals its derivation; a stray write of turn_state alone is counted by the census and undone by the
@@ -180,7 +182,8 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
         WHERE table_name = 'session' AND column_name IN ('turn_state', 'phase') ORDER BY column_name`,
     )).rows;
     assert.deepEqual(columns, [
-      { column_name: 'phase', data_type: 'text', is_nullable: 'YES', column_default: null },
+      // NOT NULL since deploy D2 (1626).
+      { column_name: 'phase', data_type: 'text', is_nullable: 'NO', column_default: null },
       { column_name: 'turn_state', data_type: 'text', is_nullable: 'YES', column_default: null },
     ]);
     const checks = (await sql.query(
@@ -304,7 +307,7 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
         for (const facts of FACTS) await insertShape(db, w, shape, facts);
       }
     }
-    // The down script: the database as it was with every migration before 1611.
+    // The down script: session as it was before 1611.
     await sql.query(readFileSync(join(SCRIPTS, 'session-turn-state-phase-down.sql'), 'utf8'));
     await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [D1]);
     const left = (await sql.query(
