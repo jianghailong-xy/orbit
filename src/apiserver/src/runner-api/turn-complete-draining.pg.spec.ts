@@ -78,7 +78,7 @@ test('a turn ending on a draining runner returns its slot, and Stop on the sessi
     await db.runner.create({
       data: {
         id, ownerId, name: `${name}-${RUN}`, tokenHash: sha256(token), status: 'ONLINE', lastHeartbeatAt: new Date(),
-        maxConcurrent: 8, capabilities: CAPABLE, capabilitiesReportedAt: new Date(),
+        maxConcurrent: 8, capabilities: CAPABLE, capabilitiesReportedAt: new Date(), heartbeatDraining: false,
       },
     });
     const workspaceId = randomUUID();
