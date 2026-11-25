@@ -162,15 +162,22 @@ test('the reaper and realtime read the facts, and a row with no turn_state reads
     }
   });
 
+  // Two cases over one sweep: which rows it releases and what it writes (today's behaviour exactly, plan §1.4), and
+  // apart from that the word its STATUS event carries (plan §3.4 C1).
+  const grace: { rows: Row[]; published: Map<string, Record<string, unknown>> } = { rows: [], published: new Map() };
+
   await t.test('a cancel past its grace releases every held session as its turn state says', async () => {
     const ids = await world(db, 'grace');
     const asked = new Date(Date.now() - 10 * 60_000);
     const rows = await everyShape(db, ids, { data: () => ({ cancelRequestedAt: asked, endReason: SessionEndReason.CANCELLED }) });
+    grace.rows = rows;
     const before = await stored(db, rows);
-    const published = new Map<string, Record<string, unknown>>();
-    await sweep(db, ids.ownerId, published);
+    await sweep(db, ids.ownerId, grace.published);
     const after = await stored(db, rows);
 
+    const released = titles(rows, (row) => after.get(row.id)!.finishedAt != null && before.get(row.id)!.finishedAt == null);
+    assert.deepEqual(released, titles(rows, (row) => row.held), 'every held row, filled and unfilled');
+    assert.deepEqual(titles(rows, (row) => grace.published.has(row.id)), released, 'one STATUS event for each');
     for (const row of rows) {
       const now = after.get(row.id)!;
       if (!row.held) {
@@ -179,19 +186,28 @@ test('the reaper and realtime read the facts, and a row with no turn_state reads
       }
       const queued = row.word === RunStatus.PENDING;
       assert.deepEqual(
-        [now.status, now.turnState, now.finishedAt != null, now.lastTurnOutcome, now.error],
+        [now.status, now.turnState, now.finishedAt != null, now.lastTurnOutcome, now.error, now.endReason, now.retryAt],
         [
           queued ? RunStatus.CANCELLED : RunStatus.FAILED, null, true,
           row.word === RunStatus.RUNNING ? 'CANCELLED' : null,
-          queued ? null : 'cancel not honored',
+          queued ? null : 'cancel not honored', SessionEndReason.CANCELLED, null,
         ],
         row.title,
       );
-      // The event carries the word the released row answers with (plan §3.4 C1), as every later read of it does.
-      const facts = await db.session.findUniqueOrThrow({ where: { id: row.id }, select: LEGACY_STATUS_SELECT });
-      assert.equal(published.get(row.id)?.status, legacySessionStatus(facts), `${row.title}: the STATUS event`);
-      assert.equal(published.get(row.id)?.status, RunStatus.CANCELLED, row.title);
     }
+  });
+
+  await t.test("the cancel grace's STATUS event carries the word the released row answers with", async () => {
+    const held = grace.rows.filter((row) => row.held);
+    assert.equal(held.length, 8);
+    const projected: Array<[string, string]> = [];
+    for (const row of held) {
+      const facts = await db.session.findUniqueOrThrow({ where: { id: row.id }, select: LEGACY_STATUS_SELECT });
+      projected.push([row.title, legacySessionStatus(facts)]);
+    }
+    // An end somebody asked for: every one reads CANCELLED, the unhonoured ones too, which are stored FAILED (C1).
+    assert.deepEqual(projected, held.map((row) => [row.title, RunStatus.CANCELLED]));
+    assert.deepEqual(held.map((row) => [row.title, grace.published.get(row.id)?.status]), projected);
   });
 
   await t.test('a DONE task ends its parked sessions and no other', async () => {
