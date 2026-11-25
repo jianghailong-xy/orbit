@@ -136,6 +136,15 @@ def ms_since(started):
     return round((time.monotonic() - started) * 1000, 1)
 
 
+def session_word(row):
+    """SQL for the status word of the session row the query names `row`: the server's projector over its facts
+    (migration 1621). The last argument is the stored word, read only for a held row with no turn_state (a database
+    the backfill has not reached); it is the one allowed read of session.status, and task T14 removes it."""
+    return (f'session_legacy_status({row}.finished_at, {row}.turn_state, {row}.end_reason, {row}.last_turn_outcome, '
+            f'{row}.started_at, {row}.import_source_cwd, {row}.kind, '
+            f'(select l.settled_as from project_landing l where l.session_id = {row}.id), {row}.status::text)')
+
+
 def sql_json(query):
     return [json.loads(row) for row in sw.sql(f'select row_to_json(t) from ({query}) t')]
 
@@ -415,7 +424,7 @@ def cmd_answered(args):
     session = event['session_id']
     turns = sql_json(f"select id, seq, client_turn_id, kind, status, created_at, delivered_at, answered_at, left(content, 160) as content "
                      f"from conversation_turn where session_id = {quote(session)} and content like {quote('%' + args.marker + '%')} order by seq")
-    row = sql_json(f"select id, status, title, assigned_runner_id, task_id, provider, engine, retry_at, retry_attempts, created_at "
+    row = sql_json(f"select id, {session_word('session')} as status, title, assigned_runner_id, task_id, provider, engine, retry_at, retry_attempts, created_at "
                    f"from session where id = {quote(session)}")[0]
     model = [json.loads(line) for line in (SERVER / 'logs/fake-model.jsonl').read_text().splitlines() if args.marker in line] \
         if (SERVER / 'logs/fake-model.jsonl').exists() else []
@@ -441,7 +450,7 @@ def record_line():
             'beat': (m['last_heartbeat_at'] or '')[11:19] or None, 'work': counts if workload else None,
             'idle': workload.get('idleSeconds') if workload else None,
         }
-    sessions = sql_json('select u.email, s.id, s.status, s.retry_at is not null as retry_armed, s.retry_attempts, '
+    sessions = sql_json(f'select u.email, s.id, {session_word("s")} as status, s.retry_at is not null as retry_armed, s.retry_attempts, '
                         "(select count(*) from conversation_turn t where t.session_id = s.id and t.status = 'PENDING') as pending "
                         'from session s join "user" u on u.id = s.owner_id join managed_runner m on m.runner_id = s.assigned_runner_id '
                         'order by s.created_at')
@@ -531,7 +540,7 @@ def snapshot(name):
                           f"from runner where id = {quote(runner)}")[0]
     workspace = sql_json(f"select id, name, runner_id, target_runner_id, work_dir, auto_init_git, enable_worktree from workspace "
                          f"where id = {quote(m['default_workspace_id'])}")[0]
-    sessions = sql_json(f"select id, status, left(title, 50) as title, retry_at, retry_attempts, task_id from session "
+    sessions = sql_json(f"select id, {session_word('session')} as status, left(title, 50) as title, retry_at, retry_attempts, task_id from session "
                         f"where assigned_runner_id = {quote(runner)} order by created_at")
     return {
         'at': now(), 'owner': name,
@@ -579,7 +588,7 @@ def cmd_jobs(args):
          'wakes': sql_json(f"select left(w.session_id::text, 8) as session, w.job_id, w.trigger, w.kind, w.command, w.status, w.exit_code, w.reason, "
                            f"w.created_at, w.updated_at from background_job_wake w join session s on s.id = w.session_id "
                            f"where s.owner_id = {quote(owner)} order by w.created_at"),
-         'sessions': sql_json(f"select left(id::text, 8) as session, status, running_bg_jobs, running_bg_shells, engine_turn_active from session "
+         'sessions': sql_json(f"select left(id::text, 8) as session, {session_word('session')} as status, running_bg_jobs, running_bg_shells, engine_turn_active from session "
                               f"where owner_id = {quote(owner)} and (cardinality(running_bg_jobs) > 0 or cardinality(running_bg_shells) > 0 "
                               f"or engine_turn_active)")})
 

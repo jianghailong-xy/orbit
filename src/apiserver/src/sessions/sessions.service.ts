@@ -8712,9 +8712,19 @@ export class SessionsService {
           return { turn, wakeQueue: false, wakeInbox: false, idempotent: true };
         }
       }
+      // A runner draining for an update hands this session no new message or shell (runner-update-drain-design.md
+      // §7.1), so a slot it holds with nothing in flight starts nothing before the update, and a session queued behind
+      // the update has already run (§7.3). Stop on either is honoured, never refused (§7.4): its queue goes below, and
+      // it is idle.
+      const runnerDraining = session.assignedRunnerId != null
+        && (await tx.runner.findUnique({ where: { id: session.assignedRunnerId }, select: { heartbeatDraining: true } }))
+          ?.heartbeatDraining === true;
+      const queuedBehindUpdate = runnerDraining && turnStateOf(session) === 'QUEUED' && session.numTurns > 0
+        && isHeld(session);
+      let idleAfterStop = queuedBehindUpdate;
       // A committed follow-up is returned above even if the Session later ended or was filed in
       // Trash. Only a new operation is judged against the lifecycle it is trying to mutate.
-      if (!isHeldPastClaim(session) || session.cancelRequestedAt) {
+      if ((!isHeldPastClaim(session) && !queuedBehindUpdate) || session.cancelRequestedAt) {
         // A plain 409, not SessionNotSendable: the callers that re-home a message on that class
         // never reach the interrupt, and this keeps it that way.
         throw sessionRefusal('SESSION_ENDED', 'the session has ended', {
@@ -8799,7 +8809,11 @@ export class SessionsService {
             status: { in: ['PENDING', 'IN_FLIGHT'] },
           },
         });
-        if (executable === 0) {
+        if (executable === 0 && runnerDraining) {
+          // Nothing runs and nothing will before the update: the runner gives back the slot it holds when it reads
+          // this interrupt (return-slot), and finds the session idle.
+          idleAfterStop = true;
+        } else if (executable === 0) {
           // turnComplete already handed the slot to a queued follow-up, but that next
           // turn has not been leased. Dropping it would strand the runner-local permit;
           // roll back and let the caller retry once the next turn actually starts.
@@ -8812,7 +8826,11 @@ export class SessionsService {
         ...(interruptPayload ? { content: interruptPayload } : {}),
       });
       if (!followUp) {
-        return { turn: null, wakeQueue: false, wakeInbox: true, idempotent: false };
+        // Parked (plan §2.2: deploy 2 writes both).
+        if (idleAfterStop) {
+          await tx.session.update({ where: { id }, data: { status: RunStatus.AWAITING_INPUT, turnState: null } });
+        }
+        return { turn: null, wakeQueue: false, wakeInbox: true, idempotent: false, idled: idleAfterStop };
       }
       // A claim can race the lazy first-turn seed, exactly as in createTurn: under this
       // same lock, make sure an unestablished runtime cannot lose its opening prompt.
@@ -8834,7 +8852,8 @@ export class SessionsService {
         ? await readOrbitMessageFrom(tx, id, turn, opts?.senderSessionId ?? null)
         : null;
       // A held follow-up moves nothing until it is released (releaseHeldTurn).
-      const turnBefore = turnStateOf(session);
+      // Stopped idle on a draining runner (below the drain check): parked, so the follow-up queues from there.
+      const turnBefore = idleAfterStop ? null : turnStateOf(session);
       const nextTurn = heldFrom ? turnBefore : turnStateAfterTurnEnqueued(turnBefore);
       await tx.session.update({
         where: { id },
@@ -8859,6 +8878,7 @@ export class SessionsService {
         wakeQueue: nextTurn === 'QUEUED',
         wakeInbox: true,
         idempotent: false,
+        idled: idleAfterStop,
       };
     }, loggedRetry(this.logger, 'sessions.interrupt'));
     // The inbox is woken unconditionally: the interrupt turn is what it is waiting for, and
@@ -8866,6 +8886,7 @@ export class SessionsService {
     if (queued.wakeQueue) this.queue.notifySessionQueued(interruptRunnerId);
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
     if (!queued.idempotent) this.realtime.publishQueuedTurnsChanged(id);
+    if ('idled' in queued && queued.idled) this.realtime.publishSessionUpdated(id);
     if (!queued.idempotent && heldFrom && queued.turn) this.startTurnTranslation(ownerId, id, queued.turn.id);
     return queued.turn
       ? { ok: true as const, turnId: queued.turn.id, seq: queued.turn.seq }

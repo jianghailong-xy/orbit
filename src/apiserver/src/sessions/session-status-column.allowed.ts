@@ -51,11 +51,8 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'push/push.service.ts': { reads: 4, enums: 1 },
   'queue/dispatch-pause.service.ts': { reads: 1 },
   'queue/queue.service.ts': { reads: 8, writes: 2, alone: 2 },
-  'realtime/lost-runner-work.ts': { reads: 2, enums: 1 },
-  'realtime/open-list-hints.ts': { reads: 1 },
-  'realtime/parked-session-end.ts': { reads: 2, enums: 1 },
-  'realtime/realtime.service.ts': { reads: 16 },
-  'realtime/reaper.service.ts': { reads: 12, writes: 1, alone: 1, enums: 1 },
+  // Reads none (task T9). `forceFinalize` writes the word and `turnState` together, as deploy 2 does; T14 takes it to 0.
+  'realtime/reaper.service.ts': { writes: 1 },
   // Reads none (task T8). Its runner-driven writers write the word and `turnState` together, as deploy 2 does; T14
   // takes these to 0.
   'runner-api/runner-api.controller.ts': { writes: 9 },
@@ -75,7 +72,8 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   // every other reader there asks them, and `?status=` (statusWordFilter) matches an unfilled held row through them.
   'sessions/session-legacy-words.ts': { reads: 1 },
   'sessions/session-turn-state.ts': { reads: 4 },
-  'sessions/sessions.service.ts': { writes: 8, enums: 1 },
+  // Nine writers, each writing `turnState` beside the word; the ninth is main's Stop on a draining runner (f49915d0b8).
+  'sessions/sessions.service.ts': { writes: 9, enums: 1 },
   'share-links/share-links.service.ts': { reads: 1 },
   'watches/watch-delivery.service.ts': { reads: 1 },
   'watches/watch-evaluator.service.ts': { reads: 1 },

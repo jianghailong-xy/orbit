@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@orbit/shared';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { RealtimeService } from './realtime.service';
 
 const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
@@ -30,7 +29,7 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
             mergeTarget: 'main',
             mergeOperationId: OPERATION_ID,
             mergeOperationOwner: null,
-            status: RunStatus.SUCCEEDED,
+            finishedAt: new Date(),
             workspace: { workDir: '/repo' },
           },
         ];
@@ -71,9 +70,9 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
           },
           {
             OR: [
-              { status: { notIn: OPEN_SESSION_STATUSES } },
+              { finishedAt: { not: null } },
               {
-                status: { in: OPEN_SESSION_STATUSES },
+                finishedAt: null,
                 inboxLeaseOwner: NEW_OWNER,
               },
             ],
@@ -89,7 +88,7 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
         mergeRecoveryAction: true,
         mergeOperationId: true,
         mergeOperationOwner: true,
-        status: true,
+        finishedAt: true,
         // `[K6]` §7: enough to ask whether this task has an accepted checkpoint, so the command
         // can carry the commit the runner is allowed to merge.
         taskId: true,
@@ -108,7 +107,7 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
         mergeStatus: 'pending',
         mergeOperationId: OPERATION_ID,
         OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: NEW_OWNER }],
-        status: { notIn: OPEN_SESSION_STATUSES },
+        finishedAt: { not: null },
       },
       data: { mergeOperationOwner: NEW_OWNER, mergeRequestedAt: restampedAt },
     },
@@ -122,7 +121,7 @@ test('recovery redelivery carries the saved candidate, checks, and the same oper
       findMany: async () => [{
         id: SESSION_ID, branch: 'orbit/session', baseSha: 'a'.repeat(40), mergeTarget: 'develop',
         mergeRecoveryAction: 'apply', mergeRecovery: recovery,
-        mergeOperationId: OPERATION_ID, status: RunStatus.SUCCEEDED, taskId: 'task',
+        mergeOperationId: OPERATION_ID, finishedAt: new Date(), taskId: 'task',
         workspace: { workDir: '/repo' },
       }],
       updateMany: async () => ({ count: 1 }),
@@ -153,7 +152,7 @@ test('`[K6]` §7: the command carries the commit the checkpoint verified, and on
             mergeTarget: 'main',
             mergeOperationId: OPERATION_ID,
             mergeOperationOwner: null,
-            status: RunStatus.SUCCEEDED,
+            finishedAt: new Date(),
             taskId: TASK,
             ownerId: OWNER,
             workspace: { workDir: '/repo' },
@@ -193,7 +192,7 @@ test('merge claim redelivers only to the same owner and loses cleanly to another
             mergeTarget: null,
             mergeOperationId: OPERATION_ID,
             mergeOperationOwner: OLD_OWNER,
-            status: RunStatus.AWAITING_INPUT,
+            finishedAt: null,
             workspace: { workDir: '/repo' },
           },
         ],
@@ -218,7 +217,7 @@ test('merge claim redelivers only to the same owner and loses cleanly to another
           mergeStatus: 'pending',
           mergeOperationId: OPERATION_ID,
           OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: OLD_OWNER }],
-          status: { in: OPEN_SESSION_STATUSES },
+          finishedAt: null,
           inboxLeaseOwner: OLD_OWNER,
         },
         data: { mergeOperationOwner: OLD_OWNER, mergeRequestedAt: restampedAt },
@@ -236,7 +235,7 @@ test('merge claim redelivers only to the same owner and loses cleanly to another
             mergeTarget: null,
             mergeOperationId: OPERATION_ID,
             mergeOperationOwner: null,
-            status: RunStatus.SUCCEEDED,
+            finishedAt: new Date(),
             workspace: { workDir: '/repo' },
           },
         ],
@@ -261,7 +260,7 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
             id: SESSION_ID,
             branch: 'orbit/session',
             commitOperationId: OPERATION_ID,
-            status: RunStatus.AWAITING_INPUT,
+            finishedAt: null,
           },
         ];
       },
@@ -286,7 +285,7 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
   // otherwise keep the checkout "busy" for the rest of the session's life.
   const idleBranch = {
     inboxLeaseOwner: NEW_OWNER,
-    status: RunStatus.AWAITING_INPUT,
+    AND: [turnStateFilter([null])],
     cancelRequestedAt: null,
     runningSubagents: { isEmpty: true },
     OR: [{ commitOperationOwner: null }, { commitOperationOwner: NEW_OWNER }],
@@ -305,7 +304,7 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
         OR: [
           idleBranch,
           {
-            status: { notIn: OPEN_SESSION_STATUSES },
+            finishedAt: { not: null },
             OR: [
               { commitOperationOwner: NEW_OWNER },
               { commitOperationOwner: null, worktreeDirty: true },
@@ -315,7 +314,7 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
       },
       // commitAction too: a queued discard is not handed to a runner that would read it as a
       // plain commit (drainCommitRequests' third argument).
-      select: { id: true, branch: true, commitOperationId: true, commitAction: true, status: true },
+      select: { id: true, branch: true, commitOperationId: true, commitAction: true, finishedAt: true },
     },
   ]);
   const restampedAt = (writes[0] as { data: { commitRequestedAt: Date } }).data.commitRequestedAt;
@@ -342,7 +341,7 @@ test('commit is not dispatched when the idle-state CAS loses', async () => {
           id: SESSION_ID,
           branch: 'orbit/session',
           commitOperationId: OPERATION_ID,
-          status: RunStatus.AWAITING_INPUT,
+          finishedAt: null,
         },
       ],
       updateMany: async () => ({ count: 0 }),
@@ -370,7 +369,7 @@ test('terminal commit reaches its owner, and a fresh owner only for a dirty chec
             id: SESSION_ID,
             branch: 'orbit/session',
             commitOperationId: OPERATION_ID,
-            status: RunStatus.SUCCEEDED,
+            finishedAt: new Date(),
           },
         ],
         updateMany: async (args: unknown) => {
@@ -397,7 +396,7 @@ test('terminal commit reaches its owner, and a fresh owner only for a dirty chec
           assignedRunnerId: RUNNER_ID,
           commitStatus: 'pending',
           commitOperationId: OPERATION_ID,
-          status: { notIn: OPEN_SESSION_STATUSES },
+          finishedAt: { not: null },
           OR: [
             { commitOperationOwner: NEW_OWNER },
             { commitOperationOwner: null, worktreeDirty: true },
@@ -417,7 +416,7 @@ test('terminal commit reaches its owner, and a fresh owner only for a dirty chec
             id: SESSION_ID,
             branch: 'orbit/session',
             commitOperationId: OPERATION_ID,
-            status: RunStatus.FAILED,
+            finishedAt: new Date(),
           },
         ],
         // The row is unowned and clean by the time the CAS runs, so it wins nothing — and the

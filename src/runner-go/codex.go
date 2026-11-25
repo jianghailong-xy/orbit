@@ -155,6 +155,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 	setTurn("")
 	var pendingShellCtx []string
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCtx, stopInbox := contextUntilEither(ctx, shutdownCtx)
 	defer stopInbox()

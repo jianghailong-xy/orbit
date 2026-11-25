@@ -98,9 +98,12 @@ export const SERVICE_TOKEN_CONCURRENCY = 3;
  */
 export const SPAWN_TREE_OUTSTANDING = 50;
 
+/** A held session parked on a turn that was abandoned before it answered. */
+export const ABANDONED_TURN_STATUS: RunStatus = RunStatus.INTERRUPTED;
+
 /** Queueing work onto an idle interactive session requires a fresh runner slot. */
 export function statusAfterTurnEnqueued(status: RunStatus): RunStatus {
-  return status === RunStatus.AWAITING_INPUT || status === RunStatus.INTERRUPTED
+  return status === RunStatus.AWAITING_INPUT || status === ABANDONED_TURN_STATUS
     ? RunStatus.PENDING
     : status;
 }

@@ -357,6 +357,11 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { leaseOwner: of.runner.leaseOwner, leaseGeneration: of.runner.leaseGeneration },
     }),
   },
+  // A slot return names the process that holds the session (docs/runner-update-drain-design.md §7.3).
+  'POST /runner/sessions/:id/return-slot': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { leaseOwner: of.runner.leaseOwner } }),
+  },
   'POST /runner/sessions/:id/orchestration-credential': { as: RUNNER, request: (of) => ({ params: { id: of.runner.callingSessionId } }) },
   'GET /runner/sessions/:id/inbox': {
     as: RUNNER,
@@ -1518,8 +1523,6 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     (of) => of.runner.helpAskSessionId,
   ),
   'GET /runner/wiki/search header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, query: { q: 'census' } }), (of) => of.runner.wikiSessionId),
-  // wiki_read reads the wiki of the chat it is called in: another account's chat is a session this runner does not host.
-  'GET /runner/wiki/read header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, query: { q: 'census' } }), (of) => of.wikiChatId),
   'POST /runner/wiki/changesets body spaceId': {
     as: RUNNER,
     request: (of, mine) => ({
@@ -1556,6 +1559,8 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     }),
     (of) => of.wikiChatId,
   ),
+  // A wiki chat's read (contract `chat.read`): read as another account's chat, refused as a session this runner does not host.
+  'GET /runner/wiki/read header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {} }), (of) => of.wikiChatId),
   // Another account's card is no card of this chat to replace: answered WIKI_SCHEMA at replaces, as one that names nothing.
   'POST /runner/wiki/drafts body replaces': {
     as: RUNNER,

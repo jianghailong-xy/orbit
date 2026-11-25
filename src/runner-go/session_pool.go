@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -1589,24 +1590,28 @@ func engineTurnSignal(eventType string, payload map[string]interface{}) (generat
 // start one. A turn that ends parked leaves an idle engine, whose warm TTL starts over
 // from that moment the way park starts it; one that a claim took over in the meantime
 // ends with the permit protecting the engine, and park still to come.
-func (p *sessionPool) engineTurnEvent(s *liveSession, eventType string, payload map[string]interface{}) {
+//
+// It reports whether the slot is to be given back (returnHeldSlot): the engine's own turn ended while the pool drains
+// for an update, under a claim taken for that turn (drainClaimScope) whose message waits for the update. Nothing runs
+// under that permit any more, so it is not kept for the follow-up (docs/runner-update-drain-design.md §7.1, §7.3).
+func (p *sessionPool) engineTurnEvent(s *liveSession, eventType string, payload map[string]interface{}) (returnSlot bool) {
 	generating, ended := engineTurnSignal(eventType, payload)
 	if !generating && !ended {
-		return
+		return false
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.sessions[s.id] != s || !s.resident {
-		return
+		return false
 	}
 	if generating {
 		if !s.active && !s.evictRequested {
 			s.selfDrivenTurn = true
 		}
-		return
+		return false
 	}
 	if !s.selfDrivenTurn {
-		return
+		return false
 	}
 	s.selfDrivenTurn = false
 	p.markActivityLocked()
@@ -1615,6 +1620,36 @@ func (p *sessionPool) engineTurnEvent(s *liveSession, eventType string, payload 
 	}
 	// A cold start waiting at the resident cap may take this engine now.
 	p.signalLocked(s)
+	return p.drainingForUpdate && s.active && !s.completingTurn && !s.detaching
+}
+
+// returnHeldSlot gives back, while the pool drains for an update, the slot a session holds with nothing running under
+// it (docs/runner-update-drain-design.md §7.3): the claim taken for an engine's own turn once that turn has ended
+// (engineTurnEvent), or a permit whose session was stopped while its queued message waited for the update (the
+// poller, on an interrupt). send asks the control plane, which decides from the session's turns: a turn in flight
+// answers RUNNING and the permit is kept; otherwise the session is queued behind the update or idle, and the permit is
+// parked, its engine warm and its background work untouched. Only the permit asked about is parked, so a claim that
+// came in the meantime keeps its own. Nothing is asked when the pool is not draining, the session holds no permit, its
+// engine is at work on a turn of its own, or a turn's completion is already out.
+func (p *sessionPool) returnHeldSlot(id string, send func() (string, error)) {
+	p.mu.Lock()
+	s := p.sessions[id]
+	if s == nil || !p.drainingForUpdate || !s.active || s.detaching || s.completingTurn || s.selfDrivenTurn {
+		p.mu.Unlock()
+		return
+	}
+	permit := s.permitGeneration
+	p.mu.Unlock()
+	status, err := send()
+	if err != nil {
+		logln(fmt.Sprintf("the slot of %s, under which nothing runs while the runner drains for an update, was not given back: %v", id, err))
+		return
+	}
+	if status == stRunning || status == "" {
+		return
+	}
+	logln(fmt.Sprintf("gave back the slot of %s while draining for an update: nothing ran under it (now %s)", id, status))
+	p.park(s, permit)
 }
 
 func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
