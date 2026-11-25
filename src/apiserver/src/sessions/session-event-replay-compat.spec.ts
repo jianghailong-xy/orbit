@@ -127,7 +127,13 @@ test('what a shared session added after a seq sits behind the same fence, read a
         return {
           id: SESSION,
           title: 'shared',
-          status: 'RUNNING',
+          // What the header's status words are derived from (sessions/session-legacy-words.ts).
+          finishedAt: null,
+          turnState: 'IN_FLIGHT',
+          lastTurnOutcome: null,
+          startedAt: new Date('2026-08-31T02:00:00Z'),
+          importSourceCwd: null,
+          sessionKind: 'CONVERSATION',
           endReason: null,
           completedAt: null,
           archivedAt: null,
@@ -138,7 +144,7 @@ test('what a shared session added after a seq sits behind the same fence, read a
       },
     },
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
-      // The header's own second read, what the session is still doing (readSessionActivities, 29fc026c1), comes as one
+      // The header's own second read, what the session is still doing and the jobs beside it (readSessionBackgroundFields), comes as one
       // Prisma.sql object rather than a template: it is part of the header, not an events read.
       if (!Array.isArray(strings) && isSessionPhaseFactsQuery(strings)) {
         // And the header's third, its phase and waitingOn (sessions/session-phase.ts), part of the header too.
@@ -151,7 +157,7 @@ test('what a shared session added after a seq sits behind the same fence, read a
         assert.match(query.sql, /FROM "session" s/);
         assert.deepEqual(query.values, [SESSION]);
         reads.push('activity');
-        return [{ id: SESSION, activity: null }];
+        return [{ id: SESSION, activity: null, runningBgCount: 0 }];
       }
       reads.push('events');
       captured = { strings, values };

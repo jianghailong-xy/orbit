@@ -84,7 +84,7 @@ function combinations(): Case[] {
 
 /** The rule as the design and the coordinator's ruling of 2026-11-22 state it. */
 function expected(c: Case): { phase: string; waitingOn: string | null } {
-  const { status } = c.row;
+  const status = c.row.status!;
   const executing = status === 'RUNNING' || (OPEN.has(status) && (c.facts.engine || c.facts.subagent || c.facts.job));
   const phase = executing ? 'RUNNING' : status === 'PENDING' ? 'PENDING' : 'IDLE';
   let waitingOn: string | null = null;
@@ -118,7 +118,7 @@ test('the invariants hold on every combination', () => {
     assert.ok((SESSION_PHASES as readonly string[]).includes(fields.phase), c.key);
     assert.ok(fields.waitingOn === null || (SESSION_WAITING_ON as readonly string[]).includes(fields.waitingOn), c.key);
     // released is the release column, and a released session is always IDLE (design §4.2).
-    assert.equal(fields.released, RELEASED.has(c.row.status), c.key);
+    assert.equal(fields.released, RELEASED.has(c.row.status!), c.key);
     if (fields.released) assert.equal(fields.phase, 'IDLE', c.key);
     // A RUNNING session waits on a person or on nothing; a hold is a queued turn's; a wake is an idle session's.
     if (fields.phase === 'RUNNING') assert.ok(fields.waitingOn === 'PERSON' || fields.waitingOn === null, c.key);
@@ -141,6 +141,22 @@ test('the shapes the ruling names answer as it says', () => {
   assert.equal(deriveSessionWaitingOn({ ...base, runningBgJobs: ['bgj_job'] }, NO_HOLD, 1), 'PERSON');
   // An open session request it sent, or an ask_owner question, is no wake fact: the row reads null.
   assert.equal(deriveSessionWaitingOn(base, NO_HOLD, 0), null);
+});
+
+test('phase reads the turn state, and the stored word only for a held row without one (task T10)', () => {
+  // Filled: the turn state decides, whatever the word beside it.
+  assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'IN_FLIGHT' }), 'RUNNING');
+  assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'QUEUED' }), 'PENDING');
+  assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'ABANDONED' }), 'IDLE');
+  assert.equal(deriveSessionPhase({ status: 'PENDING', finishedAt: null, turnState: 'IN_FLIGHT' }), 'RUNNING');
+  // Not yet backfilled: the stored word.
+  assert.equal(deriveSessionPhase({ status: 'PENDING', finishedAt: null, turnState: null }), 'PENDING');
+  assert.equal(deriveSessionPhase({ status: 'RUNNING', finishedAt: null }), 'RUNNING');
+  // Neither: parked. Released: IDLE whatever the rest says.
+  assert.equal(deriveSessionPhase({ finishedAt: null, turnState: null }), 'IDLE');
+  assert.equal(deriveSessionPhase({ status: 'RUNNING', finishedAt: AT, turnState: 'IN_FLIGHT' }), 'IDLE');
+  // A queued turn held by the dispatch pause is HOLD, on the turn state alone.
+  assert.equal(deriveSessionWaitingOn({ finishedAt: null, turnState: 'QUEUED' }, { ...NO_HOLD, dispatchPaused: true }, 0), 'HOLD');
 });
 
 test('lastTurnOutcome passes the column through, and nothing else', () => {

@@ -9,6 +9,7 @@ import { RunStatus } from '@prisma/client';
 import { PushService } from './push.service';
 import { releaseFactsOf } from '../common/session-release-shapes.fixture';
 import { findingCollapseId, findingCopy } from '../schedules/schedule-attention';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 function enabledConfig(): ConfigService {
   const values: Record<string, string> = {
@@ -39,7 +40,8 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
   assert.deepEqual(await service.needsYouSessions('owner-1'), ['s-open']);
   assert.deepEqual(calls[0].where, {
     ownerId: 'owner-1',
-    status: RunStatus.RUNNING,
+    // A turn in flight (sessions/session-turn-state.ts).
+    ...turnStateFilter(['IN_FLIGHT']),
     sessionKind: 'CONVERSATION',
     completedAt: null,
     archivedAt: null,
@@ -343,7 +345,7 @@ test('approval push initially requires a canonical Open, non-ending RUNNING sess
 
   assert.deepEqual(calls[0].where, {
     id: 's-completed',
-    OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
+    OR: [turnStateFilter(['IN_FLIGHT']), { runningSubagents: { isEmpty: false } }],
     completedAt: null,
     archivedAt: null,
     deletedAt: null,

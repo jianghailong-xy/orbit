@@ -27,6 +27,8 @@ function reaperFor(runner: { managed: boolean; beatAgoMs: number }) {
         return { count: 1 };
       },
       count: async () => 0,
+      // The released row, read back for the STATUS event's word; the event is not asserted here.
+      findUnique: async () => null,
     },
     runner: { findUnique: async () => row() },
     task: { updateMany: async () => ({ count: 1 }), findUnique: async () => null },

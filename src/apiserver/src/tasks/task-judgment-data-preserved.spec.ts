@@ -3492,7 +3492,32 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1600_project_text_translation',
       // 1601 adds one NOT NULL boolean, by_owner, to schedule_run with a constant default (whether the owner pressed a
       // Run now); no row is rewritten, and no preserved relation, trigger, function or DONE fence changes.
-      '1601_schedule_run_by_owner'],
+      '1601_schedule_run_by_owner',
+      // 1611 adds session.turn_state and session.phase with their value CHECKs, two functions and two BEFORE triggers
+      // that set only those two columns of the row being written, from its stored word; 1612 validates the CHECKs. No
+      // row is written by either, and no preserved relation, trigger of one, function of one or DONE fence changes.
+      '1611_session_turn_state_phase',
+      '1612_session_turn_state_phase_validate',
+      // 1621 adds one read-only SQL function, session_legacy_status, over its arguments alone: no table, row,
+      // trigger or DONE fence changes.
+      '1621_session_legacy_status',
+      // 1622 adds session's two turn_state CHECKs, NOT VALID; 1627-1634 build partial indexes on session. Constraints and
+      // indexes only: no row is written or checked, and no preserved relation, trigger, function or DONE fence changes.
+      '1622_session_turn_state_checks',
+      '1627_session_runner_turn_state_idx',
+      '1628_session_runner_held_idx',
+      '1629_session_batch_in_flight_idx',
+      '1631_session_root_in_flight_idx',
+      '1632_session_over_capacity_queued_idx',
+      '1633_session_owner_held_task_idx',
+      '1634_session_released_failed_idx',
+      // 1641 adds one read-only SQL function over a session row (session_held_turn_state), replaces the bodies of nine
+      // trigger functions (the five engine guards, open_list_bump_owner, session_listed_at_on_settle,
+      // session_request_recipient_ended, task_supersession_live_session_guard) and re-creates three ended-triggers
+      // with the same column lists, so each reads turn_state, finished_at and the projector's word instead of
+      // session.status (retirement plan §4.2, task T6). No row is written, no preserved relation is created, altered
+      // or dropped, and the DONE fence is unchanged.
+      '1641_session_triggers_read_facts'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

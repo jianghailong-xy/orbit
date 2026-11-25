@@ -961,7 +961,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // it surface too. A tab that is hidden reads it when it is back in view (`pump`).
         if (missedEvents) {
           missedEvents = false;
-          void refreshDriveSyncs();
+          if (!hidden()) void refreshDriveSyncs();
           reconcile();
         }
       };
@@ -1001,7 +1001,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         if (!ev?.type || ev.type === 'ping') return;
         if (ev.type === 'sessions.list_changed') hinted = true;
         // An agent's directory sync moved (`hints=drive_syncs`): the Drive tray reads its list again.
-        if (ev.type === 'drive.sync') void refreshDriveSyncs();
+        if (ev.type === 'drive.sync' && !hidden()) void refreshDriveSyncs();
         const projectId = ev.data?.projectMembership?.projectId;
         const id = ev.data?.id;
         if (ev.type === 'session.updated' || ev.type === 'session.created' || ev.type === 'session.ended') {

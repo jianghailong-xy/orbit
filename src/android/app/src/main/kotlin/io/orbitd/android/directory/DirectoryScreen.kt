@@ -358,13 +358,32 @@ private fun SearchResultsList(query: String, api: DirectoryApi, open: (OrbitRout
             if (result.hits.isEmpty()) item { StatusMessage(if (query.isBlank()) "No sessions yet" else "No matches",
                 if (query.isBlank()) "Recent sessions will appear here." else "Try another name or message.") }
             items(result.hits, key = { it.id }) { hit ->
-                ListItem(headlineContent = { Text(hit.title) }, supportingContent = {
-                    Column { Text(listOfNotNull(hit.agent?.name, hit.lifecycleState, hit.runState ?: hit.status).joinToString(" · "))
-                        hit.snippet?.let { Text(it, style = MaterialTheme.typography.bodyMedium) } }
-                }, modifier = Modifier.clickable(role = Role.Button) { open(OrbitRoute(Destination.SESSION, hit.id, hit.agent?.id, origin = Origin.SEARCH)) })
+                SearchHitRow(hit) { open(OrbitRoute(Destination.SESSION, hit.id, hit.agent?.id, origin = Origin.SEARCH)) }
             }
         }
     }
+}
+
+/** One search result. With the session facts it leads with the state icon and says the state word and then every mark (iOS
+ * `SessionSearchRow`), a screen reader hearing both as the row's value, as [SessionRow]'s; from an older server, today's line. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SearchHitRow(hit: SearchHit, onOpen: () -> Unit) {
+    val state = SessionDisplay.state(hit.displayFacts)
+    val value = SessionDisplay.text(hit.displayFacts, ", ")
+    val line = listOfNotNull(hit.agent?.name, hit.lifecycleState, state?.word ?: hit.runState ?: hit.status).joinToString(" · ")
+    ListItem(headlineContent = { Text(hit.title) }, supportingContent = {
+        Column {
+            // The marks wrap under the line where they do not fit beside it, so none is clipped.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                Text(line)
+                SessionMarkChips(SessionDisplay.marks(hit.displayFacts))
+            }
+            hit.snippet?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        }
+    }, leadingContent = state?.let { { SessionStateGlyph(it) } },
+        modifier = Modifier.clickable(role = Role.Button, onClick = onOpen)
+            .then(if (value == null) Modifier else Modifier.semantics { stateDescription = value }))
 }
 
 /** The machine a workspace's sessions run on, by the name its page gives it (web `machineName(runner)`): what a session held for the

@@ -611,6 +611,8 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
+import { sessionDisplayState, sessionDisplayText, sessionMarks } from '../lib/sessionDisplay';
+import { SessionMarkChips, SessionStateGlyph } from './SessionStateDisplay';
 import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import { MainCheckoutCtx, type MainCheckoutTarget } from '../lib/mainCheckout';
@@ -1864,6 +1866,10 @@ function SessionProjectOrphanRow({
 // `machine`, where the caller knows it, is the runner the session runs on: a session held for the
 // Claude region reads 'Anthropic unavailable on {machine}' in place of its queue word.
 export function statusLabel(session: any, watching?: string | null, machine?: string | null): string {
+  // The state word is `phase` alone wherever the server sends the facts (lib/sessionDisplay); the marks beside it
+  // are drawn by the caller. What follows is the reading for an older control plane, unchanged.
+  const shown = sessionDisplayState(session);
+  if (shown) return shown.word;
   // See sessionLine: a refused SOURCE reads as the failure it is.
   const state = sessionReadingState(session);
   // Same ordering as `sessionLine`, and outside the generating gate for the same reason: an owner
@@ -1911,6 +1917,10 @@ function failedTitle(session: any): string {
  * context, and a fresh function on every render would re-render every one of them.
  */
 export function orbitLinkStateWord(row: any): string {
+  // With the facts: the state word and the marks, as one line (lib/sessionDisplay). The session card draws them as
+  // its own pill and chips; a task's last run and a project's coordinator say them in its text.
+  const shown = sessionDisplayText(row ?? {});
+  if (shown) return shown;
   // A decision waiting on the owner still outranks the failure, in the order `statusLabel` keeps.
   if (sessionRunStateOf(row) === 'FAILED' && !((row?.pendingApprovals ?? 0) > 0)) return failedTitle(row);
   return statusLabel(row, watchingCountWord(row?.watching));
@@ -1922,6 +1932,9 @@ export function orbitLinkStateWord(row: any): string {
  * these for the sessions filed in it (lib/sessionFolders), so a folder and its rows can't disagree.
  */
 export function statusGlyphMotion(session: any, watching?: string | null): 'spinner' | 'pulse' | null {
+  // With the facts, the row's icon turns exactly when its state is Running (lib/sessionDisplay).
+  const shown = sessionDisplayState(session);
+  if (shown) return shown.icon === 'spinner' ? 'spinner' : null;
   // See sessionLine: nothing about a refused run is in motion.
   const state = sessionReadingState(session);
   if ((session.pendingApprovals ?? 0) > 0 || state === 'SUCCEEDED') return null;
@@ -1957,6 +1970,9 @@ function RunningStatusIcon() {
 // `watching` is the word for the live watches that will resume this session (`statusLabel`'s), and
 // absent wherever a caller holds no watches.
 export function StatusIcon({ session, watching, machine }: { session: any; watching?: string | null; machine?: string | null }) {
+  // With the facts, one of three icons from `phase` (lib/sessionDisplay); the marks are drawn after the row's line.
+  const shown = sessionDisplayState(session);
+  if (shown) return <SessionStateGlyph state={shown} />;
   // See sessionLine: the glyph agrees with the word beside it on a refused run too.
   const state = sessionReadingState(session);
   const fontSize = 16;
@@ -7175,7 +7191,8 @@ export function WorkspaceView({
       await downloadSessionHtml({
         id: session.id,
         title: session.title,
-        status: sessionRunStateOf(session),
+        // The file's header names the state: with the facts, the state word and the marks (lib/sessionDisplay).
+        status: sessionDisplayText(session) ?? sessionRunStateOf(session),
         createdAt: session.createdAt,
         startedAt: session.startedAt,
         lastTurnAt: session.lastTurnAt,
@@ -10222,18 +10239,31 @@ export function WorkspaceView({
   const headLifecycleWord = selectedLifecycleState
     ? sessionLifecycleLabel(selectedLifecycleState)
     : null;
+  // The marks beside the header's state word (lib/sessionDisplay); none from an older control plane, or while the
+  // header says "Handing over" in place of the state.
+  const headMarks = selected && !handingOver ? sessionMarks(selectedSession ?? selected) : null;
+  const headRest = selected
+    ? [
+        // A session you filed reads "Completed" on both axes; say it once rather than twice.
+        headLifecycleWord === headRunWord ? null : headLifecycleWord,
+        headTime,
+      ].filter(Boolean)
+    : [];
   // A new session's subtitle says where it will run — workspace, then folder — not its title again.
   const headSub = composing
     ? [headWorkspaceName, openFolder?.name].filter(Boolean).join(' › ')
     : selected
-      ? [
-          headRunWord,
-          // A session you filed reads "Completed" on both axes; say it once rather than twice.
-          headLifecycleWord === headRunWord ? null : headLifecycleWord,
-          headTime,
-        ]
-          .filter(Boolean)
-          .join(' · ')
+      ? headMarks && headMarks.length > 0
+        ? (
+          <>
+            <span className="session-head-state">
+              {headRunWord}
+              <SessionMarkChips marks={headMarks} />
+            </span>
+            {headRest.length > 0 ? ` · ${headRest.join(' · ')}` : ''}
+          </>
+        )
+        : [headRunWord, ...headRest].filter(Boolean).join(' · ')
       : selectedMissing
         ? 'Session not found'
       : selectedId
@@ -10781,6 +10811,7 @@ export function WorkspaceView({
                     >
                       {line.text}
                     </div>
+                    <SessionMarkChips marks={sessionMarks(actionSession)} />
                   </div>
                 </>
               )}

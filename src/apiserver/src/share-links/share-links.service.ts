@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { assertEngineSession } from '../sessions/engine-session';
 import { WikiDocs } from '../wiki/wiki-docs';
@@ -101,7 +102,8 @@ const LINK_SELECT = {
   updatedAt: true,
   session: {
     select: {
-      id: true, title: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+      ...LEGACY_STATUS_SELECT,
+      id: true, title: true, completedAt: true, archivedAt: true, deletedAt: true,
     },
   },
   task: { select: { id: true, title: true, status: true } },
@@ -711,7 +713,7 @@ export class ShareLinksService {
       return {
         id: session.id,
         title: session.title,
-        status: session.status,
+        status: session.runStatus,
         lifecycleState: session.lifecycleState,
         completedAt: session.completedAt,
       };

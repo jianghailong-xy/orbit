@@ -2094,7 +2094,7 @@ struct TranscriptView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            headerStatus
+            headerStatusLine
                 .font(.caption)
             if let session = app.session(id: console.sessionID) {
                 SessionCoordinatorBadge(session: session)
@@ -2137,6 +2137,23 @@ struct TranscriptView: View {
             + Text(subtitle.dropFirst(word.count)).foregroundColor(.secondary)
     }
 
+    /// With the session facts: the state word from `phase`, its marks, then "lifecycle · when"
+    /// (`SessionDisplay`). From an older server, `headerStatus` as it always was.
+    @ViewBuilder private var headerStatusLine: some View {
+        let watching = app.watches?.summary(for: console.sessionID)
+        let now = Date()
+        if let session = app.session(id: console.sessionID),
+           let state = SessionDisplay.state(session.displayFacts),
+           let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
+                                                 machine: console.runnerName) {
+            SessionHeaderStateLine(session: session, state: state, subtitle: subtitle,
+                                   word: SessionHeader.headerWord(for: session, watching: watching, now: now,
+                                                                  machine: console.runnerName))
+        } else {
+            headerStatus
+        }
+    }
+
     private static func statusWordColor(_ tone: SessionStatusGlyph.Tone) -> Color {
         switch tone {
         case .brand:   return .blue
@@ -2148,6 +2165,27 @@ struct TranscriptView: View {
     }
     #endif
 }
+
+#if os(macOS)
+/// The status bar's line with the session facts: the state word from `phase` (blue while Running), its marks, then
+/// "lifecycle · when" (`SessionDisplay`).
+struct SessionHeaderStateLine: View {
+    let session: Session
+    let state: SessionDisplayState
+    let subtitle: String
+    let word: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(word).fontWeight(.semibold)
+                .foregroundColor(word == state.word && state == .running ? .blue : .primary)
+            SessionMarkPills(marks: SessionDisplay.marks(session.displayFacts) ?? [])
+            Text(subtitle.hasPrefix(word) ? String(subtitle.dropFirst(word.count)) : subtitle)
+                .foregroundColor(.secondary)
+        }
+    }
+}
+#endif
 
 private extension View {
     /// No iOS 26 scroll-edge effect at the top: the transcript runs on up behind the nav bar as it

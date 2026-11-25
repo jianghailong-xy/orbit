@@ -47,6 +47,8 @@ import { wikiAnchorLabel, wikiAnchorMark, wikiKindWord, WIKI_NO_LONGER_PUSHED } 
 import { sessionRunStateOf, type SessionRunState, type SessionStateSource } from '../lib/sessionState';
 import { WikiAnchorMark, WikiTrustBadge } from './WikiMarks';
 import { TaskStatusPill } from './TaskStatusPill';
+import { sessionDisplayState, sessionMarks } from '../lib/sessionDisplay';
+import { SessionMarkChips } from './SessionStateDisplay';
 import { relTime } from './Transcript';
 
 /**
@@ -313,14 +315,28 @@ export function OrbitLinkCard({
     lines.push({ text: parts.join(ORBIT_LINK_SEPARATOR) });
   } else if (state === 'ready' && kind === 'session') {
     const session = answer as LinkPreviewSession;
-    const word = stateWord(session);
-    // A failure's word is its whole error, so the pill truncates where the row runs out (index.css)
-    // and keeps the rest for the hover.
-    headRight = (
-      <span className={`olc-state is-${stateTone(sessionRunStateOf(session))}`} title={word}>
-        {word}
-      </span>
-    );
+    // With the facts: the state from `phase` alone in the pill, blue while it runs, and the marks after it
+    // (lib/sessionDisplay). From an older control plane, the conversation header's word as before.
+    const shown = sessionDisplayState(session);
+    if (shown) {
+      headRight = (
+        <span className="olc-state-group">
+          <span className={`olc-state is-${shown.phase === 'RUNNING' ? 'live' : 'idle'}`} title={shown.word}>
+            {shown.word}
+          </span>
+          <SessionMarkChips marks={sessionMarks(session)} />
+        </span>
+      );
+    } else {
+      const word = stateWord(session);
+      // A failure's word is its whole error, so the pill truncates where the row runs out (index.css)
+      // and keeps the rest for the hover.
+      headRight = (
+        <span className={`olc-state is-${stateTone(sessionRunStateOf(session))}`} title={word}>
+          {word}
+        </span>
+      );
+    }
     title = cardTitle(session.title, link);
     const parts = [session.workspace?.name ?? ORBIT_LINK_UNASSIGNED];
     if (session.model) parts.push(session.model);

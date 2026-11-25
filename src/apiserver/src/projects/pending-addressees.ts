@@ -1,7 +1,9 @@
-import { RunStatus, TaskStatus } from '@prisma/client';
+import { TaskStatus } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 
+import { isHeld } from '../common/session-release';
+import { turnStateOf } from '../sessions/session-turn-state';
 import { criterionStandingRefusal } from '../tasks/task-evidence-decision';
 import {
   heldStandard,
@@ -177,7 +179,9 @@ type CoordinatorSession = CoordinatorConversationState & { id: string };
  */
 function coordinatorTakesItLater(session: CoordinatorSession): boolean {
   if (conversationIsPaused(session)) return true;
-  return session.status !== RunStatus.AWAITING_INPUT && session.status !== RunStatus.INTERRUPTED;
+  // Not held and idle (plan §2.1: AI): a turn queued or in flight, or released.
+  const turn = turnStateOf(session);
+  return !(isHeld(session) && (turn === null || turn === 'ABANDONED'));
 }
 
 function later(...dates: Array<Date | null | undefined>): Date {

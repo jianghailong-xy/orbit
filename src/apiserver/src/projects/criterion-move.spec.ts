@@ -549,7 +549,7 @@ test('the door refuses each case with its code and writes nothing', async () => 
     ['CRITERION_MOVE_TARGET_NOT_OPEN', 409, (s) => { s.project[1].status = 'DONE'; }, move({ toProjectId: B })],
     ['CRITERION_MOVE_CRITERION_MET', 409, () => {}, move({ toProjectId: B }, C1)],
     ['CRITERION_MOVE_TASK_RUNNING', 409, (s) => {
-      s.session.push({ id: 's1', ownerId: OWNER, taskId: T_OPEN, status: 'RUNNING', deletedAt: null });
+      s.session.push({ id: 's1', ownerId: OWNER, taskId: T_OPEN, status: 'RUNNING', finishedAt: null, deletedAt: null });
     }, move({ toProjectId: B })],
     ['CRITERION_MOVE_TASK_LANDING', 409, (s) => {
       s.projectIntegrationJob.push({ id: 'j1', ownerId: OWNER, taskId: T_FAILED, kind: 'LAND_TASK', state: 'QUEUED' });

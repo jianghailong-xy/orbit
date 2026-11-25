@@ -59,6 +59,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { ViewerStreamService } from '../sessions/viewer-stream.service';
@@ -346,21 +347,24 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
   await t.test('(b) the transcript comes in pages; the root keeps its old fields', async () => {
     const row = await db.session.findUniqueOrThrow({
       where: { id: shared },
-      select: { status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true, createdAt: true },
+      select: { ...LEGACY_STATUS_SELECT, completedAt: true, archivedAt: true, deletedAt: true, createdAt: true },
     });
     const state = withSessionState(row);
 
     // The root: every old field, then the tail page (200) and hasMore, and the link's own three
     // (kind, include, sharedAt), and activity (TURN, BACKGROUND_JOB, WAITING, or null;
-    // introduced by 29fc026c1). The guest red line also requires the public root to expose
-    // waitingOnOwner as a boolean, without approval contents — nothing else.
+    // introduced by 29fc026c1), with runningBgCount beside it (how many background jobs run, never
+    // which; contracts/session-state.contract.json, sharedHead, 20a337ad42). The guest red line also
+    // requires the public root to expose waitingOnOwner as a boolean, without approval contents —
+    // nothing else.
     const root = await visit(at(''));
     assert.equal(root.status, 200, root.body.toString());
     assert.deepEqual(
       Object.keys(root.json).sort(),
-      [...OLD_FIELDS, ...LINK_FIELDS, ...STATE_FIELDS, 'events', 'hasMore', 'agentName', 'activity'].sort(),
+      [...OLD_FIELDS, ...LINK_FIELDS, ...STATE_FIELDS, 'events', 'hasMore', 'agentName', 'activity', 'runningBgCount'].sort(),
     );
     assert.ok(root.json.activity === null || ['TURN', 'BACKGROUND_JOB', 'WAITING'].includes(root.json.activity));
+    assert.ok(Number.isInteger(root.json.runningBgCount), 'runningBgCount is a count');
     assert.equal(root.json.kind, 'SESSION');
     assert.equal(typeof root.json.waitingOnOwner, 'boolean');
     assert.equal(root.json.title, 'Draw the mock and show me');
@@ -522,8 +526,8 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
 
     // The header is the root's — its fields, as the root answers them, and nothing else.
     const root = await visit(at(''));
-    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, ...STATE_FIELDS, 'agentName', 'activity', 'events', 'after'].sort());
-    for (const field of [...OLD_FIELDS, ...STATE_FIELDS, 'agentName', 'activity']) assert.deepEqual(rest.json[field], root.json[field], field);
+    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, ...STATE_FIELDS, 'agentName', 'activity', 'runningBgCount', 'events', 'after'].sort());
+    for (const field of [...OLD_FIELDS, ...STATE_FIELDS, 'agentName', 'activity', 'runningBgCount']) assert.deepEqual(rest.json[field], root.json[field], field);
 
     // A conversation that moves on: the next read holds what it added and how it stands now.
     const liveToken = newToken();
@@ -746,7 +750,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
       assert.equal(root.status, 200, root.body.toString());
       assert.deepEqual(
         Object.keys(root.json).sort(),
-        [...OLD_FIELDS, ...LINK_FIELDS, ...STATE_FIELDS, 'events', 'hasMore', 'agentName', 'activity'].sort(),
+        [...OLD_FIELDS, ...LINK_FIELDS, ...STATE_FIELDS, 'events', 'hasMore', 'agentName', 'activity', 'runningBgCount'].sort(),
         end.label,
       );
       assert.equal(root.json.endReason, end.row.endReason, end.label);

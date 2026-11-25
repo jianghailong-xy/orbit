@@ -125,7 +125,7 @@ class Records {
 
   records(): DossierRecords {
     return {
-      session: { id: this.sessionId, title: 'a session', provider: 'claude', model: 'claude-opus-5', status: 'SUCCEEDED', createdAt: moment(0), taskId: null, parentSessionId: null, dispatchOrigin: 'USER' },
+      session: { id: this.sessionId, title: 'a session', provider: 'claude', model: 'claude-opus-5', legacyStatus: 'SUCCEEDED', createdAt: moment(0), taskId: null, parentSessionId: null, dispatchOrigin: 'USER' },
       turns: this.turns, approvals: [], events: this.events,
       toolCallIds: new Map(this.calls.map((call) => [call.toolUseId, call.id])),
       task: null, comments: [], receipts: [], blockers: [], tainted: false,

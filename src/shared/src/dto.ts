@@ -33,6 +33,7 @@ import type { WikiRepoOpCommand } from './wikiRepoOps';
 import type { ApprovalTranslation } from './translation';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 import type { ExternalMessageFrom } from './session-message';
+import type { SessionBackgroundFields, SessionPhaseFields } from './session-phase';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -4610,7 +4611,9 @@ export type SessionSearchMatchField =
 
 /** One row of GET /sessions/search. Deliberately thinner than a session-list row — the palette
  *  renders a title, a status glyph, an agent name and a snippet, and nothing else. */
-export interface SessionSearchHit {
+/** A search hit carries the six session facts and the Background mark's inputs (SessionPhaseFields,
+ *  SessionBackgroundFields) as the list row does; all absent from an older control plane. */
+export interface SessionSearchHit extends Partial<SessionPhaseFields>, Partial<SessionBackgroundFields> {
   id: string;
   title: string;
   /** @deprecated Raw runner status; retained as a wire-compatible alias of `runStatus`. */

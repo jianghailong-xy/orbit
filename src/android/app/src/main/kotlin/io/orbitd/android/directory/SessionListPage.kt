@@ -126,7 +126,9 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
     val line = remember(session, deleted, watching, recaps, machine, cloneProgress) {
         SessionLine.make(session, live = !deleted, watching = watching, recaps = recaps, machine = machine, cloneProgress = cloneProgress)
     }
-    val word = remember(session, watching) { SessionHeader.statusWord(session, watching) }
+    // With the session facts, the row's value is the state and its marks ("Idle, Finished"); from an older server, today's word.
+    val word = remember(session, watching) { SessionDisplay.text(session.displayFacts, ", ") ?: SessionHeader.statusWord(session, watching) }
+    val marks = remember(session) { SessionDisplay.marks(session.displayFacts) }
     Column(Modifier.fillMaxWidth()
         .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${session.name}", onLongClick = onOptions, onClick = onOpen)
         .semantics { stateDescription = word }
@@ -142,8 +144,10 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
                 Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp, vertical = 1.dp)
                     .clearAndSetSemantics { contentDescription = SessionListCopy.COORDINATOR_LABEL },
                 style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
-            Text(line.text, Modifier.testTag("session-state:${session.id}"), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium, color = lineColor(line.tone))
+            Text(line.text, (if (marks.isNullOrEmpty()) Modifier else Modifier.weight(1f)).testTag("session-state:${session.id}"), maxLines = 1,
+                overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = lineColor(line.tone))
+            // The marks at the line's right end, two at most (the board's phone rows).
+            SessionMarkChips(marks, max = 2)
         }
     }
 }
@@ -154,6 +158,8 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
  * line and the row's value say them. */
 @Composable
 internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSummary?) {
+    // With the session facts, always one of the three state icons, from `phase` alone (the board); the facts are the marks on the line.
+    SessionDisplay.state(session.displayFacts)?.let { return SessionStateGlyph(it) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val parked = session.effectiveRunState == RunState.AWAITING_INPUT
     when {

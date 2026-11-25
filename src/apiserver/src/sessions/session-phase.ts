@@ -1,5 +1,6 @@
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
+  type RunStatus,
   SESSION_TURN_OUTCOMES,
   type SessionPhase,
   type SessionPhaseFields,
@@ -9,17 +10,21 @@ import {
 
 import { isReleased, releaseFinishedTheWork } from '../common/session-release';
 import {
-  isSessionExecuting,
+  ARMED_RETRY,
+  ENGINE_TURN,
   PENDING_WAKEUP,
   RESUME_WATCH,
-  sessionWillWake,
+  RUNNING_BG_JOB,
+  RUNNING_SUBAGENT,
   type SessionWorkingRow,
 } from '../common/session-working';
 import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { isHoldNotice } from '../queue/hold-notice';
 import { runnerOfflineSql } from '../runners/runner-presence';
-import { countLiveApprovals } from './abandoned-approvals';
+import { countLiveApprovalsBySession } from './abandoned-approvals';
+import { legacySessionStatusSql } from './session-legacy-words';
+import { sessionTurnStateSql, turnStateOf } from './session-turn-state';
 
 /**
  * The three-state field and the facts beside it (docs/session-three-state-design.md §4, §11.5; plan step 5.1),
@@ -31,9 +36,13 @@ import { countLiveApprovals } from './abandoned-approvals';
 
 /** The row columns the fields read. Absent execution and wake facts read as "not there", as for an old row; an absent
  *  end reason as none asked for, and an absent kind as a conversation. */
-export interface SessionPhaseRow extends SessionWorkingRow {
+export interface SessionPhaseRow extends Omit<SessionWorkingRow, 'status'> {
   /** The release column (common/session-release.ts). */
   finishedAt: Date | string | null;
+  /** The turn state (session-turn-state.ts), read through turnStateOf: a held row without one reads its stored word
+   *  `status` (not yet backfilled), and one with neither reads as parked. */
+  turnState?: string | null;
+  status?: string;
   lastTurnOutcome?: string | null;
   error?: string | null;
   endReason?: string | null;
@@ -57,15 +66,23 @@ export function runnerUnavailableSql(runner: string): Prisma.Sql {
 
 export const NO_HOLD: SessionHoldFacts = { dispatchPaused: false, runnerUnavailable: false };
 
+/** Work that executes for a held session outside a dispatched turn (common/session-working.ts). */
+const OUTSIDE_TURN_FACTS = [ENGINE_TURN, RUNNING_SUBAGENT, RUNNING_BG_JOB] as const;
+const WAKE_FACTS = [RESUME_WATCH, PENDING_WAKEUP, ARMED_RETRY] as const;
+
 /**
- * `phase`: RUNNING while anything executes for the session (`isSessionExecuting`: a dispatched turn, the engine's own
- * turn, a sub-agent or a background job), PENDING while a turn is queued and nothing executes, IDLE otherwise. A
- * released session is always IDLE (design §4.2's invariant).
+ * `phase`: RUNNING while anything executes for the session (a dispatched turn, the engine's own turn, a sub-agent or
+ * a background job: `isSessionExecuting`'s facts), PENDING while a turn is queued and nothing executes, IDLE
+ * otherwise. A released session is always IDLE (design §4.2's invariant). Read from the facts (turn state, release,
+ * the execution columns), the rule migration 1611's `session_zz_phase` stores (plan §1.2), and the reference its PG
+ * spec holds the trigger to; a held row not yet backfilled reads its turn state from its stored word (turnStateOf).
  */
 export function deriveSessionPhase(row: SessionPhaseRow): SessionPhase {
   if (isReleased(row)) return 'IDLE';
-  if (isSessionExecuting({ ...row, status: row.status as RunStatus })) return 'RUNNING';
-  return row.status === RunStatus.PENDING ? 'PENDING' : 'IDLE';
+  const turn = turnStateOf(row);
+  if (turn === 'IN_FLIGHT') return 'RUNNING';
+  if (OUTSIDE_TURN_FACTS.some((fact) => fact.holds(row))) return 'RUNNING';
+  return turn === 'QUEUED' ? 'PENDING' : 'IDLE';
 }
 
 /**
@@ -74,13 +91,16 @@ export function deriveSessionPhase(row: SessionPhaseRow): SessionPhase {
  * Claude region check, dsh not ready. Any other `error` on a PENDING row is a leftover the claim keeps, not a hold.
  * Clients never rebuild this from `error`: they read `waitingOn: 'HOLD'`.
  */
-export function sessionHasHoldNotice(row: { status: string; error?: string | null }): boolean {
-  return row.status === RunStatus.PENDING && isHoldNotice(row.error);
+export function sessionHasHoldNotice(row: Pick<SessionPhaseRow, 'status' | 'finishedAt' | 'turnState' | 'error'>): boolean {
+  return turnStateOf(row) === 'QUEUED' && isHoldNotice(row.error);
 }
 
 /** A queued turn that something nobody asked for keeps from starting. */
-export function sessionIsHeld(row: Pick<SessionPhaseRow, 'status' | 'error'>, hold: SessionHoldFacts): boolean {
-  return row.status === RunStatus.PENDING
+export function sessionIsHeld(
+  row: Pick<SessionPhaseRow, 'status' | 'finishedAt' | 'turnState' | 'error'>,
+  hold: SessionHoldFacts,
+): boolean {
+  return turnStateOf(row) === 'QUEUED'
     && (hold.dispatchPaused || hold.runnerUnavailable || sessionHasHoldNotice(row));
 }
 
@@ -106,7 +126,8 @@ export function deriveSessionWaitingOn(
   const phase = deriveSessionPhase(row);
   if (phase === 'RUNNING') return null;
   if (phase === 'PENDING') return sessionIsHeld(row, hold) ? 'HOLD' : null;
-  return sessionWillWake({ ...row, status: row.status as RunStatus }) ? 'WAKE' : null;
+  // IDLE: nothing executes, so `sessionWillWake` is its wake facts alone.
+  return WAKE_FACTS.some((fact) => fact.holds(row)) ? 'WAKE' : null;
 }
 
 function turnOutcomeOf(value: string | null | undefined): SessionTurnOutcome | null {
@@ -138,8 +159,11 @@ interface FactsRow {
   id: string;
   ownerId: string;
   taskId: string | null;
+  /** The projected word (legacySessionStatusSql), which countLiveApprovalsBySession reads. */
   status: RunStatus;
   finishedAt: Date | null;
+  /** Resolved in SQL (sessionTurnStateSql), the stored word's fallback included. */
+  turnState: string | null;
   lastTurnOutcome: string | null;
   error: string | null;
   endReason: string | null;
@@ -161,7 +185,8 @@ type Db = Prisma.TransactionClient;
  * The fields for the sessions `ids`, by id; a session that is not there is absent. One statement reads the row,
  * its wake facts, its runner and the dispatch pause. `pendingApprovals` is the count the caller already has (the list
  * row, the realtime summary, the link preview); a session it does not name is counted here, the way
- * `session.updated` counts it (`countLiveApprovals` plus the owner decisions on it).
+ * `session.updated` counts it (`countLiveApprovals` plus the owner decisions on it), for all of them in one batch
+ * (`countLiveApprovalsBySession`), so the statements do not grow with the number of sessions.
  */
 export async function readSessionPhaseFields(
   db: Db,
@@ -170,8 +195,8 @@ export async function readSessionPhaseFields(
 ): Promise<Map<string, SessionPhaseFields>> {
   if (ids.length === 0) return new Map();
   const rows = await db.$queryRaw<FactsRow[]>(Prisma.sql`
-    SELECT s."id" AS "id", s."owner_id"::text AS "ownerId", s."task_id" AS "taskId", s."status" AS "status",
-           s."finished_at" AS "finishedAt", s."last_turn_outcome" AS "lastTurnOutcome", s."error" AS "error",
+    SELECT s."id" AS "id", s."owner_id"::text AS "ownerId", s."task_id" AS "taskId",
+           ${legacySessionStatusSql('s')} AS "status", ${sessionTurnStateSql('s')} AS "turnState", s."finished_at" AS "finishedAt", s."last_turn_outcome" AS "lastTurnOutcome", s."error" AS "error",
            s."end_reason" AS "endReason", s."kind"::text AS "sessionKind",
            s."engine_turn_active" AS "engineTurnActive", s."running_subagents" AS "runningSubagents",
            s."running_bg_jobs" AS "runningBgJobs", s."running_bg_shells" AS "runningBgShells", s."retry_at" AS "retryAt",
@@ -186,8 +211,10 @@ export async function readSessionPhaseFields(
   const uncounted = rows.filter((row) => !counted.has(row.id));
   for (const [ownerId, owned] of groupBy(uncounted, (row) => row.ownerId)) {
     const decisions = await readOwnerDecisionsBySession(db, ownerId, { sessionIds: owned.map((row) => row.id) });
+    // Counted for all of them at once: a search page of 50 hits is the same few statements as one session.
+    const live = await countLiveApprovalsBySession(db, owned);
     for (const row of owned) {
-      counted.set(row.id, (await countLiveApprovals(db, row)) + (decisions.get(row.id)?.count ?? 0));
+      counted.set(row.id, (live.get(row.id) ?? 0) + (decisions.get(row.id)?.count ?? 0));
     }
   }
   return new Map(rows.map((row) => [row.id, sessionPhaseFields(

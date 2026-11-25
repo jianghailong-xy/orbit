@@ -22,6 +22,7 @@ import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runne
 import type { CreateSessionDto } from '../sessions/dto';
 import type { CreateTaskDto } from '../tasks/dto';
 import { TasksService } from '../tasks/tasks.service';
+import { TURN_STATE_SELECT } from '../sessions/session-turn-state';
 import { helpAskMarkerOf, helpAskOutcome, helpAskTitle, readHelpAskPage } from './help-ask-marker';
 import { SessionsService } from '../sessions/sessions.service';
 
@@ -171,9 +172,9 @@ export class HelpAsk {
       select: {
         id: true,
         title: true,
-        status: true,
-        // With the status, what "released by a failure" reads (common/session-release.ts).
-        finishedAt: true,
+        // Where the turn stands (session-turn-state.ts), and with it what "released by a failure" reads
+        // (common/session-release.ts).
+        ...TURN_STATE_SELECT,
         endReason: true,
         lastTurnOutcome: true,
         engineTurnActive: true,

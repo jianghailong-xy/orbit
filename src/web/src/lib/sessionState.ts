@@ -7,6 +7,7 @@ import {
   type SessionTurnOutcome,
   type SessionWaitingOn,
 } from '@orbit/shared';
+import { sessionDisplayState } from './sessionDisplay';
 
 /**
  * A session has two independent product dimensions:
@@ -346,6 +347,10 @@ const SESSION_RUN_WORD: Record<SessionRunState, string> = {
  * says how its latest run stands.
  */
 export function sessionStateWord(session: SessionStateSource, opts: { canReply?: boolean } = {}): string {
+  // With the facts, the state word is `phase` alone (lib/sessionDisplay), and a filed session says Completed after
+  // it rather than instead of it (the caller draws that and the marks). What follows is an older control plane's.
+  const shown = sessionDisplayState(session);
+  if (shown) return shown.word;
   if (sessionLifecycleStateOf(session) === 'COMPLETED') return sessionLifecycleLabel('COMPLETED');
   // Parked is not idle: say what it is still doing (sessionActivityOf).
   const activity = sessionActivityOf(session);

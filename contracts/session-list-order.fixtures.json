@@ -1,5 +1,5 @@
 {
-  "description": "The session list's sections and their order, which the web, Apple and Android clients each test against. Server: session.listed_at (migration 1434, src/apiserver/src/sessions/session-listed-at.ts).",
+  "description": "The session list's sections and their order, which the web, Apple and Android clients each test against. Server: session.listed_at (migration 1434, src/apiserver/src/sessions/session-listed-at.ts). Each row's serverFacts are the columns the server holds for it (docs/session-status-retirement-plan.md section 2.6); its status is the legacy wire word derived from them, which is what a client reads: no client reads serverFacts, and the server spec reads only them.",
   "rule": [
     "Input: the Open list's rows. A row with completedAt or deletedAt set is not in it (the Completed view orders by completedAt; Trash is its own view).",
     "Each row goes to the FIRST section that takes it, in this order: Pinned, Needs you, Working, then one date section.",
@@ -27,6 +27,7 @@
     {
       "id": "pin-running",
       "status": "RUNNING",
+      "serverFacts": {"finishedAt": null, "turnState": "IN_FLIGHT"},
       "pinnedAt": "2026-11-02T00:00:00.000Z",
       "pendingApprovals": 0,
       "retryAt": null,
@@ -41,6 +42,7 @@
     {
       "id": "pin-asking",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": "2026-11-15T00:00:00.000Z",
       "pendingApprovals": 1,
       "retryAt": null,
@@ -55,6 +57,7 @@
     {
       "id": "pin-idle",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": "2026-11-19T00:00:00.000Z",
       "pendingApprovals": 0,
       "retryAt": null,
@@ -69,6 +72,7 @@
     {
       "id": "needs-question",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 1,
       "retryAt": null,
@@ -83,6 +87,7 @@
     {
       "id": "needs-blocked",
       "status": "RUNNING",
+      "serverFacts": {"finishedAt": null, "turnState": "IN_FLIGHT"},
       "pinnedAt": null,
       "pendingApprovals": 2,
       "retryAt": null,
@@ -97,6 +102,7 @@
     {
       "id": "needs-failed",
       "status": "FAILED",
+      "serverFacts": {"finishedAt": "2026-11-18T15:00:00.000Z", "turnState": null, "endReason": null, "lastTurnOutcome": "FAILED"},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -111,6 +117,7 @@
     {
       "id": "work-ui-copy",
       "status": "RUNNING",
+      "serverFacts": {"finishedAt": null, "turnState": "IN_FLIGHT"},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -125,6 +132,7 @@
     {
       "id": "work-queued",
       "status": "PENDING",
+      "serverFacts": {"finishedAt": null, "turnState": "QUEUED"},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -139,6 +147,7 @@
     {
       "id": "work-retrying",
       "status": "FAILED",
+      "serverFacts": {"finishedAt": "2026-11-20T08:58:00.000Z", "turnState": null, "endReason": null, "lastTurnOutcome": "FAILED"},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": "2026-11-20T12:05:00.000Z",
@@ -153,6 +162,7 @@
     {
       "id": "work-ci",
       "status": "RUNNING",
+      "serverFacts": {"finishedAt": null, "turnState": "IN_FLIGHT"},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -167,6 +177,7 @@
     {
       "id": "today-future",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -181,6 +192,7 @@
     {
       "id": "today-answered",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -195,6 +207,7 @@
     {
       "id": "today-tie-later",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -209,6 +222,7 @@
     {
       "id": "today-tie-earlier",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -222,6 +236,7 @@
     {
       "id": "today-null-listed",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -236,6 +251,7 @@
     {
       "id": "today-interrupted",
       "status": "INTERRUPTED",
+      "serverFacts": {"finishedAt": null, "turnState": "ABANDONED"},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -249,6 +265,7 @@
     {
       "id": "yesterday-late",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -262,6 +279,7 @@
     {
       "id": "yesterday-ended",
       "status": "CANCELLED",
+      "serverFacts": {"finishedAt": "2026-11-19T01:00:00.000Z", "turnState": null, "endReason": "ended", "lastTurnOutcome": "ANSWERED"},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -276,6 +294,7 @@
     {
       "id": "days-2",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -289,6 +308,7 @@
     {
       "id": "days-7",
       "status": "SUCCEEDED",
+      "serverFacts": {"finishedAt": "2026-11-13T00:00:00.000Z", "turnState": null, "endReason": "task_done", "lastTurnOutcome": "ANSWERED", "startedAt": "2026-09-01T00:00:00.000Z"},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -303,6 +323,7 @@
     {
       "id": "days-8",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -316,6 +337,7 @@
     {
       "id": "days-30",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -329,6 +351,7 @@
     {
       "id": "older-31",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -343,6 +366,7 @@
     {
       "id": "completed",
       "status": "SUCCEEDED",
+      "serverFacts": {"finishedAt": "2026-11-20T11:00:00.000Z", "turnState": null, "endReason": "task_done", "lastTurnOutcome": "ANSWERED", "startedAt": "2026-09-01T00:00:00.000Z"},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,
@@ -357,6 +381,7 @@
     {
       "id": "trashed",
       "status": "AWAITING_INPUT",
+      "serverFacts": {"finishedAt": null, "turnState": null},
       "pinnedAt": null,
       "pendingApprovals": 0,
       "retryAt": null,

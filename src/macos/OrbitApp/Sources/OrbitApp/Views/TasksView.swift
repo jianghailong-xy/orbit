@@ -2916,12 +2916,15 @@ private struct TaskDetailContent: View {
     private func runRow(_ session: SessionRef, _ task: TaskItem) -> some View {
         let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection)
         let name: (String) -> String = { runModelName($0, task) }
+        // The state from `phase` and its marks (`SessionDisplay`); nil from an older server.
+        let state = SessionDisplay.state(session.displayFacts)
+        let running = state.map { $0 == .running } ?? (session.resolvedRunState == .running)
         return HStack(spacing: 10) {
             Group {
-                if session.resolvedRunState == .running {
+                if running {
                     ProgressView().controlSize(.small)
                 } else {
-                    Circle().fill(sessionColor(session)).frame(width: 8, height: 8)
+                    Circle().fill(state != nil ? Color.secondary : sessionColor(session)).frame(width: 8, height: 8)
                 }
             }
             .frame(width: 18)
@@ -2936,15 +2939,26 @@ private struct TaskDetailContent: View {
                     }
                 }
                 HStack(spacing: 6) {
-                    // One run of text, so the dot sits evenly between where it stands and what it ran on.
-                    let status = Text(sessionLabel(session))
-                        .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
-                    if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
-                        (status + Text(" · \(ranOn)").foregroundStyle(Color.secondary))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                    if let state {
+                        // The state word, its marks, then what it ran on.
+                        Text(state.word).foregroundStyle(running ? Color.accentColor : Color.secondary)
+                        SessionMarkPills(marks: SessionDisplay.marks(session.displayFacts) ?? [])
+                        if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
+                            Text("· \(ranOn)").foregroundStyle(Color.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     } else {
-                        status
+                        // One run of text, so the dot sits evenly between where it stands and what it ran on.
+                        let status = Text(sessionLabel(session))
+                            .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
+                        if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
+                            (status + Text(" · \(ranOn)").foregroundStyle(Color.secondary))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        } else {
+                            status
+                        }
                     }
                     if let route, route.applied {
                         routeTierTag(route)

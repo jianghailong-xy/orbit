@@ -2828,15 +2828,16 @@ button.toast--pill:focus-visible {
   }
 }
 
-/* shared column grid: check | status | title | assignee */
+/* shared column grid: check | status | title | assignee. The status column fits a run's pill with its mark beside it
+   ("Running" + "Background" is the widest, docs/mocks/session-display-three-states). */
 .orbit-tasklist {
-  --cols: 28px 92px minmax(160px, 1fr) 160px;
+  --cols: 28px 180px minmax(160px, 1fr) 160px;
   border-top: 1px solid var(--border-subtle);
 }
 /* Detail panel open, or every row shares one assignee → drop the assignee column so the
    title keeps its width. */
 .orbit-tasklist.no-assignee {
-  --cols: 28px 92px minmax(160px, 1fr);
+  --cols: 28px 180px minmax(160px, 1fr);
 }
 /* Multi-select checkbox column (header + per row). */
 .task-check {
@@ -5311,8 +5312,8 @@ button.toast--pill:focus-visible {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 64px;
-  padding: 0 8px;
+  min-height: 64px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--bg-hover);
   cursor: pointer;
   /* Keep the swipe-away content from spilling past the row's edges. */
@@ -6467,6 +6468,91 @@ button.toast--pill:focus-visible {
 .session-preview.tone-watching,
 .session-preview.tone-review {
   color: var(--text-3);
+}
+/* A session's state icon and its marks (components/SessionStateDisplay, docs/mocks/session-display-three-states):
+   one small labelled chip per fact after the state word. Amber = you have to act, red = a failure nobody is
+   retrying, green = the work finished, grey = everything else. */
+.session-state-glyph {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+/* In a header pill the clock takes the pill's text colour: the list row's light grey is unreadable on the fading
+   queued pill. */
+.status-pill.queued .session-state-glyph .anticon {
+  color: inherit !important;
+}
+/* A list row's marks sit after its line while that line keeps a readable width; otherwise they take the lines below,
+   wrapping among themselves, and the row grows: every mark is drawn whole. */
+.session-sub:has(> .session-marks) {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.session-sub:has(> .session-marks) > .session-preview {
+  flex-basis: 10em;
+}
+.session-sub > .session-marks {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.session-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  vertical-align: middle;
+}
+.session-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.session-mark-svg {
+  flex: none;
+}
+.session-mark.tone-amber {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.session-mark.tone-red {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.session-mark.tone-green {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.session-head-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.task-status-pill-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.olc-state-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.tdp-now-title .session-marks {
+  margin-left: 6px;
 }
 /* Float above full-width text without changing its layout when actions appear. */
 .session-right {
@@ -20583,6 +20669,16 @@ button.chat-jump-start:hover {
 }
 .ssearch-workspace {
   color: var(--text-2);
+}
+/* A hit's marks follow its state word, wrapping as chips rather than clipping, and take no separator dot. */
+.ssearch-meta:has(> .session-marks) {
+  flex-wrap: wrap;
+}
+.ssearch-meta > .session-marks {
+  flex-wrap: wrap;
+}
+.ssearch-meta > .session-marks::before {
+  content: none;
 }
 .ssearch-snippet {
   margin-top: 3px;
