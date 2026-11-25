@@ -1,0 +1,212 @@
+{
+  "id": "49sVK7yrBSW7zlgZIAQ6Vv",
+  "title": "Translate the done card",
+  "ownerId": "7PKWnbaL8fogOSWdYtgQWC",
+  "goal": "Translate the done card",
+  "instructions": null,
+  "status": "OPEN",
+  "doneBy": null,
+  "doneAt": null,
+  "doneCriteriaDigest": null,
+  "doneTaskEpochs": null,
+  "acceptedGaps": [],
+  "nonCode": false,
+  "nonCodeSetBy": null,
+  "nonCodeSetBySessionId": null,
+  "nonCodeSetAt": null,
+  "nonCodeReason": null,
+  "reopenedAt": null,
+  "coordinatorSessionId": null,
+  "coordinatorWorkspaceId": null,
+  "coordinatorEnabled": false,
+  "maxConcurrentTasks": 3,
+  "sessionBudgetPerDay": null,
+  "configRevision": "0",
+  "convergenceThresholds": null,
+  "attemptBudget": null,
+  "unboundedAuthorizedBy": null,
+  "exceptionEscalationSeconds": 7200,
+  "startedAt": null,
+  "pausedAt": null,
+  "pausedReason": null,
+  "createdAt": "2026-11-25T01:30:13.843Z",
+  "updatedAt": "2026-11-25T01:30:13.843Z",
+  "coordinatorAgentId": null,
+  "coordinatorGeneration": "0",
+  "_count": {
+    "tasks": 0
+  },
+  "tasksByStatus": {},
+  "acceptanceCriteriaItems": [
+    {
+      "id": "3avutLsvUS4pGF76o5mrDb",
+      "ordinal": 1,
+      "text": "Translate the done card: the first criterion",
+      "verificationMethod": "Read the project page and say whether it holds",
+      "completionCriterionOverrideReason": null,
+      "satisfiedBy": "TASKS",
+      "key": "3avutLsvUS4pGF76o5mrDb",
+      "revision": 1,
+      "contentHash": "4399cff19542e23e33c77c50a145b242f6206b22991068929b96e0eadf14ef9f",
+      "semanticRevision": 1,
+      "semanticHash": "7c99beb43a0aa0712d5cdb587d0fe09f6ca8096dee6776fb3dc50e9acbb3e3c9",
+      "satisfied": false,
+      "unmet": [
+        {
+          "clause": "NO_WORK_SERVES_IT",
+          "heldUpBy": []
+        }
+      ],
+      "confirmation": null,
+      "landing": "UNKNOWN",
+      "independence": "INDEPENDENT",
+      "conflicts": [],
+      "remedy": null,
+      "movedFrom": null,
+      "publicId": "3avutLsvUS4pGF76o5mrDb"
+    },
+    {
+      "id": "1i4Zk50T2o9WH8UujtbatL",
+      "ordinal": 2,
+      "text": "Translate the done card: the second criterion",
+      "verificationMethod": "Read the project page and say whether it holds",
+      "completionCriterionOverrideReason": null,
+      "satisfiedBy": "TASKS",
+      "key": "1i4Zk50T2o9WH8UujtbatL",
+      "revision": 1,
+      "contentHash": "b36dea6f63388539c54a813fe40797855baaa196cdf8624c13ac0a5f5ee1562a",
+      "semanticRevision": 1,
+      "semanticHash": "79c0b115f4117b3014a3385b2c79bf6f3cdd14d28a24bf0ac8fc37911383d758",
+      "satisfied": false,
+      "unmet": [
+        {
+          "clause": "NO_WORK_SERVES_IT",
+          "heldUpBy": []
+        }
+      ],
+      "confirmation": null,
+      "landing": "UNKNOWN",
+      "independence": "INDEPENDENT",
+      "conflicts": [],
+      "remedy": null,
+      "movedFrom": null,
+      "publicId": "1i4Zk50T2o9WH8UujtbatL"
+    }
+  ],
+  "criteriaMovedOut": [],
+  "rulings": [],
+  "settingChanges": [],
+  "translation": {
+    "lang": "zh-Hans",
+    "title": "ZH[Translate the done card]",
+    "criteria": [
+      {
+        "id": "3avutLsvUS4pGF76o5mrDb",
+        "text": "ZH[Translate the done card: the first criterion]",
+        "publicId": "3avutLsvUS4pGF76o5mrDb"
+      },
+      {
+        "id": "1i4Zk50T2o9WH8UujtbatL",
+        "text": "ZH[Translate the done card: the second criterion]",
+        "publicId": "1i4Zk50T2o9WH8UujtbatL"
+      }
+    ]
+  },
+  "blockers": {
+    "open": [],
+    "resolved": [],
+    "resolvedCount": 0
+  },
+  "integration": {
+    "line": null,
+    "lineAbsentReason": "NOT_DECIDED",
+    "ref": null,
+    "defaultProjectBranch": "project/translate-the-done-card-49sVK7yr",
+    "upstreamRef": null,
+    "upstreamChosenAt": null,
+    "source": null,
+    "locked": false,
+    "startedAt": null,
+    "landingCheckCommand": null,
+    "landingCheckTimeoutSeconds": null,
+    "landingCheckCommandAbsentReason": "FALLS_BACK_TO_MERGE_CHECK",
+    "landingCheck": {
+      "command": null,
+      "setBy": null,
+      "setBySessionId": null,
+      "setAt": null
+    },
+    "mergeCheckCommand": null,
+    "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
+    "mergeCheckTimeoutSeconds": null,
+    "escalationSeconds": 7200,
+    "deliveryMode": "PLATFORM",
+    "deliveryModeChosenAt": null,
+    "lastMainBranch": null
+  },
+  "derivedDone": {
+    "status": "OPEN",
+    "done": false,
+    "withheld": [
+      "CRITERION_UNSATISFIED",
+      "CRITERION_UNLANDED",
+      "STANDARD_SET_UNCONFIRMED"
+    ],
+    "criteria": [
+      {
+        "definitionId": "3avutLsvUS4pGF76o5mrDb",
+        "satisfied": false,
+        "landing": "UNKNOWN",
+        "independence": "INDEPENDENT",
+        "conflicts": [],
+        "remedy": null,
+        "landingReason": "NO_RECEIPT",
+        "satisfiedBy": "TASKS",
+        "confirmation": null,
+        "withheld": [
+          "CRITERION_UNSATISFIED",
+          "CRITERION_UNLANDED"
+        ],
+        "definitionPublicId": "3avutLsvUS4pGF76o5mrDb"
+      },
+      {
+        "definitionId": "1i4Zk50T2o9WH8UujtbatL",
+        "satisfied": false,
+        "landing": "UNKNOWN",
+        "independence": "INDEPENDENT",
+        "conflicts": [],
+        "remedy": null,
+        "landingReason": "NO_RECEIPT",
+        "satisfiedBy": "TASKS",
+        "confirmation": null,
+        "withheld": [
+          "CRITERION_UNSATISFIED",
+          "CRITERION_UNLANDED"
+        ],
+        "definitionPublicId": "1i4Zk50T2o9WH8UujtbatL"
+      }
+    ],
+    "confirmation": "UNCONFIRMED",
+    "counts": {
+      "criteria": 2,
+      "met": 0,
+      "landed": 0,
+      "onMain": 0,
+      "byReason": {
+        "IN_FLIGHT": 0,
+        "ON_PROJECT_BRANCH": 0,
+        "NOTHING_TO_LAND": 0,
+        "NO_RECEIPT": 0,
+        "NO_BRANCH": 0,
+        "CODELESS": 0
+      }
+    },
+    "nonCode": false
+  },
+  "publicId": "49sVK7yrBSW7zlgZIAQ6Vv",
+  "ownerPublicId": "7PKWnbaL8fogOSWdYtgQWC",
+  "coordinatorSessionPublicId": null,
+  "nonCodeSetBySessionPublicId": null,
+  "coordinatorWorkspacePublicId": null,
+  "coordinatorAgentPublicId": null
+}
