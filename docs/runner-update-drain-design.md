@@ -134,10 +134,10 @@ and nothing else.
 
 On a draining inbox fetch nothing is put back in the queue and no inbox lease is retired: the held
 turns simply stay `PENDING` on the server. This differs from the dispatch pause, which requeues a
-`RUNNING` session with nothing in flight. The slot is returned only at turn completion (§7.3). A
-session the draining runner claimed because its engine is running a turn of its own
-(`drainClaimScope`) keeps its lease until that turn ends, so its process is not retired mid-turn, and
-then §7.3 applies.
+`RUNNING` session with nothing in flight. The slot is returned at turn completion (§7.3), or by the
+runner when nothing runs under it (the slot return, §7.3). A session the draining runner claimed because
+its engine is running a turn of its own (`drainClaimScope`) keeps its lease until that turn ends, so its
+process is not retired mid-turn, and then §7.3 applies.
 
 ### 7.2 Where the hold lives
 
@@ -162,10 +162,24 @@ It does not keep the slot for a queued follow-up. The session goes back to the q
 has (board 5 of `docs/mocks/runner-update-drain/`), not a new one. Its follow-ups run after the
 update, through the ordinary claim.
 
+The turn completion says it in the optional body field `draining: true`. The control plane then writes
+`PENDING` instead of keeping `RUNNING` for the follow-up, and answers the runner `PENDING`, which parks
+the session there: the permit is released, the engine stays warm, background jobs keep running. A
+completion without the field (an older runner) keeps the slot as before.
+
 The draining flag on the turn completion also records the runner as draining on the server, in the
 column the heartbeat writes (`runner.heartbeat_draining`). The requeued session therefore reads
 `queuedReason: runner_updating` at once, not after the next heartbeat. A later heartbeat that says
 the runner is not draining clears it, as today.
+
+Two slots have no turn completion to return them. One is a claim the draining runner took for an engine
+running a turn of its own (§7.1), once that turn ends inside the runner (`engineTurnEvent`). The other is
+a claim taken just before the drain whose queued message the draining inbox then held, once the
+session is stopped. For both, the runner gives the slot back with `POST /runner/sessions/:id/return-slot`
+(`leaseOwner` in the body). The control plane returns the slot unless a `message` or `shell` turn is in
+flight (then it answers `RUNNING` and the runner keeps its permit). With a follow-up queued, the session
+goes back to the queue as above (`PENDING`, `runner_updating`); with nothing queued, it goes idle. The
+slot return records the runner as draining too. The runner parks the permit on any answer but `RUNNING`.
 
 ### 7.4 Stop on such a session
 
@@ -175,7 +189,16 @@ Stop on a session queued behind the update:
 - ends its background work (`stopBackgroundWork`);
 - leaves the session idle.
 
-It is never refused with `SESSION_NEXT_TURN_STARTING`.
+It is never refused with `SESSION_NEXT_TURN_STARTING`. That covers a `PENDING` session of a draining
+runner that has run before, and a `RUNNING` one with no `message` or `shell` turn in flight on a draining
+runner (its follow-up was never fetched). The 409 stays for a runner that is not draining, the race it
+was written for. The interrupt still goes to the runner, through the draining inbox (§7.1), to end the
+background work. A draining runner that reads an interrupt gives back the slot it holds, if nothing runs
+under it (§7.3).
+
+A follow-up the runner had fetched and held when the Stop came is handed back unrun, as `INTERRUPTED`
+(§7.2). The Stop overtook it, so the control plane does not put it back in the queue as a message no
+engine answered: it is settled with the Stop, and the slot is released.
 
 ### 7.5 Not covered here
 
