@@ -1816,6 +1816,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503; the caller asks again, and the change is judged again against the schedule as it then stands.',
   },
   {
+    at: 'schedules/schedules.service.ts#rename',
+    shape: 'TX_RETRIED',
+    locks: "pg_advisory_xact_lock(4000750, hashtext(owner id)) — the per-account schedule serializer, a key rather than a row, which nothing else takes — then the schedule row FOR UPDATE, an unlocked read of a calling session, then the schedule UPDATE of its title and one schedule_revision INSERT, or nothing when the title is the one it has. Ranks only rise: the advisory key is no relation of LOCK_ORDER, and every row lock below it is a schedule row or one of its children, which no other path holds while it waits for the account's key.",
+    identity: "The title, read under the row lock: a re-run after a commit finds it already set and writes no second revision.",
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read under the advisory key and the row locks on every attempt: the schedule and the calling session. A rolled-back attempt takes every row it wrote with it.',
+    effects: 'None inside. The sessions whose schedule cards name it are told after commit.',
+    answer: 'Typed 503; the caller asks again, and the title is compared again with the schedule as it then stands.',
+  },
+  {
     at: 'watches/watches.service.ts#create',
     shape: 'TX_RETRIED',
     locks: 'Unlocked reads of the named task (with its progress row), session and approval rows first — the permission check and the snapshot are the same read — then the new watch row, whose foreign keys take FOR KEY SHARE on the owner user (rank 10) and, for a SESSION observer, on that session (rank 30), in that order, and whose idempotency key is where two creates with one key meet; then the owner\'s transaction-scoped advisory lock (assertCapacity), taken by nothing else and never waited for: it is `pg_try_advisory_xact_lock`, and a create that finds it held rolls back and asks again between attempts, outside any transaction (awaitOwnerTurn), so no create waits on that lock while it holds a row or a connection; then unlocked reads of the live watches of that owner and of their targets; then watch_target, watch_match and watch_delivery rows only this transaction can see. Monotone, and no row another transaction can see is written.',
