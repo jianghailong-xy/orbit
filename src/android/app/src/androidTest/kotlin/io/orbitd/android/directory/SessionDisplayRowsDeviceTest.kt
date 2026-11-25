@@ -3,13 +3,13 @@ package io.orbitd.android.directory
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -52,14 +52,15 @@ class SessionDisplayRowsDeviceTest {
                 compose.runOnUiThread {
                     compose.activity.setContent {
                         OrbitTheme {
-                            Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).statusBarsPadding()) {
+                            // A Surface, as the app's screens have, so the rows' text takes the theme's content colour.
+                            Surface(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize().statusBarsPadding()) {
                                 chunk.forEach { (row, name, session) ->
                                     Text("Row $row · $name", Modifier.padding(start = 16.dp, top = 6.dp), style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.outline)
                                     SessionRow(session, null, {}) {}
                                     HorizontalDivider()
                                 }
-                            }
+                            } }
                         }
                     }
                 }
