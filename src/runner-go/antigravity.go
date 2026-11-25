@@ -1175,6 +1175,7 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 	// The generation's inbox: what fetches its turns, and the turnIds already taken on, which a
 	// redelivery of one is dropped against for the generation's whole life.
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCh := make(chan agyInboxResult, 16)
 	go func() {
