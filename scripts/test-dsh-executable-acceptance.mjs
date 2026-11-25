@@ -23,6 +23,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import { Fatal, RunnerMachine, callApi, eventually, fileLog, freePort, lookPath, migrate, startApiserver, startPostgres } from './codex-reset-e2e/harness.mjs';
+import { sessionWordSql } from './lib/session-word.mjs';
 
 export const SCENARIOS = [
   'D3-S1 Harness EXECUTABLE task: a passing acceptance command runs on the runner in the worktree and derives DONE',
@@ -254,7 +255,7 @@ exec '${process.execPath}' '${path.join(REPO, 'scripts/deepseek-harness-dispatch
         if (unavailable) throw new Fatal(`the task was marked ${UNAVAILABLE}:\n${unavailable.body}`);
         return ['DONE', 'FAILED', 'CANCELLED'].includes(row?.status) && row;
       }, 300_000, 500);
-      const session = await one(`SELECT id::text AS id, status::text AS status, error, runtime_session_id, provider
+      const session = await one(`SELECT id::text AS id, ${sessionWordSql('session')} AS status, error, runtime_session_id, provider
         FROM session WHERE task_id = $1 ORDER BY created_at DESC LIMIT 1`, [task.id]);
       assert.ok(session, 'the task ran no session');
       const turns = await all(`SELECT id::text AS id, kind, status, content, client_turn_id, delivered_at FROM conversation_turn
@@ -365,7 +366,7 @@ exec '${process.execPath}' '${path.join(REPO, 'scripts/deepseek-harness-dispatch
       assert.equal(created.status, 201, `Harness session create: ${created.status} ${created.text}`);
       const publicId = created.json.publicId ?? created.json.id;
       const session = await eventually('the Harness session to settle its first turn', async () => {
-        const row = await one(`SELECT id::text AS id, status::text AS status, num_turns, error FROM session WHERE prompt = $1`, [prompt]);
+        const row = await one(`SELECT id::text AS id, ${sessionWordSql('session')} AS status, num_turns, error FROM session WHERE prompt = $1`, [prompt]);
         if (row?.status === 'FAILED' || row?.status === 'CANCELLED') throw new Fatal(`session ${row.status}: ${row.error}`);
         return row?.num_turns >= 1 && row.status === 'AWAITING_INPUT' && row;
       }, 240_000, 500);

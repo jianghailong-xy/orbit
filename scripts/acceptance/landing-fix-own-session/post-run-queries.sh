@@ -9,6 +9,7 @@ HERE=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 export LM_PROJECT=${LM_PROJECT:-orbit-link-lfx42} LM_DIR=${LM_DIR:-/mnt/tmp/tmp/lfx42}
 RUN=${1:?usage: post-run-queries.sh <run>}
 case "$RUN" in *[!A-Za-z0-9_-]*) echo "a run tag is letters, digits, - and _" >&2; exit 2 ;; esac
+source "$HERE/../../lib/session-word.sh"
 q() { echo; echo "### $1"; bash "$HERE/../landing-measured/stack.sh" psql "$2" x; }
 P="(select id from project where title like '%($RUN)')"
 T() { echo "(select id from task where project_id = $P and title like '$1 %')"; }
@@ -49,7 +50,7 @@ where t.session_id = $COORD and i.integration_job_id = $(J1 "$Y") and t.created_
 echo; echo "======== case 3: R's baseline-red landing never reached R's session"
 q "conversation_turn of R's work session" "select seq, client_turn_id, kind, status, created_at, answered_at, left(content, 120) as content_head
 from conversation_turn where session_id = $(S R) order by seq"
-q "R's session against its landing" "select s.status, s.end_reason, s.finished_at, j.finished_at as landing_finished_at,
+q "R's session against its landing" "select $(session_word_sql s) as status, s.end_reason, s.finished_at, j.finished_at as landing_finished_at,
   (select count(*) from conversation_turn c where c.session_id = s.id and c.client_turn_id like 'landing-fix:v1:%') as landing_fix_turns,
   (select count(*) from conversation_turn c where c.session_id = s.id and c.created_at > j.finished_at) as turns_after_landing
 from session s, project_integration_job j where s.id = $(S R) and j.id = $(J1 R)"
@@ -58,7 +59,7 @@ where session_id = $COORD and created_at > (select finished_at from project_inte
   and (position('LINE_RED.md' in content) > 0 or position('R lands after main went red' in content) > 0) order by seq"
 
 echo; echo "======== the engine"
-q "the sessions of the project and the engine they ran on" "select coalesce(t.title, 'coordinator') as task, s.id, s.provider, s.engine, s.model, s.status, s.end_reason
+q "the sessions of the project and the engine they ran on" "select coalesce(t.title, 'coordinator') as task, s.id, s.provider, s.engine, s.model, $(session_word_sql s) as status, s.end_reason
 from session s left join task t on t.id = s.task_id where s.task_id in (select id from task where project_id = $P) or s.id = $COORD order by s.created_at"
 q "the provider and the runner's engines" "select p.slug, p.preset_slug, p.base_url, r.name as runner, r.version, r.engines->0 as claude
 from model_provider p, runner r where p.slug = 'deepseek' and r.name = 'lm42-runner'"

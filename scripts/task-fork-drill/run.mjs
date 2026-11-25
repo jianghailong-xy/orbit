@@ -30,6 +30,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Fatal, RunnerMachine, callApi, eventually, freePort, migrate, startApiserver, startPostgres } from '../codex-reset-e2e/harness.mjs';
+import { sessionWordSql } from '../lib/session-word.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -164,7 +165,7 @@ async function main() {
   const isolated = await as('PATCH', `/workspaces/${workspaceId}`, { enableWorktree: true });
   assert.equal(isolated.status, 200, `enableWorktree: ${isolated.text}`);
 
-  const statusOf = async (uuid) => (await sql.query('SELECT status::text AS status FROM session WHERE id = $1', [uuid])).rows[0]?.status;
+  const statusOf = async (uuid) => (await sql.query(`SELECT ${sessionWordSql('session')} AS status FROM session WHERE id = $1`, [uuid])).rows[0]?.status;
   const idle = (uuid) => eventually('the session to finish its turn', async () => {
     const s = await statusOf(uuid);
     if (['FAILED', 'INTERRUPTED', 'CANCELLED'].includes(s)) throw new Fatal(`session ${uuid} ended ${s}`);

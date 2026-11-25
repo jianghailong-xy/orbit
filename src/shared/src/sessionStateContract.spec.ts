@@ -140,6 +140,17 @@ describe('session-state contract', () => {
       // releaseFinishedTheWork: released, and task_done or a landing container with no end reason.
       expect(e.workFinished, vector.id).toBe(e.released
         && (e.endReason === 'task_done' || (vector.given.sessionKind === 'LANDING' && e.endReason === null)));
+      // The given is the stored facts (docs/session-status-retirement-plan.md §2.6), never a status word.
+      const g = vector.given;
+      expect(g, vector.id).not.toHaveProperty('status');
+      expect(g, vector.id).toHaveProperty('finishedAt');
+      expect([null, undefined, 'QUEUED', 'IN_FLIGHT', 'ABANDONED'], vector.id).toContain(g.turnState);
+      expect(e.released, vector.id).toBe(g.finishedAt !== null);
+      if (e.released) expect(g.turnState ?? null, vector.id).toBeNull();
+      expect(e.phase, vector.id).toBe(e.released ? 'IDLE'
+        : g.turnState === 'IN_FLIGHT' || (g.runningBgJobs?.length ?? 0) > 0 ? 'RUNNING'
+        : g.turnState === 'QUEUED' ? 'PENDING' : 'IDLE');
+      expect(e.lastTurnOutcome, vector.id).toBe(g.lastTurnOutcome ?? null);
       // The end reason is the row's, as given.
       expect(e.endReason, vector.id).toBe(vector.given.endReason ?? null);
     }
