@@ -279,6 +279,25 @@ class SessionListPageShellTest {
         await { exists(hasRowMenu("Options for Pinned row")) }
     }
 
+    /** Needs you folds the same way, under its own fold: folding it leaves Pinned open. */
+    @Test fun theNeedsYouSectionFoldsAndStaysFolded() {
+        NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionPinned01", "Pinned row", fields = ""","pinnedAt":"2026-10-09T01:00:00Z""""),
+            NavShell.row("34A05cSessionWaits01", "Waiting row", pending = 1)))
+        signIn()
+        await { exists(hasRowMenu("Options for Waiting row")) }
+        val heading = compose.onNodeWithTag("needs-you-heading")
+        assertEquals(SessionListCopy.NEEDS_YOU_HIDES, heading.fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label)
+        heading.performClick()
+        await { !exists(hasRowMenu("Options for Waiting row")) }
+        assertTrue("Pinned keeps its own fold", exists(hasRowMenu("Options for Pinned row")))
+        assertEquals(SessionListCopy.NEEDS_YOU_SHOWS, compose.onNodeWithTag("needs-you-heading").fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label)
+        compose.activityRule.scenario.recreate()
+        await { exists(hasTestTag("needs-you-heading")) && exists(plain) }
+        assertFalse(exists(hasRowMenu("Options for Waiting row")))
+        compose.onNodeWithTag("needs-you-heading").performClick()
+        await { exists(hasRowMenu("Options for Waiting row")) }
+    }
+
     /** A folder's row says what the sessions it hides would have said. Its page: its name over its workspace's, ⋯ and ✎, and the scope it was
      * opened from: no ≡, search or capsule of its own. */
     @Test fun aFolderHasARowAndAPageOfItsOwn() {
