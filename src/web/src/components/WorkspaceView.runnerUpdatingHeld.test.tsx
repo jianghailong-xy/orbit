@@ -170,7 +170,10 @@ describe('the server’s payload for a session held by a runner update', { timeo
     expect(statusLabel({ ...listRow, ...detail })).toBe('Runner updating');
   });
 
+  // docs/mocks/queued-card-runner-updating, choice 1: the account goes under the turn the update holds, and the
+  // centred page is for a conversation with no queued turn to say it under — so the queue's reply is empty here.
   it('draws board 5’s queued page, with the turns it waits for and Later and Update Now', async () => {
+    vi.mocked(listQueuedTurns).mockImplementation(async () => []);
     await mountHeld();
     await waitForUi(() => expect(mounted().querySelector('.chat-queued-title')?.textContent).toBe('Runner updating'));
     expect(mounted().querySelector('.chat-queued-desc')?.textContent).toBe(
@@ -186,6 +189,13 @@ describe('the server’s payload for a session held by a runner update', { timeo
     await mountHeld();
     await waitForUi(() => expect(mounted().querySelector('.chat-runner-updating')?.textContent).toBe('Queued·runner updating'));
     expect(mounted().textContent).toContain('And check the queue after that.');
+    await act(async () => mounted().querySelector<HTMLButtonElement>('button.chat-runner-updating-reason')!.click());
+    const pop = document.querySelector('.runner-updating-pop')!;
+    expect(pop.textContent).toContain(
+      'studio-mac starts no new turns until 2 turns finish, then updates to 0.1.254. This message is sent right after.',
+    );
+    expect([...pop.querySelectorAll('.runner-update-actions button')].map((b) => b.textContent?.trim())).toEqual(['Later', 'Update Now…']);
+    expect(mounted().textContent).not.toMatch(/\bRunning\b/);
   });
 
   it('offers Stop for the background work, and the press asks the server to end it', async () => {
