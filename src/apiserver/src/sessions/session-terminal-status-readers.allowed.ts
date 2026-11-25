@@ -56,8 +56,9 @@
  * forceFinalize, the runner's finalize and its failed turn, the import, the end of a queued session, the landing
  * container and the refused source), with the one vocabulary they share
  * (RELEASED_SESSION_STATUSES, which the finalize also checks the runner's word against, and gracefulEndStatus).
- * (b) PROJECTOR: the derive functions that produce the legacy wire fields `runState`, `sessionState` and
- * `filingState` from the stored facts, which withSessionState (sessions/session-state.ts) puts on every payload beside
+ * (b) PROJECTOR: the projector of the status word from a session's facts (session-legacy-words.ts) and the derive
+ * functions that produce the legacy wire fields `runState`, `sessionState` and
+ * `filingState` from it and the stored facts, which withSessionState (sessions/session-state.ts) puts on every payload beside
  * `status` and `runStatus`; session-state-legacy-fields.spec.ts pins their output for every stored combination.
  * (c) OLD_PROTOCOL: the runner's turn-complete status word, translated into the turn outcome and read by the turn
  * writer; it goes when plan phase 6 (task 3509dk246EQ9g9yZRriiQ, step 6.1) lets the runner report the outcome and the
@@ -95,6 +96,9 @@ export const RELEASE_WRITERS: Readonly<Record<string, number>> = {
 
 /** (b) The one projector of the legacy wire fields. */
 export const PROJECTOR: Readonly<Record<string, number>> = {
+  // legacySessionStatus, which derives the status word from a session's facts, and statusWordFilter beside it
+  // (docs/session-status-retirement-plan.md §3.1, §6).
+  'src/apiserver/src/sessions/session-legacy-words.ts': 9,
   // deriveSessionRunState, deriveSessionState (deriveSessionLifecycleState and deriveSessionFilingState name none).
   'src/shared/src/enums.ts': 23,
 };

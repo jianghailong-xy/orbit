@@ -59,6 +59,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { ViewerStreamService } from '../sessions/viewer-stream.service';
@@ -346,7 +347,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
   await t.test('(b) the transcript comes in pages; the root keeps its old fields', async () => {
     const row = await db.session.findUniqueOrThrow({
       where: { id: shared },
-      select: { status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true, createdAt: true },
+      select: { ...LEGACY_STATUS_SELECT, completedAt: true, archivedAt: true, deletedAt: true, createdAt: true },
     });
     const state = withSessionState(row);
 

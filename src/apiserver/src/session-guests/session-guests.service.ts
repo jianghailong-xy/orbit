@@ -20,6 +20,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
 import { assertEngineSession } from '../sessions/engine-session';
+import { LEGACY_STATUS_SELECT, readLandingSettlements } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { readSessionBackgroundFields } from '../sessions/task-work-carrier';
 import { readSessionPhaseFields } from '../sessions/session-phase';
@@ -319,7 +320,8 @@ export class SessionGuestsService {
         addedAt: true,
         session: {
           select: {
-            id: true, title: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+            ...LEGACY_STATUS_SELECT,
+            id: true, title: true, completedAt: true, archivedAt: true, deletedAt: true,
             lastTurnAt: true, owner: { select: { name: true } },
           },
         },
@@ -327,11 +329,12 @@ export class SessionGuestsService {
     });
     // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
     const background = await readSessionBackgroundFields(this.prisma, rows.map(({ session }) => session.id));
+    const landings = await readLandingSettlements(this.prisma, rows.map(({ session }) => session));
     // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
     const phases = await readSessionPhaseFields(this.prisma, rows.map(({ session }) => session.id));
     return {
       sessions: rows.map(({ addedAt, session }) => {
-        const state = withSessionState(session);
+        const state = withSessionState(session, landings.get(session.id));
         return {
           id: session.id,
           title: session.title,
