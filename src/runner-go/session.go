@@ -999,7 +999,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		payload = runnerSecrets().scrubPayload(payload)
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
-		pool.engineTurnEvent(live, eventType, payload)
+		if pool.engineTurnEvent(live, eventType, payload) && t.returnHeldSlot != nil {
+			t.returnHeldSlot(sessionID) // the engine's own turn ended under a claim held for the update
+		}
 		executing.observe(eventType, payload)
 		// A tool may have written to the volume (a commit, an edit): a managed runner syncs it
 		// behind the tool, in the background, without holding the stream up (volume_durability.go).

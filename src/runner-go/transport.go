@@ -278,6 +278,9 @@ type Transport struct {
 	// inbox fetch says (draining=1, docs/runner-update-drain-design.md §7.2). Set by runLoop once it has a pool,
 	// before any session starts; nil on every other transport, whose fetches say nothing.
 	draining func() bool
+	// returnHeldSlot gives back, while the pool drains for an update, the slot a session holds with no turn running
+	// under it (sessionPool.returnHeldSlot, §7.3). Set by runLoop with draining; nil on every other transport.
+	returnHeldSlot func(sessionID string)
 	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
 	observerMu sync.Mutex
 	observer   func(transportEvent)
@@ -908,6 +911,10 @@ func takeoverClaimedSession(ctx context.Context, t *Transport, job *ClaimedSessi
 func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCompleteRequest) (string, error) {
 	var r TurnCompleteResponse
 	b.LeaseOwner = t.leaseOwner
+	// A turn that ends while the pool drains for an update keeps no slot for a follow-up (§7.3): the control plane
+	// answers PENDING, and the permit is parked below rather than held for the update. An older control plane ignores
+	// the field and answers RUNNING, which the hold (holdFollowUpForUpdate) still covers.
+	b.Draining = t.draining != nil && t.draining()
 	// Every path a completion is sent by, a kept one an earlier process journaled included (secret_wire.go).
 	b = scrubTurnComplete(b, sessionID)
 	// What this completion reports of the worktree is newer than any heartbeat sample scanned before
@@ -963,6 +970,18 @@ func (t *Transport) releaseTurnLeases(ctx context.Context, sessionID, leaseGener
 		body["leaseGeneration"] = leaseGeneration
 	}
 	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/release-leases", body, nil, 15*time.Second)
+}
+
+// returnSlot gives back the slot this process holds for a session under which no turn runs, while its pool drains
+// for an update (POST /runner/sessions/:id/return-slot, docs/runner-update-drain-design.md §7.3). The answer is the
+// session's status after it: PENDING or AWAITING_INPUT when the slot was given back (or the session no longer held
+// one), RUNNING when a turn in flight keeps it.
+func (t *Transport) returnSlot(ctx context.Context, sessionID string) (string, error) {
+	var r struct {
+		Status string `json:"status"`
+	}
+	err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/return-slot", map[string]string{"leaseOwner": t.leaseOwner}, &r, 15*time.Second)
+	return r.Status, err
 }
 
 // activateTurnLeases makes a freshly reserved process generation the only inbox consumer.

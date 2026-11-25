@@ -2025,6 +2025,10 @@ type TurnCompleteRequest struct {
 	// turn's report, by turnCompleteReporting, while the server offers it. The body says it because the runner link
 	// carries no request header of its own.
 	ReleaseProtocol string `json:"releaseProtocol,omitempty"`
+	// Draining says the pool drains for an update as the turn ends (docs/runner-update-drain-design.md §7.3): the
+	// control plane then keeps no slot for a queued follow-up and answers PENDING, which parks the session here instead
+	// of holding the follow-up. Set by turnComplete on every completion it sends, as the inbox fetch says draining=1.
+	Draining bool `json:"draining,omitempty"`
 }
 
 // TurnCompleteResponse carries the control-plane status after the ack. Newer
