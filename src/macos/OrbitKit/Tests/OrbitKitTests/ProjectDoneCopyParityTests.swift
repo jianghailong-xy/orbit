@@ -514,7 +514,9 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.recordLabel(all, asked: false, check: ProjectDoneCheck(findings: [])),
                        ProjectDone.recordAsDone)
         // The meta line: who asked and how long the request has waited — or nobody.
-        XCTAssertTrue(card.contains("{project.title} · {doneRequest\n"), "the asked meta line drifted")
+        // The title is the translated one when there is one (d11950ba61), as the Apple card draws it.
+        XCTAssertTrue(card.contains("const title = words?.title || project.title;"), "the meta line's title drifted")
+        XCTAssertTrue(card.contains("{title} · {doneRequest\n"), "the asked meta line drifted")
         XCTAssertTrue(card.contains(
             "? [PROJECT_DONE_COPY.askedByCoordinator, doneRequestWaiting(requestWaitingSince, now)].filter(Boolean).join(' · ')"),
                       "the asked meta line drifted")
@@ -539,7 +541,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
 
     func testTheReceiptsSentencesAreTheWebs() throws {
         let card = try flat(Self.card)
-        XCTAssertTrue(card.contains("{project.title} · {doneProvenance({ doneBy: receipt?.doneBy ?? project.doneBy, acceptedGaps: accepted })}"))
+        XCTAssertTrue(card.contains("{title} · {doneProvenance({ doneBy: receipt?.doneBy ?? project.doneBy, acceptedGaps: accepted })}"))
         XCTAssertTrue(card.contains("{receiptDate ? ` · ${receiptDate}` : ''}"))
         XCTAssertTrue(card.contains("? `${DONE_CARD_RECEIPT}${receiptDateTime ? ` · ${receiptDateTime}` : ''}`"),
                       "the owner's receipt line drifted")
