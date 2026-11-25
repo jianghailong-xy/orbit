@@ -4053,6 +4053,8 @@ model Activity {
 /// a matter of interpreting a paragraph, which is the failure verification exists to avoid.
 model Project {
   promotionRequests ProjectPromotionRequest[]
+  /// Settings › Translation (migration 1600): the title and criteria in the owner's language.
+  textTranslation   ProjectTextTranslation?
   id      String @id @default(uuid(7)) @db.Uuid
   title   String
   // Tenant scope: list/authorization always filter by this column (like tasks and task lists).
@@ -5443,6 +5445,19 @@ model ProjectCriteriaChangeTranslation {
   intent      ProjectRatifiedActionIntent @relation(fields: [intentId], references: [id], onDelete: Cascade, map: "project_criteria_change_translation_intent_fkey")
 
   @@map("project_criteria_change_translation")
+}
+
+/// Settings › Translation (migration 1600): a project's title and its criteria's text in the owner's language,
+/// `{ lang, failed?, sourceDigest, title?, criteria?: [{ id, text }] }` (ProjectTextTranslation in @orbit/shared, plus
+/// the digest of the words it was made from). A reader's copy: the project's own columns stay what the agent wrote.
+model ProjectTextTranslation {
+  projectId   String   @id @map("project_id") @db.Uuid
+  ownerId     String   @map("owner_id") @db.Uuid
+  translation Json
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade, map: "project_text_translation_project_fkey")
+
+  @@map("project_text_translation")
 }
 
 model ProjectRatifiedActionCommit {

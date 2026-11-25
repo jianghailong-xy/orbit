@@ -566,6 +566,7 @@ test('the detail read reports progress without loading the project’s tasks', a
     // project's tasks. A read that went back to the groupBy would find no delegate here.
     projectRuling: { findMany: async () => [] },
     projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     projectTaskStatusCount: {
       findMany: async (args: any) => {
         tallyArgs = args;
@@ -642,6 +643,7 @@ test('the detail read serves the authored criteria and no second representation 
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
     projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
@@ -695,6 +697,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
     projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
     },

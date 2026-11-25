@@ -128,6 +128,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({'turnId':answer['turnId'],'status':'PENDING','kind':answer['kind']})
         if path.endswith('/config') or path.endswith('/account'):
             state.config.update(body); return self.reply({'ok':True})
+        # Run now (docs/mocks/queued-run-now): the queued message starts over the limit, and the row says so while it runs.
+        if path.endswith('/run-now'):
+            state.controls.append({'action':'run-now','method':method})
+            turn=state.queuedTurns.pop(0)
+            state.rows.append({'seq':len(state.rows)+1,'type':'user','turnId':turn['turnId'],'payload':{'text':turn['content']}})
+            state.status='RUNNING'; state.extraDetail={'runState':'RUNNING','runningOverLimit':{'active':17,'limit':16,'runnerName':'HPC'}}
+            return self.reply({'ok':True,'turnId':turn['turnId'],'alreadyPassed':False})
         if path.endswith('/interrupt'):
             state.status='AWAITING_INPUT'; state.controls.append({'action':'interrupt'}); return self.reply({'ok':True})
         if '/turns/' in path and method=='DELETE':

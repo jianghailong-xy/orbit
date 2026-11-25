@@ -1,0 +1,115 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef0f3;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:#1f2329}
+.board{width:1180px;padding:36px 40px 40px}
+h1{font-size:22px;margin:0 0 4px}
+.lead{color:#646a73;font-size:13.5px;margin:0 0 26px;line-height:1.6}
+.frame{margin-bottom:28px}
+.ftitle{font-size:14px;font-weight:700;margin:0 0 8px;display:flex;gap:10px;align-items:baseline}
+.ftitle small{font-weight:400;color:#646a73;font-size:12.5px}
+.rec{display:inline-block;background:#e8f7ee;color:#1a7f45;font-size:11px;font-weight:700;border-radius:4px;padding:0 6px}
+/* pane */
+.pane{--bg:#fff;--t1:#1f2329;--t2:#646a73;--t3:#8f959e;--chip:#f1f2f4;--line:#eceef1;--bubble:#f3f4f6;
+  position:relative;background:var(--bg);color:var(--t1);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;width:1100px;height:250px}
+.pane.dark{--bg:#202023;--t1:#c9ced5;--t2:#a7adb6;--t3:#8b9099;--chip:#2f2f33;--line:#343437;--bubble:#2b2b2e}
+.pane.narrow{width:560px}
+.pane.short{height:150px}
+.hdr{position:absolute;left:0;right:0;top:0;z-index:2;display:flex;align-items:center;gap:8px;height:48px;padding:0 14px 0 20px}
+.hdr.fade{height:64px;align-items:flex-start;padding-top:12px;background:linear-gradient(to bottom,var(--bg) 0,var(--bg) 44px,transparent 64px)}
+.hdr.line{border-bottom:1px solid var(--line);background:var(--bg)}
+.name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:24px}
+.chip{flex:none;display:inline-flex;align-items:center;gap:5px;padding:0 8px;height:22px;border-radius:999px;background:var(--chip);color:var(--t2);font-size:12px}
+.dot{width:6px;height:6px;border-radius:50%}
+.sp{flex:1}
+.share{flex:none;position:relative;width:28px;height:24px;display:grid;place-items:center;color:var(--t2);border-radius:6px}
+.share.on{color:#3370ff}.share.on i{position:absolute;right:4px;top:3px;width:6px;height:6px;border-radius:50%;background:#34c759;box-shadow:0 0 0 2px var(--bg)}
+.kebab{flex:none;width:28px;height:24px;display:grid;place-items:center;color:var(--t2);font-size:18px}
+.old{font-size:12px;color:var(--t3);white-space:nowrap}
+.pill{flex:none;height:20px;padding:0 8px;border:1px solid #dee0e3;border-radius:999px;font-size:11px;font-weight:600;color:var(--t2);display:inline-flex;align-items:center}
+/* transcript scrolled under the header */
+.tr{position:absolute;left:0;right:0;top:0;padding:14px 20px 0;font-size:13.5px;line-height:1.75;color:var(--t1)}
+.tr p{margin:0 0 10px;max-width:760px}
+.ubub{margin:0 0 12px auto;max-width:460px;background:var(--bubble);border-radius:14px;padding:8px 14px}
+.mark{position:absolute;z-index:3;font-size:11px;font-weight:700;color:#e5484d;background:#fff4f4;border:1px solid #ffc9c9;border-radius:4px;padding:0 6px;line-height:16px}
+.note{background:#fff;border-radius:10px;padding:16px 20px;font-size:13px;line-height:1.7;margin-bottom:16px}
+.note h3{margin:0 0 6px;font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+td,th{border-top:1px solid #eceef1;padding:6px 8px;text-align:left;vertical-align:top}
+th{color:#646a73;font-weight:600;border-top:0}
+code{font-family:'JetBrains Mono',monospace;font-size:11.5px;background:#f3f4f6;padding:0 4px;border-radius:3px}
+.pend{background:#fff7e6;border:1px solid #ffd591}
+</style></head><body><div class="board">
+<h1>Session 顶栏 · 精简 + 渐变（修订 4）</h1>
+<p class="lead">按你的意见：顶栏只留 <b>标题 · 分享 · ⋮</b>；去掉 Waiting for your reply / Open / 时间 / Follow / 标签；分隔线换成渐变，对话从顶栏下方滚过时逐渐淡出（参考图 1）。文案不变，仍是英文。</p>
+
+<div class="frame"><div class="ftitle">① 现在 <small>~90px，两行，底部一条分隔线</small></div>
+<div class="pane short">
+ <div class="hdr line" style="height:90px;align-items:center"><div style="flex:1;min-width:0">
+  <div style="display:flex;gap:8px;align-items:center"><span class="name" style="font-size:18px">HPC runner 重启通知机制</span><span class="pill">Follow</span></div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:4px"><span class="old">Waiting for your reply · Open · 11/24, 02:02</span><span class="chip"><span class="dot" style="background:#f59a23"></span>项目架构</span><span class="chip"><span class="dot" style="background:#a855f7"></span>功能咨询</span></div>
+ </div><span class="kebab">⋮</span></div>
+</div></div>
+
+<div class="frame"><div class="ftitle">② 新顶栏 · 浅色，对话已向上滚动 <span class="rec">提案</span><small>一行 48px：标题 15px + 分享 + ⋮；下方 16px 渐变，无分隔线</small></div>
+<div class="pane">
+ <div class="tr">
+  <p>第一步先确认 runner 重启时 apiserver 能否收到断连事件。现在 link 断开后 gateway 会在 30 秒内把 runner 标成 offline，但不会通知正在等待它的 session，所以协调者只能在下一次 sweep 时才发现。</p>
+  <p>建议在 runner 重新注册时发一条 RUNNER_RESTARTED 事件，由订阅了这台机器的 watch 接收；这样「重启后继续」可以直接复用现有的 watch 唤醒路径，不需要新的轮询。</p>
+  <div class="ubub">那 HPC 上正在跑的 session 怎么处理？会自动恢复吗？</div>
+  <p>不会自动恢复：引擎进程随 runner 一起退出。重新注册后，服务端把这些 session 标成 Interrupted，并在会话里写一行说明，你可以一键 Resume。</p>
+ </div>
+ <div class="hdr fade"><span class="name">HPC runner 重启通知机制</span>
+  <span class="sp"></span><span class="share"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V2.5M5 5.2 8 2.3l3 2.9"/><path d="M3 8.5v4.2c0 .5.4.8.8.8h8.4c.4 0 .8-.3.8-.8V8.5"/></svg></span><span class="kebab">⋮</span></div>
+ <span class="mark" style="right:60px;top:44px">渐变 44→64px</span>
+</div></div>
+
+<div class="frame"><div class="ftitle">③ 深色 <small>渐变取页面底色 <code>--bg-base</code>，深浅自动跟随</small></div>
+<div class="pane dark short">
+ <div class="tr">
+  <p>建议在 runner 重新注册时发一条 RUNNER_RESTARTED 事件，由订阅了这台机器的 watch 接收；这样「重启后继续」可以直接复用现有的 watch 唤醒路径，不需要新的轮询。</p>
+  <p>不会自动恢复：引擎进程随 runner 一起退出。重新注册后，服务端把这些 session 标成 Interrupted，并在会话里写一行说明，你可以一键 Resume。</p>
+ </div>
+ <div class="hdr fade"><span class="name">HPC runner 重启通知机制</span>
+  <span class="sp"></span><span class="share"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V2.5M5 5.2 8 2.3l3 2.9"/><path d="M3 8.5v4.2c0 .5.4.8.8.8h8.4c.4 0 .8-.3.8-.8V8.5"/></svg></span><span class="kebab">⋮</span></div>
+</div></div>
+
+<div class="frame"><div class="ftitle">④ 窄窗 560px <small>标题省略号截断，分享和 ⋮ 始终可见</small></div>
+<div class="pane narrow short">
+ <div class="tr"><p>建议在 runner 重新注册时发一条 RUNNER_RESTARTED 事件，由订阅了这台机器的 watch 接收；这样「重启后继续」可以直接复用现有的 watch 唤醒路径。</p><p>不会自动恢复：引擎进程随 runner 一起退出。</p></div>
+ <div class="hdr fade"><span class="name">HPC runner 重启通知机制与断连事件</span>
+  <span class="sp"></span><span class="share"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V2.5M5 5.2 8 2.3l3 2.9"/><path d="M3 8.5v4.2c0 .5.4.8.8.8h8.4c.4 0 .8-.3.8-.8V8.5"/></svg></span><span class="kebab">⋮</span></div>
+</div></div>
+
+<div class="frame"><div class="ftitle">⑤ 已分享时 <small>分享图标变品牌蓝 + 绿点（Live），取代原来标题旁的「Shared · Live」胶囊；悬停提示 “Shared · Live — anyone with the link can view”</small></div>
+<div class="pane short">
+ <div class="tr"><p>不会自动恢复：引擎进程随 runner 一起退出。重新注册后，服务端把这些 session 标成 Interrupted，并在会话里写一行说明，你可以一键 Resume。</p></div>
+ <div class="hdr fade"><span class="name">HPC runner 重启通知机制</span>
+  <span class="sp"></span><span class="share on"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V2.5M5 5.2 8 2.3l3 2.9"/><path d="M3 8.5v4.2c0 .5.4.8.8.8h8.4c.4 0 .8-.3.8-.8V8.5"/></svg><i></i></span><span class="kebab">⋮</span></div>
+ <span class="mark" style="right:70px;top:40px">已分享</span>
+</div></div>
+
+<div class="note"><h3>去掉的东西去了哪里</h3><table>
+<tr><th>项</th><th>现在</th><th>提案</th></tr>
+<tr><td>Waiting for your reply / Working…</td><td>顶栏第二行</td><td>去掉。左侧 Session 列表的行里已经有，对话底部也有状态</td></tr>
+<tr><td>Open / Completed</td><td>顶栏第二行</td><td>去掉。⋯ 菜单第一项本来就是 Complete / Move to Open</td></tr>
+<tr><td>时间 11/24, 02:02</td><td>顶栏第二行</td><td>去掉。列表行里有时间</td></tr>
+<tr><td>Follow</td><td>标题右侧胶囊</td><td>挪进 ⋯ 菜单，叫「Follow…」，打开同一个 Watch 编辑框</td></tr>
+<tr><td>Following N / Followed by N</td><td>标题右侧（仅在有时）</td><td>见待你定 2</td></tr>
+<tr><td>标签 chip</td><td>顶栏第二行</td><td>去掉。查看和修改都在 ⋯ → Tags（已打的标签带勾）。注意：列表行目前不显示标签，去掉后只有 ⋯ 里能看到</td></tr>
+<tr><td>Share</td><td>⋯ 菜单里的一项</td><td>挪到外面：⋮ 左边的图标按钮，打开同一个分享设置；⋯ 里不再重复</td></tr>
+<tr><td>Shared · Live 胶囊</td><td>标题右侧（仅在已分享时）</td><td>并进分享图标：蓝色 + 绿点，见 ⑤</td></tr>
+<tr><td>Coordinator、Agent tools 失败</td><td>标题右侧（仅在有时）</td><td>见待你定 2</td></tr>
+<tr><td>分隔线</td><td><code>border-bottom</code></td><td>删掉；顶栏浮在对话上，背景 <code>linear-gradient(--bg-base 44px → transparent 64px)</code>，对话列表顶部留 48px 空位</td></tr>
+</table></div>
+
+<div class="note"><h3>会改的文件</h3>
+<code>src/web/src/components/WorkspaceView.tsx</code> — 移除 <code>headSub</code> 那一行和 <code>SessionWatchBadges</code> 的 Follow 按钮，去掉 <code>SessionTagChips</code>，⋯ 加「Follow…」、Share 从 ⋯ 挪成外部图标按钮、去掉 Shared · Live 胶囊；<br>
+<code>src/web/src/components/WatchRelations.tsx</code> — Follow 按钮拆出去；<br>
+<code>src/web/src/index.css</code> — <code>.workspace-header</code> 改为浮层 + 渐变、去分隔线，标题 15px，对话滚动区顶部留白。<br>
+仅桌面 Web；手机顶栏不动。</div>
+
+<div class="note pend"><h3>待你定</h3>
+1. Follow 挪进 ⋯ 菜单可以吗？（还是彻底不要入口，只靠让 agent 去建 watch？）<br>
+2. 只在特定情况出现的胶囊（Following N、Coordinator、Agent tools 失败）：<b>建议保留</b>，因为平时不出现、出现时都是需要知道的；还是一并去掉？<br>
+3. 只改 Web，还是 macOS 也跟？</div>
+</div></body></html>

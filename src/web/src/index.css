@@ -3415,7 +3415,7 @@ button.toast--pill:focus-visible {
   align-items: center;
   gap: 6px;
   color: var(--text-4);
-  font-size: 12px;
+  font-size: 13px;
 }
 .scope-menu-value-text {
   max-width: 100px;
@@ -3447,6 +3447,10 @@ button.toast--pill:focus-visible {
    menu gave a selected row's hover. */
 .workspace-header-menu .orbit-menu-item[data-selected][data-highlighted] {
   background: var(--orbit-option-selected-bg);
+}
+/* The conversation header's ⋯ menu matches no control's width, so it keeps a floor of its own. */
+.orbit-menu.workspace-header-menu {
+  min-width: 240px;
 }
 .session-row.active {
   background: var(--brand-tint);
@@ -3509,8 +3513,7 @@ button.toast--pill:focus-visible {
   gap: 8px;
   min-width: 0;
 }
-.workspace-title-line .workspace-name,
-.workspace-title-line .workspace-name-input {
+.workspace-title-line .workspace-name {
   min-width: 0;
 }
 .workspace-name {
@@ -3537,38 +3540,29 @@ button.toast--pill:focus-visible {
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
-/* Inline rename editor that replaces .workspace-name on double-click — matches the title's
-   type so the swap is seamless, with a brand underline to signal edit mode. */
-.workspace-name-input {
-  display: block;
-  box-sizing: content-box;
-  /* width is set inline from the mirror (fits the text); cap so a long title stops at the
-     header edge and scrolls instead of overflowing. */
+/* The title as the button that opens the session's settings (docs/mocks/session-settings-column ③): plain at
+   rest and while the settings are open (owner 11-25: the open state needs no look of its own), a light ground and
+   a › on hover. Keyboard focus shows as hover does, in place of the browser's ring. */
+.workspace-name-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   max-width: 100%;
-  min-width: 3ch;
+  margin-left: -8px;
+  padding: 1px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
   font-family: inherit;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-1);
-  padding: 0;
-  margin: 0;
-  border: none;
-  border-bottom: 1px solid var(--brand);
-  background: transparent;
+  text-align: left;
+  cursor: pointer;
   outline: none;
 }
-/* Off-screen twin of .workspace-name-input used only to measure the text width. */
-.workspace-name-mirror {
-  position: absolute;
-  left: -9999px;
-  top: 0;
-  visibility: hidden;
-  white-space: pre;
-  pointer-events: none;
-  font-family: inherit;
-  font-size: 18px;
-  font-weight: 600;
-}
+.workspace-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); opacity: 0; }
+.workspace-name-button:hover, .workspace-name-button:focus-visible { background: var(--orbit-control-hover-bg); }
+.workspace-name-button:hover .workspace-name-chevron,
+.workspace-name-button:focus-visible .workspace-name-chevron { opacity: 1; }
 .workspace-header-task {
   display: inline-flex;
   align-items: center;
@@ -4976,6 +4970,61 @@ button.toast--pill:focus-visible {
     }
   }
 }
+/* docs/mocks/session-header-compact: a wide window's session header is one short row with no rule
+   under it; the conversation fades out as it scrolls up to it, the way it fades into the composer.
+   The top padding is the fade's room, so at the top of the conversation nothing sits in it. A phone
+   keeps its ruled header (the mobile block further down). */
+@media (min-width: 961px) {
+  .workspace-header {
+    padding-bottom: 4px;
+    border-bottom: 0;
+  }
+  .workspace-name {
+    font-size: 15px;
+  }
+  .workspace-scroll-wrap > .workspace-sessions {
+    padding-top: 16px;
+    mask-image: linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 20px), transparent);
+  }
+}
+@media (min-width: 961px) and (hover: hover) and (pointer: fine) {
+  @supports selector(::-webkit-scrollbar) {
+    .workspace-scroll-wrap > .workspace-sessions {
+      mask-image:
+        linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 20px), transparent),
+        linear-gradient(#000, #000);
+    }
+  }
+}
+/* A wide window's top pill, moved up into the middle of the header row (the same pill the
+   transcript floats on a phone). */
+.workspace-header-jump {
+  position: absolute;
+  left: 50%;
+  /* The row's centre, above the header's 4px bottom padding. */
+  top: calc(50% - 2px);
+  transform: translate(-50%, -50%);
+  display: flex;
+  max-width: 420px;
+}
+.workspace-header-jump .chat-older-pill.chat-older-split {
+  max-width: 100%;
+}
+.workspace-header-jump[hidden] {
+  display: none;
+}
+/* Centred over the whole row, so the title stops short of the pill's half instead of running under it. */
+.workspace-header.has-jump {
+  position: relative;
+}
+.workspace-header.has-jump .workspace-header-main {
+  max-width: calc(50% - 210px - 12px);
+  margin-right: auto;
+}
+/* The header's Share button: grey, or the live link's green while the session is shared. */
+.workspace-header-share { flex: none; color: var(--text-2); }
+.workspace-header-share.is-live,
+.workspace-header-share.is-live:hover:where(:not(:disabled)) { color: var(--success); }
 /* Canonical completion-repair obligations sit outside the transcript scroller: the command has
    already finished, so burying this behind a stale Running transcript would recreate the product
    failure the obligation exists to explain. Read-only by design — repair actions belong to the
@@ -8606,6 +8655,73 @@ button.chat-jump-start:hover {
   background: var(--bg-sunken);
   color: var(--text-1);
 }
+/* The pill split in two: the person's last message (the main press) and the way back to the
+   beginning as an icon. */
+.chat-older-pill.chat-older-split {
+  gap: 0;
+  padding: 0;
+  max-width: min(86%, 560px);
+  overflow: hidden;
+}
+.chat-older-split > button {
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.chat-older-mine {
+  min-width: 0;
+  padding: 4px 10px 4px 14px;
+  color: var(--text-1);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-older-mine:hover {
+  background: var(--bg-sunken);
+}
+/* The capsule's wrapper while nothing waits: it draws nothing, only holds the strip's line (mounted,
+   empty) beside whichever pill shows. */
+.chat-older-group {
+  display: contents;
+}
+/* What waits on the reader, as the capsule's first segment: the strip's line without its bar. */
+.chat-older-split .decision-strip {
+  display: contents;
+}
+.chat-older-split .decision-strip-line {
+  width: auto;
+  min-width: 0;
+  gap: 7px;
+  padding: 4px 12px 4px 13px;
+  font-weight: 500;
+}
+.chat-older-split .decision-strip-line:hover {
+  background: var(--bg-sunken);
+}
+.chat-older-split .decision-strip-quiet,
+.chat-older-split .decision-strip-caret {
+  font-weight: 400;
+}
+.chat-older-split .decision-strip-caret {
+  margin-left: 0;
+}
+.chat-older-split .decision-strip-unread {
+  display: block;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.chat-older-split > button.chat-older-start {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 4px 10px 4px 9px;
+  border-left: 1px solid var(--border);
+  color: var(--text-3);
+}
 /* Transcript placeholder while an unvisited session's tail page is in flight. Geometry tracks
    .chat-user / .chat-assistant so the skeleton occupies the same columns the real messages will,
    and the whole block pulses as one — per-line staggering reads as content arriving, which is
@@ -9826,54 +9942,6 @@ button.chat-jump-start:hover {
 .chat-file-expired {
   flex: none;
   white-space: nowrap;
-}
-/* Sticky "your prompt" bar: sits flush under the header (outside the scroll area, so no
-   jitter) and surfaces the in-view turn's question once a long answer pushes it off the
-   top. Click to jump back to the original bubble. */
-.chat-sticky-question {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 12px;
-  border: none;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-sunken);
-  text-align: left;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-1);
-}
-.chat-sticky-question:hover {
-  background: var(--bg-hover);
-}
-/* Tail-first: the question for the content in view is still loading from an older page —
-   show the bar muted and non-interactive until it resolves. */
-.chat-sticky-loading {
-  cursor: default;
-  color: var(--text-3);
-}
-.chat-sticky-loading:hover {
-  background: var(--bg-sunken);
-}
-/* Over a turn another session sent, the label is `From <its title>`, and a task session's title runs
-   to 80 characters: capped and cut with an ellipsis, so the text beside it stays visible. Capped
-   rather than left to shrink, which let the long text squeeze it to `From Tas…`. */
-.chat-sticky-label {
-  flex: none;
-  max-width: 45%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.chat-sticky-text {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* The pending-decision strip. Flush under the header and OUTSIDE the transcript scroller, because
    it says what is true now rather than what happened: the transcript's vertical flow is for
@@ -16986,8 +17054,7 @@ button.chat-jump-start:hover {
     display: contents;
   }
   .workspace-header-main > .workspace-header-task,
-  .workspace-title-line > .workspace-name,
-  .workspace-title-line > .workspace-name-input {
+  .workspace-title-line > .workspace-name {
     flex: 0 0 100%;
   }
   .workspace-header-main > .workspace-sub {
@@ -18781,23 +18848,9 @@ button.chat-jump-start:hover {
 }
 .re-account-menu.orbit-menu {
   min-width: 176px;
-  padding: 5px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 9px;
-  box-shadow: 0 8px 28px rgba(31, 35, 41, .11), 0 2px 5px rgba(31, 35, 41, .04);
-}
-.re-account-menu.orbit-menu .orbit-menu-item {
-  min-height: 33px;
-  padding: 5px 9px;
-  font-size: 12px;
-  gap: 8px;
-  border-radius: 5px;
 }
 .re-account-menu.orbit-menu .orbit-menu-icon {
-  /* The icon's own 8px, beside the item's gap, as the menu this one replaced spaced them. */
-  margin-inline-end: 8px;
   color: var(--text-3);
-  font-size: 13px;
 }
 .re-account-menu.orbit-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
   color: inherit;
@@ -18963,7 +19016,7 @@ button.chat-jump-start:hover {
   line-height: 16px;
   vertical-align: 1px;
 }
-/* The name being renamed: the session title's underlined input (.workspace-name-input), at the
+/* The name being renamed: an underlined input, at the
    name's own size, its width set from the unseen twin below so the underline hugs the text. */
 .re-name-input {
   display: block;

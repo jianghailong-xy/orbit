@@ -24,7 +24,7 @@ describe('the conversation title bar at phone width', () => {
 
   it('gives the title a row to itself and sends the badges onto the status line', () => {
     expect(block).toContain('.workspace-header-main > .workspace-title-line {\n    display: contents;\n  }');
-    expect(block).toMatch(/\.workspace-title-line > \.workspace-name,\n  \.workspace-title-line > \.workspace-name-input \{\n    flex: 0 0 100%;/);
+    expect(block).toMatch(/\.workspace-title-line > \.workspace-name \{\n    flex: 0 0 100%;/);
   });
 
   it('wraps the status text under the badges rather than cutting it beside them', () => {

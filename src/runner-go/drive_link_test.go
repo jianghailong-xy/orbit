@@ -137,3 +137,41 @@ func TestEnsureDriveLinkRemovesStaleLinks(t *testing.T) {
 		t.Fatalf("a link elsewhere was touched: %q %v", target, err)
 	}
 }
+
+// A runner of the Documents or Files era linked ~/Documents and ~/Files to its own driver's mount. In a Pod of the
+// Drive driver those links point at /run/orbit-documents/drive and /run/orbit-files/drive, not at the mount, and are
+// still the earlier runner's: they go too (seen on Orbit Cloud on 2026-11-25).
+func TestEnsureDriveLinkRemovesLinksToOlderDriversMounts(t *testing.T) {
+	dir := t.TempDir()
+	oldMount, oldHome, oldStale, oldTargets := driveMountPath, driveHomePath, driveStaleHomePaths, driveStaleLinkTargets
+	t.Cleanup(func() {
+		driveMountPath, driveHomePath, driveStaleHomePaths, driveStaleLinkTargets = oldMount, oldHome, oldStale, oldTargets
+	})
+	driveMountPath = filepath.Join(dir, "run", "orbit-drive", "drive")
+	driveHomePath = filepath.Join(dir, "home", "orbit", "Drive")
+	docs := filepath.Join(dir, "home", "orbit", "Documents")
+	files := filepath.Join(dir, "home", "orbit", "Files")
+	driveStaleHomePaths = []string{docs, files}
+	driveStaleLinkTargets = []string{"/run/orbit-documents/drive", "/run/orbit-files/drive"}
+	if err := os.MkdirAll(filepath.Dir(driveMountPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(docs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/run/orbit-documents/drive", docs); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/run/orbit-files/drive", files); err != nil {
+		t.Fatal(err)
+	}
+	ensureDriveLink(func(string, ...interface{}) {})
+	for _, stale := range []string{docs, files} {
+		if _, err := os.Lstat(stale); !os.IsNotExist(err) {
+			t.Fatalf("the leftover link %s stayed: %v", stale, err)
+		}
+	}
+	if target, err := os.Readlink(driveHomePath); err != nil || target != driveMountPath {
+		t.Fatalf("~/Drive is not the link: %q %v", target, err)
+	}
+}

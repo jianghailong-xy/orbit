@@ -1,0 +1,65 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{--text-1:#1f2329;--text-2:#4e5969;--text-3:#86909c;--border:#e5e6eb;--border-subtle:#eef0f3;--bg-sunken:#f6f7f9;--bg-raised:#fff;--brand:#3370ff;--brand-tint:#e8f0ff}
+*{box-sizing:border-box}
+body{margin:0;background:#eceef2;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:var(--text-1)}
+.board{width:2360px;padding:40px;background:#eceef2}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--text-2);font-size:16px;margin-bottom:28px;line-height:1.6}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{width:740px}
+.tag{font-size:19px;font-weight:700;margin:0 0 4px}
+.tagnote{font-size:14px;color:var(--text-2);margin:0 0 12px;line-height:1.55;min-height:66px}
+.rec{display:inline-block;background:#00b42a;color:#fff;font-size:12px;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.pane{background:#fff;border-radius:10px;border:1px solid #dcdfe6;overflow:hidden;height:560px;display:flex;flex-direction:column;position:relative}
+.hdr{padding:16px 22px 12px;border-bottom:1px solid var(--border-subtle)}
+.hdr .t{font-size:19px;font-weight:700}.hdr .m{font-size:13px;color:var(--text-3);margin-top:6px}
+.chip{display:inline-block;background:#f2f3f5;border-radius:10px;padding:1px 8px;margin-left:6px;color:var(--text-2)}
+.bar{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border-subtle);background:var(--bg-sunken);font-size:13px;color:var(--text-1)}
+.bar .l{font-size:12px;color:var(--text-3);flex:none}.bar .x{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar.loading{color:var(--text-3)}
+.scroll{flex:1;position:relative;padding:18px 22px;overflow:hidden}
+.pills{position:absolute;top:10px;left:0;right:0;text-align:center;z-index:3;display:flex;justify-content:center;gap:8px}
+.pill{display:inline-flex;gap:6px;align-items:center;padding:4px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;color:var(--text-2);font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.pill.new{border-color:var(--brand);color:var(--brand)}
+.card{border:1px solid #c9d8ff;background:#f3f7ff;border-radius:8px;padding:12px 14px;margin:30px 0 14px}
+.card .h{color:var(--brand);font-weight:600;font-size:15px;display:flex;justify-content:space-between}.card .h span{color:var(--text-3);font-weight:400;font-size:12px}
+.card .b{font-size:13px;color:var(--text-2);margin-top:6px}
+.asst{font-size:13.5px;line-height:1.6;color:var(--text-1);margin:10px 0}
+.line{height:9px;background:#eef0f3;border-radius:4px;margin:9px 0}
+.user{margin-left:auto;width:fit-content;max-width:80%;background:var(--brand-tint);border-radius:10px;padding:8px 12px;font-size:13.5px;margin:12px 0}
+.mark{outline:3px solid #f53f3f;outline-offset:2px;border-radius:6px}
+.badge{position:absolute;background:#f53f3f;color:#fff;border-radius:50%;width:24px;height:24px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:9}
+.foot{font-size:13.5px;color:var(--text-2);line-height:1.6;margin-top:12px}
+.foot b{color:var(--text-1)}
+table{border-collapse:collapse;width:100%;font-size:14px;background:#fff;margin-top:30px}
+td,th{border:1px solid #dcdfe6;padding:8px 10px;text-align:left;vertical-align:top;line-height:1.5}th{background:#f6f7f9}
+.notes{display:flex;gap:28px;margin-top:28px}.notes>div{flex:1;background:#fff;border-radius:10px;padding:16px 20px;font-size:14px;line-height:1.65}
+.notes h3{margin:0 0 8px;font-size:16px}
+.todo{background:#fff7e8!important;border:1px solid #ffcf8b}
+code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:#f2f3f5;padding:0 4px;border-radius:3px}
+</style><style>
+.cap{display:inline-flex;align-items:stretch;border-radius:999px;border:1px solid var(--border);background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:13px;max-width:86%;overflow:hidden}
+.cap .p{display:flex;align-items:center;gap:6px;padding:5px 12px 5px 14px;color:var(--brand);min-width:0}
+.cap .p .who{flex:none;font-size:12px;color:var(--text-3)}
+.cap .p .x{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-1);font-weight:500}
+.cap .s{flex:none;display:flex;align-items:center;gap:4px;padding:5px 11px 5px 10px;color:var(--brand);border-left:1px solid var(--border);font-size:12.5px}
+.cap .p.load .x{color:var(--text-3);font-weight:400}
+.phone{width:393px}
+.phone .pane{height:520px}
+.state{font-size:13px;color:var(--text-2);margin:10px 0 0;line-height:1.6}
+</style><style>.cap .s{color:var(--text-3)!important}.cap .p .x{font-weight:500}.composer{border-top:1px solid var(--border-subtle);padding:12px 22px;color:var(--text-3);font-size:13px}</style></head><body><div class="board">
+<h1>置顶栏并入药丸：「Your question」也放进药丸</h1>
+<div class="sub">顶部的「↑ Your question」置顶栏去掉；它原来显示的问题改由药丸左段显示，右段仍是回到开头的双箭头。<br>
+左段显示哪条：视图上方最近一轮是你发的 → 就是它（原置顶栏的内容）；最近一轮是 Orbit 打开的 → 你更早最近一条亲手发的消息（不在窗口内就离开底部后逐页静默往前找，找到才显示）。</div>
+<div class="row">
+ <div class="col"><div class="tag">① 现状（已上线）</div><div class="tagnote">置顶栏显示你的问题，药丸只有「Jump to the beginning」：同一处信息分成两个控件。</div><div class="pane"><div class="hdr"><div class="t">Session</div><div class="m">Scrolled up</div></div><div class="bar"><span class="l">↑ Your question</span><span class="x">merge into main to upgrade</span></div><div class="scroll"><div class="pills"><span class="pill">↑ Jump to the beginning</span></div><div class="asst" style="margin-top:34px">The first deploy attempt stopped before building anything, so production hasn't changed…</div><div class="line" style="width:92%"></div><div class="line" style="width:80%"></div><div class="line" style="width:86%"></div><div class="asst">The build takes about 12 minutes and the deploy 1 to 2 more.</div><div class="line" style="width:70%"></div><div class="line" style="width:90%"></div><div class="line" style="width:60%"></div></div><div class="composer">Message…</div></div></div>
+ <div class="col"><div class="tag">② 合并后，离开底部</div><div class="tagnote">置顶栏没了，问题在药丸左段（点它跳到你的问题），双箭头回到开头。</div><div class="pane"><div class="hdr"><div class="t">Session</div><div class="m">Scrolled up</div></div><div class="scroll"><div class="pills"><span class="cap mark"><span class="p"><span class="x">merge into main to upgrade</span></span><span class="s"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6"/></svg></span></span></div><div class="asst" style="margin-top:34px">The first deploy attempt stopped before building anything, so production hasn't changed…</div><div class="line" style="width:92%"></div><div class="line" style="width:80%"></div><div class="line" style="width:86%"></div><div class="asst">The build takes about 12 minutes and the deploy 1 to 2 more.</div><div class="line" style="width:70%"></div><div class="line" style="width:90%"></div><div class="line" style="width:60%"></div></div><div class="composer">Message…</div></div></div>
+ <div class="col"><div class="tag">③ 合并后，Orbit 打开的轮次上方</div><div class="tagnote">同已上线的逻辑：显示你更早最近一条消息。</div><div class="pane"><div class="hdr"><div class="t">Session</div><div class="m">Scrolled up</div></div><div class="scroll"><div class="pills"><span class="cap mark"><span class="p"><span class="x">Pause 和 Resume 先做服务器和 Web，iOS 等设计图确认后再派</span></span><span class="s"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6"/></svg></span></span></div><div class="card"><div class="h">Evidence to review <span>2:40 AM</span></div><div class="b">Task “iOS/macOS: Pause/Resume on the project row” submitted revision 1.</div></div><div class="asst">Reading revision 1 of the evidence…</div><div class="line" style="width:92%"></div><div class="line" style="width:78%"></div><div class="line" style="width:85%"></div></div><div class="composer">Message…</div></div></div>
+</div>
+<div class="sub" style="margin:34px 0 14px"><b>待你定：在底部（正在看最新回复）时，药丸显示不显示？</b>原置顶栏在底部也会显示（长回答把问题顶出屏幕时），药丸现在只在离开底部后显示。</div>
+<div class="row">
+ <div class="col"><div class="tag">A　底部也显示 <span class="rec">推荐</span></div><div class="tagnote">和原置顶栏一样：问题被顶出屏幕就显示药丸。不会丢掉原置顶栏在底部的作用；代价是药丸浮在最新回复上方，盖住一行文字。</div><div class="pane"><div class="hdr"><div class="t">Session</div><div class="m">At the bottom (live tail)</div></div><div class="scroll"><div class="pills"><span class="cap mark"><span class="p"><span class="x">merge into main to upgrade</span></span><span class="s"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6"/></svg></span></span></div><div class="asst" style="margin-top:34px">The first deploy attempt stopped before building anything, so production hasn't changed…</div><div class="line" style="width:92%"></div><div class="line" style="width:80%"></div><div class="line" style="width:86%"></div><div class="asst">The build takes about 12 minutes and the deploy 1 to 2 more.</div><div class="line" style="width:70%"></div><div class="line" style="width:90%"></div><div class="line" style="width:60%"></div></div><div class="composer">Message…</div></div></div>
+ <div class="col"><div class="tag">B　只在离开底部后显示</div><div class="tagnote">在底部什么都不浮，屏幕最干净；但看一条很长的最新回复时，看不到它在回答哪个问题，要先往上滚一下。</div><div class="pane"><div class="hdr"><div class="t">Session</div><div class="m">At the bottom (live tail)</div></div><div class="scroll"><div class="pills"></div><div class="asst" style="margin-top:34px">The first deploy attempt stopped before building anything, so production hasn't changed…</div><div class="line" style="width:92%"></div><div class="line" style="width:80%"></div><div class="line" style="width:86%"></div><div class="asst">The build takes about 12 minutes and the deploy 1 to 2 more.</div><div class="line" style="width:70%"></div><div class="line" style="width:90%"></div><div class="line" style="width:60%"></div></div><div class="composer">Message…</div></div></div>
+ <div class="col"><div class="notes" style="margin-top:0;display:block"><div><h3>两种都一样的</h3>· 加载：只有离开底部才会往前翻页找；在底部只用已加载的内容（A 在底部只显示已加载的问题）。<br>· 找的过程中左段不显示，药丸是单段「↑ Jump to the beginning」。<br>· 会话里你一条都没发过：单段药丸。<br>· 只改 Web；iOS / Android 仍是置顶栏，等你确认后再跟。<br><br><b>会改的文件</b>：<code>WorkspaceView.tsx</code>（去掉 <code>chat-sticky-question</code>，问题并入药丸），<code>index.css</code>，stickyWake 测试改为断言药丸。</div></div></div>
+</div>
+</div></body></html>

@@ -46,7 +46,9 @@ struct ProjectDoneCard: View {
     var onReopen: (() async -> Void)? = nil
     /// Open, Change, Move to a follow-up… and Confirm… (`ProjectDoneFollowUps.swift`).
     var followUps = ProjectDoneFollowUpActions()
-    /// Settings › Translation: "Translated · Show original" under the coordinator's call, and its press.
+    /// Settings › Translation: "Translated · Show original" under the coordinator's call — under the
+    /// meta line on a card nobody asked for — and its press, which flips the project's words
+    /// (`subject` is given as drawn, `ProjectDoneSubject.shown`) and the request together.
     var translationFoot: [SessionTranslation.FootPart] = []
     var onFlipTranslation: () -> Void = {}
     /// The last Not yet… note could not be translated and was not sent: the line to draw — why ("…, so
@@ -127,6 +129,9 @@ struct ProjectDoneCard: View {
             .font(.orbitLabel).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+        if request == nil {
+            TranslationFootView(parts: translationFoot) { _ in onFlipTranslation() }
+        }
         if let request {
             DoneSectionHead(title: ProjectDone.coordinatorCall)
             DonePanel {
@@ -467,6 +472,10 @@ struct ProjectDoneReceiptCard: View {
 /// answer (`ProjectDone.WhyNotDone`); nothing here decides what landed.
 struct ProjectNotDoneCard: View {
     let subject: ProjectDoneSubject
+    /// Settings › Translation: the language the criteria are drawn in (`OwnerCardTranslations
+    /// .ownerLanguage`), nil for as written.
+    var owner: TranslationLanguage? = nil
+    @State private var showOriginal = false
     var confirmedAt: String? = nil
     var onReopen: (() async -> String?)? = nil
     @State private var reopening = false
@@ -516,6 +525,9 @@ struct ProjectNotDoneCard: View {
                           aside: askedAt.map { ProjectDone.askedAside(waiting: ProjectDone.requestWaiting($0)) })
                 }
                 tally
+                TranslationFootView(parts: subject.whyNotDoneFoot(why, owner: owner, showOriginal: showOriginal)) { _ in
+                    showOriginal.toggle()
+                }
                 actions(why)
             }
         }
@@ -546,7 +558,8 @@ struct ProjectNotDoneCard: View {
             DonePanel {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, criterion in
                     if index > 0 { Divider() }
-                    let item = subject.criterion(criterion.definitionId)
+                    let item = subject.shown(owner: owner, showOriginal: showOriginal)
+                        .criterion(criterion.definitionId)
                     HStack(alignment: .top, spacing: 8) {
                         DoneOrdinal(text: item.map { "\($0.ordinal)" } ?? "•")
                         VStack(alignment: .leading, spacing: 3) {

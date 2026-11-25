@@ -13,6 +13,9 @@ import kotlinx.serialization.json.*
  * draws yields null here, and the card is drawn as it came, with no "Translated · Show original" foot. The fields each card
  * translates are the server's (`*_FIELDS` in src/apiserver/src/sessions/card-translation.ts); a field the original lacks is never
  * added, and arrays go index for index. Answers go by index, so a translated option label changes no press.
+ *
+ * A project's own title and criteria carry theirs on the project document instead ([project]; `ProjectTextTranslation`), under the same
+ * rule.
  */
 object OwnerCardTranslation {
     /** Which of a card's fields are the agent's words, as the server names them (`CardFields`). */
@@ -134,6 +137,22 @@ object OwnerCardTranslation {
             },
         )
         return shown.takeIf { it != request }
+    }
+
+    /** A project document (`GET /projects/:id`) with its `title` and each criterion's `text` in the owner's language, from its
+     * `translation` (`ProjectTextTranslation`), a criterion matched by its `id`: what the done card and the page's criteria list draw.
+     * Only those words change; writes keep reading the document as it came. */
+    fun project(doc: JsonObject, owner: String?): JsonObject? {
+        val t = usable(doc["translation"], owner) ?: return null
+        val byId = t.objects("criteria").associateBy { it.text("id") }
+        val shown = overlay(doc, t, mapOf("title" to Field.Words)).toMutableMap()
+        (doc["acceptanceCriteriaItems"] as? JsonArray)?.let { items ->
+            shown["acceptanceCriteriaItems"] = JsonArray(items.map { item ->
+                val words = (item as? JsonObject)?.let { byId[it.text("id")] }
+                if (item is JsonObject && words != null) overlay(item, words, mapOf("text" to Field.Words)) else item
+            })
+        }
+        return JsonObject(shown).takeIf { it != doc }
     }
 
     /** A pending completion-evidence row: its `claim` and `gaps` (EvidenceTranslation). */

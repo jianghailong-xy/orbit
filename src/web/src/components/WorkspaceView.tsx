@@ -305,6 +305,7 @@ import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionAgentsStrip } from './SessionAgentsStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
+import { WatchEditorModal } from './WatchEditor';
 import { WatchWakeNamesCtx } from './WatchWakeCard';
 import { ExchangeTreeCtx, type ExchangeTree } from './OrbitExchangeFold';
 import { idKey as exchangeIdKey, upstreamFromGraph } from '../lib/orbitExchangeFold';
@@ -402,6 +403,7 @@ import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalP
 import { approvalAction, delegateCallOfApproval, delegateDescription, useSubagentRuns } from '../lib/subagentRuns';
 import {
   SessionDecisionStrip,
+  type StripPart,
   decisionRowKey,
   revealCriteriaCard,
   revealCard,
@@ -1075,6 +1077,13 @@ const PROJECT_COLUMN_FOLDED_KEY = 'orbit.projectColumnFolded';
 // Narrower than this, the conversation does not take the column beside it: the column folds by itself,
 // and unfolds again once the window is wide enough (owner 2026-11-11, board 4).
 const PROJECT_COLUMN_MIN_CONVERSATION = 480;
+// Session settings as a column in the project column's slot (docs/mocks/session-settings-column): its own width.
+const SETTINGS_COL_KEY = 'orbit.settingsColWidth';
+const SETTINGS_COL_MIN = 300;
+const SETTINGS_COL_DEFAULT = 340;
+// The conversation may narrow further beside its settings than beside the project column before the column has to
+// lie over it: the settings are a passing look, and floating them is what the column replaced.
+const SETTINGS_MIN_CONVERSATION = 360;
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 320;
@@ -1095,6 +1104,8 @@ const LOAD_OLDER_AT = 400;
 // deepest session in this deployment, so it bounds a runaway without being a working limit. A
 // session deeper than that keeps the control, and a second press carries on from where it left.
 const JUMP_TO_START_PAGES = 30;
+// The same ceiling on the pages the pill's search for the person's question may pull in.
+const MINE_SEARCH_PAGES = JUMP_TO_START_PAGES;
 // How long a pinned transcript's tail has to sit out of view, with no content update in between,
 // before the jump-to-bottom button offers it anyway (`stranded`; the clients' ConsoleView waits the
 // same). The follow a content update triggers lands just after the rows grew, and the gap read in
@@ -1109,10 +1120,6 @@ const LANDING_QUIET_MS = 5000;
 // answered elsewhere before the open is never drawn, and a request left standing fired on whatever
 // waiting card appeared later, moving a reader by then reading something else.
 const WAITING_REVEAL_EXPIRES_MS = 10_000;
-// What the sticky bar calls a turn the person typed — the only turn it ever names. A turn the control
-// plane opened (a card carrying `data-orbit-round`) is nobody's question: the owner ruled on
-// 2026-11-14 that machine messages never appear on the bar, so over one the bar is hidden.
-const STICKY_LABEL = 'Your question';
 /** A card still waiting on the reader, in the order the transcript draws them: a tool approval or
  *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
  *  item. Answered and snoozed forms carry none of these. On a phone a coordinator's question is its
@@ -1126,6 +1133,11 @@ export const WAITING_CARD_SELECTOR =
  *  floating "Jump to the beginning" pill (`.chat-older-top`), which any transcript scrolled off both
  *  its top and its tail offers — as a revealed card's is, unless it clamps at the top. */
 export const WAITING_CARD_GAP = 48;
+/** How long a page of older messages may take before the top pill says "Loading earlier messages…":
+ *  under a second, so a fast page shows nothing and a slow one is not a silent stall at the top. */
+const LOADING_OLDER_SHOW_AFTER_MS = 1000;
+/** Once said, how long it stays at least, so a page landing just after the delay does not flash it. */
+const LOADING_OLDER_MIN_SHOWN_MS = 500;
 
 // Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
 // recall only this session's recently sent prompts (never another session's). Stored
@@ -1577,7 +1589,7 @@ export function SessionTitleRow({
           <TeamOutlined />
         </span>
       )}
-      <span className="session-time">{fmtTime(s.listedAt ?? s.createdAt)}</span>
+      <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
@@ -1753,7 +1765,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
       <div className="session-main">
         <div className="session-title-row">
           <div className="session-title">{project.title}</div>
-          <span className="session-time">{fmtTime(project.listedAt ?? project.createdAt ?? undefined)}</span>
+          <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
         </div>
         <div className="session-sub">
           <span
@@ -2608,19 +2620,6 @@ export function WorkspaceView({
   // transcript insert have rendered. Kept separate from `at`, because an item is not a transcript
   // record and must not reseed the transcript window.
   const itemAt = itemAtOf(searchParams);
-  // Inline header-title rename: double-click swaps the title for an input. `editingTitle`
-  // gates the editor, `titleDraft` holds the in-progress text, `cancelTitleEdit` lets
-  // Escape skip the blur-commit. Switching sessions closes any open editor (effect below).
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState('');
-  const cancelTitleEdit = useRef(false);
-  // Size the rename input to its text (via an off-screen mirror) so the underline hugs the
-  // title instead of spanning the whole header; CSS caps it at the available width.
-  const titleMirrorRef = useRef<HTMLSpanElement>(null);
-  const [titleInputW, setTitleInputW] = useState(0);
-  useLayoutEffect(() => {
-    if (editingTitle) setTitleInputW((titleMirrorRef.current?.offsetWidth ?? 0) + 2);
-  }, [editingTitle, titleDraft]);
   // /workspaces/<id> names the workspace this console is scoped to: the picker is locked
   // to it and the session list is filtered to that workspace's conversations.
   // /workspaces/<id>/new is the "compose a new session" draft state (the splat is 'new').
@@ -2766,8 +2765,11 @@ export function WorkspaceView({
     pressTimer.current = undefined;
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  const [followOpen, setFollowOpen] = useState(false); // ⋯ → Follow…: a new watch on the open session
   const [agentToolsOpen, setAgentToolsOpen] = useState(false); // the open session's Agent tools drawer
-  const [settingsOpen, setSettingsOpen] = useState(false); // the open session's Settings… drawer
+  const [settingsOpen, setSettingsOpen] = useState(false); // the open session's settings: a column, a sheet on a phone
+  // Goes up each time ⋯ Rename… asks the settings' Name field for focus.
+  const [settingsNameFocus, setSettingsNameFocus] = useState(0);
   useEffect(() => setSettingsOpen(false), [selectedId]); // it belongs to the session it was opened on
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRow, setShareRow] = useState<any>(null);
@@ -2870,6 +2872,51 @@ export function WorkspaceView({
   // Whether the scroller has left its top: with the whole session loaded, the way back is still
   // offered to a reader scrolled up into it, and only the top itself has nothing to go back to.
   const [offTop, setOffTop] = useState(false);
+  // The question the answer in view belongs to: the last turn the person typed above the viewport,
+  // passing over any turn Orbit opened (the owner, 2026-11-14: a machine's message is never named).
+  // The pill at the top offers it beside the way back to the beginning, once the reader has left the
+  // tail (owner, 2026-11-25: it replaced the sticky "Your question" bar). One not loaded yet is looked
+  // for a page at a time (MINE_SEARCH_PAGES) and shown only once found; those pages load without the
+  // pill's loading state (`searchingMine`).
+  const [lastMine, setLastMine] = useState<{ seq: string; text: string } | null>(null);
+  const [searchingMine, setSearchingMine] = useState(false);
+  const revealLastMine = (): void => {
+    if (!lastMine) return;
+    const card = scrollRef.current?.querySelector<HTMLElement>(`.chat-user[data-seq="${lastMine.seq}"]`);
+    revealCard(card, 'start', false);
+  };
+  // The way back up while the reader is off the tail: the person's last message first, the way
+  // back to the beginning beside it as an icon; with no message of theirs, the way back alone. A
+  // wide window draws it in the header row, a phone over the top of the transcript.
+  const jumpUpPill = () => (lastMine && !atBottom ? (
+    // The person's last message first, the way back to the beginning beside it as an icon.
+    <span className="chat-older-pill chat-older-split">
+      <button
+        type="button"
+        className="chat-older-mine"
+        title={lastMine.text}
+        onClick={revealLastMine}
+      >
+        {lastMine.text}
+      </button>
+      <button
+        type="button"
+        className="chat-jump-start chat-older-start"
+        title="Jump to the beginning"
+        aria-label="Jump to the beginning"
+        onClick={() => void jumpToStart()}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
+        </svg>
+      </button>
+    </span>
+  ) : (
+    <button type="button" className="chat-older-pill chat-jump-start" onClick={() => void jumpToStart()}>
+      <ArrowUpOutlined /> Jump to the beginning
+    </button>
+  ));
+  const mineSearchRef = useRef<{ session: string | null; pages: number }>({ session: null, pages: 0 });
   // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
   // stamped as one that wants the top (see prependAnchorRef).
   const jumpingToStartRef = useRef(false);
@@ -2975,14 +3022,6 @@ export function WorkspaceView({
     swipeRef.current = null;
     setSwipeDrag(null);
   };
-  // The turn the answer currently in view belongs to, surfaced as a sticky bar when a long answer
-  // has pushed it off the top — so what is being answered stays findable. null hides it. Only a turn
-  // the person typed is ever named (STICKY_LABEL).
-  const [stuck, setStuck] = useState<
-    { seq: string | null; text: string; loading?: boolean } | null
-  >(null);
-  // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
-  const stuckBarRef = useRef<HTMLButtonElement>(null);
   // The exception cards scrolled wholly above the viewport, by item id, and the owner request cards,
   // by their element id (`owner-request-<id>`), space-joined so an unchanged answer is no re-render:
   // which way the pinned line's press goes to reach one.
@@ -2996,6 +3035,8 @@ export function WorkspaceView({
   // while the user has scrolled up off the live tail (and while `stranded`). (The ref alone
   // can't re-render.)
   const [atBottom, setAtBottom] = useState(true);
+  // The reader has left the live tail with more above: the way back up is offered (header or pill).
+  const jumpUpOffered = !atBottom && (hasMoreOlder || offTop);
   // Pinned, but come to rest with the tail out of view: the button's other reason to show. The pin
   // lets go on a scroll UP alone (tailPinning.ts), so a tail that left the view any other way — the
   // last card opened under a reader at the bottom, a link card landing — still reads as at the
@@ -3079,7 +3120,11 @@ export function WorkspaceView({
     const saved = Number(localStorage.getItem(PROJECT_COL_KEY));
     return saved >= SESSION_COL_MIN && saved <= SESSION_COL_MAX ? saved : SESSION_COL_DEFAULT;
   });
-  const [resizing, setResizing] = useState<'list' | 'project' | null>(null);
+  const [settingsColWidth, setSettingsColWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem(SETTINGS_COL_KEY));
+    return saved >= SETTINGS_COL_MIN && saved <= SESSION_COL_MAX ? saved : SETTINGS_COL_DEFAULT;
+  });
+  const [resizing, setResizing] = useState<'list' | 'project' | 'settings' | null>(null);
   const [projectColumnFolded, setProjectColumnFolded] = useState<boolean>(() => localStorage.getItem(PROJECT_COLUMN_FOLDED_KEY) === '1');
   // The split's width, so the column can tell whether the conversation keeps 480px beside it. Unmeasured
   // (no layout yet), the window counts as wide enough.
@@ -3097,6 +3142,9 @@ export function WorkspaceView({
   // List, its divider, the conversation, the column's divider and the column side by side.
   const projectColumnCrowds = splitWidth !== null &&
     splitWidth - colWidth - projectColWidth - 2 < PROJECT_COLUMN_MIN_CONVERSATION;
+  // The settings column, without room beside the conversation, lies over its right edge instead.
+  const settingsColumnCrowds = splitWidth !== null &&
+    splitWidth - colWidth - settingsColWidth - 2 < SETTINGS_MIN_CONVERSATION;
   // Unfolded on demand by the title bar's button while the window is too narrow: the column then lies
   // over the conversation's right edge instead of squeezing it, until it is folded or the window widens.
   const [projectColumnOnDemand, setProjectColumnOnDemand] = useState(false);
@@ -3238,9 +3286,6 @@ export function WorkspaceView({
     () => sessions.find((s) => s.id === selectedId) ?? null,
     [sessions, selectedId],
   );
-  // Close the header-title editor whenever the open session changes — a stale draft must
-  // never commit onto a different session.
-  useEffect(() => setEditingTitle(false), [selectedId]);
   // Detail of the open session, keyed the same as TasksSidePanel so React Query dedupes
   // the fetch. Its only job here is to resolve the session's workspace the instant it's opened:
   // a freshly created session isn't in the list query yet (so `selected` is null), but its
@@ -3362,6 +3407,9 @@ export function WorkspaceView({
       )
     : null;
   const selectedTrashed = selectedLifecycleState === 'TRASH';
+  // Session settings as a column (docs/mocks/session-settings-column): on a wide screen, in the project column's
+  // slot, which it takes while it is open (one column at a time); on a phone a sheet instead.
+  const settingsColumnShown = settingsOpen && !isMobile && !!selected && !selectedTrashed;
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
   // Whether a public link opens this conversation right now: the detail's open link once it has
   // been read, the list row's flag until then. The Trash pauses a link, so a trashed one is not.
@@ -3958,7 +4006,7 @@ export function WorkspaceView({
   // read here only while that page is shut: open, the page reads them itself (the same cache entries),
   // and these stop.
   const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
-    : titleBarProjectId === columnProjectId && projectColumnOpen);
+    : titleBarProjectId === columnProjectId && projectColumnOpen && !settingsColumnShown);
   const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
   const titleBarIntegrationQ = useProjectIntegration(titleBarProjectId ?? '', titleBarReadsLine);
   const titleBarPromotionQ = useQuery({
@@ -3973,20 +4021,26 @@ export function WorkspaceView({
     titleBarPromotionQ.data,
   );
   // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
+  // With the settings column over it, Esc is the settings column's: it closes that, and the project column
+  // underneath comes back.
   useEffect(() => {
-    if (!projectColumnOpen) return;
+    if (!projectColumnOpen && !settingsColumnShown) return;
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing) return;
       const focused = document.activeElement;
       if (focused instanceof HTMLElement && (focused.isContentEditable ||
         focused.closest('input, textarea, select, [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'))) return;
+      if (settingsColumnShown) {
+        setSettingsOpen(false);
+        return;
+      }
       setProjectColumnFolded(true);
       setProjectColumnOnDemand(false);
       localStorage.setItem(PROJECT_COLUMN_FOLDED_KEY, '1');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [projectColumnOpen]);
+  }, [projectColumnOpen, settingsColumnShown]);
   // Whether the address named the column's project together with, or after, the conversation now open
   // (a project row, a member's mark, a link), rather than the selection having moved on under a column
   // already open. Read by the effect below, so it is written first.
@@ -4857,6 +4911,58 @@ export function WorkspaceView({
     detachedNow,
     backToLatest: streamBackToLatest,
   } = stream;
+  // The top pill: what is loading above, or the way back up once the reader has left the tail. A wide
+  // window draws it centred in the header row, a phone over the top of the transcript.
+  // A page that lands within LOADING_OLDER_SHOW_AFTER_MS says nothing: only a slow one is announced.
+  // Once said, it stays for LOADING_OLDER_MIN_SHOWN_MS, so a page landing just after is no flash.
+  const [loadingOlderShown, setLoadingOlderShown] = useState(false);
+  const loadingOlderShownAtRef = useRef(0);
+  useEffect(() => {
+    if (loadingOlder) {
+      if (loadingOlderShown) return undefined;
+      const timer = window.setTimeout(() => {
+        loadingOlderShownAtRef.current = Date.now();
+        setLoadingOlderShown(true);
+      }, LOADING_OLDER_SHOW_AFTER_MS);
+      return () => window.clearTimeout(timer);
+    }
+    if (!loadingOlderShown) return undefined;
+    const left = LOADING_OLDER_MIN_SHOWN_MS - (Date.now() - loadingOlderShownAtRef.current);
+    const timer = window.setTimeout(() => setLoadingOlderShown(false), Math.max(0, left));
+    return () => window.clearTimeout(timer);
+  }, [loadingOlder, loadingOlderShown]);
+  // Whether anything waits on the reader: the strip's line reports it. While it does, the capsule
+  // leads with it and drops the person's last message; the way to the top stays.
+  const [decisionWaiting, setDecisionWaiting] = useState(false);
+  const topPillShown = decisionWaiting || loadingOlderShown || jumpUpOffered;
+  const jumpStartIcon = (
+    <button
+      type="button"
+      className="chat-jump-start chat-older-start"
+      title="Jump to the beginning"
+      aria-label="Jump to the beginning"
+      onClick={() => void jumpToStart()}
+    >
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
+      </svg>
+    </button>
+  );
+  // The top capsule. The strip's line is always its first child, mounted whether or not anything
+  // waits, so it can say when something does: a pill of its own then, and otherwise a wrapper that
+  // draws nothing around the pill it holds.
+  const topPill = (line: ReactNode) => (
+    <span className={decisionWaiting ? 'chat-older-pill chat-older-split' : 'chat-older-group'}>
+      {line}
+      {decisionWaiting
+        ? (jumpUpOffered ? jumpStartIcon : null)
+        : loadingOlderShown && !searchingMine
+          ? <span className="chat-older-pill">Loading earlier messages…</span>
+          : jumpUpOffered ? jumpUpPill() : null}
+    </span>
+  );
+  const capsuleMounted = !!selectedId && !composing && !selectedTrashed;
+  const headerJumpShown = !isMobile && capsuleMounted && topPillShown;
   // The session's SubAgent runs, read once for the transcript's blocks and the composer band's Agents line.
   const subagentRuns = useSubagentRuns(selectedId ?? '', transcriptEvents);
   // Settings › Translation (@orbit/shared translation.ts): what a translated conversation can do —
@@ -4924,7 +5030,7 @@ export function WorkspaceView({
   const measure = useCallback(() => {
     const el = scrollRef.current;
     if (!el) {
-      setStuck(null);
+      setLastMine(null);
       return;
     }
     const top = el.scrollTop;
@@ -4966,12 +5072,11 @@ export function WorkspaceView({
         .map((card) => card.getAttribute('data-open-item') ?? card.id)
         .join(' '),
     );
-    // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
-    // question above it no longer heads what is on screen — but nobody typed it, so the bar is hidden
-    // over it rather than naming a machine's message (`data-orbit-round` marks its card). Its queued
-    // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a
-    // background job's news or a wakeup coming due is not one: it is a line inside the answer the
-    // agent is still giving (WatchWakeCard, BackgroundWakeCard), so the bar keeps the question.
+    // A turn the control plane queued is scanned too — it is where the answer under it starts — but
+    // nobody typed it, so the question is the person's last turn before it (`data-orbit-round` marks
+    // its card). Its queued twin in the tail is skipped like any queued turn: it hasn't been asked yet.
+    // A watch's wake, a background job's news or a wakeup coming due is not one: it is a line inside
+    // the answer the agent is still giving (WatchWakeCard, BackgroundWakeCard).
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
@@ -4980,36 +5085,29 @@ export function WorkspaceView({
       if (b.getBoundingClientRect().bottom <= topY + 1) at++;
       else break;
     }
-    // The bar sits above the scroller, so drawing or dropping it moves the transcript by its height
-    // whenever the scroll position has to give way: at the tail, which stays pinned. A turn Orbit
-    // opened hides the bar as it leaves the top, and with the bar gone that turn came back into view,
-    // which raised the bar again, which pushed it out — the bar flickered at a frame's pace. So while
-    // the bar is up, such a turn only takes it down once it is above the top by the bar's own height,
-    // and the question the bar names until then is the one before it.
-    const barHeight = stuckBarRef.current?.offsetHeight ?? 0;
-    if (at >= 0 && barHeight > 0 && bubbles[at].hasAttribute('data-orbit-round')
-      && bubbles[at].getBoundingClientRect().bottom > topY + 1 - barHeight) at--;
-    const cur: HTMLElement | null = at >= 0 ? bubbles[at] : null;
-    if (cur?.hasAttribute('data-orbit-round')) {
-      setStuck(null);
-    } else if (cur) {
-      // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose
-      // hover mask ("Preview") and file chips are in the DOM regardless of visibility, and a raw
-      // textContent would splice those labels in front of the question.
-      setStuck({
-        seq: cur.getAttribute('data-seq'),
-        text: cur.querySelector('.md')?.textContent || '',
-      });
-    } else if (hasOlderNow()) {
-      // No loaded user prompt sits above the viewport, but older pages remain: the prompt for
-      // the content now in view is in an unloaded page. Don't blank the bar — show a loading
-      // state and pull the earlier page in (no-op if one is already in flight), so measure
-      // re-runs after the prepend and resolves the real question.
-      setStuck({ seq: null, text: '', loading: true });
-      loadOlder();
-    } else {
-      setStuck(null);
+    let mine: HTMLElement | null = null;
+    for (let i = at; i >= 0 && !mine; i--) if (!bubbles[i].hasAttribute('data-orbit-round')) mine = bubbles[i];
+    // Not loaded yet: once the reader has left the tail, the next older page comes in (one at a time,
+    // capped per session), and measure runs again when it lands.
+    const search = mineSearchRef.current;
+    if (search.session !== selectedIdRef.current) {
+      search.session = selectedIdRef.current;
+      search.pages = 0;
     }
+    if (!mine && !atBottomRef.current && hasOlderNow() && search.pages < MINE_SEARCH_PAGES) {
+      search.pages++;
+      setSearchingMine(true);
+      void loadOlder().finally(() => setSearchingMine(false));
+    }
+    // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose hover
+    // mask ("Preview") and file chips are in the DOM regardless of visibility, and a raw textContent
+    // would splice those labels in front of the question.
+    const mineSeq = mine?.getAttribute('data-seq');
+    const mineText = mine?.querySelector('.md')?.textContent || '';
+    setLastMine((prev) => {
+      if (!mineSeq) return null;
+      return prev?.seq === mineSeq && prev.text === mineText ? prev : { seq: mineSeq, text: mineText };
+    });
   }, [loadOlder, loadNewer, hasOlderNow, detachedNow]);
   // The same button in a window opened at a record: the latest message is past the gap, so the window
   // is traded for the tail (the stream's backToLatest), and the record leaves the URL — a reload now
@@ -5140,7 +5238,7 @@ export function WorkspaceView({
   useEffect(() => {
     setReplyTo(null);
     setLocalStatusCards([]);
-    setStuck(null);
+    setLastMine(null);
     // Staged uploads are scoped to the previous session (can't be linked to another), and
     // the sent-image previews are this session's object URLs — drop and revoke both.
     setImages((prev) => {
@@ -7054,7 +7152,7 @@ export function WorkspaceView({
       returnFocus,
     });
   };
-  // Double-click the header title (or Rename… in a ⋯) to rename. Optimistically patch the title into
+  // The settings' Name field (or Rename… on a row's ⋯) renames. Optimistically patch the title into
   // every cached session list (the header reads `selected.title` off that list, not the detail
   // query) — a project's sessions page included, where a row can be renamed too — so the new name
   // shows instantly; reconcile or roll back on settle.
@@ -7516,18 +7614,19 @@ export function WorkspaceView({
   // left column. Listeners live on `document` so a fast drag that outruns the 1px
   // handle keeps tracking; body cursor/select are pinned for the drag's duration.
   // The project's column sits at the right edge, so its divider widens it dragged leftwards.
-  const startResize = (e: ReactMouseEvent, which: 'list' | 'project' = 'list'): void => {
+  const startResize = (e: ReactMouseEvent, which: 'list' | 'project' | 'settings' = 'list'): void => {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = which === 'list' ? colWidth : projectColWidth;
-    const setWidth = which === 'list' ? setColWidth : setProjectColWidth;
+    const startW = which === 'list' ? colWidth : which === 'project' ? projectColWidth : settingsColWidth;
+    const setWidth = which === 'list' ? setColWidth : which === 'project' ? setProjectColWidth : setSettingsColWidth;
+    const min = which === 'settings' ? SETTINGS_COL_MIN : SESSION_COL_MIN;
     const sign = which === 'list' ? 1 : -1;
     let latest = startW;
     setResizing(which);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     const onMove = (ev: MouseEvent): void => {
-      latest = Math.min(SESSION_COL_MAX, Math.max(SESSION_COL_MIN, startW + sign * (ev.clientX - startX)));
+      latest = Math.min(SESSION_COL_MAX, Math.max(min, startW + sign * (ev.clientX - startX)));
       setWidth(latest);
     };
     const onUp = (): void => {
@@ -7536,7 +7635,7 @@ export function WorkspaceView({
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       setResizing(null);
-      localStorage.setItem(which === 'list' ? SESSION_COL_KEY : PROJECT_COL_KEY, String(latest));
+      localStorage.setItem(which === 'list' ? SESSION_COL_KEY : which === 'project' ? PROJECT_COL_KEY : SETTINGS_COL_KEY, String(latest));
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -8941,6 +9040,11 @@ export function WorkspaceView({
   // column of the open conversation's project, and opens that column where the address names none.
   const toggleProjectColumn = (): void => {
     if (!titleBarProjectId) return;
+    // The settings column holds the slot: the button hands it back to the project column.
+    if (settingsColumnShown) {
+      setSettingsOpen(false);
+      if (titleBarProjectId === columnProjectId && projectColumnOpen) return;
+    }
     if (titleBarProjectId === columnProjectId) {
       foldProjectColumn(projectColumnOpen);
       return;
@@ -10093,6 +10197,28 @@ export function WorkspaceView({
       : selectedId
         ? 'Starting…'
         : '';
+  // The open session's settings, for the column beside the conversation or the sheet on a phone.
+  const settingsProps = selected && !selectedTrashed && !composing
+    ? {
+        open: settingsOpen,
+        onClose: () => setSettingsOpen(false),
+        sessionId: selected.id,
+        title: selected.title,
+        onRename: (title: string) => renameMut.mutate({ id: selected.id, title }),
+        focusNameRequest: settingsNameFocus,
+        sessionTags: (selected.tags ?? []) as SessionTagRef[],
+        tagLibrary: sessionTags,
+        onToggleTag: toggleTag,
+        tagsSaving: setTagsMut.isPending,
+        engineName: selectedSession?.engine ? engineTitle.name : null,
+        runnerName: runner ? runnerShownName : null,
+        accountLabel:
+          // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
+          shownProviderRow?.kind === 'login'
+            ? `${engineTitle.name} · ${shownAccountLabel ?? shownProviderRow.label}`
+            : shownProviderValue,
+      }
+    : null;
   const composerPlaceholder = selectedTrashed
     ? 'Restore this session to continue'
     : handingOver
@@ -10600,6 +10726,69 @@ export function WorkspaceView({
     )
   );
 
+  // The pinned strip, in the half asked for: its line goes to the cards that wait on the reader,
+  // drawn as the top capsule's first segment; its fold is a bar under the header (DecisionStrip).
+  const decisionStrip = (part: StripPart) => selectedId ? (
+    <SessionDecisionStrip
+      part={part}
+      onWaiting={part === 'line' ? setDecisionWaiting : undefined}
+      sessionId={selectedId}
+      projectId={selectedSession?.projectId ?? null}
+      cards={decisionCards}
+      confirmation={
+        openSettlementIn?.sessionId === selectedId ? openSettlementIn.question : false
+      }
+      // Named in the card's own words, with how long the run has waited — never a number
+      // first. Only when the card below is drawn in this session, so a press always arrives;
+      // and not while its report is still with its reviewer, which is somebody else's to look
+      // at first — the card is there, but nothing points the owner at it (contract §5 N1).
+      ownerConfirmation={
+        ownerWaiting && ownerConfirmation.data && ownerWaiting.review?.state !== 'UNDER_REVIEW'
+          ? {
+              title: ownerConfirmation.data.title,
+              ageSeconds: Math.max(
+                0,
+                Math.floor((Date.now() - Date.parse(ownerWaiting.requestedAt)) / 1000),
+              ),
+            }
+          : null
+      }
+      // The exception cards the owner presses, with how long each has been theirs and which
+      // side of the reader it sits on now: unlike a question, one can be above.
+      needsYou={ownerExceptionRows.map((row) => ({
+        row,
+        need: selectedSession?.ownerItems?.find((item: any) => item.itemId === row.itemId)?.need
+          ?? null,
+        ageSeconds: (() => {
+          const at = Date.parse(row.escalatedAt ?? row.waitingSince);
+          return Number.isFinite(at)
+            ? Math.max(0, Math.floor((Date.now() - at) / 1000))
+            : null;
+        })(),
+        above: openItemsAbove.split(' ').includes(row.itemId),
+      }))}
+      // The strip states the fact and this takes the reader to the one place it can be
+      // answered: the card the server delivered into this conversation. A second set of
+      // buttons up here would be two faces racing for one answer.
+      onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
+      crossings={crossingCards.pointers}
+      // The coordinator's open questions, from the read `CoordinatorQuestions` draws their
+      // cards from at this conversation's foot, so the line and the cards cannot disagree.
+      questions={coordinatedProjectId ? coordinatorQuestions(openItems.data).map((row) => ({
+        itemId: row.itemId,
+        question: row.question?.question ?? row.title,
+        ageSeconds: (() => {
+          const at = Date.parse(row.waitingSince);
+          return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
+        })(),
+      })) : []}
+      ownerRequests={ownerRequestPointers.map((request) => ({
+        ...request,
+        above: openItemsAbove.split(' ').includes(`owner-request-${request.id}`),
+      }))}
+    />
+  ) : null;
+
   return (
     <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
       {/* A machine with no workspace has no sessions to list: its setup page is the card alone. */}
@@ -10846,7 +11035,7 @@ export function WorkspaceView({
         <>
         {/* A machine with no workspace: the card says whose it is, so no session title above it. A phone keeps the
             header for its way back. */}
-        {(!bareMachine || isMobile) && <div className="workspace-header">
+        {(!bareMachine || isMobile) && <div className={`workspace-header${headerJumpShown ? ' has-jump' : ''}`}>
           {isMobile && (
             <button
               type="button"
@@ -10891,64 +11080,21 @@ export function WorkspaceView({
               </button>
             )}
             <div className="workspace-title-line">
-              {editingTitle && selected && !composing ? (
-                <>
-                  <span ref={titleMirrorRef} className="workspace-name-mirror" aria-hidden="true">
-                    {titleDraft || ' '}
-                  </span>
-                  <input
-                    className="workspace-name-input"
-                    style={{ width: titleInputW }}
-                    autoFocus
-                    value={titleDraft}
-                    onChange={(e) => setTitleDraft(e.target.value)}
-                    onFocus={(e) => {
-                      // Select all (double-click-to-rename = type replaces), but anchor the
-                      // caret at the START so a long title shows its head, not its tail. The
-                      // anchor alone doesn't scroll: Chromium keeps the field at the end it
-                      // focused at.
-                      const el = e.currentTarget;
-                      el.setSelectionRange(0, el.value.length, 'backward');
-                      el.scrollLeft = 0;
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        e.currentTarget.blur();
-                      } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        cancelTitleEdit.current = true;
-                        e.currentTarget.blur();
-                      }
-                    }}
-                    onBlur={() => {
-                      setEditingTitle(false);
-                      if (cancelTitleEdit.current) {
-                        cancelTitleEdit.current = false;
-                        return;
-                      }
-                      const t = titleDraft.trim();
-                      // Entering rename mode and committing is an explicit ownership choice even
-                      // when the text is unchanged: the server uses that same-text write to opt a
-                      // project-managed title out of future synchronization (the ABA case).
-                      if (t) renameMut.mutate({ id: selected.id, title: t });
-                    }}
-                  />
-                </>
-              ) : (
-                <div
-                  className="workspace-name"
-                  {...(selected && !selectedTrashed && !composing
-                    ? {
-                        onDoubleClick: () => {
-                          setTitleDraft(selected.title);
-                          setEditingTitle(true);
-                        },
-                        title: 'Double-click to rename',
-                      }
-                    : {})}
+              {selected && !selectedTrashed && !composing ? (
+                // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
+                // it is renamed there, in the Name field.
+                <button
+                  type="button"
+                  className="workspace-name workspace-name-button"
+                  title="Session settings"
+                  aria-expanded={settingsOpen}
+                  onClick={() => setSettingsOpen((open) => !open)}
                 >
+                  <span className="workspace-name-text">{selected.title}</span>
+                  <RightOutlined className="workspace-name-chevron" aria-hidden />
+                </button>
+              ) : (
+                <div className="workspace-name">
                   {composing
                     ? 'New session'
                     : (selected?.title ?? (selectedMissing ? 'Session not found' : selectedId ? 'Starting…' : headWorkspaceName))}
@@ -10957,7 +11103,8 @@ export function WorkspaceView({
               {!composing && (
                 <CoordinatorBadge projectId={selectedSession?.projectId} />
               )}
-              {!composing && selected && selectedShared && (
+              {/* docs/mocks/session-header-compact: a wide window says Shared on the Share button beside ⋯. */}
+              {isMobile && !composing && selected && selectedShared && (
                 <button
                   type="button"
                   className="session-shared-pill"
@@ -10968,7 +11115,11 @@ export function WorkspaceView({
                 </button>
               )}
               {!composing && selectedId && !selectedTrashed && !selectedMissing && (
-                <SessionWatchBadges sessionId={selectedId} />
+                <SessionWatchBadges sessionId={selectedId} follow={isMobile} />
+              )}
+              {/* The status line is gone from a wide header, so a handoff in flight says so beside the title. */}
+              {!isMobile && !composing && handingOver && (
+                <span className="coordinator-badge">{COORDINATOR_HANDOFF_COPY.badgeHandingOver}</span>
               )}
               {/* Only a failed connection is said here; Connected, Starting and Not reported stay on the ⋯ row. */}
               {!composing && selected && !selectedTrashed && selectedAgentToolsStatus.tone === 'bad' && (
@@ -10983,7 +11134,9 @@ export function WorkspaceView({
                 </button>
               )}
             </div>
-            <div className="workspace-sub">
+            {/* docs/mocks/session-header-compact: a wide window's header is the title alone; the run word, the
+                lifecycle, the time and the tags stay on a phone's. */}
+            {(isMobile || !selected) && <div className="workspace-sub">
               {headSub}
               {/* The session's tags, seen without opening anything; a press opens ⋯ at its Tags level. */}
               {!composing && selected && !selectedTrashed && (
@@ -10996,13 +11149,19 @@ export function WorkspaceView({
                   }}
                 />
               )}
-            </div>
+            </div>}
             {/* A run of a task forked from a session says where its checkout came from, in the
                 server's own words (docs/task-fork-from-session-design.md §2.3). */}
             {!composing && detailForSelected?.forkSource && (
               <div className="workspace-sub" data-fork-source="">{detailForSelected.forkSource}</div>
             )}
           </div>
+          {/* Off the live tail, a wide window draws the transcript's top pill here, centred in the
+              header row instead of floating over the messages. A phone keeps it over the transcript
+              (no room up here). */}
+          {!isMobile && capsuleMounted && (
+            <div className="workspace-header-jump" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
+          )}
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
           <RunnerUpdateIndicator runner={runner} machine={runnerShownName} />
           {selected && !composing && (
@@ -11017,6 +11176,16 @@ export function WorkspaceView({
                   onClick={isMobile ? () => setSheetProjectId(titleBarProjectId) : toggleProjectColumn}>
                   {titleBarSessionCount ?? undefined}
                 </Button>
+              )}
+              {!isMobile && !selectedTrashed && (
+                <Button
+                  variant="text"
+                  className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
+                  icon={<ExportOutlined />}
+                  title={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}
+                  aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
+                  onClick={() => setShareOpen(true)}
+                />
               )}
               <Menu
                 side="bottom"
@@ -11086,10 +11255,11 @@ export function WorkspaceView({
                                 key: 'rename',
                                 icon: <EditOutlined />,
                                 label: 'Rename…',
+                                // Opens the settings with their Name field selected, where a session is renamed.
                                 onSelect: () => {
                                   setHeaderMenuOpen(false);
-                                  setTitleDraft(selected.title);
-                                  afterMenu(headerMore.current, () => setEditingTitle(true));
+                                  setSettingsOpen(true);
+                                  afterMenu(headerMore.current, () => setSettingsNameFocus((n) => n + 1));
                                 },
                               },
                               {
@@ -11120,6 +11290,17 @@ export function WorkspaceView({
                           levelHeader: headerTagLevel.levelHeader,
                           levelFooter: headerTagLevel.levelFooter,
                         },
+                        ...(!isMobile
+                          ? [{
+                              key: 'follow',
+                              icon: <EyeOutlined />,
+                              label: 'Follow…',
+                              onSelect: () => {
+                                setHeaderMenuOpen(false);
+                                setFollowOpen(true);
+                              },
+                            }]
+                          : []),
                         { key: 'divider-share', type: 'separator' as const },
                         // Two words for two links (docs/share-links-design.md §8): Copy link is
                         // the signed-in address, for yourself; Share… is the public one. Keeping a
@@ -11133,7 +11314,8 @@ export function WorkspaceView({
                             copySessionLink(selected);
                           },
                         },
-                        {
+                        // A wide window has Share on its own button beside ⋯ (docs/mocks/session-header-compact).
+                        ...(isMobile ? [{
                           key: 'share',
                           icon: <GlobalOutlined className={selectedShared ? 'session-share-icon-live' : undefined} />,
                           label: selectedShared ? (
@@ -11147,7 +11329,7 @@ export function WorkspaceView({
                             setHeaderMenuOpen(false);
                             setShareOpen(true);
                           },
-                        },
+                        }] : []),
                         {
                           key: 'download-html',
                           icon: <DownloadOutlined />,
@@ -11222,6 +11404,12 @@ export function WorkspaceView({
           )}
         </div>}
 
+        {followOpen && selectedId && (
+          <WatchEditorModal
+            mode={{ kind: 'create', targets: [{ kind: 'SESSION', id: selectedId }] }}
+            onClose={() => setFollowOpen(false)}
+          />
+        )}
         {selected && !composing && (
           <AgentToolsDrawer
             mode="session"
@@ -11241,25 +11429,8 @@ export function WorkspaceView({
             guests={guestContextOf(selected, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
-        {selected && !selectedTrashed && !composing && (
-          <SessionSettingsDrawer
-            open={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
-            sessionId={selected.id}
-            sessionTags={(selected.tags ?? []) as SessionTagRef[]}
-            tagLibrary={sessionTags}
-            onToggleTag={toggleTag}
-            tagsSaving={setTagsMut.isPending}
-            engineName={selectedSession?.engine ? engineTitle.name : null}
-            runnerName={runner ? runnerShownName : null}
-            accountLabel={
-              // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
-              shownProviderRow?.kind === 'login'
-                ? `${engineTitle.name} · ${shownAccountLabel ?? shownProviderRow.label}`
-                : shownProviderValue
-            }
-          />
-        )}
+        {/* On a phone the settings are a sheet over the whole screen; wider, a column (below). */}
+        {isMobile && settingsProps && <SessionSettingsDrawer {...settingsProps} />}
         {shareRow && (
           <ShareModal
             open
@@ -11283,84 +11454,10 @@ export function WorkspaceView({
             around: what this session is being asked to decide is STATE — recomputed from the ledger
             on every read — and state that sat in the transcript's vertical flow read as a message
             nobody sent. One line until it is asked to be more. */}
-        {selectedId && !selectedTrashed && (
-          <SessionDecisionStrip
-            sessionId={selectedId}
-            projectId={selectedSession?.projectId ?? null}
-            cards={decisionCards}
-            confirmation={
-              openSettlementIn?.sessionId === selectedId ? openSettlementIn.question : false
-            }
-            // Named in the card's own words, with how long the run has waited — never a number
-            // first. Only when the card below is drawn in this session, so a press always arrives;
-            // and not while its report is still with its reviewer, which is somebody else's to look
-            // at first — the card is there, but nothing points the owner at it (contract §5 N1).
-            ownerConfirmation={
-              ownerWaiting && ownerConfirmation.data && ownerWaiting.review?.state !== 'UNDER_REVIEW'
-                ? {
-                    title: ownerConfirmation.data.title,
-                    ageSeconds: Math.max(
-                      0,
-                      Math.floor((Date.now() - Date.parse(ownerWaiting.requestedAt)) / 1000),
-                    ),
-                  }
-                : null
-            }
-            // The exception cards the owner presses, with how long each has been theirs and which
-            // side of the reader it sits on now: unlike a question, one can be above.
-            needsYou={ownerExceptionRows.map((row) => ({
-              row,
-              need: selectedSession?.ownerItems?.find((item: any) => item.itemId === row.itemId)?.need
-                ?? null,
-              ageSeconds: (() => {
-                const at = Date.parse(row.escalatedAt ?? row.waitingSince);
-                return Number.isFinite(at)
-                  ? Math.max(0, Math.floor((Date.now() - at) / 1000))
-                  : null;
-              })(),
-              above: openItemsAbove.split(' ').includes(row.itemId),
-            }))}
-            // The strip states the fact and this takes the reader to the one place it can be
-            // answered: the card the server delivered into this conversation. A second set of
-            // buttons up here would be two faces racing for one answer.
-            onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
-            crossings={crossingCards.pointers}
-            // The coordinator's open questions, from the read `CoordinatorQuestions` draws their
-            // cards from at this conversation's foot, so the line and the cards cannot disagree.
-            questions={coordinatedProjectId ? coordinatorQuestions(openItems.data).map((row) => ({
-              itemId: row.itemId,
-              question: row.question?.question ?? row.title,
-              ageSeconds: (() => {
-                const at = Date.parse(row.waitingSince);
-                return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
-              })(),
-            })) : []}
-            ownerRequests={ownerRequestPointers.map((request) => ({
-              ...request,
-              above: openItemsAbove.split(' ').includes(`owner-request-${request.id}`),
-            }))}
-          />
-        )}
+        {/* What waits on the reader goes in the top capsule now (the line); the one fold it has
+            left, the submissions this session is the one to fix, stays a bar of its own here. */}
+        {selectedId && !selectedTrashed && !isMobile && decisionStrip('fold')}
 
-        {stuck && (
-          <button
-            ref={stuckBarRef}
-            className={stuck.loading ? 'chat-sticky-question chat-sticky-loading' : 'chat-sticky-question'}
-            title={stuck.text}
-            onClick={() => {
-              const seq = stuck?.seq;
-              if (!seq) return;
-              const card = scrollRef.current?.querySelector<HTMLElement>(`.chat-user[data-seq="${seq}"]`);
-              revealCard(card, 'start', false);
-            }}
-          >
-            {/* The arrow points up at the question the bar names. */}
-            <span className="chat-sticky-label">↑ {STICKY_LABEL}</span>
-            <span className="chat-sticky-text">
-              {stuck.loading ? 'Loading earlier messages…' : stuck.text}
-            </span>
-          </button>
-        )}
 
         <div className="workspace-scroll-wrap">
           {selectedMissing ? (
@@ -11383,16 +11480,8 @@ export function WorkspaceView({
                   the transcript, so there it is only something covering a message. With nothing
                   older left on the server it still scrolls to the top: the reader scrolled up into
                   a fully loaded session wants the same way back. */}
-              {(loadingOlder || (!atBottom && (hasMoreOlder || offTop))) && (
-                <div className="chat-older-top">
-                  {loadingOlder ? (
-                    <span className="chat-older-pill">Loading earlier messages…</span>
-                  ) : (
-                    <button type="button" className="chat-older-pill chat-jump-start" onClick={() => void jumpToStart()}>
-                      <ArrowUpOutlined /> Jump to the beginning
-                    </button>
-                  )}
-                </div>
+              {isMobile && capsuleMounted && (
+                <div className="chat-older-top" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
               )}
               {/* This conversation made its workspace: its first line says what was made and where
                   (board rule 8). First means first, so not above a window that starts later. */}
@@ -12230,7 +12319,20 @@ export function WorkspaceView({
         </>
         )}
       </div>
-      {projectColumnOpen && columnProjectId && (
+      {settingsColumnShown && settingsProps && (
+        <>
+          {!settingsColumnCrowds && (
+            <div
+              className={`session-resizer${resizing === 'settings' ? ' resizing' : ''}`}
+              onMouseDown={(e) => startResize(e, 'settings')}
+              role="separator"
+              aria-orientation="vertical"
+            />
+          )}
+          <SessionSettingsDrawer {...settingsProps} variant="column" width={settingsColWidth} overlay={settingsColumnCrowds} />
+        </>
+      )}
+      {projectColumnOpen && columnProjectId && !settingsColumnShown && (
         <>
           {!projectColumnOnDemand && (
             <div

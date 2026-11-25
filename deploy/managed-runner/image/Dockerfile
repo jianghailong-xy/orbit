@@ -21,7 +21,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # Preserve the whole native layout, including codex-path/rg and package resources.
 # Invoke its native binary directly so there is no npm wrapper in the signal path.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.171.0 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.172.0 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex \
  && test -x /opt/codex/bin/codex \
  && test -x /opt/codex/codex-path/rg
@@ -31,7 +31,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # postinstall only copies its platform package's native binary over a stub: take that binary
 # directly, so no Node wrapper sits in the signal path either.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.330 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.331 \
  && install -D -m 0755 \
       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude" \
       /opt/claude/bin/claude
@@ -77,18 +77,18 @@ ARG TARGETARCH
 # minutes at 81.7 MB of the Kimi binary until it was killed by hand.
 ARG FETCH="curl -fsSL --connect-timeout 30 --speed-limit 4096 --speed-time 60 --retry 5 --retry-delay 10 --retry-all-errors"
 RUN case "$TARGETARCH" in \
-      amd64) target=linux-x64 sum=7f82148d26467874400d19ee8d23ead13cece9cd0c17648a5622cae480a5a596 ;; \
-      arm64) target=linux-arm64 sum=1b13bc1f04781f7e6767162177c3081053b5ba68a2e4fdfeb8ed1d6286dbf6e3 ;; \
+      amd64) target=linux-x64 sum=c7e3ea1a021818c57726d522c40e6d8daea5c6334e2664a21ca34fb3f9a35619 ;; \
+      arm64) target=linux-arm64 sum=8912f372d0bb670fc7493e777fc5496de0da592262985b8e152a624d8a990105 ;; \
       *) exit 1 ;; esac \
- && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.7.2/kimi-code-$target" \
+ && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.7.3/kimi-code-$target" \
  && echo "$sum  /tmp/kimi" | sha256sum -c - \
  && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
  && rm /tmp/kimi
 RUN case "$TARGETARCH" in \
-      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=83311d3f354567612dc16c1ae2ea9b503d6f6833aa4e138d39aa229da3f3bb99b0e4d7cca0bce4796b0060d6a51d8113eb7449ed5dc0e7900bf217107ea5bff9 ;; \
-      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=c9b29bba475f63a1a80161ae93ba72b221c7a586d9851e4d0061546704bab66d6b2760b25d716d191724fc7564f3246456ee151e28aa37af48dbcd72bdc6c463 ;; \
+      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=3dee9f26e298156db673f6ce2a0f5dfed5b30006e04ceb9809c68070e7b717587b33a3da0f8bc2eda45af81a50bc8b14c82b28ae5832bcfe3e7fd49397117b31 ;; \
+      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=23c193151499a4986fd5fa0d8132665cc8ffbad6cc0b3ff4fd53a2cb68abb76b149a992b836d53063443cd89add335f14d8134fb02abdcecbf6e1eaef6c53d33 ;; \
       *) exit 1 ;; esac \
- && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.14-5302690847260672/$path" \
+ && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.16-5250855658717184/$path" \
  && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
  && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
@@ -250,8 +250,8 @@ store = Path(os.environ['ORBIT_ENGINE_STORE'])
 if platform.machine() == 'x86_64':
     actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
-expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.171.0',
-                     'claude': '2.1.330 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.7.2', 'agy': '1.5.14'}
+expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.172.0',
+                     'claude': '2.1.331 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.7.3', 'agy': '1.5.16'}
 expected_versions.update(chromium='Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
                          xvfb='2:21.1.16-1.3+deb13u4', x11vnc='x11vnc: 0.9.17 lastmod: 2025-04-11',
                          xclip='0.13-4', xdotool='1:3.20160805.1-5.1',

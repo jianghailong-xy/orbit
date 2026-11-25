@@ -69,7 +69,7 @@ let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let qc: QueryClient;
 
-async function mount(d: SessionDetail): Promise<void> {
+async function mount(d: SessionDetail, variant: 'drawer' | 'column' = 'drawer'): Promise<void> {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   qc.setQueryData(['session', ID], d);
   qc.setQueryData(['user', 'me'], { preferences: {} });
@@ -93,6 +93,9 @@ async function mount(d: SessionDetail): Promise<void> {
           engineName="Claude Code"
           runnerName="HPC"
           accountLabel="Claude · Max (account 2)"
+          title="Fix login redirect"
+          onRename={onRename}
+          variant={variant}
         />
       </QueryClientProvider>,
     ),
@@ -103,6 +106,7 @@ async function mount(d: SessionDetail): Promise<void> {
 }
 
 const onToggleTag = vi.fn();
+const onRename = vi.fn();
 const body = () => document.body;
 const button = (name: string) =>
   [...body().querySelectorAll('button')].find((b) => b.textContent?.trim() === name || b.getAttribute('aria-label') === name);
@@ -112,7 +116,7 @@ const switchOf = (label: string) => body().querySelector<HTMLElement>(`[role="sw
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  for (const fn of [...Object.values(api), ...Object.values(toast), onToggleTag]) fn.mockReset();
+  for (const fn of [...Object.values(api), ...Object.values(toast), onToggleTag, onRename]) fn.mockReset();
   api.getShareLink.mockResolvedValue({ link: null });
   // A refetch after a write answers with the detail as the cache holds it.
   api.getSession.mockImplementation(async () => qc.getQueryData(['session', ID]));
@@ -128,7 +132,47 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+const nameField = () => body().querySelector<HTMLInputElement>('#ss-name')!;
+async function typeName(text: string): Promise<void> {
+  const input = nameField();
+  await act(async () => {
+    input.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+const key = (k: string) => act(async () => {
+  nameField().dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+});
+
 describe('SessionSettingsDrawer', () => {
+  // docs/mocks/session-settings-column ④: the session is renamed in its settings.
+  it('renames on Return, puts the name back on Esc, and leaves an unchanged name alone on blur', async () => {
+    await mount(detail());
+    expect(nameField().value).toBe('Fix login redirect');
+    await typeName('Fix the login redirect');
+    await key('Enter');
+    expect(onRename).toHaveBeenCalledExactlyOnceWith('Fix the login redirect');
+
+    onRename.mockReset();
+    await typeName('Something else');
+    await key('Escape');
+    expect(nameField().value).toBe('Fix login redirect');
+    expect(onRename).not.toHaveBeenCalled();
+
+    await act(async () => { nameField().focus(); nameField().blur(); });
+    expect(onRename).not.toHaveBeenCalled();
+  });
+
+  it('as a column, draws in place with its own head and ✕, not as a drawer', async () => {
+    await mount(detail(), 'column');
+    const column = body().querySelector('aside.ss-column[aria-label="Session settings"]');
+    expect(column).not.toBeNull();
+    expect(body().querySelector('.orbit-drawer')).toBeNull();
+    expect(column!.querySelector('.ss-column-title')?.textContent).toBe('Session settings');
+    expect(button('Close session settings')).toBeTruthy();
+  });
+
   it('draws Session, Environment, Notifications and Info, and nothing the composer offers', async () => {
     await mount(detail());
     const titles = [...body().querySelectorAll('.ss-section-title')].map((n) => n.textContent);
