@@ -228,6 +228,7 @@ public enum ScheduleCopy {
         public static let pause = "Pause"
         public static let resume = "Resume"
         public static let change = "Change…"
+        public static let rename = "Rename…"
         public static let delete = "Delete"
         public static let undo = "Undo"
         public static let `open` = "Open"
@@ -250,6 +251,12 @@ public enum ScheduleCopy {
         public static let body = "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here."
         public static let confirm = "Delete"
         public static let cancel = "Cancel"
+    }
+    public enum RenameAlert {
+        public static let title = "Rename Schedule"
+        public static let body = "Only the name changes. When it runs and what it does stay the same."
+        public static let cancel = "Cancel"
+        public static let save = "Save"
     }
     public enum StopConfirm {
         public static let title = "Stop this run?"
@@ -275,6 +282,7 @@ public enum ScheduleCopy {
         public static let ended = "Ended: {reason}"
         public static let minutes = "{minutes} min"
         public static let noEnd = "no end"
+        public static let renamed = "Renamed from “{title}”"
         public static let who: [String: String] = [
             "USER": "You",
             "SESSION": "Session",
@@ -558,6 +566,7 @@ public enum ScheduleCopy {
         "actions.pause": ScheduleCopy.Actions.pause,
         "actions.resume": ScheduleCopy.Actions.resume,
         "actions.change": ScheduleCopy.Actions.change,
+        "actions.rename": ScheduleCopy.Actions.rename,
         "actions.delete": ScheduleCopy.Actions.delete,
         "actions.undo": ScheduleCopy.Actions.undo,
         "actions.open": ScheduleCopy.Actions.open,
@@ -578,6 +587,10 @@ public enum ScheduleCopy {
         "deleteConfirm.body": ScheduleCopy.DeleteConfirm.body,
         "deleteConfirm.confirm": ScheduleCopy.DeleteConfirm.confirm,
         "deleteConfirm.cancel": ScheduleCopy.DeleteConfirm.cancel,
+        "renameAlert.title": ScheduleCopy.RenameAlert.title,
+        "renameAlert.body": ScheduleCopy.RenameAlert.body,
+        "renameAlert.cancel": ScheduleCopy.RenameAlert.cancel,
+        "renameAlert.save": ScheduleCopy.RenameAlert.save,
         "stopConfirm.title": ScheduleCopy.StopConfirm.title,
         "stopConfirm.body": ScheduleCopy.StopConfirm.body,
         "stopConfirm.confirm": ScheduleCopy.StopConfirm.confirm,
@@ -617,6 +630,7 @@ public enum ScheduleCopy {
         "history.ended": ScheduleCopy.History.ended,
         "history.minutes": ScheduleCopy.History.minutes,
         "history.noEnd": ScheduleCopy.History.noEnd,
+        "history.renamed": ScheduleCopy.History.renamed,
         "history.who.USER": ScheduleCopy.History.who["USER"]!,
         "history.who.SESSION": ScheduleCopy.History.who["SESSION"]!,
         "history.who.RUN": ScheduleCopy.History.who["RUN"]!,

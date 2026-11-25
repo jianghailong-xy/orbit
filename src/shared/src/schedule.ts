@@ -278,6 +278,7 @@ export const SCHEDULE_COPY = {
     pause: 'Pause',
     resume: 'Resume',
     change: 'Change…',
+    rename: 'Rename…',
     delete: 'Delete',
     undo: 'Undo',
     open: 'Open',
@@ -302,6 +303,13 @@ export const SCHEDULE_COPY = {
       + 'sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here.',
     confirm: 'Delete',
     cancel: 'Cancel',
+  },
+  /** The phone's Rename… (§8.4 *Rename*): an alert with one text field. Web and macOS edit the title in place. */
+  renameAlert: {
+    title: 'Rename Schedule',
+    body: 'Only the name changes. When it runs and what it does stay the same.',
+    cancel: 'Cancel',
+    save: 'Save',
   },
   /** The phone's Stop on a run under way: asks first, as Delete does. */
   stopConfirm: {
@@ -366,6 +374,7 @@ export const SCHEDULE_COPY = {
     paused: 'Paused',
     resumed: 'Resumed',
     ended: 'Ended: {reason}',
+    renamed: 'Renamed from “{title}”',
     minutes: '{minutes} min',
     noEnd: 'no end',
   },
@@ -1964,6 +1973,16 @@ export function scheduleRecordParts(
   }
   if (key === 'accessLevel') return { field: label, text: scheduleFill(C.history.changeTo, { field: label, after: a }) };
   return { field: label, text: scheduleFill(C.history.change, { field: label, before: fieldValueText(key, before[key], names), after: a }) };
+}
+
+/**
+ * A person's rename as the history says it (§8.4 *Rename*): "Renamed from “Codex check”". Null for any other record,
+ * an agent's new title included, which reads as every change does ("Name: Codex check → Codex stable check").
+ */
+export function scheduleRenamedText(record: Pick<ScheduleChangeRecord, 'changedBy' | 'before' | 'after'>): string | null {
+  const keys = Object.keys(record.after ?? {});
+  if (record.changedBy !== 'USER' || !record.before || keys.length !== 1 || keys[0] !== 'title') return null;
+  return scheduleFill(C.history.renamed, { title: String(record.before.title) });
 }
 
 export function scheduleRecordText(
