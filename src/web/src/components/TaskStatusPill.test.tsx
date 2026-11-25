@@ -33,3 +33,34 @@ describe('TaskStatusPill queued word', () => {
     expect(text({ status: 'IN_PROGRESS', running: true, queued: false, queuedOnHold: true })).toBe('Running');
   });
 });
+
+describe('TaskStatusPill on a live run, as the board draws it', () => {
+  const row = { status: 'IN_PROGRESS', running: true, queued: false, runStalled: false, queuedOnHold: false };
+  const draw = (props: Parameters<typeof TaskStatusPill>[0]) => {
+    const html = renderToStaticMarkup(<TaskStatusPill {...props} />);
+    return { text: text(props), marks: [...html.matchAll(/data-mark="([A-Z_]+)"/g)].map((m) => m[1]) };
+  };
+
+  // taskRunOverlay answers WAITING for all three: a RESUME_SESSION watch, a scheduled wake-up, an armed retry.
+  it('reads "Idle" with Will resume for a parked run a watch or an armed retry will wake', () => {
+    const html = renderToStaticMarkup(<TaskStatusPill {...row} runReason="WAITING" />);
+    expect(html).toContain('<span class="status-pill todo"><span class="status-dot"></span>Idle</span>');
+    expect(draw({ ...row, runReason: 'WAITING' })).toEqual({ text: 'IdleWill resume', marks: ['WILL_RESUME'] });
+  });
+  // A failed turn with a retry armed has released its session (Idle, Retrying on the session's own surfaces), so it
+  // carries no task: the row says no run is live, and the pill keeps the task's own lifecycle word.
+  it('keeps the task\'s own word, with no mark, for a released run that is Retrying', () => {
+    const released = { ...row, running: false, runReason: null };
+    expect(draw(released)).toEqual({ text: 'In progress', marks: [] });
+    expect(draw({ ...released, status: 'FAILED' })).toEqual({ text: 'Failed', marks: [] });
+  });
+  it('reads "Running" with Background for a run held by a background job', () => {
+    expect(draw({ ...row, runReason: 'BACKGROUND_JOB' })).toEqual({ text: 'RunningBackground', marks: ['BACKGROUND'] });
+  });
+  it('reads a plain "Running" for a turn', () => {
+    expect(draw({ ...row, runReason: 'TURN' })).toEqual({ text: 'Running', marks: [] });
+  });
+  it('draws as before when an older server sends no queuedOnHold', () => {
+    expect(draw({ status: 'IN_PROGRESS', running: true, runReason: 'WAITING' })).toEqual({ text: 'Running', marks: [] });
+  });
+});

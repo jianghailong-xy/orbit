@@ -1203,7 +1203,7 @@ export function TaskListView() {
           />
         </div>
         <div className="task-status-cell">
-          <TaskStatusPill status={r.status} running={r.running} queued={r.queued} queuedOnHold={r.queuedOnHold} />
+          <TaskStatusPill status={r.status} running={r.running} queued={r.queued} queuedOnHold={r.queuedOnHold} runReason={r.runReason} />
         </div>
         <div className={`task-title-cell${r.accountHold && !r.hold && !r.running && !r.queued ? ' has-hold' : ''}`}>
           <span className="task-title" title={r.title}>
