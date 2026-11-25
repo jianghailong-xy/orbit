@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sessionStatusMeta } from '../components/TaskDetailPanel';
+import { sessionMarks } from './sessionDisplay';
 import { sessionTimeSections } from './sessionGrouping';
 import { serverActivity, SITUATIONS, olderServer, type Payload } from './sessionPhaseFields.fixture';
 import { sessionRunStateOf } from './sessionState';
@@ -8,16 +9,20 @@ import { sessionRunStateOf } from './sessionState';
 const taskRun = (situation: string, facts: Record<string, unknown> = {}): Payload =>
   ({ ...SITUATIONS[situation], workFinished: false, endReason: null, ...facts }) as Payload;
 
+// The badge says the state from `phase` alone; the fact it used to say instead is its mark (lib/sessionDisplay, the
+// approved board docs/mocks/session-display-three-states).
+const badge = (run: Payload) => [sessionStatusMeta(run).label, ...(sessionMarks(run) ?? [])];
+
 describe('the task panel run badge reads the session facts', () => {
-  it('a held queued run reads "On hold"', () => {
+  it('a held queued run reads "Queued" with the On hold mark', () => {
     const run = taskRun('on hold');
     expect(run.status).toBe('PENDING');
     expect(run.activity).toBe(serverActivity('PENDING'));
-    expect(sessionStatusMeta(run).label).toBe('On hold');
+    expect(badge(run)).toEqual(['Queued', 'ON_HOLD']);
   });
 
   it('a queued run with nothing holding it reads "Queued"', () => {
-    expect(sessionStatusMeta(taskRun('a queued turn')).label).toBe('Queued');
+    expect(badge(taskRun('a queued turn'))).toEqual(['Queued']);
   });
 
   it('without the facts a held queued run reads "Queued" (the older control plane)', () => {
@@ -26,17 +31,17 @@ describe('the task panel run badge reads the session facts', () => {
 
   it('Finished only when the work finished', () => {
     const done = taskRun('a task run that finished', { endReason: 'task_done', workFinished: true });
-    expect(sessionStatusMeta(done).label).toBe('Finished');
+    expect(badge(done)).toEqual(['Idle', 'FINISHED']);
     // Released and answered, but the work did not finish: Ended, not Finished.
     const plain = taskRun('old plain row stored SUCCEEDED', { workFinished: false });
     expect(sessionRunStateOf(plain)).toBe('ENDED');
-    expect(sessionStatusMeta(plain).label).toBe('Ended');
+    expect(badge(plain)).toEqual(['Idle', 'ENDED']);
   });
 
   it('Failed only for a failed turn nobody asked to end; Ended otherwise', () => {
-    expect(sessionStatusMeta(taskRun('released by a failed turn')).label).toBe('Failed');
-    expect(sessionStatusMeta(taskRun('ended, runner never confirmed', { endReason: 'ended' })).label).toBe('Ended');
-    expect(sessionStatusMeta(taskRun('released by End', { endReason: 'ended' })).label).toBe('Ended');
+    expect(badge(taskRun('released by a failed turn'))).toEqual(['Idle', 'FAILED']);
+    expect(badge(taskRun('ended, runner never confirmed', { endReason: 'ended' }))).toEqual(['Idle', 'ENDED']);
+    expect(badge(taskRun('released by End', { endReason: 'ended' }))).toEqual(['Idle', 'ENDED']);
   });
 });
 
