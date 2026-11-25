@@ -305,6 +305,7 @@ import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionAgentsStrip } from './SessionAgentsStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
+import { WatchEditorModal } from './WatchEditor';
 import { WatchWakeNamesCtx } from './WatchWakeCard';
 import { ExchangeTreeCtx, type ExchangeTree } from './OrbitExchangeFold';
 import { idKey as exchangeIdKey, upstreamFromGraph } from '../lib/orbitExchangeFold';
@@ -1102,7 +1103,7 @@ const LOAD_OLDER_AT = 400;
 // deepest session in this deployment, so it bounds a runaway without being a working limit. A
 // session deeper than that keeps the control, and a second press carries on from where it left.
 const JUMP_TO_START_PAGES = 30;
-// The same ceiling on the pages the pill's search for the person's last message may pull in.
+// The same ceiling on the pages the pill's search for the person's question may pull in.
 const MINE_SEARCH_PAGES = JUMP_TO_START_PAGES;
 // How long a pinned transcript's tail has to sit out of view, with no content update in between,
 // before the jump-to-bottom button offers it anyway (`stranded`; the clients' ConsoleView waits the
@@ -1118,10 +1119,6 @@ const LANDING_QUIET_MS = 5000;
 // answered elsewhere before the open is never drawn, and a request left standing fired on whatever
 // waiting card appeared later, moving a reader by then reading something else.
 const WAITING_REVEAL_EXPIRES_MS = 10_000;
-// What the sticky bar calls a turn the person typed — the only turn it ever names. A turn the control
-// plane opened (a card carrying `data-orbit-round`) is nobody's question: the owner ruled on
-// 2026-11-14 that machine messages never appear on the bar, so over one the bar is hidden.
-const STICKY_LABEL = 'Your question';
 /** A card still waiting on the reader, in the order the transcript draws them: a tool approval or
  *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
  *  item. Answered and snoozed forms carry none of these. On a phone a coordinator's question is its
@@ -2762,6 +2759,7 @@ export function WorkspaceView({
     pressTimer.current = undefined;
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  const [followOpen, setFollowOpen] = useState(false); // ⋯ → Follow…: a new watch on the open session
   const [agentToolsOpen, setAgentToolsOpen] = useState(false); // the open session's Agent tools drawer
   const [settingsOpen, setSettingsOpen] = useState(false); // the open session's settings: a column, a sheet on a phone
   // Goes up each time ⋯ Rename… asks the settings' Name field for focus.
@@ -2868,10 +2866,12 @@ export function WorkspaceView({
   // Whether the scroller has left its top: with the whole session loaded, the way back is still
   // offered to a reader scrolled up into it, and only the top itself has nothing to go back to.
   const [offTop, setOffTop] = useState(false);
-  // The last turn the person typed above a turn Orbit opened, which the sticky bar is hidden over: the
-  // pill at the top offers it beside the way back to the beginning. Looked for only once the reader has
-  // left the tail, a page at a time (MINE_SEARCH_PAGES), and shown only once found; those pages load
-  // without the pill's loading state (`searchingMine`).
+  // The question the answer in view belongs to: the last turn the person typed above the viewport,
+  // passing over any turn Orbit opened (the owner, 2026-11-14: a machine's message is never named).
+  // The pill at the top offers it beside the way back to the beginning, once the reader has left the
+  // tail (owner, 2026-11-25: it replaced the sticky "Your question" bar). One not loaded yet is looked
+  // for a page at a time (MINE_SEARCH_PAGES) and shown only once found; those pages load without the
+  // pill's loading state (`searchingMine`).
   const [lastMine, setLastMine] = useState<{ seq: string; text: string } | null>(null);
   const [searchingMine, setSearchingMine] = useState(false);
   const mineSearchRef = useRef<{ session: string | null; pages: number }>({ session: null, pages: 0 });
@@ -2980,14 +2980,6 @@ export function WorkspaceView({
     swipeRef.current = null;
     setSwipeDrag(null);
   };
-  // The turn the answer currently in view belongs to, surfaced as a sticky bar when a long answer
-  // has pushed it off the top — so what is being answered stays findable. null hides it. Only a turn
-  // the person typed is ever named (STICKY_LABEL).
-  const [stuck, setStuck] = useState<
-    { seq: string | null; text: string; loading?: boolean } | null
-  >(null);
-  // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
-  const stuckBarRef = useRef<HTMLButtonElement>(null);
   // The exception cards scrolled wholly above the viewport, by item id, and the owner request cards,
   // by their element id (`owner-request-<id>`), space-joined so an unchanged answer is no re-render:
   // which way the pinned line's press goes to reach one.
@@ -4942,7 +4934,7 @@ export function WorkspaceView({
   const measure = useCallback(() => {
     const el = scrollRef.current;
     if (!el) {
-      setStuck(null);
+      setLastMine(null);
       return;
     }
     const top = el.scrollTop;
@@ -4984,12 +4976,11 @@ export function WorkspaceView({
         .map((card) => card.getAttribute('data-open-item') ?? card.id)
         .join(' '),
     );
-    // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
-    // question above it no longer heads what is on screen — but nobody typed it, so the bar is hidden
-    // over it rather than naming a machine's message (`data-orbit-round` marks its card). Its queued
-    // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a
-    // background job's news or a wakeup coming due is not one: it is a line inside the answer the
-    // agent is still giving (WatchWakeCard, BackgroundWakeCard), so the bar keeps the question.
+    // A turn the control plane queued is scanned too — it is where the answer under it starts — but
+    // nobody typed it, so the question is the person's last turn before it (`data-orbit-round` marks
+    // its card). Its queued twin in the tail is skipped like any queued turn: it hasn't been asked yet.
+    // A watch's wake, a background job's news or a wakeup coming due is not one: it is a line inside
+    // the answer the agent is still giving (WatchWakeCard, BackgroundWakeCard).
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
@@ -4998,59 +4989,29 @@ export function WorkspaceView({
       if (b.getBoundingClientRect().bottom <= topY + 1) at++;
       else break;
     }
-    // The bar sits above the scroller, so drawing or dropping it moves the transcript by its height
-    // whenever the scroll position has to give way: at the tail, which stays pinned. A turn Orbit
-    // opened hides the bar as it leaves the top, and with the bar gone that turn came back into view,
-    // which raised the bar again, which pushed it out — the bar flickered at a frame's pace. So while
-    // the bar is up, such a turn only takes it down once it is above the top by the bar's own height,
-    // and the question the bar names until then is the one before it.
-    const barHeight = stuckBarRef.current?.offsetHeight ?? 0;
-    if (at >= 0 && barHeight > 0 && bubbles[at].hasAttribute('data-orbit-round')
-      && bubbles[at].getBoundingClientRect().bottom > topY + 1 - barHeight) at--;
-    const cur: HTMLElement | null = at >= 0 ? bubbles[at] : null;
-    // Over a turn Orbit opened, the bar is hidden, so the pill offers the last turn the person typed
-    // above it. Not loaded yet: once the reader has left the tail, the next older page comes in
-    // (one at a time, capped per session), and measure runs again when it lands.
     let mine: HTMLElement | null = null;
-    if (cur?.hasAttribute('data-orbit-round')) {
-      for (let i = at - 1; i >= 0 && !mine; i--) if (!bubbles[i].hasAttribute('data-orbit-round')) mine = bubbles[i];
-      const search = mineSearchRef.current;
-      if (search.session !== selectedIdRef.current) {
-        search.session = selectedIdRef.current;
-        search.pages = 0;
-      }
-      if (!mine && !atBottomRef.current && hasOlderNow() && search.pages < MINE_SEARCH_PAGES) {
-        search.pages++;
-        setSearchingMine(true);
-        void loadOlder().finally(() => setSearchingMine(false));
-      }
+    for (let i = at; i >= 0 && !mine; i--) if (!bubbles[i].hasAttribute('data-orbit-round')) mine = bubbles[i];
+    // Not loaded yet: once the reader has left the tail, the next older page comes in (one at a time,
+    // capped per session), and measure runs again when it lands.
+    const search = mineSearchRef.current;
+    if (search.session !== selectedIdRef.current) {
+      search.session = selectedIdRef.current;
+      search.pages = 0;
     }
+    if (!mine && !atBottomRef.current && hasOlderNow() && search.pages < MINE_SEARCH_PAGES) {
+      search.pages++;
+      setSearchingMine(true);
+      void loadOlder().finally(() => setSearchingMine(false));
+    }
+    // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose hover
+    // mask ("Preview") and file chips are in the DOM regardless of visibility, and a raw textContent
+    // would splice those labels in front of the question.
     const mineSeq = mine?.getAttribute('data-seq');
+    const mineText = mine?.querySelector('.md')?.textContent || '';
     setLastMine((prev) => {
-      if (!mine || !mineSeq) return null;
-      const text = mine.querySelector('.md')?.textContent || '';
-      return prev?.seq === mineSeq && prev.text === text ? prev : { seq: mineSeq, text };
+      if (!mineSeq) return null;
+      return prev?.seq === mineSeq && prev.text === mineText ? prev : { seq: mineSeq, text: mineText };
     });
-    if (cur?.hasAttribute('data-orbit-round')) {
-      setStuck(null);
-    } else if (cur) {
-      // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose
-      // hover mask ("Preview") and file chips are in the DOM regardless of visibility, and a raw
-      // textContent would splice those labels in front of the question.
-      setStuck({
-        seq: cur.getAttribute('data-seq'),
-        text: cur.querySelector('.md')?.textContent || '',
-      });
-    } else if (hasOlderNow()) {
-      // No loaded user prompt sits above the viewport, but older pages remain: the prompt for
-      // the content now in view is in an unloaded page. Don't blank the bar — show a loading
-      // state and pull the earlier page in (no-op if one is already in flight), so measure
-      // re-runs after the prepend and resolves the real question.
-      setStuck({ seq: null, text: '', loading: true });
-      loadOlder();
-    } else {
-      setStuck(null);
-    }
   }, [loadOlder, loadNewer, hasOlderNow, detachedNow]);
   // The same button in a window opened at a record: the latest message is past the gap, so the window
   // is traded for the tail (the stream's backToLatest), and the record leaves the URL — a reload now
@@ -5181,7 +5142,7 @@ export function WorkspaceView({
   useEffect(() => {
     setReplyTo(null);
     setLocalStatusCards([]);
-    setStuck(null);
+    setLastMine(null);
     // Staged uploads are scoped to the previous session (can't be linked to another), and
     // the sent-image previews are this session's object URLs — drop and revoke both.
     setImages((prev) => {
@@ -10983,7 +10944,8 @@ export function WorkspaceView({
               {!composing && (
                 <CoordinatorBadge projectId={selectedSession?.projectId} />
               )}
-              {!composing && selected && selectedShared && (
+              {/* docs/mocks/session-header-compact: a wide window says Shared on the Share button beside ⋯. */}
+              {isMobile && !composing && selected && selectedShared && (
                 <button
                   type="button"
                   className="session-shared-pill"
@@ -10994,7 +10956,11 @@ export function WorkspaceView({
                 </button>
               )}
               {!composing && selectedId && !selectedTrashed && !selectedMissing && (
-                <SessionWatchBadges sessionId={selectedId} />
+                <SessionWatchBadges sessionId={selectedId} follow={isMobile} />
+              )}
+              {/* The status line is gone from a wide header, so a handoff in flight says so beside the title. */}
+              {!isMobile && !composing && handingOver && (
+                <span className="coordinator-badge">{COORDINATOR_HANDOFF_COPY.badgeHandingOver}</span>
               )}
               {/* Only a failed connection is said here; Connected, Starting and Not reported stay on the ⋯ row. */}
               {!composing && selected && !selectedTrashed && selectedAgentToolsStatus.tone === 'bad' && (
@@ -11009,7 +10975,9 @@ export function WorkspaceView({
                 </button>
               )}
             </div>
-            <div className="workspace-sub">
+            {/* docs/mocks/session-header-compact: a wide window's header is the title alone; the run word, the
+                lifecycle, the time and the tags stay on a phone's. */}
+            {(isMobile || !selected) && <div className="workspace-sub">
               {headSub}
               {/* The session's tags, seen without opening anything; a press opens ⋯ at its Tags level. */}
               {!composing && selected && !selectedTrashed && (
@@ -11022,7 +10990,7 @@ export function WorkspaceView({
                   }}
                 />
               )}
-            </div>
+            </div>}
             {/* A run of a task forked from a session says where its checkout came from, in the
                 server's own words (docs/task-fork-from-session-design.md §2.3). */}
             {!composing && detailForSelected?.forkSource && (
@@ -11043,6 +11011,16 @@ export function WorkspaceView({
                   onClick={isMobile ? () => setSheetProjectId(titleBarProjectId) : toggleProjectColumn}>
                   {titleBarSessionCount ?? undefined}
                 </Button>
+              )}
+              {!isMobile && !selectedTrashed && (
+                <Button
+                  variant="text"
+                  className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
+                  icon={<ExportOutlined />}
+                  title={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}
+                  aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
+                  onClick={() => setShareOpen(true)}
+                />
               )}
               <Menu
                 side="bottom"
@@ -11147,6 +11125,17 @@ export function WorkspaceView({
                           levelHeader: headerTagLevel.levelHeader,
                           levelFooter: headerTagLevel.levelFooter,
                         },
+                        ...(!isMobile
+                          ? [{
+                              key: 'follow',
+                              icon: <EyeOutlined />,
+                              label: 'Follow…',
+                              onSelect: () => {
+                                setHeaderMenuOpen(false);
+                                setFollowOpen(true);
+                              },
+                            }]
+                          : []),
                         { key: 'divider-share', type: 'separator' as const },
                         // Two words for two links (docs/share-links-design.md §8): Copy link is
                         // the signed-in address, for yourself; Share… is the public one. Keeping a
@@ -11160,7 +11149,8 @@ export function WorkspaceView({
                             copySessionLink(selected);
                           },
                         },
-                        {
+                        // A wide window has Share on its own button beside ⋯ (docs/mocks/session-header-compact).
+                        ...(isMobile ? [{
                           key: 'share',
                           icon: <GlobalOutlined className={selectedShared ? 'session-share-icon-live' : undefined} />,
                           label: selectedShared ? (
@@ -11174,7 +11164,7 @@ export function WorkspaceView({
                             setHeaderMenuOpen(false);
                             setShareOpen(true);
                           },
-                        },
+                        }] : []),
                         {
                           key: 'download-html',
                           icon: <DownloadOutlined />,
@@ -11249,6 +11239,12 @@ export function WorkspaceView({
           )}
         </div>}
 
+        {followOpen && selectedId && (
+          <WatchEditorModal
+            mode={{ kind: 'create', targets: [{ kind: 'SESSION', id: selectedId }] }}
+            onClose={() => setFollowOpen(false)}
+          />
+        )}
         {selected && !composing && (
           <AgentToolsDrawer
             mode="session"
@@ -11352,25 +11348,6 @@ export function WorkspaceView({
           />
         )}
 
-        {stuck && (
-          <button
-            ref={stuckBarRef}
-            className={stuck.loading ? 'chat-sticky-question chat-sticky-loading' : 'chat-sticky-question'}
-            title={stuck.text}
-            onClick={() => {
-              const seq = stuck?.seq;
-              if (!seq) return;
-              const card = scrollRef.current?.querySelector<HTMLElement>(`.chat-user[data-seq="${seq}"]`);
-              revealCard(card, 'start', false);
-            }}
-          >
-            {/* The arrow points up at the question the bar names. */}
-            <span className="chat-sticky-label">↑ {STICKY_LABEL}</span>
-            <span className="chat-sticky-text">
-              {stuck.loading ? 'Loading earlier messages…' : stuck.text}
-            </span>
-          </button>
-        )}
 
         <div className="workspace-scroll-wrap">
           {selectedMissing ? (

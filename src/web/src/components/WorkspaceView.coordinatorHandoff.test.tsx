@@ -454,12 +454,14 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
         : null,
     });
     await mount();
-    const sub = () => mounted().querySelector('.workspace-sub')?.textContent ?? '';
-    await waitFor(() => expect(sub()).not.toBe(''));
+    // A wide header has no status line (docs/mocks/session-header-compact): the word rides beside the title.
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const badges = () => [...line()!.querySelectorAll('.coordinator-badge')].map((n) => n.textContent);
     if (shown) {
-      expect(sub().split(' · ')[0]).toBe('Handing over');
+      expect(badges()).toContain('Handing over');
     } else {
-      expect(sub()).not.toContain('Handing over');
+      expect(badges()).not.toContain('Handing over');
     }
   });
 

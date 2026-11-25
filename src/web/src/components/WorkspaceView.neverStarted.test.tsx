@@ -379,8 +379,8 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
     expect(page).toContain('This run never started');
     expect(page).not.toContain('Getting the session ready');
     expect(page).not.toContain('Starting');
-    // …and the header wears the word a run that is over wears, not the wait's.
-    expect(page).toContain('Failed');
+    // …and a wide header wears no run word at all (docs/mocks/session-header-compact), so no wait's either.
+    expect(mounted().querySelector('.workspace-sub')).toBeNull();
   });
 
   /** Waits for the conversation's history to be on the page, then answers where the card stands. */
