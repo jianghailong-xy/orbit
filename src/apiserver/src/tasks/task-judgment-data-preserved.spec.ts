@@ -3489,7 +3489,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1592_drive_tables',
       // 1600 creates project_text_translation (a project's title and criteria in the owner's language), keyed by and
       // cascading with project; no preserved relation, row, trigger, function or DONE fence changes.
-      '1600_project_text_translation'],
+      '1600_project_text_translation',
+      // 1611 adds session.turn_state and session.phase with their value CHECKs, two functions and two BEFORE triggers
+      // that set only those two columns of the row being written, from its stored word; 1612 validates the CHECKs. No
+      // row is written by either, and no preserved relation, trigger of one, function of one or DONE fence changes.
+      '1611_session_turn_state_phase',
+      '1612_session_turn_state_phase_validate'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

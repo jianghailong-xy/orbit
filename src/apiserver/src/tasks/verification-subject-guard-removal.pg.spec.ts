@@ -213,7 +213,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 68,
+  assert.equal(installed.rowCount, 70,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -247,7 +247,8 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + 'once 0850 added `session_help_ask_guard` to `session`, which refuses a write that would make a session an Ask or not, '
     + 'and 67 once 1060 added `condition_ended_with_task` to `task`, which ends a task\'s condition when it is cancelled, '
     + 'done or failed, and 68 once 1490 added `session_listed_at_settle` to `session`, which sets the row\'s own '
-    + '`listed_at` when it settles');
+    + '`listed_at` when it settles, and 70 once 1611 added `session_aa_turn_state_from_status` and `session_zz_phase` '
+    + 'to `session`, which set the row\'s own `turn_state` and `phase` from its stored word');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }

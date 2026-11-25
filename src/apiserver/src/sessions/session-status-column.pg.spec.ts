@@ -21,7 +21,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 
 const URL = process.env.COORDINATOR_PG_URL;
 
-/** Today's objects. Take a line out when a task removes or restates the object; never add one. */
+/** Today's objects. Take a line out when a task removes or restates the object; never add one (the four of deploy D1
+ *  below are the plan's own, §4.1, added with the migration that installs them). */
 const NAMING_STATUS: readonly string[] = [
   // The column and the type (T15).
   'column session.status',
@@ -50,6 +51,14 @@ const NAMING_STATUS: readonly string[] = [
   'function session_request_recipient_ended',
   // Not in the plan's §4.2 table: a task trigger's function that reads `s."status"` of the session into its error text.
   'function task_supersession_live_session_guard',
+  // Deploy D1's own (T2, migration 1611; plan §4.1): the facts follow the word until the readers and writers move.
+  // `session_aa_turn_state_from_status` and its function are replaced in D3 (T14) by the trigger that derives the
+  // word from the facts; `session_zz_phase` loses `status` from its list and `session_turn_state_of_status` (the
+  // backfill's) goes with the type in D4 (T15).
+  'trigger session_aa_turn_state_from_status',
+  'trigger session_zz_phase',
+  'function session_turn_state_from_status',
+  'function session_turn_state_of_status',
   // Indexes and the release CHECK (go with the column, T15).
   'check session_release_fact_chk',
   'index session_assigned_runner_id_status_idx',
