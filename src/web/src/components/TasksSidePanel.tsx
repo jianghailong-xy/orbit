@@ -67,6 +67,7 @@ import { api, clearToken, logoutSession } from '../api';
 import { useDriveEnabled } from '../lib/driveSwitch';
 import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
+import { setConversationProjectPage, useConversationProjectPage } from '../lib/conversationProjectPage';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { useSidebarFolded } from '../lib/sidebarFold';
@@ -467,8 +468,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // whichever workspace or member session it shows, and the workspace's row is not lit there. That is
   // a phone's: wider, `?project=` is a column beside the conversation and the list stays the
   // workspace's, so the workspace's row stays lit (owner 2026-11-14).
+  // A conversation's address names no project page (owner 2026-11-25): beside one it is the console's.
   const onConsole = !!(workspacesMatch ?? agentsMatch) || !!sessionId;
-  const projectPageId = onConsole ? routeId(searchParams.get('project')) : null;
+  const conversationProjectPage = useConversationProjectPage();
+  const projectPageId = !onConsole ? null
+    : routeId(sessionId ? conversationProjectPage?.project : searchParams.get('project'));
   const projectPageKey =
     narrow && projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
       ? `project:${projectPageId}`
@@ -902,7 +906,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     if (sel === `project:${key}` || (besideConversation && projectPageId === key)) return;
     if (narrow) setSel(`project:${key}`);
     if (besideConversation) {
-      navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
+      setConversationProjectPage({ project: key, completed: false });
       return;
     }
     const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;

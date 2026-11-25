@@ -3540,6 +3540,12 @@ button.toast--pill:focus-visible {
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
+/* The session header's badge as the link to the project page (docs/mocks/session-header-project-link, C). */
+.coordinator-badge-link { gap: 3px; margin: 0; font-family: inherit; cursor: pointer; }
+.coordinator-badge-link .anticon { font-size: 8px; }
+.coordinator-badge-link:hover,
+.coordinator-badge-link:focus-visible { background: color-mix(in srgb, var(--brand) 14%, var(--bg-base)); border-color: var(--brand); }
+.coordinator-badge-link:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
 /* The title as the button that opens the session's settings (docs/mocks/session-settings-column ③): plain at
    rest and while the settings are open (owner 11-25: the open state needs no look of its own), a light ground and
    a › on hover. Keyboard focus shows as hover does, in place of the browser's ring. */
@@ -17205,6 +17211,31 @@ button.chat-jump-start:hover {
   background: var(--brand);
   opacity: 0.3;
 }
+/* The grab strip on the line between the file list and the diff (see startListResize): it
+   overlaps the list's right border by a few pixels on each side so the line itself is the target. */
+.wt-diff-list-resizer {
+  flex: none;
+  position: relative;
+  width: 8px;
+  margin: 0 -4px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 4;
+}
+.wt-diff-list-resizer:hover,
+.wt-diff-list-resizer.resizing {
+  background: var(--brand);
+  opacity: 0.3;
+}
+/* Stacked layout on narrow screens: there is no side rail to resize. */
+@media (max-width: 700px) {
+  .wt-diff-list-resizer {
+    display: none;
+  }
+  .wt-diff-list {
+    width: auto !important;
+  }
+}
 /* Re-assert the diff body as the scroll container (it shares .chat-diff, which sets
    overflow:hidden, defined later in the file) so the sticky hunk headers below have a scroller. */
 .wt-diff-view {
@@ -20429,7 +20460,6 @@ button.chat-jump-start:hover {
 .ssearch-modal.orbit-dialog {
   padding: 0;
   overflow: hidden;
-  border-radius: 12px;
 }
 .ssearch-modal > .orbit-overlay-header {
   display: none;
