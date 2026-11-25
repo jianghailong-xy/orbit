@@ -3448,6 +3448,41 @@ button.toast--pill:focus-visible {
 .workspace-header-menu .orbit-menu-item[data-selected][data-highlighted] {
   background: var(--orbit-option-selected-bg);
 }
+/* The conversation header's ⋯ menu, roomier than the compact default: a rounder card with a hairline edge, taller
+   rows with larger icons, inset dividers, and Delete tinted rather than filled under the pointer. */
+.orbit-menu.workspace-header-menu {
+  min-width: 240px;
+  padding: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+.workspace-header-menu .orbit-menu-item {
+  min-height: 38px;
+  padding: 7px 12px;
+  gap: 12px;
+  border-radius: 10px;
+  font-size: 15px;
+}
+.workspace-header-menu .orbit-menu-icon {
+  justify-content: center;
+  min-width: 18px;
+  font-size: 16px;
+}
+.workspace-header-menu .orbit-menu-separator {
+  margin: 6px 12px;
+}
+.workspace-header-menu .scope-menu-value {
+  font-size: 13px;
+}
+.workspace-header-menu .orbit-menu-submenu-icon {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.workspace-header-menu .orbit-menu-item[data-danger][data-highlighted] {
+  color: var(--orbit-control-error);
+  background: var(--orbit-control-error-bg);
+}
 .session-row.active {
   background: var(--brand-tint);
   --session-menu-surface: var(--brand-tint);
