@@ -2567,6 +2567,11 @@ public final class APIClient: @unchecked Sendable {
         try await post("schedules/\(id)/undo", body: ScheduleUndoBody(revision: revision))
     }
 
+    /// Rename (§8.4): the title alone, applied at once. It answers as Undo does.
+    public func renameSchedule(_ id: String, title: String) async throws -> ScheduleUpdateAnswer {
+        try await post("schedules/\(id)/rename", body: ScheduleRenameBody(title: title))
+    }
+
     public func deleteSchedule(_ id: String) async throws -> ScheduleControlAnswer {
         try await delete("schedules/\(id)")
     }

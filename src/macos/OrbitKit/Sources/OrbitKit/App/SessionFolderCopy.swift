@@ -26,6 +26,8 @@ public enum SessionFolderCopy {
     // MARK: Rename…
 
     public static let renameTitle = "Rename Folder"
+    /// Under a name edited in place (web `FOLDER_COPY.editHint`); the Mac's schedule title is one.
+    public static let editHint = "Enter to save · Esc to cancel"
     public static let namePlaceholder = "Name"
     public static let save = "Save"
     public static let cancel = "Cancel"
