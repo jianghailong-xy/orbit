@@ -3497,7 +3497,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1612_session_turn_state_phase_validate',
       // 1621 adds one read-only SQL function, session_legacy_status, over its arguments alone: no table, row,
       // trigger or DONE fence changes.
-      '1621_session_legacy_status'],
+      '1621_session_legacy_status',
+      // 1622 adds session's two turn_state CHECKs, NOT VALID; 1627-1634 build partial indexes on session. Constraints and
+      // indexes only: no row is written or checked, and no preserved relation, trigger, function or DONE fence changes.
+      '1622_session_turn_state_checks',
+      '1627_session_runner_turn_state_idx',
+      '1628_session_runner_held_idx',
+      '1629_session_batch_in_flight_idx',
+      '1631_session_root_in_flight_idx',
+      '1632_session_over_capacity_queued_idx',
+      '1633_session_owner_held_task_idx',
+      '1634_session_released_failed_idx'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

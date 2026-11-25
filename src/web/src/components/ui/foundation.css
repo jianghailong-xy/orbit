@@ -81,6 +81,8 @@
   --orbit-segmented-selected-bg: #ffffff;
   --orbit-segmented-selected-color: #3370ff;
   --orbit-segmented-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05), 0 1px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px 0 rgba(0, 0, 0, 0.03);
+  --orbit-popover-edge: rgba(0, 0, 0, .28);
+  --orbit-popover-shadow: drop-shadow(0 12px 32px rgba(0, 0, 0, .08)) drop-shadow(0 2px 6px rgba(0, 0, 0, .04));
   --orbit-filter-popover: drop-shadow(0 6px 16px rgba(0, 0, 0, .08)) drop-shadow(0 3px 6px rgba(0, 0, 0, .12)) drop-shadow(0 9px 28px rgba(0, 0, 0, .05));
   --orbit-shadow-popup: 0 6px 16px 0 rgba(0, 0, 0, 0.08),
     0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
@@ -151,6 +153,8 @@
   --orbit-segmented-selected-bg: #424246;
   --orbit-segmented-selected-color: #5b8cff;
   --orbit-segmented-shadow: 0 1px 2px 0 rgba(255, 255, 255, 0.01), 0 1px 6px -1px rgba(255, 255, 255, 0.008), 0 2px 4px 0 rgba(255, 255, 255, 0.008);
+  --orbit-popover-edge: rgba(255, 255, 255, .2);
+  --orbit-popover-shadow: var(--orbit-filter-popover);
   --orbit-filter-popover: drop-shadow(0 6px 16px rgba(255, 255, 255, .016)) drop-shadow(0 3px 6px rgba(255, 255, 255, .024)) drop-shadow(0 9px 28px rgba(255, 255, 255, .01));
   --orbit-shadow-popup: 0 6px 16px 0 rgba(255, 255, 255, 0.016),
     0 3px 6px -4px rgba(255, 255, 255, 0.024), 0 9px 28px 8px rgba(255, 255, 255, 0.01);

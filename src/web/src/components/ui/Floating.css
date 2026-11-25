@@ -56,6 +56,9 @@
 /* Filter belongs to the animated surface: opacity must composite its shadow
    together with the surface, rather than cast a shadow through fading content. */
 .orbit-popover, .orbit-tooltip { box-shadow: none; filter: var(--orbit-filter-popover); }
+/* A popover takes the menus' hairline edge and soft shadow as filters, so they follow its arrow too. Its corners stay
+   12px: the arrow of a popover aligned to one end sits 12px in, where a rounder corner would still be curving. */
+.orbit-popover { border-radius: 12px; filter: drop-shadow(0 0 .5px var(--orbit-popover-edge)) var(--orbit-popover-shadow); }
 .orbit-tooltip { --orbit-callout-bg: var(--orbit-tooltip-bg); position: relative; max-width: 250px; min-height: 32px; padding: 6px 8px; color: #fff; background: var(--orbit-tooltip-bg); border-radius: 6px; overflow-wrap: break-word; }
 /* Retains Ant Design's rounded arrow geometry (MIT; the Ant Design license file in this directory). */
 .orbit-floating-arrow { position: absolute; width: 16px; height: 16px; overflow: hidden; pointer-events: none; }

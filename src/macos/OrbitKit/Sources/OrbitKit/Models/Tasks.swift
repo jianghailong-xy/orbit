@@ -357,6 +357,9 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     @LenientSessionField public private(set) var workFinished: Bool?
     @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
     public let activity: String?
+    /// The background jobs and shells still running, beside `activity` (`SessionDisplay.marks`); absent from an
+    /// older server.
+    public let runningBgCount: Int?
     public let sessionKind: String?
 
     /// Resolve the task detail's run state from the session facts when sent, as web's task panel does

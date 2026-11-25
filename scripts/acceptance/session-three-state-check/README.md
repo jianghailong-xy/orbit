@@ -22,3 +22,5 @@ Regenerate everything (table.md is the output):
 
 `make-fixture.mjs` regenerates fixture.json (hand-written capabilities); `server-capabilities.cjs` replaces them with the server's own.
 web.json, apple.json and android.json are the driver outputs the committed table.md was built from.
+
+The display check across the three clients (project 353SgnUjvamRr06Sho0EZ, criterion 7) is in [display/](display/README.md).
