@@ -69,6 +69,11 @@ before(async () => {
   // as on every turn the owner or a session sent.
   // `finished_at` is the release column (migrations 1261, 1401): the lock reads it to refuse a released session,
   // NULL on every case here, as on every session still held.
+  // `turn_state` is where the session's turn stands for the runner (migration 1611): the lock and the inbox predicate
+  // read it in place of `status` (task T8). NULL on every case here, as on a row the backfill has not reached, which
+  // reads its stored word's (sessions/session-turn-state.ts). The lock reads the word through the projector's SQL twin
+  // (session_legacy_status, migration 1621, from the migrated public schema), so the row carries the facts it reads,
+  // with the application's types: `status` is a `run_status`, the times are timestamps without a time zone.
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";
@@ -85,9 +90,15 @@ before(async () => {
       provider_builtin boolean NOT NULL DEFAULT true,
       engine text,
       task_id uuid,
-      status text NOT NULL,
+      status run_status NOT NULL,
+      turn_state text,
       cancel_requested_at timestamptz,
-      finished_at timestamptz
+      finished_at timestamp(3),
+      end_reason text,
+      last_turn_outcome text,
+      started_at timestamp(3),
+      import_source_cwd text,
+      kind text NOT NULL DEFAULT 'CONVERSATION'
     );
     CREATE TABLE steer_dequeue_test."inbox_lease_generation" (
       generation uuid PRIMARY KEY,
