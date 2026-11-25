@@ -206,6 +206,7 @@ import {
 } from '../lib/sessionProjects';
 import { moveProject } from './ProjectRunSettings';
 import { SidebarNavIcon } from './SidebarNavIcon';
+import { HeaderMoreIcon, HeaderShareIcon } from './SessionHeaderIcons';
 import {
   type SessionTagRef,
   compareListed,
@@ -11204,16 +11205,7 @@ export function WorkspaceView({
                   {titleBarSessionCount ?? undefined}
                 </Button>
               )}
-              {!isMobile && !selectedTrashed && (
-                <Button
-                  variant="text"
-                  className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
-                  icon={<ExportOutlined />}
-                  title={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}
-                  aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
-                  onClick={() => setShareOpen(true)}
-                />
-              )}
+              {/* docs/mocks/session-header-share-more: ⋯ then Share, one tight pair at the header's right edge. */}
               <Menu
                 side="bottom"
                 align="end"
@@ -11425,8 +11417,18 @@ export function WorkspaceView({
                         },
                       ]
                 }
-                trigger={<Button ref={headerMore} variant="text" icon={<MoreOutlined />} title="More actions" />}
+                trigger={<Button ref={headerMore} variant="text" className="workspace-header-more" icon={<HeaderMoreIcon />} title="More actions" />}
               />
+              {!isMobile && !selectedTrashed && (
+                <Button
+                  variant="text"
+                  className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
+                  icon={<HeaderShareIcon />}
+                  title={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}
+                  aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
+                  onClick={() => setShareOpen(true)}
+                />
+              )}
             </>
           )}
         </div>}
