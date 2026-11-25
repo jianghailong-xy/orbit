@@ -199,7 +199,7 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 				// loop waits for this one's permit itself, as it always did.
 				return resp, nil
 			}
-			if p.permit(expiredContext) {
+			if p.permit(permitProbe) {
 				return resp, nil // its permit is here: nothing waits
 			}
 			p.hold(ctx, resp)
@@ -212,13 +212,17 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 	}
 }
 
-// expiredContext is a context that has ended: a permit wait asked under it answers whether the permit is there now,
-// without waiting for it (waitActive checks before it waits).
-var expiredContext = func() context.Context {
+// permitProbe is a context that has ended: a permit wait asked under it answers whether the permit is there now,
+// without waiting for it (waitActive checks before it waits). It is the same check the loop's own wait makes.
+var permitProbe = func() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	return ctx
 }()
+
+// isPermitProbe is whether a permit wait is the poller asking whether the permit is there now (permitProbe), rather
+// than a wait for it.
+func isPermitProbe(ctx context.Context) bool { return ctx == permitProbe }
 
 // holdTurns makes the poller wait for the turn permit of every message or shell turn it fetches before it hands the
 // turn to the session loop, and go on fetching meanwhile, so that a control turn filed behind a held turn is handed on
