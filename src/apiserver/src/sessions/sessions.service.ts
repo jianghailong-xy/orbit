@@ -50,7 +50,7 @@ import {
   SESSION_RUNNING_BG_JOB_WHERE,
 } from '../common/session-working';
 import { readOneSessionBackgroundFields, readSessionBackgroundFields, sessionActivitySql } from './task-work-carrier';
-import { LEGACY_STATUS_SELECT, withoutWordFacts } from './session-legacy-words';
+import { LEGACY_STATUS_SELECT, readLandingSettlements, withoutWordFacts } from './session-legacy-words';
 import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
@@ -5750,7 +5750,7 @@ export class SessionsService {
     // Not stored per session: what the assigned runner last reported for this engine.
     const engineVersion = (engine
       && sanitizeRunnerEngines(session.assignedRunner?.engines)?.find((e) => e.engine === engine)?.version) || null;
-    return withSessionCapabilities({
+    const detail = withSessionCapabilities({
       ...rest,
       engine,
       // What its Trash note says when a file is keeping it there past the 30 days.
@@ -5817,11 +5817,15 @@ export class SessionsService {
       settings: sessionSettingsOf(session, session.workspace?.env, SessionsService.engineLive(session)),
       usage,
       engineVersion,
+    }, Date.now(), landing);
+    return {
+      ...detail,
       // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
+      // Added after the words: withSessionState takes the stored `phase` off the row, which this read replaces.
       ...(await readOneSessionPhaseFields(this.prisma, session.id)),
       // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
       ...(await readOneSessionBackgroundFields(this.prisma, session.id)),
-    }, Date.now(), landing);
+    };
   }
 
   /**
@@ -6141,7 +6145,7 @@ export class SessionsService {
       select: { id: true, toolName: true },
     });
     const waitingOnOwner = cards.length > 0 && (await visibleQuestions(this.prisma, cards)).length > 0;
-    const stateful = withSessionState(session);
+    const stateful = withSessionState(session, (await readLandingSettlements(this.prisma, [session])).get(session.id));
     // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
     // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
     // And the jobs still running beside it: the Background mark's two inputs, as the list row reads them.

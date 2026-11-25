@@ -142,7 +142,7 @@ import {
 } from '../sessions/engine-signin-preflight';
 import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readSessionPhaseFields } from '../sessions/session-phase';
-import { LEGACY_STATUS_SELECT, withoutWordFacts } from '../sessions/session-legacy-words';
+import { LEGACY_STATUS_SELECT, readLandingSettlements, withoutWordFacts } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import {
   readSessionBackgroundFields,
@@ -9808,15 +9808,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The session facts of every run, from the function every other session payload reads
     // (sessions/session-phase.ts), so a run here answers as the same session does elsewhere.
     const runIds = (task.sessions ?? []).map((session) => session.id);
-    const [runFacts, runBackground] = await Promise.all([
+    const [runFacts, runBackground, landings] = await Promise.all([
       readSessionPhaseFields(this.prisma, runIds),
       // And the Background mark's inputs, activity and runningBgCount, as the list row reads them.
       readSessionBackgroundFields(this.prisma, runIds),
+      readLandingSettlements(this.prisma, task.sessions ?? []),
     ]);
     return {
       ...task,
       sessions: (task.sessions ?? []).map((session) => ({
-        ...withoutWordFacts(withSessionState(session)),
+        ...withoutWordFacts(withSessionState(session, landings.get(session.id))),
         ...runFacts.get(session.id),
         ...runBackground.get(session.id),
         route: routes.get(session.id) ?? null,

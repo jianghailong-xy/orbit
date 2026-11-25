@@ -47,6 +47,25 @@ export interface LandingSettlement {
 }
 
 /**
+ * The settlements P3 needs for these rows, by session id. Reads only when a row is a released LANDING container with
+ * no end asked, so conversations cost nothing.
+ */
+export async function readLandingSettlements(
+  db: Pick<Prisma.TransactionClient, 'projectLanding'>,
+  rows: ReadonlyArray<{ id: string; sessionKind: string; finishedAt: Date | string | null; endReason: string | null }>,
+): Promise<Map<string, LandingSettlement>> {
+  const ids = rows
+    .filter((row) => row.sessionKind === 'LANDING' && row.finishedAt != null && row.endReason == null)
+    .map((row) => row.id);
+  if (ids.length === 0) return new Map();
+  const landings = await db.projectLanding.findMany({
+    where: { sessionId: { in: ids } },
+    select: { sessionId: true, settledAt: true, settledAs: true },
+  });
+  return new Map(landings.map(({ sessionId, ...settlement }) => [sessionId, settlement]));
+}
+
+/**
  * The row without the facts a narrow select read only for the projector, so a payload built from it carries the keys
  * it carried before (`endReason` stays: every such payload had it). A payload's own facts are session-phase.ts's.
  */
