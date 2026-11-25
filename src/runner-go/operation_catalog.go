@@ -1222,9 +1222,12 @@ func buildOperationCatalog() []*operation {
 				"of the account this runner belongs to; write these same fields with " +
 				"project_create and project_update.",
 			"inputSchema": obj(map[string]interface{}{
+				// Where the id comes from: Codex answered E5-read-only-project with project_get on an id made from the project's
+				// name (C.no_invented_ids) in 57 of 160 runs on the step-0 commit and 82 of 120 after the delegate fix; with this
+				// wording it passed 30/30, against 19/30 for step 0 beside it (2026-11-25).
 				"projectId": map[string]interface{}{
 					"type":        "string",
-					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+					"description": "The project to read: a task's projectId (task_get with no taskId reads this session's own task) or the id in its web UI URL (/projects/<id>), never one made from its name.",
 				},
 			}, "projectId"),
 		},
