@@ -11095,17 +11095,6 @@ export function WorkspaceView({
                 <span className="workspace-header-task-name">{selected.taskTitle ?? 'Back to task'}</span>
               </button>
             )}
-            {projectBack && !composing && (
-              <button
-                type="button"
-                className="workspace-header-task"
-                title={projectBack.title ? `Back to project · ${projectBack.title}` : 'Back to project'}
-                onClick={() => navigate(projectBack.path)}
-              >
-                <ArrowLeftOutlined />
-                <span className="workspace-header-task-name">{projectBack.title ?? 'Back to project'}</span>
-              </button>
-            )}
             <div className="workspace-title-line">
               {selected && !selectedTrashed && !composing ? (
                 // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
@@ -11127,8 +11116,19 @@ export function WorkspaceView({
                     : (selected?.title ?? (selectedMissing ? 'Session not found' : selectedId ? 'Starting…' : headWorkspaceName))}
                 </div>
               )}
-              {!composing && (
-                <CoordinatorBadge projectId={selectedSession?.projectId} />
+              {/* docs/mocks/session-header-project-link (C): a coordinator session is named after its project, so the
+                  way to the project page is the Coordinator badge itself, not a second line repeating the title. */}
+              {!composing && projectBack && (
+                <button
+                  type="button"
+                  className="coordinator-badge coordinator-badge-link"
+                  title={projectBack.title ? `Open project · ${projectBack.title}` : 'Open project'}
+                  aria-label={projectBack.title ? `Coordinator · Open project ${projectBack.title}` : 'Coordinator · Open project'}
+                  onClick={() => navigate(projectBack.path)}
+                >
+                  Coordinator
+                  <RightOutlined aria-hidden />
+                </button>
               )}
               {/* docs/mocks/session-header-compact: a wide window says Shared on the Share button beside ⋯. */}
               {isMobile && !composing && selected && selectedShared && (
