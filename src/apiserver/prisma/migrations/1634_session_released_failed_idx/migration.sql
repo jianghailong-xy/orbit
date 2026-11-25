@@ -6,7 +6,9 @@
 -- session_owner_status_task_idx reads the failed rows alone (6,121 buffers against 643 on the seeded database), and
 -- §4.5 asks for an index that answers such a plan. Failures are few (85 of 12,201 sessions measured), so the index is
 -- small. Its predicate is the one statusWordFilter('FAILED') states (sessions/session-legacy-words.ts, task T4), which
--- is what lets the planner read it.
+-- is what lets the planner read it, and `owner_id IS NOT NULL`, which only a query that names an owner proves. Without
+-- that, the auto-retry sweep (a failure release, no owner) combined this index in a BitmapAnd in place of walking
+-- session_retry_at_idx (common/session-release-questions.pg.spec.ts).
 --
 -- Built as 1426 is: only SET, DROP INDEX IF EXISTS, CREATE INDEX CONCURRENTLY and RESET, so prisma migrate deploy sends
 -- it statement by statement. The drop is asked for 2 s at most and takes no lock on a first run; on a re-run it removes
@@ -22,7 +24,7 @@ SET lock_timeout = 0;
 SET statement_timeout = 0;
 
 CREATE INDEX CONCURRENTLY "session_released_failed_idx" ON "session" ("owner_id")
-  WHERE "finished_at" IS NOT NULL AND "end_reason" IS NULL
+  WHERE "owner_id" IS NOT NULL AND "finished_at" IS NOT NULL AND "end_reason" IS NULL
     AND ("last_turn_outcome" = 'FAILED' OR ("last_turn_outcome" IS NULL AND "import_source_cwd" IS NOT NULL));
 
 RESET statement_timeout;

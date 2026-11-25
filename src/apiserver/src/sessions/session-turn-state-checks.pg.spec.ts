@@ -59,8 +59,8 @@ const INDEXES: Record<string, string> = {
     `(assigned_runner_id) WHERE ((over_capacity_turn_id IS NOT NULL) AND (turn_state = 'QUEUED'::text))`,
   session_owner_held_task_idx: `(owner_id, task_id) WHERE (finished_at IS NULL)`,
   session_released_failed_idx:
-    `(owner_id) WHERE ((finished_at IS NOT NULL) AND (end_reason IS NULL) AND ((last_turn_outcome = 'FAILED'::text) `
-    + `OR ((last_turn_outcome IS NULL) AND (import_source_cwd IS NOT NULL))))`,
+    `(owner_id) WHERE ((owner_id IS NOT NULL) AND (finished_at IS NOT NULL) AND (end_reason IS NULL) AND `
+    + `((last_turn_outcome = 'FAILED'::text) OR ((last_turn_outcome IS NULL) AND (import_source_cwd IS NOT NULL))))`,
   session_root_in_flight_idx: `(root_session_id) WHERE (turn_state = 'IN_FLIGHT'::text)`,
   session_runner_held_idx: `(assigned_runner_id) WHERE (finished_at IS NULL)`,
   session_runner_turn_state_idx: `(assigned_runner_id, turn_state) WHERE (turn_state IS NOT NULL)`,

@@ -19,7 +19,10 @@ choices and buffer counts move a little between runs.
 
 The six candidates of §4.5, all kept (1627–1633), and one more, `session_released_failed_idx` (1634): without it
 `?status=FAILED` on the facts read the whole table (6,121 buffers against 643). Its predicate is
-`statusWordFilter('FAILED')`'s (T4), so a change there has to change the index.
+`statusWordFilter('FAILED')`'s (T4), so a change there has to change the index. It also says `owner_id IS NOT NULL`,
+which only a query that names an owner proves: without it the auto-retry sweep, which names none, combined this index in
+a BitmapAnd instead of walking `session_retry_at_idx` (`common/session-release-questions.pg.spec.ts` caught it). The
+FAILED row below was measured with and without that clause: 615 buffers both times.
 
 ## Buffers
 
