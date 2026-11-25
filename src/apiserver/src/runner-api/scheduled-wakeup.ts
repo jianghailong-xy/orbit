@@ -9,6 +9,7 @@ import {
 import { IsBoolean, IsISO8601, IsNumber, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { isReleased, releaseWasFailure, sessionHasEnded } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
+import { TURN_STATE_SELECT } from '../sessions/session-legacy-words';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
 import { stripNul } from './strip-nul';
 
@@ -297,9 +298,9 @@ export async function markScheduledWakeupDelivered(
 
 /** What a session a wakeup came due on reads as, for deciding what the wakeup does. */
 export const TICK_SESSION = {
+  // The turn state's columns, which sessionHasEnded reads (sessions/session-legacy-words.ts), the release column among them.
+  ...TURN_STATE_SELECT,
   ownerId: true,
-  status: true,
-  finishedAt: true,
   endReason: true,
   lastTurnOutcome: true,
   completedAt: true,

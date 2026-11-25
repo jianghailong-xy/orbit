@@ -5,7 +5,9 @@ import test from 'node:test';
 
 import { deriveSessionRunState, deriveSessionState } from '@orbit/shared';
 
-import { legacySessionStatus, statusWordFilter } from './session-legacy-words';
+import {
+  heldSessionWord, legacySessionStatus, sessionTurnState, statusWordFilter, turnStateOfWord, turnStateWhere,
+} from './session-legacy-words';
 import { factsOfWord, WORD_SHAPES } from './session-legacy-words.fixture';
 
 /**
@@ -45,4 +47,45 @@ test('a held row with no turn state keeps its stored word; one with a turn state
 test('a word the protocol does not have is no filter', () => {
   assert.equal(statusWordFilter('PARKED'), undefined);
   assert.equal(statusWordFilter('pending'), undefined);
+});
+
+// The turn state the runner-facing readers ask instead of the word (task T8): one for one with the held words, and the
+// stored word's for a held row not yet backfilled, so each reader decides what it decided on the word.
+const TURN_OF: Record<string, string | null> = { PENDING: 'QUEUED', RUNNING: 'IN_FLIGHT', INTERRUPTED: 'ABANDONED', AWAITING_INPUT: null };
+
+test('a held row reads the turn state and held word of its stored word, backfilled or not', () => {
+  for (const [status, turn] of Object.entries(TURN_OF)) {
+    for (const turnState of [turn, null]) {
+      const facts = factsOfWord(status, { turnState });
+      assert.equal(sessionTurnState(facts), turn, `${status}, turn_state ${turnState}`);
+      assert.equal(heldSessionWord(facts), status, `${status}, turn_state ${turnState}`);
+      assert.equal(heldSessionWord(facts), legacySessionStatus(facts), `${status}: the projector's word`);
+    }
+    assert.equal(turnStateOfWord(status), turn, status);
+  }
+  // A stored turn state decides over the word, as the projector reads it.
+  assert.equal(sessionTurnState(factsOfWord('RUNNING', { status: 'PENDING' })), 'IN_FLIGHT');
+});
+
+test('a released row has no turn state and no held word', () => {
+  for (const shape of WORD_SHAPES.filter((shape) => shape.facts.finishedAt != null)) {
+    assert.equal(sessionTurnState(shape.facts), null, shape.name);
+    assert.equal(heldSessionWord(shape.facts), null, shape.name);
+    assert.equal(turnStateOfWord(shape.stored), null, shape.name);
+  }
+});
+
+test('turnStateWhere is held, and reads the stored word only where turn_state is null', () => {
+  assert.deepEqual(turnStateWhere('QUEUED'), {
+    finishedAt: null,
+    OR: [{ turnState: { in: ['QUEUED'] } }, { turnState: null, status: { in: ['PENDING'] } }],
+  });
+  assert.deepEqual(turnStateWhere(null), {
+    finishedAt: null,
+    OR: [{ turnState: null, status: { notIn: ['PENDING', 'RUNNING', 'INTERRUPTED'] } }],
+  });
+  assert.deepEqual(turnStateWhere('IN_FLIGHT', 'ABANDONED', null), {
+    finishedAt: null,
+    OR: [{ turnState: { in: ['IN_FLIGHT', 'ABANDONED'] } }, { turnState: null, status: { notIn: ['PENDING'] } }],
+  });
 });

@@ -71,25 +71,21 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'realtime/parked-session-end.ts': { reads: 2, enums: 1 },
   'realtime/realtime.service.ts': { reads: 16 },
   'realtime/reaper.service.ts': { reads: 12, writes: 1, alone: 1, enums: 1 },
-  'runner-api/background-job-stops.ts': { reads: 1 },
-  'runner-api/runner-api.controller.ts': { reads: 52, writes: 9, alone: 9, enums: 1 },
-  'runner-api/runner-link-hints.ts': { reads: 6 },
-  'runner-api/runner-orchestration-authorizer.ts': { reads: 1 },
-  'runner-api/runner-sessions.controller.ts': { enums: 1 },
-  'runner-api/runner-subagents.controller.ts': { reads: 2, enums: 1 },
-  'runner-api/scheduled-wakeup.ts': { reads: 1 },
-  'runner-api/scheduled-wakeup.worker.ts': { reads: 2, enums: 1 },
-  'runner-api/turn-outcome.ts': { enums: 1 },
+  // Reads none (task T8). Its runner-driven writers write the word and `turnState` together, as deploy 2 does; T14
+  // takes these to 0.
+  'runner-api/runner-api.controller.ts': { writes: 9 },
   'runners/attention-fix.ts': { reads: 2 },
   'runners/claude-account-swap.ts': { reads: 6 },
   'runners/runner-background-holders.ts': { reads: 1 },
   'runners/runners.service.ts': { reads: 6, enums: 1 },
   'schedules/schedule-runs.service.ts': { reads: 9, enums: 1 },
   'session-guests/session-guests.service.ts': { reads: 3, writes: 1, alone: 1, enums: 1 },
-  // The one read added after the list was seeded (task T4): the projector's fallback for a held row with no
-  // `turn_state` (not yet backfilled), which keeps its stored word. Its SQL twin takes the word as an argument, and
-  // LEGACY_STATUS_SELECT hands it over from queries that read it already. Goes with the column's writers (T14).
-  'sessions/session-legacy-words.ts': { reads: 2 },
+  // The reads added after the list was seeded, the only place the stored word is read for a held row with no
+  // `turn_state` (not yet backfilled, task T3), which keeps its stored word: the projector's fallback (task T4), and
+  // the turn-state conditions that select exactly the rows the projector gives a turn state, `turnStateWhere` (Prisma)
+  // and `sessionTurnStateSql` (raw SQL, which the scanner does not count) (task T8). LEGACY_STATUS_SELECT,
+  // TURN_STATE_SELECT and `turnStateColumnsSql` hand the word to them. Goes with the column's writers (T14).
+  'sessions/session-legacy-words.ts': { reads: 3 },
   'sessions/auto-retry-eligibility.ts': { reads: 2, enums: 1 },
   'sessions/auto-retry.service.ts': { reads: 22, enums: 1 },
   'sessions/open-list-version.ts': { reads: 2 },

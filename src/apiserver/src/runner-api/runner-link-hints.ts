@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
-import { sessionHeldIndexedSql } from '../common/session-release';
+import { sessionHeldSql } from '../common/session-release';
+import { sessionTurnStateSql } from '../sessions/session-legacy-words';
 
 /**
  * What a heartbeat the link gateway forwarded is answered with beside today's HeartbeatResponse
@@ -79,6 +80,12 @@ export function runnerLinkHintsOf(
 }
 
 /**
+ * A turn runs on session `s`: a dispatched one (IN_FLIGHT, which was RUNNING), or on a parked session (no turn state,
+ * which was AWAITING_INPUT) the engine's own.
+ */
+const DISPATCHED_OR_ENGINE_TURN = Prisma.sql`${sessionTurnStateSql('s', 'IN_FLIGHT')} OR (${sessionTurnStateSql('s', null)} AND s."engine_turn_active")`;
+
+/**
  * The select list readRunnerLinkHints reads: three columns, "inboxSessionIds", "claim" and "approvals". A link
  * heartbeat answered from runner_presence reads them in its own statement (runner-api/link-heartbeat.ts), so the two
  * readings are one text.
@@ -91,7 +98,7 @@ export function runnerLinkHintsSql(runnerId: string): Prisma.Sql {
           SELECT s.id::text AS id
           FROM "session" s
           WHERE s."assigned_runner_id" = ${runnerId}::uuid
-            AND s.status IN ('RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+            AND ${sessionTurnStateSql('s', 'IN_FLIGHT', null, 'ABANDONED')}
             AND EXISTS (
               SELECT 1 FROM "conversation_turn" t
               WHERE t."session_id" = s.id
@@ -101,7 +108,7 @@ export function runnerLinkHintsSql(runnerId: string): Prisma.Sql {
         ) waiting
       ) AS "inboxSessionIds",
       EXISTS (
-        SELECT 1 FROM "session" s WHERE s."assigned_runner_id" = ${runnerId}::uuid AND s.status = 'PENDING'
+        SELECT 1 FROM "session" s WHERE s."assigned_runner_id" = ${runnerId}::uuid AND ${sessionTurnStateSql('s', 'QUEUED')}
       ) AS "claim",
       (
         SELECT json_agg(json_build_object('sessionId', decided."sessionId", 'approvalId', decided."approvalId"))
@@ -110,14 +117,14 @@ export function runnerLinkHintsSql(runnerId: string): Prisma.Sql {
           FROM "session" s
           JOIN "approval" a ON a."session_id" = s.id AND a.status IN ('ALLOWED', 'DENIED')
           WHERE s."assigned_runner_id" = ${runnerId}::uuid
-            AND ${sessionHeldIndexedSql('s')}
+            AND ${sessionHeldSql('s')}
             AND (
-              s.status = 'RUNNING' OR (s.status = 'AWAITING_INPUT' AND s."engine_turn_active")
+              ${DISPATCHED_OR_ENGINE_TURN}
               OR cardinality(s."running_bg_shells") > 0
             )
             AND CASE
               WHEN a."background_job_id" IS NOT NULL THEN a."background_job_id" = ANY (s."running_bg_shells")
-              ELSE (s.status = 'RUNNING' OR (s.status = 'AWAITING_INPUT' AND s."engine_turn_active"))
+              ELSE (${DISPATCHED_OR_ENGINE_TURN})
                 AND (a."turn_id" IS NOT NULL OR a."tool_use_id" IS NOT NULL)
                 AND (a."turn_id" IS NULL OR EXISTS (
                   SELECT 1 FROM "conversation_turn" t WHERE t.id = a."turn_id" AND t.status <> 'ANSWERED'

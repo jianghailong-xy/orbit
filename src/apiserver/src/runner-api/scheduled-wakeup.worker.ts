@@ -8,7 +8,8 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { sessionTurnState, TURN_STATE_SELECT } from '../sessions/session-legacy-words';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService, type WakeupMissedReason } from '../push/push.service';
@@ -125,7 +126,7 @@ function recoveringByRetry(now: Date): Prisma.SessionWhereInput {
 /** What a silent loop's alert reads of its session: its title, and whether its runner is there. */
 const SILENT_SESSION = {
   title: true,
-  status: true,
+  ...TURN_STATE_SELECT,
   assignedRunner: { select: { status: true, ...RUNNER_BEATS } },
 } as const satisfies Prisma.SessionSelect;
 
@@ -419,7 +420,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       const session = await this.prisma.session.findUnique({ where: { id: tick.sessionId }, select: SILENT_SESSION });
       if (!session) return;
       const runnerOnline = runnerIsOnline(session.assignedRunner, now.getTime());
-      if (runnerOnline && session.status === RunStatus.RUNNING && (await this.turnRunning(tick.sessionId))) return;
+      if (runnerOnline && sessionTurnState(session) === 'IN_FLIGHT' && (await this.turnRunning(tick.sessionId))) return;
       if (!(await claimLoopAlert(this.prisma, tick.loopId, silentSince, now))) return;
       const standing = tickStanding(tick.session, now);
       const reason: WakeupMissedReason = !runnerOnline
