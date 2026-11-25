@@ -46,7 +46,7 @@ if (ri >= 0) {
     const w = read(l);
     console.log(`## payloads of ${l}'s sessions, as ${r.api} serves them, against what ${w.api} served (S12)`);
     const out = [];
-    diff(w.scenarios['S12 payloads'], r.payloads, 'S12', out);
+    diff(strip(w.scenarios['S12 payloads']), r.payloads, 'S12', out);
     console.log(out.length ? out.map((x) => `    ${x}`).join('\n') : '    equal');
     console.log(`(not counted: a recheck's word changes are matched against §3.4 by hand)`);
   }

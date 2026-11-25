@@ -17,7 +17,7 @@ async function call(method, path, token, body) {
 const T = (await call('POST', '/auth/login', undefined, { email: 'owner@orbit-staging.test', password })).accessToken;
 const KEYS = ['status', 'runStatus', 'runState', 'sessionState', 'phase', 'released', 'lastTurnOutcome', 'waitingOn', 'endReason'];
 const payloads = {};
-for (const name of Object.keys(walk.scenarios['S12 payloads'] ?? {}).sort()) {
+for (const name of Object.keys(walk.scenarios['S12 payloads'] ?? {}).filter((k) => k !== 'ms').sort()) {
   const p = await call('GET', `/sessions/${walk.sessions[name].publicId}`, T);
   payloads[name] = Object.fromEntries(KEYS.map((k) => [k, p[k] ?? null]));
 }

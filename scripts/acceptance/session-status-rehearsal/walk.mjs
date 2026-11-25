@@ -173,7 +173,12 @@ function publicIdOf(id) {
 
 const result = { label, api: API, code: CODE, runnerId, startedAt: new Date().toISOString(), scenarios: {} };
 const failures = [];
-async function scenario(key, fn) {
+// WALK_ONLY=<key>,<key>: run only those scenarios (by the key's first word, e.g. S8r). S8r runs only when named: it waits
+// out the reaper's two-minute cancel grace.
+const ONLY = process.env.WALK_ONLY ? process.env.WALK_ONLY.split(',') : null;
+async function scenario(key, fn, { onlyWhenNamed = false } = {}) {
+  const short = key.split(' ')[0];
+  if (ONLY ? !ONLY.includes(short) : onlyWhenNamed) return;
   say(`== ${key}`);
   const start = Date.now();
   try {
@@ -391,6 +396,33 @@ await scenario('S6 runner restart', async () => {
   await setRunner({ maxConcurrent: 2 });
   return { before, afterRestart, settled, runnerLog: logLines, payloads: { parked: await payload(a), abandoned: await payload(x), running: await payload(r), queued: await payload(p) } };
 });
+
+// S8r: an end the runner does not honour (plan §3.4 C1): a task run stopped (batch stop, reason `cancelled`) while its
+// runner is down, released by the reaper once the two-minute cancel grace has passed.
+await scenario('S8r end not honoured', async () => {
+  flag(`${label}-s8r`, true);
+  const task = await call('POST', '/tasks', T, {
+    assigneeId: workspaceId, title: `${label} S8r task`, description: `E2E-HOLD-WHILE ${label}-s8r\nSay done.`,
+    completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0, acceptanceTimeoutSeconds: 60,
+    autoRunWhenReady: false,
+  });
+  await call('POST', `/tasks/${task.id}/execute`, T, { triggerId: randomUUID() });
+  const sid = await until('the S8r run session', () => value(`select id from session where task_id = (select id from task where title = '${label} S8r task') order by created_at desc limit 1`) || null, 60_000);
+  names.set(sid, 'S8r run'); uuidOf.set('S8r run', sid); pidOf.set('S8r run', publicIdOf(sid));
+  await isWord('S8r run', 'RUNNING');
+  // The turn is in the engine's hands before its runner goes: a stop of an undelivered turn answers it at once.
+  await until('the S8r turn delivered', () => value(`select delivered_at is not null from conversation_turn where session_id = '${sid}' and seq = 1`) === 't', 60_000, 100);
+  say(stack('kill-runner'));
+  const stop = await attempt('POST', '/tasks/batch-stop', T, { taskIds: [task.id] });
+  const stopped = await snap('S8r run');
+  await released('S8r run', 330_000);
+  flag(`${label}-s8r`, false);
+  const rows = await snap('S8r run');
+  const facts = json(`select json_build_object('error', error, 'cancel_requested', cancel_requested_at is not null) from session where id = '${sid}'`);
+  say(stack('start-runner'));
+  await until('runner online again', async () => (await call('GET', '/runners', T)).find((y) => y.id === runnerId && y.online), 120_000, 1_000);
+  return { batchStop: refusal(stop), stopped, released: rows, facts, payload: await payload('S8r run') };
+}, { onlyWhenNamed: true });
 
 // S11: the ?status= filter with each word (GET /sessions/compact, what `orbit session list --status` reads), over this pass's sessions.
 await scenario('S11 status filter', async () => {

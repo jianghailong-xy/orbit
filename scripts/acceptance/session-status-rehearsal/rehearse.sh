@@ -15,6 +15,7 @@
 #   rehearse.sh d2          hand-over: apiserver-b replaced by D2 code, which applies 1621-1643 while D1 serves
 #   rehearse.sh post-gate   the post-backfill migrations of 1daa60562d (gate, strict CHECK, VALIDATEs, NOT NULL)
 #   rehearse.sh migrations  _prisma_migrations' timings for the session-status migrations
+#   rehearse.sh cutover     the end of the hand-over: D1 stops, the D2 replica answers as apiserver
 #   rehearse.sh stop-load   writer loop and lock sampler off, with their summaries
 #   rehearse.sh down        remove the stack and every container this script started
 #
@@ -86,7 +87,9 @@ seed)
 d1)
   docker rm -f t16-writer >/dev/null 2>&1 || true
   docker run -d --name t16-writer --network "$NET" -e DATABASE_URL="$DB_URL" -v "$HERE:/kit:ro" "$P-apiserver:d2" node /kit/writer-loop.cjs >/dev/null
-  nohup bash "$HERE/sample-locks.sh" "$PG" "$OUT/locks.jsonl" > /dev/null 2>&1 &
+  # Its own session, so it outlives the step that starts it (a runner-hosted job ends its process group); stop-load
+  # stops it.
+  setsid bash "$HERE/sample-locks.sh" "$PG" "$OUT/locks.jsonl" > /dev/null 2>&1 < /dev/null &
   echo $! > "$OUT/sampler.pid"
   sleep 5
   log "d1: writer loop and lock sampler on; starting the D1 apiservers (prisma migrate deploy at boot: 1611, 1612)"
@@ -162,11 +165,27 @@ post-gate)
   psqlc -A -F $'\t' -c "SELECT conname, convalidated FROM pg_constraint WHERE conrelid = 'session'::regclass AND conname ~ 'turn_state|phase' ORDER BY 1" | tee -a "$OUT/post-gate.txt"
   psqlc -At -c "SELECT attnotnull FROM pg_attribute WHERE attrelid = 'session'::regclass AND attname = 'phase'" | sed 's/^/phase NOT NULL: /' | tee -a "$OUT/post-gate.txt"
   ;;
+cutover)
+  # The end of the hand-over: the D1 replica stops and the D2 one answers to the service name too, as a deployment's
+  # new apiserver does (the web gateway and the link gateway's revocation read address `apiserver`).
+  b=$P-apiserver-b
+  log "cutover: $P-apiserver (D1) stopped; $b (D2) answers as apiserver"
+  docker stop -t 30 "$P-apiserver" >/dev/null
+  docker network disconnect "$NET" "$b"
+  docker network connect --alias apiserver-b --alias apiserver "$NET" "$b"
+  docker restart -t 10 "$P-gateway" >/dev/null
+  wait_healthy "$b"
+  for _ in $(seq 1 60); do
+    [ "$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$LM_HTTP_PORT/api/auth/setup-status")" = 200 ] && break
+    sleep 1
+  done
+  log "cutover: the web gateway answers $(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$LM_HTTP_PORT/api/auth/setup-status") through $(image_of "$b")"
+  ;;
 migrations)
   migrations
   ;;
 stop-load)
-  [ -f "$OUT/sampler.pid" ] && { pkill -P "$(cat "$OUT/sampler.pid")" 2>/dev/null || true; kill "$(cat "$OUT/sampler.pid")" 2>/dev/null || true; rm -f "$OUT/sampler.pid"; }
+  [ -f "$OUT/sampler.pid" ] && { kill -- -"$(cat "$OUT/sampler.pid")" 2>/dev/null || true; rm -f "$OUT/sampler.pid"; }
   psqlc -At -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 't16-lock-sampler'" >/dev/null || true
   docker stop -t 20 t16-writer >/dev/null 2>&1 || true
   docker logs t16-writer > "$OUT/writer-loop.jsonl" 2>&1 || true

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Read-only lock sampler for the rehearsal (after scripts/runner-link/lock-sampler.sh): every 0.5 s, one JSON line with
+# Read-only lock sampler for the rehearsal (after scripts/runner-link/lock-sampler.sh): every 0.2 s, one JSON line with
 # every backend waiting on a heavyweight lock (pg_stat_activity wait_event_type = 'Lock'), how long its statement has
 # run, the lock it waits for and the backends holding it. One long-lived psql backend; nothing is changed. Lines with
 # no waiter are dropped, so the file holds only the waits.
@@ -20,5 +20,5 @@ SELECT json_build_object(
           'query', left(regexp_replace(h.query, '\s+', ' ', 'g'), 90)))
         FROM pg_stat_activity h WHERE h.pid = ANY(pg_blocking_pids(w.pid)))))
     FROM pg_stat_activity w WHERE w.wait_event_type = 'Lock' AND w.pid <> pg_backend_pid()), '[]'::json))
-\watch 0.5
+\watch 0.2
 SQL
