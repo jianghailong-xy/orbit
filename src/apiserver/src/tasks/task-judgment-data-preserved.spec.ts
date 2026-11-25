@@ -3498,15 +3498,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1621 adds one read-only SQL function, session_legacy_status, over its arguments alone: no table, row,
       // trigger or DONE fence changes.
       '1621_session_legacy_status',
-      // 1622-1626 add session's two turn_state CHECKs (1622 first asserts every row's two facts are derived from its
-      // status, and writes none), validate them and set phase NOT NULL; 1627-1634 build partial indexes on session.
-      // Constraints and indexes only: no row is written, and no preserved relation, trigger, function or DONE fence
-      // changes.
+      // 1622 adds session's two turn_state CHECKs, NOT VALID; 1627-1634 build partial indexes on session. Constraints and
+      // indexes only: no row is written or checked, and no preserved relation, trigger, function or DONE fence changes.
       '1622_session_turn_state_checks',
-      '1623_session_turn_state_agrees_validate',
-      '1624_session_turn_state_released_validate',
-      '1625_session_phase_not_null_validate',
-      '1626_session_phase_set_not_null',
       '1627_session_runner_turn_state_idx',
       '1628_session_runner_held_idx',
       '1629_session_batch_in_flight_idx',

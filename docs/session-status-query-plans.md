@@ -12,8 +12,14 @@ psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -v without_old=1 -f scripts/session-s
 The seed: 101,358 sessions, 358 of them held; the busy runner has 44,073, 73 held. **It is not a copy of
 production**; the rehearsal (T16) measures that. Numbers are shared buffers (hit and read) of one warm execution.
 "Word, D1" is the query on the stored word on a database at migration 1612; "Facts, D2" is its translation after
-1622–1634; the last number column is the same with the six indexes on `status` dropped, as D4 leaves it. Planner
+1622 and 1627–1634; the last number column is the same with the six indexes on `status` dropped, as D4 leaves it. Planner
 choices and buffer counts move a little between runs.
+
+1622 adds the two `turn_state` CHECKs `NOT VALID`, and nothing here waits for the backfill: the plan's strict
+agreement CHECK, the `VALIDATE`s and `phase` NOT NULL are a later task's, after the backfill has run on production. The
+facts queries below are the plain translations of §2.1. Until the backfill has run, the readers have to be NULL-safe
+(a NULL `turn_state` on a held row reads the stored word); **those forms were not measured**, and a partial index over
+`turn_state` cannot answer them alone.
 
 ## Indexes built
 
