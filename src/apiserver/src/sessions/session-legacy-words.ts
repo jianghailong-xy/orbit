@@ -20,6 +20,7 @@
 import { Prisma } from '@prisma/client';
 import { RunStatus, SessionEndReason } from '@orbit/shared';
 
+import { isHeldStatus } from '../common/session-release';
 import { landingContainerStatus } from '../projects/landing-session';
 
 /** The session columns the projector reads. */
@@ -46,11 +47,6 @@ export const LEGACY_STATUS_SELECT = {
   importSourceCwd: true,
   sessionKind: true,
 } as const;
-
-/** The held words, which an unfilled held row keeps as stored. */
-const STORED_HELD_WORDS: ReadonlySet<string> = new Set([
-  RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED,
-]);
 
 /** The settlement of a LANDING container's `project_landing` row, which P3 reads. */
 export interface LandingSettlement {
@@ -104,7 +100,7 @@ export function legacySessionStatus(facts: LegacyStatusFacts, landing?: LandingS
     if (facts.turnState != null) return HELD_WORD_OF_TURN_STATE[facts.turnState] ?? RunStatus.AWAITING_INPUT;
     // No turn state: parked, or not yet backfilled. A parked row stores AWAITING_INPUT, so both read the stored word.
     const session = facts;
-    return STORED_HELD_WORDS.has(session.status) ? session.status as RunStatus : RunStatus.AWAITING_INPUT;
+    return isHeldStatus(session.status) ? session.status as RunStatus : RunStatus.AWAITING_INPUT;
   }
   if (facts.endReason == null) {
     if (facts.lastTurnOutcome === 'FAILED') return RunStatus.FAILED;
