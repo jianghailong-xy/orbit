@@ -165,7 +165,7 @@ var alwaysOnBudgets = map[string]alwaysOnBudget{
 
 // claudeCodeAlwaysOnGoalBytes is the instruction-units project's goal for the longest Claude Code shape (criterion
 // 5CM9pGWkpF2H9phd7Np21g). It is logged against, not enforced: the caps above are what the measured steps reached.
-const claudeCodeAlwaysOnGoalBytes = 3500
+const claudeCodeAlwaysOnGoalBytes = 6200
 
 // alwaysOnBudgetCLI is a CLI path longer than any runner's, so a shape measured with it fits its cap on every runner.
 const alwaysOnBudgetCLI = "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"

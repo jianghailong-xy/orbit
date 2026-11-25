@@ -195,7 +195,7 @@ Add a `sessionRole` value, set it in `sessionShape`, and give each unit that sho
 ### 8.6 Admission and sunset, as enforced
 
 - **Admission** (`TestEveryAlwaysOnUnitIsKindAOrFAndNamesItsEvalCase`): every registry unit is kind A or F and every `guardedBy` id is a real scenario. Five units without a case were demoted in step 7a. Not machine-checked: that the author names the unit evicted or compressed; the reviewer asks.
-- **Caps** (`TestAlwaysOnBudgetPerShape`): each snapshot shape has a byte and rule cap equal to what it reached; raising one is a reviewed change. The project's goal of 3,500 bytes for the longest shape is logged, not enforced.
+- **Caps** (`TestAlwaysOnBudgetPerShape`): each snapshot shape has a byte and rule cap equal to what it reached; raising one is a reviewed change. The project's goal for the longest Claude Code shape is 6,200 bytes, down from 8,315 before step 4 (approved by the owner on 2026-11-25, in place of the earlier 3,500); it is logged, not enforced.
 - **Sunset**: when the engine matrix changes, run each unit's guarding scenario with `--leave-out <unit id>` (`docs/agent-instructions-eval-baseline.md`, "How it was run"); a unit whose case still passes at ten or more runs is demoted. D2 (`alwaysLoad` for notify and delegate) was dropped this way.
 
 ### 8.7 Final sizes
