@@ -345,10 +345,13 @@ beforeEach(() => {
     }
     if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
     if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
+    if (path === '/auth/capabilities') return reply({ managedRunners: { enabled: false }, documents: { enabled: true } });
     if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/watches?following=true') return reply([]);
     // The session list's Needs you row reads the terminals asking to be approved: none here.
     if (path === '/terminals/requests') return reply({ requests: [] });
     if (path.startsWith('/owner-requests')) return reply({ requests: [] });
+    // The managed-runner gate reads what the server offers: none here.
+    if (path === '/auth/capabilities') return reply({ managedRunners: { enabled: false } });
     unstubbed.push(path);
     return reply([]);
   }) as unknown as typeof api);
@@ -597,6 +600,16 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     expect(requested.slice(requestedBefore), 'a press on the line asked the server for something').toEqual([]);
   });
 
+  it('is the top capsule in the header, with no bar of its own and none of the reader\'s own words', async () => {
+    await coordinatorWithTheCard();
+    const capsule = questionLine()!.closest<HTMLElement>('.workspace-header-jump');
+    expect(capsule, 'the line is not in the header capsule').not.toBeNull();
+    expect(capsule!.hidden, 'the capsule is hidden while something waits').toBe(false);
+    expect(mounted().querySelector('.workspace-header')!.classList.contains('has-jump')).toBe(true);
+    // While something waits, the capsule leads with it and leaves out the person's last message.
+    expect(capsule!.querySelector('.chat-older-mine')).toBeNull();
+  });
+
   it('offers no answer to the settlement question on the strip, only the way to its card', async () => {
     await coordinatorWithTheCard();
     // Every control the strip has moves the reader somewhere: a line, and nothing else.
@@ -624,6 +637,7 @@ describe('the settlement question on the pinned line on a phone', { timeout: 60_
     });
     const controls = [...strip()!.querySelectorAll<HTMLButtonElement>('button')];
     expect(controls.map((button) => button.className), 'the phone strip is not one line').toEqual(['decision-strip-line']);
+    expect(strip()!.closest('.chat-older-top'), 'the phone line is not the capsule over the transcript').not.toBeNull();
     expect(controls[0]!.hasAttribute('aria-expanded'), 'the phone line is a fold').toBe(false);
 
     const card = settlementCards()[0]!;

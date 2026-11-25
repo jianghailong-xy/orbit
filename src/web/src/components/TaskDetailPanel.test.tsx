@@ -1158,9 +1158,10 @@ describe('the task page led by the run', () => {
   const queuedRun = (situation: string) =>
     task({ sessions: [{ ...SITUATIONS[situation], workFinished: false, endReason: null, id: LIVE_RUN, createdAt: STARTED, workspace: { name: 'Builder' } }] });
 
-  it('the Now card reads "On hold" for a held queued run, by the run badge\'s own rule', () => {
+  it('the Now card reads "Queued" with the On hold mark for a held queued run, by the run badge\'s own rule', () => {
     const html = renderPanel(queuedRun('on hold'));
-    expect(nowTitle(html)).toBe('On hold');
+    expect(nowTitle(html)).toBe('Queued');
+    expect(/class="tdp-now-title">Queued<span class="session-marks"><span class="session-mark tone-grey" data-mark="ON_HOLD"/.test(html)).toBe(true);
   });
 
   it('the Now card reads "Queued" for a queued run that nothing holds', () => {

@@ -32,12 +32,11 @@ import { supersedesLiveDrafts } from '../lib/steerDelivery';
 import {
   isSessionLive,
   sessionLifecycleStateOf,
-  sessionStateWord,
   type SessionStateSource,
 } from '../lib/sessionState';
 import { NEAR_BOTTOM, sampleTail } from '../lib/tailPinning';
 import { titleFirstLine } from '../lib/title';
-import { followDelay, sharedStateTone, WORKING_POLL_MS } from './SharedSessionPage';
+import { followDelay, SharedSessionStatus, WORKING_POLL_MS } from './SharedSessionPage';
 
 const TAIL_PAGE = 200;
 const OLDER_PAGE = 200;
@@ -498,7 +497,6 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
 
   const owner = data.ownerName;
   const completed = sessionLifecycleStateOf(head) === 'COMPLETED';
-  const tone = sharedStateTone(head, true);
   const live = isSessionLive(head) && !completed;
   const waiting = live && head.waitingOnOwner === true;
   const hint = !live ? guestCopy.restarts(owner) : waiting ? guestCopy.waitsItsTurn : guestCopy.runsOn(owner);
@@ -632,10 +630,7 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
           <span className="share-subtitle">Shared by {owner}</span>
         </div>
         <div className="share-right">
-          <span className={`status-pill ${tone}`}>
-            {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
-            {sessionStateWord(head)}
-          </span>
+          <SharedSessionStatus head={head} canReply />
           <span className="share-badge">Guest</span>
         </div>
       </header>

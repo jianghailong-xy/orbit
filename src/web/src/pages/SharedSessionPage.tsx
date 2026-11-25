@@ -30,12 +30,15 @@ import {
   isSessionLive,
   isSessionWorking,
   sessionActivityOf,
+  sessionLifecycleLabel,
   sessionLifecycleStateOf,
   sessionRunStateOf,
   sessionStateWord,
   type SessionRunState,
   type SessionStateSource,
 } from '../lib/sessionState';
+import { sessionDisplayState, sessionMarks } from '../lib/sessionDisplay';
+import { SessionMarkChips } from '../components/SessionStateDisplay';
 import { shortDate } from '../lib/shareLinks';
 import { supersedesLiveDrafts } from '../lib/steerDelivery';
 import { streamAnchorAfter } from '../lib/streamAnchor';
@@ -133,6 +136,10 @@ export const RUN_TONE: Record<SessionRunState, string> = {
  * reader; and an idle one whose reader cannot reply (`canReply: false`, a public link) is grey.
  */
 export function sharedStateTone(head: SessionStateSource, canReply: boolean): string {
+  // With the facts, the pill's colour is the state (`phase`) alone (lib/sessionDisplay): the spinner while it runs,
+  // the queued pill while it waits for a slot, grey when idle. What follows is an older control plane's.
+  const shown = sessionDisplayState(head);
+  if (shown) return shown.phase === 'RUNNING' ? 'running' : shown.phase === 'PENDING' ? 'queued' : 'todo';
   if (sessionLifecycleStateOf(head) === 'COMPLETED') return 'done';
   const activity = sessionActivityOf(head);
   if (activity === 'TURN') return 'running';
@@ -140,6 +147,30 @@ export function sharedStateTone(head: SessionStateSource, canReply: boolean): st
   const state = sessionRunStateOf(head);
   if (state === 'AWAITING_INPUT' && !canReply) return 'todo';
   return RUN_TONE[state];
+}
+
+/**
+ * A shared or guest page's status: the pill with the state word, then, from a server that sends the facts, the marks
+ * and, for a filed session, Completed after the state rather than instead of it (lib/sessionDisplay).
+ */
+export function SharedSessionStatus({ head, canReply }: { head: SessionStateSource; canReply: boolean }) {
+  const tone = sharedStateTone(head, canReply);
+  const pill = (
+    <span className={`status-pill ${tone}`}>
+      {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
+      {sessionStateWord(head, canReply ? {} : { canReply: false })}
+    </span>
+  );
+  if (!sessionDisplayState(head)) return pill;
+  return (
+    <>
+      {pill}
+      <SessionMarkChips marks={sessionMarks(head)} />
+      {sessionLifecycleStateOf(head) === 'COMPLETED' && (
+        <span className="share-badge">{sessionLifecycleLabel('COMPLETED')}</span>
+      )}
+    </>
+  );
 }
 
 /**
@@ -548,8 +579,7 @@ function SharedConversation() {
 
   if (isLoading) return <SharedLoading />;
   if (isError || gone || !head) return <SharedUnavailable />;
-  // A public link's reader cannot reply, so an idle session is not waiting on them.
-  const tone = sharedStateTone(head, false);
+  // A public link's reader cannot reply, so an idle session is not waiting on them (SharedSessionStatus).
   return (
     <PublicShell
       crumbs={
@@ -574,12 +604,7 @@ function SharedConversation() {
               ]
             : [{ label: titleFirstLine(head.title) }]
       }
-      status={
-        <span className={`status-pill ${tone}`}>
-          {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
-          {sessionStateWord(head, { canReply: false })}
-        </span>
-      }
+      status={<SharedSessionStatus head={head} canReply={false} />}
       scrollRef={scrollRef}
       onScroll={(e) => {
         if (e.currentTarget.scrollTop < LOAD_OLDER_AT) loadOlder();

@@ -11,8 +11,13 @@ const text = (props: Parameters<typeof TaskStatusPill>[0]) =>
   renderToStaticMarkup(<TaskStatusPill {...props} />).replace(/<[^>]+>/g, '');
 
 describe('TaskStatusPill queued word', () => {
-  it('reads "On hold" for a queued row whose run is held', () => {
-    expect(text(heldRow)).toBe('On hold');
+  it('reads "Queued" with the On hold mark beside it for a queued row whose run is held (the approved board)', () => {
+    const html = renderToStaticMarkup(<TaskStatusPill {...heldRow} />);
+    expect(html).toContain('<span class="status-dot"></span>Queued</span>');
+    expect(html).toContain('data-mark="ON_HOLD"');
+    expect(text(heldRow)).toBe('QueuedOn hold');
+    // The word function a graph's label reads is the legacy one, pinned by legacyBaseline.test.ts; no caller passes
+    // it `queuedOnHold`.
     expect(taskStatusLabel(heldRow.status, heldRow.running, heldRow.queued, heldRow.queuedOnHold)).toBe('On hold');
   });
   it('reads "Queued" for a plainly queued row', () => {
@@ -23,7 +28,7 @@ describe('TaskStatusPill queued word', () => {
     expect(text(olderServerRow)).toBe('Queued');
     expect(taskStatusLabel('IN_PROGRESS', false, true)).toBe('Queued');
   });
-  it('never reads "On hold" for a row that is not queued, or is running', () => {
+  it('never draws On hold for a row that is not queued, or is running', () => {
     expect(text({ status: 'OPEN', queued: false, queuedOnHold: true })).toBe('Open');
     expect(text({ status: 'IN_PROGRESS', running: true, queued: false, queuedOnHold: true })).toBe('Running');
   });

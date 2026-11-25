@@ -2828,15 +2828,16 @@ button.toast--pill:focus-visible {
   }
 }
 
-/* shared column grid: check | status | title | assignee */
+/* shared column grid: check | status | title | assignee. The status column fits a run's pill with its mark beside it
+   ("Queued" + "On hold", docs/mocks/session-display-three-states). */
 .orbit-tasklist {
-  --cols: 28px 92px minmax(160px, 1fr) 160px;
+  --cols: 28px 152px minmax(160px, 1fr) 160px;
   border-top: 1px solid var(--border-subtle);
 }
 /* Detail panel open, or every row shares one assignee → drop the assignee column so the
    title keeps its width. */
 .orbit-tasklist.no-assignee {
-  --cols: 28px 92px minmax(160px, 1fr);
+  --cols: 28px 152px minmax(160px, 1fr);
 }
 /* Multi-select checkbox column (header + per row). */
 .task-check {
@@ -3415,7 +3416,7 @@ button.toast--pill:focus-visible {
   align-items: center;
   gap: 6px;
   color: var(--text-4);
-  font-size: 12px;
+  font-size: 13px;
 }
 .scope-menu-value-text {
   max-width: 100px;
@@ -3447,6 +3448,10 @@ button.toast--pill:focus-visible {
    menu gave a selected row's hover. */
 .workspace-header-menu .orbit-menu-item[data-selected][data-highlighted] {
   background: var(--orbit-option-selected-bg);
+}
+/* The conversation header's ⋯ menu matches no control's width, so it keeps a floor of its own. */
+.orbit-menu.workspace-header-menu {
+  min-width: 240px;
 }
 .session-row.active {
   background: var(--brand-tint);
@@ -5001,17 +5006,20 @@ button.toast--pill:focus-visible {
   top: calc(50% - 2px);
   transform: translate(-50%, -50%);
   display: flex;
-  max-width: 360px;
+  max-width: 420px;
 }
 .workspace-header-jump .chat-older-pill.chat-older-split {
   max-width: 100%;
+}
+.workspace-header-jump[hidden] {
+  display: none;
 }
 /* Centred over the whole row, so the title stops short of the pill's half instead of running under it. */
 .workspace-header.has-jump {
   position: relative;
 }
 .workspace-header.has-jump .workspace-header-main {
-  max-width: calc(50% - 180px - 12px);
+  max-width: calc(50% - 210px - 12px);
   margin-right: auto;
 }
 /* The header's Share button: grey, or the live link's green while the session is shared. */
@@ -6437,6 +6445,72 @@ button.toast--pill:focus-visible {
 .session-preview.tone-watching,
 .session-preview.tone-review {
   color: var(--text-3);
+}
+/* A session's state icon and its marks (components/SessionStateDisplay, docs/mocks/session-display-three-states):
+   one small labelled chip per fact after the state word. Amber = you have to act, red = a failure nobody is
+   retrying, green = the work finished, grey = everything else. */
+.session-state-glyph {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+.session-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  vertical-align: middle;
+}
+.session-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.session-mark-svg {
+  flex: none;
+}
+.session-mark.tone-amber {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.session-mark.tone-red {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.session-mark.tone-green {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.session-head-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.task-status-pill-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.olc-state-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.tdp-now-title .session-marks {
+  margin-left: 6px;
 }
 /* Float above full-width text without changing its layout when actions appear. */
 .session-right {
@@ -8673,6 +8747,39 @@ button.chat-jump-start:hover {
 }
 .chat-older-mine:hover {
   background: var(--bg-sunken);
+}
+/* The capsule's wrapper while nothing waits: it draws nothing, only holds the strip's line (mounted,
+   empty) beside whichever pill shows. */
+.chat-older-group {
+  display: contents;
+}
+/* What waits on the reader, as the capsule's first segment: the strip's line without its bar. */
+.chat-older-split .decision-strip {
+  display: contents;
+}
+.chat-older-split .decision-strip-line {
+  width: auto;
+  min-width: 0;
+  gap: 7px;
+  padding: 4px 12px 4px 13px;
+  font-weight: 500;
+}
+.chat-older-split .decision-strip-line:hover {
+  background: var(--bg-sunken);
+}
+.chat-older-split .decision-strip-quiet,
+.chat-older-split .decision-strip-caret {
+  font-weight: 400;
+}
+.chat-older-split .decision-strip-caret {
+  margin-left: 0;
+}
+.chat-older-split .decision-strip-unread {
+  display: block;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 .chat-older-split > button.chat-older-start {
   flex: none;
@@ -18808,23 +18915,9 @@ button.chat-jump-start:hover {
 }
 .re-account-menu.orbit-menu {
   min-width: 176px;
-  padding: 5px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 9px;
-  box-shadow: 0 8px 28px rgba(31, 35, 41, .11), 0 2px 5px rgba(31, 35, 41, .04);
-}
-.re-account-menu.orbit-menu .orbit-menu-item {
-  min-height: 33px;
-  padding: 5px 9px;
-  font-size: 12px;
-  gap: 8px;
-  border-radius: 5px;
 }
 .re-account-menu.orbit-menu .orbit-menu-icon {
-  /* The icon's own 8px, beside the item's gap, as the menu this one replaced spaced them. */
-  margin-inline-end: 8px;
   color: var(--text-3);
-  font-size: 13px;
 }
 .re-account-menu.orbit-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
   color: inherit;

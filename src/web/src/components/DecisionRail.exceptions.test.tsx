@@ -9,6 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DecisionStrip,
   GO_TO_NEXT_CARD_HINT,
+  cardSide,
   revealOwnerItemCard,
   wayPosition,
   type ExceptionCardPointer,
@@ -331,15 +332,71 @@ describe('a press goes to the card', () => {
     expect(scrolled).toEqual([card]);
   });
 
-  it('points the caret at where the NEXT press goes once a press has gone somewhere', async () => {
+  it('points the caret at the card the line names, not where the next press goes', async () => {
     const scope = await page([pointer(ESCALATED, true)], [evidence()]);
     expect(line(scope).querySelector('.decision-strip-caret')?.textContent).toBe('↑');
 
     await press(scope);
-    // The line names the card it went to; the next press goes down, to the question at the foot.
+    // The line names the card it went to, above; the next press goes down, to the question at the
+    // foot, but the arrow is about the words beside it (owner, 2026-11-25).
     expect(line(scope).querySelector('.decision-strip-title')?.textContent)
       .toBe(`Escalated to you · ${ESCALATED.title}`);
     expect(line(scope).getAttribute('title')).toBe(GO_TO_NEXT_CARD_HINT);
-    expect(line(scope).querySelector('.decision-strip-caret')?.textContent).toBe('↓');
+    expect(line(scope).querySelector('.decision-strip-caret')?.textContent).toBe('↑');
+  });
+});
+
+describe('where the caret says the card is', () => {
+  /** A card in a transcript scroller, each given the box a laid-out page would. */
+  const placed = (view: [number, number], box: [number, number]): HTMLElement => {
+    const scroller = document.createElement('div');
+    scroller.className = 'workspace-sessions';
+    const card = document.createElement('div');
+    scroller.appendChild(card);
+    const rect = ([top, bottom]: [number, number]) => () => ({ top, bottom, height: bottom - top } as DOMRect);
+    scroller.getBoundingClientRect = rect(view);
+    card.getBoundingClientRect = rect(box);
+    return card;
+  };
+
+  it('is nothing to say once the card is on screen', () => {
+    expect(cardSide(placed([100, 700], [300, 500]))).toBe('here');
+    // Half of a short card showing is on screen; a sliver of a tall one is not.
+    expect(cardSide(placed([100, 700], [680, 720]))).toBe('here');
+    expect(cardSide(placed([100, 700], [690, 1200]))).toBe('below');
+  });
+
+  it('is above or below by the side the card is on', () => {
+    expect(cardSide(placed([100, 700], [-400, 60]))).toBe('above');
+    expect(cardSide(placed([100, 700], [900, 1100]))).toBe('below');
+  });
+
+  it('is unknown where the page has no layout, so the line falls back to what it was told', () => {
+    expect(cardSide(placed([0, 0], [0, 0]))).toBeNull();
+    expect(cardSide(document.createElement('div'))).toBeNull();
+    expect(cardSide(null)).toBeNull();
+  });
+});
+
+describe('the strip drawn in halves', () => {
+  it('draws only the line as the capsule segment, and only the fold as the bar', () => {
+    const both = { exceptions: [pointer(ESCALATED, true)], pending: [evidence()] };
+    const half = (part: 'line' | 'fold'): string => renderToStaticMarkup(
+      <DecisionStrip
+        queue={{ ...queue(both.pending), waitingOnYou: [evidence()] }}
+        open={false}
+        hasCard={() => true}
+        onToggle={() => {}}
+        exceptions={both.exceptions}
+        part={part}
+      />,
+    );
+    const line = half('line');
+    expect(line.startsWith('<span class="decision-strip"'), 'the capsule segment is not inline').toBe(true);
+    expect(line).toContain(ESCALATED.title);
+    expect(line).not.toContain('aria-expanded');
+    const fold = half('fold');
+    expect(fold).toContain('aria-expanded');
+    expect(fold).not.toContain(ESCALATED.title);
   });
 });
