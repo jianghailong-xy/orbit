@@ -20454,7 +20454,6 @@ button.chat-jump-start:hover {
 .ssearch-modal.orbit-dialog {
   padding: 0;
   overflow: hidden;
-  border-radius: 12px;
 }
 .ssearch-modal > .orbit-overlay-header {
   display: none;
