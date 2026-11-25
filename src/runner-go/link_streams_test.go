@@ -35,6 +35,10 @@ func asManagedRunner(t *testing.T) {
 	resetManagedInstanceCache(t)
 }
 
+// noBrowserViewer is a viewer that starts no browser: the stand-in below is already listening. The default,
+// linkStreamViewer, starts this process's browser supervisor when there is one, which execs Xvfb, x11vnc and Chromium.
+func noBrowserViewer() (func(), error) { return func() {}, nil }
+
 // vncStandIn is a listener on a Unix socket, standing in for x11vnc.
 type vncStandIn struct {
 	path  string
@@ -102,6 +106,7 @@ func newLinkStreamRig(t *testing.T, browser bool, socket string) *linkStreamRig 
 	r.g.welcome = func(_ *fakeWorkConn, w *linkpb.Welcome) { w.Browser = browser }
 	r.g.onStream = func(_ *fakeWorkConn, f *linkpb.Frame) { r.frames <- f }
 	r.m.work.streams.socket = func() string { return socket }
+	r.m.work.streams.viewer = noBrowserViewer
 	r.conn = r.useLink(t)
 	return r
 }
@@ -441,6 +446,7 @@ func TestASaturatedLinkStreamDoesNotHoldUpHeartbeats(t *testing.T) {
 	r := &linkStreamRig{linkWorkRig: newLinkWorkRig(t), frames: make(chan *linkpb.Frame, 1024)}
 	r.g.welcome = func(_ *fakeWorkConn, w *linkpb.Welcome) { w.Browser = true }
 	r.m.work.streams.socket = func() string { return vnc.path }
+	r.m.work.streams.viewer = noBrowserViewer
 	var upBytes, downBytes atomic.Int64
 	downRoom := make(chan int, 4096)
 	opened := make(chan struct{})

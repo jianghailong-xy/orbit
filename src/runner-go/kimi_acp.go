@@ -1077,12 +1077,12 @@ func kimiNameValuePairs(value interface{}) []map[string]string {
 	return pairs
 }
 
-func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecordedWork, watches, workflows bool) string {
+func kimiAgentInstructions(agent AgentExecConfig, shape SessionShape) string {
 	parts := []string{}
 	if strings.TrimSpace(agent.SystemPrompt) != "" {
 		parts = append(parts, agent.SystemPrompt)
 	}
-	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches, agentDelegates(agent), workflows)); appendPrompt != "" {
+	if appendPrompt := strings.TrimSpace(withOrbitInstructions(agent.AppendSystemPrompt, compose(shape, kimiProfile).System)); appendPrompt != "" {
 		parts = append(parts, appendPrompt)
 	}
 	if len(agent.AllowedTools) > 0 {
@@ -1094,12 +1094,12 @@ func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecorde
 	return strings.Join(parts, "\n\n")
 }
 
-func kimiPromptText(agent AgentExecConfig, orbitExe, text string, insideRecordedWork, watches, workflows bool) string {
-	instructions := kimiAgentInstructions(agent, orbitExe, insideRecordedWork, watches, workflows)
+func kimiPromptText(agent AgentExecConfig, shape SessionShape, text string) string {
+	instructions := kimiAgentInstructions(agent, shape)
 	if instructions == "" {
 		return text
 	}
-	return "<orbit-agent-instructions>\n" + instructions + "\n</orbit-agent-instructions>\n\n" + text
+	return kimiInstructionsOpen + instructions + "\n</orbit-agent-instructions>\n\n" + text
 }
 
 type kimiPreparedPrompt struct {
@@ -1107,7 +1107,9 @@ type kimiPreparedPrompt struct {
 	refs   []map[string]interface{}
 }
 
-func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string) kimiPreparedPrompt {
+// prepareKimiPrompt builds the prompt for one turn. It carries Orbit's instructions when instructions says the
+// conversation does not hold them (kimiInstructionLedger.due; a nil ledger: always).
+func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string, instructions *kimiInstructionLedger) kimiPreparedPrompt {
 	blocks := []map[string]interface{}{}
 	refs := []map[string]interface{}{}
 	writtenPaths := []string{}
@@ -1147,7 +1149,9 @@ func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, r
 			feedText = note
 		}
 	}
-	feedText = kimiPromptText(job.instructionAgent(), orbitCLIExecutable(), feedText, job.insideRecordedWork(), job.watchesOn(), job.workflowsOn())
+	if instructions.due() {
+		feedText = kimiPromptText(job.instructionAgent(), job.sessionShape(orbitCLIExecutable()), feedText)
+	}
 	if feedText != "" || len(blocks) == 0 {
 		blocks = append(blocks, map[string]interface{}{"type": "text", "text": feedText})
 	}
@@ -1822,6 +1826,8 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	}
 	turns.setSession(sessionID)
 	job.RuntimeSessionID = sessionID
+	// Whether the conversation holds Orbit's instructions, read from its own history (a resumed one's included).
+	instructions := newKimiInstructionLedger(realHome, sessionID)
 	expectedSessionID.Store(sessionID)
 	writeKimiSessionMeta(scratchDir, job, execDir)
 	if err := app.configureSession(ctx, sessionID, job.Agent); err != nil {
@@ -2055,7 +2061,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					continue
 				}
 				inbox.markInflight(resp.TurnID)
-				prepared := prepareKimiPrompt(ctx, t, job, resp, pendingShellCtx)
+				prepared := prepareKimiPrompt(ctx, t, job, resp, pendingShellCtx, instructions)
 				pendingShellCtx = nil
 				userEvent := map[string]interface{}{"text": resp.Content}
 				if len(prepared.refs) > 0 {
