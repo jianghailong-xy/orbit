@@ -211,7 +211,9 @@ describe('the Tasks list pill', () => {
   const pill = (props: Parameters<typeof TaskStatusPill>[0]) => renderToStaticMarkup(<TaskStatusPill {...props} />);
   it('a held queued run reads Queued with the On hold mark beside it (the server sends queuedOnHold)', () => {
     const html = pill({ status: 'OPEN', queued: true, queuedOnHold: true });
-    expect(html).toContain('<span class="status-dot"></span>Queued</span>');
+    expect(html).toContain('data-state="PENDING"');
+    expect(html).toContain('anticon-clock-circle');
+    expect(html).toContain('Queued</span>');
     expect(marksIn(html)).toEqual(['ON_HOLD']);
   });
   it('a running or queued run with nothing held reads its state alone', () => {
