@@ -4091,6 +4091,8 @@ export function WorkspaceView({
   const composing =
     !selectedId && !landingsProjectId &&
     (composingRoute || view !== 'open' || (sessionsQ.isSuccess && listedSessions.length === 0));
+  // A wide window draws the top pill centred in the header row (a phone floats it over the transcript).
+  const headerJumpShown = !isMobile && !!selectedId && !composing && jumpUpOffered;
   // The Projects CTA lands on the ordinary New Session route with one piece of transient framing:
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
@@ -10914,7 +10916,7 @@ export function WorkspaceView({
         <>
         {/* A machine with no workspace: the card says whose it is, so no session title above it. A phone keeps the
             header for its way back. */}
-        {(!bareMachine || isMobile) && <div className="workspace-header">
+        {(!bareMachine || isMobile) && <div className={`workspace-header${headerJumpShown ? ' has-jump' : ''}`}>
           {isMobile && (
             <button
               type="button"
@@ -11035,10 +11037,10 @@ export function WorkspaceView({
               <div className="workspace-sub" data-fork-source="">{detailForSelected.forkSource}</div>
             )}
           </div>
-          {/* Off the live tail, a wide window draws the transcript's top pill here in the header row,
-              where it sits beside the title instead of floating over the messages. A phone keeps it
-              over the transcript (no room up here). */}
-          {!isMobile && selectedId && !composing && jumpUpOffered && (
+          {/* Off the live tail, a wide window draws the transcript's top pill here, centred in the
+              header row instead of floating over the messages. A phone keeps it over the transcript
+              (no room up here). */}
+          {headerJumpShown && (
             <div className="workspace-header-jump">{jumpUpPill()}</div>
           )}
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}

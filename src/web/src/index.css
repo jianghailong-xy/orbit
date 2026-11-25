@@ -4993,15 +4993,27 @@ button.toast--pill:focus-visible {
     }
   }
 }
-/* A wide window's top pill, moved up into the header row beside Share and ⋯ (the same pill the
+/* A wide window's top pill, moved up into the middle of the header row (the same pill the
    transcript floats on a phone). */
 .workspace-header-jump {
-  flex: 0 1 auto;
-  min-width: 0;
+  position: absolute;
+  left: 50%;
+  /* The row's centre, above the header's 4px bottom padding. */
+  top: calc(50% - 2px);
+  transform: translate(-50%, -50%);
   display: flex;
+  max-width: 360px;
 }
 .workspace-header-jump .chat-older-pill.chat-older-split {
-  max-width: 360px;
+  max-width: 100%;
+}
+/* Centred over the whole row, so the title stops short of the pill's half instead of running under it. */
+.workspace-header.has-jump {
+  position: relative;
+}
+.workspace-header.has-jump .workspace-header-main {
+  max-width: calc(50% - 180px - 12px);
+  margin-right: auto;
 }
 /* The header's Share button: grey, or the live link's green while the session is shared. */
 .workspace-header-share { flex: none; color: var(--text-2); }
