@@ -990,7 +990,9 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     const closed = await request(open);
     console.log(`# recipient_ended ${JSON.stringify(closed)}`);
     assert.equal(closed.state, 'RECIPIENT_ENDED');
-    assert.equal(closed.close_reason, 'RUNNING', 'close_reason is still STATUS[:end_reason], unchanged');
+    // Since 1641 (task T6) the word in close_reason is the projector's (session_legacy_status), not the stored one the
+    // release fact alone left RUNNING: released with no end reason and no turn outcome reads CANCELLED (P5).
+    assert.equal(closed.close_reason, 'CANCELLED', 'close_reason is WORD[:end_reason], the word read from the facts');
 
     // A release by a failure with a retry armed is not an end. The status word is still RUNNING, so it is the turn
     // outcome the clause read (removal step R4: the failure is the turn's).

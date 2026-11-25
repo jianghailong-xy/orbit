@@ -8,7 +8,8 @@
  * restates, and T15 turns this into the check that the column and the type are gone.
  *
  * A function body is told by what it says: `NEW.status` / `OLD.status` in a function a trigger on session runs,
- * `<alias>.status` or a `SET status` of a statement on the session table, or a mention of `run_status`.
+ * `<x>.status` in a function that takes a session row, `<alias>.status` or a `SET status` of a statement on the
+ * session table, or a mention of `run_status`.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-status-column.pg.spec.ts
  */
@@ -22,7 +23,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 const URL = process.env.COORDINATOR_PG_URL;
 
 /** Today's objects. Take a line out when a task removes or restates the object; never add one (the four of deploy D1
- *  below are the plan's own, §4.1, added with the migration that installs them). */
+ *  below are the plan's own, §4.1, added with the migration that installs them, and T6's one function replaces nine
+ *  that read the word each on their own). */
 const NAMING_STATUS: readonly string[] = [
   // The column and the type (T15).
   'column session.status',
@@ -40,17 +42,10 @@ const NAMING_STATUS: readonly string[] = [
   'trigger session_request_recipient_ended',
   'trigger session_superseded_task_revive_guard',
   'trigger task_owner_confirmation_review_reviewer_ended',
-  // Function bodies (T6).
-  'function guard_antigravity_runner_claim',
-  'function guard_cursor_runner_acquisition',
-  'function guard_dsh_runner_acquisition',
-  'function guard_opencode_runner_claim',
-  'function guard_session_engine_acquisition',
-  'function open_list_bump_owner',
-  'function session_listed_at_on_settle',
-  'function session_request_recipient_ended',
-  // Not in the plan's §4.2 table: a task trigger's function that reads `s."status"` of the session into its error text.
-  'function task_supersession_live_session_guard',
+  // Function bodies: T6 (migration 1641) restated the nine that read it on the facts. They reach the stored word only
+  // through this one, the SQL twin of turnStateOf: a held row with no turn_state, as one not yet backfilled has, reads
+  // its stored word (the project's deploy-order rule, 2026-11-25). T14 takes that read out of it.
+  'function session_held_turn_state',
   // Deploy D1's own (T2, migration 1611; plan §4.1): the facts follow the word until the readers and writers move.
   // `session_aa_turn_state_from_status` and its function are replaced in D3 (T14) by the trigger that derives the
   // word from the facts; `session_zz_phase` loses `status` from its list and `session_turn_state_of_status` (the
@@ -72,10 +67,11 @@ const NAMING_STATUS: readonly string[] = [
   'index session_status_idx',
 ];
 
-function bodyNamesStatus(body: string, onSession: boolean): boolean {
+function bodyNamesStatus(body: string, onSession: boolean, takesSession = false): boolean {
   const text = body.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   if (/\brun_status\b/i.test(text)) return true;
   if (onSession && /\b(new|old)\s*\.\s*"?status\b/i.test(text)) return true;
+  if (takesSession && /\.\s*"?status\b/i.test(text)) return true;
   const statements = text.split(';');
   return statements.some((statement) => {
     const tables = [...statement.matchAll(/\b(from|join|update|into)\s+(?:only\s+)?(?:"?public"?\.)?"?session"?(?![\w"])(?:\s+(?:as\s+)?([a-z_]\w*))?/gi)];
@@ -117,14 +113,15 @@ async function objectsNamingStatus(sql: Client): Promise<string[]> {
     WHERE a.attgenerated <> '' AND (pg_get_expr(d.adbin, d.adrelid) ~ '\\mrun_status\\M'
        OR (a.attrelid = 'public.session'::regclass AND pg_get_expr(d.adbin, d.adrelid) ~ '\\mstatus\\M'))`);
 
-  const functions = (await sql.query<{ name: string; body: string; onSession: boolean }>(
+  const functions = (await sql.query<{ name: string; body: string; onSession: boolean; takesSession: boolean }>(
     `SELECT p.proname AS name, pg_get_functiondef(p.oid) AS body,
             EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgfoid = p.oid AND NOT t.tgisinternal
-                      AND t.tgrelid = 'public.session'::regclass) AS "onSession"
+                      AND t.tgrelid = 'public.session'::regclass) AS "onSession",
+            'public.session'::regtype = ANY (p.proargtypes::oid[]) AS "takesSession"
        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND p.prokind IN ('f', 'p')`)).rows;
   assert.ok(functions.length > 50, `only ${functions.length} functions: is this a migrated database?`);
-  found.push(...functions.filter((fn) => bodyNamesStatus(fn.body, fn.onSession)).map((fn) => `function ${fn.name}`));
+  found.push(...functions.filter((fn) => bodyNamesStatus(fn.body, fn.onSession, fn.takesSession)).map((fn) => `function ${fn.name}`));
   return found.sort();
 }
 
@@ -150,9 +147,12 @@ test('no database object names session.status beyond the ones listed', { skip: !
       await sql.query('CREATE INDEX planted_status_index ON session (status)');
       await sql.query('ALTER TABLE session ADD CONSTRAINT planted_status_chk CHECK (status IS NOT NULL) NOT VALID');
       await sql.query(`CREATE FUNCTION planted_noop() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$`);
+      await sql.query(`CREATE FUNCTION planted_row_reader(s session) RETURNS boolean LANGUAGE sql AS
+        $$ SELECT s.status = 'PENDING' $$`);
       await sql.query('CREATE TRIGGER planted_status_trigger BEFORE UPDATE OF status ON session FOR EACH ROW EXECUTE FUNCTION planted_noop()');
       assert.deepEqual(added(await objectsNamingStatus(sql)), [
         'check planted_status_chk',
+        'function planted_row_reader',
         'function planted_status_reader',
         'index planted_status_index',
         'trigger planted_status_trigger',
