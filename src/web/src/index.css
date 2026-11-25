@@ -20640,6 +20640,16 @@ button.chat-jump-start:hover {
 .ssearch-workspace {
   color: var(--text-2);
 }
+/* A hit's marks follow its state word, wrapping as chips rather than clipping, and take no separator dot. */
+.ssearch-meta:has(> .session-marks) {
+  flex-wrap: wrap;
+}
+.ssearch-meta > .session-marks {
+  flex-wrap: wrap;
+}
+.ssearch-meta > .session-marks::before {
+  content: none;
+}
 .ssearch-snippet {
   margin-top: 3px;
   color: var(--text-2);
