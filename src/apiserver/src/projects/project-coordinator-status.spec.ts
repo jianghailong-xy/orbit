@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import { factsOfWord } from '../sessions/session-legacy-words.fixture';
 import { withSessionState } from '../sessions/session-state';
 import { COORDINATOR_UNAVAILABLE_CODE, ProjectsService } from './projects.service';
 
@@ -15,13 +16,13 @@ const BORROWED_ID = '00000000-0000-7000-8000-0000000000c3';
 
 /** The session columns `coordinatorStatus` selects, in the shape Prisma hands back. */
 function sessionRow(overrides: Record<string, unknown> = {}) {
+  const status = (overrides.status as RunStatus | undefined) ?? RunStatus.AWAITING_INPUT;
   return {
     id: SESSION_ID,
     title: 'Ship the coordinator',
-    status: RunStatus.AWAITING_INPUT,
-    endReason: null,
+    // What the words are derived from (sessions/session-legacy-words.ts), as a session at `status` has them.
+    ...factsOfWord(status),
     startedAt: new Date('2026-08-24T06:00:00.000Z'),
-    finishedAt: null,
     completedAt: null,
     archivedAt: null,
     deletedAt: null,

@@ -127,7 +127,13 @@ test('what a shared session added after a seq sits behind the same fence, read a
         return {
           id: SESSION,
           title: 'shared',
-          status: 'RUNNING',
+          // What the header's status words are derived from (sessions/session-legacy-words.ts).
+          finishedAt: null,
+          turnState: 'IN_FLIGHT',
+          lastTurnOutcome: null,
+          startedAt: new Date('2026-08-31T02:00:00Z'),
+          importSourceCwd: null,
+          sessionKind: 'CONVERSATION',
           endReason: null,
           completedAt: null,
           archivedAt: null,

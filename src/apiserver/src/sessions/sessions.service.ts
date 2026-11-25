@@ -50,6 +50,7 @@ import {
   SESSION_RUNNING_BG_JOB_WHERE,
 } from '../common/session-working';
 import { readOneSessionBackgroundFields, readSessionBackgroundFields, sessionActivitySql } from './task-work-carrier';
+import { LEGACY_STATUS_SELECT, readLandingSettlements, withoutWordFacts } from './session-legacy-words';
 import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
@@ -1115,6 +1116,13 @@ function settledWorktreeStateCleared(session: Pick<Session, 'mergeStatus' | 'com
         }
       : {}),
   };
+}
+
+/** The merge repair as the detail embeds it: `startedAt` and `finishedAt` it always had, the other facts read for
+ *  its status words only. */
+function mergeRepairOf<T extends { lastTurnOutcome: unknown; importSourceCwd: unknown; sessionKind: unknown }>(repair: T) {
+  const { lastTurnOutcome: _outcome, importSourceCwd: _import, sessionKind: _kind, ...rest } = repair;
+  return rest;
 }
 
 @Injectable()
@@ -3364,10 +3372,9 @@ export class SessionsService {
         ...runnerScopeWhere(filters.scope),
       },
       select: {
+        ...LEGACY_STATUS_SELECT,
         id: true,
         title: true,
-        status: true,
-        endReason: true,
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
@@ -3393,7 +3400,7 @@ export class SessionsService {
     });
     const engines = await sessionEnginesOf(this.prisma, sessions.map((session) => ({ ...session, ownerId })));
     return sessions.map(({ providerBuiltin: _providerBuiltin, ...session }) =>
-      withSessionState({ ...session, engine: engines.get(session.id) ?? null }));
+      withoutWordFacts(withSessionState({ ...session, engine: engines.get(session.id) ?? null })));
   }
 
   /**
@@ -3450,7 +3457,12 @@ export class SessionsService {
         id: true,
         title: true,
         prompt: true,
+        // The facts the status words are derived from (session-legacy-words.ts), beside sessionKind, startedAt,
+        // finishedAt and endReason below.
         status: true,
+        turnState: true,
+        lastTurnOutcome: true,
+        importSourceCwd: true,
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
@@ -3520,14 +3532,15 @@ export class SessionsService {
     const landing = session.sessionKind === SESSION_KIND_LANDING
       ? await readLandingView(this.prisma, ownerId, id)
       : undefined;
-    return withSessionState({
+    const { lastTurnOutcome: _lastTurnOutcome, importSourceCwd: _importSourceCwd, ...worded } = withSessionState({
       ...compact,
       engine,
       // When the session is woken next, when a wakeup last reached its engine, and its loop
       // (docs/long-running-loop-contract.md §3).
       wakeups: await readSessionWakeups(this.prisma, id),
       ...(landing ? { landing } : {}),
-    });
+    }, landing);
+    return worded;
   }
 
   /**
@@ -3602,6 +3615,12 @@ export class SessionsService {
       id: string;
       title: string;
       status: RunStatus;
+      turnState: string | null;
+      finishedAt: Date | null;
+      lastTurnOutcome: string | null;
+      startedAt: Date | null;
+      importSourceCwd: string | null;
+      sessionKind: string;
       workspaceId: string | null;
       workspaceName: string | null;
       runnerId: string | null;
@@ -3868,6 +3887,12 @@ export class SessionsService {
           scored AS (
             SELECT
               s.id, s.title, s.status,
+              s.turn_state   AS "turnState",
+              s.finished_at  AS "finishedAt",
+              s.last_turn_outcome AS "lastTurnOutcome",
+              s.started_at   AS "startedAt",
+              s.import_source_cwd AS "importSourceCwd",
+              s.kind         AS "sessionKind",
               a.id   AS "workspaceId",
               a.name AS "workspaceName",
               s.assigned_runner_id AS "runnerId",
@@ -3955,7 +3980,8 @@ export class SessionsService {
             FROM scored
           )
           SELECT
-            id, title, status, "workspaceId", "workspaceName", "runnerId", "taskId", "taskTitle",
+            id, title, status, "turnState", "finishedAt", "lastTurnOutcome", "startedAt", "importSourceCwd", "sessionKind",
+            "workspaceId", "workspaceName", "runnerId", "taskId", "taskTitle",
             "lastTurnAt", "listedAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
             "matchField", "snippet", total::int AS "total"
           FROM ranked
@@ -3972,6 +3998,12 @@ export class SessionsService {
       : await this.prisma.$queryRaw<Row[]>(Prisma.sql`
           SELECT
             s.id, s.title, s.status,
+            s.turn_state   AS "turnState",
+            s.finished_at  AS "finishedAt",
+            s.last_turn_outcome AS "lastTurnOutcome",
+            s.started_at   AS "startedAt",
+            s.import_source_cwd AS "importSourceCwd",
+            s.kind         AS "sessionKind",
             a.id   AS "workspaceId",
             a.name AS "workspaceName",
             s.assigned_runner_id AS "runnerId",
@@ -4006,10 +4038,16 @@ export class SessionsService {
       readSessionBackgroundFields(this.prisma, ids),
     ]);
     const hits = rows.map((r) => ({
-      ...withSessionState({
+      ...withoutWordFacts(withSessionState({
         id: r.id,
         title: r.title,
         status: r.status,
+        turnState: r.turnState,
+        finishedAt: r.finishedAt,
+        lastTurnOutcome: r.lastTurnOutcome,
+        startedAt: r.startedAt,
+        importSourceCwd: r.importSourceCwd,
+        sessionKind: r.sessionKind,
         agent: r.workspaceId ? { id: r.workspaceId, name: r.workspaceName ?? '' } : null,
         runnerId: r.runnerId,
         taskId: r.taskId,
@@ -4027,7 +4065,7 @@ export class SessionsService {
         // offset is carried: collapsing shifts every position, so clients locate the query inside
         // the finished snippet instead.
         snippet: r.snippet ? r.snippet.replace(/\s+/g, ' ').trim() : null,
-      }),
+      })),
       ...phases.get(r.id),
       ...background.get(r.id),
     }));
@@ -4882,6 +4920,9 @@ export class SessionsService {
     type Row = {
       id: string;
       status: RunStatus;
+      turnState: string | null;
+      lastTurnOutcome: string | null;
+      importSourceCwd: string | null;
       title: string;
       createdAt: Date;
       lastTurnAt: Date | null;
@@ -5017,6 +5058,10 @@ export class SessionsService {
         s.error,
         s.end_reason      AS "endReason",
         s.finished_at     AS "finishedAt",
+        -- With them, what the status words are derived from (session-legacy-words.ts).
+        s.turn_state      AS "turnState",
+        s.last_turn_outcome AS "lastTurnOutcome",
+        s.import_source_cwd AS "importSourceCwd",
         s.cancel_requested_at AS "cancelRequestedAt",
         s.runtime_session_id AS "runtimeSessionId",
         -- When the auto-retry will re-send the message that a self-healing failure killed, or
@@ -5258,6 +5303,9 @@ export class SessionsService {
       withSessionCapabilities({
         id: r.id,
         status: r.status,
+        turnState: r.turnState,
+        lastTurnOutcome: r.lastTurnOutcome,
+        importSourceCwd: r.importSourceCwd,
         title: r.title,
         createdAt: r.createdAt,
         lastTurnAt: r.lastTurnAt,
@@ -5359,7 +5407,7 @@ export class SessionsService {
         runningOverLimit: r.overLimitActive == null || r.overLimitLimit == null
           ? null
           : { active: Number(r.overLimitActive), limit: r.overLimitLimit, runnerName: r.runnerLabel },
-      }),
+      }, Date.now(), r.landing),
     );
     // What each row says about who is waiting on whom (`listOverlay`): given by a caller that already
     // read it for these rows (`listOpenSince`), read here otherwise.
@@ -5373,8 +5421,10 @@ export class SessionsService {
       rows.map((r) => r.id),
       new Map(rows.map((r) => [r.id, overlays.get(r.id)!.pendingApprovals])),
     );
-    // The release column was read for the capabilities; the row does not carry it.
-    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...overlays.get(s.id)!, ...phases.get(s.id) }));
+    // The release column was read for the capabilities and the status words; the row does not carry it, nor the two
+    // other columns read for the words alone (`lastTurnOutcome` comes with the phase fields).
+    return sessions.map(({ finishedAt: _released, lastTurnOutcome: _outcome, importSourceCwd: _import, ...s }) =>
+      ({ ...s, ...overlays.get(s.id)!, ...phases.get(s.id) }));
   }
 
   /**
@@ -5566,17 +5616,14 @@ export class SessionsService {
           orderBy: { createdAt: 'desc' },
           take: 1,
           select: {
+            ...LEGACY_STATUS_SELECT,
             id: true,
             title: true,
-            status: true,
-            endReason: true,
             completedAt: true,
             archivedAt: true,
             deletedAt: true,
             error: true,
             createdAt: true,
-            startedAt: true,
-            finishedAt: true,
             lastTurnAt: true,
             lastAssistantText: true,
           },
@@ -5706,7 +5753,7 @@ export class SessionsService {
     // Not stored per session: what the assigned runner last reported for this engine.
     const engineVersion = (engine
       && sanitizeRunnerEngines(session.assignedRunner?.engines)?.find((e) => e.engine === engine)?.version) || null;
-    return withSessionCapabilities({
+    const detail = withSessionCapabilities({
       ...rest,
       engine,
       // What its Trash note says when a file is keeping it there past the 30 days.
@@ -5728,11 +5775,11 @@ export class SessionsService {
       forkSource: await forkSourceLine(this.prisma, task),
       // When its turn last ended or it finished, and what it last said — what a repair waiting for the
       // owner asked — clipped to the session list's preview length, in code points as `left()` counts.
-      mergeRepairSession: children[0] ? withSessionState({
+      mergeRepairSession: children[0] ? mergeRepairOf(withSessionState({
         ...children[0],
         lastAssistantText: children[0].lastAssistantText == null ? null
           : [...children[0].lastAssistantText].slice(0, SessionsService.PREVIEW_LEN).join(''),
-      }) : null,
+      })) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
       // Both shapes of the same fact, because the two faces of the API have always differed here:
@@ -5773,11 +5820,15 @@ export class SessionsService {
       settings: sessionSettingsOf(session, session.workspace?.env, SessionsService.engineLive(session)),
       usage,
       engineVersion,
+    }, Date.now(), landing);
+    return {
+      ...detail,
       // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
+      // Added after the words: withSessionState takes the stored `phase` off the row, which this read replaces.
       ...(await readOneSessionPhaseFields(this.prisma, session.id)),
       // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
       ...(await readOneSessionBackgroundFields(this.prisma, session.id)),
-    });
+    };
   }
 
   /**
@@ -5870,7 +5921,7 @@ export class SessionsService {
       // worktree and branch of its own would only be left behind empty, reading as abandoned work.
       { source: 'merge-repair', parentSessionId: parent.id, noWorktree: true },
     );
-    return withSessionState(created);
+    return created;
   }
 
   /**
@@ -6079,10 +6130,9 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, deletedAt: null },
       select: {
+        ...LEGACY_STATUS_SELECT,
         id: true,
         title: true,
-        status: true,
-        endReason: true,
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
@@ -6098,7 +6148,7 @@ export class SessionsService {
       select: { id: true, toolName: true },
     });
     const waitingOnOwner = cards.length > 0 && (await visibleQuestions(this.prisma, cards)).length > 0;
-    const stateful = withSessionState(session);
+    const stateful = withSessionState(session, (await readLandingSettlements(this.prisma, [session])).get(session.id));
     // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
     // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
     // And the jobs still running beside it: the Background mark's two inputs, as the list row reads them.

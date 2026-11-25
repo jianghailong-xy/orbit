@@ -3494,7 +3494,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // that set only those two columns of the row being written, from its stored word; 1612 validates the CHECKs. No
       // row is written by either, and no preserved relation, trigger of one, function of one or DONE fence changes.
       '1611_session_turn_state_phase',
-      '1612_session_turn_state_phase_validate'],
+      '1612_session_turn_state_phase_validate',
+      // 1621 adds one read-only SQL function, session_legacy_status, over its arguments alone: no table, row,
+      // trigger or DONE fence changes.
+      '1621_session_legacy_status'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

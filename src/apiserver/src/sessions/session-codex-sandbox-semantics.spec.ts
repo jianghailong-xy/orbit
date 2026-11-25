@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider, PermissionMode, RunStatus, derivePermissionSemantics } from '@orbit/shared';
+import { factsOfWord } from './session-legacy-words.fixture';
 import { withSessionCapabilities } from './session-state';
 import { reportsCodexSandboxUnavailable } from '../runner-api/codex-sandbox-report';
 
@@ -15,6 +16,7 @@ const NOW = new Date('2026-11-23T12:00:00.000Z');
 
 function session(provider: string, permissionMode: string, codexSandboxUnavailable?: boolean) {
   return {
+    ...factsOfWord(RunStatus.RUNNING),
     status: RunStatus.RUNNING,
     endReason: null,
     completedAt: null,
