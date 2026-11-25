@@ -1095,6 +1095,8 @@ const LOAD_OLDER_AT = 400;
 // deepest session in this deployment, so it bounds a runaway without being a working limit. A
 // session deeper than that keeps the control, and a second press carries on from where it left.
 const JUMP_TO_START_PAGES = 30;
+// The same ceiling on the pages the pill's search for the person's last message may pull in.
+const MINE_SEARCH_PAGES = JUMP_TO_START_PAGES;
 // How long a pinned transcript's tail has to sit out of view, with no content update in between,
 // before the jump-to-bottom button offers it anyway (`stranded`; the clients' ConsoleView waits the
 // same). The follow a content update triggers lands just after the rows grew, and the gap read in
@@ -2870,6 +2872,13 @@ export function WorkspaceView({
   // Whether the scroller has left its top: with the whole session loaded, the way back is still
   // offered to a reader scrolled up into it, and only the top itself has nothing to go back to.
   const [offTop, setOffTop] = useState(false);
+  // The last turn the person typed above a turn Orbit opened, which the sticky bar is hidden over: the
+  // pill at the top offers it beside the way back to the beginning. Looked for only once the reader has
+  // left the tail, a page at a time (MINE_SEARCH_PAGES), and shown only once found; those pages load
+  // without the pill's loading state (`searchingMine`).
+  const [lastMine, setLastMine] = useState<{ seq: string; text: string } | null>(null);
+  const [searchingMine, setSearchingMine] = useState(false);
+  const mineSearchRef = useRef<{ session: string | null; pages: number }>({ session: null, pages: 0 });
   // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
   // stamped as one that wants the top (see prependAnchorRef).
   const jumpingToStartRef = useRef(false);
@@ -4990,6 +4999,29 @@ export function WorkspaceView({
     if (at >= 0 && barHeight > 0 && bubbles[at].hasAttribute('data-orbit-round')
       && bubbles[at].getBoundingClientRect().bottom > topY + 1 - barHeight) at--;
     const cur: HTMLElement | null = at >= 0 ? bubbles[at] : null;
+    // Over a turn Orbit opened, the bar is hidden, so the pill offers the last turn the person typed
+    // above it. Not loaded yet: once the reader has left the tail, the next older page comes in
+    // (one at a time, capped per session), and measure runs again when it lands.
+    let mine: HTMLElement | null = null;
+    if (cur?.hasAttribute('data-orbit-round')) {
+      for (let i = at - 1; i >= 0 && !mine; i--) if (!bubbles[i].hasAttribute('data-orbit-round')) mine = bubbles[i];
+      const search = mineSearchRef.current;
+      if (search.session !== selectedIdRef.current) {
+        search.session = selectedIdRef.current;
+        search.pages = 0;
+      }
+      if (!mine && !atBottomRef.current && hasOlderNow() && search.pages < MINE_SEARCH_PAGES) {
+        search.pages++;
+        setSearchingMine(true);
+        void loadOlder().finally(() => setSearchingMine(false));
+      }
+    }
+    const mineSeq = mine?.getAttribute('data-seq');
+    setLastMine((prev) => {
+      if (!mine || !mineSeq) return null;
+      const text = mine.querySelector('.md')?.textContent || '';
+      return prev?.seq === mineSeq && prev.text === text ? prev : { seq: mineSeq, text };
+    });
     if (cur?.hasAttribute('data-orbit-round')) {
       setStuck(null);
     } else if (cur) {
@@ -11385,8 +11417,34 @@ export function WorkspaceView({
                   a fully loaded session wants the same way back. */}
               {(loadingOlder || (!atBottom && (hasMoreOlder || offTop))) && (
                 <div className="chat-older-top">
-                  {loadingOlder ? (
+                  {loadingOlder && !searchingMine ? (
                     <span className="chat-older-pill">Loading earlier messages…</span>
+                  ) : lastMine && !atBottom ? (
+                    // The person's last message first, the way back to the beginning beside it as an icon.
+                    <span className="chat-older-pill chat-older-split">
+                      <button
+                        type="button"
+                        className="chat-older-mine"
+                        title={lastMine.text}
+                        onClick={() => {
+                          const card = scrollRef.current?.querySelector<HTMLElement>(`.chat-user[data-seq="${lastMine.seq}"]`);
+                          revealCard(card, 'start', false);
+                        }}
+                      >
+                        {lastMine.text}
+                      </button>
+                      <button
+                        type="button"
+                        className="chat-jump-start chat-older-start"
+                        title="Jump to the beginning"
+                        aria-label="Jump to the beginning"
+                        onClick={() => void jumpToStart()}
+                      >
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
+                        </svg>
+                      </button>
+                    </span>
                   ) : (
                     <button type="button" className="chat-older-pill chat-jump-start" onClick={() => void jumpToStart()}>
                       <ArrowUpOutlined /> Jump to the beginning

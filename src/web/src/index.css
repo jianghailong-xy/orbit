@@ -8606,6 +8606,40 @@ button.chat-jump-start:hover {
   background: var(--bg-sunken);
   color: var(--text-1);
 }
+/* The pill split in two: the person's last message (the main press) and the way back to the
+   beginning as an icon. */
+.chat-older-pill.chat-older-split {
+  gap: 0;
+  padding: 0;
+  max-width: min(86%, 560px);
+  overflow: hidden;
+}
+.chat-older-split > button {
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.chat-older-mine {
+  min-width: 0;
+  padding: 4px 10px 4px 14px;
+  color: var(--text-1);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-older-mine:hover {
+  background: var(--bg-sunken);
+}
+.chat-older-split > button.chat-older-start {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 4px 10px 4px 9px;
+  border-left: 1px solid var(--border);
+  color: var(--text-3);
+}
 /* Transcript placeholder while an unvisited session's tail page is in flight. Geometry tracks
    .chat-user / .chat-assistant so the skeleton occupies the same columns the real messages will,
    and the whole block pulses as one — per-line staggering reads as content arriving, which is
