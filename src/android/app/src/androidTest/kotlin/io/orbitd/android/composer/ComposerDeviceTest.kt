@@ -470,13 +470,14 @@ class ComposerDeviceTest {
     /** A message a full runner holds, with the session row as `GET /sessions` sends it beside a capacity gate. */
     private fun heldByFullRunner(active: Int, runNow: String) = """{"status":"PENDING",
         "extraDetail":{"runState":"QUEUED","queuedReason":"runner_at_capacity","queuedActive":$active,"queuedLimit":16,"queuedHeldByJobs":0,
-        "queuedBurstLimit":2,"runningOverLimit":null,$runNow},
+        "queuedBurstLimit":2,"runningOverLimit":null,$runNow,
+        "lastTurnAt":"${java.time.Instant.now().minusSeconds(5 * 60L)}"},
         "runnerExtra":{"name":"HPC","maxConcurrent":16,"activeSessions":$active,"burstConcurrent":2},
         "rows":[{"seq":1,"type":"user","turnId":"t-1","payload":{"text":"Start task 6"}},
         {"seq":2,"type":"assistant","turnId":"t-1","payload":{"text":"Task 6 is filed and waiting for a runner."}},
         {"seq":3,"type":"turn_end","turnId":"t-1","payload":{"subtype":"success"}}],
         "queuedTurns":[{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b92","turnId":"01a0cca7-8609-70ed-a0e2-d4b55b832b92","kind":"message",
-        "placement":"accepted","content":"Android: draw the session page the way iOS does","attachments":[]}]}"""
+        "placement":"accepted","content":"Android: draw the session page the way iOS does.","attachments":[]}]}"""
 
     private fun openRunnerFull() {
         compose.waitUntil(20000) { compose.onAllNodes(hasTestTag("runner-updating-foot:reason"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
