@@ -9852,54 +9852,6 @@ button.chat-jump-start:hover {
   flex: none;
   white-space: nowrap;
 }
-/* Sticky "your prompt" bar: sits flush under the header (outside the scroll area, so no
-   jitter) and surfaces the in-view turn's question once a long answer pushes it off the
-   top. Click to jump back to the original bubble. */
-.chat-sticky-question {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 12px;
-  border: none;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-sunken);
-  text-align: left;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-1);
-}
-.chat-sticky-question:hover {
-  background: var(--bg-hover);
-}
-/* Tail-first: the question for the content in view is still loading from an older page —
-   show the bar muted and non-interactive until it resolves. */
-.chat-sticky-loading {
-  cursor: default;
-  color: var(--text-3);
-}
-.chat-sticky-loading:hover {
-  background: var(--bg-sunken);
-}
-/* Over a turn another session sent, the label is `From <its title>`, and a task session's title runs
-   to 80 characters: capped and cut with an ellipsis, so the text beside it stays visible. Capped
-   rather than left to shrink, which let the long text squeeze it to `From Tas…`. */
-.chat-sticky-label {
-  flex: none;
-  max-width: 45%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.chat-sticky-text {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* The pending-decision strip. Flush under the header and OUTSIDE the transcript scroller, because
    it says what is true now rather than what happened: the transcript's vertical flow is for
    events, and a thing recomputed every turn sitting in it read as a message nobody sent. Collapsed
