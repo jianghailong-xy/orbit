@@ -10905,6 +10905,9 @@ model ScheduleRun {
   /// A MANUAL run the owner pressed themselves (§8.4, migration 1601): it counts toward no budget. False for every
   /// other run, including a Run now by a session or a personal access token, which counts toward theirs.
   byOwner          Boolean            @default(false) @map("by_owner")
+  /// When the watch pass first found the delivered run's session idle with nothing to wake it (§7.1, migration 1643):
+  /// the run is failed NO_REPORT once it has read so for SCHEDULE_IDLE_SETTLE_MS; any other reading clears it.
+  idleSeenAt       DateTime?          @map("idle_seen_at") @db.Timestamptz(3)
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions         Session[]
 

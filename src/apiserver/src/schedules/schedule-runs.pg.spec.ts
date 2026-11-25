@@ -47,6 +47,7 @@ import { ScheduleReadsService } from './schedule-reads.service';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import {
   SCHEDULE_APPROVAL_TIMEOUT_MS,
+  SCHEDULE_IDLE_SETTLE_MS,
   ScheduleRunsService,
   type OpenRunSession,
   type ScheduleRunSessionPort,
@@ -238,6 +239,14 @@ function reset(): void {
   pushed = [];
   failOpen = false;
   failEnd = false;
+}
+
+/** The run's session reads idle with nothing to wake it: unchanged until it has for the settle time, then NO_REPORT. */
+async function idleSettles(runId: string) {
+  assert.equal(await runs.reconcileRun(runId), 'UNCHANGED', 'idle is not settled at once');
+  advance(SCHEDULE_IDLE_SETTLE_MS);
+  assert.equal(await runs.reconcileRun(runId), 'FAILED');
+  assert.equal((await runOf(runId)).failureReason, 'NO_REPORT');
 }
 
 /** The sessions of a run that could still run: what must never be more than one. */
@@ -733,15 +742,16 @@ test('§7.1 NO_REPORT: a session that settles idle, or ends, without a report fa
   assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'still working');
   await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
   await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
-  assert.equal(await runs.reconcileRun(run.id), 'FAILED');
-  const failed = await runOf(run.id);
-  assert.equal(failed.failureReason, 'NO_REPORT');
-  assert.equal(failed.attempt, 1);
+  await idleSettles(run.id);
+  assert.equal((await runOf(run.id)).attempt, 1);
 
   at('2026-11-14T00:00:00Z');
   const w2 = await world('no-report-ended');
   const { run: r2, sessionId: s2 } = await runningRun(w2);
-  await db.session.update({ where: { id: s2 }, data: { completedAt: clockNow } });
+  // An end asked for counts once the session is released: until then it reads as what it is doing.
+  await db.session.update({ where: { id: s2 }, data: { completedAt: clockNow, cancelRequestedAt: clockNow, endReason: 'completed' } });
+  assert.equal(await runs.reconcileRun(r2.id), 'UNCHANGED', 'an end still to be honoured');
+  await db.session.update({ where: { id: s2 }, data: { status: 'CANCELLED', finishedAt: clockNow } });
   assert.equal(await runs.reconcileRun(r2.id), 'FAILED');
   assert.equal((await runOf(r2.id)).failureReason, 'NO_REPORT');
 });
@@ -764,8 +774,7 @@ test('§7.1 an idle session waiting on a bg_run job, or on the wake its end file
   assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'a wake still to deliver holds the run');
   // The wake's turn ends without a report: now it is NO_REPORT.
   await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
-  assert.equal(await runs.reconcileRun(run.id), 'FAILED');
-  assert.equal((await runOf(run.id)).failureReason, 'NO_REPORT');
+  await idleSettles(run.id);
 
   // A job that never ends is still capped by the run limit.
   at('2026-11-14T00:00:00Z');
@@ -802,16 +811,129 @@ test('§7.1 an idle session set to wake, by a schedule_wakeup or a task_await wa
   assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'the watch task_await leaves holds the run');
   await db.watch.update({ where: { id: watch.id }, data: { state: 'CANCELLED' } });
 
-  assert.equal(await runs.reconcileRun(run.id), 'FAILED', 'nothing left to wake it');
-  assert.equal((await runOf(run.id)).failureReason, 'NO_REPORT');
+  await idleSettles(run.id);
+});
+
+/** A resume watch the run's session observes, as task_await or session_await leaves one. */
+async function resumeWatch(ownerId: string, sessionId: string) {
+  return db.watch.create({
+    data: {
+      ownerId, observerType: 'SESSION', observerSessionId: sessionId, action: 'RESUME_SESSION',
+      predicate: { kind: 'task_status', in: ['DONE'] }, expiresAt: FUTURE,
+    },
+  });
+}
+
+test('§7.1 a crash with a retry armed holds the run; the revived session reports in time', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('crash-retry-armed');
+  const { run, sessionId } = await runningRun(w, { runLimitMinutes: 120 });
+  await db.session.update({
+    where: { id: sessionId },
+    data: { status: 'FAILED', lastTurnOutcome: 'FAILED', finishedAt: clockNow, error: 'engine exited', retryAt: advance(MINUTE) },
+  });
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'the retry will bring it back');
+  // The retry revives it: held again, the turn re-sent.
+  await db.session.update({ where: { id: sessionId }, data: { status: 'PENDING', finishedAt: null, retryAt: null } });
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  await runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'done on the retry' });
+  assert.equal((await runOf(run.id)).state, 'NO_CHANGE');
+});
+
+test('§7.1 a crash or an end with only a watch left behind is not waited on: a watch revives no released session', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('crash-leftover-watch');
+  const { run, sessionId } = await runningRun(w, { runLimitMinutes: 120 });
+  await resumeWatch(w.ownerId, sessionId);
+  await db.session.update({
+    where: { id: sessionId }, data: { status: 'FAILED', lastTurnOutcome: 'FAILED', finishedAt: clockNow, error: 'engine exited' },
+  });
+  assert.equal(await runs.reconcileRun(run.id), 'FAILED');
+  assert.equal((await runOf(run.id)).failureReason, 'ENGINE_CRASHED');
+
+  at('2026-11-14T00:00:00Z');
+  const w2 = await world('ended-leftover-watch');
+  const { run: r2, sessionId: s2 } = await runningRun(w2, { runLimitMinutes: 120 });
+  await resumeWatch(w2.ownerId, s2);
+  await db.session.update({
+    where: { id: s2 },
+    data: { status: 'CANCELLED', lastTurnOutcome: 'ANSWERED', finishedAt: clockNow, endReason: 'ended', cancelRequestedAt: clockNow },
+  });
+  assert.equal(await runs.reconcileRun(r2.id), 'FAILED');
+  assert.equal((await runOf(r2.id)).failureReason, 'NO_REPORT');
+});
+
+test('§7.1 a failed turn still owed its release is read as working, then ENGINE_CRASHED once released', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('failed-turn-release-owed');
+  const { run, sessionId } = await runningRun(w);
+  // A failed turn under SESSION_RELEASE_V1: the slot is reclaimed with cancelRequestedAt, no end reason, still held.
+  await db.session.update({
+    where: { id: sessionId }, data: { lastTurnOutcome: 'FAILED', cancelRequestedAt: clockNow, error: 'engine exited' },
+  });
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'not NO_REPORT while its release is owed');
+  await db.session.update({ where: { id: sessionId }, data: { status: 'FAILED', finishedAt: clockNow } });
+  assert.equal(await runs.reconcileRun(run.id), 'FAILED');
+  assert.equal((await runOf(run.id)).failureReason, 'ENGINE_CRASHED');
+});
+
+test('§7.1 a report made while an end the owner asked for is still to be honoured counts', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('report-before-release');
+  const { run, sessionId } = await runningRun(w);
+  await db.session.update({ where: { id: sessionId }, data: { deletedAt: clockNow, cancelRequestedAt: clockNow, endReason: 'deleted' } });
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  await runs.report(w.ownerId, sessionId, { outcome: 'NO_CHANGE', summary: 'finished as it was trashed' });
+  assert.equal((await runOf(run.id)).state, 'NO_CHANGE');
+});
+
+test('§7.1 an owner request the run filed does not hide the watch it waits on', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('owner-request-and-watch');
+  const { run, sessionId } = await runningRun(w, { runLimitMinutes: 120 });
+  await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
+  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  await db.ownerRequest.create({
+    data: { ownerId: w.ownerId, askedBySessionId: sessionId, kind: 'MANUAL_STEP', title: 'Rotate the key', why: 'expired' },
+  });
+  const watch = await resumeWatch(w.ownerId, sessionId);
+  advance(30 * MINUTE);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  advance(SCHEDULE_IDLE_SETTLE_MS);
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'still waiting on the watch');
+  await db.watch.update({ where: { id: watch.id }, data: { state: 'CANCELLED' } });
+  await idleSettles(run.id);
+});
+
+test('§7.1 idle fails the run only after the settle time, and any work in between starts it again', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('idle-settle');
+  const { run, sessionId } = await runningRun(w, { runLimitMinutes: 120 });
+  await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
+  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  assert.ok((await runOf(run.id)).idleSeenAt, 'the first idle reading is kept');
+  advance(SCHEDULE_IDLE_SETTLE_MS - 1000);
+  // A job's wake arrives a moment after its end: the session works again.
+  await db.session.update({ where: { id: sessionId }, data: { engineTurnActive: true } });
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED');
+  assert.equal((await runOf(run.id)).idleSeenAt, null, 'work clears it');
+  await db.session.update({ where: { id: sessionId }, data: { engineTurnActive: false } });
+  advance(2000);
+  await idleSettles(run.id);
 });
 
 /** Settle the run's session idle with no report: the reading that fails it NO_REPORT. */
 async function noReport(runId: string, sessionId: string) {
   await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
   await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
-  assert.equal(await runs.reconcileRun(runId), 'FAILED');
-  assert.equal((await runOf(runId)).failureReason, 'NO_REPORT');
+  await idleSettles(runId);
 }
 
 /** A turn written to the session after the run ended: by a person (the owner stepping in), or by Orbit. */
@@ -1713,8 +1835,7 @@ for (const work of OUTSIDE_TURN_WORK) {
     advance(40 * MINUTE);
     assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', `${work.kind} holds the run`);
     await db.session.update({ where: { id: sessionId }, data: work.ended });
-    assert.equal(await runs.reconcileRun(run.id), 'FAILED');
-    assert.equal((await runOf(run.id)).failureReason, 'NO_REPORT');
+    await idleSettles(run.id);
   });
 }
 

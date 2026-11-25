@@ -581,6 +581,11 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - `note` replaces the schedule's note. It is for what the next run should know and the prompt does not say: a moved
   URL, a rate limit, where it left off.
 - The report ends the run. The session's turn may go on, but nothing after it changes the run.
+- What the run's session is doing is read from its published state alone (`readSessionPhaseReadings`: the phase
+  fields and `sessionWakes`, in `schedule-run-session-reading.ts`), never from a session column. A session released,
+  or settled idle with nothing to wake it for a minute (`SCHEDULE_IDLE_SETTLE_MS`, from `idle_seen_at`), without a
+  report fails the run: `ENGINE_CRASHED` for a release by a failure, `NO_REPORT` otherwise. An end somebody asked for
+  counts once the session is released, not when it is asked.
 - A session that ends or settles idle without a report fails the run with `NO_REPORT`. Silence never reads as "no
   change". A session is not idle while one of its `bg_run` jobs (job or watch, not a service) is still running or a
   turn, such as that job's wake, is still to be answered, nor while something is set to wake it (`sessionWillWake`: a

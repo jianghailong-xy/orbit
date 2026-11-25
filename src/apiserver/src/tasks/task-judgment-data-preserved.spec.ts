@@ -3517,7 +3517,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // with the same column lists, so each reads turn_state, finished_at and the projector's word instead of
       // session.status (retirement plan §4.2, task T6). No row is written, no preserved relation is created, altered
       // or dropped, and the DONE fence is unchanged.
-      '1641_session_triggers_read_facts'],
+      '1641_session_triggers_read_facts',
+      // 1643 adds one nullable column, idle_seen_at, to schedule_run; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1643_schedule_run_idle_seen_at'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

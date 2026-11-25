@@ -225,6 +225,22 @@ export async function readSessionPhaseFields(
   ids: readonly string[],
   pendingApprovals?: ReadonlyMap<string, number>,
 ): Promise<Map<string, SessionPhaseFields>> {
+  const readings = await readSessionPhaseReadings(db, ids, pendingApprovals);
+  return new Map([...readings].map(([id, reading]) => [id, reading.fields]));
+}
+
+/** The published fields and, from the same row, `sessionWakes`: for a server reader that asks the wake beside PERSON. */
+export interface SessionPhaseReading {
+  fields: SessionPhaseFields;
+  wakes: boolean;
+}
+
+/** `readSessionPhaseFields`, with `sessionWakes` beside each session's fields. */
+export async function readSessionPhaseReadings(
+  db: Db,
+  ids: readonly string[],
+  pendingApprovals?: ReadonlyMap<string, number>,
+): Promise<Map<string, SessionPhaseReading>> {
   if (ids.length === 0) return new Map();
   const rows = await db.$queryRaw<FactsRow[]>(Prisma.sql`
     SELECT s."id" AS "id", s."owner_id"::text AS "ownerId", s."task_id" AS "taskId",
@@ -250,11 +266,14 @@ export async function readSessionPhaseFields(
       counted.set(row.id, (live.get(row.id) ?? 0) + (decisions.get(row.id)?.count ?? 0));
     }
   }
-  return new Map(rows.map((row) => [row.id, sessionPhaseFields(
-    row,
-    { dispatchPaused: row.dispatchPaused === true, runnerUnavailable: row.runnerUnavailable === true },
-    counted.get(row.id) ?? 0,
-  )]));
+  return new Map(rows.map((row) => [row.id, {
+    fields: sessionPhaseFields(
+      row,
+      { dispatchPaused: row.dispatchPaused === true, runnerUnavailable: row.runnerUnavailable === true },
+      counted.get(row.id) ?? 0,
+    ),
+    wakes: sessionWakes(row),
+  }]));
 }
 
 /** `readSessionPhaseFields` for one session; null when it is not there. */

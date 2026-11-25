@@ -54,13 +54,12 @@ import { SCHEDULE_COPY, scheduleFill, RunFailureKind, runFailureIs } from '@orbi
 import { Prisma, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
-import { isSessionExecuting, SESSION_WILL_WAKE_WHERE } from '../common/session-working';
+import { isSessionExecuting } from '../common/session-working';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { openingTurnKey } from '../sessions/orbit-authored-turn';
 import { sessionHeldByCapacity } from '../sessions/queued-reason-sql';
-import { deriveSessionPhase } from '../sessions/session-phase';
 import { isParked, TURN_STATE_SELECT, turnStateFilter, turnStateOf } from '../sessions/session-turn-state';
 import {
   SCHEDULE_NOTIFIER,
@@ -86,6 +85,7 @@ import { closeUnknownItems } from '../conditions/condition-attention';
 import type { ConditionFiring } from '../conditions/conditions.service';
 import { sampleHolds } from '../conditions/condition-evaluation';
 import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
+import { readRunSessions, releasedByFailure } from './schedule-run-session-reading';
 import {
   scheduleAgentPressStarts,
   scheduleOverBudget,
@@ -106,7 +106,6 @@ import {
   heldFilter,
   isReleased,
   releaseFinishedTheWork,
-  releaseWasFailure,
   releaseWasFailureFilter,
   releasedFilter,
 } from '../common/session-release';
@@ -241,6 +240,13 @@ type Tx = Prisma.TransactionClient;
  * §7.1: the failures the server inferred from the run's session, which a late report from that session may replace.
  * RUN_LIMIT, APPROVAL_TIMEOUT and the owner's stop end the run on purpose and stay final.
  */
+/**
+ * §7.1: how long a delivered run's session must read idle, with nothing executing, queued or set to wake it, before
+ * the run is failed NO_REPORT. A job's end reaches the session a moment before the wake it files; four watch passes
+ * cover that gap many times over and cost a run that really ended without a report a minute.
+ */
+export const SCHEDULE_IDLE_SETTLE_MS = 60_000;
+
 const LATE_REPORT_FAILURES: ReadonlySet<string> = new Set<ScheduleFailureReason>(['NO_REPORT', 'ENGINE_CRASHED']);
 
 const IN_PROGRESS = ['RUNNING', 'AWAITING_APPROVAL'] as const;
@@ -661,17 +667,7 @@ export class ScheduleRunsService {
     const now = this.clock();
     const startedAt = run.startedAt ?? now;
     const sessionId = run.sessionId;
-    const session = sessionId
-      ? await this.prisma.session.findUnique({
-          where: { id: sessionId },
-          select: {
-            ...TURN_STATE_SELECT, endReason: true, lastTurnOutcome: true, completedAt: true, archivedAt: true,
-            deletedAt: true,
-            cancelRequestedAt: true, error: true, failureKind: true,
-            engineTurnActive: true, runningSubagents: true, runningBgJobs: true,
-          },
-        })
-      : null;
+    const session = sessionId ? (await readRunSessions(this.prisma, [sessionId])).get(sessionId) ?? null : null;
     if (!session || !sessionId) {
       // The start committed and its session never followed: the process that was to open it died between the two.
       if (now.getTime() - startedAt.getTime() >= SCHEDULE_UNDELIVERED_LIMIT_MS) {
@@ -686,18 +682,23 @@ export class ScheduleRunsService {
     const deliveredAt = opening?.deliveredAt ?? null;
     const delivered = deliveredAt !== null;
 
-    // Released by a failure (common/session-release.ts). An end that was asked for and not honoured is a stop, below.
-    if (releaseWasFailure(session)) {
-      if (delivered) return this.fail(runId, 'ENGINE_CRASHED', { sessionId });
-      return this.fail(runId, runFailureIs(session, [RunFailureKind.USAGE_LIMIT]) ? 'QUOTA' : 'ENGINE_CRASHED_BEFORE_START', { sessionId });
+    // Released before its first turn reached the engine: the run never started, and it is retried in a fresh session
+    // now, whatever might revive this one. By a failure it is QUOTA or ENGINE_CRASHED_BEFORE_START, named from the
+    // failure the session recorded (only the label, once the reading has decided); any other release (a retire that
+    // committed before its re-queue did, among others) is retried like a run that met no runner.
+    if (!delivered && session.fields.released) {
+      if (!releasedByFailure(session.fields)) return this.fail(runId, 'RUNNER_UNAVAILABLE', { sessionId });
+      const failure = await this.prisma.session.findUnique({
+        where: { id: sessionId }, select: { error: true, failureKind: true },
+      });
+      const quota = failure != null && runFailureIs(failure, [RunFailureKind.USAGE_LIMIT]);
+      return this.fail(runId, quota ? 'QUOTA' : 'ENGINE_CRASHED_BEFORE_START', { sessionId });
     }
-    const ended = session.deletedAt !== null || session.completedAt !== null || session.archivedAt !== null
-      || session.cancelRequestedAt !== null
-      // Released any other way (a stop, or the work finished): the failures returned above.
-      || isReleased(session);
-    // Ended before its first turn reached the engine: the run never started (a retire that committed before its
-    // re-queue did, among others), so it is retried like one that met no runner.
-    if (ended) return this.fail(runId, delivered ? 'NO_REPORT' : 'RUNNER_UNAVAILABLE', { sessionId });
+    // Released after delivery, with nothing to revive it. An end that was asked for, or one asked for and not honoured,
+    // counts only once the session is released (the reaper's end_not_honored release bounds the wait): until then the
+    // session reads as what it is doing.
+    if (session.reading === 'FAILED') return this.fail(runId, 'ENGINE_CRASHED', { sessionId });
+    if (session.reading === 'ENDED') return this.fail(runId, 'NO_REPORT', { sessionId });
 
     if (!delivered) {
       // §7.2: a full runner, run or batch is not a runner that is not coming. The session keeps its place in the
@@ -747,26 +748,32 @@ export class ScheduleRunsService {
       where: { scheduleRunId: runId, kind: 'SCHEDULE_APPROVAL', state: 'PENDING' },
     });
     if (filed > 0 && !(await this.syncApprovalItems(runId, sessionId))) return 'SETTLED_ELSEWHERE';
+    // Idle is not finished while the run still has work coming back to it, which the reading says
+    // (schedule-run-session-reading.ts): WORKING while anything executes for it (a turn, the engine's own turn, a
+    // SubAgent, a `bg_run` job silent or not) or a turn is queued, WILL_WAKE while a `schedule_wakeup`, the watch a
+    // `task_await` or `session_await` leaves, or an armed retry will give it one. Its working time still counts
+    // toward RUN_LIMIT above. A job's end is reported a moment before the wake it files, so IDLE fails the run only
+    // once it has read so for SCHEDULE_IDLE_SETTLE_MS (`idleSeenAt`).
+    const idle = !card && session.reading === 'IDLE' && opening?.status === 'ANSWERED';
+    if (idle && run.idleSeenAt && now.getTime() - run.idleSeenAt.getTime() >= SCHEDULE_IDLE_SETTLE_MS) {
+      return this.fail(runId, 'NO_REPORT', { sessionId });
+    }
+    if (idle !== (run.idleSeenAt !== null)) await this.noteIdle(runId, sessionId, idle ? now : null);
+    if (idle) return 'UNCHANGED';
     if (card) {
       if (run.state === 'RUNNING') return this.moveInProgress(runId, 'RUNNING', 'AWAITING_APPROVAL');
       return 'UNCHANGED';
     }
-    // Idle is not finished while the run still has work coming back to it. The session's phase says whether anything
-    // executes for it (sessions/session-phase.ts): a dispatched turn, the engine's own turn, a SubAgent (background
-    // `delegate` calls included) or a `bg_run` job, silent or not, since a job waiting on a lock writes nothing. A turn
-    // not yet answered, such as the wake a job's or SubAgent's end files a moment after its end is reported, holds it
-    // too, and so does whatever will wake it without anybody writing (`sessionWillWake`): a `schedule_wakeup`, the
-    // watch a `task_await` or `session_await` leaves, an armed retry. Its working time still counts toward RUN_LIMIT
-    // above.
-    const idle = deriveSessionPhase(session) === 'IDLE'
-      && opening?.status === 'ANSWERED'
-      && (await this.prisma.conversationTurn.count({
-        where: { sessionId, status: { in: ['PENDING', 'IN_FLIGHT'] } },
-      })) === 0
-      && (await this.prisma.session.count({ where: { AND: [{ id: sessionId }, SESSION_WILL_WAKE_WHERE] } })) === 0;
-    if (idle) return this.fail(runId, 'NO_REPORT', { sessionId });
     if (run.state === 'AWAITING_APPROVAL') return this.moveInProgress(runId, 'AWAITING_APPROVAL', 'RUNNING');
     return 'UNCHANGED';
+  }
+
+  /** The run's session read idle with nothing to wake it since `at`, or (null) it no longer does (§7.1). */
+  private async noteIdle(runId: string, sessionId: string, at: Date | null): Promise<void> {
+    await this.prisma.scheduleRun.updateMany({
+      where: { id: runId, sessionId, state: { in: [...IN_PROGRESS] } },
+      data: { idleSeenAt: at },
+    });
   }
 
   /** A full runner holds the run's session: when it was last seen so, for the 10-minute limit once it no longer is. */
