@@ -363,6 +363,7 @@ object ScheduleCopy {
     object Push {
         const val failedBody = "The last run {reason}. It keeps running until you pause it."
         const val goalReachedTitle = "{title} ended itself"
+        const val reportedLateTitle = "{title} reported after all"
         const val stoppedAsPlanned = "Stopped as planned after {runs}"
     }
     object Empty {
@@ -692,6 +693,7 @@ object ScheduleCopy {
         "waiting.widen.body" to Waiting.widenBody,
         "push.failedBody" to Push.failedBody,
         "push.goalReachedTitle" to Push.goalReachedTitle,
+        "push.reportedLateTitle" to Push.reportedLateTitle,
         "push.stoppedAsPlanned" to Push.stoppedAsPlanned,
         "empty.lead" to Empty.lead,
         "empty.examples.0" to Empty.examples[0],

@@ -375,6 +375,7 @@ public enum ScheduleCopy {
     public enum Push {
         public static let failedBody = "The last run {reason}. It keeps running until you pause it."
         public static let goalReachedTitle = "{title} ended itself"
+        public static let reportedLateTitle = "{title} reported after all"
         public static let stoppedAsPlanned = "Stopped as planned after {runs}"
     }
     public enum Empty {
@@ -701,6 +702,7 @@ public enum ScheduleCopy {
         "waiting.widen.body": ScheduleCopy.Waiting.widenBody,
         "push.failedBody": ScheduleCopy.Push.failedBody,
         "push.goalReachedTitle": ScheduleCopy.Push.goalReachedTitle,
+        "push.reportedLateTitle": ScheduleCopy.Push.reportedLateTitle,
         "push.stoppedAsPlanned": ScheduleCopy.Push.stoppedAsPlanned,
         "empty.lead": ScheduleCopy.Empty.lead,
         "empty.examples.0": ScheduleCopy.Empty.examples[0],
