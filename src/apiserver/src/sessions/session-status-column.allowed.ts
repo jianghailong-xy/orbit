@@ -56,15 +56,9 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'realtime/parked-session-end.ts': { reads: 2, enums: 1 },
   'realtime/realtime.service.ts': { reads: 16 },
   'realtime/reaper.service.ts': { reads: 12, writes: 1, alone: 1, enums: 1 },
-  'runner-api/background-job-stops.ts': { reads: 1 },
-  'runner-api/runner-api.controller.ts': { reads: 52, writes: 9, alone: 9, enums: 1 },
-  'runner-api/runner-link-hints.ts': { reads: 6 },
-  'runner-api/runner-orchestration-authorizer.ts': { reads: 1 },
-  'runner-api/runner-sessions.controller.ts': { enums: 1 },
-  'runner-api/runner-subagents.controller.ts': { reads: 2, enums: 1 },
-  'runner-api/scheduled-wakeup.ts': { reads: 1 },
-  'runner-api/scheduled-wakeup.worker.ts': { reads: 2, enums: 1 },
-  'runner-api/turn-outcome.ts': { enums: 1 },
+  // Reads none (task T8). Its runner-driven writers write the word and `turnState` together, as deploy 2 does; T14
+  // takes these to 0.
+  'runner-api/runner-api.controller.ts': { writes: 9 },
   'runners/attention-fix.ts': { reads: 2 },
   'runners/claude-account-swap.ts': { reads: 6 },
   'runners/runner-background-holders.ts': { reads: 1 },

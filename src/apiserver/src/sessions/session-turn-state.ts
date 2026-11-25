@@ -79,6 +79,15 @@ export function turnStateOf(facts: TurnStateFacts): TurnState | null {
   return TURN_STATE_OF_HELD_WORD[heldSessionWord(facts)] ?? null;
 }
 
+/**
+ * The turn state a writer stores beside the word it writes (deploy 2 writes both, plan §2.2): the word's own, one for
+ * one, null for AWAITING_INPUT and every released word. The mapping of `session_turn_state_of_status` (migration
+ * 1611), whose trigger derives it from the word in the same row, and which the CHECK of 1622 holds it to.
+ */
+export function turnStateOfWord(word: string): TurnState | null {
+  return TURN_STATE_OF_HELD_WORD[word] ?? null;
+}
+
 /** Held with no turn queued, in flight or abandoned: what AWAITING_INPUT said (plan §2.1: A). */
 export function isParked(facts: TurnStateFacts): boolean {
   return facts.finishedAt == null && turnStateOf(facts) === null;

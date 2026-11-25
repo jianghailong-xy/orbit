@@ -50,12 +50,13 @@ import {
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
-import { RunEventType, uuidToBase62 } from '@orbit/shared';
+import { RunEventType } from '@orbit/shared';
 
 import { isReleasedStatus } from '../common/session-release';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
+import { branchName } from '../projects/project-criterion-landing';
 import { configureProjectIntegration } from '../projects/project-integration-line';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { QueueService } from '../queue/queue.service';
@@ -510,10 +511,14 @@ test('(5) the landing is NONE outside a project, LINE_THEN_OWNER on a MAIN line 
     const autoBranch = await lineProject(s.db, w, 'branch-automatic-on', 'PROJECT_BRANCH', true);
     const onAutoBranch = await codeTask(autoBranch, 'on-a-project-branch-automatic-on');
     assert.deepEqual(await landingOf(onAutoBranch.taskId), { landing: 'AUTO_MAIN', startsAfterLanding: true });
-    // Once a receipt puts the work on the line, its dependents no longer wait for the landing.
+    // Once a receipt puts the work on the line, its dependents no longer wait for the landing. The line is the
+    // branch its binding stores (named from the project's title since 4f887a58d9), not one the spec spells itself.
+    const autoLine = await s.db.projectCodebase.findFirstOrThrow({
+      where: { projectId: autoBranch, slot: 'primary' }, select: { integrationRef: true },
+    });
     await mergedInto(s.db, w, {
       sessionId: onAutoBranch.sessionId, taskId: onAutoBranch.taskId, projectId: autoBranch,
-      sourceBranch: `orbit/on-a-project-branch-automatic-on-${RUN}`, targetBranch: `project/${uuidToBase62(autoBranch)}`,
+      sourceBranch: `orbit/on-a-project-branch-automatic-on-${RUN}`, targetBranch: branchName(autoLine.integrationRef),
     });
     assert.deepEqual(await landingOf(onAutoBranch.taskId), { landing: 'AUTO_MAIN', startsAfterLanding: false });
 
