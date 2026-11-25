@@ -1,4 +1,6 @@
 import { LoadingOutlined } from '@ant-design/icons';
+import { sessionDisplayState, sessionMarks } from '../lib/sessionDisplay';
+import { SessionMarkChips } from './SessionStateDisplay';
 
 const STATUS_PILL: Record<string, { cls: string; label: string }> = {
   DONE: { cls: 'done', label: 'Done' },
@@ -30,6 +32,28 @@ export function TaskStatusPill({
   /** The queued run is held (the server's `queuedOnHold`); absent from an older server, which reads "Queued". */
   queuedOnHold?: boolean;
 }) {
+  // A server that says whether the task's queued run is held (`queuedOnHold`) has the facts: the pill says the live
+  // run's state, Running or Queued, and a held run wears the On hold mark beside it (lib/sessionDisplay). The run's
+  // other facts are not on a task's row. From an older server, the pill as before.
+  if ((running || queued) && typeof queuedOnHold === 'boolean') {
+    const run = { phase: running ? 'RUNNING' : 'PENDING', released: false, waitingOn: !running && queuedOnHold ? 'HOLD' : null };
+    const shown = sessionDisplayState(run);
+    const marks = sessionMarks(run);
+    if (shown) {
+      const pill = (
+        <span className={`status-pill ${shown.phase === 'RUNNING' ? 'running' : 'queued'}`}>
+          {shown.phase === 'RUNNING' ? <LoadingOutlined spin /> : <span className="status-dot" />}
+          {shown.word}
+        </span>
+      );
+      return marks && marks.length > 0 ? (
+        <span className="task-status-pill-run">
+          {pill}
+          <SessionMarkChips marks={marks} />
+        </span>
+      ) : pill;
+    }
+  }
   if (running) {
     return (
       <span className="status-pill running">

@@ -6438,6 +6438,72 @@ button.toast--pill:focus-visible {
 .session-preview.tone-review {
   color: var(--text-3);
 }
+/* A session's state icon and its marks (components/SessionStateDisplay, docs/mocks/session-display-three-states):
+   one small labelled chip per fact after the state word. Amber = you have to act, red = a failure nobody is
+   retrying, green = the work finished, grey = everything else. */
+.session-state-glyph {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+.session-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  vertical-align: middle;
+}
+.session-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.session-mark-svg {
+  flex: none;
+}
+.session-mark.tone-amber {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.session-mark.tone-red {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.session-mark.tone-green {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.session-head-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.task-status-pill-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.olc-state-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.tdp-now-title .session-marks {
+  margin-left: 6px;
+}
 /* Float above full-width text without changing its layout when actions appear. */
 .session-right {
   position: absolute;
