@@ -29,6 +29,7 @@ import { projectReopenAskers } from '../owner-requests/project-reopen';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { legacySessionStatus, LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import {
   countWatchDeadLetter,
@@ -194,9 +195,8 @@ export function watchEndTurnClientId(watchId: string, end: BareWatchEnd): string
 }
 
 const OBSERVER_SELECT = {
-  status: true,
-  finishedAt: true,
-  endReason: true,
+  // sessionHasEnded's, and the facts the run state in a refusal is derived from (session-legacy-words.ts).
+  ...LEGACY_STATUS_SELECT,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
@@ -785,7 +785,8 @@ export function observerRefusal(session: ObserverRow | null): DeliveryRefused | 
     return new DeliveryRefused('OBSERVER_SESSION_COMPLETED', 'the observer session was moved to Completed, and a watch does not reopen it');
   }
   if (session.cancelRequestedAt || sessionHasEnded(session)) {
-    const run = deriveSessionRunState(session);
+    // An observer is never a LANDING container (assertEngineSession), so no landing row.
+    const run = deriveSessionRunState({ status: legacySessionStatus(session), endReason: session.endReason });
     return new DeliveryRefused('OBSERVER_SESSION_ENDED', `the observer session's run is over (${run}), and a watch does not revive it`);
   }
   return null;
