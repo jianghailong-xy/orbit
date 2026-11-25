@@ -346,7 +346,7 @@ final class NavigationTests: XCTestCase {
         nav.settingsPresented = false
         nav.push(.console(sessionID: "s2", origin: .list))
         XCTAssertEqual(nav.path.count, 2)
-        XCTAssertEqual(nav.settingsPath.count, 2, "closing leaves Settings' stack where it was")
+        XCTAssertEqual(nav.settingsPath, [.runnerDetail(runnerID: "r1")], "closing leaves Settings' stack where it was")
     }
 
     /// Settings opens on its own list, whatever page it was closed on — and opening it again while it
