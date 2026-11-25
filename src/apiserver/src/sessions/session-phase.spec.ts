@@ -11,6 +11,7 @@ import {
   deriveSessionWaitingOn,
   NO_HOLD,
   sessionPhaseFields,
+  sessionWakes,
   type SessionHoldFacts,
   type SessionPhaseRow,
 } from './session-phase';
@@ -90,6 +91,9 @@ function expected(c: Case): { phase: string; waitingOn: string | null } {
   let waitingOn: string | null = null;
   if (c.owed > 0) waitingOn = 'PERSON';
   else if (phase === 'PENDING') waitingOn = c.holdKind === 'notice' || c.holdKind === 'runnerUnavailable' || c.holdKind === 'dispatchPaused' ? 'HOLD' : null;
+  // A released row comes back only by an armed retry here: its outcome is null, so it is no failure release, and only a
+  // failure release in Open is revived by a wake-up; a watch never revives a released session.
+  else if (phase === 'IDLE' && RELEASED.has(status)) waitingOn = c.facts.retry ? 'WAKE' : null;
   else if (phase === 'IDLE') waitingOn = c.facts.watch || c.facts.wakeup || c.facts.retry ? 'WAKE' : null;
   return { phase, waitingOn };
 }
@@ -135,6 +139,18 @@ test('the shapes the ruling names answer as it says', () => {
   const failed: SessionPhaseRow = { status: 'FAILED', finishedAt: AT };
   assert.equal(deriveSessionWaitingOn(failed, NO_HOLD, 0), null);
   assert.equal(deriveSessionWaitingOn({ ...failed, retryAt: AT }, NO_HOLD, 0), 'WAKE');
+  // A wake-up revives a release by a failure (released, no end asked, the turn FAILED) while it is filed in Open; a
+  // watch never revives a released session; an end that was asked for is not revived by either.
+  const crashed: SessionPhaseRow = { ...failed, lastTurnOutcome: 'FAILED', endReason: null };
+  assert.equal(deriveSessionWaitingOn({ ...crashed, hasPendingWakeup: true }, NO_HOLD, 0), 'WAKE');
+  assert.equal(deriveSessionWaitingOn({ ...crashed, hasPendingWakeup: true, completedAt: AT }, NO_HOLD, 0), null);
+  assert.equal(deriveSessionWaitingOn({ ...crashed, hasResumeWatch: true }, NO_HOLD, 0), null);
+  const ended: SessionPhaseRow = { status: 'CANCELLED', finishedAt: AT, endReason: 'ended', lastTurnOutcome: 'ANSWERED' };
+  assert.equal(deriveSessionWaitingOn({ ...ended, hasPendingWakeup: true, hasResumeWatch: true }, NO_HOLD, 0), null);
+  assert.equal(sessionWakes({ ...crashed, hasPendingWakeup: true }), true);
+  // Beside PERSON: a held idle session with an owner request open and a watch armed still wakes.
+  assert.equal(deriveSessionWaitingOn({ ...base, hasResumeWatch: true }, NO_HOLD, 1), 'PERSON');
+  assert.equal(sessionWakes({ ...base, hasResumeWatch: true }), true);
   // Waiting on a sub-agent or a background job is RUNNING, which owes nothing unless an answer is owed.
   assert.equal(deriveSessionPhase({ ...base, runningSubagents: ['toolu_sub'] }), 'RUNNING');
   assert.equal(deriveSessionWaitingOn({ ...base, runningBgJobs: ['bgj_job'] }, NO_HOLD, 0), null);

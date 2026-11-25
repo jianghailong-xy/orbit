@@ -47,8 +47,8 @@
         "PERSON when pendingApprovals is above zero (live approval cards plus owner decisions), in any phase",
         "null when phase is RUNNING",
         "HOLD when phase is PENDING and the dispatch pause is on, its runner is unassigned, offline or updating, or the row carries a hold notice (src/apiserver/src/queue/hold-notice.ts)",
-        "WAKE when phase is IDLE and a RESUME_SESSION watch, a PENDING scheduled wake-up or an armed retry will give it a turn",
-        "null otherwise: a parked conversation that asked for nothing, a released session with no retry armed, and an IDLE session waiting only on a session request it sent or an ask_owner question"
+        "WAKE when phase is IDLE and a RESUME_SESSION watch, a PENDING scheduled wake-up or an armed retry will give it a turn; a released session only by an armed retry, or a PENDING scheduled wake-up on a release by a failure still filed in Open (a watch never revives a released session)",
+        "null otherwise: a parked conversation that asked for nothing, a released session nothing revives (a watch or a wake-up left on an end that was asked for among them), and an IDLE session waiting only on a session request it sent or an ask_owner question"
       ],
       "ruledBy": "the coordinator, 2026-11-22 (task 5.1)"
     },

@@ -621,6 +621,12 @@ Renaming `AWAITING_INPUT` to `IDLE` fixes none of this, and makes the first kind
   > session with no retry armed, and an `IDLE` session waiting only on a session request it sent or an
   > `ask_owner` question, because neither is a wake fact of `sessionWillWake`. Waiting on a sub-agent
   > or a background job is `RUNNING`.
+  >
+  > **Corrected 2026-11-26.** On a released session `WAKE` read any of the three facts, but only an
+  > armed retry, or a scheduled wake-up on a release by a failure still filed in Open, revives one; a
+  > watch never does. `sessionWakes` (`session-phase.ts`) now reads only those there, so a crash with a
+  > leftover `task_await` watch reads null rather than a wake that never comes. A scheduled run asks
+  > `sessionWakes` beside `PERSON`, so an owner request it filed does not hide its wake.
 - **The background sets must become exact first.** They are inferred today: an id goes in
   when a launch is seen and out when an end is reported, and the ten-minute freshness rule
   exists because that drifts. A state that people and agents rely on cannot rest on them
