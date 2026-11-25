@@ -674,8 +674,9 @@ test('a published event only schedules an evaluation: a status it claims is not 
   assert.equal(hinted.state, 'ACTIVE', 'a Match was derived from an event payload');
   assert.equal((await readMatches(watchId)).length, 0);
 
-  // The row fails too, and the same event now finds it.
-  await sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [session]);
+  // The row fails too, released as a failure is (its turn records it), and the same event now finds it.
+  await sql.query(`UPDATE "session" SET "status" = 'FAILED', "last_turn_outcome" = 'FAILED', "finished_at" = COALESCE("finished_at", now())
+                    WHERE "id" = $1`, [session]);
   realtime.publish(session, event(RunEventType.STATUS, { status: 'FAILED' }));
   const [match] = await eventually('the Match', () => readMatches(watchId), (m) => m.length === 1);
   assert.equal(match.snapshot.targets[0].observed?.status, 'FAILED');

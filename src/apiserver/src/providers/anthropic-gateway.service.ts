@@ -150,7 +150,7 @@ export class AnthropicGatewayService {
         },
         session: {
           select: {
-            status: true, finishedAt: true, ownerId: true, provider: true, engine: true, model: true, completedAt: true, deletedAt: true,
+            finishedAt: true, ownerId: true, provider: true, engine: true, model: true, completedAt: true, deletedAt: true,
             cancelRequestedAt: true, endReason: true,
             owner: { select: { disabledAt: true } },
           },
