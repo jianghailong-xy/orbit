@@ -33,7 +33,8 @@ const SCANS: readonly KindFilteredScan[] = [
   {
     file: 'src/queue/queue.service.ts',
     name: 'the claim statement (the PENDING pick the runner is handed)',
-    anchor: "WHERE s.status = 'PENDING'",
+    // The claim's candidate: held and queued (the turn state QUEUED, what PENDING said; task T7).
+    anchor: "WHERE ${sessionHeldSql('s')}\n            AND ${sessionTurnStateSql('s')} = 'QUEUED'",
     filter: `AND s."kind" = 'CONVERSATION'`,
     within: 700,
   },

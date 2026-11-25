@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE } from '../common/session-working';
+import { turnStateFilter } from './session-turn-state';
 import { BG_JOB_ACTIVITY_STALE_AFTER_MS } from './background-job-activity';
 import { SessionsService } from './sessions.service';
 
@@ -275,7 +275,9 @@ test('workspace counts separate queued activity from Session-list spinner work',
   // flight are never read — and still over the same Open scope as the other two.
   const jobsQuery = findManyCalls.find((call) => call?.where?.runningBgJobs);
   assert.deepEqual(jobsQuery.where.runningBgJobs, { isEmpty: false });
-  assert.deepEqual(jobsQuery.where.status, { in: OPEN_SESSION_STATUSES });
+  // Held: the release column (common/session-release.ts heldFilter), not the held statuses.
+  assert.equal(jobsQuery.where.finishedAt, null);
+  assert.equal(jobsQuery.where.status, undefined);
   assert.equal(jobsQuery.where.completedAt, null);
   assert.equal(jobsQuery.where.deletedAt, null);
   // It reads the two columns the verdict needs and nothing else — the verdict itself is not stored
@@ -295,10 +297,11 @@ test('workspace counts separate queued activity from Session-list spinner work',
   // The shared definition, background jobs aside: a dispatched turn, or on a session that has not
   // ended the engine's own turn or a subagent (common/session-working.ts).
   assert.deepEqual(runningQuery.where.OR, SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE.OR);
+  // A dispatched turn is the turn state IN_FLIGHT; "not ended" is held (finished_at IS NULL).
   assert.deepEqual(runningQuery.where.OR, [
-    { status: RunStatus.RUNNING },
+    turnStateFilter(['IN_FLIGHT']),
     {
-      status: { in: OPEN_SESSION_STATUSES },
+      finishedAt: null,
       OR: [{ engineTurnActive: true }, { runningSubagents: { isEmpty: false } }],
     },
   ]);
