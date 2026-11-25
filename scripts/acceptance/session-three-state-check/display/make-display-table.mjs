@@ -28,6 +28,8 @@ const expectOf = (p) => {
 };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const failures = [];
+// Differences the report explains, matched as narrowly as their cause: a failure above otherwise.
+const explained = [];
 
 // iPhone and Android list rows draw two marks at most, then "+N" (the board); Mac and web rows draw all of them.
 const phoneOf = (marks) => (marks.length > 2 ? [...marks.slice(0, 2), `+${marks.length - 2}`] : marks);
@@ -127,7 +129,11 @@ for (const r of rows.filter((x) => KINDS.includes(x.kind))) {
   const read = got.map((g) => (g.marks === undefined ? undefined : { state: g.state, marks: g.marks }));
   const present = read.filter((x) => x !== undefined);
   const agree = present.every((x) => same(x, present[0]));
-  if (!agree) failures.push(`clients disagree on ${r.id}: ${JSON.stringify(read)}`);
+  // Apple's search hit hands its two functions the six facts alone (`SessionSearchHit.displayFacts`): no Background.
+  const searchBackground = !agree && r.kind === 'searchHit' && read[1] && read[0]
+    && read[1].state === read[0].state && same(read[1].marks, read[0].marks.filter((m) => m !== 'Background'));
+  if (searchBackground) explained.push(`${r.id}: Apple's search facts omit Background, web's reading has it`);
+  else if (!agree) failures.push(`clients disagree on ${r.id}: ${JSON.stringify(read)}`);
   const w = read[0];
   const equalsList = !w || !listE ? '-' : same(w, listE) ? 'yes' : '**no**';
   if (equalsList === '**no**') {
@@ -146,6 +152,56 @@ for (const r of rows.filter((x) => KINDS.includes(x.kind))) {
   for (const s of names) t5.push(`| ${r.name} | ${r.kind} | ${s} | ${got.map((g) => g.surfaces?.[s] ?? 'n/a').join(' | ')} |`);
 }
 
+// ---- table 1b: search, Shared with me and the shared / guest head, as each client draws them ----
+// Web is what the console drew in the real-stack walk; Apple and Android are what their view code is handed
+// (AppleDisplayTests, AndroidDisplayTest). The expected state and marks are the list row's: one case, one answer.
+const SURFACES = { search: 'searchHit', sharedWithMe: 'guestRow', sharedHead: 'sharedHead' };
+const webDrawn = (name, surface) => {
+  const c = walk.cases[name];
+  if (!c || c.missing) return null;
+  if (surface === 'search') return c.search ? { state: c.search.word, marks: c.search.marks } : null;
+  if (surface === 'sharedWithMe') {
+    if (!c.guestRowText) return null;
+    const parts = c.guestRowText.split(' · ').slice(1);
+    return { state: parts[0], marks: parts.slice(1).filter((m) => m !== 'Completed') };
+  }
+  const a = c.sharedPage, b = c.guestPage;
+  if (!a || !b) return null;
+  // The public page and the signed-in guest page draw one component: both must say the same.
+  if (!same(a, b)) failures.push(`web shared page and guest page differ on ${name}: ${JSON.stringify([a, b])}`);
+  return { state: a.word, marks: a.marks };
+};
+const head1b = ['case', 'surface', 'board: state', 'board: marks', ...COLS.map((c) => `state ${NAME[c]}`),
+  ...MARKS.flatMap((m) => COLS.map((c) => `${m} ${NAME[c]}`)), 'agree'];
+const t1b = [`| ${head1b.join(' | ')} |`, `|${head1b.map(() => '---').join('|')}|`];
+const surfaceDiffs = new Map();
+let surfaceRows = 0;
+for (const r of rows.filter((x) => x.kind === 'listRow')) {
+  const e = expectOf(r.payload);
+  for (const [surface, kind] of Object.entries(SURFACES)) {
+    const id = `${r.name}|${kind}`;
+    if (!out.apple.get(id)) continue; // search never answers the settled landing
+    surfaceRows += 1;
+    const apple = out.apple.get(id).drawn?.[surface] ?? null;
+    const android = out.android.get(id).drawn?.[surface] ?? null;
+    const drawn = { web: webDrawn(r.name, surface), mac: apple, iphone: apple, android };
+    const bad = COLS.filter((c) => drawn[c] && !(drawn[c].state === e.state && same(drawn[c].marks, e.marks)));
+    for (const c of bad) {
+      const missing = e.marks.filter((m) => !drawn[c].marks.includes(m));
+      const what = drawn[c].state !== e.state ? 'another state word' : `marks missing: ${missing.join(', ') || '-'}`;
+      const key = `${surface}|${c}|${what}`;
+      surfaceDiffs.set(key, [...(surfaceDiffs.get(key) ?? []), `${r.name} (${drawn[c].state}${drawn[c].marks.length ? ` · ${drawn[c].marks.join(' · ')}` : ''})`]);
+    }
+    for (const c of COLS) if (!drawn[c] && !(c === 'web' && walk.cases[r.name]?.missing)) failures.push(`surface table: nothing read for ${c} ${surface} ${r.name}`);
+    t1b.push(`| ${[r.name, surface, e.state, e.marks.join(', ') || '-', ...COLS.map((c) => drawn[c]?.state ?? 'n/a'),
+      ...MARKS.flatMap((m) => COLS.map((c) => (!drawn[c] ? 'n/a' : drawn[c].marks.includes(m) ? 'yes' : '-'))),
+      bad.length ? '**NO**' : 'yes'].join(' | ')} |`);
+  }
+}
+const t1bSummary = ['| surface | client | difference | cases (what it drew) |', '|---|---|---|---|',
+  ...[...surfaceDiffs].map(([k, v]) => { const [s, c, w] = k.split('|'); return `| ${s} | ${NAME[c]} | ${w} | ${v.length}: ${v.join('; ')} |`; })];
+if (!surfaceDiffs.size) t1bSummary.push('| none | | | |');
+
 writeFileSync(`${outDir}/display-table.md`, [
   '# Cross-client display: web, Mac, iPhone, Android', '',
   'Generated by `make-display-table.mjs`; do not edit. F = a row of `../fixture.json` (facts present); S = a payload the tip’s',
@@ -154,6 +210,10 @@ writeFileSync(`${outDir}/display-table.md`, [
   'shows that mark; `+N` = counted in a phone row’s “+N”; `-` = not shown. Columns are what each client’s list row draws:',
   'web and Mac all marks, iPhone and Android two and “+N” (Mac and iPhone share OrbitKit; see the report).', '',
   '## 1. State and each mark, per client', '', ...t1, '',
+  '## 1b. Search, Shared with me and the shared / guest head', '',
+  `${surfaceRows} rows (23 server cases × 3 surfaces; search never answers the settled landing, and the session list has no web row for it:`,
+  '`n/a`). Web is the walk’s DOM; Apple and Android are what their views are handed. Expected is the case’s list-row answer.', '',
+  ...t1bSummary, '', ...t1b, '',
   '## 2. Older server (facts absent): drawn as before', '', ...t2, '',
   '## 3. Needs you / Working membership: tip against the commit before the display change (cf06a12e75)', '', ...t3, '',
   `Recorded groups (legacy-baseline.*.json, rows without facts): ${CLIENTS.map((c, k) => `${c} ${absent.length - recorded[k].length}/${absent.length} equal`).join(', ')}.`, '',
@@ -172,5 +232,7 @@ writeFileSync(`${outDir}/surfaces.md`, [
 console.log(`table 1: ${cases.length} cases; groups: ${rows.filter((x) => x.kind === 'fixture' || x.kind === 'listRow').length} rows; walk surfaces ${JSON.stringify(walk.checked)}`);
 console.log(`moved (pre-existing) groups: ${moved.length}`);
 for (const [k, v] of kindGaps) console.log(`kind gap ${k}: ${v.length} cases`);
-console.log(failures.length ? `FAILURES ${failures.length}:\n${failures.join('\n')}` : 'no unexplained disagreement in tables 1-3 and the per-kind function readings');
+for (const [k, v] of surfaceDiffs) console.log(`surface difference ${k}: ${v.length} cases`);
+console.log(`surface table: ${surfaceRows} rows, ${surfaceDiffs.size} kinds of difference; explained per-kind readings: ${explained.length}`);
+console.log(failures.length ? `FAILURES ${failures.length}:\n${failures.join('\n')}` : 'no unexplained disagreement in tables 1-3 and the per-kind function readings (table 1b differences are listed above)');
 process.exit(failures.length ? 1 : 0);

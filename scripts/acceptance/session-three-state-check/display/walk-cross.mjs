@@ -209,11 +209,27 @@ for (const [label, c] of Object.entries(cases)) {
 await desk.goto(`${origin}/`);
 await desk.waitForSelector('.session-row', { timeout: 30_000 });
 await desk.evaluate(() => window.dispatchEvent(new Event('orbit:open-session-search')));
-await desk.locator('input[placeholder*="earch"]').last().fill('payloads');
+const box = desk.locator('input[placeholder*="earch"]').last();
+await box.fill('payloads');
 await desk.waitForSelector('.ssearch-row', { timeout: 15_000 }).catch(() => {});
 await settle(desk, 2_500);
 const palette = await desk.evaluate(`[...document.querySelectorAll('.ssearch-row')].map(${READ})`);
 await shot(desk, 'search');
+// Each case by its own title: the row's state icon, the word beside it and the chips it draws.
+for (const [label, c] of Object.entries(cases)) {
+  if (!c.publicId) continue;
+  await box.fill(c.title);
+  const row = desk.locator('.ssearch-row', { has: desk.locator('.ssearch-title', { hasText: new RegExp(`^${c.title.replace(/[()]/g, '\\$&')}$`) }) }).first();
+  await row.waitFor({ timeout: 8_000 }).catch(() => {});
+  await settle(desk, 500);
+  if (!(await row.count())) continue;
+  c.search = await row.evaluate((r) => ({
+    state: r.querySelector('[data-state]')?.getAttribute('data-state') ?? null,
+    word: r.querySelector('.ssearch-meta > span:not(.ssearch-workspace):not(.ssearch-in):not(.session-marks)')?.textContent?.trim() ?? null,
+    marks: [...r.querySelectorAll('[data-mark]')].map((m) => m.textContent.trim()),
+  }));
+  await row.screenshot({ path: path.join(out, `search-${slug(label)}.png`) });
+}
 await browser.close();
 
 for (const c of Object.values(cases)) {
@@ -240,6 +256,11 @@ for (const [label, c] of Object.entries(cases)) {
   check('shared page', !!c.sharedPage && c.sharedPage.word === e.state && same(c.sharedPage.marks, e.marks), c.sharedPage);
   check('guest page', !!c.guestPage && c.guestPage.word === e.state && same(c.guestPage.marks, e.marks), c.guestPage);
   check('shared with me', !!c.guestRowText?.endsWith([e.state, ...e.marks].join(' · ')), c.guestRowText);
+  check('search', !!c.search && c.search.word === e.state && STATE_OF[c.search.state] === e.state && same(c.search.marks, e.marks), c.search);
+  // The Tasks list pill speaks for a live run only (a finished or parked-without-wake run reads the task's own word).
+  const pill = pills.find((x) => x.title === c.taskTitle);
+  c.pill = pill ?? null;
+  if (pill && ['Queued', 'Running', 'Idle'].includes(pill.word)) check('tasks pill', pill.word === e.state && same(pill.marks, e.marks), pill);
 }
 const result = { at: new Date().toISOString(), cases, pills, palette, checked, mismatches };
 fs.writeFileSync(path.join(out, 'walk.json'), JSON.stringify(result, null, 1));

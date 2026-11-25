@@ -1,6 +1,9 @@
 package io.orbitd.android.sessionfacts
 
 import io.orbitd.android.core.guests.GuestWire
+import io.orbitd.android.core.guests.SharedWithMe
+import io.orbitd.android.core.guests.displayFacts
+import io.orbitd.android.core.guests.marks
 import io.orbitd.android.core.guests.word
 import io.orbitd.android.directory.DirectorySession
 import io.orbitd.android.directory.SearchHit
@@ -48,6 +51,10 @@ class AndroidDisplayTest {
         if (state != null) put("drawnIcon", state.icon.name)
     }
 
+    private fun JsonObjectBuilder.drawn(surface: String, state: String, marks: List<String>) = put("drawn", buildJsonObject {
+        put(surface, buildJsonObject { put("state", state); put("marks", JsonArray(marks.map(::JsonPrimitive))) })
+    })
+
     private fun fill(b: JsonObjectBuilder, kind: String, p: JsonObject) = with(b) {
         val surfaces = mutableMapOf<String, String>()
         when (kind) {
@@ -66,13 +73,27 @@ class AndroidDisplayTest {
             "linkPreview" -> put(SessionDisplay.facts(p))   // Android has no link card; the two functions' reading only.
             "guestRow" -> {
                 val list = buildJsonObject { put("sessions", buildJsonArray { add(p) }) }
-                surfaces["sharedPage"] = GuestWire.list(list.toString().encodeToByteArray()).single().state.word
+                val summary = GuestWire.list(list.toString().encodeToByteArray()).single()
+                put(summary.state.displayFacts)
+                // The drawer's Shared with me row, second line: "Ana · Idle · Finished".
+                val line = SharedWithMe.subtitle(summary)
+                surfaces["sharedWithMe"] = line
+                val parts = line.removePrefix("${summary.ownerName} · ").split(" · ")
+                drawn("sharedWithMe", parts.first(), parts.drop(1).filter { it != "Completed" })
             }
-            "sharedHead" -> surfaces["sharedPage"] = GuestWire.state(p).word
+            "sharedHead" -> {
+                val state = GuestWire.state(p)
+                put(state.displayFacts)
+                // GuestHead: the pill's word, then every mark (`SessionMarkChips(state.marks)`).
+                val marks = state.marks.orEmpty().map { it.word }
+                surfaces["sharedPage"] = (listOf(state.word) + marks).joinToString(" · ")
+                drawn("sharedHead", state.word, marks)
+            }
             "searchHit" -> {
                 val hit = json.decodeFromJsonElement(SearchHit.serializer(), p)
                 // DirectoryScreen's search row draws these words (agent · lifecycle · run state).
                 surfaces["search"] = listOfNotNull(hit.agent?.name, hit.lifecycleState, hit.runState ?: hit.status).joinToString(" · ")
+                drawn("search", hit.runState ?: hit.status, emptyList())
             }
             else -> error("unknown kind $kind")
         }

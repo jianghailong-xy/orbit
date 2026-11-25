@@ -37,6 +37,13 @@ final class AppleDisplayTests: XCTestCase {
         if let state { row["drawnIcon"] = state.glyph.label }
     }
 
+    /// "Ana · Idle · Finished · Completed" -> the state and the marks it writes after the owner.
+    private func parsed(_ line: String, owner: String) -> [String: Any] {
+        var parts = line.components(separatedBy: " \u{00B7} ")
+        if parts.first == owner { parts.removeFirst() }
+        return ["state": parts.first ?? "", "marks": parts.dropFirst().filter { $0 != "Completed" }]
+    }
+
     private func fill(_ row: inout [String: Any], kind: String, data: Data) throws {
         let d = JSONDecoder()
         var surfaces: [String: String] = [:]
@@ -66,14 +73,28 @@ final class AppleDisplayTests: XCTestCase {
             surfaces["linkCard"] = (card.sessionGlyph.map(\.label) ?? "") + card.sessionMarks.map { " · " + $0.word }.joined()
         case "guestRow":
             let g = try d.decode(GuestSessionSummary.self, from: data)
-            surfaces["sharedPage"] = g.state.word
+            put(&row, g.state.displayFacts)
+            // The Shared with me row's second line, as MainView / CompactShell draw it: "Ana · Idle · Finished".
+            let line = SharedWithMe.subtitle(g)
+            surfaces["sharedWithMe"] = line
+            row["drawn"] = ["sharedWithMe": parsed(line, owner: g.ownerName)]
         case "sharedHead":
             let g = try d.decode(GuestSession.self, from: data)
-            surfaces["sharedPage"] = g.state.word
+            put(&row, g.state.displayFacts)
+            // The guest head (GuestSessionView.headBadges): the state pill and the marks from the two functions, else the old pill.
+            let state = SessionDisplay.state(g.state.displayFacts)
+            let marks = SessionDisplay.marks(g.state.displayFacts) ?? []
+            let word = state?.word ?? g.state.word
+            surfaces["sharedPage"] = ([word] + marks.map(\.word)).joined(separator: " · ")
+            row["drawn"] = ["sharedHead": ["state": word, "marks": marks.map(\.word)]]
         case "searchHit":
             let hit = try d.decode(SessionSearchHit.self, from: data)
             put(&row, hit.displayFacts)
-            surfaces["search"] = (SessionDisplay.state(hit.displayFacts)?.glyph ?? SessionStatusGlyph.make(runState: hit.effectiveRunState)).label
+            // SessionSearchRow: the glyph's label, then the marks.
+            let word = (SessionDisplay.state(hit.displayFacts)?.glyph ?? SessionStatusGlyph.make(runState: hit.effectiveRunState)).label
+            let marks = (SessionDisplay.marks(hit.displayFacts) ?? []).map(\.word)
+            surfaces["search"] = ([word] + marks).joined(separator: " · ")
+            row["drawn"] = ["search": ["state": word, "marks": marks]]
         default:
             XCTFail("unknown kind \(kind)")
         }
