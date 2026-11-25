@@ -729,6 +729,29 @@ test('§7.1 a baseline key is not new; a NO_CHANGE run completes its session onc
   assert.deepEqual(calls, [{ op: 'complete', sessionId: s2 }]);
 });
 
+test('§7.4 a NO_CHANGE session is completed once nothing works in it, its own run\'s only, and a busy one starves no pass', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('complete-busy');
+  const { sessionId: busy } = await runningRun(w);
+  await runs.report(w.ownerId, busy, { outcome: 'NO_CHANGE', summary: 'nothing new' });
+  // The turn is over, but a background job it started is still running.
+  await db.session.update({ where: { id: busy }, data: { status: 'AWAITING_INPUT', runningBgShells: ['bgj_1'], runningBgJobs: ['bgj_1'] } });
+
+  at('2026-11-14T00:00:00Z');
+  const w2 = await world('complete-released');
+  const { sessionId: done } = await runningRun(w2);
+  advance(MINUTE);
+  await runs.report(w2.ownerId, done, { outcome: 'NO_CHANGE', summary: 'nothing new' });
+  await db.session.update({ where: { id: done }, data: { status: 'CANCELLED', finishedAt: clockNow, lastTurnOutcome: 'ANSWERED' } });
+
+  // One row a pass: the busy session, reported first, is not what fills it.
+  assert.deepEqual(await runs.completeNoChangeSessions(1), [done]);
+  assert.deepEqual(await runs.completeNoChangeSessions(), [], 'a session whose job still runs is not completed under it');
+  await db.session.update({ where: { id: busy }, data: { runningBgShells: [], runningBgJobs: [] } });
+  assert.deepEqual(await runs.completeNoChangeSessions(), [busy]);
+});
+
 // =============================================================================================================
 // §7.1 / §7.2 — ending without a report
 // =============================================================================================================
@@ -1627,16 +1650,19 @@ test('§7.2 consecutive failures are counted and never pause the schedule; a res
 
 test('§7.4 CHANGED and FAILED runs leave their sessions open after they settle; only NO_CHANGE completes', { skip }, async () => {
   reset();
+  const own: string[] = [];
   for (const outcome of ['CHANGED', 'FAILED'] as const) {
     at('2026-11-14T00:00:00Z');
     const w = await world(`open-${outcome.toLowerCase()}`);
     const { sessionId } = await runningRun(w);
+    own.push(sessionId);
     await runs.report(w.ownerId, sessionId, { outcome, key: outcome === 'CHANGED' ? 'k@1' : undefined, summary: 's' });
     await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
     assert.ok(!(await runs.completeNoChangeSessions(1000)).includes(sessionId), `${outcome} keeps its session`);
     assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).completedAt, null);
   }
-  assert.deepEqual(calls.filter((c) => c.op === 'complete'), []);
+  // Other cases' NO_CHANGE sessions are the pass's to complete; none of these is.
+  assert.deepEqual(calls.filter((c) => c.op === 'complete' && own.includes(c.sessionId)), []);
 });
 
 test('§5 a run AWAITING_APPROVAL is in progress: the next slot is QUEUED behind it', { skip }, async () => {

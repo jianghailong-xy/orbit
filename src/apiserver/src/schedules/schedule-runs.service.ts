@@ -54,12 +54,13 @@ import { SCHEDULE_COPY, scheduleFill, RunFailureKind, runFailureIs } from '@orbi
 import { Prisma, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
+import { sessionExecutingOutsideTurnSql } from '../common/session-working';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { openingTurnKey } from '../sessions/orbit-authored-turn';
 import { sessionHeldByCapacity } from '../sessions/queued-reason-sql';
-import { TURN_STATE_SELECT, turnStateFilter, turnStateOf } from '../sessions/session-turn-state';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import {
   SCHEDULE_NOTIFIER,
   approvalCopy,
@@ -102,9 +103,6 @@ import {
   runSessionScheduleId,
   type ScheduleActor,
 } from './schedules.service';
-import {
-  releasedFilter,
-} from '../common/session-release';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -945,23 +943,31 @@ export class ScheduleRunsService {
     return told;
   }
 
-  /** §7.4: a NO_CHANGE run's session is completed once its turn has settled. */
+  /**
+   * §7.4: a NO_CHANGE run's session is completed once nothing is working in it any more (its reading is not WORKING:
+   * idle, set to wake, or released). Only the run's own session, never an earlier one a retry retired, and the rest
+   * of the conditions are in the query too, so rows this pass would skip cannot fill its batch: no turn queued or in
+   * flight (session-turn-state.ts) and none of the shared outside-turn facts (common/session-working.ts) are the
+   * prefilter, the reading confirms each.
+   * `completed_at` and `deleted_at` say only that it was completed or trashed already.
+   */
   async completeNoChangeSessions(batch = 25): Promise<string[]> {
-    const sessions = await this.prisma.session.findMany({
-      where: {
-        runSource: 'SCHEDULE',
-        completedAt: null,
-        deletedAt: null,
-        // No turn queued or in flight: released, parked, or its turn abandoned.
-        OR: [releasedFilter(), turnStateFilter([null, 'ABANDONED'])],
-        scheduleRun: { state: 'NO_CHANGE', OR: [{ landingStatus: null }, { landingStatus: { in: ['LANDED', 'NO_COMMITS'] } }] },
-      },
-      take: batch,
-      select: { id: true, ownerId: true, scheduleRun: { select: { sessionId: true } } },
-    });
+    const sessions = await this.prisma.$queryRaw<Array<{ id: string; ownerId: string }>>(Prisma.sql`
+      SELECT s."id" AS "id", s."owner_id"::text AS "ownerId"
+        FROM "schedule_run" r
+        JOIN "session" s ON s."id" = r."session_id" AND s."schedule_run_id" = r."id"
+       WHERE r."state" = 'NO_CHANGE'
+         AND (r."landing_status" IS NULL OR r."landing_status" IN ('LANDED', 'NO_COMMITS'))
+         AND s."completed_at" IS NULL AND s."deleted_at" IS NULL
+         AND ${sessionTurnStateSql('s')} IS DISTINCT FROM 'QUEUED'
+         AND ${sessionTurnStateSql('s')} IS DISTINCT FROM 'IN_FLIGHT'
+         AND NOT ${Prisma.raw(sessionExecutingOutsideTurnSql('s'))}
+       ORDER BY r."ended_at" ASC, r."id" ASC
+       LIMIT ${batch}`);
+    const readings = await readRunSessions(this.prisma, sessions.map((session) => session.id));
     const completed: string[] = [];
     for (const s of sessions) {
-      if (s.scheduleRun?.sessionId !== s.id) continue;
+      if (readings.get(s.id)?.reading === 'WORKING') continue;
       try {
         await this.sessions.complete(s.ownerId, s.id);
         completed.push(s.id);
@@ -1104,7 +1110,7 @@ export class ScheduleRunsService {
       loggedRetry(this.logger, 'scheduleRuns.report'),
     );
     await this.alert(result.alerts);
-    if (result.run.state === 'NO_CHANGE' && result.run.accessLevel !== 'LAND') await this.completeIfSettled(ownerId, sessionId);
+    // A NO_CHANGE session is completed by the worker's pass once nothing works in it (completeNoChangeSessions).
     await this.startNext(result.scheduleId);
     return { run: result.run, newFinding: result.newFinding };
   }
@@ -1833,14 +1839,6 @@ export class ScheduleRunsService {
       engine: plan.engine,
       provider: plan.provider,
     };
-  }
-
-  private async completeIfSettled(ownerId: string, sessionId: string): Promise<void> {
-    const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { ...TURN_STATE_SELECT, completedAt: true } });
-    if (!session || session.completedAt) return;
-    const turn = turnStateOf(session);
-    if (turn === 'IN_FLIGHT' || turn === 'QUEUED') return;
-    await this.quietly(() => this.sessions.complete(ownerId, sessionId), 'complete');
   }
 
   /** A run ended: the one queued behind it may start (§5). */
