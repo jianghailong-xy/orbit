@@ -1132,6 +1132,11 @@ export const WAITING_CARD_SELECTOR =
  *  floating "Jump to the beginning" pill (`.chat-older-top`), which any transcript scrolled off both
  *  its top and its tail offers — as a revealed card's is, unless it clamps at the top. */
 export const WAITING_CARD_GAP = 48;
+/** How long a page of older messages may take before the top pill says "Loading earlier messages…":
+ *  under a second, so a fast page shows nothing and a slow one is not a silent stall at the top. */
+const LOADING_OLDER_SHOW_AFTER_MS = 1000;
+/** Once said, how long it stays at least, so a page landing just after the delay does not flash it. */
+const LOADING_OLDER_MIN_SHOWN_MS = 500;
 
 // Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
 // recall only this session's recently sent prompts (never another session's). Stored
@@ -4907,8 +4912,26 @@ export function WorkspaceView({
   } = stream;
   // The top pill: what is loading above, or the way back up once the reader has left the tail. A wide
   // window draws it centred in the header row, a phone over the top of the transcript.
-  const topPillShown = loadingOlder || jumpUpOffered;
-  const topPill = (): ReturnType<typeof jumpUpPill> => (loadingOlder && !searchingMine
+  // A page that lands within LOADING_OLDER_SHOW_AFTER_MS says nothing: only a slow one is announced.
+  // Once said, it stays for LOADING_OLDER_MIN_SHOWN_MS, so a page landing just after is no flash.
+  const [loadingOlderShown, setLoadingOlderShown] = useState(false);
+  const loadingOlderShownAtRef = useRef(0);
+  useEffect(() => {
+    if (loadingOlder) {
+      if (loadingOlderShown) return undefined;
+      const timer = window.setTimeout(() => {
+        loadingOlderShownAtRef.current = Date.now();
+        setLoadingOlderShown(true);
+      }, LOADING_OLDER_SHOW_AFTER_MS);
+      return () => window.clearTimeout(timer);
+    }
+    if (!loadingOlderShown) return undefined;
+    const left = LOADING_OLDER_MIN_SHOWN_MS - (Date.now() - loadingOlderShownAtRef.current);
+    const timer = window.setTimeout(() => setLoadingOlderShown(false), Math.max(0, left));
+    return () => window.clearTimeout(timer);
+  }, [loadingOlder, loadingOlderShown]);
+  const topPillShown = loadingOlderShown || jumpUpOffered;
+  const topPill = (): ReturnType<typeof jumpUpPill> => (loadingOlderShown && !searchingMine
     ? <span className="chat-older-pill">Loading earlier messages…</span>
     : jumpUpPill());
   const headerJumpShown = !isMobile && !!selectedId && !composing && topPillShown;
