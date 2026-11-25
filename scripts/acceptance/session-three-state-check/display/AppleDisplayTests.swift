@@ -22,7 +22,8 @@ final class AppleDisplayTests: XCTestCase {
             var row: [String: Any] = ["id": r["id"]!, "client": "apple"]
             do {
                 switch kind {
-                case "sessionSummary": try fillSummary(&row, summary: payload, listRow: listRows[r["name"] as! String]!)
+                case "sessionSummary": try fillSummary(&row, summary: payload, listRow: listRows[r["name"] as! String]!, starting: true)
+                case "sessionSummaryCleared": try fillSummary(&row, summary: payload, listRow: listRows[r["name"] as! String]!, starting: false)
                 // `session.ended` only takes the row off the Open list (ControlEventRoute `.sessionLeft`): nothing reads its facts.
                 case "sessionEnded": row["notRead"] = "the row leaves the list"
                 default: try fill(&row, kind: kind, data: data)
@@ -45,13 +46,16 @@ final class AppleDisplayTests: XCTestCase {
         if let state { row["drawnIcon"] = state.glyph.label }
     }
 
-    /// `session.updated` as the Open list takes it (OpenRowChange.merging): the summary folded into the row as listed before
-    /// any background work showed (no `activity`, no `runningBgCount`). A summary that asks for a snapshot instead is read
-    /// from the next list, so it says nothing of its own.
-    private func fillSummary(_ row: inout [String: Any], summary: [String: Any], listRow: [String: Any]) throws {
+    /// `session.updated` as the Open list takes it (OpenRowChange.merging), the summary folded into the held row. `starting`:
+    /// the held row was listed before any background work showed (no `activity`, no `runningBgCount`), so the summary has to
+    /// add the mark. Otherwise the held row is the case as listed and the summary says the work ended, so it has to clear it.
+    /// A summary that asks for a snapshot instead is read from the next list, so it says nothing of its own.
+    private func fillSummary(_ row: inout [String: Any], summary: [String: Any], listRow: [String: Any], starting: Bool) throws {
         var before = listRow
-        before["activity"] = nil
-        before["runningBgCount"] = 0
+        if starting {
+            before["activity"] = nil
+            before["runningBgCount"] = 0
+        }
         var event = summary
         event["id"] = event["id"] ?? before["id"]
         let held = try JSONDecoder().decode(Session.self, from: JSONSerialization.data(withJSONObject: before))
@@ -68,6 +72,17 @@ final class AppleDisplayTests: XCTestCase {
         var parts = line.components(separatedBy: " \u{00B7} ")
         if parts.first == owner { parts.removeFirst() }
         return ["state": parts.first ?? "", "marks": parts.dropFirst().filter { $0 != "Completed" }]
+    }
+
+    /// "Idle · Finished" -> the state and the marks.
+    private func split(_ text: String) -> [String: Any] {
+        let parts = text.components(separatedBy: " \u{00B7} ")
+        return ["state": parts.first ?? "", "marks": Array(parts.dropFirst())]
+    }
+
+    /// "- Idle · Finished · Nov 24 · orbit-ws01" -> "Idle · Finished".
+    private func runsLine(_ line: String) -> String {
+        String(line.dropFirst(2)).components(separatedBy: " \u{00B7} ").dropLast(2).joined(separator: " \u{00B7} ")
     }
 
     private func fill(_ row: inout [String: Any], kind: String, data: Data) throws {
@@ -89,6 +104,15 @@ final class AppleDisplayTests: XCTestCase {
             let run = try d.decode(SessionRef.self, from: data)
             put(&row, run.displayFacts)
             surfaces["runBadge"] = ShareMarkdown.runLabel(run)
+            // Copy as Markdown, the whole builder: the task's Runs line for this run.
+            var listed = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+            listed["createdAt"] = nil
+            listed["agent"] = ["id": "w", "name": "orbit-ws01"]
+            let taskData = try JSONSerialization.data(withJSONObject: ["id": "t", "title": "T", "status": "IN_PROGRESS", "sessions": [listed]])
+            let markdown = ShareMarkdown.task(try d.decode(TaskItem.self, from: taskData), link: "https://orbit/t") { _ in "Nov 24" }
+            surfaces["markdownRun"] = markdown.split(separator: "\n").map(String.init)
+                .first { $0.hasPrefix("- ") && $0.hasSuffix("orbit-ws01") } ?? "(no Runs line)"
+            row["drawn"] = ["taskRun": split(surfaces["runBadge"]!), "markdown": split(runsLine(surfaces["markdownRun"]!))]
         case "linkPreview":
             let preview = try d.decode(LinkPreviewSession.self, from: data)
             put(&row, preview.displayFacts)

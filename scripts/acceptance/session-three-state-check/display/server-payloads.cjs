@@ -67,6 +67,18 @@ async function main() {
       rows.push({ id: `${c.label}|${kind}`, name: c.label, kind, payload: payloads.get(c.label)[kind] });
     }
   }
+  // A live update that ends the background work: each such case's `session.updated` summary as the server builds it with no
+  // shell or job left, the row put back afterwards so the walk sees the case as seeded.
+  for (const c of fixture.FIXTURE_CASES.filter((x) => x.row?.runningBgShells)) {
+    const id = world.ids.get(c.label);
+    const before = await db.session.findUniqueOrThrow({
+      where: { id }, select: { runningBgShells: true, runningBgJobs: true, updatedAt: true },
+    });
+    await db.session.update({ where: { id }, data: { runningBgShells: [], runningBgJobs: [] } });
+    const cleared = await stack.realtime.buildSessionSummary(id);
+    await db.session.update({ where: { id }, data: before });
+    rows.push({ id: `${c.label}|sessionSummaryCleared`, name: c.label, kind: 'sessionSummaryCleared', payload: cleared });
+  }
   fs.writeFileSync(path.join(walk, 'world.json'), JSON.stringify({
     ownerEmail: owner.email, guestEmail: guest.email, ownerId: world.ownerId, runnerId: runner.id, cases,
   }, null, 2));

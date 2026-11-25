@@ -8,7 +8,8 @@ mark per client, for list rows and for search, Shared with me and the shared / g
 ## Pieces
 
 - `server-payloads.cjs`: seeds 23 cases as real rows (the server's `session-payloads.fixture.ts` plus the board's cases
-  and the marks it lacks) and writes all eight payload kinds as the tip's server code builds them.
+  and the marks it lacks) and writes the payload kinds as the tip's server code builds them, with the `session.updated` that ends each case's
+  background work.
 - `walk-cross.mjs` / `run-walk.sh`: the built console on the tip's apiserver and PostgreSQL over those rows; reads and
   screenshots every web surface, the search palette per case included, and holds each to the board.
 - `make-rows.mjs`: the drivers' input: the rig's 36 `../fixture.json` rows plus the walk's server payloads.
@@ -16,9 +17,9 @@ mark per client, for list rows and for search, Shared with me and the shared / g
   display functions and surface words on each row, decoding each payload kind as that client decodes it (an account event
   a client never reads the facts of is marked `n/a`).
 - `*Groups*`: Needs you / Working membership only, run at the tip and at the commit before the display change.
-- `run-drivers.sh`, `make-display-table.mjs`: run the drivers and render the tables. The generator lists the surface
-  differences of table 1b, and exits non-zero on any other difference from the board, between clients on a payload, or in
-  a group (one known cause, Apple dropping `runningBgCount` on three payload kinds, is listed rather than fatal).
+- `run-drivers.sh`, `make-display-table.mjs`: run the drivers and render the tables. The generator exits non-zero on any
+  difference from the board (list rows, the surfaces of table 1b, the live updates of table 1c), between clients on a
+  payload, or in a group.
 
 ## Rerun
 

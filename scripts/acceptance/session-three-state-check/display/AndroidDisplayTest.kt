@@ -13,6 +13,7 @@ import io.orbitd.android.directory.displayFacts
 import io.orbitd.android.directory.isWorkingForList
 import io.orbitd.android.directory.needsOwner
 import io.orbitd.android.tasks.TaskDetailLogic
+import io.orbitd.android.tasks.TaskMarkdown
 import java.io.File
 import java.time.Instant
 import kotlinx.serialization.json.*
@@ -51,9 +52,10 @@ class AndroidDisplayTest {
         if (state != null) put("drawnIcon", state.icon.name)
     }
 
-    private fun JsonObjectBuilder.drawn(surface: String, state: String, marks: List<String>) = put("drawn", buildJsonObject {
-        put(surface, buildJsonObject { put("state", state); put("marks", JsonArray(marks.map(::JsonPrimitive))) })
-    })
+    private fun drawnOf(state: String, marks: List<String>) = buildJsonObject { put("state", state); put("marks", JsonArray(marks.map(::JsonPrimitive))) }
+
+    private fun JsonObjectBuilder.drawn(surface: String, state: String, marks: List<String>) =
+        put("drawn", buildJsonObject { put(surface, drawnOf(state, marks)) })
 
     private fun fill(b: JsonObjectBuilder, kind: String, p: JsonObject) = with(b) {
         val surfaces = mutableMapOf<String, String>()
@@ -68,9 +70,23 @@ class AndroidDisplayTest {
                 put("group", buildJsonObject { put("needsYou", s.needsOwner()); put("working", s.isWorkingForList()) })
             }
             // An account event only asks for the list to be read again (`INVALIDATING_EVENTS`): nothing reads its facts.
-            "sessionSummary", "sessionEnded" -> put("notRead", "the list is read again")
+            "sessionSummary", "sessionSummaryCleared", "sessionEnded" -> put("notRead", "the list is read again")
             "taskRun" -> {
                 put(SessionDisplay.facts(p)); surfaces["runBadge"] = TaskDetailLogic.runLabel(p)
+                // Copy as Markdown, the whole builder: the task's Runs line for this run.
+                val task = buildJsonObject {
+                    put("title", "T"); put("status", "IN_PROGRESS")
+                    put("sessions", buildJsonArray { add(JsonObject(p + ("createdAt" to JsonPrimitive("2026-11-24T00:00:00Z")) +
+                        ("deletedAt" to JsonNull) + ("agent" to buildJsonObject { put("name", "orbit-ws01") }))) })
+                }
+                val line = TaskMarkdown.task(task, "https://orbit/t") { "Nov 24" }.lines().first { it.startsWith("- ") && it.endsWith("orbit-ws01") }
+                surfaces["markdownRun"] = line
+                val badge = surfaces["runBadge"]!!.split(" · ")
+                val written = line.removePrefix("- ").split(" · ").dropLast(2)
+                put("drawn", buildJsonObject {
+                    put("taskRun", drawnOf(badge.first(), badge.drop(1)))
+                    put("markdown", drawnOf(written.first(), written.drop(1)))
+                })
             }
             "linkPreview" -> put(SessionDisplay.facts(p))   // Android has no link card; the two functions' reading only.
             "guestRow" -> {
@@ -93,9 +109,13 @@ class AndroidDisplayTest {
             }
             "searchHit" -> {
                 val hit = json.decodeFromJsonElement(SearchHit.serializer(), p)
-                // DirectoryScreen's search row draws these words (agent · lifecycle · run state).
-                surfaces["search"] = listOfNotNull(hit.agent?.name, hit.lifecycleState, hit.runState ?: hit.status).joinToString(" · ")
-                drawn("search", hit.runState ?: hit.status, emptyList())
+                put(hit.displayFacts)
+                // SearchHitRow: the state icon, "agent · lifecycle · state word", then every mark (`SessionMarkChips`, no limit).
+                val state = SessionDisplay.state(hit.displayFacts)
+                val word = state?.word ?: hit.runState ?: hit.status
+                val marks = SessionDisplay.marks(hit.displayFacts).orEmpty().map { it.word }
+                surfaces["search"] = (listOfNotNull(hit.agent?.name, hit.lifecycleState, word) + marks).joinToString(" · ")
+                drawn("search", word, marks)
             }
             else -> error("unknown kind $kind")
         }

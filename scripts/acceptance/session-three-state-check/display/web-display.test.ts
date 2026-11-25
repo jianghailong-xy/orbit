@@ -6,7 +6,7 @@ import { SESSION_MARKS, sessionDisplayState, sessionDisplayText, sessionMarks } 
 import { sessionStateWord } from './sessionState';
 import { sessionIsWorking, sessionNeedsOwner } from './sessionGrouping';
 import { StatusIcon, orbitLinkStateWord, statusLabel } from '../components/WorkspaceView';
-import { sessionStatusMeta } from '../components/TaskDetailPanel';
+import { sessionStatusMeta, taskMarkdown } from '../components/TaskDetailPanel';
 
 // Copy to src/web/src/lib/ of the checkout under test and run with ROWS=<rows.json> OUT=<result.json>.
 const attr = (html: string, name: string) => html.match(new RegExp(`${name}="([^"]*)"`))?.[1] ?? null;
@@ -26,6 +26,11 @@ it('writes what web draws for every row', () => {
     };
     // The list row's icon as the component draws it: data-state from the facts, else the legacy glyph.
     const icon = renderToStaticMarkup(createElement(StatusIcon, { session: p }));
+    // Copy as Markdown, the whole builder: the task's Runs line for a task's run.
+    if (r.kind === 'taskRun') {
+      surfaces.markdownRun = taskMarkdown({ title: 'T', status: 'IN_PROGRESS', sessions: [{ ...p, createdAt: null, deletedAt: null, workspace: { name: 'orbit-ws01' } }] }, 'L')
+        .split('\n').find((l: string) => l.startsWith('- ') && l.endsWith('orbit-ws01'))!;
+    }
     return {
       id: r.id, client: 'web', state: state?.word ?? null,
       marks: marks ? marks.map((m) => SESSION_MARKS[m].word) : null,

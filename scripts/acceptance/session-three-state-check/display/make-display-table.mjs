@@ -1,6 +1,5 @@
 // Renders display-table.md (the criterion's table) and surfaces.md (every other payload kind and surface) from the three
-// client drivers' outputs, holds them to the approved board and the recorded groups, and exits non-zero on a difference
-// that the lists of known differences below do not explain.
+// client drivers' outputs, holds them to the approved board and the recorded groups, and exits non-zero on any difference.
 //   node make-display-table.mjs <tip checkout> <drivers out dir> <walk out dir> <out dir>
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -28,8 +27,6 @@ const expectOf = (p) => {
 };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const failures = [];
-// Differences the report explains, matched as narrowly as their cause: a failure above otherwise.
-const explained = [];
 
 // iPhone and Android list rows draw two marks at most, then "+N" (the board); Mac and web rows draw all of them.
 const phoneOf = (marks) => (marks.length > 2 ? [...marks.slice(0, 2), `+${marks.length - 2}`] : marks);
@@ -117,10 +114,9 @@ for (const r of rows.filter((x) => x.kind === 'fixture' && x.newFields)) {
 }
 
 // ---- table 4: the two functions on every payload kind the server sends, and each surface's words ----
-const KINDS = ['listRow', 'detail', 'sessionSummary', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead', 'taskRun', 'searchHit'];
+const KINDS = ['listRow', 'detail', 'sessionSummary', 'sessionSummaryCleared', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead', 'taskRun', 'searchHit'];
 const t4 = ['| case | payload kind | state: web / Apple / Android | marks: web / Apple / Android | same as the list row | clients agree |', '|---|---|---|---|---|---|'];
 const kindGaps = new Map();
-const kindApple = new Map();
 for (const r of rows.filter((x) => KINDS.includes(x.kind))) {
   const got = CLIENTS.map((c) => out[c].get(r.id));
   got.forEach((g, k) => { if (g.error) failures.push(`driver error: ${CLIENTS[k]} ${r.id}: ${g.error}`); });
@@ -130,22 +126,22 @@ for (const r of rows.filter((x) => KINDS.includes(x.kind))) {
   const read = got.map((g) => (g.marks === undefined ? undefined : { state: g.state, marks: g.marks }));
   const present = read.filter((x) => x !== undefined);
   const agree = present.every((x) => same(x, present[0]));
-  // Apple only, Background only: three Apple types do not hand their two functions `runningBgCount`
-  // (`SessionSearchHit`, `SessionRef`, `ControlSessionSummary`), so a mark that rests on it is missing there.
-  const appleBackground = !agree && ['searchHit', 'taskRun', 'sessionSummary'].includes(r.kind) && read[0] && read[1]
-    && (read[2] === undefined || same(read[2], read[0]))
-    && read[1].state === read[0].state && same(read[1].marks, read[0].marks.filter((m) => m !== 'Background'));
-  if (appleBackground) explained.push(`${r.id}: Apple omits Background`);
-  else if (!agree) failures.push(`clients disagree on ${r.id}: ${JSON.stringify(read)}`);
+  if (!agree) failures.push(`clients disagree on ${r.id}: ${JSON.stringify(read)}`);
+  // A live update that ends the work is not the list row's case any more: each reading is held to the board's rule on
+  // the update itself, which has no Background mark left.
+  if (r.kind === 'sessionSummaryCleared') {
+    const e = expectOf(r.payload);
+    for (const x of present) if (!same(x, e) || x.marks.includes('Background')) failures.push(`cleared update ${r.id}: board ${JSON.stringify(e)}, read ${JSON.stringify(x)}`);
+  }
   const w = read[0];
-  const equalsList = !w || !listE ? '-' : same(w, listE) ? 'yes' : '**no**';
+  const equalsList = !w || !listE || r.kind === 'sessionSummaryCleared' ? '-' : same(w, listE) ? 'yes' : '**no**';
   if (equalsList === '**no**') {
     const missing = listE.marks?.filter((m) => !w.marks?.includes(m)) ?? [];
     const extra = w.marks?.filter((m) => !listE.marks?.includes(m)) ?? [];
     const key = `${r.kind}|${w.state === null ? 'no facts on the payload' : `missing ${missing.join(', ') || '-'}; extra ${extra.join(', ') || '-'}`}`;
     kindGaps.set(key, [...(kindGaps.get(key) ?? []), r.name]);
+    failures.push(`payload kind differs from the list row: ${r.id}`);
   }
-  if (appleBackground) kindApple.set(r.kind, [...(kindApple.get(r.kind) ?? []), r.name]);
   const show = (f) => read.map((x, k) => (x === undefined ? (got[k].notRead ? `n/a (${got[k].notRead})` : 'n/a') : f(x))).join(' / ');
   t4.push(`| ${r.name} | ${r.kind} | ${show((x) => x.state ?? '(legacy)')} | ${show((x) => (x.marks ? x.marks.join(', ') || 'none' : '(legacy)'))} | ${equalsList} | ${agree ? 'yes' : '**NO**'} |`);
 }
@@ -159,11 +155,19 @@ for (const r of rows.filter((x) => KINDS.includes(x.kind))) {
 // ---- table 1b: search, Shared with me and the shared / guest head, as each client draws them ----
 // Web is what the console drew in the real-stack walk; Apple and Android are what their view code is handed
 // (AppleDisplayTests, AndroidDisplayTest). The expected state and marks are the list row's: one case, one answer.
-const SURFACES = { search: 'searchHit', sharedWithMe: 'guestRow', sharedHead: 'sharedHead' };
+const SURFACES = { search: 'searchHit', sharedWithMe: 'guestRow', sharedHead: 'sharedHead', taskRun: 'taskRun', markdown: 'taskRun' };
 const webDrawn = (name, surface) => {
+  // The Runs line web's own `taskMarkdown` writes for the run (web-display.test.ts): "- Idle · Finished · — · orbit-ws01".
+  if (surface === 'markdown') {
+    const line = out.web.get(`${name}|taskRun`)?.surfaces.markdownRun;
+    if (!line) return null;
+    const parts = line.slice(2).split(' · ').slice(0, -2);
+    return { state: parts[0], marks: parts.slice(1) };
+  }
   const c = walk.cases[name];
   if (!c || c.missing) return null;
   if (surface === 'search') return c.search ? { state: c.search.word, marks: c.search.marks } : null;
+  if (surface === 'taskRun') return c.taskPanel?.runs[0] ? { state: c.taskPanel.runs[0].badge, marks: c.taskPanel.runs[0].marks } : null;
   if (surface === 'sharedWithMe') {
     if (!c.guestRowText) return null;
     const parts = c.guestRowText.split(' · ').slice(1);
@@ -206,6 +210,24 @@ const t1bSummary = ['| surface | client | difference | cases (what it drew) |', 
   ...[...surfaceDiffs].map(([k, v]) => { const [s, c, w] = k.split('|'); return `| ${s} | ${NAME[c]} | ${w} | ${v.length}: ${v.join('; ')} |`; })];
 if (!surfaceDiffs.size) t1bSummary.push('| none | | | |');
 
+// ---- table 1c: a live `session.updated`, as Apple folds it into the held row ----
+// Add: the row was listed before the background work showed. Clear: the row shows it and the update says it ended.
+const t1c = ['| case | add: board | add: Mac / iPhone | clear: board | clear: Mac / iPhone | web’s two functions on the two updates |', '|---|---|---|---|---|---|'];
+const liveCases = rows.filter((x) => x.kind === 'sessionSummaryCleared').map((x) => x.name);
+for (const name of liveCases) {
+  const e1 = expectOf(rows.find((x) => x.id === `${name}|listRow`).payload);
+  const e2 = expectOf(rows.find((x) => x.id === `${name}|sessionSummaryCleared`).payload);
+  const a1 = out.apple.get(`${name}|sessionSummary`), a2 = out.apple.get(`${name}|sessionSummaryCleared`);
+  const w1 = out.web.get(`${name}|sessionSummary`), w2 = out.web.get(`${name}|sessionSummaryCleared`);
+  const show = (x) => (x.marks ? `${x.state}: ${x.marks.join(', ') || 'none'}` : `n/a (${x.notRead})`);
+  const is = (x, e) => x.marks && x.state === e.state && same(x.marks, e.marks);
+  if (!(is(a1, e1) && e1.marks.includes('Background') && is(a2, e2) && !e2.marks.includes('Background'))) {
+    failures.push(`live update ${name}: add ${show(a1)} (board ${JSON.stringify(e1)}), clear ${show(a2)} (board ${JSON.stringify(e2)})`);
+  }
+  t1c.push(`| ${name} | ${show(e1)} | ${show(a1)} | ${show(e2)} | ${show(a2)} | ${show(w1)} → ${show(w2)} |`);
+}
+if (!liveCases.length) failures.push('no live-update case was built');
+
 writeFileSync(`${outDir}/display-table.md`, [
   '# Cross-client display: web, Mac, iPhone, Android', '',
   'Generated by `make-display-table.mjs`; do not edit. F = a row of `../fixture.json` (facts present); S = a payload the tip’s',
@@ -214,10 +236,13 @@ writeFileSync(`${outDir}/display-table.md`, [
   'shows that mark; `+N` = counted in a phone row’s “+N”; `-` = not shown. Columns are what each client’s list row draws:',
   'web and Mac all marks, iPhone and Android two and “+N” (Mac and iPhone share OrbitKit; see the report).', '',
   '## 1. State and each mark, per client', '', ...t1, '',
-  '## 1b. Search, Shared with me and the shared / guest head', '',
-  `${surfaceRows} rows (23 server cases × 3 surfaces; search never answers the settled landing, and the session list has no web row for it:`,
-  '`n/a`). Web is the walk’s DOM; Apple and Android are what their views are handed. Expected is the case’s list-row answer.', '',
+  '## 1b. Search, Shared with me, the shared / guest head, the task run label and shared Markdown', '',
+  `${surfaceRows} rows (23 server cases × 5 surfaces; search never answers the settled landing, and web’s walk has no page for it:`,
+  '`n/a`). Web is the walk’s DOM (Markdown: web’s `taskMarkdown`); Apple and Android are what their views are handed. Expected is',
+  'the case’s list-row answer.', '',
   ...t1bSummary, '', ...t1b, '',
+  '## 1c. A live session.updated on Apple: the Background mark starts and ends', '', ...t1c, '',
+  'Android reads the Open list again on the event and draws the list row (table 1).', '',
   '## 2. Older server (facts absent): drawn as before', '', ...t2, '',
   '## 3. Needs you / Working membership: tip against the commit before the display change (cf06a12e75)', '', ...t3, '',
   `Recorded groups (legacy-baseline.*.json, rows without facts): ${CLIENTS.map((c, k) => `${c} ${absent.length - recorded[k].length}/${absent.length} equal`).join(', ')}.`, '',
@@ -231,15 +256,13 @@ writeFileSync(`${outDir}/surfaces.md`, [
   '## Payload kinds that draw differently from the list row', '',
   '| payload kind | difference | cases |', '|---|---|---|',
   ...[...kindGaps].map(([k, v]) => `| ${k.split('|')[0]} | ${k.split('|')[1]} | ${v.join('; ')} |`), '',
-  '## Apple differs from web: Background missing', '', '| payload kind | cases |', '|---|---|',
-  ...(kindApple.size ? [...kindApple].map(([k, v]) => `| ${k} | ${v.join('; ')} |`) : ['| none | |']), '',
   '## Words each surface writes', '', ...t5, '',
 ].join('\n'));
 console.log(`table 1: ${cases.length} cases; groups: ${rows.filter((x) => x.kind === 'fixture' || x.kind === 'listRow').length} rows; walk surfaces ${JSON.stringify(walk.checked)}`);
 console.log(`moved (pre-existing) groups: ${moved.length}`);
 for (const [k, v] of kindGaps) console.log(`kind gap ${k}: ${v.length} cases`);
 for (const [k, v] of surfaceDiffs) console.log(`surface difference ${k}: ${v.length} cases`);
-console.log(`surface table: ${surfaceRows} rows, ${surfaceDiffs.size} kinds of difference; explained per-kind readings: ${explained.length}`);
-for (const [k, v] of kindApple) console.log(`Apple omits Background on ${k}: ${v.join('; ')}`);
-console.log(failures.length ? `FAILURES ${failures.length}:\n${failures.join('\n')}` : 'no unexplained disagreement in tables 1-3 and the per-kind function readings (table 1b differences are listed above)');
+console.log(`surface table: ${surfaceRows} rows, ${surfaceDiffs.size} kinds of difference; live-update cases: ${liveCases.length}`);
+if (surfaceDiffs.size) failures.push(`table 1b: ${surfaceDiffs.size} kinds of difference`);
+console.log(failures.length ? `FAILURES ${failures.length}:\n${failures.join('\n')}` : 'no disagreement in tables 1, 1b, 1c, 2, 3 or the per-kind function readings');
 process.exit(failures.length ? 1 : 0);
