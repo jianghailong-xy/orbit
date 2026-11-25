@@ -70,28 +70,18 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'runners/runner-background-holders.ts': { reads: 1 },
   'runners/runners.service.ts': { reads: 6, enums: 1 },
   'schedules/schedule-runs.service.ts': { reads: 9, enums: 1 },
-  'session-guests/session-guests.service.ts': { reads: 3, writes: 1, alone: 1, enums: 1 },
+  'session-guests/session-guests.service.ts': { writes: 1 },
   // The reads added after the list was seeded: the one fallback for a held row with no `turn_state` (not yet
   // backfilled), which keeps its stored word (project rule of 2026-11-25: readers may reach production before the
   // backfill, task T3). Task T4 added it to the projector; task T11 moved it into session-turn-state.ts, beside the
   // turn state readers move onto (`heldSessionWord`, `turnStateOf`, `turnStateFilter`, `sessionTurnStateSql`), so the
   // projector and every moved reader ask the same function. The projector's SQL twin takes the word as an argument
   // (`legacySessionStatusSql` hands it over), and LEGACY_STATUS_SELECT / TURN_STATE_SELECT select it for them. Goes
-  // with the column's writers (T14).
+  // with the column's writers (T14). Since task T10 these two are the only reads left in sessions/ and session-guests/:
+  // every other reader there asks them, and `?status=` (statusWordFilter) matches an unfilled held row through them.
   'sessions/session-legacy-words.ts': { reads: 1 },
-  'sessions/session-turn-state.ts': { reads: 5 },
-  'sessions/auto-retry-eligibility.ts': { reads: 2, enums: 1 },
-  'sessions/auto-retry.service.ts': { reads: 22, enums: 1 },
-  'sessions/open-list-version.ts': { reads: 2 },
-  'sessions/queued-reason-sql.ts': { reads: 2 },
-  'sessions/run-now.ts': { reads: 2 },
-  'sessions/session-move.ts': { reads: 3, enums: 1 },
-  'sessions/session-phase.ts': { reads: 4, enums: 1 },
-  'sessions/session-reach.ts': { reads: 1 },
-  'sessions/session-request.ts': { reads: 3 },
-  'sessions/sessions.controller.ts': { enums: 1 },
-  'sessions/sessions.service.ts': { reads: 59, writes: 8, alone: 8, enums: 1 },
-  'sessions/task-work-carrier.ts': { reads: 6, enums: 1 },
+  'sessions/session-turn-state.ts': { reads: 4 },
+  'sessions/sessions.service.ts': { writes: 8, enums: 1 },
   'share-links/share-links.service.ts': { reads: 1 },
   'watches/watch-delivery.service.ts': { reads: 1 },
   'watches/watch-evaluator.service.ts': { reads: 1 },

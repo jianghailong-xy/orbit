@@ -32,12 +32,37 @@ const TURN_STATE_OF_HELD_WORD: Readonly<Record<string, TurnState>> = Object.from
   Object.entries(HELD_WORD_OF_TURN_STATE).map(([state, word]) => [word, state as TurnState]),
 );
 
+/**
+ * The turn state a writer stores beside the word it writes (plan §2.2: deploy 2 writes both): QUEUED for PENDING,
+ * IN_FLIGHT for RUNNING, ABANDONED for INTERRUPTED, and null for AWAITING_INPUT and every released word.
+ */
+export function turnStateWrittenWith(word: RunStatus | string): TurnState | null {
+  return TURN_STATE_OF_HELD_WORD[word] ?? null;
+}
+
+/** The held word of a turn state, null for parked: what a writer stores beside it while both are written. */
+export function heldWordOf(turn: TurnState | null): RunStatus {
+  return turn === null ? RunStatus.AWAITING_INPUT : HELD_WORD_OF_TURN_STATE[turn];
+}
+
+/**
+ * `statusAfterTurnEnqueued` (common/session-scheduling.ts) on the turn state of a held session: a parked or abandoned
+ * session's new turn waits for a claim (QUEUED), and one queued or in flight stays where it is.
+ */
+export function turnStateAfterTurnEnqueued(turn: TurnState | null): TurnState {
+  return turn === 'QUEUED' || turn === 'IN_FLIGHT' ? turn : 'QUEUED';
+}
+
 /** The columns turnStateOf reads. `status` is the fallback the header describes, read for nothing else. */
 export const TURN_STATE_SELECT = { status: true, finishedAt: true, turnState: true } as const;
 
-/** What turnStateOf reads. A row with no `turnState` key reads as one not yet backfilled: its stored word decides. */
+/**
+ * What turnStateOf reads. A row with no `turnState` key reads as one not yet backfilled: its stored word decides. A row
+ * whose turn state was resolved in SQL (sessionTurnStateSql, the fallback included) needs no word: with neither it
+ * reads as parked.
+ */
 export interface TurnStateFacts {
-  status: string;
+  status?: string;
   finishedAt: Date | string | null;
   turnState?: string | null;
 }
@@ -49,7 +74,8 @@ export function heldSessionWord(facts: TurnStateFacts): RunStatus {
   }
   // No turn state: parked, or not yet backfilled. A parked row stores AWAITING_INPUT, so both read the stored word.
   const session = facts;
-  return isHeldStatus(session.status) ? session.status as RunStatus : RunStatus.AWAITING_INPUT;
+  const stored = session.status ?? '';
+  return isHeldStatus(stored) ? stored as RunStatus : RunStatus.AWAITING_INPUT;
 }
 
 /**

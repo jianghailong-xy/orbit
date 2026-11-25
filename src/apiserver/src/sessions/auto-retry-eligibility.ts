@@ -1,6 +1,7 @@
-import { Prisma, ProjectStatus, RunStatus } from '@prisma/client';
+import { Prisma, ProjectStatus } from '@prisma/client';
 
 import { releaseWasFailureFilter, releaseWasFailureSql } from '../common/session-release';
+import { sessionTurnStateSql, turnStateFilter } from './session-turn-state';
 
 /**
  * The list pause, asked where a retry is RELEASED rather than where it was armed.
@@ -67,7 +68,8 @@ export function autoRetryEligibleWhere(): Prisma.SessionWhereInput {
     // A landing is never re-sent: its AWAITING_INPUT means only that the subject is open.
     sessionKind: 'CONVERSATION',
     OR: [
-      { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
+      // Parked (plan §2.1: A), no end asked.
+      { ...turnStateFilter([null]), cancelRequestedAt: null },
       // Released by a failure (common/session-release.ts).
       releaseWasFailureFilter(),
     ],
@@ -79,7 +81,8 @@ export function autoRetryEligibleWhere(): Prisma.SessionWhereInput {
 export function autoRetryEligibleSql(alias: string): Prisma.Sql {
   const s = Prisma.raw(alias);
   return Prisma.sql`(${s}."deleted_at" IS NULL AND ${s}."completed_at" IS NULL AND ${s}."kind" = 'CONVERSATION'
-    AND ((${s}."status" = 'AWAITING_INPUT' AND ${s}."cancel_requested_at" IS NULL) OR ${releaseWasFailureSql(alias)})
+    AND ((${s}."finished_at" IS NULL AND ${sessionTurnStateSql(alias)} IS NULL AND ${s}."cancel_requested_at" IS NULL)
+         OR ${releaseWasFailureSql(alias)})
     AND (${s}."task_id" IS NULL OR ${s}."starts_task_work" = false
          OR EXISTS (SELECT 1 FROM "task" t WHERE t."id" = ${s}."task_id" AND t."dispatch_hold" = false))
     AND (${s}."task_id" IS NULL OR ${s}."starts_task_work" = false
