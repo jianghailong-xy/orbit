@@ -403,6 +403,7 @@ import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalP
 import { approvalAction, delegateCallOfApproval, delegateDescription, useSubagentRuns } from '../lib/subagentRuns';
 import {
   SessionDecisionStrip,
+  type StripPart,
   decisionRowKey,
   revealCriteriaCard,
   revealCard,
@@ -4930,11 +4931,38 @@ export function WorkspaceView({
     const timer = window.setTimeout(() => setLoadingOlderShown(false), Math.max(0, left));
     return () => window.clearTimeout(timer);
   }, [loadingOlder, loadingOlderShown]);
-  const topPillShown = loadingOlderShown || jumpUpOffered;
-  const topPill = (): ReturnType<typeof jumpUpPill> => (loadingOlderShown && !searchingMine
-    ? <span className="chat-older-pill">Loading earlier messages…</span>
-    : jumpUpPill());
-  const headerJumpShown = !isMobile && !!selectedId && !composing && topPillShown;
+  // Whether anything waits on the reader: the strip's line reports it. While it does, the capsule
+  // leads with it and drops the person's last message; the way to the top stays.
+  const [decisionWaiting, setDecisionWaiting] = useState(false);
+  const topPillShown = decisionWaiting || loadingOlderShown || jumpUpOffered;
+  const jumpStartIcon = (
+    <button
+      type="button"
+      className="chat-jump-start chat-older-start"
+      title="Jump to the beginning"
+      aria-label="Jump to the beginning"
+      onClick={() => void jumpToStart()}
+    >
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
+      </svg>
+    </button>
+  );
+  // The top capsule. The strip's line is always its first child, mounted whether or not anything
+  // waits, so it can say when something does: a pill of its own then, and otherwise a wrapper that
+  // draws nothing around the pill it holds.
+  const topPill = (line: ReactNode) => (
+    <span className={decisionWaiting ? 'chat-older-pill chat-older-split' : 'chat-older-group'}>
+      {line}
+      {decisionWaiting
+        ? (jumpUpOffered ? jumpStartIcon : null)
+        : loadingOlderShown && !searchingMine
+          ? <span className="chat-older-pill">Loading earlier messages…</span>
+          : jumpUpOffered ? jumpUpPill() : null}
+    </span>
+  );
+  const capsuleMounted = !!selectedId && !composing && !selectedTrashed;
+  const headerJumpShown = !isMobile && capsuleMounted && topPillShown;
   // The session's SubAgent runs, read once for the transcript's blocks and the composer band's Agents line.
   const subagentRuns = useSubagentRuns(selectedId ?? '', transcriptEvents);
   // Settings › Translation (@orbit/shared translation.ts): what a translated conversation can do —
@@ -10698,6 +10726,69 @@ export function WorkspaceView({
     )
   );
 
+  // The pinned strip, in the half asked for: its line goes to the cards that wait on the reader,
+  // drawn as the top capsule's first segment; its fold is a bar under the header (DecisionStrip).
+  const decisionStrip = (part: StripPart) => selectedId ? (
+    <SessionDecisionStrip
+      part={part}
+      onWaiting={part === 'line' ? setDecisionWaiting : undefined}
+      sessionId={selectedId}
+      projectId={selectedSession?.projectId ?? null}
+      cards={decisionCards}
+      confirmation={
+        openSettlementIn?.sessionId === selectedId ? openSettlementIn.question : false
+      }
+      // Named in the card's own words, with how long the run has waited — never a number
+      // first. Only when the card below is drawn in this session, so a press always arrives;
+      // and not while its report is still with its reviewer, which is somebody else's to look
+      // at first — the card is there, but nothing points the owner at it (contract §5 N1).
+      ownerConfirmation={
+        ownerWaiting && ownerConfirmation.data && ownerWaiting.review?.state !== 'UNDER_REVIEW'
+          ? {
+              title: ownerConfirmation.data.title,
+              ageSeconds: Math.max(
+                0,
+                Math.floor((Date.now() - Date.parse(ownerWaiting.requestedAt)) / 1000),
+              ),
+            }
+          : null
+      }
+      // The exception cards the owner presses, with how long each has been theirs and which
+      // side of the reader it sits on now: unlike a question, one can be above.
+      needsYou={ownerExceptionRows.map((row) => ({
+        row,
+        need: selectedSession?.ownerItems?.find((item: any) => item.itemId === row.itemId)?.need
+          ?? null,
+        ageSeconds: (() => {
+          const at = Date.parse(row.escalatedAt ?? row.waitingSince);
+          return Number.isFinite(at)
+            ? Math.max(0, Math.floor((Date.now() - at) / 1000))
+            : null;
+        })(),
+        above: openItemsAbove.split(' ').includes(row.itemId),
+      }))}
+      // The strip states the fact and this takes the reader to the one place it can be
+      // answered: the card the server delivered into this conversation. A second set of
+      // buttons up here would be two faces racing for one answer.
+      onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
+      crossings={crossingCards.pointers}
+      // The coordinator's open questions, from the read `CoordinatorQuestions` draws their
+      // cards from at this conversation's foot, so the line and the cards cannot disagree.
+      questions={coordinatedProjectId ? coordinatorQuestions(openItems.data).map((row) => ({
+        itemId: row.itemId,
+        question: row.question?.question ?? row.title,
+        ageSeconds: (() => {
+          const at = Date.parse(row.waitingSince);
+          return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
+        })(),
+      })) : []}
+      ownerRequests={ownerRequestPointers.map((request) => ({
+        ...request,
+        above: openItemsAbove.split(' ').includes(`owner-request-${request.id}`),
+      }))}
+    />
+  ) : null;
+
   return (
     <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
       {/* A machine with no workspace has no sessions to list: its setup page is the card alone. */}
@@ -11068,8 +11159,8 @@ export function WorkspaceView({
           {/* Off the live tail, a wide window draws the transcript's top pill here, centred in the
               header row instead of floating over the messages. A phone keeps it over the transcript
               (no room up here). */}
-          {headerJumpShown && (
-            <div className="workspace-header-jump">{topPill()}</div>
+          {!isMobile && capsuleMounted && (
+            <div className="workspace-header-jump" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
           )}
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
           <RunnerUpdateIndicator runner={runner} machine={runnerShownName} />
@@ -11363,64 +11454,9 @@ export function WorkspaceView({
             around: what this session is being asked to decide is STATE — recomputed from the ledger
             on every read — and state that sat in the transcript's vertical flow read as a message
             nobody sent. One line until it is asked to be more. */}
-        {selectedId && !selectedTrashed && (
-          <SessionDecisionStrip
-            sessionId={selectedId}
-            projectId={selectedSession?.projectId ?? null}
-            cards={decisionCards}
-            confirmation={
-              openSettlementIn?.sessionId === selectedId ? openSettlementIn.question : false
-            }
-            // Named in the card's own words, with how long the run has waited — never a number
-            // first. Only when the card below is drawn in this session, so a press always arrives;
-            // and not while its report is still with its reviewer, which is somebody else's to look
-            // at first — the card is there, but nothing points the owner at it (contract §5 N1).
-            ownerConfirmation={
-              ownerWaiting && ownerConfirmation.data && ownerWaiting.review?.state !== 'UNDER_REVIEW'
-                ? {
-                    title: ownerConfirmation.data.title,
-                    ageSeconds: Math.max(
-                      0,
-                      Math.floor((Date.now() - Date.parse(ownerWaiting.requestedAt)) / 1000),
-                    ),
-                  }
-                : null
-            }
-            // The exception cards the owner presses, with how long each has been theirs and which
-            // side of the reader it sits on now: unlike a question, one can be above.
-            needsYou={ownerExceptionRows.map((row) => ({
-              row,
-              need: selectedSession?.ownerItems?.find((item: any) => item.itemId === row.itemId)?.need
-                ?? null,
-              ageSeconds: (() => {
-                const at = Date.parse(row.escalatedAt ?? row.waitingSince);
-                return Number.isFinite(at)
-                  ? Math.max(0, Math.floor((Date.now() - at) / 1000))
-                  : null;
-              })(),
-              above: openItemsAbove.split(' ').includes(row.itemId),
-            }))}
-            // The strip states the fact and this takes the reader to the one place it can be
-            // answered: the card the server delivered into this conversation. A second set of
-            // buttons up here would be two faces racing for one answer.
-            onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
-            crossings={crossingCards.pointers}
-            // The coordinator's open questions, from the read `CoordinatorQuestions` draws their
-            // cards from at this conversation's foot, so the line and the cards cannot disagree.
-            questions={coordinatedProjectId ? coordinatorQuestions(openItems.data).map((row) => ({
-              itemId: row.itemId,
-              question: row.question?.question ?? row.title,
-              ageSeconds: (() => {
-                const at = Date.parse(row.waitingSince);
-                return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
-              })(),
-            })) : []}
-            ownerRequests={ownerRequestPointers.map((request) => ({
-              ...request,
-              above: openItemsAbove.split(' ').includes(`owner-request-${request.id}`),
-            }))}
-          />
-        )}
+        {/* What waits on the reader goes in the top capsule now (the line); the one fold it has
+            left, the submissions this session is the one to fix, stays a bar of its own here. */}
+        {selectedId && !selectedTrashed && !isMobile && decisionStrip('fold')}
 
 
         <div className="workspace-scroll-wrap">
@@ -11444,8 +11480,8 @@ export function WorkspaceView({
                   the transcript, so there it is only something covering a message. With nothing
                   older left on the server it still scrolls to the top: the reader scrolled up into
                   a fully loaded session wants the same way back. */}
-              {isMobile && topPillShown && (
-                <div className="chat-older-top">{topPill()}</div>
+              {isMobile && capsuleMounted && (
+                <div className="chat-older-top" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
               )}
               {/* This conversation made its workspace: its first line says what was made and where
                   (board rule 8). First means first, so not above a window that starts later. */}
