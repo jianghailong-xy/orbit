@@ -10772,8 +10772,7 @@ export function WorkspaceView({
                     >
                       {line.text}
                     </div>
-                    {/* The list column is narrow: two marks and "+N", as the board's phone rows, so none is clipped. */}
-                    <SessionMarkChips marks={sessionMarks(actionSession)} max={2} />
+                    <SessionMarkChips marks={sessionMarks(actionSession)} />
                   </div>
                 </>
               )}

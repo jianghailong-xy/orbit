@@ -5306,8 +5306,8 @@ button.toast--pill:focus-visible {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 64px;
-  padding: 0 8px;
+  min-height: 64px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--bg-hover);
   cursor: pointer;
   /* Keep the swipe-away content from spilling past the row's edges. */
@@ -6475,6 +6475,20 @@ button.toast--pill:focus-visible {
    queued pill. */
 .status-pill.queued .session-state-glyph .anticon {
   color: inherit !important;
+}
+/* A list row's marks sit after its line while that line keeps a readable width; otherwise they take the lines below,
+   wrapping among themselves, and the row grows: every mark is drawn whole. */
+.session-sub:has(> .session-marks) {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.session-sub:has(> .session-marks) > .session-preview {
+  flex-basis: 10em;
+}
+.session-sub > .session-marks {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 .session-marks {
   display: inline-flex;

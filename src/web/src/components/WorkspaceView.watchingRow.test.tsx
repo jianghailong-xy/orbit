@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -256,7 +258,8 @@ describe('the session list over a session a watch will resume', { timeout: 60_00
 });
 
 describe('the session list row with three marks', { timeout: 60_000 }, () => {
-  it('draws the first two and "+1", so the narrow row clips no chip', async () => {
+  // jsdom lays nothing out: that no chip is clipped is the stylesheet's wrapping, seen in the 1440 px screenshot.
+  it('draws all three chips, and no "+N"', async () => {
     listed = [WATCHING, PLAIN, THREE];
     await mountList();
     await act(async () => {
@@ -267,6 +270,20 @@ describe('the session list row with three marks', { timeout: 60_000 }, () => {
     });
 
     const chips = [...listRow(THREE.title).querySelectorAll('.session-marks .session-mark')];
-    expect(chips.map((chip) => chip.textContent)).toEqual(['Interrupted', 'Background', '+1']);
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Interrupted', 'Background', 'Will resume']);
+  });
+
+  it('lets the chips wrap under a readable line, in a row that grows with them', () => {
+    const css = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
+    const rule = (selector: string) => {
+      const start = css.indexOf(`\n${selector} {`);
+      expect(start, selector).toBeGreaterThan(-1);
+      return css.slice(start, css.indexOf('}', start));
+    };
+    expect(rule('.session-sub:has(> .session-marks)')).toContain('flex-wrap: wrap');
+    expect(rule('.session-sub:has(> .session-marks) > .session-preview')).toContain('flex-basis: 10em');
+    expect(rule('.session-sub > .session-marks')).toContain('flex-wrap: wrap');
+    expect(rule('.session-row')).toContain('min-height: 64px');
+    expect(rule('.session-row')).not.toMatch(/\n  height:/);
   });
 });
