@@ -23,7 +23,7 @@ const turnSql = (session: string): string => sessionTurnStateSql(session).sql;
  * shows a task as running, and every Run door that decides whether a press would start it.
  *
  * `session.status` answers a narrower question, and answers it correctly: is a turn queued or
- * executing. Runner slots (`ACTIVE_TURN_STATUSES`), spawn admission and `session_create(wait)`
+ * executing. Runner slots (the turn state IN_FLIGHT), spawn admission and `session_create(wait)`
  * (`UNSETTLED_SESSION_STATUSES`), a watch's SESSION_TURN_SETTLED and the stall reclaim
  * (`TASK_OCCUPYING`) are about turns and claims, and stay on them — see
  * common/session-scheduling.ts. Whether the TASK is being worked on is a different question, and

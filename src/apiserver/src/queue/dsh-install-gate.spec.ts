@@ -11,6 +11,7 @@ import {
   dshRuntimeUnavailable,
 } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 const runner = { id: '11111111-1111-4111-8111-111111111111', ownerId: '22222222-2222-4222-8222-222222222222' };
 // Every runtime declared, Cursor CLI's included (migration 0426): only dsh's install state is in question.
@@ -158,7 +159,7 @@ test('dsh install gate: the queue holds the runner\'s dsh rows with the notice a
     if (dshUnavailable) {
       assert.ok(asked[0].OR.some((clause) => JSON.stringify(clause) === JSON.stringify({ provider: 'dsh', providerBuiltin: true })));
       assert.deepEqual(paused, ['waiting', 'marked']);
-      assert.deepEqual(marked, [{ where: { id: 'waiting', status: 'PENDING' }, data: { error: DSH_NOT_INSTALLED_ERROR } }]);
+      assert.deepEqual(marked, [{ where: { id: 'waiting', ...turnStateFilter(['QUEUED']) }, data: { error: DSH_NOT_INSTALLED_ERROR } }]);
       assert.deepEqual(published, ['waiting']);
     } else {
       assert.ok(!asked[0].OR.some((clause) => JSON.stringify(clause).includes('"dsh"')));

@@ -9,12 +9,11 @@
  * STORED word: here (`heldSessionWord`, which legacySessionStatus in session-legacy-words.ts reads too, the Prisma
  * filter and the SQL fragment below) and in that projector's SQL twin, and nowhere else. That read goes with the column's writers (task T14).
  *
- * A leaf: it imports nothing of the projects or tasks modules, so every one of them can import it.
+ * A leaf: it imports nothing of the projects or tasks modules, nor of common/, so every one of them can import it
+ * (common/session-release.ts and the slot helpers beside it read their turn states here).
  */
 import { Prisma } from '@prisma/client';
 import { RunStatus } from '@orbit/shared';
-
-import { isHeldStatus } from '../common/session-release';
 
 /**
  * Where a held session's turn stands for the runner (plan §1.3): it waits for a claim, a dispatched turn holds a
@@ -67,7 +66,7 @@ export function heldSessionWord(facts: TurnStateFacts): RunStatus {
   // No turn state: parked, or not yet backfilled. A parked row stores AWAITING_INPUT, so both read the stored word.
   const session = facts;
   const stored = session.status ?? '';
-  return isHeldStatus(stored) ? stored as RunStatus : RunStatus.AWAITING_INPUT;
+  return Object.hasOwn(TURN_STATE_OF_HELD_WORD, stored) ? stored as RunStatus : RunStatus.AWAITING_INPUT;
 }
 
 /**
@@ -95,7 +94,9 @@ export function isParked(facts: TurnStateFacts): boolean {
 
 /**
  * Prisma filter: held, and its turn state is one of `states` (null for parked), as turnStateOf reads it. Its keys are
- * `finishedAt` and `OR`, so spread it only into a filter that names neither, or put it in an `AND` list.
+ * `finishedAt` and `OR`, so spread it only into a filter that names neither, or put it in an `AND` list. Never null in
+ * SQL (the `IN` is asked only beside `turn_state IS NOT NULL`), so a `NOT` of it is the rows it does not match: without
+ * that, a row not yet backfilled read NULL there and fell out of both a filter and its negation.
  */
 export function turnStateFilter(states: ReadonlyArray<TurnState | null>): Prisma.SessionWhereInput {
   const named = states.filter((state): state is TurnState => state !== null);
@@ -108,7 +109,7 @@ export function turnStateFilter(states: ReadonlyArray<TurnState | null>): Prisma
     : { turnState: null, status: { in: turnWords.filter((word) => words.includes(word)) } };
   return {
     finishedAt: null,
-    OR: [...(named.length > 0 ? [{ turnState: { in: named } }] : []), session],
+    OR: [...(named.length > 0 ? [{ turnState: { not: null, in: named } }] : []), session],
   };
 }
 

@@ -64,6 +64,9 @@ test('managed runner OOM recovery', { skip: !URL }, async (t) => {
       });
       const running = await session(RunStatus.RUNNING);
       const alsoRunning = await session(RunStatus.RUNNING);
+      // A row not yet backfilled (task T3): no turn_state, its stored word decides (docs/session-status-retirement-plan.md
+      // §1.4). The stop below finds it in flight as it finds the filled one.
+      await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', alsoRunning.id);
       const idle = await session(RunStatus.AWAITING_INPUT);
       const pending = await session(RunStatus.PENDING);
       const stateOf = (id: string) => db.session.findUniqueOrThrow({ where: { id } });
@@ -121,12 +124,14 @@ test('managed runner OOM recovery', { skip: !URL }, async (t) => {
       const firstReplacement = await takeOver(original.leaseOwner);
       assert.equal((await firstReplacement.fetch()).turnId, turn.id, 'the first replacement resumes the in-flight turn');
       assert.equal(await effectiveConcurrency(), 1);
+      assert.equal((await stateOf(alsoRunning.id)).turnState, null, 'still a row the backfill has not reached');
 
       w.cluster.stopPod(pod, 137, 'OOMKilled');
       assert.equal(await w.primary.reconcile(mapping.id), maxAttempts === 3 ? 'BACKOFF' : 'FAILED');
       for (const former of [running, alsoRunning]) {
         const interrupted = await stateOf(former.id);
         assert.equal(interrupted.status, RunStatus.INTERRUPTED);
+        assert.equal(interrupted.turnState, 'ABANDONED', 'the runner was stopped under the turn, beside the word');
         assert.equal(interrupted.error, 'Stopped because the machine ran out of memory twice while this turn was running. Send a message to continue.');
         assert.equal(interrupted.lastTurnOutcome, 'INTERRUPTED');
         assert.equal(interrupted.retryAt, null);
