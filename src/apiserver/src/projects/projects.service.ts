@@ -3090,7 +3090,7 @@ export class ProjectsService {
     ]);
     // Served only in the owner's current language and while made from the words the project has now; otherwise one
     // is queued (decision 1A), and this read serves none.
-    const textTranslation = usableProjectTextTranslation(
+    const textTranslation = langs && usableProjectTextTranslation(
       storedTextTranslation?.translation,
       langs,
       projectTextDigest(project.title, project.acceptanceCriterionDefinitions),
