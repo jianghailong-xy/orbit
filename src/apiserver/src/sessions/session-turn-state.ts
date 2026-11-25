@@ -32,14 +32,6 @@ const TURN_STATE_OF_HELD_WORD: Readonly<Record<string, TurnState>> = Object.from
   Object.entries(HELD_WORD_OF_TURN_STATE).map(([state, word]) => [word, state as TurnState]),
 );
 
-/**
- * The turn state a writer stores beside the word it writes (plan §2.2: deploy 2 writes both): QUEUED for PENDING,
- * IN_FLIGHT for RUNNING, ABANDONED for INTERRUPTED, and null for AWAITING_INPUT and every released word.
- */
-export function turnStateWrittenWith(word: RunStatus | string): TurnState | null {
-  return TURN_STATE_OF_HELD_WORD[word] ?? null;
-}
-
 /** The held word of a turn state, null for parked: what a writer stores beside it while both are written. */
 export function heldWordOf(turn: TurnState | null): RunStatus {
   return turn === null ? RunStatus.AWAITING_INPUT : HELD_WORD_OF_TURN_STATE[turn];

@@ -40,7 +40,7 @@ test('listRow reuses the page select and restricts live overlays to the one owne
   // The runnable read answers with the row's id; the carrier read with the one session queued on it.
   const raw = recordingQueryRaw((sql) => (sql.includes('"runReason"')
     ? [{
-      taskId: TASK_ID, sessionId: 'session-1', status: 'PENDING', runReason: 'TURN',
+      taskId: TASK_ID, sessionId: 'session-1', finishedAt: null, turnState: 'QUEUED', runReason: 'TURN',
       runningBgJobs: [], runningBgJobActivity: {}, startedAt: null,
     }]
     : [{ id: TASK_ID }]));

@@ -55,7 +55,7 @@ import {
 } from './session-legacy-words';
 import {
   heldWordOf, isParked, sessionTurnStateSql, type TurnState, type TurnStateFacts, TURN_STATE_SELECT, turnStateAfterTurnEnqueued,
-  turnStateFilter, turnStateOf, turnStateWrittenWith,
+  turnStateFilter, turnStateOf,
 } from './session-turn-state';
 import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
@@ -317,8 +317,6 @@ import { replayableEventSql } from '../common/system-noise';
 import {
   SERVICE_TOKEN_CONCURRENCY,
   SPAWN_TREE_OUTSTANDING,
-  UNSETTLED_SESSION_STATUSES,
-  statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
 import {
   HELD_SESSION_STATUSES,
