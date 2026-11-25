@@ -93,22 +93,32 @@ func (s *heldTurnStub) settledTurn(turnID string) *TurnCompleteRequest {
 	return nil
 }
 
-// recordedEmits is what a session loop emitted, by kind.
+// recordedEmits is what a session loop emitted, by kind, with the noticeKind of each notice.
 type recordedEmits struct {
-	mu    sync.Mutex
-	kinds []string
+	mu          sync.Mutex
+	kinds       []string
+	noticeKinds []string
 }
 
-func (e *recordedEmits) emit(kind string, _ map[string]interface{}) {
+func (e *recordedEmits) emit(kind string, payload map[string]interface{}) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.kinds = append(e.kinds, kind)
+	if notice, ok := payload["noticeKind"].(string); ok {
+		e.noticeKinds = append(e.noticeKinds, notice)
+	}
 }
 
 func (e *recordedEmits) saw(kind string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return slices.Contains(e.kinds, kind)
+}
+
+func (e *recordedEmits) sawNotice(noticeKind string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Contains(e.noticeKinds, noticeKind)
 }
 
 // heldFollowUpSession is a session whose turn ended while the pool drained for an update, with the control plane
@@ -218,7 +228,9 @@ func TestAnInterruptFiledBehindAFollowUpHeldForTheUpdateIsHandled(t *testing.T) 
 				}
 				return false
 			}
-			return ran, func() bool { return emits.saw(evInterrupt) }
+			// Nothing is running (the follow-up was never started), so Codex's answer to the Stop is that notice, not
+			// the Interrupted marker.
+			return ran, func() bool { return emits.sawNotice("codex-stop-nothing-running") }
 		}},
 	}
 	for _, c := range cases {
