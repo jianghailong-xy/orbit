@@ -119,7 +119,7 @@ test('empty and absent sets read as nothing running', () => {
 
 test('holdsSlot is exactly the turn state IN_FLIGHT and does not widen', () => {
   assert.deepEqual(SESSION_HOLDS_SLOT_WHERE, turnStateFilter(['IN_FLIGHT']));
-  assert.equal(sessionHoldsSlotSql('s'), `(${sessionTurnStateSql('s').sql} = 'IN_FLIGHT')`);
+  assert.equal(sessionHoldsSlotSql('s'), `(${sessionTurnStateSql('s').sql} IS NOT DISTINCT FROM 'IN_FLIGHT')`);
   assert.doesNotMatch(sessionHoldsSlotSql('s'), /phase/);
 });
 

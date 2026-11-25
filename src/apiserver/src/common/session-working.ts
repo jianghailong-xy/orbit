@@ -77,7 +77,9 @@ const nonEmpty = (values: readonly string[] | null | undefined): boolean => (val
 export const DISPATCHED_TURN: SessionFact<TurnStateFacts> = {
   holds: (row) => turnStateOf(row) === 'IN_FLIGHT',
   where: turnStateFilter(['IN_FLIGHT']),
-  sql: (s) => `${sessionTurnStateSql(s).sql} = 'IN_FLIGHT'`,
+  // IS NOT DISTINCT FROM: the turn state is NULL on a parked or released row, and the fact is false there, never NULL,
+  // so the executing and wake fragments that OR and NOT it read as they say.
+  sql: (s) => `${sessionTurnStateSql(s).sql} IS NOT DISTINCT FROM 'IN_FLIGHT'`,
 };
 
 /**
