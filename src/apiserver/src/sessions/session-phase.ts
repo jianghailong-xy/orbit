@@ -1,14 +1,16 @@
 import { Prisma } from '@prisma/client';
 import {
+  deriveSessionLifecycleState,
   type RunStatus,
   SESSION_TURN_OUTCOMES,
+  SessionLifecycleState,
   type SessionPhase,
   type SessionPhaseFields,
   type SessionTurnOutcome,
   type SessionWaitingOn,
 } from '@orbit/shared';
 
-import { isReleased, releaseFinishedTheWork } from '../common/session-release';
+import { isReleased, releaseFinishedTheWork, releaseWasFailure } from '../common/session-release';
 import {
   ARMED_RETRY,
   ENGINE_TURN,
@@ -47,6 +49,11 @@ export interface SessionPhaseRow extends Omit<SessionWorkingRow, 'status'> {
   error?: string | null;
   endReason?: string | null;
   sessionKind?: string | null;
+  /** Filing (Complete, Trash): read only for whether a scheduled wake-up still revives a failed release. Absent reads
+   *  as Open. */
+  completedAt?: Date | string | null;
+  archivedAt?: Date | string | null;
+  deletedAt?: Date | string | null;
 }
 
 /** What holds a queued turn outside the row: the dispatch pause, and the runner it is assigned to. */
@@ -105,13 +112,36 @@ export function sessionIsHeld(
 }
 
 /**
+ * Whether something will give the session a turn without anybody writing to it: what `waitingOn: WAKE` says, and
+ * what a reader that must not mistake a waiting session for a finished one asks beside PERSON (a scheduled run).
+ * A held session wakes by any of its wake facts (a watch, a wake-up, an armed retry; nothing executing is a reader's
+ * to ask beside it, through the phase). A released one comes back only by what revives a release:
+ * an armed retry, or a scheduled wake-up on a release by a failure that is still filed in Open
+ * (runner-api/scheduled-wakeup.ts `tickStanding`; any other release drops the wake-up when it comes due). A watch
+ * never revives a released session (watches/watch-delivery.service.ts), so one left behind is no wake.
+ */
+export function sessionWakes(row: SessionPhaseRow): boolean {
+  if (!isReleased(row)) return WAKE_FACTS.some((fact) => fact.holds(row));
+  if (ARMED_RETRY.holds(row)) return true;
+  return PENDING_WAKEUP.holds(row)
+    && releaseWasFailure({
+      finishedAt: row.finishedAt,
+      endReason: row.endReason ?? null,
+      lastTurnOutcome: row.lastTurnOutcome ?? null,
+      status: row.status ?? '',
+    })
+    && deriveSessionLifecycleState(row) === SessionLifecycleState.OPEN;
+}
+
+/**
  * `waitingOn`, in this order (the coordinator's ruling of 2026-11-22, task 5.1):
  *   1. PERSON — somebody owes the session an answer it asked for: `pendingApprovals` (live approval cards plus owner
  *      decisions, the count the list row and `session.updated` carry) is above zero. In any phase;
  *   2. a RUNNING session owes nothing else: null;
  *   3. HOLD — a PENDING one held (`sessionIsHeld`);
- *   4. WAKE — an IDLE one something will wake (`sessionWillWake`: a RESUME_SESSION watch, a scheduled wake-up, an armed
- *      retry). A released FAILED session with a retry armed is WAKE; a PENDING one is waiting on its claim, not a wake;
+ *   4. WAKE — an IDLE one something will wake (`sessionWakes`: a RESUME_SESSION watch, a scheduled wake-up, an armed
+ *      retry; on a released session only an armed retry, or a wake-up on a failure release still in Open). A PENDING one
+ *      is waiting on its claim, not a wake;
  *   5. null — nothing. A parked conversation that asked for nothing, and a released one with no retry armed.
  * Not wake sources here, so null when they are all an IDLE session has: an open session request it sent, and a
  * question it asked the owner as coordinator (`ask_owner`) — both answered as a turn, but neither is one of
@@ -126,8 +156,7 @@ export function deriveSessionWaitingOn(
   const phase = deriveSessionPhase(row);
   if (phase === 'RUNNING') return null;
   if (phase === 'PENDING') return sessionIsHeld(row, hold) ? 'HOLD' : null;
-  // IDLE: nothing executes, so `sessionWillWake` is its wake facts alone.
-  return WAKE_FACTS.some((fact) => fact.holds(row)) ? 'WAKE' : null;
+  return sessionWakes(row) ? 'WAKE' : null;
 }
 
 function turnOutcomeOf(value: string | null | undefined): SessionTurnOutcome | null {
@@ -168,6 +197,9 @@ interface FactsRow {
   error: string | null;
   endReason: string | null;
   sessionKind: string;
+  completedAt: Date | null;
+  archivedAt: Date | null;
+  deletedAt: Date | null;
   engineTurnActive: boolean;
   runningSubagents: string[];
   runningBgJobs: string[];
@@ -193,11 +225,28 @@ export async function readSessionPhaseFields(
   ids: readonly string[],
   pendingApprovals?: ReadonlyMap<string, number>,
 ): Promise<Map<string, SessionPhaseFields>> {
+  const readings = await readSessionPhaseReadings(db, ids, pendingApprovals);
+  return new Map([...readings].map(([id, reading]) => [id, reading.fields]));
+}
+
+/** The published fields and, from the same row, `sessionWakes`: for a server reader that asks the wake beside PERSON. */
+export interface SessionPhaseReading {
+  fields: SessionPhaseFields;
+  wakes: boolean;
+}
+
+/** `readSessionPhaseFields`, with `sessionWakes` beside each session's fields. */
+export async function readSessionPhaseReadings(
+  db: Db,
+  ids: readonly string[],
+  pendingApprovals?: ReadonlyMap<string, number>,
+): Promise<Map<string, SessionPhaseReading>> {
   if (ids.length === 0) return new Map();
   const rows = await db.$queryRaw<FactsRow[]>(Prisma.sql`
     SELECT s."id" AS "id", s."owner_id"::text AS "ownerId", s."task_id" AS "taskId",
            ${legacySessionStatusSql('s')} AS "status", ${sessionTurnStateSql('s')} AS "turnState", s."finished_at" AS "finishedAt", s."last_turn_outcome" AS "lastTurnOutcome", s."error" AS "error",
            s."end_reason" AS "endReason", s."kind"::text AS "sessionKind",
+           s."completed_at" AS "completedAt", s."archived_at" AS "archivedAt", s."deleted_at" AS "deletedAt",
            s."engine_turn_active" AS "engineTurnActive", s."running_subagents" AS "runningSubagents",
            s."running_bg_jobs" AS "runningBgJobs", s."running_bg_shells" AS "runningBgShells", s."retry_at" AS "retryAt",
            (${Prisma.raw(RESUME_WATCH.sql('s'))}) AS "hasResumeWatch",
@@ -217,11 +266,14 @@ export async function readSessionPhaseFields(
       counted.set(row.id, (live.get(row.id) ?? 0) + (decisions.get(row.id)?.count ?? 0));
     }
   }
-  return new Map(rows.map((row) => [row.id, sessionPhaseFields(
-    row,
-    { dispatchPaused: row.dispatchPaused === true, runnerUnavailable: row.runnerUnavailable === true },
-    counted.get(row.id) ?? 0,
-  )]));
+  return new Map(rows.map((row) => [row.id, {
+    fields: sessionPhaseFields(
+      row,
+      { dispatchPaused: row.dispatchPaused === true, runnerUnavailable: row.runnerUnavailable === true },
+      counted.get(row.id) ?? 0,
+    ),
+    wakes: sessionWakes(row),
+  }]));
 }
 
 /** `readSessionPhaseFields` for one session; null when it is not there. */

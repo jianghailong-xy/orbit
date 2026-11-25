@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery, type QueryClient } from '@tanstack/react-query';
 import {
   scheduleNeedsCount,
   type ScheduleCard,
@@ -9,11 +9,13 @@ import {
   type ScheduleDraftsResponse,
   type ScheduleListResponse,
   type ScheduleRunView,
+  type ScheduleUpdateAnswer,
   type SessionScheduleCardsResponse,
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from './listBudget';
 import type { SessionReach, SessionReachDeclaration } from './sessionReach';
+import { sameResourceId } from './watches';
 
 /** The sessions a sentence on the Scheduled page opened, whose agent's card the drafts list waits for. */
 const draftsAwaited = new Set<string>();
@@ -45,8 +47,9 @@ export function scheduleClock(at: string | Date, timezone: string): string {
 export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
   queryOptions({
     queryKey: ['schedules', 'list', workspaceId ?? 'any', state ?? 'open'] as const,
-    // Owner-wide: no one session's event moves it (lib/sessionReach). Its own poll is its safety read.
-    meta: { entities: ['session', 'workspace'], sessionReach: 'none' satisfies SessionReach },
+    // Owner-wide: no one session's event moves it (lib/sessionReach). `schedule_cards.changed` says a schedule was
+    // written (a rename on another device among them); its own poll is its safety read.
+    meta: { entities: ['session', 'workspace', 'scheduleCard'], sessionReach: 'none' satisfies SessionReach },
     queryFn: () => {
       const params = new URLSearchParams();
       if (workspaceId) params.set('workspaceId', workspaceId);
@@ -62,7 +65,7 @@ export const scheduleDetailQuery = (id: string) =>
     queryKey: ['schedules', 'detail', id] as const,
     // Its runs are scheduled runs of its workspace (lib/sessionReach), and its cards the asking sessions'.
     meta: {
-      entities: ['session', 'workspace'],
+      entities: ['session', 'workspace', 'scheduleCard'],
       sessionReach: ((data: unknown) => {
         const detail = data as ScheduleDetailResponse | undefined;
         if (!detail) return { sessions: [] };
@@ -170,10 +173,35 @@ export function openScheduleChange(id: string, text: string) {
 /** Undo a recorded change through the door the record names. */
 export function undoScheduleRecord(record: Pick<ScheduleChangeRecord, 'undo' | 'scheduleId' | 'revision'>) {
   const door = record.undo;
-  return api(door?.path ?? `/schedules/${encodeURIComponent(record.scheduleId)}/undo`, {
+  // The record names the route from the server's root; `api` adds the `/api` itself.
+  return api(door?.path.replace(/^\/api(?=\/)/, '') ?? `/schedules/${encodeURIComponent(record.scheduleId)}/undo`, {
     method: 'POST',
     body: door?.body ?? { revision: record.revision },
   });
+}
+
+/** Rename (§8.4): the title alone, applied at once. It answers as Undo does. */
+export function renameSchedule(id: string, title: string) {
+  return api<ScheduleUpdateAnswer>(`/schedules/${encodeURIComponent(id)}/rename`, { method: 'POST', body: { title } });
+}
+
+/** A rename's answer in the reads at once: the new name in the lists and the open schedule, its record in the history. */
+export function putRenameAnswer(qc: QueryClient, answer: ScheduleUpdateAnswer) {
+  if (answer.outcome !== 'APPLIED') return;
+  const { schedule, record } = answer;
+  qc.setQueriesData<ScheduleListResponse>({ queryKey: ['schedules', 'list'] }, (list) => list && {
+    ...list,
+    schedules: list.schedules.map((row) => (sameResourceId(row.id, schedule.id) ? { ...row, title: schedule.title } : row)),
+  });
+  qc.setQueriesData<ScheduleDetailResponse>({ queryKey: ['schedules', 'detail'] }, (detail) => (
+    detail && sameResourceId(detail.schedule.id, schedule.id)
+      ? {
+          ...detail,
+          schedule: { ...detail.schedule, title: schedule.title, revision: schedule.revision },
+          history: record ? [record, ...detail.history.filter((r) => r.revision !== record.revision)] : detail.history,
+        }
+      : detail
+  ));
 }
 
 /** Whether a record can still be undone: it has a door, and nothing undid it yet. */

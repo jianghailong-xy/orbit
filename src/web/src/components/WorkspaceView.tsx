@@ -535,6 +535,7 @@ import { SessionSettingsDrawer } from './SessionSettingsDrawer';
 import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
+import { RenameField } from './RenameField';
 import { Button } from './ui/Button';
 import { ProjectSessionsSheet } from './ProjectSessionsSheet';
 import { useConfirm } from './ui/ConfirmDialog';
@@ -1600,46 +1601,6 @@ export function SessionTitleRow({
       )}
       <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
-    </div>
-  );
-}
-
-/** Rename… on a session row: the title in a field where the row's two lines were, drawn as a
- * folder's Rename… is. The header editor's rules: Return or leaving the field hands back the trimmed
- * title — unchanged text too, as the header does — and Esc or an emptied field hands back null. */
-function SessionRowRename({ title, onDone }: { title: string; onDone: (title: string | null) => void }) {
-  const [draft, setDraft] = useState(title);
-  const cancelled = useRef(false);
-  return (
-    <div className="session-rename">
-      <input
-        className="folder-name-input"
-        autoFocus
-        maxLength={200}
-        aria-label="Session title"
-        value={draft}
-        onFocus={(e) => {
-          // All of it selected (typing replaces it), with its head in view: Chromium keeps the field
-          // scrolled to the end it focused at, whichever way the selection runs.
-          const el = e.currentTarget;
-          el.setSelectionRange(0, el.value.length, 'backward');
-          el.scrollLeft = 0;
-        }}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            e.currentTarget.blur();
-          } else if (e.key === 'Escape') {
-            e.preventDefault();
-            cancelled.current = true;
-            e.currentTarget.blur();
-          }
-        }}
-        onBlur={() => onDone(cancelled.current ? null : draft.trim() || null)}
-      />
-      <span className="session-folder-hint">{FOLDER_COPY.editHint}</span>
     </div>
   );
 }
@@ -2801,7 +2762,7 @@ export function WorkspaceView({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
   // Each session row's ⋯ by session id: where focus goes back to when a confirmation its menu opened closes.
   const rowKebabs = useRef(new Map<string, HTMLButtonElement>());
-  // The session row whose Rename… field is open (SessionRowRename), from its ⋯ or a held press.
+  // The session row whose Rename… field is open (RenameField), from its ⋯ or a held press.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   // Touch swipe actions for session rows: on mobile the row's actions sit behind a swipe,
   // laid out like the iOS list (lib/sessionSwipe) — swipe right
@@ -10771,7 +10732,9 @@ export function WorkspaceView({
             </span>
             <div className="session-main">
               {renaming ? (
-                <SessionRowRename
+                // Rename… on a session row: the title in a field where the row's two lines were.
+                <RenameField
+                  label="Session title"
                   title={s.title ?? ''}
                   onDone={(title) => {
                     setRenamingId(null);

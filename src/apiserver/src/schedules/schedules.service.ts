@@ -938,6 +938,32 @@ export class SchedulesService {
   }
 
   /**
+   * Rename (§8.4): the title alone, the one field a surface edits. A name is inside every envelope, so it applies at
+   * once, as a revision with Undo; the text it already has writes nothing. Refused when ENDED. It holds nothing: a
+   * session or a run may set the title again later.
+   */
+  async rename(actor: ScheduleActor, scheduleId: string, title: string): Promise<ScheduleUpdateResult> {
+    checkText('title', title);
+    const result = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        await this.lockAccount(tx, actor.ownerId);
+        const schedule = await this.lockSchedule(tx, actor.ownerId, scheduleId);
+        const who: ResolvedActor = actor.kind === 'PAT'
+          ? { changedBy: 'USER' as const, sessionId: null, session: null, servesScheduleId: null }
+          : await this.resolveActor(tx, actor, scheduleId);
+        assertRunSessionScope(who.servesScheduleId, scheduleId, 'UPDATE');
+        return this.applyLocked(tx, schedule, { title: title.trim() }, who, { widen: false, undoOf: null });
+      },
+      loggedRetry(this.logger, 'schedules.rename'),
+    );
+    if (result.outcome === 'APPLIED') {
+      await this.announceCards(actor.ownerId, scheduleId, [SchedulesService.sessionOf(actor)]);
+    }
+    return result;
+  }
+
+  /**
    * Undo one revision: put back what it changed, provided nothing has changed those fields since. The OWNER's Undo
    * restores the envelope too; a session's or a token's is judged by §4 like any other change.
    */
@@ -1144,8 +1170,10 @@ export class SchedulesService {
     const envelope = opts.restoreEnvelope ?? judgment.next;
     const state = patch.state ?? schedule.state;
     const endedReason = patch.state !== undefined ? (patch.endedReason ?? null) : schedule.endedReason;
-    let due: Date | null = null;
-    if (state === 'ACTIVE' && settings.rule.kind !== 'WHEN') {
+    // A new name alone leaves the times as they are: a slot that is due and not yet taken is still taken.
+    const nameOnly = Object.entries(patch).every(([key, value]) => key === 'title' || value === undefined);
+    let due: Date | null = nameOnly ? schedule.nextDueAt : null;
+    if (!nameOnly && state === 'ACTIVE' && settings.rule.kind !== 'WHEN') {
       due = nextDueAt(ruleOf(settings.rule), settings.timezone, now, { startAt: schedule.startAt, endAt: settings.endAt });
       if (!due) {
         throw refusal('BAD_REQUEST', 'SCHEDULE_NO_NEXT_SLOT', 'The rule has no slot left before the schedule\'s end.');

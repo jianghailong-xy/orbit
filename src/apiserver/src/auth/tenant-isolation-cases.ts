@@ -1044,6 +1044,8 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /schedules/:id/resume':
     "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /schedules/:id/rename':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:951)",
   'POST /schedules/:id/undo':
     "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'DELETE /schedules/:id':

@@ -164,10 +164,11 @@ describe('the server’s payload for a session held by a runner update', { timeo
   it('reads queued behind the update on the list row and the header, never Running', () => {
     expect(sessionRunStateOf(listRow)).toBe('QUEUED');
     expect(sessionLine(listRow, true)).toEqual({ text: 'Runner updating', tone: 'warning' });
-    expect(statusLabel(listRow)).toBe('Runner updating');
+    // The header's word is the phase's alone (lib/sessionDisplay); why it waits is the row's line and the page's block.
+    expect(statusLabel(listRow)).toBe('Queued');
     // The detail names no gate of its own: laid over the row, as the page lays it, it changes no word.
     expect(sessionRunStateOf(detail)).toBe('QUEUED');
-    expect(statusLabel({ ...listRow, ...detail })).toBe('Runner updating');
+    expect(statusLabel({ ...listRow, ...detail })).toBe('Queued');
   });
 
   // docs/mocks/queued-card-runner-updating, choice 1: the account goes under the turn the update holds, and the
