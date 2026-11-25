@@ -186,8 +186,10 @@ internal object SessionLineCopy {
 /** OrbitKit `SessionHeader`'s two words the line falls back on. */
 internal object SessionHeader {
     /** The run's short state word; where the session is filed is not consulted. [watching]: parked with a live watch that
-     * will resume it, it reads the watch's word. */
+     * will resume it, it reads the watch's word. Where the server sends the session facts, the word is the state's, from `phase` alone
+     * ([SessionDisplay.state]); the marks beside it are the caller's to draw. What follows is the reading for an older control plane. */
     fun statusWord(s: DirectorySession, watching: WatchSessionSummary? = null, now: Instant = Instant.now()): String {
+        SessionDisplay.state(s.displayFacts)?.let { return it.word }
         if (s.pendingApprovals > 0) return waitingWord(s)
         if (s.confirmationUnderReview != null) return OwnerReview.underReview
         return when (s.displayRunState) {

@@ -1,6 +1,7 @@
 package io.orbitd.android.tasks
 
 import io.orbitd.android.core.protocol.SessionFacts
+import io.orbitd.android.directory.SessionDisplay
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.ObjectId
@@ -926,7 +927,9 @@ object TaskDetailLogic {
         return (listOf("Policy v${route.number("policyVersion") ?: 0}", "decided $decided") +
             if (route.flag("escalated")) listOf(TaskDetailCopy.usageLimitNote) else emptyList()).joinToString(" · ")
     }
-    fun runLabel(session: JsonObject) = when (resolvedRunState(session)) {
+    /** A run's state as words: with the session facts, the state from `phase` and its marks (`Idle · Finished`, [SessionDisplay.text]);
+     * from an older server, today's word. */
+    fun runLabel(session: JsonObject) = SessionDisplay.text(SessionDisplay.facts(session)) ?: when (resolvedRunState(session)) {
         "QUEUED" -> if (SessionFacts.present(session) && SessionFacts.waitingOn(session) == "HOLD") "On hold" else "Queued"; "FINISHED" -> "Finished"; "RUNNING" -> "Running"; "AWAITING_INPUT" -> "Awaiting reply"; "SUCCEEDED" -> "Finished"
         "FAILED" -> "Failed"; "INTERRUPTED" -> "Interrupted"; "ENDED" -> "Ended"; else -> "—"
     }
