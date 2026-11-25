@@ -183,14 +183,7 @@ test('reclaim enables orchestration only when every live guard matches', async (
       assignedRunnerId: 'runner-1',
       ownerId: 'owner-1',
       sessionKind: 'CONVERSATION',
-      status: {
-        in: [
-          RunStatus.PENDING,
-          RunStatus.RUNNING,
-          RunStatus.AWAITING_INPUT,
-          RunStatus.INTERRUPTED,
-        ],
-      },
+      finishedAt: null,
     },
   ]);
 

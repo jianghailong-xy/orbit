@@ -85,7 +85,7 @@ export function withoutWordFacts<T>(row: T): Omit<T, Exclude<keyof LegacyStatusF
   return rest as unknown as Omit<T, Exclude<keyof LegacyStatusFacts, 'endReason' | 'status'>>;
 }
 
-const HELD_WORD_OF_TURN_STATE: Record<string, RunStatus> = {
+const HELD_WORD_OF_TURN_STATE: Record<HeldTurnState, RunStatus> = {
   QUEUED: RunStatus.PENDING,
   IN_FLIGHT: RunStatus.RUNNING,
   ABANDONED: RunStatus.INTERRUPTED,
@@ -96,7 +96,7 @@ export type HeldTurnFacts = Pick<LegacyStatusFacts, 'status' | 'finishedAt' | 't
 
 /** The word of a held row: its turn state's, or with none its stored word (parked, or not yet backfilled). */
 function heldWord(facts: HeldTurnFacts): RunStatus {
-  if (facts.turnState != null) return HELD_WORD_OF_TURN_STATE[facts.turnState] ?? RunStatus.AWAITING_INPUT;
+  if (facts.turnState != null) return HELD_WORD_OF_TURN_STATE[facts.turnState as HeldTurnState] ?? RunStatus.AWAITING_INPUT;
   // No turn state: parked, or not yet backfilled. A parked row stores AWAITING_INPUT, so both read the stored word.
   const session = facts;
   return isHeldStatus(session.status) ? session.status as RunStatus : RunStatus.AWAITING_INPUT;
@@ -170,14 +170,10 @@ export function statusWordFilter(word: string): Prisma.SessionWhereInput | undef
 export type HeldTurnState = 'QUEUED' | 'IN_FLIGHT' | 'ABANDONED';
 
 /** The held word each turn state reads. */
-const HELD_WORD_OF: Record<HeldTurnState, RunStatus> = {
-  QUEUED: RunStatus.PENDING,
-  IN_FLIGHT: RunStatus.RUNNING,
-  ABANDONED: RunStatus.INTERRUPTED,
-};
+const HELD_WORD_OF = HELD_WORD_OF_TURN_STATE;
 
 /** The held words that name a turn state; a held row stored with any other (AWAITING_INPUT) has none. */
-const WORDS_WITH_A_TURN: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.INTERRUPTED];
+const WORDS_WITH_A_TURN: RunStatus[] = Object.values(HELD_WORD_OF_TURN_STATE);
 
 /**
  * A session's turn state: null when it is released or parked. A held row with no `turn_state` (not yet backfilled,
@@ -188,11 +184,10 @@ export function sessionTurnState(facts: HeldTurnFacts): HeldTurnState | null {
   return TURN_STATE_OF_HELD_WORD[heldWord(facts)] ?? null;
 }
 
-const TURN_STATE_OF_HELD_WORD: Partial<Record<RunStatus, HeldTurnState>> = {
-  [RunStatus.PENDING]: 'QUEUED',
-  [RunStatus.RUNNING]: 'IN_FLIGHT',
-  [RunStatus.INTERRUPTED]: 'ABANDONED',
-};
+/** HELD_WORD_OF_TURN_STATE read the other way. */
+const TURN_STATE_OF_HELD_WORD: Partial<Record<string, HeldTurnState>> = Object.fromEntries(
+  (Object.entries(HELD_WORD_OF_TURN_STATE) as Array<[HeldTurnState, RunStatus]>).map(([state, word]) => [word, state]),
+);
 
 /**
  * The turn state a writer stores beside the word it writes (deploy 2 writes both, plan §2.2): the word's own, one for
@@ -200,7 +195,7 @@ const TURN_STATE_OF_HELD_WORD: Partial<Record<RunStatus, HeldTurnState>> = {
  * (migration 1611), whose trigger derives it from the word in the same row and the CHECK of 1622 holds it to.
  */
 export function turnStateOfWord(word: RunStatus | string): HeldTurnState | null {
-  return TURN_STATE_OF_HELD_WORD[word as RunStatus] ?? null;
+  return TURN_STATE_OF_HELD_WORD[word] ?? null;
 }
 
 /**

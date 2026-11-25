@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { turnStateWhere } from '../sessions/session-legacy-words';
 import { RunnerApiController } from './runner-api.controller';
 import { importForkSessionId } from '../sessions/import-fork';
 
@@ -91,11 +92,12 @@ test('ok clears the pending marker with a CAS, and parks the session it was hold
   assert.deepEqual(h.updateManyCalls[0].where, {
     id: SESSION_ID,
     importSourceCwd: { not: null },
-    // The claim set the row RUNNING; a row another writer already finalized is not this
+    // The claim set the row RUNNING (IN_FLIGHT); a row another writer already finalized is not this
     // receipt's to move, and must not be resurrected as claimable.
-    status: RunStatus.RUNNING,
+    ...turnStateWhere('IN_FLIGHT'),
   });
   assert.equal(h.updateManyCalls[0].data.importSourceCwd, null);
+  assert.equal(h.updateManyCalls[0].data.turnState, null, 'parked: no turn state beside the word');
   assert.equal(
     h.updateManyCalls[0].data.status,
     RunStatus.AWAITING_INPUT,
