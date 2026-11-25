@@ -317,4 +317,30 @@ final class SessionDisplayTests: XCTestCase {
             .filter { $0 != "DISCONNECTED" }
         XCTAssertEqual(declared, SessionMark.allCases.map { keys[$0]! })
     }
+
+    /// The web's two functions (src/web/src/lib/sessionDisplay.ts) say the same words, give each mark the same tone,
+    /// declare the marks in the same order and join them the same way, so a shared Markdown line reads alike.
+    func testTheWebsDisplayFunctionsSayTheSameWords() throws {
+        let web = try String(contentsOf: Self.root.appendingPathComponent("src/web/src/lib/sessionDisplay.ts"), encoding: .utf8)
+        for (key, state) in [("PENDING", SessionDisplayState.queued), ("RUNNING", .running), ("IDLE", .idle)] {
+            XCTAssertTrue(web.contains("\(key): { word: '\(state.word)'"), "web says \(state.word) for \(key)")
+        }
+        let keys: [SessionMark: String] = [.needsYou: "NEEDS_YOU", .failed: "FAILED", .retrying: "RETRYING",
+                                           .onHold: "ON_HOLD", .interrupted: "INTERRUPTED", .background: "BACKGROUND",
+                                           .willResume: "WILL_RESUME", .finished: "FINISHED", .ended: "ENDED"]
+        let tones: [SessionStatusGlyph.Tone: String] = [.warning: "amber", .error: "red", .success: "green", .neutral: "grey"]
+        for mark in SessionMark.allCases {
+            XCTAssertTrue(web.contains("\(keys[mark]!): { word: '\(mark.word)', tone: '\(tones[mark.tone]!)' }"),
+                          "web SESSION_MARKS.\(keys[mark]!)")
+        }
+        let block = web.components(separatedBy: "export const SESSION_MARKS")[1].components(separatedBy: "};")[0]
+        let declared = block.components(separatedBy: "\n").compactMap { line -> String? in
+            let t = line.trimmingCharacters(in: .whitespaces)
+            guard let colon = t.firstIndex(of: ":"), t[colon...].hasPrefix(": { word:") else { return nil }
+            return String(t[..<colon])
+        }
+        XCTAssertEqual(declared, SessionMark.allCases.map { keys[$0]! })
+        XCTAssertTrue(web.contains("return [state.word, ...marks.map((m) => SESSION_MARKS[m].word)].join(' · ');"))
+        XCTAssertEqual(SessionDisplay.written(.idle, [.finished]), "Idle · Finished")
+    }
 }
