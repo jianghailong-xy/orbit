@@ -2144,6 +2144,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 		return err
 	}
+	if err := requireRunnerTaskAutoRunDeclaration(body); err != nil {
+		return err
+	}
 	if err := requireHandoffNamesItsDestination(body); err != nil {
 		return err
 	}
@@ -2563,6 +2566,9 @@ func parseTaskBatchItems(raw string) ([]map[string]interface{}, error) {
 			}
 		}
 		if err := requireRunnerTaskCompletionDeclaration(item); err != nil {
+			return nil, fmt.Errorf("tasks[%d]: %w", i, err)
+		}
+		if err := requireRunnerTaskAutoRunDeclaration(item); err != nil {
 			return nil, fmt.Errorf("tasks[%d]: %w", i, err)
 		}
 		if err := requireHandoffNamesItsDestination(item); err != nil {

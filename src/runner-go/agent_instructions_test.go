@@ -24,11 +24,10 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		// Graded discovery: a command is found a topic or an id at a time, never by reading the whole
 		// catalogue, which no engine shows a model whole (operation_discovery.go).
 		"'/opt/orbit runner/bin/orbit' guide [topic] --json",
-		"'/opt/orbit runner/bin/orbit' capabilities --id <id> --json",
+		"Run it as `'/opt/orbit runner/bin/orbit'`",
 		"mcp__orbit__*",
-		"Pass `--receipt` to read the receipt its MCP tool answers with",
-		"`--json` prints the entity alone",
-		" mcp` directly",
+		"`--receipt` prints a write's receipt",
+		"Never run `'/opt/orbit runner/bin/orbit' mcp`",
 		"durable record",
 		"No returned id, no claim.",
 		"Most newly discovered work is one task",
@@ -40,12 +39,12 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		// about to be created is what keeps that card from arriving unannounced.
 		"writes nothing until they confirm it",
 		"first say in a sentence or two what you will create",
-		"do not create it another way",
+		"A refusal or a declined card is final on every surface",
 		"Its confirmation card is the user's answer",
 		"from this same session",
 		// A reply names Orbit things by a link the clients draw as the title, not by a bare id.
 		"`[Fix login redirect](orbit-task:<id>)`",
-		"orbit-session:<id>",
+		"by its receipt's link, never a bare id",
 	} {
 		if !strings.Contains(got, phrase) {
 			t.Errorf("merged instructions do not contain %q", phrase)
@@ -61,7 +60,7 @@ func TestShellQuote(t *testing.T) {
 
 func TestAppendClaudeAgentInstructionArgsAddsOnlyAbsolutePhase1Rules(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
-	got := appendClaudeAgentInstructionArgs([]string{"-p"}, AgentExecConfig{
+	got := claudeInstructionArgs([]string{"-p"}, AgentExecConfig{
 		SystemPrompt:       "Base agent instructions.",
 		AppendSystemPrompt: "Owner append instructions.",
 		AllowedTools:       []string{"Read", "mcp__orbit__*"},
@@ -100,13 +99,13 @@ func TestAppendClaudeAgentInstructionArgsFailsClosedWithoutSafeExecutable(t *tes
 		AllowedTools:       []string{"Read"},
 	}
 	want := []string{"-p", "--append-system-prompt", "Owner instructions.", "--allowedTools", "Read"}
-	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, agent, "", false, false, true, false, true); !reflect.DeepEqual(got, want) {
+	if got := claudeInstructionArgs([]string{"-p"}, agent, "", false, false, true, false, true); !reflect.DeepEqual(got, want) {
 		t.Fatalf("missing executable args = %#v, want %#v", got, want)
 	}
 	if got := withOrbitCLIInstructions("Owner instructions.", "", false, true, true, true); got != "Owner instructions." {
 		t.Fatalf("missing executable instructions = %q", got)
 	}
-	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, AgentExecConfig{}, "", false, false, true, false, true); !reflect.DeepEqual(got, []string{"-p"}) {
+	if got := claudeInstructionArgs([]string{"-p"}, AgentExecConfig{}, "", false, false, true, false, true); !reflect.DeepEqual(got, []string{"-p"}) {
 		t.Fatalf("empty fail-closed args = %#v", got)
 	}
 }
@@ -174,7 +173,7 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	if open == inside {
 		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
-	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-session:<id>", "capabilities --id <id> --json", "guide [topic] --json", "mcp__orbit__*"} {
+	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-task:<id>", "--receipt", "guide [topic] --json", "mcp__orbit__*"} {
 		if !strings.Contains(open, shared) || !strings.Contains(inside, shared) {
 			t.Errorf("both forms must keep %q", shared)
 		}
@@ -190,20 +189,17 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 			t.Errorf("a session inside recorded work is still offered %q", want)
 		}
 	}
-	for _, want := range []string{
-		"file it as a task",
-		"lands under the same project this one belongs to",
-		// The proposal is not withheld from a task session any more; what the form carries is the
-		// default it trades away and the thing agreeing costs — this conversation becomes the new
-		// project's coordinator.
-		"you may put it in front of them",
-		"this conversation becomes that project's coordinator",
-	} {
-		if !strings.Contains(inside, want) {
-			t.Errorf("task form does not contain %q", want)
+	// Since design step 5d what the task form said at length is project_create's description.
+	var create string
+	for _, tool := range catalogToolDescriptors(false, false) {
+		if tool["name"] == "project_create" {
+			create, _ = tool["description"].(string)
 		}
-		if strings.Contains(open, want) {
-			t.Errorf("free conversation is told %q", want)
+	}
+	for _, want := range []string{"The card is the only yes", "never create a project another way", "from this same session",
+		"Inside a task's run, work you discover is a task of that task's project", "bound to THIS session as its coordinator"} {
+		if !strings.Contains(create, want) {
+			t.Errorf("project_create's description does not say %q", want)
 		}
 	}
 	// The one clause neither form may drop: nothing is created without the user's yes, in either shape.
@@ -225,11 +221,8 @@ func TestOrbitInstructionsSayWhichLinkedFilesReachTheUser(t *testing.T) {
 		for _, phrase := range []string{
 			"`[name](path)`",
 			"`![name](path)`",
-			"inside your working directory or this session's uploads directory",
-			"/tmp included",
-			"copy the file there first and link the copy",
-			"can end up in a commit",
-			"the uploads directory or a git-ignored path",
+			"copy it into your working directory or this session's uploads directory first",
+			"link the copy, never /tmp",
 		} {
 			if !strings.Contains(got, phrase) {
 				t.Errorf("instructions (inside=%v, watches=%v) do not say %q", form.inside, form.watches, phrase)
@@ -262,9 +255,13 @@ func TestOrbitInstructionsKeepEvidenceOutOfTheRepository(t *testing.T) {
 			}
 		}
 		reply, evidence := strings.Index(got, orbitReplyFileInstructions), strings.Index(got, orbitEvidenceFileInstructions)
-		if reply < 0 || evidence != reply+len(orbitReplyFileInstructions) {
+		if reply < 0 || evidence != reply+len(orbitReplyFileInstructions+"\n\n") {
 			t.Errorf("the evidence paragraph must follow the reply paragraph it leans on: reply at %d, evidence at %d", reply, evidence)
 		}
+	}
+	// A SubAgent hands nothing to the person, so it is not told where evidence goes.
+	if strings.Contains(orbitCLIInstructions(exe, true, true, false, true), orbitEvidenceFileInstructions) {
+		t.Error("a SubAgent is given the evidence paragraph")
 	}
 	if strings.Contains(orbitEvidenceFileInstructions, "artifact") {
 		t.Error("file_* is the name: artifact already means three other things here")
@@ -433,7 +430,7 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 		t.Error("a session dispatched for a task does not read as inside recorded work")
 	}
 	appendPromptFor := func(job *ClaimedSession) string {
-		args := appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), true, false, true)
+		args := claudeInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), true, false, true)
 		for i, arg := range args {
 			if arg == "--append-system-prompt" && i+1 < len(args) {
 				return args[i+1]
@@ -445,8 +442,8 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 	if got := appendPromptFor(&ClaimedSession{}); !strings.Contains(got, "you may propose recording it") {
 		t.Errorf("free conversation did not get the open form: %q", got)
 	}
-	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); !strings.Contains(got, "file it as a task") {
-		t.Errorf("task session did not get the task form: %q", got)
+	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); strings.Contains(got, "you may propose recording it") {
+		t.Errorf("task session was given the open form: %q", got)
 	}
 }
 
@@ -459,20 +456,20 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 	child := subagentChildJob(parent, AgentExecConfig{}, subagentDefinition{}, "run-1", providerClaude, "")
 	builders := map[string]func(job *ClaimedSession) string{
 		"claude": func(job *ClaimedSession) string {
-			return strings.Join(appendClaudeAgentInstructionArgs(nil, job.instructionAgent(), exe, false, job.insideRecordedWork(), job.watchesOn(), false, true), "\n")
+			return strings.Join(claudeInstructionArgs(nil, job.instructionAgent(), exe, false, job.insideRecordedWork(), job.watchesOn(), false, true), "\n")
 		},
 		"codex context": func(job *ClaimedSession) string {
-			return codexAgentContext(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
+			return codexAgentContextOf(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
 		},
 		"codex additionalContext": func(job *ClaimedSession) string {
 			var values []string
-			for _, v := range codexAgentAdditionalContext(job.instructionAgent(), exe, 1, job.insideRecordedWork(), job.watchesOn(), true) {
+			for _, v := range codexAgentAdditionalContextOf(job.instructionAgent(), exe, 1, job.insideRecordedWork(), job.watchesOn(), true) {
 				values = append(values, asString(mapValue(v)["value"]))
 			}
 			return strings.Join(values, "\n\n")
 		},
 		"kimi": func(job *ClaimedSession) string {
-			return kimiAgentInstructions(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
+			return kimiAgentInstructionsOf(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
 		},
 		"cursor":      cursorAgentInstructions,
 		"dsh":         func(job *ClaimedSession) string { return dshSessionAgentOverlay(job).AppendSystemPrompt },
@@ -489,7 +486,8 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 			return string(raw)
 		},
 	}
-	whenToDelegate := strings.TrimSuffix(strings.TrimSuffix(orbitDelegateInstructions, "\n\n"), orbitDelegateClaudeCodeLoad)
+	whenToDelegate := strings.TrimSuffix(orbitHandoffInstructions, "{{toolsearch:delegate}}")
+	whenToDelegate = strings.TrimPrefix(whenToDelegate, "Hand work to another agent through Orbit{{own_subagents}}. ")
 	for name, build := range builders {
 		top := build(parent)
 		if !strings.Contains(top, whenToDelegate) {
@@ -498,15 +496,18 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 		if loads := strings.Contains(top, orbitDelegateClaudeCodeLoad); loads == (name == "cursor") {
 			t.Errorf("%s: says how to load delegate in Claude Code = %v", name, loads)
 		}
-		if sub := build(child); strings.Contains(sub, "Use delegate") || strings.Contains(sub, "select:mcp__orbit__delegate") ||
+		if sub := build(child); strings.Contains(sub, "use delegate") || strings.Contains(sub, "select:mcp__orbit__delegate") ||
 			!strings.Contains(sub, "Orbit primer") {
 			t.Errorf("%s: a SubAgent is told to use delegate, or is not given Orbit's instructions:\n%s", name, sub)
 		}
 	}
-	for _, want := range []string{"cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
-		"in the background", "built-in subagent or Agent tool", "records the cost", "ToolSearch select:mcp__orbit__delegate"} {
-		if !strings.Contains(orbitDelegateInstructions, want) {
-			t.Errorf("the delegate paragraph lacks %q", want)
+	// One paragraph, in one order: look, start what is recorded, delegate a piece whose result comes back, create new work.
+	for _, want := range []string{"Hand work to another agent through Orbit", "Look with task_list first",
+		"task_start work already recorded", "never file it twice", "use delegate for a piece whose result you need back",
+		"in the background", "cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
+		"task_create with startNow", "ToolSearch select:mcp__orbit__delegate"} {
+		if !strings.Contains(renderInstructionUnit(orbitHandoffInstructions, SessionShape{}, claudeCodeProfile), want) {
+			t.Errorf("the handoff paragraph lacks %q", want)
 		}
 	}
 }
@@ -531,7 +532,6 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 			fakeDriveMount(t, mounted)
 			if mounted {
 				// Whichever root the Pod has (/run/orbit-drive, or /run/orbit-documents or /run/orbit-files of an older driver) is the one named.
-				brief = append(brief, driveParentPath+"/errors.log")
 				full = append(full, "mounted at "+driveMountPath+")", driveParentPath+"/errors.log")
 			}
 			long := "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
@@ -545,9 +545,10 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 					t.Errorf("%d paragraph bytes exceed budget %d", len(p), codexContextValueMaxBytes)
 				}
 			}
-			for _, phrase := range brief {
-				if !strings.Contains(instructions, phrase) {
-					t.Errorf("instructions omit %q", phrase)
+			// No eval case guards a drive paragraph (step 7a): the guide's files topic carries the rule, the instructions none.
+			for _, phrase := range brief[:1] {
+				if strings.Contains(instructions, phrase) {
+					t.Errorf("instructions carry %q", phrase)
 				}
 			}
 			doc, err := guideAnswer(guideFacts{context: guideContext{Surface: "mcp"}}, "files")
@@ -560,31 +561,20 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 					t.Errorf("the files guide omits %q", phrase)
 				}
 			}
-			if got := strings.Contains(instructions, "~/Drive is the owner's"); got != mounted {
+			if got := strings.Contains(instructions, "~/Drive is the owner's"); got {
 				t.Errorf("shell mount instructions present = %t, mounted = %t", got, mounted)
 			}
 		})
 	}
 }
 
-// The workflow paragraph is given exactly when the session is offered the workflow tool: a top-level session whose
-// Agent has Workflows (and SubAgents) on. It never names a tool the session lacks.
-func TestOrbitWorkflowInstructionsFollowTheTool(t *testing.T) {
+// The workflow tool's guidance lives in its description since step 7a (no eval case guarded a paragraph about it):
+// the instructions never name the tool, and its description says when to use it.
+func TestOrbitWorkflowGuidanceIsInTheToolDescription(t *testing.T) {
 	const exe = "/usr/local/bin/orbit"
-	on := orbitCLIInstructions(exe, false, true, true, true)
-	for _, want := range []string{
-		"mcp__orbit__workflow", "ToolSearch select:mcp__orbit__workflow", "wakes this session once with its return value",
-		"delegate stays the tool for one independent piece", "in parallel or in phases", "needs no user opt-in",
-		"unlike Claude Code's built-in Workflow tool",
-	} {
-		if !strings.Contains(on, want) {
-			t.Errorf("Workflows on: the instructions lack %q", want)
-		}
-	}
 	for name, got := range map[string]string{
-		"Workflows off":      orbitCLIInstructions(exe, false, true, true, false),
-		"SubAgent session":   orbitCLIInstructions(exe, false, true, false, true),
-		"Workflows and more": orbitCLIInstructions(exe, true, false, false, false),
+		"Workflows on":  orbitCLIInstructions(exe, false, true, true, true),
+		"Workflows off": orbitCLIInstructions(exe, false, true, true, false),
 	} {
 		if strings.Contains(got, "workflow") || strings.Contains(got, "Workflow") {
 			t.Errorf("%s: the instructions name the workflow tool:\n%s", name, got)
@@ -593,14 +583,16 @@ func TestOrbitWorkflowInstructionsFollowTheTool(t *testing.T) {
 	if (&ClaimedSession{WorkflowsDisabled: true}).workflowsOn() || !(&ClaimedSession{}).workflowsOn() {
 		t.Error("workflowsOn does not follow WorkflowsDisabled")
 	}
-	for i := 0; i < len(orbitWorkflowInstructions); i++ {
-		if orbitWorkflowInstructions[i] > 127 {
-			t.Fatalf("the workflow paragraph must stay ASCII; byte %d is %q", i, orbitWorkflowInstructions[i])
+	obj := func(props map[string]interface{}, _ ...string) map[string]interface{} { return props }
+	description, _ := workflowToolDescriptor(obj)["description"].(string)
+	for _, want := range []string{"fan out several SubAgents", "in parallel or in phases", "delegate stays the tool for one independent piece",
+		"needs no user opt-in", "built-in Workflow tool"} {
+		if !strings.Contains(description, want) {
+			t.Errorf("the workflow description lacks %q", want)
 		}
 	}
 	cursor := cursorAgentInstructions(&ClaimedSession{})
 	if strings.Contains(cursor, "ToolSearch") {
 		t.Errorf("cursor is told how to load a tool in Claude Code:\n%s", cursor)
 	}
-	t.Logf("workflow paragraph: %d characters", len(strings.TrimSuffix(orbitWorkflowInstructions, "\n\n")))
 }

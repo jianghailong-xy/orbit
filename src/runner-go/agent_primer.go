@@ -6,12 +6,14 @@ package main
 // It has two kinds of carrier, and both carry these exact words. The MCP server sends it as its
 // `initialize` instructions (mcpServer.handle), which is the one carrier every engine shares. And
 // the runner puts it first in the instructions it writes into each engine's own context
-// (orbitCLIInstructions): Claude Code's --append-system-prompt, Codex's application context (or,
+// (compose, instruction_units.go): Claude Code's --append-system-prompt, Codex's application context (or,
 // on an older Codex, its developer message or turn input), Kimi's every prompt and Cursor's first,
 // Antigravity's global rules, DeepSeek Harness's appended prompt and OpenCode's instructions. The
 // second carrier is the fallback for an engine that does not show a server's instructions, or a
 // session whose MCP server did not start, so it is sent whether or not the first one arrived: the
-// runner cannot see which of them reached the model. On 2026-11-14 Codex 0.167.2 showed only the
+// runner cannot see which of them reached the model. The exception is an engine whose own carrier is
+// measured to reach the model (EngineProfile.SystemCarrier, so far Claude Code): there `orbit mcp`
+// answers initialize with the first paragraph only, and the primer is given once. On 2026-11-14 Codex 0.167.2 showed only the
 // first 250 characters of a server's instructions, as that server's line in its list of deferred
 // tools (`codex debug prompt-input`), while Claude Code 2.1.325 puts the whole of them under "MCP
 // Server Instructions" and, after a manual /compact, still quoted their first line. That is why the
@@ -21,7 +23,7 @@ package main
 // it nor can take it away. It names tools by their MCP names, which every engine shows under its
 // own prefix, and so it holds the same in an MCP client and in every engine's instructions; the
 // engine-specific spelling, the CLI's absolute path and everything that depends on the session's
-// shape live in orbitCLIInstructions, after it. ASCII, like the rest of those instructions.
+// shape live in the units compose puts after it. ASCII, like the rest of those instructions.
 //
 // Budgets (TestAgentPrimerBudgets): the first paragraph is at most agentPrimerLeadMaxChars, the
 // whole primer at most agentPrimerMaxBytes, Orbit's own instructions to an engine (the primer and
@@ -31,11 +33,11 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.4.7"
+const agentPrimerVersion = "1.8.1"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
-const agentContractVersion = "1.14.0"
+const agentContractVersion = "1.15.0"
 
 // agentPrimerLeadMaxChars is the most the first paragraph may take. It is read on its own: by a
 // client that shows only the beginning of a server's instructions, and by a model skimming them.
@@ -47,7 +49,7 @@ const agentPrimerLeadMaxChars = 512
 const agentPrimerMaxBytes = 3456
 
 // orbitInstructionsMaxBytes is the most the instructions the runner writes into an engine may take,
-// the primer included (orbitCLIInstructions, in its longest shape: a task's session with Watch on). Raised from
+// the primer included (compose, in its longest shape: a task's session with Watch on). Raised from
 // 6,400 on 2026-11-15, with the owner's agreement, for the delegate paragraph (orbitDelegateInstructions, 440
 // bytes): the longest shape was already 6,309 bytes without it. On the project line Agent Contract 1.9.0 had
 // raised it to 6,656 for the paragraph on an engine's own sub-agents (orbitSubAgentInstructions), which the
@@ -66,8 +68,7 @@ const (
 		"Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or " +
 		"followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own " +
 		"acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get " +
-		"around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a " +
-		"task. No returned id, no claim."
+		"around a card or a refusal. No returned id, no claim."
 
 	agentPrimerObjects = "Pick the object by the question it answers. Project: the whole goal and what settles it. " +
 		"Task: one durable piece of work. Task list: how a class of work is dispatched, " +
@@ -79,29 +80,20 @@ const (
 		"records and starts it on one card, and runAt schedules one start. If the person said nothing should run " +
 		"until they say so, pass autoRunWhenReady: false and do not call task_start."
 
-	agentPrimerCards = "A create, a batch, a project, a provider or agent change puts a confirmation card " +
-		"in front of the user (not for a session's first few tasks) and writes nothing until they confirm it, so first " +
-		"say in a sentence or two what you will create and why. A declined card (APPROVAL_DECLINED) is a refusal: do " +
-		"not create it another way. A chat is not a no: answer the owner's words, then call the tool again, changed as agreed. A card still " +
-		"waiting is not a no either, and an owner-only decision is never yours to answer."
+	agentPrimerCards = "A create, a batch, a project, a provider or agent change can put a confirmation card in front of " +
+		"the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create " +
+		"and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, " +
+		"and its receipt says what to do next."
 
-	agentPrimerCLI = "The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with " +
-		"no MCP tool and commands that outlive this turn, run by the absolute path Orbit gives you. It reaches " +
-		"the same server under the same approvals: a refusal, a declined card or a missing switch there is the same " +
-		"answer."
+	agentPrimerReceipts = "Only a structured receipt counts: a write happened when it says ok: true and outcome: written; " +
+		"read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry " +
+		"(resend, reread_first, fix_input, do_not_retry, wait) and its notes. Name an Orbit object to the user by its receipt's link, never a bare " +
+		"id: `[Fix login redirect](orbit-task:<id>)`."
 
-	agentPrimerReceipts = "Only a structured receipt counts: a write happened when its receipt says ok: true and " +
-		"outcome: written, with the entity's id and status; read and dry_run wrote nothing. Any other outcome is ok: " +
-		"false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait). Key " +
-		"task_create and task_create_batch with an idempotencyKey derived from the work, so a retry cannot file twice. " +
-		"Name an Orbit object to the user by a link, never a bare id: `[Fix login redirect](orbit-task:<id>)`, " +
-		"likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`, and a wiki entry as " +
-		"`[title](orbit-wiki:<id>)`."
-
+	// Its hand-off half (task_start what task_list shows recorded, else record it) is the handoff unit's since 1.6.0.
 	agentPrimerOrchestration = "Session, agent and runner tools exist only while the account's Session " +
-		"orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if " +
-		"task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session " +
-		"orchestration, and never claim a delegation."
+		"orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: " +
+		"tell the user the switch is in Settings -> Session orchestration."
 
 	agentPrimerSettings = "When a person's problem is one of their own Settings, call settings_get, then settings_propose " +
 		"the change; for a key it refuses, link the row it returns instead of describing where it is."
@@ -115,7 +107,6 @@ const agentPrimer = agentPrimerLead + "\n\n" +
 	agentPrimerObjects + "\n\n" +
 	agentPrimerStart + "\n\n" +
 	agentPrimerCards + "\n\n" +
-	agentPrimerCLI + "\n\n" +
 	agentPrimerReceipts + "\n\n" +
 	agentPrimerOrchestration + "\n\n" +
 	agentPrimerSettings + "\n\n" +

@@ -443,6 +443,11 @@ func mcpRequestIDSent(args map[string]interface{}) bool {
 
 // listedToolDescriptors is what tools/list answers.
 func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
+	return s.toolDescriptorsFor(os.Getenv(envSubagentRunID) != "")
+}
+
+// toolDescriptorsFor is what tools/list answers for a server of this session's switches, a SubAgent's or not.
+func (s *mcpServer) toolDescriptorsFor(subagent bool) []map[string]interface{} {
 	tools := toolDescriptors(s.allowPermissionPrompt, s.orchestrationEnabled())
 	if s.readsOwnTaskLanding() {
 		tools = withOwnLandingSessionGet(tools)
@@ -468,7 +473,7 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	}
 	// A SubAgent cannot hand work on again (subagent.go), and a session whose Agent has Workflows off is not offered a
 	// workflow (subagent_workflow.go); delegate does not depend on that switch.
-	if os.Getenv(envSubagentRunID) == "" {
+	if !subagent {
 		cwd, _ := os.Getwd()
 		tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)))
 		if !s.workflowsOff {

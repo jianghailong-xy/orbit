@@ -163,8 +163,6 @@ func TestALinkStreamPasteIsInsertedAndAnswered(t *testing.T) {
 	if !slices.Contains(r.conn.hello.GetCapabilities(), linkStreamPasteCapability) {
 		t.Fatal("a managed runner did not declare paste")
 	}
-	// No real browser: the stream bridges the stand-in socket.
-	r.m.work.streams.viewer = func() (func(), error) { return func() {}, nil }
 	var mu sync.Mutex
 	var got []string
 	r.m.work.streams.paste = func(_ context.Context, text string) error {

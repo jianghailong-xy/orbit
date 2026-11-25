@@ -307,8 +307,9 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 		}
 		cliParts = append(cliParts, value)
 	}
-	if len(cliParts) < 2 || strings.Join(cliParts, "\n\n") != orbitCLIInstructions(exe, false, true, true, true) {
-		t.Fatalf("orbit CLI context in %d values = %q, want %q", len(cliParts), strings.Join(cliParts, "\n\n"), orbitCLIInstructions(exe, false, true, true, true))
+	wantCLI := compose(testShape(exe, false, true, true, true), codexProfile).System
+	if len(cliParts) < 2 || strings.Join(cliParts, "\n\n") != wantCLI {
+		t.Fatalf("orbit CLI context in %d values = %q, want %q", len(cliParts), strings.Join(cliParts, "\n\n"), wantCLI)
 	}
 	if !strings.HasPrefix(cliParts[0], agentPrimerLead) {
 		t.Fatalf("the first orbit CLI value does not open with the agent primer: %q", cliParts[0])
@@ -371,7 +372,7 @@ func TestCodexCompactionRefreshesInstructionContextOnNextTurn(t *testing.T) {
 	if generation != 1 {
 		t.Fatalf("post-compaction generation = %d, want 1", generation)
 	}
-	refreshed := codexAgentAdditionalContext(AgentExecConfig{}, "", generation, false, true, true)
+	refreshed := codexAgentAdditionalContextOf(AgentExecConfig{}, "", generation, false, true, true)
 	imageDelivery, ok := refreshed["orbit_00000001_image_delivery"].(map[string]interface{})
 	if !ok || imageDelivery["value"] != codexImageDeliveryInstructions {
 		t.Fatalf("image delivery instructions not restored after compaction: %#v", refreshed)
@@ -558,7 +559,7 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 	if !strings.Contains(input[0]["text"].(string), codexImageDeliveryInstructions) {
 		t.Fatalf("legacy input is missing image delivery instructions: %#v", input)
 	}
-	items := codexInjectedAgentItems(job.Agent, "/usr/local/bin/orbit", false, true, true)
+	items := codexInjectedAgentItemsOf(job.Agent, "/usr/local/bin/orbit", false, true, true)
 	if len(items) != 1 || items[0]["role"] != "developer" {
 		t.Fatalf("injected items = %#v", items)
 	}
@@ -577,7 +578,7 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 
 func TestCodexAdditionalContextChunksLongOwnerInstructionsLosslessly(t *testing.T) {
 	want := strings.Repeat("界abc", 900)
-	context := codexAgentAdditionalContext(AgentExecConfig{AppendSystemPrompt: want}, "/usr/local/bin/orbit", 7, false, true, true)
+	context := codexAgentAdditionalContextOf(AgentExecConfig{AppendSystemPrompt: want}, "/usr/local/bin/orbit", 7, false, true, true)
 	keys := make([]string, 0, len(context))
 	for key := range context {
 		if strings.HasPrefix(key, "orbit_00000007_agent_append_") {
