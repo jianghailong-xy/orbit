@@ -241,6 +241,13 @@ Only #16 can write over a row that is already released (its WHERE is the id); ev
 or on `finished_at`. That matters once: `session_listed_at_on_settle` moves `listed_at` today when #16 turns a released
 word into FAILED, and on `finished_at` it would not (§4.2). The census counts such rows.
 
+Three writers set the word to the value it already has: #12 (RUNNING kept for a queued follow-up or the release-v1
+hold), #20 and #22 (PENDING or RUNNING kept). Every trigger `UPDATE OF status` fires on those statements today, because
+it fires on the columns a statement names, not on a changed value. So the D2 and D3 writers name `turn_state` in the
+same statements, unchanged value included, and the triggers fire where they fire now. (Their functions are idempotent
+on such a rewrite anyway: the guards and the two serializers compare OLD with NEW, and the AFTER triggers close only
+what is still open.)
+
 Two helpers return the word a writer stores, and become helpers that return a turn state:
 `statusAfterTurnEnqueued` and `statusAfterTurnCompleted` (`common/session-scheduling.ts:101-111`, used by #12, #20,
 #21, #22). `gracefulEndStatus` (`src/shared/src/enums.ts:238-248`) stays, read by the finalize's `effectiveStatus`
@@ -538,10 +545,24 @@ From the shapes of `common/session-release-shapes.fixture.ts` (as migration 1441
 
 `runState` and `sessionState` follow from the word, the end reason and the filing through the unchanged derivers
 (`src/shared/src/enums.ts:130-158, 188-228`): Trash reads DELETED first, Completed reads COMPLETED unless the word is
-FAILED, then the word decides. The same kinds change in three more places that store the word, for rows written
-from D2 on (written rows stay as they are): `session_request.close_reason` (§4.2), watch observations
-(`watches/watch-predicate.ts:486-505`), and the coordinator's wake facts that carry `sessionStatus`
-(`projects/task-exception-input.producer.ts:41-126`, `projects/coordinator-wake.ts:363-375`).
+FAILED, then the word decides. The same kinds change wherever the server stores the word or something made from it,
+for what is written from D2 on (what is stored stays as it is):
+
+- `session_request.close_reason`, from the trigger (§4.2) and from `sessions/session-request.ts:1128`;
+- watch observations (`watches/watch-predicate.ts:486-505`) in `watch_match.per_target_snapshot`,
+  `watch_delivery.expiry_snapshot` and the RESUME_SESSION wake message (`watches/watch-delivery.service.ts:838-872`);
+- the coordinator's wake facts that carry `sessionStatus` (`projects/task-exception-input.producer.ts:41-126`,
+  `projects/coordinator-wake.ts:363-375`), the task comment of an attempt that ended unsettled, and its blocker's
+  `detail.sessionStatus`, whose sha256 is the blocker's `condition_version`
+  (`projects/attempt-ended-unsettled.producer.ts:390-409, 443-464`): a blocker raised again across D2 for a row of
+  these kinds gets a new version;
+- the wiki dossier header (`wiki/wiki-dossier.ts:1939`), whose hash is stored (`wiki/wiki-maintenance.ts:772`): a
+  dossier that names a session of these kinds is rebuilt once.
+
+The sentences the reaper and the finalize write into `conversation_turn.delivery_failure_reason`,
+`watch_delivery.last_error` and `project_criterion_confirmation.note` (`realtime/reaper.service.ts:1129, 1136, 1161`;
+`ctl:10671, 10678, 10707`) carry the word those writers compute, not the stored one; they keep computing it, so the
+sentences do not change.
 
 The goldens that pin today's words, `sessions/session-state-legacy-fields.golden.json` and
 `sessions/session-payloads-legacy.golden.json`, are restated in the projector task (T4) for exactly these kinds and no
@@ -687,6 +708,9 @@ A plan that reads more buffers than today's stops T5 until an index answers it.
 - `SET NOT NULL` on `phase` follows a validated `CHECK (phase IS NOT NULL)`, so it does not scan.
 - Migration numbers are chosen when each task is written, above everything on main, `project/*` and pushed `orbit/*`
   branches (main's highest today: 1600).
+- Every trigger added, restated or dropped (T2, T6, T14, T15) also changes its entry in `TRIGGER_WRITE_SOURCES`
+  (`common/db-write-inventory.ts:4582`), which `common/db-write-inventory.spec.ts:557` holds to the triggers the
+  migrations install.
 
 ## 5. The guard
 
@@ -830,6 +854,7 @@ did is recorded and compared with D1:
 | R14 | Rollback past a point of no return: to D1 code after D3, or to any code that declares `status` after D4. | the coordinator's deploy notes (§4.1) |
 | R15 | The rehearsal stack on a copy of production reaches real people (mail, push, Feishu) or real runners. | T16, T17 (§7.1) |
 | R16 | Stored `phase` and `deriveSessionPhase` disagree, and the wire's `phase` moves. | T2 (PG spec over every shape and fact combination), T16 (census) |
+| R17 | A trigger change lands without its entry in the write inventory, and the unit suite fails on the landed commit (`common/db-write-inventory.spec.ts:557`). | T2, T6, T14, T15 (§4.6) |
 
 ### 8.2 Tasks
 
