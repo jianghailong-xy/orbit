@@ -397,7 +397,7 @@ describe('a run’s session where the run did not get under way (board scheduled
     expect(host.textContent).not.toContain('Found no runner online');
     await press('Run now');
     expect(calls.find((c) => c.method === 'POST')?.path).toBe('/schedules/sch-bump/run');
-    expect(host.querySelector('[data-where]')!.textContent).toBe('/sessions/sess-bump-now?folder=scheduled');
+    expect(host.querySelector('[data-where]')!.textContent).toBe('/sessions/sess-bump-now');
   });
 
   it('② reads the same from an earlier try, and says a full runner was full', async () => {
@@ -435,7 +435,7 @@ describe('a run’s session where the run did not get under way (board scheduled
       doors: ['Open the run →'],
     });
     await press('Open the run →');
-    expect(host.querySelector('[data-where]')!.textContent).toBe('/sessions/sess-bump-try-3?folder=scheduled');
+    expect(host.querySelector('[data-where]')!.textContent).toBe('/sessions/sess-bump-try-3');
   });
 
   it('draws no card in the session the run went on in, nor from a server that predates the run status', async () => {

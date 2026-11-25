@@ -798,13 +798,14 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     folders = [FOLDER];
     rows = [LOOSE, BELOW, TASK, { ...COORDINATOR, folderId: FOLDER.id, pendingApprovals: 1, waitingKind: 'OWNER_ITEM',
       ownerItems: [{ itemId: ITEM_ID, kind: 'COORDINATOR_QUESTION', since: '2026-10-03T09:00:00Z' }] }];
-    await mount(() => expect(projectRows()).toHaveLength(1), `/sessions/${BELOW.id}?folder=${FOLDER.id}`);
+    // The conversation's own address opens the list on the folder it is filed in.
+    await mount(() => expect(projectRows()).toHaveLength(1), `/sessions/${BELOW.id}`);
     expect(titles()).toEqual(['Project Alpha', 'Older conversation']);
     await press('ArrowUp');
     await until(() => expect(location.split('?')[0]).toBe(`/sessions/${COORDINATOR.id}`));
     const search = new URLSearchParams(location.split('?')[1]);
     expect(search.get('item')).toBe(ITEM_ID);
-    expect(search.get('folder')).toBe(FOLDER.id);
+    expect(search.get('folder')).toBeNull();
     expect(mounted().querySelector('.session-folder-title')?.textContent).toBe(FOLDER.name);
     expect(titles()).toEqual(['Project Alpha', 'Older conversation']);
   });

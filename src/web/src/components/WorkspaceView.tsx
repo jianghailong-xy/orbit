@@ -3182,12 +3182,47 @@ export function WorkspaceView({
   // session filed in it. That is the request every native client makes for every list; a workspace
   // without folders keeps paging as before.
   const listByTag = !!tagFilter || groupByTag;
+  // The page the list is on: an encoded folder id, `scheduled` for Scheduled runs, or null for the
+  // workspace's own list. A list's own address keeps it as `?folder=`, so a reload and Back keep the
+  // page. A conversation's address does not (owner 2026-11-25): a copied `/sessions/<id>` has to
+  // open the same way anywhere, so there the page is the console's own, and a conversation the page
+  // does not list takes the list to where it is filed (the effect after `listedSessions`).
+  const pageInUrl = !selectedId && !landingsProjectId;
+  const urlFolder = searchParams.get('folder');
+  const [conversationPage, setConversationPage] = useState<string | null>(urlFolder);
+  if (pageInUrl && conversationPage !== urlFolder) setConversationPage(urlFolder);
+  const folderParam = pageInUrl ? urlFolder : conversationPage;
+  const setListPage = (page: string | null, replace = false): void => {
+    if (!pageInUrl) {
+      setConversationPage(page);
+      return;
+    }
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (page) next.set('folder', page);
+        else next.delete('folder');
+        return next;
+      },
+      { replace },
+    );
+  };
+  // An older link to a conversation still names the list's page: it was read above, and the address
+  // drops it.
+  useEffect(() => {
+    if (pageInUrl || !urlFolder) return;
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('folder');
+      return next;
+    }, { replace: true });
+  }, [pageInUrl, urlFolder, setSearchParams]);
   // The workspace's Scheduled runs folder is open (`?folder=scheduled`): the list is its runs' sessions alone, which
   // every other list leaves out, with no folder or project rows of its own.
-  const onScheduledRuns = !listProjectId && searchParams.get('folder') === SCHEDULED_RUNS_FOLDER;
-  // A folder's page, by its route alone: it reads the workspace's whole list as the folder rows do, and
+  const onScheduledRuns = !listProjectId && folderParam === SCHEDULED_RUNS_FOLDER;
+  // A folder's page, by its page alone: it reads the workspace's whole list as the folder rows do, and
   // keeps doing so while a tag narrows it, which takes the folder rows off the workspace's own list.
-  const onFolderPage = !listProjectId && !onScheduledRuns && !!searchParams.get('folder');
+  const onFolderPage = !listProjectId && !onScheduledRuns && !!folderParam;
   const foldersShown = !onScheduledRuns && listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
   const projectScope = `${runner.id}:${scopeWorkspaceId}:${effectiveView}:${tagFilter ?? ''}`;
   const [membershipScope, setMembershipScope] = useState<string | null>(null);
@@ -3765,10 +3800,8 @@ export function WorkspaceView({
       ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
     [openProjectId, pageLineNotStarted, landingMembers, pageMerges, pageProject?.mainBranch],
   );
-  // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
-  // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
-  // shows folders at all.
-  const folderParam = searchParams.get('folder');
+  // The folder page the list is on (`folderParam` above). Only a folder of this workspace, and only
+  // where the list shows folders at all.
   // A tag filter or Group by Tag does not close the page: inside one folder they narrow and section its
   // sessions, with no folder rows for a session to be in twice (owner 2026-11-22,
   // docs/mocks/session-folder-page-filter). Trash still has no folders.
@@ -3799,16 +3832,10 @@ export function WorkspaceView({
     if (listProjectId || !folderParam || openFolder || onScheduledRuns || !foldersQ.isSuccess || !scopeWorkspaceId) return;
     if (scopeWorkspaceId !== resolvedWorkspaceId) return;
     if (!listShowsFolders(effectiveView, false)) return;
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.delete('folder');
-        return next;
-      },
-      { replace: true },
-    );
+    setListPage(null, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setListPage is rebuilt each render
   }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, resolvedWorkspaceId, effectiveView,
-    setSearchParams, listProjectId, onScheduledRuns]);
+    listProjectId, onScheduledRuns, pageInUrl]);
   // The folder page is kept for the workspace whose list it is, so the sidebar opens the workspace on
   // it again after a trip to another one (lib/workspaceListFolder). A project's sessions page over
   // the list leaves it as it was.
@@ -3853,8 +3880,23 @@ export function WorkspaceView({
       ? entry.coordinator ? [entry.coordinator] : [] : [entry]),
     [folderListing, listProjectId, projectMembers],
   );
-  // Where a session opened from this list lives. On a folder's page the page goes along, so the
-  // list stays on it while the conversations it lists are opened one after another.
+  // A conversation the list's page does not show — a pasted link, a search pick, a notification — takes
+  // the list to where it is filed: its folder's page, Scheduled runs for a scheduled run, or the
+  // workspace's own list. One opened from the page leaves the page as it is. Decided once a conversation,
+  // when its row and this workspace's list and folders are in.
+  const placedSessionId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedId || placedSessionId.current === selectedId || !selectedSession) return;
+    if (!scopeWorkspaceId || scopeWorkspaceId !== resolvedWorkspaceId) return;
+    if (!sessionsQ.isSuccess || sessionsQ.isPlaceholderData || !foldersQ.isSuccess) return;
+    placedSessionId.current = selectedId;
+    if (listProjectId || listedSessions.some((s) => s.id === selectedId)) return;
+    const place = selectedSession.runSource === 'SCHEDULE' ? SCHEDULED_RUNS_FOLDER
+      : selectedSession.folderId ? encodeId(selectedSession.folderId) : null;
+    if (place !== folderParam) setConversationPage(place);
+  }, [selectedId, selectedSession, scopeWorkspaceId, resolvedWorkspaceId, sessionsQ.isSuccess,
+    sessionsQ.isPlaceholderData, foldersQ.isSuccess, listProjectId, listedSessions, folderParam]);
+  // The list's page on a list's own address (a workspace's list, its New session), so a reload keeps it.
   const folderSearch = openFolder
     ? `?folder=${encodeId(openFolder.id)}`
     : onScheduledRuns ? `?folder=${SCHEDULED_RUNS_FOLDER}` : '';
@@ -3870,8 +3912,11 @@ export function WorkspaceView({
   // Where a session opened from the project's page lives: the page goes along, in the list on a
   // phone and in the column beside the conversation wider.
   const projectSearch = openProjectId
-    ? `?project=${encodeId(openProjectId)}${listProjectId && effectiveView === 'completed' ? '&view=completed' : ''}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : '';
-  const listSearch = listProjectId ? projectSearch : folderSearch;
+    ? `?project=${encodeId(openProjectId)}${listProjectId && effectiveView === 'completed' ? '&view=completed' : ''}` : '';
+  const listSearch = listProjectId
+    ? `${projectSearch}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : folderSearch;
+  // A conversation's address names no list page (`pageInUrl` above): only the project page beside it.
+  const conversationSearch = listProjectId ? projectSearch : '';
   // The project each project row of the list stands for, by its coordinator, and the project of each
   // member row marked with one (a member whose coordinator runs in another workspace).
   const listedSessionProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
@@ -3886,13 +3931,11 @@ export function WorkspaceView({
   // to that project, and a session in no project closes it. With no column open, a project row's own
   // click or the arrow keys onto it (`stepSession`) open one.
   const searchFor = useCallback((id: string): string => {
-    if (isMobile || !openProjectId) return listSearch;
+    if (isMobile || !openProjectId) return conversationSearch;
     if (allProjectMembers.some((s) => s.id === id)) return projectSearch;
     const rowProjectId = listedSessionProjects.get(id);
-    return rowProjectId
-      ? `?project=${encodeId(rowProjectId)}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`
-      : listSearch;
-  }, [isMobile, listSearch, openProjectId, allProjectMembers, projectSearch, listedSessionProjects, folderParam]);
+    return rowProjectId ? `?project=${encodeId(rowProjectId)}` : conversationSearch;
+  }, [isMobile, conversationSearch, openProjectId, allProjectMembers, projectSearch, listedSessionProjects]);
   const sessionPath = useCallback((id: string, search?: string) => `/sessions/${encodeId(id)}${search ?? searchFor(id)}`,
     [searchFor]);
   const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }, search = searchFor(session.id)) => {
@@ -4179,11 +4222,11 @@ export function WorkspaceView({
       // the row's click does, even with none open (owner 2026-11-14).
       const rowProjectId = isMobile ? undefined : listedCoordinatorProjects.get(target.id);
       navigate(rowProjectId
-        ? sessionItemPath(target, `?project=${encodeId(rowProjectId)}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`)
+        ? sessionItemPath(target, `?project=${encodeId(rowProjectId)}`)
         : sessionItemPath(target));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects, folderParam],
+    [orderedSessions, selectedId, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
@@ -8966,16 +9009,7 @@ export function WorkspaceView({
   const setFolderParam = (folderId: string | null, replace = false): void => {
     navigateWithPaneSlide(
       folderId ? 'push' : 'pop',
-      () =>
-        setSearchParams(
-          (current) => {
-            const next = new URLSearchParams(current);
-            if (folderId) next.set('folder', encodeId(folderId));
-            else next.delete('folder');
-            return next;
-          },
-          { replace },
-        ),
+      () => setListPage(folderId ? encodeId(folderId) : null, replace),
       { swapsPane: false },
     );
   };
@@ -8987,15 +9021,7 @@ export function WorkspaceView({
   const enterScheduledRuns = (): void => {
     setSwipeOpen(null);
     setFolderEdit(null);
-    navigateWithPaneSlide(
-      'push',
-      () => setSearchParams((current) => {
-        const next = new URLSearchParams(current);
-        next.set('folder', SCHEDULED_RUNS_FOLDER);
-        return next;
-      }),
-      { swapsPane: false },
-    );
+    navigateWithPaneSlide('push', () => setListPage(SCHEDULED_RUNS_FOLDER), { swapsPane: false });
   };
   const leaveFolder = (replace = false): void => {
     setFolderEdit(null);
@@ -9010,8 +9036,7 @@ export function WorkspaceView({
     setMenuOpenId(null);
     if (!isMobile) {
       if (openId) {
-        navigate(`/sessions/${encodeId(openId)}?project=${encodeId(projectId)}${
-          folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`, { state: stampFromList() });
+        navigate(`/sessions/${encodeId(openId)}?project=${encodeId(projectId)}`, { state: stampFromList() });
         return;
       }
       setSearchParams((current) => {
@@ -10689,7 +10714,7 @@ export function WorkspaceView({
               // in the open conversation's place, so ← still returns to the list behind it (board 5).
               if (pageProjectId && sheetProjectId) {
                 setSheetProjectId(null);
-                navigate(sessionItemPath(actionSession, listSearch), { replace: true, state: window.history.state?.usr });
+                navigate(sessionItemPath(actionSession, conversationSearch), { replace: true, state: window.history.state?.usr });
                 return;
               }
               navigateWithPaneSlide('push', () =>

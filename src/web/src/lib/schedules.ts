@@ -21,7 +21,6 @@ const draftsAwaited = new Set<string>();
 export const awaitDraftFrom = (sessionId: string): void => {
   draftsAwaited.add(sessionId);
 };
-import { SCHEDULED_RUNS_FOLDER } from './sessionFolders';
 
 /**
  * Scheduled tasks on the web (docs/scheduled-tasks-design.md §9.2): the REST reads the Scheduled page, the inspector,
@@ -134,12 +133,13 @@ export function useScheduledNeedsCount(): number {
 }
 
 /**
- * A run's session, reached from the schedule's history: the ordinary session page, with its workspace's list on the
- * Scheduled runs folder, the one list that holds it (owner 2026-11-19).
+ * A run's session, reached from the schedule's history: the ordinary session page. Its workspace's list goes to
+ * the Scheduled runs folder, the one list that holds it (owner 2026-11-19), from the run's own session, not the
+ * address (owner 2026-11-25).
  */
 export function scheduleRunSessionPath(run: Pick<ScheduleRunView, 'sessionId'>): string | null {
   if (!run.sessionId) return null;
-  return `/sessions/${encodeURIComponent(run.sessionId)}?folder=${SCHEDULED_RUNS_FOLDER}`;
+  return `/sessions/${encodeURIComponent(run.sessionId)}`;
 }
 
 /** The Scheduled page with one schedule open in the inspector. */

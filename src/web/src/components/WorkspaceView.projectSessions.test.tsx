@@ -1883,7 +1883,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     mobile = true; // the page in the list's place, as a phone still has it
     folders = [FOLDER];
     rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, TASK];
-    const folderAddress = `/sessions/${LOOSE.id}?folder=${FOLDER.id}`;
+    const folderAddress = `/workspaces/${WORKSPACE_ID}?folder=${FOLDER.id}`;
     await mount(undefined, folderAddress);
     await openSessions();
     await click(page()?.querySelector('.session-folder-back'), 'the project page back');
