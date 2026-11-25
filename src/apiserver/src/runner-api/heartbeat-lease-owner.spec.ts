@@ -82,7 +82,7 @@ test('heartbeat cancels supervised sessions not owned by this process', async ()
   assert.deepEqual(h.findManyWhere[0], {
     id: { in: [SESSION_B, SESSION_A] },
     assignedRunnerId: RUNNER_ID,
-    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    finishedAt: null,
     sessionKind: 'CONVERSATION',
     inboxLeaseOwner: OWNER,
   });
@@ -119,7 +119,7 @@ test('modern heartbeat live-diff writes are fenced by the process owner', async 
   assert.deepEqual(h.updateManyWhere[1], {
     id: SESSION_A,
     assignedRunnerId: RUNNER_ID,
-    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    finishedAt: null,
     mergeStatus: { in: ['conflict', 'error'] },
     mergeRecovery: { equals: Prisma.AnyNull },
     inboxLeaseOwner: OWNER,

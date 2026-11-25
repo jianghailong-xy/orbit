@@ -15,6 +15,7 @@ import { isHeld } from '../common/session-release';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { conversationIsDown, sessionHasEnded as projectSessionHasEnded } from '../projects/project-open-item';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 import { observerRefusal } from '../watches/watch-delivery.service';
 import { sessionHasEnded } from './background-job-wake';
 import { tickStanding } from './scheduled-wakeup';
@@ -41,6 +42,7 @@ const OUTCOMES: readonly (string | null)[] = ['ANSWERED', 'FAILED', 'CANCELLED',
 
 interface Row {
   status: RunStatus;
+  turnState: string | null;
   finishedAt: Date | null;
   endReason: string | null;
   lastTurnOutcome: string | null;
@@ -67,6 +69,8 @@ function outcomesOf(status: string, endReason: string | null, filing: string): r
 function rowOf(status: string, lastTurnOutcome: string | null, endReason: string | null, cancelled: boolean, filing: string, retry: string): Row {
   return {
     status: status as RunStatus,
+    // As the D1 trigger keeps it from the word (migration 1611).
+    turnState: turnStateOfWord(status),
     finishedAt: ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status) ? new Date(NOW.getTime() - 60_000) : null,
     endReason,
     // The outcome of the turn that carries the release (design §12.1): the failure is the turn's.

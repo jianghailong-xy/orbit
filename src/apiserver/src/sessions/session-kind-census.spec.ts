@@ -90,7 +90,7 @@ const SCANS: readonly KindFilteredScan[] = [
   {
     file: 'src/runner-api/runner-api.controller.ts',
     name: 'markProviderUpgradeRequired (the PENDING pick and its mark)',
-    anchor: 'await this.prisma.session.findMany({\n        where: {\n          assignedRunnerId: runnerId,\n          status: RunStatus.PENDING,',
+    anchor: 'await this.prisma.session.findMany({\n        where: {\n          assignedRunnerId: runnerId,\n          AND: [turnStateFilter([\'QUEUED\'])],',
     filter: "sessionKind: 'CONVERSATION',",
     within: 220,
   },
