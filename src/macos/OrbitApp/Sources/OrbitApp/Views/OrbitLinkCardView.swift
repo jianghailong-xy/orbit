@@ -101,6 +101,8 @@ struct OrbitLinkCardView: View {
                 // its width and the pill takes what is left, truncated — held at its full length it
                 // pushed the card, and the bubble holding it, off the screen.
                 SessionStatusPill(glyph: glyph).layoutPriority(1)
+                // The marks after the state (`SessionDisplay`); none from an older server.
+                if !content.sessionMarks.isEmpty { SessionMarkPills(marks: content.sessionMarks) }
             } else if let trust = content.wikiTrust, trust != .unknown {
                 WikiBadge(text: WikiCopy.trustLabel(trust), tone: WikiLogic.trustTone(trust))
             }

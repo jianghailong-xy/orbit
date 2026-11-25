@@ -1,0 +1,274 @@
+{
+  "rows" : [
+    {
+      "headerWord" : "Queued",
+      "linkCard" : {
+        "icon" : "clock",
+        "label" : "Queued",
+        "tone" : "neutral"
+      },
+      "name" : "status PENDING (queued)",
+      "search" : {
+        "icon" : "clock",
+        "label" : "Queued",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Queued · Open"
+    },
+    {
+      "headerWord" : "Running",
+      "linkCard" : {
+        "icon" : "spinner",
+        "label" : "Running",
+        "tone" : "brand"
+      },
+      "name" : "status RUNNING",
+      "search" : {
+        "icon" : "spinner",
+        "label" : "Running",
+        "tone" : "brand"
+      },
+      "subtitle" : "Running · Open"
+    },
+    {
+      "headerWord" : "Waiting for your reply",
+      "linkCard" : {
+        "icon" : "message",
+        "label" : "Waiting for your reply",
+        "tone" : "neutral"
+      },
+      "name" : "status AWAITING_INPUT (held idle)",
+      "search" : {
+        "icon" : "message",
+        "label" : "Waiting for your reply",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Waiting for your reply · Open"
+    },
+    {
+      "headerWord" : "Interrupted",
+      "linkCard" : {
+        "icon" : "minus.circle",
+        "label" : "Interrupted",
+        "tone" : "neutral"
+      },
+      "name" : "status INTERRUPTED (held, stopped turn)",
+      "search" : {
+        "icon" : "minus.circle",
+        "label" : "Interrupted",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Interrupted · Open"
+    },
+    {
+      "headerWord" : "Succeeded",
+      "linkCard" : {
+        "icon" : "checkmark.circle.fill",
+        "label" : "Succeeded",
+        "tone" : "success"
+      },
+      "name" : "status SUCCEEDED (task run finished)",
+      "search" : {
+        "icon" : "checkmark.circle.fill",
+        "label" : "Succeeded",
+        "tone" : "success"
+      },
+      "subtitle" : "Succeeded · Open"
+    },
+    {
+      "headerWord" : "Failed",
+      "linkCard" : {
+        "icon" : "xmark.circle.fill",
+        "label" : "Failed",
+        "tone" : "error"
+      },
+      "name" : "status FAILED (released by a failed turn)",
+      "search" : {
+        "icon" : "xmark.circle.fill",
+        "label" : "Failed",
+        "tone" : "error"
+      },
+      "subtitle" : "Failed · Open"
+    },
+    {
+      "headerWord" : "Ended",
+      "linkCard" : {
+        "icon" : "checkmark.circle",
+        "label" : "Ended",
+        "tone" : "neutral"
+      },
+      "name" : "status CANCELLED (released by End)",
+      "search" : {
+        "icon" : "checkmark.circle",
+        "label" : "Ended",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Ended · Open"
+    },
+    {
+      "headerWord" : "Background process running",
+      "linkCard" : {
+        "icon" : "terminal",
+        "label" : "Background process running",
+        "tone" : "neutral"
+      },
+      "name" : "running a job with no turn",
+      "search" : {
+        "icon" : "message",
+        "label" : "Waiting for your reply",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Background process running · Open"
+    },
+    {
+      "headerWord" : "Waiting for approval",
+      "linkCard" : {
+        "icon" : "pause.circle",
+        "label" : "Waiting for approval",
+        "tone" : "warning"
+      },
+      "name" : "waiting on an approval",
+      "search" : {
+        "icon" : "spinner",
+        "label" : "Running",
+        "tone" : "brand"
+      },
+      "subtitle" : "Waiting for approval · Open"
+    },
+    {
+      "headerWord" : "Queued",
+      "linkCard" : {
+        "icon" : "clock",
+        "label" : "Queued",
+        "tone" : "neutral"
+      },
+      "name" : "on hold (queued, account paused)",
+      "search" : {
+        "icon" : "clock",
+        "label" : "Queued",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Queued · Open"
+    },
+    {
+      "headerWord" : "Failed",
+      "linkCard" : {
+        "icon" : "xmark.circle.fill",
+        "label" : "cancel not honored",
+        "tone" : "error"
+      },
+      "name" : "ended, runner never confirmed",
+      "search" : {
+        "icon" : "xmark.circle.fill",
+        "label" : "Failed",
+        "tone" : "error"
+      },
+      "subtitle" : "Failed · Open"
+    },
+    {
+      "headerWord" : "Succeeded",
+      "linkCard" : {
+        "icon" : "checkmark.circle.fill",
+        "label" : "Succeeded",
+        "tone" : "success"
+      },
+      "name" : "old plain row stored SUCCEEDED",
+      "search" : {
+        "icon" : "checkmark.circle.fill",
+        "label" : "Succeeded",
+        "tone" : "success"
+      },
+      "subtitle" : "Succeeded · Open"
+    },
+    {
+      "headerWord" : "Ended",
+      "linkCard" : {
+        "icon" : "checkmark.circle",
+        "label" : "Ended",
+        "tone" : "neutral"
+      },
+      "name" : "ending after an interrupted turn",
+      "search" : {
+        "icon" : "checkmark.circle",
+        "label" : "Ended",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Ended · Open"
+    },
+    {
+      "headerWord" : "Waiting for your reply",
+      "linkCard" : {
+        "icon" : "message",
+        "label" : "Waiting for your reply",
+        "tone" : "neutral"
+      },
+      "name" : "parked, engine started its own turn",
+      "search" : {
+        "icon" : "message",
+        "label" : "Waiting for your reply",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Waiting for your reply · Open"
+    },
+    {
+      "headerWord" : "Running Agent",
+      "linkCard" : {
+        "icon" : "message",
+        "label" : "Waiting for your reply",
+        "tone" : "neutral"
+      },
+      "name" : "parked, sub-agent running",
+      "search" : {
+        "icon" : "message",
+        "label" : "Waiting for your reply",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Running Agent · Open"
+    },
+    {
+      "headerWord" : "Waiting to resume",
+      "linkCard" : {
+        "icon" : "eye",
+        "label" : "Waiting to resume",
+        "tone" : "neutral"
+      },
+      "name" : "parked, will wake (watch or wake-up)",
+      "search" : {
+        "icon" : "message",
+        "label" : "Waiting for your reply",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Waiting to resume · Open"
+    },
+    {
+      "headerWord" : "Ended",
+      "linkCard" : {
+        "icon" : "checkmark.circle",
+        "label" : "Ended",
+        "tone" : "neutral"
+      },
+      "name" : "unknown status, no capabilities, held",
+      "search" : {
+        "icon" : "checkmark.circle",
+        "label" : "Ended",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Ended · Open"
+    },
+    {
+      "headerWord" : "Ended",
+      "linkCard" : {
+        "icon" : "checkmark.circle",
+        "label" : "Ended",
+        "tone" : "neutral"
+      },
+      "name" : "unknown status, no capabilities, released",
+      "search" : {
+        "icon" : "checkmark.circle",
+        "label" : "Ended",
+        "tone" : "neutral"
+      },
+      "subtitle" : "Ended · Open"
+    }
+  ]
+}
