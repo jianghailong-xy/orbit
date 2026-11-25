@@ -135,6 +135,23 @@ export interface World {
   taskIds: Map<string, string>;
 }
 
+/** The `project_landing` row of a settled LANDING container, with the project and codebase it hangs from. */
+async function settledLanding(db: PrismaClient, ownerId: string, taskId: string, sessionId: string): Promise<void> {
+  const project = await db.project.create({ data: { ownerId, title: 'payloads project' } });
+  const codebase = await db.projectCodebase.create({
+    data: {
+      ownerId, projectId: project.id, canonicalRepoUrl: `https://github.com/example/payloads-${project.id}`,
+      upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+    },
+  });
+  await db.projectLanding.create({
+    data: {
+      id: randomUUID(), projectId: project.id, ownerId, codebaseId: codebase.id, subject: 'TASK', taskId, sessionId,
+      settledAt: new Date(), settledAs: 'LANDED',
+    },
+  });
+}
+
 /** The owner, an online runner, a workspace, a guest, and one shared conversation per case. */
 export async function buildWorld(db: PrismaClient, run: string): Promise<World> {
   const w: World = { ownerId: randomUUID(), guestId: randomUUID(), ids: new Map(), taskIds: new Map() };
@@ -174,6 +191,8 @@ export async function buildWorld(db: PrismaClient, run: string): Promise<World> 
         ...c.row,
       },
     });
+    // A LANDING container's row, which says how it settled: the projector reads it for the container's word.
+    if (c.row?.sessionKind === 'LANDING') await settledLanding(db, w.ownerId, taskIdOf(c.label), id);
     await db.sessionGuest.create({ data: { sessionId: id, userId: w.guestId, ownerId: w.ownerId } });
     await c.arm?.(db, w.ownerId, id);
     w.ids.set(c.label, id);

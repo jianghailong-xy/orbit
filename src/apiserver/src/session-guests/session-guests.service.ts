@@ -20,6 +20,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
 import { assertEngineSession } from '../sessions/engine-session';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { readSessionBackgroundFields } from '../sessions/task-work-carrier';
 import { readSessionPhaseFields } from '../sessions/session-phase';
@@ -319,7 +320,8 @@ export class SessionGuestsService {
         addedAt: true,
         session: {
           select: {
-            id: true, title: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+            ...LEGACY_STATUS_SELECT,
+            id: true, title: true, completedAt: true, archivedAt: true, deletedAt: true,
             lastTurnAt: true, owner: { select: { name: true } },
           },
         },

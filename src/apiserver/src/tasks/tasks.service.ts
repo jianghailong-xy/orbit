@@ -142,6 +142,7 @@ import {
 } from '../sessions/engine-signin-preflight';
 import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readSessionPhaseFields } from '../sessions/session-phase';
+import { LEGACY_STATUS_SELECT, withoutWordFacts } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import {
   readSessionBackgroundFields,
@@ -9722,12 +9723,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         sessions: {
           orderBy: { createdAt: 'desc' },
           select: {
+            // What the run's word on the wire is derived from (sessions/session-legacy-words.ts). Its
+            // `endReason` is on the wire too: a graceful recycle and a hard stop both read CANCELLED, so
+            // the panel's run chip needs the reason to tell "dormant" from "cancelled" (TaskDetailPanel).
+            ...LEGACY_STATUS_SELECT,
             id: true,
             title: true,
-            status: true,
-            // A graceful recycle and a hard stop both settle CANCELLED, so the panel's run
-            // chip needs the reason to tell "dormant" from "cancelled" (see TaskDetailPanel).
-            endReason: true,
             completedAt: true,
             archivedAt: true,
             deletedAt: true,
@@ -9743,10 +9744,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         },
         creatorSession: {
           select: {
+            ...LEGACY_STATUS_SELECT,
             id: true,
             title: true,
-            status: true,
-            endReason: true,
             completedAt: true,
             archivedAt: true,
             deletedAt: true,
@@ -9816,12 +9816,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return {
       ...task,
       sessions: (task.sessions ?? []).map((session) => ({
-        ...withSessionState(session),
+        ...withoutWordFacts(withSessionState(session)),
         ...runFacts.get(session.id),
         ...runBackground.get(session.id),
         route: routes.get(session.id) ?? null,
       })),
-      creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,
+      creatorSession: task.creatorSession ? withoutWordFacts(withSessionState(task.creatorSession)) : null,
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
       blocked: !canRun(dependencyState),

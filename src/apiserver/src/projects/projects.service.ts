@@ -153,6 +153,7 @@ import {
   refuseProjectStatusWrite,
   refuseSessionAuthoredCriteriaDecision,
 } from './coordinator-authority';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { chargeSessionMessage, SessionMessageRateLimited } from '../sessions/session-message';
@@ -863,12 +864,11 @@ const NO_LANDING_WORKSPACE_CODE = 'NO_LANDING_WORKSPACE';
 /** The session columns the coordinator status read needs. `archivedAt` is here only because
  *  `withSessionState` folds it into `completedAt`; it is never served under its own name. */
 const COORDINATOR_STATUS_SESSION_SELECT = {
+  ...LEGACY_STATUS_SELECT,
   id: true,
   title: true,
+  // The approval count beside the words reads it.
   status: true,
-  endReason: true,
-  startedAt: true,
-  finishedAt: true,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
