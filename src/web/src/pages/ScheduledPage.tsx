@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -50,6 +50,7 @@ import {
 import type { SessionReach } from '../lib/sessionReach';
 import { ownerRequestsQuery } from '../lib/queries';
 import { sameResourceId } from '../lib/watches';
+import { isTypingTarget } from '../lib/helpDrawer';
 import { OwnerRequestCard } from '../components/OwnerRequestCard';
 import { isScheduleWaitingKind } from '../components/ScheduleWaitingCard';
 import { isConditionWaitingKind } from '../components/ConditionWaitingCard';
@@ -145,6 +146,8 @@ interface RowView {
   cls: string;
   selected: boolean;
   onSelect: () => void;
+  /** A row that never shows as selected (a past run, a task that opens elsewhere): Up/Down step over it. */
+  noCursor?: true;
   /** A condition's row: the gauge in place of the circle, and the newest reading and its age in place of a time. */
   gauge?: 'waiting' | 'cant-read';
   reading?: { value: string | null; age: string };
@@ -274,6 +277,7 @@ export function ScheduledPage(): JSX.Element {
         cls: ' is-past',
         selected: false,
         onSelect: () => select({ kind: 'schedule', id: item.schedule.id }),
+        noCursor: true,
       };
     }
     if (item.kind === 'DRAFT') {
@@ -316,6 +320,7 @@ export function ScheduledPage(): JSX.Element {
         cls: underWay ? '' : ' is-past',
         selected: false,
         onSelect,
+        noCursor: true,
       };
     }
     const inPaused = group.key === 'PAUSED';
@@ -363,6 +368,7 @@ export function ScheduledPage(): JSX.Element {
     cls: '',
     selected: false,
     onSelect: () => navigate(`/tasks/${encodeURIComponent(task.id)}`),
+    noCursor: true,
     gauge: cantRead ? 'cant-read' : 'waiting',
     reading: cantRead ? undefined : conditionRowReading(task.condition, nowMs),
   });
@@ -388,6 +394,45 @@ export function ScheduledPage(): JSX.Element {
 
   const workspaceName = (id: string | null) =>
     workspaces.data?.find((w) => sameResourceId(w.id, id ?? ''))?.name ?? null;
+  const pendingRowViews: RowView[] = pendingRows.map((p) => ({
+    key: `pending:${p.sessionId}`,
+    circle: scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 0 }, { draft: true }),
+    title: p.text,
+    line: [workspaceName(p.workspaceId), C.row.draft].filter(Boolean).join(C.separator),
+    repeats: false,
+    time: '',
+    cls: ' is-draft',
+    selected: selection?.kind === 'pending' && selection.sessionId === p.sessionId,
+    onSelect: () => select({ kind: 'pending', sessionId: p.sessionId }),
+  }));
+  // The rows Up/Down step through, top to bottom as drawn.
+  const cursorRows = [...sections.flatMap((section) => section.rows), ...pendingRowViews].filter((row) => !row.noCursor);
+
+  // Up/Down move the selection to the row above or below, as a click on it would, and stop at the ends. Skipped
+  // while typing, while a menu or dialog is open, and when something else already took the key.
+  const cursorRef = useRef(cursorRows);
+  cursorRef.current = cursorRows;
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent): void => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (e.defaultPrevented || e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || isTypingTarget(e.target)) return;
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return;
+      const rows = cursorRef.current;
+      if (rows.length === 0) return;
+      const down = e.key === 'ArrowDown';
+      const cur = rows.findIndex((row) => row.selected);
+      const next = cur === -1 ? (down ? 0 : rows.length - 1) : cur + (down ? 1 : -1);
+      if (next < 0 || next >= rows.length) return;
+      e.preventDefault();
+      const row = rows[next]!;
+      row.onSelect();
+      const el = document.querySelector<HTMLElement>(`.sched-row[data-row="${CSS.escape(row.key)}"]`);
+      el?.focus({ preventScroll: true });
+      el?.scrollIntoView({ block: 'nearest' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const filterLabel = workspaceFilter ? (workspaceName(workspaceFilter) ?? C.page.allWorkspaces) : C.page.allWorkspaces;
   const empty = list.isSuccess && schedules.length === 0 && waitingTasks.length === 0 && draftCards.length === 0
     && pendingRows.length === 0;
@@ -487,22 +532,7 @@ export function ScheduledPage(): JSX.Element {
                 {section.rows.map((row) => <Row key={row.key} row={row} />)}
               </section>
             ))}
-            {pendingRows.map((p) => (
-              <Row
-                key={`pending:${p.sessionId}`}
-                row={{
-                  key: `pending:${p.sessionId}`,
-                  circle: scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 0 }, { draft: true }),
-                  title: p.text,
-                  line: [workspaceName(p.workspaceId), C.row.draft].filter(Boolean).join(C.separator),
-                  repeats: false,
-                  time: '',
-                  cls: ' is-draft',
-                  selected: selection?.kind === 'pending' && selection.sessionId === p.sessionId,
-                  onSelect: () => select({ kind: 'pending', sessionId: p.sessionId }),
-                }}
-              />
-            ))}
+            {pendingRowViews.map((row) => <Row key={row.key} row={row} />)}
             {quickAdd}
           </>
         )}

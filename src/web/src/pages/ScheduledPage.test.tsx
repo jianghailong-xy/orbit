@@ -468,3 +468,42 @@ describe('the empty page (board 1/2 ⑤)', () => {
     expect(document.querySelector('form')).toBeNull();
   });
 });
+
+describe('the keyboard', () => {
+  const press = async (key: string, target: EventTarget = document.body) => {
+    await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
+    await flush();
+  };
+  // A run's row, a missed run's and a waiting task's never show as selected, so the cursor steps over them.
+  const all = () => [...host.querySelectorAll<HTMLElement>('.sched-row')]
+    .filter((r) => !/^(run|missed|CONDITION:task):/.test(r.dataset.row!));
+  beforeEach(() => { Element.prototype.scrollIntoView = () => {}; });
+  const selectedTitle = () => host.querySelector('.sched-row.is-selected .sched-row-title')?.textContent ?? null;
+
+  it('Down and Up move the selection through the rows as drawn, open its inspector, and stop at the ends', async () => {
+    serve();
+    await open();
+    const titles = all().map((r) => r.querySelector('.sched-row-title')!.textContent);
+    expect(host.querySelector('.sched-row[data-row^="run:"]')).not.toBeNull();
+    await press('ArrowDown');
+    expect(selectedTitle()).toBe(titles[0]);
+    expect(document.activeElement).toBe(all()[0]);
+    await press('ArrowDown');
+    expect(selectedTitle()).toBe(titles[1]);
+    expect(inspector().querySelector('.sched-inspector-title')!.textContent).toBe(titles[1]);
+    await press('ArrowUp');
+    expect(selectedTitle()).toBe(titles[0]);
+    await press('ArrowUp');
+    expect(selectedTitle()).toBe(titles[0]);
+    for (let i = 0; i < titles.length + 2; i += 1) await press('ArrowDown');
+    expect(selectedTitle()).toBe(titles[titles.length - 1]);
+  });
+
+  it('leaves the keys alone while typing in the line at the end', async () => {
+    serve();
+    await open();
+    const input = host.querySelector<HTMLElement>('input, textarea')!;
+    await press('ArrowDown', input);
+    expect(selectedTitle()).toBeNull();
+  });
+});
