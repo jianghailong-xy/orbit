@@ -7083,7 +7083,8 @@ export function WorkspaceView({
       await downloadSessionHtml({
         id: session.id,
         title: session.title,
-        status: sessionRunStateOf(session),
+        // The file's header names the state: with the facts, the state word and the marks (lib/sessionDisplay).
+        status: sessionDisplayText(session) ?? sessionRunStateOf(session),
         createdAt: session.createdAt,
         startedAt: session.startedAt,
         lastTurnAt: session.lastTurnAt,
