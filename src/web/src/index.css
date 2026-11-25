@@ -3509,8 +3509,7 @@ button.toast--pill:focus-visible {
   gap: 8px;
   min-width: 0;
 }
-.workspace-title-line .workspace-name,
-.workspace-title-line .workspace-name-input {
+.workspace-title-line .workspace-name {
   min-width: 0;
 }
 .workspace-name {
@@ -3537,38 +3536,30 @@ button.toast--pill:focus-visible {
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
-/* Inline rename editor that replaces .workspace-name on double-click — matches the title's
-   type so the swap is seamless, with a brand underline to signal edit mode. */
-.workspace-name-input {
-  display: block;
-  box-sizing: content-box;
-  /* width is set inline from the mirror (fits the text); cap so a long title stops at the
-     header edge and scrolls instead of overflowing. */
+/* The title as the button that opens the session's settings (docs/mocks/session-settings-column ③): plain at
+   rest, a light ground and a › on hover, the brand tint while the settings are open. */
+.workspace-name-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   max-width: 100%;
-  min-width: 3ch;
+  margin-left: -8px;
+  padding: 1px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
   font-family: inherit;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-1);
-  padding: 0;
-  margin: 0;
-  border: none;
-  border-bottom: 1px solid var(--brand);
-  background: transparent;
-  outline: none;
+  text-align: left;
+  cursor: pointer;
 }
-/* Off-screen twin of .workspace-name-input used only to measure the text width. */
-.workspace-name-mirror {
-  position: absolute;
-  left: -9999px;
-  top: 0;
-  visibility: hidden;
-  white-space: pre;
-  pointer-events: none;
-  font-family: inherit;
-  font-size: 18px;
-  font-weight: 600;
-}
+.workspace-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); opacity: 0; }
+.workspace-name-button:hover, .workspace-name-button:focus-visible { background: var(--orbit-control-hover-bg); }
+.workspace-name-button:hover .workspace-name-chevron,
+.workspace-name-button:focus-visible .workspace-name-chevron,
+.workspace-name-button.is-open .workspace-name-chevron { opacity: 1; }
+.workspace-name-button.is-open { background: var(--brand-tint); color: var(--brand); }
+.workspace-name-button.is-open .workspace-name-chevron { color: var(--brand); }
 .workspace-header-task {
   display: inline-flex;
   align-items: center;
@@ -16986,8 +16977,7 @@ button.chat-jump-start:hover {
     display: contents;
   }
   .workspace-header-main > .workspace-header-task,
-  .workspace-title-line > .workspace-name,
-  .workspace-title-line > .workspace-name-input {
+  .workspace-title-line > .workspace-name {
     flex: 0 0 100%;
   }
   .workspace-header-main > .workspace-sub {
@@ -18963,7 +18953,7 @@ button.chat-jump-start:hover {
   line-height: 16px;
   vertical-align: 1px;
 }
-/* The name being renamed: the session title's underlined input (.workspace-name-input), at the
+/* The name being renamed: an underlined input, at the
    name's own size, its width set from the unseen twin below so the underline hugs the text. */
 .re-name-input {
   display: block;

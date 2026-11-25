@@ -1075,6 +1075,13 @@ const PROJECT_COLUMN_FOLDED_KEY = 'orbit.projectColumnFolded';
 // Narrower than this, the conversation does not take the column beside it: the column folds by itself,
 // and unfolds again once the window is wide enough (owner 2026-11-11, board 4).
 const PROJECT_COLUMN_MIN_CONVERSATION = 480;
+// Session settings as a column in the project column's slot (docs/mocks/session-settings-column): its own width.
+const SETTINGS_COL_KEY = 'orbit.settingsColWidth';
+const SETTINGS_COL_MIN = 300;
+const SETTINGS_COL_DEFAULT = 340;
+// The conversation may narrow further beside its settings than beside the project column before the column has to
+// lie over it: the settings are a passing look, and floating them is what the column replaced.
+const SETTINGS_MIN_CONVERSATION = 360;
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 320;
@@ -2608,19 +2615,6 @@ export function WorkspaceView({
   // transcript insert have rendered. Kept separate from `at`, because an item is not a transcript
   // record and must not reseed the transcript window.
   const itemAt = itemAtOf(searchParams);
-  // Inline header-title rename: double-click swaps the title for an input. `editingTitle`
-  // gates the editor, `titleDraft` holds the in-progress text, `cancelTitleEdit` lets
-  // Escape skip the blur-commit. Switching sessions closes any open editor (effect below).
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState('');
-  const cancelTitleEdit = useRef(false);
-  // Size the rename input to its text (via an off-screen mirror) so the underline hugs the
-  // title instead of spanning the whole header; CSS caps it at the available width.
-  const titleMirrorRef = useRef<HTMLSpanElement>(null);
-  const [titleInputW, setTitleInputW] = useState(0);
-  useLayoutEffect(() => {
-    if (editingTitle) setTitleInputW((titleMirrorRef.current?.offsetWidth ?? 0) + 2);
-  }, [editingTitle, titleDraft]);
   // /workspaces/<id> names the workspace this console is scoped to: the picker is locked
   // to it and the session list is filtered to that workspace's conversations.
   // /workspaces/<id>/new is the "compose a new session" draft state (the splat is 'new').
@@ -2767,7 +2761,9 @@ export function WorkspaceView({
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
   const [agentToolsOpen, setAgentToolsOpen] = useState(false); // the open session's Agent tools drawer
-  const [settingsOpen, setSettingsOpen] = useState(false); // the open session's Settings… drawer
+  const [settingsOpen, setSettingsOpen] = useState(false); // the open session's settings: a column, a sheet on a phone
+  // Goes up each time ⋯ Rename… asks the settings' Name field for focus.
+  const [settingsNameFocus, setSettingsNameFocus] = useState(0);
   useEffect(() => setSettingsOpen(false), [selectedId]); // it belongs to the session it was opened on
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRow, setShareRow] = useState<any>(null);
@@ -3079,7 +3075,11 @@ export function WorkspaceView({
     const saved = Number(localStorage.getItem(PROJECT_COL_KEY));
     return saved >= SESSION_COL_MIN && saved <= SESSION_COL_MAX ? saved : SESSION_COL_DEFAULT;
   });
-  const [resizing, setResizing] = useState<'list' | 'project' | null>(null);
+  const [settingsColWidth, setSettingsColWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem(SETTINGS_COL_KEY));
+    return saved >= SETTINGS_COL_MIN && saved <= SESSION_COL_MAX ? saved : SETTINGS_COL_DEFAULT;
+  });
+  const [resizing, setResizing] = useState<'list' | 'project' | 'settings' | null>(null);
   const [projectColumnFolded, setProjectColumnFolded] = useState<boolean>(() => localStorage.getItem(PROJECT_COLUMN_FOLDED_KEY) === '1');
   // The split's width, so the column can tell whether the conversation keeps 480px beside it. Unmeasured
   // (no layout yet), the window counts as wide enough.
@@ -3097,6 +3097,9 @@ export function WorkspaceView({
   // List, its divider, the conversation, the column's divider and the column side by side.
   const projectColumnCrowds = splitWidth !== null &&
     splitWidth - colWidth - projectColWidth - 2 < PROJECT_COLUMN_MIN_CONVERSATION;
+  // The settings column, without room beside the conversation, lies over its right edge instead.
+  const settingsColumnCrowds = splitWidth !== null &&
+    splitWidth - colWidth - settingsColWidth - 2 < SETTINGS_MIN_CONVERSATION;
   // Unfolded on demand by the title bar's button while the window is too narrow: the column then lies
   // over the conversation's right edge instead of squeezing it, until it is folded or the window widens.
   const [projectColumnOnDemand, setProjectColumnOnDemand] = useState(false);
@@ -3238,9 +3241,6 @@ export function WorkspaceView({
     () => sessions.find((s) => s.id === selectedId) ?? null,
     [sessions, selectedId],
   );
-  // Close the header-title editor whenever the open session changes — a stale draft must
-  // never commit onto a different session.
-  useEffect(() => setEditingTitle(false), [selectedId]);
   // Detail of the open session, keyed the same as TasksSidePanel so React Query dedupes
   // the fetch. Its only job here is to resolve the session's workspace the instant it's opened:
   // a freshly created session isn't in the list query yet (so `selected` is null), but its
@@ -3362,6 +3362,9 @@ export function WorkspaceView({
       )
     : null;
   const selectedTrashed = selectedLifecycleState === 'TRASH';
+  // Session settings as a column (docs/mocks/session-settings-column): on a wide screen, in the project column's
+  // slot, which it takes while it is open (one column at a time); on a phone a sheet instead.
+  const settingsColumnShown = settingsOpen && !isMobile && !!selected && !selectedTrashed;
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
   // Whether a public link opens this conversation right now: the detail's open link once it has
   // been read, the list row's flag until then. The Trash pauses a link, so a trashed one is not.
@@ -3958,7 +3961,7 @@ export function WorkspaceView({
   // read here only while that page is shut: open, the page reads them itself (the same cache entries),
   // and these stop.
   const titleBarPageShown = !!titleBarProjectId && (isMobile ? sheetProjectId === titleBarProjectId
-    : titleBarProjectId === columnProjectId && projectColumnOpen);
+    : titleBarProjectId === columnProjectId && projectColumnOpen && !settingsColumnShown);
   const titleBarReadsLine = !!titleBarProjectId && !selectedTrashed && !titleBarPageShown;
   const titleBarIntegrationQ = useProjectIntegration(titleBarProjectId ?? '', titleBarReadsLine);
   const titleBarPromotionQ = useQuery({
@@ -3973,20 +3976,26 @@ export function WorkspaceView({
     titleBarPromotionQ.data,
   );
   // Esc folds the column too, unless focus is in a field, a dialog or a menu, which own the key.
+  // With the settings column over it, Esc is the settings column's: it closes that, and the project column
+  // underneath comes back.
   useEffect(() => {
-    if (!projectColumnOpen) return;
+    if (!projectColumnOpen && !settingsColumnShown) return;
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing) return;
       const focused = document.activeElement;
       if (focused instanceof HTMLElement && (focused.isContentEditable ||
         focused.closest('input, textarea, select, [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'))) return;
+      if (settingsColumnShown) {
+        setSettingsOpen(false);
+        return;
+      }
       setProjectColumnFolded(true);
       setProjectColumnOnDemand(false);
       localStorage.setItem(PROJECT_COLUMN_FOLDED_KEY, '1');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [projectColumnOpen]);
+  }, [projectColumnOpen, settingsColumnShown]);
   // Whether the address named the column's project together with, or after, the conversation now open
   // (a project row, a member's mark, a link), rather than the selection having moved on under a column
   // already open. Read by the effect below, so it is written first.
@@ -7054,7 +7063,7 @@ export function WorkspaceView({
       returnFocus,
     });
   };
-  // Double-click the header title (or Rename… in a ⋯) to rename. Optimistically patch the title into
+  // The settings' Name field (or Rename… on a row's ⋯) renames. Optimistically patch the title into
   // every cached session list (the header reads `selected.title` off that list, not the detail
   // query) — a project's sessions page included, where a row can be renamed too — so the new name
   // shows instantly; reconcile or roll back on settle.
@@ -7516,18 +7525,19 @@ export function WorkspaceView({
   // left column. Listeners live on `document` so a fast drag that outruns the 1px
   // handle keeps tracking; body cursor/select are pinned for the drag's duration.
   // The project's column sits at the right edge, so its divider widens it dragged leftwards.
-  const startResize = (e: ReactMouseEvent, which: 'list' | 'project' = 'list'): void => {
+  const startResize = (e: ReactMouseEvent, which: 'list' | 'project' | 'settings' = 'list'): void => {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = which === 'list' ? colWidth : projectColWidth;
-    const setWidth = which === 'list' ? setColWidth : setProjectColWidth;
+    const startW = which === 'list' ? colWidth : which === 'project' ? projectColWidth : settingsColWidth;
+    const setWidth = which === 'list' ? setColWidth : which === 'project' ? setProjectColWidth : setSettingsColWidth;
+    const min = which === 'settings' ? SETTINGS_COL_MIN : SESSION_COL_MIN;
     const sign = which === 'list' ? 1 : -1;
     let latest = startW;
     setResizing(which);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     const onMove = (ev: MouseEvent): void => {
-      latest = Math.min(SESSION_COL_MAX, Math.max(SESSION_COL_MIN, startW + sign * (ev.clientX - startX)));
+      latest = Math.min(SESSION_COL_MAX, Math.max(min, startW + sign * (ev.clientX - startX)));
       setWidth(latest);
     };
     const onUp = (): void => {
@@ -7536,7 +7546,7 @@ export function WorkspaceView({
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       setResizing(null);
-      localStorage.setItem(which === 'list' ? SESSION_COL_KEY : PROJECT_COL_KEY, String(latest));
+      localStorage.setItem(which === 'list' ? SESSION_COL_KEY : which === 'project' ? PROJECT_COL_KEY : SETTINGS_COL_KEY, String(latest));
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -8941,6 +8951,11 @@ export function WorkspaceView({
   // column of the open conversation's project, and opens that column where the address names none.
   const toggleProjectColumn = (): void => {
     if (!titleBarProjectId) return;
+    // The settings column holds the slot: the button hands it back to the project column.
+    if (settingsColumnShown) {
+      setSettingsOpen(false);
+      if (titleBarProjectId === columnProjectId && projectColumnOpen) return;
+    }
     if (titleBarProjectId === columnProjectId) {
       foldProjectColumn(projectColumnOpen);
       return;
@@ -10093,6 +10108,28 @@ export function WorkspaceView({
       : selectedId
         ? 'Starting…'
         : '';
+  // The open session's settings, for the column beside the conversation or the sheet on a phone.
+  const settingsProps = selected && !selectedTrashed && !composing
+    ? {
+        open: settingsOpen,
+        onClose: () => setSettingsOpen(false),
+        sessionId: selected.id,
+        title: selected.title,
+        onRename: (title: string) => renameMut.mutate({ id: selected.id, title }),
+        focusNameRequest: settingsNameFocus,
+        sessionTags: (selected.tags ?? []) as SessionTagRef[],
+        tagLibrary: sessionTags,
+        onToggleTag: toggleTag,
+        tagsSaving: setTagsMut.isPending,
+        engineName: selectedSession?.engine ? engineTitle.name : null,
+        runnerName: runner ? runnerShownName : null,
+        accountLabel:
+          // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
+          shownProviderRow?.kind === 'login'
+            ? `${engineTitle.name} · ${shownAccountLabel ?? shownProviderRow.label}`
+            : shownProviderValue,
+      }
+    : null;
   const composerPlaceholder = selectedTrashed
     ? 'Restore this session to continue'
     : handingOver
@@ -10891,64 +10928,21 @@ export function WorkspaceView({
               </button>
             )}
             <div className="workspace-title-line">
-              {editingTitle && selected && !composing ? (
-                <>
-                  <span ref={titleMirrorRef} className="workspace-name-mirror" aria-hidden="true">
-                    {titleDraft || ' '}
-                  </span>
-                  <input
-                    className="workspace-name-input"
-                    style={{ width: titleInputW }}
-                    autoFocus
-                    value={titleDraft}
-                    onChange={(e) => setTitleDraft(e.target.value)}
-                    onFocus={(e) => {
-                      // Select all (double-click-to-rename = type replaces), but anchor the
-                      // caret at the START so a long title shows its head, not its tail. The
-                      // anchor alone doesn't scroll: Chromium keeps the field at the end it
-                      // focused at.
-                      const el = e.currentTarget;
-                      el.setSelectionRange(0, el.value.length, 'backward');
-                      el.scrollLeft = 0;
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        e.currentTarget.blur();
-                      } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        cancelTitleEdit.current = true;
-                        e.currentTarget.blur();
-                      }
-                    }}
-                    onBlur={() => {
-                      setEditingTitle(false);
-                      if (cancelTitleEdit.current) {
-                        cancelTitleEdit.current = false;
-                        return;
-                      }
-                      const t = titleDraft.trim();
-                      // Entering rename mode and committing is an explicit ownership choice even
-                      // when the text is unchanged: the server uses that same-text write to opt a
-                      // project-managed title out of future synchronization (the ABA case).
-                      if (t) renameMut.mutate({ id: selected.id, title: t });
-                    }}
-                  />
-                </>
-              ) : (
-                <div
-                  className="workspace-name"
-                  {...(selected && !selectedTrashed && !composing
-                    ? {
-                        onDoubleClick: () => {
-                          setTitleDraft(selected.title);
-                          setEditingTitle(true);
-                        },
-                        title: 'Double-click to rename',
-                      }
-                    : {})}
+              {selected && !selectedTrashed && !composing ? (
+                // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
+                // it is renamed there, in the Name field.
+                <button
+                  type="button"
+                  className={`workspace-name workspace-name-button${settingsOpen ? ' is-open' : ''}`}
+                  title="Session settings"
+                  aria-expanded={settingsOpen}
+                  onClick={() => setSettingsOpen((open) => !open)}
                 >
+                  <span className="workspace-name-text">{selected.title}</span>
+                  <RightOutlined className="workspace-name-chevron" aria-hidden />
+                </button>
+              ) : (
+                <div className="workspace-name">
                   {composing
                     ? 'New session'
                     : (selected?.title ?? (selectedMissing ? 'Session not found' : selectedId ? 'Starting…' : headWorkspaceName))}
@@ -11086,10 +11080,11 @@ export function WorkspaceView({
                                 key: 'rename',
                                 icon: <EditOutlined />,
                                 label: 'Rename…',
+                                // Opens the settings with their Name field selected, where a session is renamed.
                                 onSelect: () => {
                                   setHeaderMenuOpen(false);
-                                  setTitleDraft(selected.title);
-                                  afterMenu(headerMore.current, () => setEditingTitle(true));
+                                  setSettingsOpen(true);
+                                  afterMenu(headerMore.current, () => setSettingsNameFocus((n) => n + 1));
                                 },
                               },
                               {
@@ -11241,25 +11236,8 @@ export function WorkspaceView({
             guests={guestContextOf(selected, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
-        {selected && !selectedTrashed && !composing && (
-          <SessionSettingsDrawer
-            open={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
-            sessionId={selected.id}
-            sessionTags={(selected.tags ?? []) as SessionTagRef[]}
-            tagLibrary={sessionTags}
-            onToggleTag={toggleTag}
-            tagsSaving={setTagsMut.isPending}
-            engineName={selectedSession?.engine ? engineTitle.name : null}
-            runnerName={runner ? runnerShownName : null}
-            accountLabel={
-              // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
-              shownProviderRow?.kind === 'login'
-                ? `${engineTitle.name} · ${shownAccountLabel ?? shownProviderRow.label}`
-                : shownProviderValue
-            }
-          />
-        )}
+        {/* On a phone the settings are a sheet over the whole screen; wider, a column (below). */}
+        {isMobile && settingsProps && <SessionSettingsDrawer {...settingsProps} />}
         {shareRow && (
           <ShareModal
             open
@@ -12230,7 +12208,20 @@ export function WorkspaceView({
         </>
         )}
       </div>
-      {projectColumnOpen && columnProjectId && (
+      {settingsColumnShown && settingsProps && (
+        <>
+          {!settingsColumnCrowds && (
+            <div
+              className={`session-resizer${resizing === 'settings' ? ' resizing' : ''}`}
+              onMouseDown={(e) => startResize(e, 'settings')}
+              role="separator"
+              aria-orientation="vertical"
+            />
+          )}
+          <SessionSettingsDrawer {...settingsProps} variant="column" width={settingsColWidth} overlay={settingsColumnCrowds} />
+        </>
+      )}
+      {projectColumnOpen && columnProjectId && !settingsColumnShown && (
         <>
           {!projectColumnOnDemand && (
             <div
