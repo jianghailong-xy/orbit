@@ -1,7 +1,8 @@
 /**
  * The REST doors of scheduled tasks (docs/scheduled-tasks-design.md §9.1): read and control, and the owner's press
  * on the two cards. There is deliberately NO door here that creates or changes a schedule — those go through a
- * session's `schedule_create` / `schedule_update` and its card (`schedules-rest-surface.spec.ts` holds this).
+ * session's `schedule_create` / `schedule_update` and its card — with one exception, rename, which changes the title
+ * alone (§8.4; `schedules-rest-surface.spec.ts` holds this).
  *
  *   GET    /api/schedules                         list (not ENDED unless ?state=), with the page's timeline runs
  *   GET    /api/schedules/drafts                  the Scheduled page's drafts: PENDING create cards
@@ -9,6 +10,7 @@
  *   GET    /api/schedules/:id                     the inspector, with this month's use
  *   GET    /api/schedules/:id/runs                runs, newest first
  *   POST   /api/schedules/:id/{pause,resume,run,undo}
+ *   POST   /api/schedules/:id/rename              the title alone
  *   DELETE /api/schedules/:id
  *   POST   /api/schedule-runs/:id/stop
  *   GET    /api/schedule-requests[/:id]           the cards
@@ -43,7 +45,7 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { SessionsService } from '../sessions/sessions.service';
 import { actingSession } from '../wiki/wiki.controller';
-import { ScheduleChangeDto, ScheduleDecisionDto, ScheduleDraftDto, ScheduleUndoDto } from './dto';
+import { ScheduleChangeDto, ScheduleDecisionDto, ScheduleDraftDto, ScheduleRenameDto, ScheduleUndoDto } from './dto';
 import { ScheduleChangeConversations } from './schedule-change-conversation';
 import { ScheduleReadsService } from './schedule-reads.service';
 import { ScheduleRunsService } from './schedule-runs.service';
@@ -186,6 +188,19 @@ export class SchedulesController {
   @HttpCode(HttpStatus.OK)
   async resume(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Req() req: Headers) {
     return this.reads.controlAnswer(user.userId, await this.schedules.resume(scheduleActorOf(user, req), id));
+  }
+
+  /** Rename (§8.4): the title alone; answers as Undo does, with the schedule and the change's record. */
+  @Post('schedules/:id/rename')
+  @PatScope('sessions:write', READ)
+  @HttpCode(HttpStatus.OK)
+  async rename(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: ScheduleRenameDto,
+    @Req() req: Headers,
+  ) {
+    return this.reads.updateAnswer(user.userId, await this.schedules.rename(scheduleActorOf(user, req), id, dto.title));
   }
 
   /** Run now: a MANUAL run under the overlap rule; refused when ENDED (§8.4). */
