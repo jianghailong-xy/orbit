@@ -103,6 +103,20 @@ const WATCH = {
   expiryDeliveries: [],
 };
 
+/** Interrupted, a process left up, a retry armed: the list row's facts for a case that draws three marks. */
+const THREE = {
+  ...row(encodeId('0195c0de-0000-7000-8000-0000000000c6'), 'Three marks', 'Stopped halfway.'),
+  status: 'INTERRUPTED',
+  phase: 'IDLE',
+  released: false,
+  lastTurnOutcome: 'INTERRUPTED',
+  waitingOn: 'WAKE',
+  endReason: null,
+  workFinished: false,
+  runningBgCount: 1,
+};
+let listed: object[] = [];
+
 class FakeEventSource {
   onmessage: ((e: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -127,6 +141,7 @@ const listRow = (title: string): HTMLElement => {
 };
 
 beforeEach(() => {
+  listed = [WATCHING, PLAIN];
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -155,7 +170,7 @@ beforeEach(() => {
         return reply(session);
       }
     }
-    if (path.startsWith('/sessions')) return reply([WATCHING, PLAIN]);
+    if (path.startsWith('/sessions')) return reply(listed);
     if (path.startsWith('/tasks/evidence-decisions/pending')) {
       return reply({ decidingSessionId: null, count: 0, oldestAgeSeconds: null, pending: [], waitingOnYou: [] });
     }
@@ -196,25 +211,29 @@ afterEach(async () => {
   }
 });
 
+/** The real WorkspaceView on the plain session, so every other row is drawn from the list's own copy of it. */
+async function mountList(): Promise<void> {
+  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  const nextContainer = document.createElement('div');
+  const nextRoot = createRoot(nextContainer);
+  client = nextClient;
+  container = nextContainer;
+  root = nextRoot;
+  document.body.appendChild(nextContainer);
+  await act(async () => {
+    nextRoot.render(
+      <QueryClientProvider client={nextClient}>
+        <MemoryRouter initialEntries={[`/sessions/${PLAIN_PUBLIC}`]}>
+          <WorkspaceView runner={RUNNER} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  });
+}
+
 describe('the session list over a session a watch will resume', { timeout: 60_000 }, () => {
   it('draws its row as Watching, in the strip’s words, and leaves a plain reply alone', async () => {
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
-    const nextContainer = document.createElement('div');
-    const nextRoot = createRoot(nextContainer);
-    client = nextClient;
-    container = nextContainer;
-    root = nextRoot;
-    document.body.appendChild(nextContainer);
-    // The plain one is open, so the watched row is drawn from the list's own copy of it.
-    await act(async () => {
-      nextRoot.render(
-        <QueryClientProvider client={nextClient}>
-          <MemoryRouter initialEntries={[`/sessions/${PLAIN_PUBLIC}`]}>
-            <WorkspaceView runner={RUNNER} />
-          </MemoryRouter>
-        </QueryClientProvider>,
-      );
-    });
+    await mountList();
     await act(async () => {
       await vi.waitFor(() => expect(listRow(WATCHING.title).querySelector('.session-icon .anticon-eye')).not.toBeNull(), {
         timeout: 20_000,
@@ -233,5 +252,21 @@ describe('the session list over a session a watch will resume', { timeout: 60_00
     expect(plain.querySelector('.session-icon .anticon-message')).not.toBeNull();
     expect(plain.querySelector('.session-icon .anticon-eye')).toBeNull();
     expect(plain.querySelector('.session-preview')?.textContent).toBe(PLAIN.lastAssistantText);
+  });
+});
+
+describe('the session list row with three marks', { timeout: 60_000 }, () => {
+  it('draws the first two and "+1", so the narrow row clips no chip', async () => {
+    listed = [WATCHING, PLAIN, THREE];
+    await mountList();
+    await act(async () => {
+      await vi.waitFor(() => expect(listRow(THREE.title).querySelector('.session-marks')).not.toBeNull(), {
+        timeout: 20_000,
+        interval: 20,
+      });
+    });
+
+    const chips = [...listRow(THREE.title).querySelectorAll('.session-marks .session-mark')];
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Interrupted', 'Background', '+1']);
   });
 });
