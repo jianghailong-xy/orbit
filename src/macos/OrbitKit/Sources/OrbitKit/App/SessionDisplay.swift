@@ -169,7 +169,7 @@ extension SessionRef {
     public var displayFacts: SessionDisplayFacts {
         SessionDisplayFacts(phase: phase, released: released, lastTurnOutcome: lastTurnOutcome,
                             waitingOn: waitingOn, endReason: endReason, workFinished: workFinished,
-                            activity: activity)
+                            activity: activity, runningBgCount: runningBgCount)
     }
 }
 
@@ -185,6 +185,7 @@ extension LinkPreviewSession {
 extension SessionSearchHit {
     public var displayFacts: SessionDisplayFacts {
         SessionDisplayFacts(phase: phase, released: released, lastTurnOutcome: lastTurnOutcome,
-                            waitingOn: waitingOn, endReason: endReason, workFinished: workFinished)
+                            waitingOn: waitingOn, endReason: endReason, workFinished: workFinished,
+                            activity: activity, runningBgCount: runningBgCount)
     }
 }
