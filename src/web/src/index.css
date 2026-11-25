@@ -6471,6 +6471,11 @@ button.toast--pill:focus-visible {
   align-items: center;
   line-height: 0;
 }
+/* In a header pill the clock takes the pill's text colour: the list row's light grey is unreadable on the fading
+   queued pill. */
+.status-pill.queued .session-state-glyph .anticon {
+  color: inherit !important;
+}
 .session-marks {
   display: inline-flex;
   align-items: center;
