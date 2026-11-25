@@ -467,6 +467,46 @@ class ComposerDeviceTest {
         capture("runner-full-cancelled")
     }
 
+    /** A message a full runner holds, with the session row as `GET /sessions` sends it beside a capacity gate. */
+    private fun heldByFullRunner(active: Int, runNow: String) = """{"status":"PENDING",
+        "extraDetail":{"runState":"QUEUED","queuedReason":"runner_at_capacity","queuedActive":$active,"queuedLimit":16,"queuedHeldByJobs":0,
+        "queuedBurstLimit":2,"runningOverLimit":null,$runNow},
+        "runnerExtra":{"name":"HPC","maxConcurrent":16,"activeSessions":$active,"burstConcurrent":2},
+        "rows":[{"seq":1,"type":"user","turnId":"t-1","payload":{"text":"Start task 6"}},
+        {"seq":2,"type":"assistant","turnId":"t-1","payload":{"text":"Task 6 is filed and waiting for a runner."}},
+        {"seq":3,"type":"turn_end","turnId":"t-1","payload":{"subtype":"success"}}],
+        "queuedTurns":[{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b92","turnId":"01a0cca7-8609-70ed-a0e2-d4b55b832b92","kind":"message",
+        "placement":"accepted","content":"Android: draw the session page the way iOS does","attachments":[]}]}"""
+
+    private fun openRunnerFull() {
+        compose.waitUntil(20000) { compose.onAllNodes(hasTestTag("runner-updating-foot:reason"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("runner-updating-foot:reason", useUnmergedTree = true).performClick()
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("run-now:note"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /** docs/mocks/queued-run-now ① and ②: Run now in the popover, then the turn running over the limit with its tag. */
+    @Test fun runNowStartsAHeldMessageOverTheLimit() = journey("run-now") {
+        login(heldByFullRunner(16, """"runNowAvailable":true,"runNowRefusal":null"""))
+        openRunnerFull()
+        compose.onNodeWithTag("run-now").assertIsEnabled()
+        capture("run-now-enabled")
+        compose.onNodeWithTag("run-now").performClick()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("over-limit"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(stats()["controls"]!!.jsonArray.any { it.jsonObject["action"]?.jsonPrimitive?.content == "run-now" })
+        capture("over-limit")
+        compose.onNodeWithTag("over-limit", useUnmergedTree = true).performClick()
+        compose.waitUntil(5000) { compose.onAllNodes(hasTestTag("over-limit:hint"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        capture("over-limit-hint")
+    }
+
+    /** ③: at the extra cap the button explains, it does not run. */
+    @Test fun runNowAtTheCapExplainsInsteadOfRunning() = journey("run-now-refused") {
+        login(heldByFullRunner(18, """"runNowAvailable":false,"runNowRefusal":"HPC is already 2 over its limit, the most it can take. Wait, or stop another session.""""))
+        openRunnerFull()
+        compose.onNodeWithTag("run-now").assertIsNotEnabled()
+        capture("run-now-disabled")
+    }
+
     @Test fun explicitRejectionRestoresMessageAndAttachmentThenResumes() = journey("rejected-send") {
         login()
         compose.runOnIdle { model.importAttachment(StagedAttachment("reject-file","retry.txt","text/plain"),
