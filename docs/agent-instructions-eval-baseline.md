@@ -511,7 +511,9 @@ D3, D4 and D5 (first one-sentence reply-files text), `B-claude` is `A` without `
 
 The final eval at `5d4471c494` had `I3-delegate-subagent/background` on Codex 0.172.0 at 14/20 against 20/20 on the
 step-0 commit. Played again on 2026-11-25, 20 runs of the cell on each step's tip, Claude Code 2.1.331
-(`claude-sonnet-5-5`) and Codex 0.172.0 as before. Reports: [`agent-eval/instructions-i3b/`](agent-eval/instructions-i3b/).
+(`claude-sonnet-5-5`) and Codex 0.172.0 as before. Reports: the `.md` renderings in [`agent-eval/instructions-i3b/`](agent-eval/instructions-i3b/); the raw `.json`
+reports they were rendered from are kept in Orbit as the file bundle `56XiIIYjYo7kXH0DUJo2Jv` (73 files, one per job and
+name), not in the repository.
 
 | Commit | Step | I3b on Codex |
 | --- | --- | --- |
@@ -564,7 +566,7 @@ for Claude Code); its sentence is true on every engine.
 | E5-read-only-project | 20/20 | 14/20 |
 
 The full suites on the delivered code at the baseline's run counts (5 runs per E and X scenario, 10 per I scenario,
-`v2full-*.json`) put two cells below step 0's baseline, both on Codex, and neither below the step-0 commit beside it:
+`v2full-*`) put two cells below step 0's baseline, both on Codex, and neither below the step-0 commit beside it:
 
 | Cell on Codex | Baseline | Delivered | Step 0, same day |
 | --- | --- | --- | --- |
