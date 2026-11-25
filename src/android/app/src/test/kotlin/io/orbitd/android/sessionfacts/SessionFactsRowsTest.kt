@@ -73,7 +73,8 @@ class SessionFactsRowsTest {
         assertEquals("Succeeded", guest("released" to JsonPrimitive(true)).word)
         assertEquals("Succeeded", guest().word)
         val queued = GuestState(runStatus = "PENDING", released = false, waitingOn = "HOLD", phase = "PENDING")
-        assertEquals("On hold", queued.word)
+        assertEquals("Queued", queued.word)
+        assertEquals(listOf("On hold"), queued.marks!!.map { it.word })
         assertEquals("Queued", GuestState(runStatus = "PENDING").word)
         assertEquals("Interrupted", GuestState(runStatus = "INTERRUPTED", released = false, endReason = "ended", lastTurnOutcome = "INTERRUPTED").word)
     }
