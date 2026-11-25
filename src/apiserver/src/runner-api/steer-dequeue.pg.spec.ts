@@ -69,6 +69,9 @@ before(async () => {
   // as on every turn the owner or a session sent.
   // `finished_at` is the release column (migrations 1261, 1401): the lock reads it to refuse a released session,
   // NULL on every case here, as on every session still held.
+  // `turn_state` is where the session's turn stands for the runner (migration 1611): the lock and the inbox predicate
+  // read it in place of `status` (task T8). NULL on every case here, as on a row the backfill has not reached, which
+  // reads its stored word's (sessions/session-legacy-words.ts).
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";
@@ -86,6 +89,7 @@ before(async () => {
       engine text,
       task_id uuid,
       status text NOT NULL,
+      turn_state text,
       cancel_requested_at timestamptz,
       finished_at timestamptz
     );
