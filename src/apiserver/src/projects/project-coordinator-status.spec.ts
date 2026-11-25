@@ -20,7 +20,6 @@ function sessionRow(overrides: Record<string, unknown> = {}) {
   return {
     id: SESSION_ID,
     title: 'Ship the coordinator',
-    status,
     // What the words are derived from (sessions/session-legacy-words.ts), as a session at `status` has them.
     ...factsOfWord(status),
     startedAt: new Date('2026-08-24T06:00:00.000Z'),

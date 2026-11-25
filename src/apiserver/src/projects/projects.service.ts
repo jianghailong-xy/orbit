@@ -867,8 +867,6 @@ const COORDINATOR_STATUS_SESSION_SELECT = {
   ...LEGACY_STATUS_SELECT,
   id: true,
   title: true,
-  // The approval count beside the words reads it.
-  status: true,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,

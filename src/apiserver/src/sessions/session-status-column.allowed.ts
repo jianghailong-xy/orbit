@@ -52,7 +52,7 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'projects/project-open-item.ts': { reads: 1 },
   'projects/project-ready-to-run.ts': { reads: 3 },
   'projects/project-tasks-settled.producer.ts': { reads: 1 },
-  'projects/projects.service.ts': { reads: 3, enums: 1 },
+  'projects/projects.service.ts': { reads: 2, enums: 1 },
   'projects/session-source.ts': { reads: 1, writes: 1, alone: 1, enums: 1 },
   'projects/task-exception-input.producer.ts': { reads: 1 },
   'projects/task-run-idle.ts': { reads: 1, enums: 1 },
@@ -86,6 +86,10 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'runners/runners.service.ts': { reads: 6, enums: 1 },
   'schedules/schedule-runs.service.ts': { reads: 9, enums: 1 },
   'session-guests/session-guests.service.ts': { reads: 3, writes: 1, alone: 1, enums: 1 },
+  // The one read added after the list was seeded (task T4): the projector's fallback for a held row with no
+  // `turn_state` (not yet backfilled), which keeps its stored word. Its SQL twin takes the word as an argument, and
+  // LEGACY_STATUS_SELECT hands it over from queries that read it already. Goes with the column's writers (T14).
+  'sessions/session-legacy-words.ts': { reads: 2 },
   'sessions/auto-retry-eligibility.ts': { reads: 2, enums: 1 },
   'sessions/auto-retry.service.ts': { reads: 22, enums: 1 },
   'sessions/open-list-version.ts': { reads: 2 },
@@ -96,7 +100,7 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'sessions/session-reach.ts': { reads: 1 },
   'sessions/session-request.ts': { reads: 3 },
   'sessions/sessions.controller.ts': { enums: 1 },
-  'sessions/sessions.service.ts': { reads: 56, writes: 8, alone: 8, enums: 1 },
+  'sessions/sessions.service.ts': { reads: 59, writes: 8, alone: 8, enums: 1 },
   'sessions/task-work-carrier.ts': { reads: 6, enums: 1 },
   'share-links/share-links.service.ts': { reads: 1 },
   'task-lists/task-lists.service.ts': { reads: 2 },

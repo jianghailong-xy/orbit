@@ -30,6 +30,7 @@ function wordShape(shape: ReleaseShape, name: string = shape.name, over: Partial
     name,
     stored: shape.status,
     facts: {
+      status: shape.status,
       finishedAt: shape.released ? AT : null,
       turnState: shape.released ? null : TURN_STATE_OF_WORD[shape.status] ?? null,
       endReason: shape.endReason,
@@ -60,6 +61,7 @@ const held = (status: RunStatus, over: Partial<LegacyStatusFacts> = {}, name = `
 export function factsOfWord(status: RunStatus | string, over: Partial<LegacyStatusFacts> = {}): LegacyStatusFacts {
   const released = status === 'SUCCEEDED' || status === 'FAILED' || status === 'CANCELLED';
   return {
+    status,
     finishedAt: released ? AT : null,
     turnState: TURN_STATE_OF_WORD[status as RunStatus] ?? null,
     endReason: status === 'SUCCEEDED' ? 'task_done' : null,

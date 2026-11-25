@@ -4,8 +4,10 @@
 -- docs/session-status-retirement-plan.md §3.1; project 353SgnUjvamRr06Sho0EZ, task T4).
 --
 -- It gives the word a session reads on the wire from its facts, for the database functions that need one (plan §4.2,
--- restated in T6) and for the trigger that keeps the column during deploy 3 (T14). The last argument is the
--- settled_as of a LANDING container's project_landing row (null for every other session). It returns text, not
+-- restated in T6) and for the trigger that keeps the column during deploy 3 (T14). landing_settled_as is the
+-- settled_as of a LANDING container's project_landing row (null for every other session). stored_status is the stored
+-- word, read for one thing: a held row with no turn_state, which a row not written since 1611 has until the backfill
+-- (T3) fills it, keeps its stored word. T14 removes that argument with the column's writers. It returns text, not
 -- run_status, so that dropping the type in deploy 4 does not depend on it. An end_reason of '' is an end reason,
 -- as the TypeScript `endReason == null` reads it.
 --
@@ -18,7 +20,7 @@
 
 CREATE OR REPLACE FUNCTION session_legacy_status(
   finished_at timestamp, turn_state text, end_reason text, last_turn_outcome text, started_at timestamp,
-  import_source_cwd text, kind text, landing_settled_as text
+  import_source_cwd text, kind text, landing_settled_as text, stored_status text
 ) RETURNS text
   LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
   SELECT CASE
@@ -27,7 +29,9 @@ CREATE OR REPLACE FUNCTION session_legacy_status(
                WHEN 'QUEUED' THEN 'PENDING'
                WHEN 'IN_FLIGHT' THEN 'RUNNING'
                WHEN 'ABANDONED' THEN 'INTERRUPTED'
-               ELSE 'AWAITING_INPUT'
+               ELSE
+                 CASE WHEN turn_state IS NULL AND stored_status IN ('PENDING', 'RUNNING', 'INTERRUPTED') THEN stored_status
+                      ELSE 'AWAITING_INPUT' END
              END
            WHEN end_reason IS NULL AND last_turn_outcome IS NOT DISTINCT FROM 'FAILED' THEN 'FAILED'
            WHEN end_reason IS NULL AND last_turn_outcome IS NULL AND import_source_cwd IS NOT NULL THEN 'FAILED'

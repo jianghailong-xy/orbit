@@ -3459,6 +3459,7 @@ export class SessionsService {
         prompt: true,
         // The facts the status words are derived from (session-legacy-words.ts), beside sessionKind, startedAt,
         // finishedAt and endReason below.
+        status: true,
         turnState: true,
         lastTurnOutcome: true,
         importSourceCwd: true,
@@ -3613,6 +3614,7 @@ export class SessionsService {
     type Row = {
       id: string;
       title: string;
+      status: RunStatus;
       turnState: string | null;
       finishedAt: Date | null;
       lastTurnOutcome: string | null;
@@ -3884,7 +3886,7 @@ export class SessionsService {
           ),
           scored AS (
             SELECT
-              s.id, s.title,
+              s.id, s.title, s.status,
               s.turn_state   AS "turnState",
               s.finished_at  AS "finishedAt",
               s.last_turn_outcome AS "lastTurnOutcome",
@@ -3978,7 +3980,7 @@ export class SessionsService {
             FROM scored
           )
           SELECT
-            id, title, "turnState", "finishedAt", "lastTurnOutcome", "startedAt", "importSourceCwd", "sessionKind",
+            id, title, status, "turnState", "finishedAt", "lastTurnOutcome", "startedAt", "importSourceCwd", "sessionKind",
             "workspaceId", "workspaceName", "runnerId", "taskId", "taskTitle",
             "lastTurnAt", "listedAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
             "matchField", "snippet", total::int AS "total"
@@ -3995,7 +3997,7 @@ export class SessionsService {
         `)
       : await this.prisma.$queryRaw<Row[]>(Prisma.sql`
           SELECT
-            s.id, s.title,
+            s.id, s.title, s.status,
             s.turn_state   AS "turnState",
             s.finished_at  AS "finishedAt",
             s.last_turn_outcome AS "lastTurnOutcome",
@@ -4039,6 +4041,7 @@ export class SessionsService {
       ...withoutWordFacts(withSessionState({
         id: r.id,
         title: r.title,
+        status: r.status,
         turnState: r.turnState,
         finishedAt: r.finishedAt,
         lastTurnOutcome: r.lastTurnOutcome,

@@ -6,7 +6,7 @@ import test from 'node:test';
 import { deriveSessionRunState, deriveSessionState } from '@orbit/shared';
 
 import { legacySessionStatus, statusWordFilter } from './session-legacy-words';
-import { WORD_SHAPES } from './session-legacy-words.fixture';
+import { factsOfWord, WORD_SHAPES } from './session-legacy-words.fixture';
 
 /**
  * The projector of the legacy status words (docs/session-status-retirement-plan.md §3.1, task T4), over every row
@@ -32,6 +32,14 @@ test('every row shape derives the golden words, and differs from the stored word
   assert.deepEqual(unexplained, []);
   assert.deepEqual([...new Set(golden.rows.flatMap((row) => row.kind ?? []))].sort(),
     ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']);
+});
+
+test('a held row with no turn state keeps its stored word; one with a turn state, or released, does not read it', () => {
+  for (const status of ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED']) {
+    assert.equal(legacySessionStatus(factsOfWord(status, { turnState: null })), status);
+  }
+  assert.equal(legacySessionStatus(factsOfWord('RUNNING', { status: 'PENDING' })), 'RUNNING');
+  assert.equal(legacySessionStatus(factsOfWord('CANCELLED', { status: 'RUNNING' })), 'CANCELLED');
 });
 
 test('a word the protocol does not have is no filter', () => {

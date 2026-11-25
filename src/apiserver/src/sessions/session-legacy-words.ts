@@ -5,7 +5,11 @@
  * (`session_legacy_status`, migration 1621) and the `?status=` condition (`statusWordFilter`). The three are held to
  * each other over every row shape by session-legacy-words.spec.ts and session-legacy-words.pg.spec.ts.
  *
- * A held row (`finished_at` null) reads its turn state. A released row reads, first match wins:
+ * A held row (`finished_at` null) reads its turn state. One with no turn state reads its STORED word: a held row
+ * that nothing has written since migration 1611 added the column has none until the backfill (task T3) fills it, and
+ * deploy 1 and this projector can reach production together. That one read of `session.status` is made here and in
+ * the SQL twin only, and goes with the column's writers (task T14). A released row reads no stored word; first match
+ * wins:
  *   P1  no end asked and the last turn failed                                    FAILED
  *   P2  no end asked, no turn outcome, a transcript import still marked pending  FAILED
  *   P3  a LANDING container with no end asked                                    SUCCEEDED or CANCELLED, by its landing
@@ -20,6 +24,8 @@ import { landingContainerStatus } from '../projects/landing-session';
 
 /** The session columns the projector reads. */
 export interface LegacyStatusFacts {
+  /** The stored word, read only for a held row with no turn state (see above). Task T14 removes it. */
+  status: string;
   finishedAt: Date | string | null;
   turnState: string | null;
   endReason: string | null;
@@ -31,6 +37,7 @@ export interface LegacyStatusFacts {
 
 /** The columns LegacyStatusFacts reads, for a Prisma `select`. */
 export const LEGACY_STATUS_SELECT = {
+  status: true,
   finishedAt: true,
   turnState: true,
   endReason: true,
@@ -39,6 +46,11 @@ export const LEGACY_STATUS_SELECT = {
   importSourceCwd: true,
   sessionKind: true,
 } as const;
+
+/** The held words, which an unfilled held row keeps as stored. */
+const STORED_HELD_WORDS: ReadonlySet<string> = new Set([
+  RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED,
+]);
 
 /** The settlement of a LANDING container's `project_landing` row, which P3 reads. */
 export interface LandingSettlement {
@@ -69,12 +81,12 @@ export async function readLandingSettlements(
  * The row without the facts a narrow select read only for the projector, so a payload built from it carries the keys
  * it carried before (`endReason` stays: every such payload had it). A payload's own facts are session-phase.ts's.
  */
-export function withoutWordFacts<T>(row: T): Omit<T, Exclude<keyof LegacyStatusFacts, 'endReason'>> {
+export function withoutWordFacts<T>(row: T): Omit<T, Exclude<keyof LegacyStatusFacts, 'endReason' | 'status'>> {
   const {
     finishedAt: _finishedAt, turnState: _turnState, lastTurnOutcome: _lastTurnOutcome, startedAt: _startedAt,
     importSourceCwd: _importSourceCwd, sessionKind: _sessionKind, ...rest
   } = row as T & Partial<LegacyStatusFacts>;
-  return rest as unknown as Omit<T, Exclude<keyof LegacyStatusFacts, 'endReason'>>;
+  return rest as unknown as Omit<T, Exclude<keyof LegacyStatusFacts, 'endReason' | 'status'>>;
 }
 
 const HELD_WORD_OF_TURN_STATE: Record<string, RunStatus> = {
@@ -89,7 +101,10 @@ const HELD_WORD_OF_TURN_STATE: Record<string, RunStatus> = {
  */
 export function legacySessionStatus(facts: LegacyStatusFacts, landing?: LandingSettlement | null): RunStatus {
   if (facts.finishedAt == null) {
-    return (facts.turnState == null ? undefined : HELD_WORD_OF_TURN_STATE[facts.turnState]) ?? RunStatus.AWAITING_INPUT;
+    if (facts.turnState != null) return HELD_WORD_OF_TURN_STATE[facts.turnState] ?? RunStatus.AWAITING_INPUT;
+    // No turn state: parked, or not yet backfilled. A parked row stores AWAITING_INPUT, so both read the stored word.
+    const session = facts;
+    return STORED_HELD_WORDS.has(session.status) ? session.status as RunStatus : RunStatus.AWAITING_INPUT;
   }
   if (facts.endReason == null) {
     if (facts.lastTurnOutcome === 'FAILED') return RunStatus.FAILED;
