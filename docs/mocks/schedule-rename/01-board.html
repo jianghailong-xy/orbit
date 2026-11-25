@@ -259,8 +259,8 @@
 
 <!-- ================= Part 3: rules, decisions, delivery ================= -->
 <section class="b-part" id="part-3">
-  <h1>Rules, open decisions, delivery</h1>
-  <p class="b-sub">The scheduled-tasks design (§2) says “no surface has a field: changes are said”. Renaming would be its first exception, so the decisions below are yours to make.</p>
+  <h1>Rules, decisions, delivery</h1>
+  <p class="b-sub">The scheduled-tasks design (§2) says “no surface has a field: changes are said”. Renaming is its one exception. Decided by the owner on 2026-11-26: D1 A, D2 B.</p>
   <div class="b-cols">
     <div class="b-card">
       <h3>What a rename does</h3>
@@ -275,18 +275,18 @@
       </ul>
     </div>
     <div class="b-card">
-      <h3>To decide</h3>
+      <h3>Decided (owner, 2026-11-26)</h3>
       <div class="b-q">D1 · How does a rename reach the server?</div>
-      <div class="b-opt rec"><b>A (recommended) · A narrow REST door</b><code>POST /api/schedules/:id/rename {title}</code>: title only, beside pause/resume. The name is a label, not goal, risk, budget or authority, so §2's rule still holds for everything that is. The surface spec is updated to list it.</div>
-      <div class="b-opt"><b>B · Keep it said</b>Rename… opens the Change… conversation with “Rename it to: ” typed in. No new door, but every rename starts an engine and costs a turn.</div>
+      <div class="b-opt rec"><b>A · A narrow REST door ✓ chosen</b><code>POST /api/schedules/:id/rename {title}</code>: title only, beside pause/resume. The name is a label, not goal, risk, budget or authority, so §2's rule still holds for everything that is. The surface spec is updated to list it.</div>
+      <div class="b-opt" style="opacity:.55"><b>B · Keep it said</b>Rename… opens the Change… conversation with “Rename it to: ” typed in. No new door, but every rename starts an engine and costs a turn.</div>
       <div class="b-q">D2 · May an agent rename it afterwards?</div>
-      <div class="b-opt rec"><b>A (recommended) · A person's name sticks</b>Once a person has named it, a run's <code>schedule_update</code> with a new title is refused (<code>SCHEDULE_TITLE_SET_BY_OWNER</code>). A session the person is talking in may still rename it, when asked. Undoing the rename lifts the hold.</div>
-      <div class="b-opt"><b>B · No hold</b>Any change is recorded with Undo; an agent may overwrite the name.</div>
+      <div class="b-opt" style="opacity:.55"><b>A · A person's name sticks</b>Once a person has named it, a run's <code>schedule_update</code> with a new title is refused (<code>SCHEDULE_TITLE_SET_BY_OWNER</code>). A session the person is talking in may still rename it, when asked. Undoing the rename lifts the hold.</div>
+      <div class="b-opt rec"><b>B · No hold ✓ chosen</b>Any change is recorded with Undo; an agent may rename it later, and History shows who did, with Undo.</div>
     </div>
     <div class="b-card">
       <h3>Delivery (cheapest first)</h3>
       <ol>
-        <li><b>Server</b>: the rename door + <code>titleSetBy</code> column (D2 A), revision record, spec for the surface list and the run refusal. Shared copy for “Rename…”, “Renamed from …”.</li>
+        <li><b>Server</b>: the rename door (no migration), the revision record, the surface spec listing it. Shared copy for “Rename…”, “Renamed from …”.</li>
         <li><b>Web</b>: Rename… in the row menu and inspector ⋯; the inspector title as a field (reuses the session-row rename field). Vitest.</li>
         <li><b>macOS + iOS</b>: the menu item, the inline field on macOS and the alert on iOS; OrbitKit API call; History line.</li>
         <li><b>Android</b>: the menu item and a dialog, following iOS.</li>
