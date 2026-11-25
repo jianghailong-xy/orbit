@@ -1,0 +1,148 @@
+{
+    "rows": [
+        {
+            "name": "status PENDING (queued)",
+            "mark": "queued",
+            "word": "Queued",
+            "runBadge": "Queued",
+            "needsYouGroup": false,
+            "workingGroup": true
+        },
+        {
+            "name": "status RUNNING",
+            "mark": "running",
+            "word": "Running",
+            "runBadge": "Running",
+            "needsYouGroup": false,
+            "workingGroup": true
+        },
+        {
+            "name": "status AWAITING_INPUT (held idle)",
+            "mark": "none",
+            "word": "Waiting for your reply",
+            "runBadge": "Awaiting reply",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "status INTERRUPTED (held, stopped turn)",
+            "mark": "none",
+            "word": "Interrupted",
+            "runBadge": "Interrupted",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "status SUCCEEDED (task run finished)",
+            "mark": "none",
+            "word": "Succeeded",
+            "runBadge": "Finished",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "status FAILED (released by a failed turn)",
+            "mark": "failed",
+            "word": "Failed",
+            "runBadge": "Failed",
+            "needsYouGroup": true,
+            "workingGroup": false
+        },
+        {
+            "name": "status CANCELLED (released by End)",
+            "mark": "none",
+            "word": "Ended",
+            "runBadge": "Ended",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "running a job with no turn",
+            "mark": "jobs",
+            "word": "Background process running",
+            "runBadge": "Awaiting reply",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "waiting on an approval",
+            "mark": "needs-you",
+            "word": "Waiting for approval",
+            "runBadge": "Running",
+            "needsYouGroup": true,
+            "workingGroup": true
+        },
+        {
+            "name": "on hold (queued, account paused)",
+            "mark": "queued",
+            "word": "Queued",
+            "runBadge": "Queued",
+            "needsYouGroup": false,
+            "workingGroup": true
+        },
+        {
+            "name": "ended, runner never confirmed",
+            "mark": "failed",
+            "word": "Failed",
+            "runBadge": "Failed",
+            "needsYouGroup": true,
+            "workingGroup": false
+        },
+        {
+            "name": "old plain row stored SUCCEEDED",
+            "mark": "none",
+            "word": "Succeeded",
+            "runBadge": "Finished",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "ending after an interrupted turn",
+            "mark": "none",
+            "word": "Ended",
+            "runBadge": "Ended",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "parked, engine started its own turn",
+            "mark": "none",
+            "word": "Waiting for your reply",
+            "runBadge": "Awaiting reply",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "parked, sub-agent running",
+            "mark": "running",
+            "word": "Running Agent",
+            "runBadge": "Awaiting reply",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "parked, will wake (watch or wake-up)",
+            "mark": "watching",
+            "word": "Waiting to resume",
+            "runBadge": "Awaiting reply",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "unknown status, no capabilities, held",
+            "mark": "none",
+            "word": "Ended",
+            "runBadge": "—",
+            "needsYouGroup": false,
+            "workingGroup": false
+        },
+        {
+            "name": "unknown status, no capabilities, released",
+            "mark": "none",
+            "word": "Ended",
+            "runBadge": "—",
+            "needsYouGroup": false,
+            "workingGroup": false
+        }
+    ]
+}

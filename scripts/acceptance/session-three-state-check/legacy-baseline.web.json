@@ -1,0 +1,174 @@
+{
+ "rows": [
+  {
+   "name": "status PENDING (queued)",
+   "icon": "clock-circle",
+   "word": "Queued",
+   "runBadge": "Queued",
+   "needsYouGroup": false,
+   "workingGroup": true
+  },
+  {
+   "name": "status RUNNING",
+   "icon": "loading",
+   "word": "Running",
+   "runBadge": "Running",
+   "needsYouGroup": false,
+   "workingGroup": true
+  },
+  {
+   "name": "status AWAITING_INPUT (held idle)",
+   "icon": "message",
+   "word": "Waiting for your reply",
+   "runBadge": "Awaiting reply",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "status INTERRUPTED (held, stopped turn)",
+   "icon": "minus-circle",
+   "word": "Interrupted",
+   "runBadge": "Interrupted",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "status SUCCEEDED (task run finished)",
+   "icon": "check-circle",
+   "word": "Finished",
+   "runBadge": "Finished",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "status FAILED (released by a failed turn)",
+   "icon": "close-circle",
+   "word": "Failed",
+   "runBadge": "Failed",
+   "needsYouGroup": true,
+   "workingGroup": false
+  },
+  {
+   "name": "status CANCELLED (released by End)",
+   "icon": "check-circle",
+   "word": "Ended",
+   "runBadge": "Ended",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "running a job with no turn",
+   "icon": "code",
+   "word": "Background process running",
+   "runBadge": "Awaiting reply",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "waiting on an approval",
+   "icon": "pause-circle",
+   "word": "Waiting for approval",
+   "runBadge": "Running",
+   "needsYouGroup": true,
+   "workingGroup": true
+  },
+  {
+   "name": "on hold (queued, account paused)",
+   "icon": "clock-circle",
+   "word": "Queued",
+   "runBadge": "Queued",
+   "needsYouGroup": false,
+   "workingGroup": true
+  },
+  {
+   "name": "ended, runner never confirmed",
+   "icon": "close-circle",
+   "word": "Failed",
+   "runBadge": "Failed",
+   "needsYouGroup": true,
+   "workingGroup": false
+  },
+  {
+   "name": "old plain row stored SUCCEEDED",
+   "icon": "check-circle",
+   "word": "Finished",
+   "runBadge": "Finished",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "ending after an interrupted turn",
+   "icon": "check-circle",
+   "word": "Ended",
+   "runBadge": "Ended",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "parked, engine started its own turn",
+   "icon": "message",
+   "word": "Waiting for your reply",
+   "runBadge": "Awaiting reply",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "parked, sub-agent running",
+   "icon": "loading",
+   "word": "Running Agent",
+   "runBadge": "Awaiting reply",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "parked, will wake (watch or wake-up)",
+   "icon": "eye",
+   "word": "Waiting to resume",
+   "runBadge": "Awaiting reply",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "unknown status, no capabilities, held",
+   "icon": "check-circle",
+   "word": "Ended",
+   "runBadge": "Ended",
+   "needsYouGroup": false,
+   "workingGroup": false
+  },
+  {
+   "name": "unknown status, no capabilities, released",
+   "icon": "check-circle",
+   "word": "Ended",
+   "runBadge": "Ended",
+   "needsYouGroup": false,
+   "workingGroup": false
+  }
+ ],
+ "tasksListPill": [
+  {
+   "name": "task running",
+   "word": "Running"
+  },
+  {
+   "name": "task queued, queuedOnHold absent",
+   "word": "Queued"
+  },
+  {
+   "name": "task queued, queuedOnHold false",
+   "word": "Queued"
+  },
+  {
+   "name": "task queued, queuedOnHold true",
+   "word": "On hold"
+  },
+  {
+   "name": "task open",
+   "word": "Open"
+  },
+  {
+   "name": "task failed",
+   "word": "Failed"
+  }
+ ]
+}
