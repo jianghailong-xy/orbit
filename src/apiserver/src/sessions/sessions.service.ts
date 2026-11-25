@@ -8814,7 +8814,7 @@ export class SessionsService {
         ...(interruptPayload ? { content: interruptPayload } : {}),
       });
       if (!followUp) {
-        if (idleAfterStop) await tx.session.update({ where: { id }, data: { status: RunStatus.AWAITING_INPUT } });
+        if (idleAfterStop) await tx.session.update({ where: { id }, data: { status: RunStatus.AWAITING_INPUT, turnState: null } });
         return { turn: null, wakeQueue: false, wakeInbox: true, idempotent: false, idled: idleAfterStop };
       }
       // A claim can race the lazy first-turn seed, exactly as in createTurn: under this

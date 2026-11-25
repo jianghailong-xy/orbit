@@ -5755,14 +5755,16 @@ export class RunnerApiController {
     // Retried whole: whether anything runs is re-read under the session lock on every attempt.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
-      const row = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true, cancelRequestedAt: true } });
-      if (row.status !== RunStatus.RUNNING || row.cancelRequestedAt) return { status: row.status, returned: false };
+      // The slot is the turn state IN_FLIGHT; the word answered is the projector's (sessions/session-legacy-words.ts).
+      const row = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ...LEGACY_STATUS_SELECT, cancelRequestedAt: true } });
+      if (turnStateOf(row) !== 'IN_FLIGHT' || row.cancelRequestedAt) return { status: legacySessionStatus(row), returned: false };
       const executable = (status: string) => tx.conversationTurn.count({
         where: { sessionId, kind: { in: ['message', 'shell'] }, status },
       });
-      if (await executable('IN_FLIGHT') > 0) return { status: row.status, returned: false };
+      if (await executable('IN_FLIGHT') > 0) return { status: legacySessionStatus(row), returned: false };
       const status = await executable('PENDING') > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT;
-      await tx.session.update({ where: { id: sessionId }, data: { status, engineTurnActive: false } });
+      // The word and its turn state together, as deploy 2 writes them: queued again, or parked.
+      await tx.session.update({ where: { id: sessionId }, data: { status, turnState: turnStateOfWord(status), engineTurnActive: false } });
       return { status, returned: true };
     }, loggedRetry(this.logger, 'runnerApi.returnSlot'));
     await this.recordRunnerDraining(runner.id);

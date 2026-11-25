@@ -48,8 +48,9 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   // Reads none (task T9). `forceFinalize` writes the word and `turnState` together, as deploy 2 does; T14 takes it to 0.
   'realtime/reaper.service.ts': { writes: 1 },
   // Reads none (task T8). Its runner-driven writers write the word and `turnState` together, as deploy 2 does; T14
-  // takes these to 0.
-  'runner-api/runner-api.controller.ts': { writes: 9 },
+  // takes these to 0. The tenth is return-slot, which main's f49915d0b8 added after T8 and the merge of main brought in
+  // (dbdc84a638) reading and writing the word alone; task T7 moved it onto the turn state and writes both.
+  'runner-api/runner-api.controller.ts': { writes: 10 },
   'schedules/schedule-runs.service.ts': { reads: 9, enums: 1 },
   'session-guests/session-guests.service.ts': { reads: 3, writes: 1, alone: 1, enums: 1 },
   // The reads added after the list was seeded: the one fallback for a held row with no `turn_state` (not yet
@@ -71,7 +72,9 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'sessions/session-reach.ts': { reads: 1 },
   'sessions/session-request.ts': { reads: 3 },
   'sessions/sessions.controller.ts': { enums: 1 },
-  'sessions/sessions.service.ts': { reads: 59, writes: 8, alone: 8, enums: 1 },
+  // The ninth write is the interrupt's idle-after-Stop, which main's f49915d0b8 added and the merge of main brought in
+  // (dbdc84a638); it writes `turnState` beside the word (task T7), so `alone` stays 8.
+  'sessions/sessions.service.ts': { reads: 59, writes: 9, alone: 8, enums: 1 },
   'sessions/task-work-carrier.ts': { reads: 6, enums: 1 },
   'share-links/share-links.service.ts': { reads: 1 },
   'watches/watch-delivery.service.ts': { reads: 1 },
