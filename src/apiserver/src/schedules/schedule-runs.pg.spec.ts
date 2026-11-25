@@ -1551,6 +1551,24 @@ for (const work of OUTSIDE_TURN_WORK) {
   });
 }
 
+// The session's phase decides idle (sessions/session-phase.ts), so a background SubAgent holds a run as a `bg_run`
+// job does: on 2026-11-25 a run whose turn ended to wait on a background `delegate` was failed NO_REPORT mid-wait.
+for (const work of OUTSIDE_TURN_WORK) {
+  test(`§7.1 NO_REPORT: an idle-status session with ${work.kind} executing holds its run, then fails it unreported`, { skip }, async () => {
+    reset();
+    at('2026-11-14T00:00:00Z');
+    const w = await world(`no-report-executing-${work.kind.replace(/\W+/g, '-')}`);
+    const { run, sessionId } = await runningRun(w, { runLimitMinutes: 120 });
+    await db.conversationTurn.updateMany({ where: { sessionId }, data: { status: 'ANSWERED' } });
+    await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT', ...work.running } });
+    advance(40 * MINUTE);
+    assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', `${work.kind} holds the run`);
+    await db.session.update({ where: { id: sessionId }, data: work.ended });
+    assert.equal(await runs.reconcileRun(run.id), 'FAILED');
+    assert.equal((await runOf(run.id)).failureReason, 'NO_REPORT');
+  });
+}
+
 test('LAND: the working-time limit still bounds a run waiting on a background job after its turn', { skip }, async () => {
   const { w, run, sessionId } = await landFixture('land-limit-bg-job');
   await runs.report(w.ownerId, sessionId, { outcome: 'CHANGED', key: 'early', summary: 'Committed the bump.' });

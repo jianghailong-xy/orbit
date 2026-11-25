@@ -26,7 +26,8 @@
  * WATCHING AND ENDING (§6.4, §7)
  * ==============================
  * `schedule_run_report` ends a run, once, from the session serving it. Without one, what the session does decides:
- * an engine that ended, or went idle with no `bg_run` job running and no turn still to answer, is NO_REPORT;
+ * an engine that ended, or whose session's phase is IDLE (no SubAgent, `bg_run` job or engine turn executing) with no
+ * turn still to answer, is NO_REPORT;
  * a run past its limit is interrupted, RUN_LIMIT; a card nobody
  * answered for two hours interrupts it, APPROVAL_TIMEOUT. Whether the run reached its engine is read from its first
  * turn's `delivered_at`: a run that never did (RUNNER_UNAVAILABLE, QUOTA, ENGINE_CRASHED_BEFORE_START) has its
@@ -57,6 +58,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { openingTurnKey } from '../sessions/orbit-authored-turn';
 import { sessionHeldByCapacity } from '../sessions/queued-reason-sql';
+import { deriveSessionPhase } from '../sessions/session-phase';
 import {
   SCHEDULE_NOTIFIER,
   approvalCopy,
@@ -654,7 +656,8 @@ export class ScheduleRunsService {
           select: {
             status: true, finishedAt: true, endReason: true, lastTurnOutcome: true, completedAt: true, archivedAt: true,
             deletedAt: true,
-            cancelRequestedAt: true, error: true, failureKind: true, runningBgJobs: true,
+            cancelRequestedAt: true, error: true, failureKind: true,
+            engineTurnActive: true, runningSubagents: true, runningBgJobs: true,
           },
         })
       : null;
@@ -737,14 +740,13 @@ export class ScheduleRunsService {
       if (run.state === 'RUNNING') return this.moveInProgress(runId, 'RUNNING', 'AWAITING_APPROVAL');
       return 'UNCHANGED';
     }
-    // Idle is not finished while the run still has work coming back to it: a `bg_run` job the runner still
-    // reports running (`runningBgJobs`: job or watch, never a service; silent or not, since a job waiting on a
-    // lock writes nothing), or a turn not yet answered, such as the wake a job's end files a moment after its
-    // end is reported. Its working time still counts toward RUN_LIMIT above.
-    // Held (a released session returned above) and no turn queued or running: AWAITING_INPUT or INTERRUPTED.
-    const idle = session.status !== RunStatus.PENDING && session.status !== RunStatus.RUNNING
+    // Idle is not finished while the run still has work coming back to it. The session's phase says whether anything
+    // executes for it (sessions/session-phase.ts): a dispatched turn, the engine's own turn, a SubAgent (background
+    // `delegate` calls included) or a `bg_run` job, silent or not, since a job waiting on a lock writes nothing. A turn
+    // not yet answered, such as the wake a job's or SubAgent's end files a moment after its end is reported, holds it
+    // too. Its working time still counts toward RUN_LIMIT above.
+    const idle = deriveSessionPhase(session) === 'IDLE'
       && opening?.status === 'ANSWERED'
-      && session.runningBgJobs.length === 0
       && (await this.prisma.conversationTurn.count({
         where: { sessionId, status: { in: ['PENDING', 'IN_FLIGHT'] } },
       })) === 0;
