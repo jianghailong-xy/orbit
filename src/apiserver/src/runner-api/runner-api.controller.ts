@@ -5755,14 +5755,21 @@ export class RunnerApiController {
     // Retried whole: whether anything runs is re-read under the session lock on every attempt.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
-      const row = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true, cancelRequestedAt: true } });
-      if (row.status !== RunStatus.RUNNING || row.cancelRequestedAt) return { status: row.status, returned: false };
+      const row = await tx.session.findUniqueOrThrow({
+        where: { id: sessionId }, select: { ...LEGACY_STATUS_SELECT, cancelRequestedAt: true },
+      });
+      // Only a slot holds anything to give back: a dispatched turn (IN_FLIGHT). The answer is the projected word.
+      if (turnStateOf(row) !== 'IN_FLIGHT' || row.cancelRequestedAt) {
+        return { status: legacySessionStatus(row), returned: false };
+      }
       const executable = (status: string) => tx.conversationTurn.count({
         where: { sessionId, kind: { in: ['message', 'shell'] }, status },
       });
-      if (await executable('IN_FLIGHT') > 0) return { status: row.status, returned: false };
-      const status = await executable('PENDING') > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT;
-      await tx.session.update({ where: { id: sessionId }, data: { status, engineTurnActive: false } });
+      if (await executable('IN_FLIGHT') > 0) return { status: RunStatus.RUNNING, returned: false };
+      // Back in the queue behind the update, or parked; both spellings, as deploy 2 writes them.
+      const turnState = await executable('PENDING') > 0 ? 'QUEUED' as const : null;
+      const status = turnState === 'QUEUED' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT;
+      await tx.session.update({ where: { id: sessionId }, data: { status, turnState, engineTurnActive: false } });
       return { status, returned: true };
     }, loggedRetry(this.logger, 'runnerApi.returnSlot'));
     await this.recordRunnerDraining(runner.id);

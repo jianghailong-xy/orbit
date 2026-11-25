@@ -535,7 +535,8 @@ test('the index asks the cheap prerequisite guard before it walks a dependency c
   const rollup = statements.find((sql) => sql.includes('AS "workState"'));
   assert.ok(rollup, 'the task rollup was read');
   const end = rollup.indexOf("THEN 'READY'");
-  const ready = rollup.slice(rollup.lastIndexOf('WHEN ', end), end);
+  // From the WHEN after the arm before it: the arm's own predicates may hold a CASE WHEN (the turn state's).
+  const ready = rollup.slice(rollup.indexOf('WHEN ', rollup.lastIndexOf("THEN '", end - 1)), end);
   const guard = ready.indexOf(everyPrerequisiteDoneOrRetiredSql('t'));
   const walk = ready.indexOf('task_dependency_tail_id');
   assert.notEqual(guard, -1, 'the READY lane is narrowed by the guard');
