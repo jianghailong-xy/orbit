@@ -520,7 +520,7 @@ test('earlier work runs feed the decision; task and session details carry each r
 
       const summary = {
         level: 'L', provider: 'claude', model: OPUS, effort: 'high', applied: true, escalated: true,
-        reasons: row.reasons, policyVersion: 4, decidedAt: row.createdAt,
+        reasons: row.reasons, relaxedRun: null, policyVersion: 4, decidedAt: row.createdAt,
       };
       const detail = await services.tasks.get(target.ownerId, taskId) as unknown as {
         sessions: Array<{ id: string; route: Record<string, unknown> | null }>;

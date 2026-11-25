@@ -423,6 +423,8 @@ struct AgentPanes: View {
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
+    /// Whether the Needs you section is folded to its header, stored for the same reason.
+    @AppStorage("sessionList.needsYouCollapsed") private var needsYouCollapsed = false
     /// The last grouping drawn and its inputs (see `body`).
     @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
     /// The clock the session list's terminal line is filtered against.
@@ -807,17 +809,17 @@ struct AgentPanes: View {
                     listRow(session, projects: projectRows, marks: projectMarks)
                 }
             }
-        } else if section.title == "Pinned" {
-            // Pinned folds to its header, as Notes' Pinned does: the rows leave the
-            // list, the header stays to bring them back. The rows are dropped here
-            // rather than through `Section(isExpanded:)`, whose disclosure only draws in
-            // the sidebar list style.
+        } else if let folded = sectionFold(section.title) {
+            // Pinned and Needs you fold to their header, as Notes' Pinned does: the rows
+            // leave the list, the header stays to bring them back. The rows are dropped
+            // here rather than through `Section(isExpanded:)`, whose disclosure only draws
+            // in the sidebar list style.
             TitledListSection {
-                if !pinnedCollapsed {
+                if !folded.wrappedValue {
                     ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                 }
             } title: {
-                pinnedSectionHeader(section.title)
+                foldSectionHeader(section.title, folded: folded)
             }
         } else {
             TitledListSection {
@@ -1174,25 +1176,37 @@ struct AgentPanes: View {
         }
     }
 
-    /// The Pinned section's header: its title, and at the trailing edge a chevron that points down
-    /// while the rows show and right once they are folded away (one glyph turned, never two
-    /// swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
-    private func pinnedSectionHeader(_ title: String) -> some View {
-        Button {
-            withAnimation { pinnedCollapsed.toggle() }
+    /// A folding section's header (Pinned, Needs you): its title, and at the trailing edge a chevron
+    /// that points down while the rows show and right once they are folded away (one glyph turned,
+    /// never two swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
+    private func foldSectionHeader(_ title: String, folded: Binding<Bool>) -> some View {
+        let pinned = title == "Pinned"
+        let shows = pinned ? "Shows the pinned sessions" : "Shows the sessions waiting for you"
+        let hides = pinned ? "Hides the pinned sessions" : "Hides the sessions waiting for you"
+        return Button {
+            withAnimation { folded.wrappedValue.toggle() }
         } label: {
             HStack {
                 Text(title).textCase(nil)
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
+                    .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
                     .accessibilityHidden(true)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
-        .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+        .accessibilityHint(folded.wrappedValue ? shows : hides)
+    }
+
+    /// The fold of a section that folds to its header (Pinned, Needs you); nil for one that doesn't.
+    private func sectionFold(_ title: String) -> Binding<Bool>? {
+        switch title {
+        case "Pinned": return $pinnedCollapsed
+        case "Needs you": return $needsYouCollapsed
+        default: return nil
+        }
     }
 }
 

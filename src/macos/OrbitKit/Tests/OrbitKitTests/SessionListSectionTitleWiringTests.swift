@@ -35,13 +35,13 @@ final class SessionListSectionTitleWiringTests: XCTestCase {
     }
 
     /// Every titled section the session list draws goes through `TitledListSection` — the recency
-    /// buckets, the Pinned title that folds, the tag buckets and the search hits'.
+    /// buckets, the Pinned and Needs you titles that fold, the tag buckets and the search hits'.
     func testEverySessionListSectionTitleDrawsThroughTitledSection() throws {
         let agents = code(try appSource("Views/AgentsView.swift"))
         XCTAssertTrue(agents.contains("} title: {\n                Text(section.title).textCase(nil)"),
                       "a recency bucket's title")
-        XCTAssertTrue(agents.contains("} title: {\n                pinnedSectionHeader(section.title)"),
-                      "the folding Pinned title")
+        XCTAssertTrue(agents.contains("} title: {\n                foldSectionHeader(section.title, folded: folded)"),
+                      "the folding Pinned and Needs you titles")
         XCTAssertTrue(agents.contains("} title: {\n            tagSectionHeader(section.tag)"),
                       "grouped-by-tag headings")
         XCTAssertTrue(agents.contains("} title: {\n            Text(contentSearched"),
@@ -76,8 +76,8 @@ final class SessionListSectionTitleWiringTests: XCTestCase {
         XCTAssertFalse(page.contains("} header: {"), "no section on the folder page keeps a pinned header")
         XCTAssertTrue(page.contains("} title: {\n                Text(section.title).textCase(nil)"),
                       "a recency bucket's title")
-        XCTAssertTrue(page.contains("} title: {\n                pinnedSectionHeader(section.title)"),
-                      "the folding Pinned title")
+        XCTAssertTrue(page.contains("} title: {\n                foldSectionHeader(section.title, folded: folded)"),
+                      "the folding Pinned and Needs you titles")
         XCTAssertTrue(page.contains("} title: {\n            Text(contentSearched"), "the search hits' heading")
         XCTAssertTrue(page.contains(".softTopEdgeEffect()"), "and meets the title area on its soft edge")
     }

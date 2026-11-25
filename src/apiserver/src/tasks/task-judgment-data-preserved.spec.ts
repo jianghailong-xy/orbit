@@ -3490,6 +3490,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1600 creates project_text_translation (a project's title and criteria in the owner's language), keyed by and
       // cascading with project; no preserved relation, row, trigger, function or DONE fence changes.
       '1600_project_text_translation',
+      // 1601 adds one NOT NULL boolean, by_owner, to schedule_run with a constant default (whether the owner pressed a
+      // Run now); no row is rewritten, and no preserved relation, trigger, function or DONE fence changes.
+      '1601_schedule_run_by_owner',
       // 1611 adds session.turn_state and session.phase with their value CHECKs, two functions and two BEFORE triggers
       // that set only those two columns of the row being written, from its stored word; 1612 validates the CHECKs. No
       // row is written by either, and no preserved relation, trigger of one, function of one or DONE fence changes.
