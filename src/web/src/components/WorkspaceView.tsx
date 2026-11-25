@@ -10966,7 +10966,7 @@ export function WorkspaceView({
                 // it is renamed there, in the Name field.
                 <button
                   type="button"
-                  className={`workspace-name workspace-name-button${settingsOpen ? ' is-open' : ''}`}
+                  className="workspace-name workspace-name-button"
                   title="Session settings"
                   aria-expanded={settingsOpen}
                   onClick={() => setSettingsOpen((open) => !open)}

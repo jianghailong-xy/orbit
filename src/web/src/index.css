@@ -3537,7 +3537,8 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
 }
 /* The title as the button that opens the session's settings (docs/mocks/session-settings-column ③): plain at
-   rest, a light ground and a › on hover, the brand tint while the settings are open. */
+   rest and while the settings are open (owner 11-25: the open state needs no look of its own), a light ground and
+   a › on hover. Keyboard focus shows as hover does, in place of the browser's ring. */
 .workspace-name-button {
   display: inline-flex;
   align-items: center;
@@ -3551,15 +3552,13 @@ button.toast--pill:focus-visible {
   font-family: inherit;
   text-align: left;
   cursor: pointer;
+  outline: none;
 }
 .workspace-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); opacity: 0; }
 .workspace-name-button:hover, .workspace-name-button:focus-visible { background: var(--orbit-control-hover-bg); }
 .workspace-name-button:hover .workspace-name-chevron,
-.workspace-name-button:focus-visible .workspace-name-chevron,
-.workspace-name-button.is-open .workspace-name-chevron { opacity: 1; }
-.workspace-name-button.is-open { background: var(--brand-tint); color: var(--brand); }
-.workspace-name-button.is-open .workspace-name-chevron { color: var(--brand); }
+.workspace-name-button:focus-visible .workspace-name-chevron { opacity: 1; }
 .workspace-header-task {
   display: inline-flex;
   align-items: center;
