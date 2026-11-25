@@ -895,7 +895,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.pin` |
 | `POST` | `/api/runner/sessions/:id/finalize` | body `Object`; path `id` | `RunnerApiController.finalize` |
 | `POST` | `/api/runner/sessions/:id/import-result` | body `Object`; path `id` | `RunnerApiController.importResult` |
-| `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
+| `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `draining`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
 | `POST` | `/api/runner/sessions/:id/interrupt` | body `Object`; path `id` | `RunnerSessionsController.interruptSession` |
 | `POST` | `/api/runner/sessions/:id/merge` | body `Object`; path `id` | `RunnerSessionsController.mergeSession` |
 | `GET` | `/api/runner/sessions/:id/merge-receipts` | path `id`; query `limit` | `RunnerSessionsController.listMergeReceipts` |

@@ -5749,6 +5749,9 @@ export class RunnerApiController {
      *  for none: a turn its own generation leased that it is not running is one whose answer was lost,
      *  and is handed to it again now rather than when the lease runs out (dequeueTurn). */
     @Query('runningTurnId') runningTurnId?: string,
+    /** `1` while the runner drains for an update (docs/runner-update-drain-design.md §7.1): no message, shell or
+     *  reload is handed out, and the control turns still are. Absent is a runner that does not say. */
+    @Query('draining') draining?: string,
     @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
@@ -5761,7 +5764,8 @@ export class RunnerApiController {
     // handed a turn out is answered with that turn (dequeueTurn).
     const resend = link?.requestId ? { leaseOwner: link.leaseOwner, requestId: link.requestId } : undefined;
     // It answers at once: a hint says when there is something to fetch.
-    const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1', declared, redelivery, resend);
+    const turn = await this.dequeueTurn(
+      sessionId, runner.id, generation, acceptsSteer === '1', declared, redelivery, resend, draining === '1');
     return turn ?? { turnId: '', seq: 0, kind: 'message' };
   }
 
@@ -5920,6 +5924,9 @@ export class RunnerApiController {
     /** A link call's request id and the process it came from: a fetch sent again under the id of one
      *  that handed a turn out is answered with that turn. */
     resend?: { leaseOwner: string; requestId: string },
+    /** The fetch says its runner is draining for an update: it is held as the dispatch pause holds, except that
+     *  nothing is put back in the queue — the session keeps its engine while the runner drains (§7.1). */
+    draining = false,
   ): Promise<RunInboxResponse | null> {
     let pauseRequeued = false;
     // Requeued because the engine is resident on a Default its owner removed from Orbit, not for a pause.
@@ -6171,7 +6178,8 @@ export class RunnerApiController {
         // message (agy, OpenCode) would be ended by the reaper's startup watchdog. It goes back to the
         // queue the way the account pause above puts a run back, and a claim hands it out again once the
         // pause is off. A turn in flight keeps its run, its lease expired or not: an expired one is the
-        // turn a replacement process takes up below.
+        // turn a replacement process takes up below. A draining fetch is not put back here: its session
+        // keeps its engine and background jobs while the runner drains (runner-update-drain-design.md §7.1).
         if (owned[0].dispatchPaused) {
           const held = await tx.$queryRaw<Array<{ id: string }>>`
             SELECT s.id FROM "session" s
@@ -6247,13 +6255,14 @@ export class RunnerApiController {
                 AND turn."created_at" > now() - (${STEER_WITHDRAW_DELIVERY_WINDOW_MS} * interval '1 millisecond'))
               -- A reload is ordered between executable turns, but does not itself consume
               -- an active-turn slot. A cold runtime can leave it queued until the next claim.
-              -- It replaces the engine's process, so the runner dispatch pause holds it.
+              -- It replaces the engine's process, so the runner dispatch pause holds it, and so does a
+              -- fetch that says its runner is draining for an update.
               OR (turn."kind" = 'reload' AND turn."status" = 'PENDING' AND NOT EXISTS (
                 SELECT 1 FROM "conversation_turn" inflight
                 WHERE inflight."session_id" = ${sessionId}::uuid
                   AND inflight."kind" IN ('message', 'shell')
                   AND inflight."status" = 'IN_FLIGHT'
-              ) AND NOT ${DISPATCH_PAUSED})
+              ) AND NOT (${DISPATCH_PAUSED} OR ${draining}::boolean))
               -- A steer is the mirror image of an executable turn: it is deliverable
               -- BECAUSE one is already running, and it is written into that turn instead of
               -- waiting for its result. It neither occupies the single in-flight slot (the
@@ -6298,14 +6307,15 @@ export class RunnerApiController {
                 )
                 AND (
                   (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())
-                  -- A PENDING one starts a turn, which the runner dispatch pause holds. The expired
-                  -- lease above is a turn already running, handed to the process that replaced its own.
+                  -- A PENDING one starts a turn, which the runner dispatch pause holds, as does a draining
+                  -- fetch. The expired lease above is a turn already running, handed to the process that
+                  -- replaced its own.
                   OR (turn."status" = 'PENDING' AND NOT EXISTS (
                     SELECT 1 FROM "conversation_turn" inflight
                     WHERE inflight."session_id" = ${sessionId}::uuid
                       AND inflight."kind" IN ('message', 'shell')
                       AND inflight."status" = 'IN_FLIGHT'
-                  ) AND NOT ${DISPATCH_PAUSED})
+                  ) AND NOT (${DISPATCH_PAUSED} OR ${draining}::boolean))
                   -- The turn this link poller's own generation leased and it says it is not running
                   -- (redeliverOwnLease): a turn already running, like the expired lease above, so the
                   -- dispatch pause does not hold it either — a cut-over waits for it to finish.
@@ -6699,7 +6709,7 @@ export class RunnerApiController {
       this.realtime.publishSessionUpdated(sessionId);
       // What was queued behind it is this poll's to hand out. Refused, the reload is no longer leased
       // to this generation, so the poll is not answered with it again as a resend.
-      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery, resend);
+      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery, resend, draining);
     }
     // The run's wait moved (restartRedelivered): the clients read it off the session.
     if (restartRedelivered) this.realtime.publishSessionUpdated(sessionId);
