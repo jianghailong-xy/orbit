@@ -75,12 +75,12 @@ class GuestDisplayRowsTest {
     @Test fun endingAfterAnInterruptedTurn_matchesWeb() = matchesWeb("ending after an interrupted turn", I, listOf("Interrupted"))
     @Test fun parkedEngineStartedItsOwnTurn_matchesWeb() = matchesWeb("parked, engine started its own turn", R, listOf<String>())
     @Test fun parkedSubAgentRunning_matchesWeb() = matchesWeb("parked, sub-agent running", R, listOf<String>())
-    @Test fun parkedBackgroundProcessLeftUp_matchesWeb() = matchesWeb("parked, background process left up", I, listOf<String>())
+    @Test fun parkedBackgroundProcessLeftUp_matchesWeb() = matchesWeb("parked, background process left up", I, listOf("Background"))
     @Test fun parkedRetryArmed_matchesWeb() = matchesWeb("parked, retry armed", I, listOf("Will resume"))
     @Test fun failedRetryArmed_matchesWeb() = matchesWeb("failed, retry armed", I, listOf("Retrying"))
     @Test fun failedRunnerOffline_matchesWeb() = matchesWeb("failed, runner offline", I, listOf("Failed"))
-    @Test fun approvalBesideABackgroundJob_matchesWeb() = matchesWeb("approval beside a background job", R, listOf("Needs you"))
-    @Test fun interruptedAProcessUpRetryArmed_matchesWeb() = matchesWeb("interrupted, a process up, retry armed", I, listOf("Interrupted", "Will resume"))
+    @Test fun approvalBesideABackgroundJob_matchesWeb() = matchesWeb("approval beside a background job", R, listOf("Needs you", "Background"))
+    @Test fun interruptedAProcessUpRetryArmed_matchesWeb() = matchesWeb("interrupted, a process up, retry armed", I, listOf("Interrupted", "Background", "Will resume"))
 
     /** A filed session: the state and marks as ever, then Completed (web puts it after them, never instead). */
     @Test fun aFiledSessionSaysCompletedAfterItsStateAndMarks() {
@@ -90,7 +90,7 @@ class GuestDisplayRowsTest {
         assertEquals("${row.ownerName} · Idle · Finished · Completed", SharedWithMe.subtitle(row))
     }
 
-    /** What a mark reads beside the facts, once a guest payload sends it. */
+    /** What a mark reads beside the facts: the approvals count too, where a payload sends it. */
     @Test fun theCountsBesideTheFactsAreReadWhenSent() {
         val p = payload("AWAITING_INPUT", "guestRow")
         val more = JsonObject(p + ("runningBgCount" to JsonPrimitive(1)) + ("pendingApprovals" to JsonPrimitive(1)))

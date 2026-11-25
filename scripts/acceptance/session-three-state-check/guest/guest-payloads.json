@@ -2,20 +2,21 @@
  {
   "name": "PENDING",
   "guestRow": {
-   "id": "b0829630-959c-44d9-90e5-2740fa8cbf53",
+   "id": "282c5630-9a4b-4028-a6e6-262d38500bff",
    "title": "payloads PENDING",
    "ownerName": "payloads owner",
    "status": "PENDING",
    "sessionState": "QUEUED",
    "lifecycleState": "OPEN",
    "activity": "TURN",
+   "runningBgCount": 0,
    "phase": "PENDING",
    "released": false,
    "lastTurnOutcome": null,
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.555Z",
+   "addedAt": "2026-11-25T07:04:34.847Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -24,6 +25,7 @@
    "workspaceName": "payloads-agent",
    "status": "PENDING",
    "activity": "TURN",
+   "runningBgCount": 0,
    "runStatus": "PENDING",
    "sessionState": "QUEUED",
    "runState": "QUEUED",
@@ -35,26 +37,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:17:32.545Z"
+   "createdAt": "2026-11-25T07:03:34.838Z"
   }
  },
  {
   "name": "RUNNING",
   "guestRow": {
-   "id": "fdf378f3-c6bb-4596-8564-27716f1ca48e",
+   "id": "95dfcac3-7a35-4912-a3dd-cb525b070030",
    "title": "payloads RUNNING",
    "ownerName": "payloads owner",
    "status": "RUNNING",
    "sessionState": "RUNNING",
    "lifecycleState": "OPEN",
    "activity": "TURN",
+   "runningBgCount": 0,
    "phase": "RUNNING",
    "released": false,
    "lastTurnOutcome": null,
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.565Z",
+   "addedAt": "2026-11-25T07:04:34.856Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -63,6 +66,7 @@
    "workspaceName": "payloads-agent",
    "status": "RUNNING",
    "activity": "TURN",
+   "runningBgCount": 0,
    "runStatus": "RUNNING",
    "sessionState": "RUNNING",
    "runState": "RUNNING",
@@ -74,26 +78,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:16:32.559Z"
+   "createdAt": "2026-11-25T07:02:34.850Z"
   }
  },
  {
   "name": "AWAITING_INPUT",
   "guestRow": {
-   "id": "f7240a59-c51e-4c4b-9bad-ac5a61c20946",
+   "id": "889d14b5-224f-4ad8-88c5-274f76446e25",
    "title": "payloads AWAITING_INPUT",
    "ownerName": "payloads owner",
    "status": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": false,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.573Z",
+   "addedAt": "2026-11-25T07:04:34.864Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -102,6 +107,7 @@
    "workspaceName": "payloads-agent",
    "status": "AWAITING_INPUT",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "runState": "AWAITING_INPUT",
@@ -113,26 +119,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:15:32.568Z"
+   "createdAt": "2026-11-25T07:01:34.859Z"
   }
  },
  {
   "name": "INTERRUPTED",
   "guestRow": {
-   "id": "c0c7b58a-17b9-4e6b-9e94-a1fa01971ac6",
+   "id": "e4f16069-5ad3-42be-b077-5d9d7e8d37d4",
    "title": "payloads INTERRUPTED",
    "ownerName": "payloads owner",
    "status": "INTERRUPTED",
    "sessionState": "INTERRUPTED",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": false,
    "lastTurnOutcome": "INTERRUPTED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.582Z",
+   "addedAt": "2026-11-25T07:04:34.871Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -141,6 +148,7 @@
    "workspaceName": "payloads-agent",
    "status": "INTERRUPTED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "INTERRUPTED",
    "sessionState": "INTERRUPTED",
    "runState": "INTERRUPTED",
@@ -152,26 +160,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:14:32.576Z"
+   "createdAt": "2026-11-25T07:00:34.866Z"
   }
  },
  {
   "name": "SUCCEEDED",
   "guestRow": {
-   "id": "fba34d29-803f-4611-a23c-73c8712bea51",
+   "id": "462f5ecf-8560-4b03-99d0-5a2b2768447f",
    "title": "payloads SUCCEEDED",
    "ownerName": "payloads owner",
    "status": "SUCCEEDED",
    "sessionState": "COMPLETED",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": true,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
    "endReason": "task_done",
    "workFinished": true,
-   "addedAt": "2026-11-25T06:18:32.588Z",
+   "addedAt": "2026-11-25T07:04:34.878Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -180,6 +189,7 @@
    "workspaceName": "payloads-agent",
    "status": "SUCCEEDED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "SUCCEEDED",
    "sessionState": "COMPLETED",
    "runState": "SUCCEEDED",
@@ -191,26 +201,27 @@
    "waitingOn": null,
    "endReason": "task_done",
    "workFinished": true,
-   "createdAt": "2026-11-25T06:13:32.584Z"
+   "createdAt": "2026-11-25T06:59:34.874Z"
   }
  },
  {
   "name": "FAILED",
   "guestRow": {
-   "id": "7983a42d-160d-4cc2-8202-39768337ff9f",
+   "id": "a2a49c86-cfb0-48d9-96fb-c3d3a0d2b794",
    "title": "payloads FAILED",
    "ownerName": "payloads owner",
    "status": "FAILED",
    "sessionState": "FAILED",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": true,
    "lastTurnOutcome": "FAILED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.596Z",
+   "addedAt": "2026-11-25T07:04:34.885Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -219,6 +230,7 @@
    "workspaceName": "payloads-agent",
    "status": "FAILED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "FAILED",
    "sessionState": "FAILED",
    "runState": "FAILED",
@@ -230,26 +242,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:12:32.590Z"
+   "createdAt": "2026-11-25T06:58:34.880Z"
   }
  },
  {
   "name": "CANCELLED",
   "guestRow": {
-   "id": "663626f7-a559-4271-92d8-0ad25d30b92b",
+   "id": "c228de97-5bda-41eb-bbf3-80880bba5d4b",
    "title": "payloads CANCELLED",
    "ownerName": "payloads owner",
    "status": "CANCELLED",
    "sessionState": "DORMANT",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": true,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
    "endReason": "ended",
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.602Z",
+   "addedAt": "2026-11-25T07:04:34.890Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -258,6 +271,7 @@
    "workspaceName": "payloads-agent",
    "status": "CANCELLED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "CANCELLED",
    "sessionState": "DORMANT",
    "runState": "ENDED",
@@ -269,26 +283,27 @@
    "waitingOn": null,
    "endReason": "ended",
    "workFinished": false,
-   "createdAt": "2026-11-25T06:11:32.598Z"
+   "createdAt": "2026-11-25T06:57:34.887Z"
   }
  },
  {
   "name": "job running",
   "guestRow": {
-   "id": "631b57e1-d8b8-4623-bcb0-cc9d2bb59fee",
+   "id": "88ffa05e-2d41-46d6-a839-689018d4693c",
    "title": "payloads job running",
    "ownerName": "payloads owner",
    "status": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "lifecycleState": "OPEN",
    "activity": "BACKGROUND_JOB",
+   "runningBgCount": 1,
    "phase": "RUNNING",
    "released": false,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.609Z",
+   "addedAt": "2026-11-25T07:04:34.896Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -297,6 +312,7 @@
    "workspaceName": "payloads-agent",
    "status": "AWAITING_INPUT",
    "activity": "BACKGROUND_JOB",
+   "runningBgCount": 1,
    "runStatus": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "runState": "AWAITING_INPUT",
@@ -308,26 +324,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:10:32.604Z"
+   "createdAt": "2026-11-25T06:56:34.892Z"
   }
  },
  {
   "name": "waiting on an approval",
   "guestRow": {
-   "id": "8dd2e64a-03be-4b90-bd67-39488ddeff84",
+   "id": "d622a429-f6ca-459d-9848-421b015a7775",
    "title": "payloads waiting on an approval",
    "ownerName": "payloads owner",
    "status": "RUNNING",
    "sessionState": "RUNNING",
    "lifecycleState": "OPEN",
    "activity": "TURN",
+   "runningBgCount": 0,
    "phase": "RUNNING",
    "released": false,
    "lastTurnOutcome": null,
    "waitingOn": "PERSON",
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.614Z",
+   "addedAt": "2026-11-25T07:04:34.900Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -336,6 +353,7 @@
    "workspaceName": "payloads-agent",
    "status": "RUNNING",
    "activity": "TURN",
+   "runningBgCount": 0,
    "runStatus": "RUNNING",
    "sessionState": "RUNNING",
    "runState": "RUNNING",
@@ -347,26 +365,27 @@
    "waitingOn": "PERSON",
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:09:32.611Z"
+   "createdAt": "2026-11-25T06:55:34.898Z"
   }
  },
  {
   "name": "watch armed",
   "guestRow": {
-   "id": "3a5349df-2a35-41b1-94a3-ac87154c1169",
+   "id": "eab95279-136e-493a-b7b8-9fccf7b7ba33",
    "title": "payloads watch armed",
    "ownerName": "payloads owner",
    "status": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "lifecycleState": "OPEN",
    "activity": "WAITING",
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": false,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": "WAKE",
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.620Z",
+   "addedAt": "2026-11-25T07:04:34.906Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -375,6 +394,7 @@
    "workspaceName": "payloads-agent",
    "status": "AWAITING_INPUT",
    "activity": "WAITING",
+   "runningBgCount": 0,
    "runStatus": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "runState": "AWAITING_INPUT",
@@ -386,26 +406,27 @@
    "waitingOn": "WAKE",
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:08:32.618Z"
+   "createdAt": "2026-11-25T06:54:34.904Z"
   }
  },
  {
   "name": "paused account",
   "guestRow": {
-   "id": "fbea7b49-d4f7-4786-b877-fbe06cd17095",
+   "id": "aa3b705a-e9d7-4318-95cd-7b1fb456a37d",
    "title": "payloads paused account",
    "ownerName": "payloads owner",
    "status": "PENDING",
    "sessionState": "QUEUED",
    "lifecycleState": "OPEN",
    "activity": "TURN",
+   "runningBgCount": 0,
    "phase": "PENDING",
    "released": false,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": "HOLD",
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.628Z",
+   "addedAt": "2026-11-25T07:04:34.913Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -414,6 +435,7 @@
    "workspaceName": "payloads-agent",
    "status": "PENDING",
    "activity": "TURN",
+   "runningBgCount": 0,
    "runStatus": "PENDING",
    "sessionState": "QUEUED",
    "runState": "QUEUED",
@@ -425,26 +447,27 @@
    "waitingOn": "HOLD",
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:07:32.624Z"
+   "createdAt": "2026-11-25T06:53:34.909Z"
   }
  },
  {
   "name": "settled landing",
   "guestRow": {
-   "id": "60a5bda3-3a4a-427e-ae07-f416130dee25",
+   "id": "64ac8a4c-efd5-4003-9f2f-8894771de582",
    "title": "payloads settled landing",
    "ownerName": "payloads owner",
    "status": "SUCCEEDED",
    "sessionState": "COMPLETED",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": true,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": true,
-   "addedAt": "2026-11-25T06:18:32.633Z",
+   "addedAt": "2026-11-25T07:04:34.918Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -453,6 +476,7 @@
    "workspaceName": "payloads-agent",
    "status": "SUCCEEDED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "SUCCEEDED",
    "sessionState": "COMPLETED",
    "runState": "SUCCEEDED",
@@ -464,26 +488,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": true,
-   "createdAt": "2026-11-25T06:06:32.630Z"
+   "createdAt": "2026-11-25T06:52:34.915Z"
   }
  },
  {
   "name": "ended, runner never confirmed",
   "guestRow": {
-   "id": "2c91c867-e7e8-4a6a-a36d-0fbfa7a68452",
+   "id": "4219756a-8cb1-42e0-aa91-53b979769349",
    "title": "payloads ended, runner never confirmed",
    "ownerName": "payloads owner",
    "status": "FAILED",
    "sessionState": "FAILED",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": true,
    "lastTurnOutcome": "FAILED",
    "waitingOn": null,
    "endReason": "ended",
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.639Z",
+   "addedAt": "2026-11-25T07:04:34.923Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -492,6 +517,7 @@
    "workspaceName": "payloads-agent",
    "status": "FAILED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "FAILED",
    "sessionState": "FAILED",
    "runState": "FAILED",
@@ -503,26 +529,27 @@
    "waitingOn": null,
    "endReason": "ended",
    "workFinished": false,
-   "createdAt": "2026-11-25T06:05:32.635Z"
+   "createdAt": "2026-11-25T06:51:34.920Z"
   }
  },
  {
   "name": "old plain row stored SUCCEEDED",
   "guestRow": {
-   "id": "8f88dfb5-6839-4e6d-b8cb-3dc039e3899f",
+   "id": "e813ccc6-8a62-4688-aacb-cfdb739b9d52",
    "title": "payloads old plain row stored SUCCEEDED",
    "ownerName": "payloads owner",
    "status": "SUCCEEDED",
    "sessionState": "COMPLETED",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": true,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.645Z",
+   "addedAt": "2026-11-25T07:04:34.928Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -531,6 +558,7 @@
    "workspaceName": "payloads-agent",
    "status": "SUCCEEDED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "SUCCEEDED",
    "sessionState": "COMPLETED",
    "runState": "SUCCEEDED",
@@ -542,26 +570,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:04:32.641Z"
+   "createdAt": "2026-11-25T06:50:34.925Z"
   }
  },
  {
   "name": "ending after an interrupted turn",
   "guestRow": {
-   "id": "01a2bfe4-f00f-4e84-b182-3e3fd96fbc1f",
+   "id": "a8e2af5d-c8ec-4f35-9eb1-81919dab20f5",
    "title": "payloads ending after an interrupted turn",
    "ownerName": "payloads owner",
    "status": "INTERRUPTED",
    "sessionState": "DORMANT",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": false,
    "lastTurnOutcome": "INTERRUPTED",
    "waitingOn": null,
    "endReason": "ended",
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.651Z",
+   "addedAt": "2026-11-25T07:04:34.933Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -570,6 +599,7 @@
    "workspaceName": "payloads-agent",
    "status": "INTERRUPTED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "INTERRUPTED",
    "sessionState": "DORMANT",
    "runState": "ENDED",
@@ -581,26 +611,27 @@
    "waitingOn": null,
    "endReason": "ended",
    "workFinished": false,
-   "createdAt": "2026-11-25T06:03:32.647Z"
+   "createdAt": "2026-11-25T06:49:34.930Z"
   }
  },
  {
   "name": "parked, engine started its own turn",
   "guestRow": {
-   "id": "6e205af2-6b26-4b66-ae3e-ccafb0f8a4d6",
+   "id": "67850dd5-6a69-4d25-b594-8055874f7c34",
    "title": "payloads parked, engine started its own turn",
    "ownerName": "payloads owner",
    "status": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "lifecycleState": "OPEN",
    "activity": "TURN",
+   "runningBgCount": 0,
    "phase": "RUNNING",
    "released": false,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.657Z",
+   "addedAt": "2026-11-25T07:04:34.939Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -609,6 +640,7 @@
    "workspaceName": "payloads-agent",
    "status": "AWAITING_INPUT",
    "activity": "TURN",
+   "runningBgCount": 0,
    "runStatus": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "runState": "AWAITING_INPUT",
@@ -620,26 +652,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:02:32.653Z"
+   "createdAt": "2026-11-25T06:48:34.935Z"
   }
  },
  {
   "name": "parked, sub-agent running",
   "guestRow": {
-   "id": "7621e325-143e-49dc-b132-07f3c217cfe3",
+   "id": "5bbd94d1-3849-4b52-886c-5efed394f74d",
    "title": "payloads parked, sub-agent running",
    "ownerName": "payloads owner",
    "status": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "lifecycleState": "OPEN",
    "activity": "TURN",
+   "runningBgCount": 0,
    "phase": "RUNNING",
    "released": false,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.663Z",
+   "addedAt": "2026-11-25T07:04:34.944Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -648,6 +681,7 @@
    "workspaceName": "payloads-agent",
    "status": "AWAITING_INPUT",
    "activity": "TURN",
+   "runningBgCount": 0,
    "runStatus": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "runState": "AWAITING_INPUT",
@@ -659,26 +693,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:01:32.659Z"
+   "createdAt": "2026-11-25T06:47:34.940Z"
   }
  },
  {
   "name": "parked, background process left up",
   "guestRow": {
-   "id": "87a65de7-465f-43c1-80c1-0eb903e7de4c",
+   "id": "c4aca331-ca6d-4649-a371-d44140c8c16b",
    "title": "payloads parked, background process left up",
    "ownerName": "payloads owner",
    "status": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 1,
    "phase": "IDLE",
    "released": false,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.670Z",
+   "addedAt": "2026-11-25T07:04:34.949Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -687,6 +722,7 @@
    "workspaceName": "payloads-agent",
    "status": "AWAITING_INPUT",
    "activity": null,
+   "runningBgCount": 1,
    "runStatus": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "runState": "AWAITING_INPUT",
@@ -698,26 +734,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T06:00:32.665Z"
+   "createdAt": "2026-11-25T06:46:34.946Z"
   }
  },
  {
   "name": "parked, retry armed",
   "guestRow": {
-   "id": "037922d5-78c9-406d-b87b-1c5710832bf5",
+   "id": "13e1897a-c6c3-45b9-a65d-ca1997ab6e9b",
    "title": "payloads parked, retry armed",
    "ownerName": "payloads owner",
    "status": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "lifecycleState": "OPEN",
    "activity": "WAITING",
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": false,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": "WAKE",
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.677Z",
+   "addedAt": "2026-11-25T07:04:34.955Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -726,6 +763,7 @@
    "workspaceName": "payloads-agent",
    "status": "AWAITING_INPUT",
    "activity": "WAITING",
+   "runningBgCount": 0,
    "runStatus": "AWAITING_INPUT",
    "sessionState": "AWAITING_INPUT",
    "runState": "AWAITING_INPUT",
@@ -737,26 +775,27 @@
    "waitingOn": "WAKE",
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T05:59:32.672Z"
+   "createdAt": "2026-11-25T06:45:34.951Z"
   }
  },
  {
   "name": "failed, retry armed",
   "guestRow": {
-   "id": "319f0d50-3563-4358-b50e-d488753089ed",
+   "id": "03ec3b85-15ac-432d-949a-b79d9203812d",
    "title": "payloads failed, retry armed",
    "ownerName": "payloads owner",
    "status": "FAILED",
    "sessionState": "FAILED",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": true,
    "lastTurnOutcome": "FAILED",
    "waitingOn": "WAKE",
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.682Z",
+   "addedAt": "2026-11-25T07:04:34.960Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -765,6 +804,7 @@
    "workspaceName": "payloads-agent",
    "status": "FAILED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "FAILED",
    "sessionState": "FAILED",
    "runState": "FAILED",
@@ -776,26 +816,27 @@
    "waitingOn": "WAKE",
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T05:58:32.679Z"
+   "createdAt": "2026-11-25T06:44:34.957Z"
   }
  },
  {
   "name": "failed, runner offline",
   "guestRow": {
-   "id": "751eab64-e8d3-465d-b2b7-86dbea10d567",
+   "id": "6662909c-fb85-4b36-9a2f-5f2e9706441e",
    "title": "payloads failed, runner offline",
    "ownerName": "payloads owner",
    "status": "FAILED",
    "sessionState": "FAILED",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 0,
    "phase": "IDLE",
    "released": true,
    "lastTurnOutcome": "FAILED",
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.686Z",
+   "addedAt": "2026-11-25T07:04:34.964Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -804,6 +845,7 @@
    "workspaceName": "payloads-agent",
    "status": "FAILED",
    "activity": null,
+   "runningBgCount": 0,
    "runStatus": "FAILED",
    "sessionState": "FAILED",
    "runState": "FAILED",
@@ -815,26 +857,27 @@
    "waitingOn": null,
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T05:57:32.684Z"
+   "createdAt": "2026-11-25T06:43:34.962Z"
   }
  },
  {
   "name": "approval beside a background job",
   "guestRow": {
-   "id": "d67a9a35-e1e3-4379-9818-249bbee6b970",
+   "id": "b2b9fba2-e57b-49d0-a260-211b32b0d937",
    "title": "payloads approval beside a background job",
    "ownerName": "payloads owner",
    "status": "RUNNING",
    "sessionState": "RUNNING",
    "lifecycleState": "OPEN",
    "activity": "TURN",
+   "runningBgCount": 1,
    "phase": "RUNNING",
    "released": false,
    "lastTurnOutcome": null,
    "waitingOn": "PERSON",
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.691Z",
+   "addedAt": "2026-11-25T07:04:34.969Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -843,6 +886,7 @@
    "workspaceName": "payloads-agent",
    "status": "RUNNING",
    "activity": "TURN",
+   "runningBgCount": 1,
    "runStatus": "RUNNING",
    "sessionState": "RUNNING",
    "runState": "RUNNING",
@@ -854,26 +898,27 @@
    "waitingOn": "PERSON",
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T05:56:32.687Z"
+   "createdAt": "2026-11-25T06:42:34.966Z"
   }
  },
  {
   "name": "interrupted, a process up, retry armed",
   "guestRow": {
-   "id": "fa3a6a10-c435-466c-8cae-4ccde27bd83a",
+   "id": "bf32bf53-83dd-4fa6-96f4-e5d902e39130",
    "title": "payloads interrupted, a process up, retry armed",
    "ownerName": "payloads owner",
    "status": "INTERRUPTED",
    "sessionState": "INTERRUPTED",
    "lifecycleState": "OPEN",
    "activity": null,
+   "runningBgCount": 1,
    "phase": "IDLE",
    "released": false,
    "lastTurnOutcome": "INTERRUPTED",
    "waitingOn": "WAKE",
    "endReason": null,
    "workFinished": false,
-   "addedAt": "2026-11-25T06:18:32.697Z",
+   "addedAt": "2026-11-25T07:04:34.976Z",
    "lastTurnAt": null
   },
   "sharedHead": {
@@ -882,6 +927,7 @@
    "workspaceName": "payloads-agent",
    "status": "INTERRUPTED",
    "activity": null,
+   "runningBgCount": 1,
    "runStatus": "INTERRUPTED",
    "sessionState": "INTERRUPTED",
    "runState": "INTERRUPTED",
@@ -893,7 +939,7 @@
    "waitingOn": "WAKE",
    "endReason": null,
    "workFinished": false,
-   "createdAt": "2026-11-25T05:55:32.694Z"
+   "createdAt": "2026-11-25T06:41:34.972Z"
   }
  }
 ]
