@@ -13,14 +13,15 @@ set local statement_timeout = '60s';
 
 with
 -- Runs that ended successfully: released sessions whose status word, derived from the row's facts by the server's own
--- projector (migration 1621; docs/session-status-retirement-plan.md section 2.6), is SUCCEEDED.
+-- projector (migration 1621; docs/session-status-retirement-plan.md section 2.6), is SUCCEEDED. The stored word is
+-- the projector's last argument until task T14 removes it.
 succeeded_run as (
   select s.finished_at
   from session s
   where s.finished_at is not null
     and session_legacy_status(s.finished_at, s.turn_state, s.end_reason, s.last_turn_outcome, s.started_at,
       s.import_source_cwd, s.kind,
-      (select l.settled_as from project_landing l where l.session_id = s.id), null) = 'SUCCEEDED'
+      (select l.settled_as from project_landing l where l.session_id = s.id), s.status::text) = 'SUCCEEDED'
 ),
 -- A turn a person sent: clients key turns with a UUID, while initial prompts, wakes, shells and
 -- coordinator steers use prefixed keys; child sessions only hear from the agent that spawned them.

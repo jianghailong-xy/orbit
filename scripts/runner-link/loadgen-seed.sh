@@ -24,6 +24,7 @@
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/session-word.sh"
 
 cmd="${1:-}"
 case "$cmd" in seed|arm|disarm|remove) ;; *) sed -n '2,25p' "$0" >&2; exit 2 ;; esac
@@ -42,7 +43,8 @@ done
 pg="$project-postgres"
 psql_run() {
   docker exec -i "$pg" psql -U orbit -d orbit -v ON_ERROR_STOP=1 -q -X \
-    -v owners="$owners" -v runners="$runners" -v sessions="$sessions" -v active="$active" "$@"
+    -v owners="$owners" -v runners="$runners" -v sessions="$sessions" -v active="$active" \
+    -v word="$(session_word_sql s)" "$@"
 }
 
 case "$cmd" in
@@ -108,7 +110,7 @@ BEGIN;
 -- The previous run's running sessions are over; the reaper may have finished some of them already. A cancellation it
 -- queued for one would be handed to the runner's next process for five minutes (RealtimeService.drainCancellations).
 UPDATE session s SET status = 'SUCCEEDED', finished_at = now(), updated_at = now()
-  FROM loadgen.session ls WHERE ls.session_id = s.id AND ls.running AND s.finished_at IS NULL AND s.turn_state IS NOT NULL;
+  FROM loadgen.session ls WHERE ls.session_id = s.id AND ls.running AND s.finished_at IS NULL AND :word IN ('RUNNING', 'PENDING', 'INTERRUPTED');
 UPDATE session s SET cancel_requested_at = NULL
   FROM loadgen.owner o WHERE s.owner_id = o.user_id AND s.cancel_requested_at IS NOT NULL;
 DELETE FROM loadgen.session WHERE running;
@@ -148,7 +150,7 @@ disarm)
   log "ending the running sessions in $pg"
   psql_run <<'SQL'
 UPDATE session s SET status = 'SUCCEEDED', finished_at = now(), updated_at = now()
-  FROM loadgen.session ls WHERE ls.session_id = s.id AND ls.running AND s.finished_at IS NULL AND s.turn_state IS NOT NULL;
+  FROM loadgen.session ls WHERE ls.session_id = s.id AND ls.running AND s.finished_at IS NULL AND :word IN ('RUNNING', 'PENDING', 'INTERRUPTED');
 SQL
   ;;
 remove)

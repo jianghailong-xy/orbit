@@ -117,10 +117,10 @@ function record(label, id) {
 }
 const released = (id, what) => until(what, () => value(`select finished_at is not null from session where id = '${sid(id)}'`) === 't',
   { timeoutMs: 240_000, everyMs: 1_000 });
-const idle = (id, what) => until(what, () => value(`select finished_at is null and turn_state is null
+const idle = (id, what) => until(what, () => value(`select ${sessionWordSql('s')} = 'AWAITING_INPUT' and finished_at is null
   and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null)
   from session s where id = '${sid(id)}'`) === 't', { timeoutMs: 240_000, everyMs: 1_000 });
-const held = (id, what) => until(what, () => value(`select turn_state = 'IN_FLIGHT' and finished_at is null and cancel_requested_at is not null
+const held = (id, what) => until(what, () => value(`select ${sessionWordSql('session')} = 'RUNNING' and finished_at is null and cancel_requested_at is not null
   and end_reason is null and last_turn_outcome = 'FAILED' from session where id = '${sid(id)}'`) === 't', { timeoutMs: 240_000, everyMs: 250 });
 const runnerLines = (r, id, from) => logSince(runnerLog(r), from).split('\n').filter((l) => l.includes(sid(id)) || l.includes(id)).join('\n');
 
@@ -195,8 +195,8 @@ async function walk(label, r, ws, { kill }) {
       (await call('GET', '/runners', T)).find((x) => x.name === `lm42-runner-${r}` && x.online), { timeoutMs: 120_000 });
   }
   // The retry re-sends the message as a turn of its own; once it is answered, the attempts count is reset.
-  await until(`${label}: the armed retry to fire and its turn to be answered`, () => value(`select finished_at is null
-    and turn_state is null and retry_at is null
+  await until(`${label}: the armed retry to fire and its turn to be answered`, () => value(`select ${sessionWordSql('s')} = 'AWAITING_INPUT'
+    and finished_at is null and retry_at is null
     and (select count(*) from conversation_turn t where t.session_id = s.id and t.kind = 'message') >= 2
     and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null)
     from session s where id = '${sid(retry.id)}'`) === 't', { timeoutMs: 420_000, everyMs: 2_000 });
