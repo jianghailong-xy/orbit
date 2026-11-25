@@ -102,7 +102,7 @@ class SettingsOrderShotsTest {
         open(null)
         await("1 needs you")
         val order = listOf(SETTINGS_PERSONAL, GENERAL, "Notifications", "Appearance", SETTINGS_PROFILE, "Shared links", AccessTokens.TITLE,
-            Terminals.TITLE, MachinesAndModels.MACHINES, SETTINGS_PROVIDERS, "Sign out")
+            Terminals.TITLE, MachinesAndModels.MACHINES, MachinesAndModels.ADD_MACHINE, GithubCopy.INTEGRATIONS, SETTINGS_PROVIDERS, "Sign out")
         val tops = order.map(::top)
         assertEquals("top to bottom: $order", tops.sorted(), tops)
         listOf("Preferences", "Account", "Instance", "Admin", "Email", "Change password", MachinesAndModels.TITLE, SESSION_RECAPS)

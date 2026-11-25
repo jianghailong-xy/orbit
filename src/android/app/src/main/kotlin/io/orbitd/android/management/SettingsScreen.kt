@@ -39,6 +39,10 @@ import io.orbitd.android.core.promptoptimizer.PromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.composer.ManagementGithub
+import io.orbitd.android.composer.FollowManagedRunner
+import io.orbitd.android.composer.ManagedRunner
+import io.orbitd.android.composer.rememberManagedRunner
+import androidx.compose.runtime.saveable.rememberSaveable
 import io.orbitd.android.navigation.*
 import io.orbitd.android.translation.TranslationCopy
 import kotlinx.coroutines.CancellationException
@@ -46,8 +50,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
 /** Settings' own pages; "workspace" is the workspace list's gear, "profile" the header's edit card and "account" the Profile row's page;
- * "machines" and "providers" are the two halves of the Machines & models page, whose pool and key pages ("machines-and-models" with a
- * record) are one push further. */
+ * "providers" is the Providers half of the Machines & models page, whose pool and key pages ("machines-and-models" with a
+ * record) are one push further; the machines are listed on the Settings home itself. */
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
@@ -66,7 +70,6 @@ private fun SettingsPages(api: ManagementApi, route: OrbitRoute, revision: Long,
         "account" -> ProfileSettingsPage(api, revision, open)
         "password" -> ChangePassword(api)
         "machines-and-models" -> MachinesAndModelsSettings(api, revision, route.recordId, open, back)
-        "machines" -> MachinesAndModelsPage(api, revision, open, MachinesAndModelsPart.MACHINES)
         "providers" -> MachinesAndModelsPage(api, revision, open, MachinesAndModelsPart.PROVIDERS)
         "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
@@ -101,7 +104,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
         record != null -> poolTitle(record.substringAfter(':'))
         else -> null
     } ?: MachinesAndModels.TITLE
-    "machines" -> MachinesAndModels.MACHINES; "providers" -> SETTINGS_PROVIDERS
+    "providers" -> SETTINGS_PROVIDERS
     "sessions" -> GENERAL; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
     "terminals" -> Terminals.TITLE; "github" -> GithubCopy.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
@@ -191,8 +194,8 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
     }
 }
 
-/** The account, then SettingsHome's groups — Personal, then Machines, then Providers, the web Settings nav's — then About (Android
- * only: its updates) and Sign out: iOS's Settings list (docs/mocks/ios-settings-web-groups, 1A 2A 3A). */
+/** The account, then SettingsHome's groups — Personal, Machines (each machine listed, one tap from here, then Add machine), Integrations
+ * (GitHub), then Providers — then About (Android only: its updates) and Sign out: iOS's Settings list. */
 @Composable
 private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, logout: () -> Unit,
     deviceAlerts: () -> Boolean?, terminalsChanged: Long) {
@@ -202,35 +205,48 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     val user = record.value as? JsonObject
     val preferences = user?.get("preferences") as? JsonObject ?: JsonObject(emptyMap())
     val photo = rememberAccountPhoto(api, user)
-    // The Machines and Providers rows' values are what their pages' Needs you holds: the machines, and the pools — a Codex one of the
-    // account's own with its people and keys, which say whether it can run. Machines' is shown once the machines are read, as on iOS.
-    var runners by remember(api) { mutableStateOf<List<JsonObject>?>(null) }
-    // Read with the machines: a machine with no coding CLI signed in needs you unless a workspace there runs on a key.
-    var workspaces by remember(api) { mutableStateOf<List<JsonObject>>(emptyList()) }
+    // The Machines header's value and the Providers row's are what their pages' Needs you holds: the machines, and the pools — a Codex one
+    // of the account's own with its people and keys, which say whether it can run. Machines' is shown once the machines are read, as on iOS.
     val machinesAndModels = remember(api) { MachinesAndModelsModel(api) }
+    val machines = machinesAndModels.machines
+    val runners = machines.runners.takeIf { machines.loaded }
+    // Read with the machines: a machine with no coding CLI signed in needs you unless a workspace there runs on a key.
+    val workspaces = machines.workspaces
+    val scope = rememberCoroutineScope()
+    val now = rememberNow()
+    val resumed = rememberResumed()
+    var adding by rememberSaveable { mutableStateOf(false) }
+    var removing by remember { mutableStateOf<JsonObject?>(null) }
+    val notice = remember { Notice() }
+    // The Orbit Cloud setup card above the machines, under the Machines & models page's own condition.
+    val managed = rememberManagedRunner(api, ask = true)
+    FollowManagedRunner(managed, follow = resumed && managed.shown != null)
+    var confirmingSetup by remember { mutableStateOf(false) }
+    val managedStatus = managed.shown?.status
+    val managedRunnerId = managedStatus?.runnerId?.let { id -> machines.runners.firstOrNull { ObjectId.same(it.text("id"), id) }?.text("id") }
+    val managedRow = ManagedRunner.row(managedRunnerId, managedStatus)
+    fun setUp() = scope.launch {
+        managed.ensure()
+        managed.refusal?.let { notice.show(it); return@launch }
+        machines.load()
+        managed.shown?.status?.runnerId?.let { open(OrbitRoute(Destination.RUNNER, it)) }
+    }
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
     var accessTokens by remember(api) { mutableStateOf<String?>(null) }
     var terminals by remember(api) { mutableStateOf<String?>(null) }
     var alerts by remember { mutableStateOf(deviceAlerts()) }
     var signingOut by remember { mutableStateOf(false) }
-    var resumed by remember { mutableIntStateOf(0) }
+    var resumedCount by remember { mutableIntStateOf(0) }
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) resumed++ }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) resumedCount++ }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(api, revision, resumed) {
+    LaunchedEffect(api, revision, resumedCount) {
         alerts = deviceAlerts()
         // Each row's value is its own read; only an answer the server gave is shown.
-        launch {
-            try {
-                val machines = providerObjects(api.get("runners"))
-                workspaces = try { providerObjects(api.get("workspaces")) } catch (e: CancellationException) { throw e } catch (_: Exception) { workspaces }
-                runners = machines
-            }
-            catch (e: CancellationException) { throw e } catch (_: Exception) { }
-        }
+        launch { machines.load() }
         launch { machinesAndModels.loadPools() }
         launch { machinesAndModels.loadShared() }
         launch {
@@ -243,11 +259,12 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         }
     }
     // A terminal approved or revoked anywhere moves this row's count, and nothing else on the page.
-    LaunchedEffect(api, revision, resumed, terminalsChanged) {
+    LaunchedEffect(api, revision, resumedCount, terminalsChanged) {
         try { terminals = Terminals.settingsValue(TerminalsApi(api.session, api.handle).list().size) }
         catch (e: CancellationException) { throw e } catch (_: Exception) { }
     }
     fun page(id: String) = open(OrbitRoute(Destination.SETTINGS, id))
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
         val name = user?.text("name")?.ifBlank { null } ?: user?.text("email").orEmpty()
         Column(Modifier.fillMaxWidth().clickable(enabled = user != null, role = Role.Button) { page("profile") }
@@ -287,22 +304,38 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsLink(AccessTokens.TITLE, R.drawable.ic_key, accessTokens) { page("access-tokens") }
             SettingsLink(Terminals.TITLE, R.drawable.ic_terminal, terminals) { page("terminals") }
         }
-        // Integrations → GitHub, between Personal and Machines as the web's settings nav groups it (docs/github-workspace-design.md §8).
+        // Machines, between Personal and Integrations: each machine as the Machines & models page draws it, one tap from here, then Add
+        // machine. What needs a person is said in amber on the header.
+        val needsYou = machinesAndModels.attention(machines.runners, workspaces, now, managedRow?.let { managedRunnerId }).count { it.isMachine }
+        SettingsGroup(MachinesAndModels.MACHINES, trailing = runners?.let { MachinesAndModels.settingsValue(needsYou, it) },
+            trailingColor = if (needsYou > 0) Ink.amber else null) {
+            managed.shown?.takeIf { it.display.ensure && it.display.kind == "setup" }?.let { shown ->
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                    ManagedRunnerEntryRow(shown.display, busy = managed.busy) {
+                        // An account with a machine or a workspace is asked first (D3); a new one sets it up at once.
+                        if (machines.runners.isNotEmpty() || machines.workspaces.isNotEmpty()) confirmingSetup = true else setUp()
+                    }
+                }
+                if (machines.loaded && machines.runners.isNotEmpty()) HorizontalDivider()
+            }
+            if (machines.loaded && machines.runners.isNotEmpty()) Box(Modifier.padding(horizontal = 16.dp)) {
+                MachineRows(machines, now, { id -> open(OrbitRoute(Destination.RUNNER, id)) }, managedStatus) { removing = it }
+            }
+            if (machines.loaded) HorizontalDivider()
+            ListItem(headlineContent = { Text(MachinesAndModels.ADD_MACHINE, color = MaterialTheme.colorScheme.primary) }, colors = settingsRowColors(),
+                leadingContent = { Icon(painterResource(R.drawable.ic_plus), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.clickable(role = Role.Button) { adding = true })
+        }
+        // Integrations → GitHub, between Machines and Providers as the web's settings nav groups it (docs/github-workspace-design.md §8).
         SettingsGroup(GithubCopy.INTEGRATIONS, footer = GithubCopy.GITHUB_ROW_HINT) {
             SettingsLink(GithubCopy.TITLE, R.drawable.ic_github) { page("github") }
         }
-        // No header over either: each group's one row says its name (SettingsHome.header). What needs a person is said in amber.
-        val now = System.currentTimeMillis()
-        SettingsGroup(null) {
-            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, now).count { item -> item.isMachine } } ?: 0
-            SettingsLink(MachinesAndModels.MACHINES, R.drawable.ic_runner, runners?.let { MachinesAndModels.settingsValue(needsYou, it) },
-                valueColor = if (needsYou > 0) Ink.amber else null) { page("machines") }
-        }
+        // No header over Providers: its one row says its name (SettingsHome.header).
         SettingsGroup(null) {
             // Only once both pool lists have answered, and only what needs you: the pools have no count of their own to show.
-            val needsYou = if (machinesAndModels.poolsSettled)
+            val poolsNeedYou = if (machinesAndModels.poolsSettled)
                 settingsNeedsYouValue(machinesAndModels.attention(runners.orEmpty(), workspaces, now).count { !it.isMachine }) else null
-            SettingsLink(SETTINGS_PROVIDERS, R.drawable.ic_cloud, needsYou, valueColor = Ink.amber) { page("providers") }
+            SettingsLink(SETTINGS_PROVIDERS, R.drawable.ic_cloud, poolsNeedYou, valueColor = Ink.amber) { page("providers") }
         }
         Spacer(Modifier.height(20.dp))
         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
@@ -313,6 +346,22 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             ListItem(headlineContent = { Text("Sign out", color = MaterialTheme.colorScheme.error) }, colors = settingsRowColors(),
                 modifier = Modifier.clickable(role = Role.Button) { signingOut = true })
         }
+    }
+    notice.Host(Modifier.align(Alignment.BottomCenter))
+    }
+    removing?.let { runner ->
+        AlertDialog(onDismissRequest = { removing = null }, title = { Text("Remove “${RunnerPage.displayName(runner)}”?") },
+            text = { Text(RunnerCopy.REMOVE_FOOTER) }, confirmButton = {
+                TextButton(onClick = { removing = null; scope.launch {
+                    machines.press { api.delete("runners/${runner.text("id")}") }?.let { machines.error = it; notice.show(it) }
+                } }) { Text(RunnerCopy.REMOVE, color = Ink.red) }
+            }, dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } })
+    }
+    if (confirmingSetup) ManagedRunnerSetupConfirm(onDismiss = { confirmingSetup = false }) { confirmingSetup = false; setUp() }
+    if (adding) AddRunnerDialog(api, onDismiss = { adding = false }) { id ->
+        adding = false
+        val ws = machines.workspacesOf(id).firstOrNull()?.text("id")
+        open(OrbitRoute(Destination.DRAFT, workspaceId = ws, id = if (ws == null) id else null))
     }
     if (signingOut) AlertDialog(onDismissRequest = { signingOut = false }, title = { Text(SETTINGS_SIGN_OUT_TITLE) },
         confirmButton = { TextButton(onClick = { signingOut = false; logout() }) { Text("Sign out", color = MaterialTheme.colorScheme.error) } },
@@ -409,10 +458,13 @@ private fun settingsRowColors() = ListItemDefaults.colors(containerColor = Color
 /** A group of rows under its header — none where its one row says the name (SettingsHome.header) — and, where it has one, the line
  * under it (SettingsHome.footer). */
 @Composable
-private fun SettingsGroup(title: String?, footer: String? = null, rows: @Composable ColumnScope.() -> Unit) {
+private fun SettingsGroup(title: String?, footer: String? = null, trailing: String? = null, trailingColor: Color? = null, rows: @Composable ColumnScope.() -> Unit) {
     if (title != null) {
-        Text(title, Modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp).semantics { heading() },
-            style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom) {
+            Text(title, Modifier.weight(1f).semantics { heading() },
+                style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            trailing?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = trailingColor ?: MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+        }
     } else {
         Spacer(Modifier.height(20.dp))
     }

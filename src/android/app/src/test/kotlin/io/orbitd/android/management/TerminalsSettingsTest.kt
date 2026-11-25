@@ -77,7 +77,7 @@ class TerminalsSettingsTest {
         // Read together, after the one scroll: Access tokens, then Terminals — Personal's last row — then Machines.
         // Where each row starts, unclipped by the screen's edge.
         val (tokens, terminals, machines) = listOf("Access tokens", "Terminals", MachinesAndModels.MACHINES)
-            .map { compose.onNode(hasText(it) and hasClickAction()).fetchSemanticsNode().positionInRoot.y }
+            .map { compose.onNode(hasText(it)).fetchSemanticsNode().positionInRoot.y }
         assertTrue("Terminals sits under Access tokens ($tokens, $terminals)", terminals > tokens)
         assertTrue("and over Machines ($terminals, $machines)", terminals < machines)
         row.performClick()

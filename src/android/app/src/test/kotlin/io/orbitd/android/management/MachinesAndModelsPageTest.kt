@@ -150,47 +150,56 @@ class MachinesAndModelsPageTest {
         }
     }
 
-    /** Settings' Machines and Providers rows (iOS SettingsHome, docs/mocks/ios-settings-web-groups 1A 2A): one row each under Personal, no
-     * header over either to say the name twice and no line under them. Machines says "1 needs you" for a machine's line, else the
-     * machines online; Providers says only what needs you about a pool. */
-    @Test fun settingsHasAMachinesRowAndAProvidersRowAfterPersonal() {
-        // Codex signed out on the one machine is nothing for the row to count, as the web's machine card draws it nothing. The pool's
+    /** Settings' Machines group (iOS SettingsHome): headed Machines with what needs you on the header, each machine a row that opens it,
+     * and Add machine last — then Integrations, then Providers' one row, which says "1 needs you" for a pool only. */
+    @Test fun settingsListsTheMachinesInlineAfterPersonal() {
+        // Codex signed out on the one machine is nothing for the group to count, as the web's machine card draws it nothing. The pool's
         // people couldn't be read, so its own account — signed out — is all it has: one line about a pool, and none about a machine.
         codexSignedOut()
         fixture.loginState = "SIGNED_OUT"; fixture.accessFails = true
         settings()
         await("1 of 1 online")
-        compose.onNode(hasText(MachinesAndModels.MACHINES) and hasText("1 of 1 online") and hasClickAction()).assertExists()
+        compose.onNode(hasText("1 of 1 online")).assertExists()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText(SETTINGS_PROVIDERS) and hasText("1 needs you")).fetchSemanticsNodes().isNotEmpty() }
         listOf("Runners", MachinesAndModels.TITLE, "Preferences", "Account").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
-        assertTrue("Personal, its last row Terminals, then Machines, then Providers", top(SETTINGS_PERSONAL) < top(Terminals.TITLE) &&
-            top(Terminals.TITLE) < top(MachinesAndModels.MACHINES) && top(MachinesAndModels.MACHINES) < top(SETTINGS_PROVIDERS))
-        // A machine offline is the Machines row's to count, and not the Providers row's.
+        assertEquals("Add machine", MachinesAndModels.ADD_MACHINE)
+        assertTrue("Personal, its last row Terminals, then Machines, its machine, Add machine, Integrations, then Providers",
+            top(SETTINGS_PERSONAL) < top(Terminals.TITLE) && top(Terminals.TITLE) < top(MachinesAndModels.MACHINES) &&
+            top(MachinesAndModels.MACHINES) < top("Old alias") && top("Old alias") < top(MachinesAndModels.ADD_MACHINE) &&
+            top(MachinesAndModels.ADD_MACHINE) < top(GithubCopy.INTEGRATIONS) && top(GithubCopy.INTEGRATIONS) < top(SETTINGS_PROVIDERS))
+        // A machine offline is the Machines header's to count, and not the Providers row's.
         fixture.secondRunner = true; fixture.runnerTwoOnline = false
         revision++
-        compose.waitUntil(60_000) { compose.onAllNodes(hasText(MachinesAndModels.MACHINES) and hasText("1 needs you")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText("1 needs you")).fetchSemanticsNodes().size >= 2 }
         compose.onNode(hasText(SETTINGS_PROVIDERS) and hasText("1 needs you") and hasClickAction()).performScrollTo().performClick()
-        compose.onNode(hasText(MachinesAndModels.MACHINES) and hasClickAction()).performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "providers"), OrbitRoute(Destination.SETTINGS, "machines")), opened) }
-        assertEquals(MachinesAndModels.MACHINES, settingsTitle("machines"))
+        compose.onNode(hasText("Old alias") and hasClickAction()).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "providers"), OrbitRoute(Destination.RUNNER, fixture.RUNNER)), opened) }
         assertEquals(SETTINGS_PROVIDERS, settingsTitle("providers"))
+        assertEquals("Settings", settingsTitle("machines"))
     }
 
-    /** The two halves Settings opens (iOS RunnersListView's part): Machines holds a machine's Needs you lines, the machines and Add
-     * Runner; Providers a pool's lines, the account pools, the API keys and the model tiers. */
+    /** Add machine opens the Add Runner dialog the Machines & models page's button opens. */
+    @Test fun addMachineOpensTheAddRunnerDialog() {
+        settings()
+        await(MachinesAndModels.ADD_MACHINE)
+        compose.onNode(hasText(MachinesAndModels.ADD_MACHINE) and hasClickAction()).performScrollTo().performClick()
+        compose.waitUntil(60_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /** The two halves of the Machines & models page (iOS RunnersListView's part): Machines holds a machine's Needs you lines, the
+     * machines and Add Runner; Providers a pool's lines, the account pools, the API keys and the model tiers. */
     @Test fun machinesAndProvidersEachShowTheirOwnHalf() {
         codexSignedOut()
         fixture.secondRunner = true; fixture.runnerTwoOnline = false
         fixture.loginState = "SIGNED_OUT"; fixture.accessFails = true
         val api = api()
-        var route by mutableStateOf(OrbitRoute(Destination.SETTINGS, "machines"))
-        compose.setContent { SettingsScreen(api, route, revision, { opened += it }, {}, logout = {}, changed = {}, workspaceDeleted = {},
-            deviceAlerts = { true }, notifications = {}, about = {}) }
+        var part by mutableStateOf(MachinesAndModelsPart.MACHINES)
+        compose.setContent { MachinesAndModelsPage(api, revision, { opened += it }, part = part) }
         await("Spare box is offline")
         listOf(MachinesAndModels.NEEDS_YOU, MachinesAndModels.MACHINES_DETAIL, RunnerCopy.ADD).forEach { compose.onNodeWithText(it).assertExists() }
         listOf("Team Codex is unavailable", MachinesAndModels.ACCOUNT_POOLS, MachinesAndModels.API_KEYS)
             .forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
-        route = OrbitRoute(Destination.SETTINGS, "providers")
+        part = MachinesAndModelsPart.PROVIDERS
         await("Team Codex is unavailable")
         listOf(MachinesAndModels.NEEDS_YOU, MachinesAndModels.ACCOUNT_POOLS, MachinesAndModels.API_KEYS).forEach { compose.onNodeWithText(it).assertExists() }
         listOf("Spare box is offline", MachinesAndModels.MACHINES_DETAIL, RunnerCopy.ADD).forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }

@@ -219,16 +219,20 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
 /** Machines & models' Managed runner section (board 3): the managed runner the server offers this account, and its Set up. */
 @Composable
 internal fun ManagedRunnerSection(display: ManagedRunner.Display, busy: Boolean, setUp: () -> Unit) {
-    FormSection(ManagedRunner.Entry.TITLE) {
-        Row(Modifier.fillMaxWidth().clickable(enabled = !busy, role = Role.Button, onClick = setUp).padding(vertical = 8.dp)
-            .testTag("managed-runner-entry"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("+", Modifier.clearAndSetSemantics { }, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(display.title)
-                Text(ManagedRunner.Entry.SUBTITLE, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-            }
-            TextButton(enabled = !busy, onClick = setUp) { Text(ManagedRunner.Entry.ACTION) }
+    FormSection(ManagedRunner.Entry.TITLE) { ManagedRunnerEntryRow(display, busy, setUp) }
+}
+
+/** The managed runner's Set up row, as the section above draws it and Settings' Machines group draws it at its top. */
+@Composable
+internal fun ManagedRunnerEntryRow(display: ManagedRunner.Display, busy: Boolean, setUp: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(enabled = !busy, role = Role.Button, onClick = setUp).padding(vertical = 8.dp)
+        .testTag("managed-runner-entry"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("+", Modifier.clearAndSetSemantics { }, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(display.title)
+            Text(ManagedRunner.Entry.SUBTITLE, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
         }
+        TextButton(enabled = !busy, onClick = setUp) { Text(ManagedRunner.Entry.ACTION) }
     }
 }
 

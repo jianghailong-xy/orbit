@@ -39,8 +39,8 @@ class MachinesAndModelsCopyParityTest {
             "\"Install \\(RunnerPageFormat.engineName(engine))\"").forEach { assertTrue("$it is not in the Swift sources", source.contains(it)) }
         val settings = read("${kit}SettingsHome.swift")
         listOf("\"1 needs you\"", " need you\"").forEach { assertTrue("$it is not in SettingsHome.swift", settings.contains(it)) }
-        // Settings' Machines group has no header, as on iOS: its one row says the name; Providers' neither.
-        assertTrue("iOS heads Machines", settings.contains("case .machines:  return nil"))
+        // Settings' Machines group is headed "Machines", as on iOS, over the machines themselves; Providers' one row says its name.
+        assertTrue("iOS heads Machines", settings.contains("case .machines:  return MachinesAndModels.machines"))
         assertTrue("iOS heads Providers", settings.contains("case .providers: return nil"))
         assertTrue(read("${views}SkillsRunnersView.swift").contains("failedTitle: \"Machines couldn't be loaded\""))
     }

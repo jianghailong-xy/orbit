@@ -24,6 +24,8 @@ internal object MachinesAndModels {
     const val TITLE = "Machines & models"
     const val NEEDS_YOU = "Needs you"
     const val MACHINES = "Machines"
+    /** Settings' Machines group's last row: the same add-machine flow as the Machines & models page's Add Runner. iOS: MachinesAndModels.addMachine. */
+    const val ADD_MACHINE = "Add machine"
     const val MACHINES_DETAIL = "Subscriptions signed in here are spent only by sessions on that machine."
     const val DETAILS = "Details"
     const val MANAGE = "Manage"
