@@ -86,12 +86,12 @@ class SessionFactsRowShotsTest {
 
     private fun rows(withFacts: Boolean): List<DirectorySession> {
         fun row(id: String, title: String, status: String, runState: String? = null, endReason: String? = null, released: Boolean, outcome: String? = null,
-            phase: String, waitingOn: String? = null) =
+            phase: String, waitingOn: String? = null, workFinished: Boolean = false) =
             DirectorySession(id, title = title, workspaceId = workspace, status = status, runState = runState, endReason = endReason,
                 phase = phase.takeIf { withFacts }, released = released.takeIf { withFacts }, lastTurnOutcome = outcome.takeIf { withFacts },
-                waitingOn = waitingOn.takeIf { withFacts })
+                waitingOn = waitingOn.takeIf { withFacts }, workFinished = workFinished.takeIf { withFacts })
         return listOf(
-            row("1", "1 A task run that finished", "SUCCEEDED", endReason = "task_done", released = true, outcome = "ANSWERED", phase = "IDLE"),
+            row("1", "1 A task run that finished", "SUCCEEDED", endReason = "task_done", released = true, outcome = "ANSWERED", phase = "IDLE", workFinished = true),
             row("2", "2 A queued session on hold", "PENDING", runState = "QUEUED", released = false, phase = "PENDING", waitingOn = "HOLD"),
             row("3", "3 An end nobody confirmed", "FAILED", endReason = "ended", released = true, outcome = "FAILED", phase = "IDLE"),
             row("4", "4 An old plain conversation", "SUCCEEDED", released = true, outcome = "ANSWERED", phase = "IDLE"),
@@ -107,11 +107,12 @@ class SessionFactsRowShotsTest {
         } } }
     }
 
-    private fun assertWords(words: List<String>) {
+    private fun assertWords(words: List<String>, values: List<String>? = null) {
         val rows = rows(false)
         words.forEachIndexed { i, word ->
             compose.onNodeWithTag("directory-list").performScrollToNode(hasText(rows[i].title!!))
             compose.onNode(hasText(rows[i].title!!) and hasText(word)).assertExists()
+            values?.let { compose.onNode(hasText(rows[i].title!!) and hasStateDescription(it[i])).assertExists() }
         }
     }
 
@@ -122,10 +123,13 @@ class SessionFactsRowShotsTest {
         shot("list-before-legacy-fields")
     }
 
-    /** The same five rows with the facts the server sends now. */
+    /** The same five rows with the facts the server sends now: the state from `phase`, the other facts as the approved board's marks
+     * (docs/mocks/session-display-three-states). With nothing to preview, the line says the state word, as web's does, and a held
+     * queue its queue word, as on the board. */
     @Test fun afterTheFactsAreSent() {
         draw(rows(true))
-        assertWords(listOf("Finished", "On hold", "Ended", "Ended", "Interrupted"))
+        assertWords(listOf("Idle", "On hold", "Idle", "Idle", "Idle"),
+            listOf("Idle, Finished", "Queued, On hold", "Idle, Ended", "Idle, Ended", "Idle, Interrupted"))
         shot("list-after-session-facts")
     }
 }

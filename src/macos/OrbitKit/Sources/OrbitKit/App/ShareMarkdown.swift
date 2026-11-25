@@ -83,8 +83,13 @@ public enum ShareMarkdown {
         return nil
     }
 
-    /// A task run in the task panel's words: its run state's, a held queued run reading "On hold".
+    /// A task run in the task panel's words: the state word and its marks ("Idle · Finished",
+    /// `SessionDisplay`), else, from an older server, its run state's, a held queued run reading "On hold".
     public static func runLabel(_ run: SessionRef) -> String {
+        let facts = run.displayFacts
+        if let state = SessionDisplay.state(facts) {
+            return SessionDisplay.written(state, SessionDisplay.marks(facts) ?? [])
+        }
         if run.resolvedRunState == .queued && run.waitingOn == .hold { return "On hold" }
         return runLabel(run.resolvedRunState)
     }
