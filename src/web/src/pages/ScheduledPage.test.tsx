@@ -299,6 +299,25 @@ describe('the inspector (board 1/2 ②)', () => {
     expect(block('next').textContent).toBe('Next runTomorrow 09:00Last · Today 10:00 · Known 0.49.0, linked PR #831 · not notified');
   });
 
+  it('widens by dragging its left edge, within the list’s room, and keeps the width in this browser', async () => {
+    await openCodex();
+    const page = document.querySelector<HTMLElement>('.sched-page')!;
+    const handle = document.querySelector<HTMLElement>('[data-schedule-resizer]')!;
+    expect(handle.nextElementSibling).toBe(inspector());
+    expect(page.style.getPropertyValue('--sched-inspector-width')).toBe('');
+    vi.spyOn(inspector(), 'getBoundingClientRect').mockReturnValue({ width: 400 } as DOMRect);
+    vi.spyOn(handle.previousElementSibling!, 'getBoundingClientRect').mockReturnValue({ width: 700 } as DOMRect);
+    const mouse = (type: string, clientX: number) =>
+      act(() => { (type === 'mousedown' ? handle : document).dispatchEvent(new MouseEvent(type, { bubbles: true, clientX })); });
+    mouse('mousedown', 1000);
+    mouse('mousemove', 850);
+    expect(page.style.getPropertyValue('--sched-inspector-width')).toBe('550px');
+    mouse('mousemove', 0);
+    expect(page.style.getPropertyValue('--sched-inspector-width')).toBe('740px');
+    mouse('mouseup', 0);
+    expect(localStorage.getItem('orbit.scheduleInspectorWidth')).toBe('740');
+  });
+
   it('has Run now, Pause, Change… and ⋯', async () => {
     await openCodex();
     expect([...block('doors').querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Run now', 'Pause', 'Change…', '⋯']);
