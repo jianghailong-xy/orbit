@@ -1,0 +1,212 @@
+{
+ "id": "353S0ylqeIKBCY3w4qlRZ",
+ "title": "Project closeout",
+ "ownerId": "4SYVmjR3sZdKbJg75C8AfB",
+ "goal": "Close the release out",
+ "instructions": null,
+ "status": "OPEN",
+ "doneBy": null,
+ "doneAt": null,
+ "doneCriteriaDigest": null,
+ "doneTaskEpochs": null,
+ "acceptedGaps": [],
+ "nonCode": false,
+ "nonCodeSetBy": null,
+ "nonCodeSetBySessionId": null,
+ "nonCodeSetAt": null,
+ "nonCodeReason": null,
+ "reopenedAt": null,
+ "coordinatorSessionId": null,
+ "coordinatorWorkspaceId": null,
+ "coordinatorEnabled": false,
+ "maxConcurrentTasks": 3,
+ "sessionBudgetPerDay": null,
+ "configRevision": "0",
+ "convergenceThresholds": null,
+ "attemptBudget": null,
+ "unboundedAuthorizedBy": null,
+ "exceptionEscalationSeconds": 7200,
+ "startedAt": null,
+ "pausedAt": null,
+ "pausedReason": null,
+ "createdAt": "2026-11-25T01:30:04.842Z",
+ "updatedAt": "2026-11-25T01:30:04.842Z",
+ "coordinatorAgentId": null,
+ "coordinatorGeneration": "0",
+ "_count": {
+  "tasks": 0
+ },
+ "tasksByStatus": {},
+ "acceptanceCriteriaItems": [
+  {
+   "id": "2yt5pZPWugf5KAASTMpjsz",
+   "ordinal": 1,
+   "text": "The release is on main",
+   "verificationMethod": "Read the merge receipt",
+   "completionCriterionOverrideReason": null,
+   "satisfiedBy": "TASKS",
+   "key": "2yt5pZPWugf5KAASTMpjsz",
+   "revision": 1,
+   "contentHash": "dc2b8bc67a46dafa345755922d39b04f899eeb2cf049e553793c221b2c214069",
+   "semanticRevision": 1,
+   "semanticHash": "256ad0876791c59b2153c15e0566746529774b9ee3fe9c3c229b624816ac22e1",
+   "satisfied": false,
+   "unmet": [
+    {
+     "clause": "NO_WORK_SERVES_IT",
+     "heldUpBy": []
+    }
+   ],
+   "confirmation": null,
+   "landing": "UNKNOWN",
+   "independence": "INDEPENDENT",
+   "conflicts": [],
+   "remedy": null,
+   "movedFrom": null,
+   "publicId": "2yt5pZPWugf5KAASTMpjsz"
+  },
+  {
+   "id": "50kxaUpTpjD6Vkm7nhundd",
+   "ordinal": 2,
+   "text": "The live check was completed",
+   "verificationMethod": "Read the check output",
+   "completionCriterionOverrideReason": null,
+   "satisfiedBy": "TASKS",
+   "key": "50kxaUpTpjD6Vkm7nhundd",
+   "revision": 1,
+   "contentHash": "43d4bd94237e5bdc38866366b677403b76aa7da5d80b3f1eff7045130ae3dc94",
+   "semanticRevision": 1,
+   "semanticHash": "cc515cedb32adf37afb4ed04fd8ec00e93ea3d9cd42dd314050d3a7a8b7d8ee2",
+   "satisfied": false,
+   "unmet": [
+    {
+     "clause": "NO_WORK_SERVES_IT",
+     "heldUpBy": []
+    }
+   ],
+   "confirmation": null,
+   "landing": "UNKNOWN",
+   "independence": "INDEPENDENT",
+   "conflicts": [],
+   "remedy": null,
+   "movedFrom": null,
+   "publicId": "50kxaUpTpjD6Vkm7nhundd"
+  }
+ ],
+ "criteriaMovedOut": [],
+ "rulings": [],
+ "settingChanges": [],
+ "translation": {
+  "lang": "zh-Hans",
+  "title": "ZH[Project closeout]",
+  "criteria": [
+   {
+    "id": "2yt5pZPWugf5KAASTMpjsz",
+    "text": "ZH[The release is on main]",
+    "publicId": "2yt5pZPWugf5KAASTMpjsz"
+   },
+   {
+    "id": "50kxaUpTpjD6Vkm7nhundd",
+    "text": "ZH[The live check was completed]",
+    "publicId": "50kxaUpTpjD6Vkm7nhundd"
+   }
+  ]
+ },
+ "blockers": {
+  "open": [],
+  "resolved": [],
+  "resolvedCount": 0
+ },
+ "integration": {
+  "line": null,
+  "lineAbsentReason": "NOT_DECIDED",
+  "ref": null,
+  "defaultProjectBranch": "project/project-closeout-353S0ylq",
+  "upstreamRef": null,
+  "upstreamChosenAt": null,
+  "source": null,
+  "locked": false,
+  "startedAt": null,
+  "landingCheckCommand": null,
+  "landingCheckTimeoutSeconds": null,
+  "landingCheckCommandAbsentReason": "FALLS_BACK_TO_MERGE_CHECK",
+  "landingCheck": {
+   "command": null,
+   "setBy": null,
+   "setBySessionId": null,
+   "setAt": null
+  },
+  "mergeCheckCommand": null,
+  "mergeCheckCommandAbsentReason": "NOT_CONFIGURED",
+  "mergeCheckTimeoutSeconds": null,
+  "escalationSeconds": 7200,
+  "deliveryMode": "PLATFORM",
+  "deliveryModeChosenAt": null,
+  "lastMainBranch": null
+ },
+ "derivedDone": {
+  "status": "OPEN",
+  "done": false,
+  "withheld": [
+   "CRITERION_UNSATISFIED",
+   "CRITERION_UNLANDED",
+   "STANDARD_SET_UNCONFIRMED"
+  ],
+  "criteria": [
+   {
+    "definitionId": "2yt5pZPWugf5KAASTMpjsz",
+    "satisfied": false,
+    "landing": "UNKNOWN",
+    "independence": "INDEPENDENT",
+    "conflicts": [],
+    "remedy": null,
+    "landingReason": "NO_RECEIPT",
+    "satisfiedBy": "TASKS",
+    "confirmation": null,
+    "withheld": [
+     "CRITERION_UNSATISFIED",
+     "CRITERION_UNLANDED"
+    ],
+    "definitionPublicId": "2yt5pZPWugf5KAASTMpjsz"
+   },
+   {
+    "definitionId": "50kxaUpTpjD6Vkm7nhundd",
+    "satisfied": false,
+    "landing": "UNKNOWN",
+    "independence": "INDEPENDENT",
+    "conflicts": [],
+    "remedy": null,
+    "landingReason": "NO_RECEIPT",
+    "satisfiedBy": "TASKS",
+    "confirmation": null,
+    "withheld": [
+     "CRITERION_UNSATISFIED",
+     "CRITERION_UNLANDED"
+    ],
+    "definitionPublicId": "50kxaUpTpjD6Vkm7nhundd"
+   }
+  ],
+  "confirmation": "UNCONFIRMED",
+  "counts": {
+   "criteria": 2,
+   "met": 0,
+   "landed": 0,
+   "onMain": 0,
+   "byReason": {
+    "IN_FLIGHT": 0,
+    "ON_PROJECT_BRANCH": 0,
+    "NOTHING_TO_LAND": 0,
+    "NO_RECEIPT": 0,
+    "NO_BRANCH": 0,
+    "CODELESS": 0
+   }
+  },
+  "nonCode": false
+ },
+ "publicId": "353S0ylqeIKBCY3w4qlRZ",
+ "ownerPublicId": "4SYVmjR3sZdKbJg75C8AfB",
+ "coordinatorSessionPublicId": null,
+ "nonCodeSetBySessionPublicId": null,
+ "coordinatorWorkspacePublicId": null,
+ "coordinatorAgentPublicId": null
+}
