@@ -206,6 +206,7 @@ import {
 } from '../lib/sessionProjects';
 import { moveProject } from './ProjectRunSettings';
 import { SidebarNavIcon } from './SidebarNavIcon';
+import { HeaderMoreIcon, HeaderShareIcon } from './SessionHeaderIcons';
 import {
   type SessionTagRef,
   compareListed,
@@ -280,7 +281,9 @@ import {
 } from '../lib/contextSeed';
 import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
-import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
+import { BrandMark, NewSessionProviderHero, type NewSessionPlace } from './NewSessionProviderHero';
+import { orderWorkspaces, workspaceRunnerId } from '../lib/workspaceOrder';
+import { runnerUpdateIndicator } from '../lib/runnerUpdateIndicator';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
 import { MachineSetupCard, RevealedOnArrival, setupCredentialOf, type HistoryChoice } from './MachineSetupCard';
 import { startHistoryImport } from '../lib/claudeHistoryImport';
@@ -10197,6 +10200,30 @@ export function WorkspaceView({
       : selectedId
         ? 'Starting…'
         : '';
+  // Where a new session runs, said and picked under the engine (docs/mocks/new-session-top ②⑤). Another
+  // workspace opens its own draft (the 'new' draft's text goes along); a folder is the `folder` param the
+  // send already files the session by. The Projects framing names the workspace alone: a project has no folder.
+  const draftPlace: NewSessionPlace | null = pickedWorkspace
+    ? {
+        workspace: { id: pickedWorkspace.id, name: pickedWorkspace.name },
+        workspaces: orderWorkspaces(workspacesQ.data ?? [])
+          .filter((w) => workspaceRunnerId(w) != null)
+          .map((w) => ({ id: w.id, name: w.name })),
+        onPickWorkspace: (id) =>
+          navigate(`/workspaces/${encodeId(id)}/new${projectIntent ? '?intent=project' : ''}`),
+        folder: openFolder && openFolder.workspaceId === pickedWorkspace.id
+          ? { id: openFolder.id, name: openFolder.name }
+          : null,
+        folders: projectIntent || scopeWorkspaceId !== pickedWorkspace.id
+          ? []
+          : workspaceFolders.map((f) => ({ id: f.id, name: f.name })),
+        onPickFolder: (id) => setFolderParam(id, true),
+      }
+    : null;
+  // A wide window's draft has no header (docs/mocks/new-session-top ②c): with no session there is no title,
+  // Share or ⋯ to put in one, and where the session runs is said under the engine. A machine's own draft
+  // keeps it (no hero there), as does a runner draining for its update, whose pill lives in the header.
+  const draftHeaderless = composing && !isMobile && !machineDraft && !runnerUpdateIndicator(runner, runnerShownName);
   // The open session's settings, for the column beside the conversation or the sheet on a phone.
   const settingsProps = selected && !selectedTrashed && !composing
     ? {
@@ -11035,7 +11062,7 @@ export function WorkspaceView({
         <>
         {/* A machine with no workspace: the card says whose it is, so no session title above it. A phone keeps the
             header for its way back. */}
-        {(!bareMachine || isMobile) && <div className={`workspace-header${headerJumpShown ? ' has-jump' : ''}`}>
+        {(!bareMachine || isMobile) && !draftHeaderless && <div className={`workspace-header${headerJumpShown ? ' has-jump' : ''}`}>
           {isMobile && (
             <button
               type="button"
@@ -11136,7 +11163,8 @@ export function WorkspaceView({
             </div>
             {/* docs/mocks/session-header-compact: a wide window's header is the title alone; the run word, the
                 lifecycle, the time and the tags stay on a phone's. */}
-            {(isMobile || !selected) && <div className="workspace-sub">
+            {/* A draft's phone header is its way back and its name: where it runs is said under the engine. */}
+            {(isMobile || !selected) && !(composing && !machineDraft) && <div className="workspace-sub">
               {headSub}
               {/* The session's tags, seen without opening anything; a press opens ⋯ at its Tags level. */}
               {!composing && selected && !selectedTrashed && (
@@ -11177,16 +11205,7 @@ export function WorkspaceView({
                   {titleBarSessionCount ?? undefined}
                 </Button>
               )}
-              {!isMobile && !selectedTrashed && (
-                <Button
-                  variant="text"
-                  className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
-                  icon={<ExportOutlined />}
-                  title={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}
-                  aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
-                  onClick={() => setShareOpen(true)}
-                />
-              )}
+              {/* docs/mocks/session-header-share-more: ⋯ then Share, one tight pair at the header's right edge. */}
               <Menu
                 side="bottom"
                 align="end"
@@ -11398,8 +11417,18 @@ export function WorkspaceView({
                         },
                       ]
                 }
-                trigger={<Button ref={headerMore} variant="text" icon={<MoreOutlined />} title="More actions" />}
+                trigger={<Button ref={headerMore} variant="text" className="workspace-header-more" icon={<HeaderMoreIcon />} title="More actions" />}
               />
+              {!isMobile && !selectedTrashed && (
+                <Button
+                  variant="text"
+                  className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
+                  icon={<HeaderShareIcon />}
+                  title={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}
+                  aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
+                  onClick={() => setShareOpen(true)}
+                />
+              )}
             </>
           )}
         </div>}
@@ -11953,6 +11982,7 @@ export function WorkspaceView({
                   disabled={!pickedWorkspace}
                   note={providerSwitchNote}
                   projectIntent={projectIntent}
+                  place={draftPlace}
                 />
               )}
               {localStatusCards.map((card) => (

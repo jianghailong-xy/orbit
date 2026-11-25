@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { encodeId } from '../lib/idCodec';
-import { NewSessionProviderHero } from './NewSessionProviderHero';
+import { NewSessionProviderHero, type NewSessionPlace } from './NewSessionProviderHero';
 import { currentEngineChoice, draftFallback, engineChoices, type ChoiceSources } from '../lib/sessionProviderChoices';
 import { defaultEngineOf, type ConfiguredProvider } from '../lib/workspaceDefaults';
 import { AgentProvider, type RunnerAntigravityState, type RunnerEngineHealth } from '@orbit/shared';
@@ -39,6 +39,7 @@ function markup(
     projectIntent?: boolean;
     antigravity?: RunnerAntigravityState;
     region?: ChoiceSources['region'];
+    place?: NewSessionPlace | null;
   } = {},
 ) {
   const sources: ChoiceSources = {
@@ -63,6 +64,7 @@ function markup(
         note={opts.note}
         currentModelLabel={opts.currentModelLabel}
         projectIntent={opts.projectIntent}
+        place={opts.place}
       />
     </MemoryRouter>,
   );
@@ -74,7 +76,6 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('aria-label="Engine: Antigravity CLI"');
     expect(html).not.toContain('env key');
     expect(html).not.toContain('Google account');
-    expect(html).toContain('Gemini 3.8 Flash');
     expect(html).not.toContain('Managed by the provider');
   });
 
@@ -91,7 +92,9 @@ describe('NewSessionProviderHero', () => {
     const html = markup('claude');
 
     expect(html).toContain('<div class="np-empty-copy">Send a task to get started.</div>');
-    expect(html).toContain('<div class="np-current-model">Claude Opus 5</div>');
+    // The model is said once, in the composer (docs/mocks/new-session-top ③).
+    expect(html).not.toContain('np-current-model');
+    expect(html).not.toContain('Claude Opus 5');
     expect(html).not.toContain('Start a new session');
     expect(html).not.toContain('Orbit remembers who runs it.');
     expect(html).not.toContain('Start a new project');
@@ -120,11 +123,47 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('np-chev');
   });
 
-  it('shows the draft model rather than the provider default in the empty state', () => {
-    const html = markup('claude', { currentModelLabel: 'Claude Sonnet 5' });
+  it('names the draft model rather than the provider default in the project summary', () => {
+    const html = markup('claude', { currentModelLabel: 'Claude Sonnet 5', projectIntent: true });
 
-    expect(html).toContain('<div class="np-current-model">Claude Sonnet 5</div>');
+    expect(html).toContain('Claude Sonnet 5');
     expect(html).not.toContain('Claude Opus 5');
+  });
+
+  describe('where the session runs (docs/mocks/new-session-top)', () => {
+    const place = (over: Partial<NewSessionPlace> = {}): NewSessionPlace => ({
+      workspace: { id: 'w1', name: 'orbit-ws01' },
+      workspaces: [{ id: 'w1', name: 'orbit-ws01' }, { id: 'w2', name: 'orbit-ws02' }],
+      onPickWorkspace: () => {},
+      folder: { id: 'f1', name: 'Orbit Session' },
+      folders: [{ id: 'f1', name: 'Orbit Session' }, { id: 'f2', name: 'Releases' }],
+      onPickFolder: () => {},
+      ...over,
+    });
+
+    it('says the workspace and the folder under the engine, each a menu', () => {
+      const html = markup('claude', { place: place() });
+      expect(html.indexOf('np-name')).toBeLessThan(html.indexOf('np-place'));
+      expect(html.indexOf('np-place')).toBeLessThan(html.indexOf('np-empty-copy'));
+      expect(html).toContain('aria-label="Workspace: orbit-ws01"');
+      expect(html).toContain('aria-label="Folder: Orbit Session"');
+      expect(html).toContain('<span class="np-place-in">in</span>');
+    });
+
+    it('says No folder when the draft is in none', () => {
+      expect(markup('claude', { place: place({ folder: null }) })).toContain('aria-label="Folder: No folder"');
+    });
+
+    it('names the workspace alone when it has no folders', () => {
+      const html = markup('claude', { place: place({ folder: null, folders: [] }) });
+      expect(html).toContain('aria-label="Workspace: orbit-ws01"');
+      expect(html).not.toContain('aria-label="Folder:');
+      expect(html).not.toContain('np-place-sep');
+    });
+
+    it('draws no place line before the workspace is known', () => {
+      expect(markup('claude')).not.toContain('np-place');
+    });
   });
 
   it('drops the chevron when there is nothing to pick', () => {
