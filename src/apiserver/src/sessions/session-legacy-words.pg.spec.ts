@@ -148,6 +148,8 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
   });
 
   await t.test('(4) a held row with no turn_state answers its stored word', async () => {
+    // Compared all at once, so a failure shows every word that is answered wrong.
+    const answers: Record<string, unknown> = {};
     for (const word of HELD_WORDS) {
       const { id } = await db.session.create({
         data: {
@@ -167,10 +169,9 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
                  import_source_cwd, kind, NULL, status::text) AS word
           FROM session WHERE id = $1::uuid`, id);
       const payload = withSessionState(row);
-      assert.deepEqual(
-        { typescript: legacySessionStatus(row), sql: sql.word, status: payload.status, runStatus: payload.runStatus },
-        { typescript: word, sql: word, status: word, runStatus: word },
-      );
+      answers[word] = { typescript: legacySessionStatus(row), sql: sql.word, status: payload.status, runStatus: payload.runStatus };
     }
+    assert.deepEqual(answers, Object.fromEntries(HELD_WORDS.map((word) =>
+      [word, { typescript: word, sql: word, status: word, runStatus: word }])));
   });
 });
