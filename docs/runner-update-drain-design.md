@@ -132,9 +132,12 @@ and nothing else.
 | `diff` | goes through |
 | redelivery of a `message` or `shell` turn already running (expired lease, own-lease redelivery) | goes through |
 
-Held turns stay `PENDING` on the server. As under the dispatch pause, a session that is `RUNNING`
-with no `message` or `shell` turn in flight and one queued is put back in the queue rather than left
-`RUNNING` with nothing running.
+On a draining inbox fetch nothing is put back in the queue and no inbox lease is retired: the held
+turns simply stay `PENDING` on the server. This differs from the dispatch pause, which requeues a
+`RUNNING` session with nothing in flight. The slot is returned only at turn completion (§7.3). A
+session the draining runner claimed because its engine is running a turn of its own
+(`drainClaimScope`) keeps its lease until that turn ends, so its process is not retired mid-turn, and
+then §7.3 applies.
 
 ### 7.2 Where the hold lives
 
@@ -153,6 +156,11 @@ It does not keep the slot for a queued follow-up. The session goes back to the q
 `PENDING`, `waitingOn: HOLD`, `queuedReason: runner_updating`: the queued state this design already
 has (board 5 of `docs/mocks/runner-update-drain/`), not a new one. Its follow-ups run after the
 update, through the ordinary claim.
+
+The draining flag on the turn completion also records the runner as draining on the server, in the
+column the heartbeat writes (`runner.heartbeat_draining`). The requeued session therefore reads
+`queuedReason: runner_updating` at once, not after the next heartbeat. A later heartbeat that says
+the runner is not draining clears it, as today.
 
 ### 7.4 Stop on such a session
 
