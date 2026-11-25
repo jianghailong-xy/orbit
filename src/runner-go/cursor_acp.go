@@ -1249,6 +1249,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	// The generation's inbox poller: what fetches its turns, and the turnIds already taken on, which
 	// a redelivery of one is dropped against for the generation's whole life.
 	poller := newInboxPoller(p.t, p.job.SessionID, p.leaseGeneration)
+	poller.holdTurns(p.waitTurnPermit, p.job, p.completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer poller.close()
 	inbox := make(chan *RunInboxResponse, 8)
 	pollErrors := make(chan error, 1)

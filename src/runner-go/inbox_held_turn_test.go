@@ -226,7 +226,8 @@ func TestAnInterruptFiledBehindAFollowUpHeldForTheUpdateIsHandled(t *testing.T) 
 			id := "sess-held-" + c.engine
 			stub := newHeldTurnStub(t)
 			tr := NewTransport(stub.server.URL, "runner-token")
-			_, _, permit := heldFollowUpSession(t, id)
+			pool, _, permit := heldFollowUpSession(t, id)
+			tr.draining = pool.isDrainingForUpdate
 			complete := func(req TurnCompleteRequest, _ ...context.Context) error {
 				_, err := tr.turnComplete(context.Background(), id, req)
 				return err
@@ -253,6 +254,173 @@ func TestAnInterruptFiledBehindAFollowUpHeldForTheUpdateIsHandled(t *testing.T) 
 			if ran() {
 				t.Fatal("the held follow-up reached the engine")
 			}
+			// Every fetch, the one that handed the follow-up out included, said the pool drains for an update.
+			stub.mu.Lock()
+			said := slices.Clone(stub.drainingSaid)
+			stub.mu.Unlock()
+			for i, d := range said {
+				if d != "1" {
+					t.Fatalf("inbox fetch %d of %d said draining=%q while the pool drained for an update, want \"1\"", i+1, len(said), d)
+				}
+			}
 		})
+	}
+}
+
+// Every inbox fetch says draining=1 while the pool drains for an update (docs/runner-update-drain-design.md §7.2), and
+// says nothing before the drain or once it has been put off.
+func TestEveryInboxFetchSaysDrainingWhileThePoolDrainsForAnUpdate(t *testing.T) {
+	stub := newHeldTurnStub(t)
+	tr := NewTransport(stub.server.URL, "runner-token")
+	pool := newSessionPool(2)
+	tr.draining = pool.isDrainingForUpdate
+	inbox := newInboxPoller(tr, "sess-draining", "gen-1")
+	defer inbox.close()
+	ctx, cancel := context.WithTimeout(context.Background(), heldInterruptWithin)
+	defer cancel()
+	fetch := func(turnID, want string) {
+		t.Helper()
+		stub.mu.Lock()
+		from := len(stub.drainingSaid)
+		stub.mu.Unlock()
+		stub.queue(RunInboxResponse{TurnID: turnID, Kind: "diff"})
+		if resp, err := inbox.next(ctx); err != nil || resp.TurnID != turnID {
+			t.Fatalf("fetching %s: %v, %v", turnID, resp, err)
+		}
+		stub.mu.Lock()
+		said := slices.Clone(stub.drainingSaid[from:])
+		stub.mu.Unlock()
+		for _, d := range said {
+			if d != want {
+				t.Fatalf("a fetch for %s said draining=%q, want %q", turnID, d, want)
+			}
+		}
+	}
+	fetch("before", "")
+	pool.drainForUpdate()
+	fetch("during", "1")
+	fetch("still-during", "1")
+	pool.endDrainForUpdate()
+	fetch("after", "")
+}
+
+// fakePermit is a session loop's waitTurnPermit the test opens: until then it waits, as waitActive does while the
+// update holds the session's follow-up.
+type fakePermit struct {
+	mu   sync.Mutex
+	open bool
+	ch   chan struct{}
+}
+
+func newFakePermit() *fakePermit { return &fakePermit{ch: make(chan struct{})} }
+
+func (f *fakePermit) wait(ctx context.Context) bool {
+	f.mu.Lock()
+	if f.open {
+		f.mu.Unlock()
+		return true
+	}
+	ch := f.ch
+	f.mu.Unlock()
+	select {
+	case <-ch:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (f *fakePermit) grant() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.open {
+		f.open = true
+		close(f.ch)
+	}
+}
+
+// The mechanism itself, which every session loop takes its turns through (holdTurns): a message or shell turn whose
+// permit has not come is held, and the control turns filed behind it are handed on meanwhile; once its permit comes it
+// is handed on; an interrupt hands a held turn back unrun, as INTERRUPTED, before the interrupt itself is handed on.
+func TestThePollerHoldsATurnWaitingForItsPermitAndReadsOn(t *testing.T) {
+	for _, kind := range []string{"message", "shell"} {
+		t.Run(kind, func(t *testing.T) {
+			stub := newHeldTurnStub(t)
+			tr := NewTransport(stub.server.URL, "runner-token")
+			inbox := newInboxPoller(tr, "sess-hold", "gen-1")
+			defer inbox.close()
+			permit := newFakePermit()
+			var mu sync.Mutex
+			var handedBack []TurnCompleteRequest
+			complete := func(req TurnCompleteRequest, _ ...context.Context) error {
+				mu.Lock()
+				defer mu.Unlock()
+				handedBack = append(handedBack, req)
+				return nil
+			}
+			inbox.holdTurns(permit.wait, &ClaimedSession{SessionID: "sess-hold"}, complete)
+			ctx, cancel := context.WithTimeout(context.Background(), heldInterruptWithin)
+			defer cancel()
+			next := func(want string) {
+				t.Helper()
+				resp, err := inbox.next(ctx)
+				if err != nil || resp.TurnID != want {
+					t.Fatalf("handed %v (%v), want %s", resp, err, want)
+				}
+			}
+
+			// Held, with every control turn behind it handed on.
+			stub.queue(RunInboxResponse{TurnID: "held-1", Kind: kind, Content: "work"})
+			for _, control := range []string{"diff", "setconfig", "withdraw", "steer"} {
+				stub.queue(RunInboxResponse{TurnID: control + "-1", Kind: control})
+			}
+			for _, control := range []string{"diff", "setconfig", "withdraw", "steer"} {
+				next(control + "-1")
+			}
+			// The held turn handed over again while it waits is the same turn, not a second one.
+			stub.queue(RunInboxResponse{TurnID: "held-1", Kind: kind, Content: "work"})
+			stub.queue(RunInboxResponse{TurnID: "diff-2", Kind: "diff"})
+			next("diff-2")
+			// Its permit comes: it is handed on.
+			permit.grant()
+			next("held-1")
+			mu.Lock()
+			if len(handedBack) != 0 {
+				t.Fatalf("a turn whose permit came was handed back: %+v", handedBack)
+			}
+			mu.Unlock()
+
+			// Held again, then an interrupt: the held turn is handed back unrun and the interrupt handed on.
+			permit2 := newFakePermit()
+			inbox.permit = permit2.wait
+			stub.queue(RunInboxResponse{TurnID: "held-2", Kind: kind, Content: "more work"})
+			stub.queue(RunInboxResponse{TurnID: "stop-1", Kind: "interrupt"})
+			next("stop-1")
+			mu.Lock()
+			got := slices.Clone(handedBack)
+			mu.Unlock()
+			if len(got) != 1 || got[0].TurnID != "held-2" || got[0].Status != stInterrupted {
+				t.Fatalf("handed back %+v, want held-2 INTERRUPTED", got)
+			}
+			// Nothing hands it on afterwards, even once its permit comes.
+			permit2.grant()
+			stub.queue(RunInboxResponse{TurnID: "end-1", Kind: "end"})
+			next("end-1")
+		})
+	}
+}
+
+// Every session loop that takes its turns through the inbox poller has it hold the turns that wait for their permit:
+// the mechanism the tests above drive for claude, codex and the poller itself is the one each of the eight loops uses.
+func TestEverySessionLoopHasItsPollerHoldTurnsWaitingForAPermit(t *testing.T) {
+	for _, f := range []string{"session.go", "codex.go", "codex_appserver.go", "kimi_acp.go", "opencode.go", "antigravity.go",
+		"cursor_acp.go", "dsh_acp.go"} {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(string(src), ".holdTurns("); n != 1 {
+			t.Errorf("%s calls holdTurns %d times, want 1 (after its newInboxPoller)", f, n)
+		}
 	}
 }
