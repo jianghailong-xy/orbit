@@ -713,7 +713,7 @@ export class ShareLinksService {
       return {
         id: session.id,
         title: session.title,
-        status: session.status,
+        status: session.runStatus,
         lifecycleState: session.lifecycleState,
         completedAt: session.completedAt,
       };

@@ -565,6 +565,7 @@
     "push": {
       "failedBody": "The last run {reason}. It keeps running until you pause it.",
       "goalReachedTitle": "{title} ended itself",
+      "reportedLateTitle": "{title} reported after all",
       "stoppedAsPlanned": "Stopped as planned after {runs}"
     },
     "empty": {

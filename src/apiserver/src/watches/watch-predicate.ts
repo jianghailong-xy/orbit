@@ -5,7 +5,7 @@
  * Pure: nothing here reads a database or a clock. `WatchEvaluatorService` reads the leaves'
  * `sourceColumns` inside its evaluating transaction and hands the rows in, together with that
  * transaction's `now()`; this only decides. The leaves call the derivations the rest of the server
- * already answers the same questions with — `UNSETTLED_SESSION_STATUSES`, `deriveSessionRunState`,
+ * already answers the same questions with — `turnStateOf`, `deriveSessionRunState`,
  * `deriveSessionLifecycleState` — so a watch cannot disagree with `session_create(wait)` or the session
  * list about whether a turn settled or a session ended.
  *
@@ -29,7 +29,6 @@ import {
 } from '@orbit/shared';
 
 import { runIsOver } from '../common/session-release';
-import { UNSETTLED_SESSION_STATUSES } from '../common/session-scheduling';
 import {
   ARMED_RETRY,
   isSessionExecuting,
@@ -39,6 +38,7 @@ import {
 } from '../common/session-working';
 import { sessionHasEnded } from '../runner-api/background-job-wake';
 import { readBgJobActivity } from '../sessions/background-job-activity';
+import { turnStateOf } from '../sessions/session-turn-state';
 
 /** The newest grammar this build evaluates. */
 export const WATCH_PREDICATE_VERSION = 4;
@@ -135,7 +135,10 @@ export type WatchTargetFact =
       kind: 'SESSION';
       /** CONVERSATION, or LANDING for the platform-driven container a landing subject opens. */
       sessionKind: string;
+      /** The word the session reads on the wire (session-legacy-words.ts): what an observation records. */
       status: string;
+      /** Where a held session's turn stands (session-turn-state.ts); null when parked or released. */
+      turnState?: string | null;
       /** `session.finished_at`: the release column. */
       finishedAt: Date | null;
       endReason: string | null;
@@ -171,6 +174,12 @@ function workingRow(fact: WatchSessionFact): SessionWorkingRow {
     hasPendingWakeup: fact.hasPendingWakeup,
     retryAt: fact.retryAt,
   };
+}
+
+/** SESSION_TURN_SETTLED: no turn of the session is queued or in flight. */
+function turnSettled(fact: WatchSessionFact): boolean {
+  const turn = turnStateOf(fact);
+  return turn !== 'QUEUED' && turn !== 'IN_FLIGHT';
 }
 
 /** SESSION_QUIESCENT's first half: something is running for the session (`isSessionExecuting`). */
@@ -325,14 +334,14 @@ export function leafHolds(test: WatchLeafTest, fact: WatchTargetFact, now: numbe
       // is not a turn that settled: awaiting the landing means awaiting the landing's END, and the
       // row is terminal only once the settlement wrote `completed_at` (SUCCEEDED / CANCELLED).
       if (fact.sessionKind === 'LANDING') return fact.completedAt !== null;
-      return !(UNSETTLED_SESSION_STATUSES as readonly string[]).includes(fact.status);
+      return turnSettled(fact);
     case 'SESSION_QUIESCENT':
       if (fact.kind !== 'SESSION') return false;
       // The same LANDING reading as SESSION_TURN_SETTLED: a landing is quiet only once it has ended.
       if (fact.sessionKind === 'LANDING') return fact.completedAt !== null;
       // A settled turn, and nothing else running or armed: no queued or dispatched turn, no engine turn,
       // subagent or background job, and no watch, wake-up or retry that will give it a turn by itself.
-      return !(UNSETTLED_SESSION_STATUSES as readonly string[]).includes(fact.status)
+      return turnSettled(fact)
         && !sessionFactExecuting(fact)
         && !sessionFactWakeArmed(fact);
     case 'SESSION_RUN_TERMINAL':

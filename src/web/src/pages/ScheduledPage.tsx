@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -411,6 +411,7 @@ export function ScheduledPage(): JSX.Element {
   }, [drafts.data, selection?.kind === 'pending' ? selection.sessionId : null]);
 
   const [quickText, setQuickText] = useState('');
+  const [inspectorWidth, startInspectorResize, inspectorResizing] = useInspectorWidth();
   const quickAdd = (
     <QuickAdd
       text={quickText}
@@ -427,7 +428,10 @@ export function ScheduledPage(): JSX.Element {
   );
 
   return (
-    <div className="sched-page">
+    <div
+      className={`sched-page${inspectorResizing ? ' is-resizing' : ''}`}
+      style={inspectorWidth != null ? ({ '--sched-inspector-width': `${inspectorWidth}px` } as CSSProperties) : undefined}
+    >
       <div className="sched-list">
         <header className="sched-head">
           <h1>{C.page.title}</h1>
@@ -503,6 +507,9 @@ export function ScheduledPage(): JSX.Element {
           </>
         )}
       </div>
+      {selectedSchedule || selectedDraft || selectedPending ? (
+        <div className="sched-resizer" data-schedule-resizer="" onMouseDown={startInspectorResize} />
+      ) : null}
       {selectedSchedule ? (
         <ScheduleInspector key={selectedSchedule.id} schedule={selectedSchedule} />
       ) : selectedDraft ? (
@@ -522,6 +529,52 @@ export function ScheduledPage(): JSX.Element {
       ) : null}
     </div>
   );
+}
+
+// The inspector's width is dragged by its left edge and kept in this browser; null until the first drag (CSS default).
+const INSPECTOR_WIDTH_KEY = 'orbit.scheduleInspectorWidth';
+const INSPECTOR_WIDTH = { min: 320, max: 900, listMin: 360 } as const;
+
+function useInspectorWidth(): [number | null, (event: ReactMouseEvent<HTMLElement>) => void, boolean] {
+  const [width, setWidth] = useState<number | null>(() => {
+    const stored = Number(localStorage.getItem(INSPECTOR_WIDTH_KEY));
+    return stored > 0 && Number.isFinite(stored) ? Math.min(INSPECTOR_WIDTH.max, Math.max(INSPECTOR_WIDTH.min, stored)) : null;
+  });
+  const [resizing, setResizing] = useState(false);
+  const startResize = (event: ReactMouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const inspector = event.currentTarget.nextElementSibling;
+    const list = event.currentTarget.previousElementSibling;
+    const startWidth = inspector?.getBoundingClientRect().width ?? 400;
+    // The list beside it keeps at least listMin; a list already narrower than that never shrinks further.
+    const listWidth = list?.getBoundingClientRect().width ?? Infinity;
+    const max = Math.max(startWidth, Math.min(INSPECTOR_WIDTH.max, startWidth + listWidth - INSPECTOR_WIDTH.listMin));
+    let latest = startWidth;
+    const onMove = (ev: MouseEvent) => {
+      // It sits on the right: dragging left widens it.
+      latest = Math.round(Math.min(max, Math.max(INSPECTOR_WIDTH.min, startWidth + startX - ev.clientX)));
+      setWidth(latest);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setResizing(false);
+      try {
+        localStorage.setItem(INSPECTOR_WIDTH_KEY, String(latest));
+      } catch {
+        // Storage unavailable: the width lasts this page.
+      }
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    setResizing(true);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+  return [width, startResize, resizing];
 }
 
 /** The line at the end of the list: one sentence and the workspace it goes to (board 1/2 ③ ⑤). Not a form. */

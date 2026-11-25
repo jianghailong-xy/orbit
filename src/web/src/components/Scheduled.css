@@ -110,8 +110,12 @@
 
 /* ---- The inspector ---- */
 .sched-inspector {
-  width: 400px; flex: none; border-left: 1px solid var(--border); background: var(--bg-subtle); overflow: auto; padding: 22px 22px 30px;
+  width: var(--sched-inspector-width, 400px); flex: none; border-left: 1px solid var(--border); background: var(--bg-subtle); overflow: auto; padding: 22px 22px 30px;
 }
+/* Drag handle over the inspector's left border, with a wider hit area. */
+.sched-resizer { flex: none; width: 1px; margin-right: -1px; position: relative; z-index: 2; cursor: col-resize; }
+.sched-resizer::before { content: ''; position: absolute; inset: 0 -5px; }
+.sched-resizer:hover, .sched-page.is-resizing .sched-resizer { background: var(--brand); }
 .sched-inspector-title { font-size: 19px; font-weight: 700; color: var(--text-1); line-height: 26px; margin: 0; }
 .sched-inspector-title.is-draft { color: var(--text-2); }
 .sched-inspector-meta { font-size: 12.5px; color: var(--text-3); margin-top: 2px; }
@@ -224,6 +228,7 @@
   .sched-page { flex-direction: column; height: auto; }
   .sched-list { padding: 18px 16px 30px; }
   .sched-inspector { width: auto; border-left: 0; border-top: 1px solid var(--border); }
+  .sched-resizer { display: none; }
 }
 
 /* ---- A run's session where the run did not get under way (board scheduled-run-not-started ②③④) ---- */
