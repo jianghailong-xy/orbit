@@ -59,6 +59,7 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
   UnorderedListOutlined,
+  VerticalAlignTopOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -2874,6 +2875,11 @@ export function WorkspaceView({
   // pill's loading state (`searchingMine`).
   const [lastMine, setLastMine] = useState<{ seq: string; text: string } | null>(null);
   const [searchingMine, setSearchingMine] = useState(false);
+  const revealLastMine = (): void => {
+    if (!lastMine) return;
+    const card = scrollRef.current?.querySelector<HTMLElement>(`.chat-user[data-seq="${lastMine.seq}"]`);
+    revealCard(card, 'start', false);
+  };
   const mineSearchRef = useRef<{ session: string | null; pages: number }>({ session: null, pages: 0 });
   // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
   // stamped as one that wants the top (see prependAnchorRef).
@@ -2993,6 +2999,8 @@ export function WorkspaceView({
   // while the user has scrolled up off the live tail (and while `stranded`). (The ref alone
   // can't re-render.)
   const [atBottom, setAtBottom] = useState(true);
+  // The reader has left the live tail with more above: the way back up is offered (header or pill).
+  const jumpUpOffered = !atBottom && (hasMoreOlder || offTop);
   // Pinned, but come to rest with the tail out of view: the button's other reason to show. The pin
   // lets go on a scroll UP alone (tailPinning.ts), so a tail that left the view any other way — the
   // last card opened under a reader at the bottom, a link card landing — still reads as at the
@@ -10997,6 +11005,32 @@ export function WorkspaceView({
               <div className="workspace-sub" data-fork-source="">{detailForSelected.forkSource}</div>
             )}
           </div>
+          {/* Off the live tail, a wide window offers the way back up in the header row, drawn like the
+              header's own buttons: the person's last message, then the beginning. Floating over the
+              transcript it read as a sticker on the text. A phone keeps the pill (no room up here). */}
+          {!isMobile && selectedId && !composing && jumpUpOffered && (
+            <div className="workspace-header-jump">
+              {lastMine && (
+                <Button
+                  variant="text"
+                  className="workspace-header-mine"
+                  icon={<ArrowUpOutlined />}
+                  title={`Back to your message · ${lastMine.text}`}
+                  onClick={revealLastMine}
+                >
+                  <span className="workspace-header-mine-text">{lastMine.text}</span>
+                </Button>
+              )}
+              <Button
+                variant="text"
+                className="workspace-header-start"
+                icon={<VerticalAlignTopOutlined />}
+                title="Jump to the beginning"
+                aria-label="Jump to the beginning"
+                onClick={() => void jumpToStart()}
+              />
+            </div>
+          )}
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
           <RunnerUpdateIndicator runner={runner} machine={runnerShownName} />
           {selected && !composing && (
@@ -11370,9 +11404,9 @@ export function WorkspaceView({
                   the transcript, so there it is only something covering a message. With nothing
                   older left on the server it still scrolls to the top: the reader scrolled up into
                   a fully loaded session wants the same way back. */}
-              {(loadingOlder || (!atBottom && (hasMoreOlder || offTop))) && (
+              {(loadingOlder || (isMobile && jumpUpOffered)) && (
                 <div className="chat-older-top">
-                  {loadingOlder && !searchingMine ? (
+                  {loadingOlder && (!searchingMine || !isMobile) ? (
                     <span className="chat-older-pill">Loading earlier messages…</span>
                   ) : lastMine && !atBottom ? (
                     // The person's last message first, the way back to the beginning beside it as an icon.
@@ -11381,10 +11415,7 @@ export function WorkspaceView({
                         type="button"
                         className="chat-older-mine"
                         title={lastMine.text}
-                        onClick={() => {
-                          const card = scrollRef.current?.querySelector<HTMLElement>(`.chat-user[data-seq="${lastMine.seq}"]`);
-                          revealCard(card, 'start', false);
-                        }}
+                        onClick={revealLastMine}
                       >
                         {lastMine.text}
                       </button>

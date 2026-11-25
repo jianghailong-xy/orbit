@@ -4993,6 +4993,30 @@ button.toast--pill:focus-visible {
     }
   }
 }
+/* A wide window's way back up, in the header row beside Share and ⋯ and drawn like them: grey text
+   buttons with no box of their own, the last message cut to one line. */
+.workspace-header-jump {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.workspace-header-jump .orbit-button {
+  color: var(--text-2);
+  font-weight: 400;
+}
+.workspace-header-mine {
+  min-width: 0;
+  max-width: 320px;
+}
+.workspace-header-mine-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.workspace-header-start { flex: none; }
 /* The header's Share button: grey, or the live link's green while the session is shared. */
 .workspace-header-share { flex: none; color: var(--text-2); }
 .workspace-header-share.is-live,
@@ -8606,21 +8630,6 @@ button.composer-usage:focus-visible {
   text-align: center;
   pointer-events: none;
 }
-/* The ground the pill stands on: the page's own colour from the scroller's top edge down past the
-   pill, then fading out the way the header's edge fades the conversation. Without it a message
-   scrolled up under the header reads on both sides of the pill and through its shadow, and the
-   pill sits on the text like a sticker instead of hanging from the header. Behind the pill, above
-   the transcript (the wrapper's z-index makes the stacking context). */
-.chat-older-top::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  left: 0;
-  right: 0;
-  top: -26px;
-  height: 84px;
-  background: linear-gradient(to bottom, var(--bg-base) 62%, transparent);
-}
 .chat-older-pill {
   display: inline-flex;
   align-items: center;
@@ -8631,7 +8640,7 @@ button.composer-usage:focus-visible {
   background: var(--bg-raised);
   color: var(--text-2);
   font-size: 13px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   pointer-events: auto;
 }
 button.chat-jump-start {
