@@ -1,5 +1,5 @@
 {
-  "metadataVerifiedOn": "2026-11-25",
+  "metadataVerifiedOn": "2026-11-26",
   "supportedPlatforms": [
     "linux/amd64",
     "linux/arm64"
@@ -9,20 +9,20 @@
   "nodeImage": "node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1",
   "debianSnapshot": "20260928T000000Z",
   "codexPackage": "@openai/codex@0.172.0",
-  "claudeCodePackage": "@anthropic-ai/claude-code@2.1.331",
+  "claudeCodePackage": "@anthropic-ai/claude-code@2.1.332",
   "openCodePackage": "opencode-linux-x64-baseline@1.19.6 (amd64), opencode-linux-arm64@1.19.6 (arm64)",
   "kimiCode": {
-    "version": "2.7.3",
+    "version": "2.8.0",
     "sha256": {
-      "linux/amd64": "c7e3ea1a021818c57726d522c40e6d8daea5c6334e2664a21ca34fb3f9a35619",
-      "linux/arm64": "8912f372d0bb670fc7493e777fc5496de0da592262985b8e152a624d8a990105"
+      "linux/amd64": "a8855467385e823209e1f45014f3fa9ade81260b648bcba33fbe461963dae9e2",
+      "linux/arm64": "ee6d96407dd17c4123ae3bf1d2d021be26dce7c358cd81771b6cad2d740dc323"
     }
   },
   "antigravityCli": {
-    "version": "1.5.16",
+    "version": "1.5.17",
     "sha512": {
-      "linux/amd64": "3dee9f26e298156db673f6ce2a0f5dfed5b30006e04ceb9809c68070e7b717587b33a3da0f8bc2eda45af81a50bc8b14c82b28ae5832bcfe3e7fd49397117b31",
-      "linux/arm64": "23c193151499a4986fd5fa0d8132665cc8ffbad6cc0b3ff4fd53a2cb68abb76b149a992b836d53063443cd89add335f14d8134fb02abdcecbf6e1eaef6c53d33"
+      "linux/amd64": "71a967aa16e0ab5d87196bcd6772130bdab55b2fd768cd24d21b1da401ff9f60280b976cad3dc14a2d646233b0eaf8caf87c490eed73044d54550cbb3d8d67d2",
+      "linux/arm64": "e4f086d0730b325cfd438ea90396ee78eb23a3110ef7f792824c8817b8d0432462b7b5f91b3d933fc1932a6f4ba73de505e2e96f44448c9fb2427292ead716f7"
     }
   },
   "cursorCli": {
@@ -58,13 +58,13 @@
     "node": "https://hub.docker.com/v2/repositories/library/node/tags/26.10.0-trixie-slim",
     "dockerfileFrontend": "https://hub.docker.com/v2/repositories/docker/dockerfile/tags/1.7.1",
     "codex": "https://registry.npmjs.org/@openai/codex/0.172.0",
-    "claudeCode": "https://registry.npmjs.org/@anthropic-ai/claude-code/2.1.331",
+    "claudeCode": "https://registry.npmjs.org/@anthropic-ai/claude-code/2.1.332",
     "codexLayout": "https://github.com/openai/codex/blob/rust-v0.172.0/scripts/codex_package/README.md",
     "debian": "https://snapshot.debian.org/archive/debian/20260928T000000Z/dists/trixie/Release",
     "debianSecurity": "https://snapshot.debian.org/archive/debian-security/20260928T000000Z/dists/trixie-security/Release",
     "playwrightMcp": "https://registry.npmjs.org/@playwright/mcp/0.0.85",
     "openCode": "https://registry.npmjs.org/opencode-ai/1.19.6",
-    "kimiCode": "https://code.kimi.com/kimi-code/binaries/2.7.3/manifest.json",
+    "kimiCode": "https://code.kimi.com/kimi-code/binaries/2.8.0/manifest.json",
     "antigravityCli": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json",
     "cursorCli": "https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz"
   }
