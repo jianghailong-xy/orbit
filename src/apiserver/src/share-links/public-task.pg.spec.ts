@@ -294,6 +294,8 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
   })).id;
 
   // Its runs: one that succeeded (with a transcript and an image), one in the Trash, one running.
+  // The first is an old SUCCEEDED row with no end reason: kind C4 of docs/session-status-retirement-plan.md §3.4,
+  // accepted by the owner, so the page reads it ENDED.
   const RUN_FIELDS = { taskId: shared, provider: SECRET.provider, model: SECRET.model, branch: SECRET.branch, baseSha: SECRET.sha, costUsd: 12.5 };
   const succeeded = await session(`Run of ${TITLE}`, {
     ...RUN_FIELDS, status: RunStatus.SUCCEEDED,
@@ -422,7 +424,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     assert.deepEqual(root.runs, [
       { state: 'RUNNING', startedAt: '2026-09-22T09:00:02.000Z', endedAt: null, durationMs: null },
       {
-        state: 'SUCCEEDED', startedAt: '2026-09-20T10:00:05.000Z', endedAt: '2026-09-20T11:11:05.000Z',
+        state: 'ENDED', startedAt: '2026-09-20T10:00:05.000Z', endedAt: '2026-09-20T11:11:05.000Z',
         durationMs: 71 * 60_000,
       },
     ]);
@@ -555,7 +557,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     const page = await visit(`/sessions/${pub(succeeded)}?limit=3`);
     assert.equal(page.status, 200, page.text);
     assert.equal(page.json.title, `Run of ${TITLE}`);
-    assert.equal(page.json.runState, 'SUCCEEDED');
+    assert.equal(page.json.runState, 'ENDED'); // C4, as in (1)
     assert.deepEqual(page.json.events.map((e: Json) => e.seq), [2, 3, 4]);
     assert.equal(page.json.hasMore, true);
     // The task it is a run of, and the task's runs a visitor may open — for the breadcrumb and links.
