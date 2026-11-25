@@ -19,7 +19,7 @@ final class AppleDecisionsTests: XCTestCase {
             let resume = ComposerLogic.shouldResume(status: status, released: s.released, capabilities: caps)
             let send = blocked ? "BLOCK" : (resume ? "RESUME" : "SEND")
             out.append(["name": r["name"]!, "newFields": r["newFields"]!, "send": send,
-                        "waitOver": s.isReleased, "run": ShareMarkdown.runLabel(try JSONDecoder().decode(SessionRef.self, from: data)), "word": SessionHeader.statusWord(for: s)])
+                        "waitOver": s.isReleased, "run": ShareMarkdown.runLabel(try JSONDecoder().decode(SessionRef.self, from: data)), "word": SessionHeader.headerWord(for: s)])
         }
         try JSONSerialization.data(withJSONObject: out, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: env["OUT"]!))
     }

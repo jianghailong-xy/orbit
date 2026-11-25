@@ -40,23 +40,8 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'managed-runners/managed-runner-work.ts': { reads: 2 },
   'managed-runners/managed-runner.service.ts': { reads: 2 },
   'metrics/fleet-metrics.ts': { reads: 4 },
-  'projects/attempt-ended-unsettled.producer.ts': { reads: 5, enums: 1 },
-  'projects/coordinator-evidence-queue.service.ts': { reads: 1, enums: 1 },
-  'projects/coordinator-fact-queue.service.ts': { reads: 1 },
-  'projects/coordinator-handoff.service.ts': { enums: 1 },
-  'projects/criterion-move.ts': { reads: 3 },
-  'projects/landing-session.ts': { writes: 2, alone: 2, enums: 1 },
-  'projects/open-item-escalation.service.ts': { reads: 2 },
-  'projects/pending-addressees.ts': { reads: 2, enums: 1 },
-  'projects/project-done-request.ts': { reads: 4, enums: 1 },
-  'projects/project-open-item.ts': { reads: 1 },
-  'projects/project-ready-to-run.ts': { reads: 3 },
-  'projects/project-tasks-settled.producer.ts': { reads: 1 },
-  'projects/projects.service.ts': { reads: 2, enums: 1 },
-  'projects/session-source.ts': { reads: 1, writes: 1, alone: 1, enums: 1 },
-  'projects/task-exception-input.producer.ts': { reads: 1 },
-  'projects/task-run-idle.ts': { reads: 1, enums: 1 },
-  'projects/task-run-stopped.producer.ts': { reads: 1, enums: 1 },
+  'projects/landing-session.ts': { writes: 2 },
+  'projects/session-source.ts': { writes: 1 },
   'providers/account-health.service.ts': { reads: 2 },
   'providers/account-move-capability.ts': { enums: 1 },
   'providers/active-sessions.ts': { reads: 2 },
@@ -80,12 +65,15 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'runners/runners.service.ts': { reads: 6, enums: 1 },
   'schedules/schedule-runs.service.ts': { reads: 9, enums: 1 },
   'session-guests/session-guests.service.ts': { reads: 3, writes: 1, alone: 1, enums: 1 },
-  // The reads added after the list was seeded, the only place the stored word is read for a held row with no
-  // `turn_state` (not yet backfilled, task T3), which keeps its stored word: the projector's fallback (task T4), and
-  // the turn-state conditions that select exactly the rows the projector gives a turn state, `turnStateWhere` (Prisma)
-  // and `sessionTurnStateSql` (raw SQL, which the scanner does not count) (task T8). LEGACY_STATUS_SELECT,
-  // TURN_STATE_SELECT and `turnStateColumnsSql` hand the word to them. Goes with the column's writers (T14).
-  'sessions/session-legacy-words.ts': { reads: 3 },
+  // The reads added after the list was seeded: the one fallback for a held row with no `turn_state` (not yet
+  // backfilled), which keeps its stored word (project rule of 2026-11-25: readers may reach production before the
+  // backfill, task T3). Task T4 added it to the projector; task T11 moved it into session-turn-state.ts, beside the
+  // turn state readers move onto (`heldSessionWord`, `turnStateOf`, `turnStateFilter`, `sessionTurnStateSql`), so the
+  // projector and every moved reader ask the same function. The projector's SQL twin takes the word as an argument
+  // (`legacySessionStatusSql` hands it over), and LEGACY_STATUS_SELECT / TURN_STATE_SELECT select it for them. Goes
+  // with the column's writers (T14).
+  'sessions/session-legacy-words.ts': { reads: 1 },
+  'sessions/session-turn-state.ts': { reads: 5 },
   'sessions/auto-retry-eligibility.ts': { reads: 2, enums: 1 },
   'sessions/auto-retry.service.ts': { reads: 22, enums: 1 },
   'sessions/open-list-version.ts': { reads: 2 },
@@ -99,13 +87,6 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'sessions/sessions.service.ts': { reads: 59, writes: 8, alone: 8, enums: 1 },
   'sessions/task-work-carrier.ts': { reads: 6, enums: 1 },
   'share-links/share-links.service.ts': { reads: 1 },
-  'task-lists/task-lists.service.ts': { reads: 2 },
-  'tasks/evidence-review.service.ts': { reads: 1 },
-  'tasks/owner-confirmation-if-confirmed.ts': { reads: 1 },
-  'tasks/reclaim-stalled-task.ts': { reads: 1, enums: 1 },
-  'tasks/reference-expansion.ts': { reads: 1 },
-  'tasks/tasks.service.ts': { reads: 24, enums: 1 },
-  'tasks/verification-epoch-read.ts': { reads: 2 },
   'watches/watch-delivery.service.ts': { reads: 1 },
   'watches/watch-evaluator.service.ts': { reads: 1 },
   'watches/watches.service.ts': { reads: 4 },

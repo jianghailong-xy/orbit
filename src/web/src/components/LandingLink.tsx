@@ -1,5 +1,5 @@
 import type { JSX, ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { LANDING_NO_PAGE, LANDING_OPEN } from './ProjectPanoramaHeader';
 
@@ -9,9 +9,9 @@ import { LANDING_NO_PAGE, LANDING_OPEN } from './ProjectPanoramaHeader';
  * a Work overview card still open the jobs in flight, and a job's row still opens its task. This is
  * the one thing said in words, drawn beside them, and a real `<a href>` so ⌘/middle-click works.
  *
- * It keeps the list it was read on: opened from a project's sessions page, the same `?project=` (and
- * the folder, when there is one) rides along, so the page behind the landing is still the project
- * rather than the whole workspace.
+ * It keeps the list it was read on: opened from a project's sessions page, the page behind the landing
+ * is still the project rather than the whole workspace. The console carries that page, so the address is
+ * the session alone (owner 2026-11-25).
  */
 export function LandingLink({
   sessionId,
@@ -26,16 +26,8 @@ export function LandingLink({
   onClick?: () => void;
   title?: string;
 }): JSX.Element {
-  const location = useLocation();
-  const current = new URLSearchParams(location.search);
-  const keep = new URLSearchParams();
-  for (const key of ['project', 'folder', 'view']) {
-    const value = current.get(key);
-    if (value) keep.set(key, value);
-  }
-  const query = keep.toString();
   return (
-    <Link className={className} to={`/sessions/${encodeURIComponent(encodeId(sessionId))}${query ? `?${query}` : ''}`}
+    <Link className={className} to={`/sessions/${encodeURIComponent(encodeId(sessionId))}`}
       onClick={onClick} title={title}>
       {children ?? <>{`${LANDING_OPEN} ›`}</>}
     </Link>

@@ -225,6 +225,8 @@ test('the index is owner-scoped and newest first, and narrows only when asked', 
     coordinatorSession: {
       select: {
         status: true,
+        finishedAt: true,
+        turnState: true,
         engineTurnActive: true,
         runningSubagents: true,
         lastTurnAt: true,

@@ -101,8 +101,10 @@ class FakeEventSource {
 }
 
 let pathname = '';
+const visited: string[] = [];
 function Where() {
   pathname = useLocation().pathname;
+  if (visited[visited.length - 1] !== pathname) visited.push(pathname);
   return null;
 }
 
@@ -463,6 +465,22 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     } else {
       expect(badges()).not.toContain('Handing over');
     }
+  });
+
+  it('links the header to the project through the Coordinator badge, with no second line repeating the title', async () => {
+    // docs/mocks/session-header-project-link (C): a coordinator session is named after its project.
+    detail = session({ projectId: PROJECT, projectTitle: 'Checkout redesign', projectMembership: coordinator });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    expect(mounted().querySelector('.workspace-header-main > .workspace-header-task')).toBeNull();
+    const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
+    expect(badge?.textContent).toBe('Coordinator');
+    expect(badge?.getAttribute('title')).toBe('Open project · Checkout redesign');
+    expect(badge?.getAttribute('aria-label')).toBe('Coordinator · Open project Checkout redesign');
+    await act(async () => badge!.click());
+    // The test's one catch-all route keeps WorkspaceView mounted on /projects/…, which may route on from there.
+    await waitFor(() => expect(visited).toContain(`/projects/${PROJECT}`));
   });
 
   it('02-3: opens the successor with the note card and the waits that moved here', async () => {

@@ -71,7 +71,7 @@ before(async () => {
   // NULL on every case here, as on every session still held.
   // `turn_state` is where the session's turn stands for the runner (migration 1611): the lock and the inbox predicate
   // read it in place of `status` (task T8). NULL on every case here, as on a row the backfill has not reached, which
-  // reads its stored word's (sessions/session-legacy-words.ts).
+  // reads its stored word's (sessions/session-turn-state.ts).
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";

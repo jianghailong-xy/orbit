@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { AgentProvider, SESSION_SOURCE_PIN_V1 } from '@orbit/shared';
 import { QueueService } from '../queue/queue.service';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
-import { turnStateWhere } from '../sessions/session-legacy-words';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { RunnerApiController } from './runner-api.controller';
 import {
   CURSOR_RUNNER_UPGRADE_ERROR,
@@ -80,7 +80,7 @@ test('P1 cursor rows on a runner that has not declared Cursor CLI carry the upgr
     assert.equal(marked[0].data.error, CURSOR_RUNNER_UPGRADE_ERROR);
     // Recorded on Cursor CLI whatever credential it spends, and — for a row without an engine — the slug.
     assert.deepEqual(marked[0].where, {
-      id: { in: ['cursor-1'] }, assignedRunnerId: runner.id, AND: [turnStateWhere('QUEUED')],
+      id: { in: ['cursor-1'] }, assignedRunnerId: runner.id, AND: [turnStateFilter(['QUEUED'])],
       sessionKind: 'CONVERSATION',
       OR: [{ engine: 'cursor' }, { AND: [{ engine: null }, { provider: { in: ['cursor'] } }] }],
       cancelRequestedAt: null,

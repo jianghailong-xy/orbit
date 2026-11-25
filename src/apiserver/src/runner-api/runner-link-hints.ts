@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { sessionHeldSql } from '../common/session-release';
-import { sessionTurnStateSql } from '../sessions/session-legacy-words';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 
 /**
  * What a heartbeat the link gateway forwarded is answered with beside today's HeartbeatResponse
@@ -83,7 +83,7 @@ export function runnerLinkHintsOf(
  * A turn runs on session `s`: a dispatched one (IN_FLIGHT, which was RUNNING), or on a parked session (no turn state,
  * which was AWAITING_INPUT) the engine's own.
  */
-const DISPATCHED_OR_ENGINE_TURN = Prisma.sql`${sessionTurnStateSql('s', 'IN_FLIGHT')} OR (${sessionTurnStateSql('s', null)} AND s."engine_turn_active")`;
+const DISPATCHED_OR_ENGINE_TURN = Prisma.sql`${sessionTurnStateSql('s')} = 'IN_FLIGHT' OR (${sessionHeldSql('s')} AND ${sessionTurnStateSql('s')} IS NULL AND s."engine_turn_active")`;
 
 /**
  * The select list readRunnerLinkHints reads: three columns, "inboxSessionIds", "claim" and "approvals". A link
@@ -98,7 +98,7 @@ export function runnerLinkHintsSql(runnerId: string): Prisma.Sql {
           SELECT s.id::text AS id
           FROM "session" s
           WHERE s."assigned_runner_id" = ${runnerId}::uuid
-            AND ${sessionTurnStateSql('s', 'IN_FLIGHT', null, 'ABANDONED')}
+            AND ${sessionHeldSql('s')} AND ${sessionTurnStateSql('s')} IS DISTINCT FROM 'QUEUED'
             AND EXISTS (
               SELECT 1 FROM "conversation_turn" t
               WHERE t."session_id" = s.id
@@ -108,7 +108,7 @@ export function runnerLinkHintsSql(runnerId: string): Prisma.Sql {
         ) waiting
       ) AS "inboxSessionIds",
       EXISTS (
-        SELECT 1 FROM "session" s WHERE s."assigned_runner_id" = ${runnerId}::uuid AND ${sessionTurnStateSql('s', 'QUEUED')}
+        SELECT 1 FROM "session" s WHERE s."assigned_runner_id" = ${runnerId}::uuid AND ${sessionHeldSql('s')} AND ${sessionTurnStateSql('s')} = 'QUEUED'
       ) AS "claim",
       (
         SELECT json_agg(json_build_object('sessionId', decided."sessionId", 'approvalId', decided."approvalId"))

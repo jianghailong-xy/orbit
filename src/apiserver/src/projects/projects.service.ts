@@ -15,7 +15,6 @@ import {
   ProjectIdentitySource,
   ProjectRole,
   ProjectStatus,
-  RunStatus,
   TaskStatus,
 } from '@prisma/client';
 import {
@@ -27,6 +26,7 @@ import {
   type ProjectSidebarFuse,
   type ProjectPauseState,
   RunEventType,
+  type RunStatus,
   SessionLifecycleState,
   type SessionFilingState,
   type SessionRunState,
@@ -154,6 +154,7 @@ import {
   refuseSessionAuthoredCriteriaDecision,
 } from './coordinator-authority';
 import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
+import { isParked, TURN_STATE_SELECT } from '../sessions/session-turn-state';
 import { withSessionState } from '../sessions/session-state';
 import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { chargeSessionMessage, SessionMessageRateLimited } from '../sessions/session-message';
@@ -524,7 +525,8 @@ const COORDINATION_INCLUDE = {
  */
 /** The coordinator conversation's columns `coordinatorActivityOf` reads, and nothing else of it. */
 const COORDINATOR_ACTIVITY_SELECT = {
-  status: true,
+  // isSessionGenerating's (common/session-generating.ts) and isParked's.
+  ...TURN_STATE_SELECT,
   engineTurnActive: true,
   runningSubagents: true,
   lastTurnAt: true,
@@ -723,7 +725,7 @@ function coordinatorActivityOf(
   const working =
     session._count.approvals === 0 &&
     (isSessionGenerating(session) ||
-      (session.status === RunStatus.AWAITING_INPUT && session.runningSubagents.length > 0));
+      (isParked(session) && session.runningSubagents.length > 0));
   return { working, lastTurnAt: session.lastTurnAt };
 }
 
@@ -902,7 +904,7 @@ export interface ProjectCoordinatorStatus {
     session: {
       id: string;
       title: string;
-      runStatus: RunStatus;
+      runStatus: `${RunStatus}`;
       runState: SessionRunState;
       lifecycleState: SessionLifecycleState;
       /** @deprecated Compatibility mirror of `lifecycleState`, as on every Session payload. */

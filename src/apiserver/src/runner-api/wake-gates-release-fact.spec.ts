@@ -15,7 +15,7 @@ import { isHeld } from '../common/session-release';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { conversationIsDown, sessionHasEnded as projectSessionHasEnded } from '../projects/project-open-item';
 import { RETRY_CLAIM_WINDOW_MS } from '../sessions/session-request';
-import { turnStateOfWord } from '../sessions/session-legacy-words';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 import { observerRefusal } from '../watches/watch-delivery.service';
 import { sessionHasEnded } from './background-job-wake';
 import { tickStanding } from './scheduled-wakeup';

@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-import { heldFilter } from '../common/session-release';
-import { UNSETTLED_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import {
   CoordinatorDeliveryService, DELIVERY_COORDINATOR_SESSION_UNAVAILABLE,
 } from './coordinator-delivery.service';
@@ -45,8 +44,7 @@ export class CoordinatorFactQueueService {
           ...(sessionId ? { coordinatorSessionId: sessionId } : {
             coordinatorSession: {
               // Idle and still held: no turn queued or running, not released.
-              ...heldFilter(),
-              status: { notIn: UNSETTLED_SESSION_STATUSES },
+              ...turnStateFilter([null, 'ABANDONED']),
               endReason: null, completedAt: null, archivedAt: null, deletedAt: null,
               cancelRequestedAt: null, retryAt: null,
             },

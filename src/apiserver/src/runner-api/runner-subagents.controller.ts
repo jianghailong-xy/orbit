@@ -33,7 +33,7 @@ import {
   SUBAGENT_REMOTE_RESUME_V1,
 } from '@orbit/shared';
 import { Prisma, type Runner } from '@prisma/client';
-import { TURN_STATE_SELECT } from '../sessions/session-legacy-words';
+import { TURN_STATE_SELECT } from '../sessions/session-turn-state';
 import { PublicIdPipe } from '../common/public-id';
 import {
   ALWAYS_ALLOWED_TOOLS,

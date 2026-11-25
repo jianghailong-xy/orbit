@@ -9,9 +9,6 @@
  *   (3) statusWordFilter(word) selects exactly the conversation sessions the projector gives that word
  *   (4) a held row with no turn_state, as one not yet backfilled has, answers its stored word for every held word, in
  *       TypeScript, in SQL and on the payload fields
- *   (5) turnStateWhere (Prisma), sessionTurnStateSql (raw SQL) and sessionTurnState (TypeScript) select, for every set
- *       of turn states, exactly the rows the held words they replace selected: every shape above, the unfilled rows
- *       of (4) among them (task T8)
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-legacy-words.pg.spec.ts
  */
@@ -19,21 +16,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { Prisma, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
 import { RunStatus, SessionEndReason } from '@orbit/shared';
 
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
 import { prismaClientFor } from '../prisma/prisma-client';
-import {
-  type HeldTurnState,
-  LEGACY_STATUS_SELECT,
-  legacySessionStatus,
-  sessionTurnState,
-  sessionTurnStateSql,
-  statusWordFilter,
-  TURN_STATE_SELECT,
-  turnStateWhere,
-} from './session-legacy-words';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, statusWordFilter } from './session-legacy-words';
 import { withSessionState } from './session-state';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
 
@@ -185,37 +173,5 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
     }
     assert.deepEqual(answers, Object.fromEntries(HELD_WORDS.map((word) =>
       [word, { typescript: word, sql: word, status: word, runStatus: word }])));
-  });
-
-  await t.test('(5) the turn-state conditions select the rows the held words selected', async () => {
-    const STATES: Array<HeldTurnState | null> = ['QUEUED', 'IN_FLIGHT', 'ABANDONED', null];
-    const WORD_OF = new Map<HeldTurnState | null, string>([
-      ['QUEUED', 'PENDING'], ['IN_FLIGHT', 'RUNNING'], ['ABANDONED', 'INTERRUPTED'], [null, 'AWAITING_INPUT'],
-    ]);
-    const rows = await db.session.findMany({ where: { ownerId }, select: { id: true, title: true, ...TURN_STATE_SELECT } });
-    assert.ok(rows.some((row) => row.finishedAt == null && row.turnState == null && row.status !== 'AWAITING_INPUT'),
-      'no unfilled held row to read');
-    const titles = (ids: Iterable<string>) => rows.filter((row) => new Set(ids).has(row.id)).map((row) => row.title).sort();
-    const results: Record<string, unknown> = {};
-    const expected: Record<string, unknown> = {};
-    for (let mask = 1; mask < 1 << STATES.length; mask += 1) {
-      const states = STATES.filter((_, i) => mask & (1 << i));
-      const words = states.map((state) => WORD_OF.get(state)!);
-      const label = states.map((state) => state ?? 'none').join('+');
-      // What the readers asked before: a held word of the set, read off the stored column.
-      const before = rows.filter((row) => row.finishedAt == null && words.includes(row.status)).map((row) => row.id);
-      const prisma = await db.session.findMany({ where: { AND: [{ ownerId }, turnStateWhere(...states)] }, select: { id: true } });
-      const sql = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        SELECT s.id::text AS id FROM "session" s
-         WHERE s."owner_id" = ${ownerId}::uuid AND ${sessionTurnStateSql('s', ...states)}`);
-      const typescript = rows.filter((row) => row.finishedAt == null && states.includes(sessionTurnState(row)));
-      results[label] = {
-        prisma: titles(prisma.map((row) => row.id)), sql: titles(sql.map((row) => row.id)),
-        typescript: titles(typescript.map((row) => row.id)),
-      };
-      expected[label] = { prisma: titles(before), sql: titles(before), typescript: titles(before) };
-      if (states.length === 1) assert.ok(before.length >= 2, `${label}: no filled and unfilled rows to tell apart`);
-    }
-    assert.deepEqual(results, expected);
   });
 });

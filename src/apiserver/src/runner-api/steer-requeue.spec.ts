@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { TURN_COMPLETE_STEER_REQUEUE } from '@orbit/shared';
-import { turnStateWhere } from '../sessions/session-legacy-words';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { RunnerApiController } from './runner-api.controller';
 
 /**
@@ -197,7 +197,7 @@ test('a re-filed steer wakes a session its turn already parked', async () => {
   assert.equal(h.sessionWrites.length, 1);
   assert.deepEqual(h.sessionWrites[0].where, {
     id: SESSION_ID,
-    ...turnStateWhere(null),
+    ...turnStateFilter([null]),
     cancelRequestedAt: null,
   });
   assert.equal(h.sessionWrites[0].data.status, RunStatus.PENDING);

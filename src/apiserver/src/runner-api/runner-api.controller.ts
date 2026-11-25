@@ -211,18 +211,16 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { statusAfterTurnCompleted } from '../common/session-scheduling';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, legacySessionStatusSql } from '../sessions/session-legacy-words';
 import {
-  heldSessionWord,
-  LEGACY_STATUS_SELECT,
-  legacySessionStatus,
-  sessionTurnState,
+  isParked,
   sessionTurnStateSql,
-  turnStateColumnsSql,
   TURN_STATE_SELECT,
+  turnStateFilter,
+  turnStateOf,
   turnStateOfWord,
-  turnStateWhere,
-  type HeldTurnFacts,
-} from '../sessions/session-legacy-words';
+  type TurnStateFacts,
+} from '../sessions/session-turn-state';
 import {
   reportsSuccessWithNoEnd,
   RELEASED_SESSION_STATUSES,
@@ -1180,10 +1178,10 @@ async function projectedWordOf(db: Prisma.TransactionClient, sessionId: string):
  */
 function restsResumableOn(
   runnerId: string,
-  session: Omit<SessionCapabilityFields, 'assignedRunner'> & HeldTurnFacts,
+  session: Omit<SessionCapabilityFields, 'assignedRunner'> & TurnStateFacts,
 ): boolean {
   if (session.assignedRunnerId !== runnerId) return false;
-  const turn = sessionTurnState(session);
+  const turn = turnStateOf(session);
   if (turn === 'QUEUED' || turn === 'IN_FLIGHT') return false;
   const { resumeBlockedReason: blocked } = deriveSessionCapabilities({ ...session, assignedRunner: null });
   return blocked === null || blocked === 'NOT_TERMINAL' || blocked === 'RUNNER_OFFLINE';
@@ -4473,7 +4471,7 @@ export class RunnerApiController {
       (await this.prisma.session.findMany({
         where: {
           assignedRunnerId: runnerId,
-          AND: [turnStateWhere('QUEUED')],
+          AND: [turnStateFilter(['QUEUED'])],
           sessionKind: 'CONVERSATION',
           ...providerWhere,
           cancelRequestedAt: null,
@@ -4490,7 +4488,7 @@ export class RunnerApiController {
         where: {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
-          AND: [turnStateWhere('QUEUED')],
+          AND: [turnStateFilter(['QUEUED'])],
           sessionKind: 'CONVERSATION',
           ...providerWhere,
           cancelRequestedAt: null,
@@ -4675,7 +4673,7 @@ export class RunnerApiController {
         onProvider
           .filter(
             (session) =>
-              sessionTurnState(session) === 'QUEUED' && session.cancelRequestedAt == null,
+              turnStateOf(session) === 'QUEUED' && session.cancelRequestedAt == null,
           )
           .map((session) => ({ id: session.id, error: session.error })),
       );
@@ -4754,7 +4752,7 @@ export class RunnerApiController {
         const adminOnly = !customRow && await adminOnlyProviderRefusal(this.prisma, s.ownerId, declared!);
         await this.markProviderUpgradeRequired(runner.id, { id: s.id },
           adminOnly ? ADMIN_ONLY_PROVIDER_ERROR : PROVIDER_UNAVAILABLE_ERROR,
-          sessionTurnState(s) === 'QUEUED' ? [{ id: s.id, error: s.error }] : []);
+          turnStateOf(s) === 'QUEUED' ? [{ id: s.id, error: s.error }] : []);
         continue;
       }
       const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, s.ownerId) : undefined;
@@ -4791,7 +4789,7 @@ export class RunnerApiController {
         const refusal = (error as { getResponse?: () => { code?: string; message?: string } }).getResponse?.();
         if (refusal?.code !== 'PROVIDER_ENGINE_INCOMPATIBLE' || !refusal.message) throw error;
         await this.markProviderUpgradeRequired(runner.id, { id: s.id }, refusal.message,
-          sessionTurnState(s) === 'QUEUED' ? [{ id: s.id, error: s.error }] : []);
+          turnStateOf(s) === 'QUEUED' ? [{ id: s.id, error: s.error }] : []);
         continue;
       }
       // Same materialization as the claim path: an unset model is snapshotted, and one the runtime
@@ -5105,7 +5103,7 @@ export class RunnerApiController {
         }>
       >`
         SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", ${turnStateColumnsSql('"session"')}, "finished_at" AS "finishedAt",
+               "inbox_lease_owner" AS "inboxLeaseOwner", ${legacySessionStatusSql('"session"')} AS "status", ${sessionTurnStateSql('"session"')} AS "turnState", "finished_at" AS "finishedAt",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
@@ -5125,8 +5123,8 @@ export class RunnerApiController {
       if (!isHeld(owned[0])) {
         throw new ConflictException('session is no longer open');
       }
-      // The word answered: the projector's for the locked row (sessions/session-legacy-words.ts), a held row's.
-      const word = heldSessionWord(owned[0])!;
+      // The word answered: the projector's for the locked row (its SQL twin, sessions/session-legacy-words.ts).
+      const word = owned[0].status as RunStatus;
       const currentOwner = owned[0].inboxLeaseOwner;
       if (currentOwner === leaseOwner) {
         return { status: word, orphanedApprovals: [], interruptedSubagents: [] as string[], interruptedWorkflows: [] as string[] };
@@ -5334,7 +5332,7 @@ export class RunnerApiController {
         }>
       >`
         SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", ${turnStateColumnsSql('"session"')}, "finished_at" AS "finishedAt",
+               "inbox_lease_owner" AS "inboxLeaseOwner", ${legacySessionStatusSql('"session"')} AS "status", ${sessionTurnStateSql('"session"')} AS "turnState", "finished_at" AS "finishedAt",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
@@ -5378,7 +5376,7 @@ export class RunnerApiController {
         }
         const currentOwner = row.inboxLeaseOwner;
         if (currentOwner === leaseOwner) {
-          answers.set(sessionId, { sessionId, status: heldSessionWord(row)! });
+          answers.set(sessionId, { sessionId, status: row.status as RunStatus });
           continue;
         }
         if (
@@ -5392,7 +5390,7 @@ export class RunnerApiController {
           conflict('inbox lease owner changed; refresh the session snapshot');
           continue;
         }
-        writes.push({ id: sessionId, fence: row.inboxLeaseGeneration ?? randomUUID(), predecessor: currentOwner, status: heldSessionWord(row)!, declared });
+        writes.push({ id: sessionId, fence: row.inboxLeaseGeneration ?? randomUUID(), predecessor: currentOwner, status: row.status as RunStatus, declared });
       }
 
       const orphanedApprovals: Array<{ sessionId: string; id: string }> = [];
@@ -5983,7 +5981,7 @@ export class RunnerApiController {
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", ${turnStateColumnsSql('"session"')}, "finished_at" AS "finishedAt",
+               "inbox_lease_owner" AS "inboxLeaseOwner", ${legacySessionStatusSql('"session"')} AS "status", ${sessionTurnStateSql('"session"')} AS "turnState", "finished_at" AS "finishedAt",
                "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin", engine
                , "task_id" AS "taskId", ${DISPATCH_PAUSED} AS "dispatchPaused"
                , "inbox_request_id" AS "inboxRequestId", "inbox_request_turn_id" AS "inboxRequestTurnId"
@@ -6105,7 +6103,7 @@ export class RunnerApiController {
       // So may the Default a resident engine runs on have been removed from Orbit by its owner: its
       // next message waits for the claim that moves the session off it (QueueService.accountsForClaim),
       // and the turn it is running finishes there.
-      if (resent.length === 0 && sessionTurnState(owned[0]) === 'IN_FLIGHT') {
+      if (resent.length === 0 && turnStateOf(owned[0]) === 'IN_FLIGHT') {
         if (owned[0].providerBuiltin && isAccountEngine(owned[0].provider)) {
           // Pause writes this same row. Hold the read until the lease commits, so a pause
           // either precedes this turn or waits for its delivery and lets that turn finish.
@@ -6291,7 +6289,7 @@ export class RunnerApiController {
                 AND EXISTS (
                   SELECT 1 FROM "session" active
                   WHERE active.id = ${sessionId}::uuid
-                    AND ${sessionTurnStateSql('active', 'IN_FLIGHT')}
+                    AND ${sessionTurnStateSql('active')} = 'IN_FLIGHT'
                     AND active."cancel_requested_at" IS NULL
                 )
                 AND EXISTS (
@@ -6311,7 +6309,7 @@ export class RunnerApiController {
                 AND EXISTS (
                   SELECT 1 FROM "session" active
                   WHERE active.id = ${sessionId}::uuid
-                    AND ${sessionTurnStateSql('active', 'IN_FLIGHT')}
+                    AND ${sessionTurnStateSql('active')} = 'IN_FLIGHT'
                     AND active."cancel_requested_at" IS NULL
                 )
                 AND (
@@ -6439,7 +6437,7 @@ export class RunnerApiController {
             if (cut) {
               restartRedelivered = (await tx.$executeRaw`
                 UPDATE "session" SET "run_claimed_at" = now()
-                WHERE id = ${sessionId}::uuid AND ${sessionTurnStateSql('"session"', 'IN_FLIGHT')} AND "engine_started_at" IS NULL
+                WHERE id = ${sessionId}::uuid AND ${sessionTurnStateSql('"session"')} = 'IN_FLIGHT' AND "engine_started_at" IS NULL
               `) > 0;
             }
           }
@@ -7706,7 +7704,7 @@ export class RunnerApiController {
           // it may have parked the session with a message now queued behind nothing. Waking it
           // is the same transition an ordinary send makes.
           await tx.session.updateMany({
-            where: { id: sessionId, ...turnStateWhere(null), cancelRequestedAt: null },
+            where: { id: sessionId, ...turnStateFilter([null]), cancelRequestedAt: null },
             data: { status: RunStatus.PENDING, turnState: 'QUEUED', lastTurnAt: new Date() },
           });
           // A background job's exit the engine never read is a wake turn of its own again, and a
@@ -7784,7 +7782,7 @@ export class RunnerApiController {
         });
         const held = requeued.count > 0
           ? await tx.session.updateMany({
-              where: { id: sessionId, cancelRequestedAt: null, ...turnStateWhere('IN_FLIGHT') },
+              where: { id: sessionId, cancelRequestedAt: null, ...turnStateFilter(['IN_FLIGHT']) },
               data: {
                 status: RunStatus.PENDING,
                 turnState: 'QUEUED',
@@ -8420,7 +8418,7 @@ export class RunnerApiController {
         where: {
           id: sessionId,
           cancelRequestedAt: null,
-          ...turnStateWhere('IN_FLIGHT'),
+          ...turnStateFilter(['IN_FLIGHT']),
         },
         data: {
           status: nextStatus,
@@ -10584,7 +10582,7 @@ export class RunnerApiController {
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
       const res = await tx.session.updateMany({
-        where: { id: sessionId, ...turnStateWhere('IN_FLIGHT', 'ABANDONED', null) },
+        where: { id: sessionId, ...turnStateFilter(['IN_FLIGHT', 'ABANDONED', null]) },
         data: {
           status: effectiveStatus,
           // Released: no turn, slot or claim (session_turn_state_released_chk).
@@ -10815,7 +10813,7 @@ export class RunnerApiController {
         // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
         failureReported,
         // A release after a failed turn: that turn's report owed the check, and made it.
-        repairCheck: failureReported ? null : repairCheckAfter(current, sessionTurnState(current) === 'IN_FLIGHT',
+        repairCheck: failureReported ? null : repairCheckAfter(current, turnStateOf(current) === 'IN_FLIGHT',
           effectiveStatus === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
@@ -10948,7 +10946,7 @@ export class RunnerApiController {
     });
     const status = stopped && waiting === 0 ? RunStatus.AWAITING_INPUT : RunStatus.PENDING;
     const rested = await tx.session.updateMany({
-      where: { id: sessionId, ...turnStateWhere('IN_FLIGHT', 'ABANDONED', null) },
+      where: { id: sessionId, ...turnStateFilter(['IN_FLIGHT', 'ABANDONED', null]) },
       data: {
         status,
         turnState: turnStateOfWord(status),
@@ -11043,7 +11041,7 @@ export class RunnerApiController {
         // row some other writer already finalized — the status guard keeps this from resurrecting
         // one, and the marker it leaves behind is inert on a session that can no longer be claimed.
         const res = await tx.session.updateMany({
-          where: { id: sessionId, importSourceCwd: { not: null }, ...turnStateWhere('IN_FLIGHT') },
+          where: { id: sessionId, importSourceCwd: { not: null }, ...turnStateFilter(['IN_FLIGHT']) },
           data: {
             importSourceCwd: null,
             // The runner read a real title out of the transcript; it wins over the placeholder.
@@ -11311,7 +11309,7 @@ export class RunnerApiController {
           mergeOwnerTokenFor: string | null;
         }>
       >`
-        SELECT ${turnStateColumnsSql('"session"')}, "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
+        SELECT ${legacySessionStatusSql('"session"')} AS "status", ${sessionTurnStateSql('"session"')} AS "turnState", "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
@@ -11616,7 +11614,7 @@ export class RunnerApiController {
           commitOperationOwner: string | null;
         }>
       >`
-        SELECT ${turnStateColumnsSql('"session"')}, "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
+        SELECT ${legacySessionStatusSql('"session"')} AS "status", ${sessionTurnStateSql('"session"')} AS "turnState", "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
                "commit_status" AS "commitStatus",
                "commit_operation_id" AS "commitOperationId",
                "commit_operation_owner" AS "commitOperationOwner"
@@ -11631,7 +11629,7 @@ export class RunnerApiController {
       const legacyAttempt =
         !operationId &&
         !leaseOwner &&
-        heldSessionWord(current) === RunStatus.AWAITING_INPUT &&
+        isParked(current) &&
         current.commitStatus === 'pending' &&
         current.commitOperationId === null &&
         current.commitOperationOwner === null;
@@ -11645,7 +11643,7 @@ export class RunnerApiController {
         // before its receipt POST; accept that exact process/epoch so Resume can
         // safely wait for completion instead of stranding a claimed operation.
         (isReleased(current) ||
-          (heldSessionWord(current) === RunStatus.AWAITING_INPUT && current.inboxLeaseOwner === leaseOwner));
+          (isParked(current) && current.inboxLeaseOwner === leaseOwner));
       if (!legacyAttempt && !modernAttempt) {
         throw new ConflictException('commit operation is no longer current');
       }

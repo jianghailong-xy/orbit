@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider, SESSION_SOURCE_PIN_V1 } from '@orbit/shared';
-import { turnStateWhere } from '../sessions/session-legacy-words';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { RunnerApiController } from './runner-api.controller';
 import {
   DSH_RUNNER_UPGRADE_ERROR,
@@ -83,7 +83,7 @@ test('P1b dsh provider notices distinguish native and legacy colliding identitie
   // A session recorded on Harness is noticed whatever key it spends; one without an engine by the old
   // identities, where a configured `dsh` keyword collision stays configured (migration 0414).
   assert.deepEqual(marked[0].where, {
-    id: { in: ['native'] }, assignedRunnerId: runner.id, AND: [turnStateWhere('QUEUED')],
+    id: { in: ['native'] }, assignedRunnerId: runner.id, AND: [turnStateFilter(['QUEUED'])],
     sessionKind: 'CONVERSATION',
     OR: [
       { engine: 'dsh' },

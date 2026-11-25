@@ -9,7 +9,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { sessionTurnState, TURN_STATE_SELECT } from '../sessions/session-legacy-words';
+import { turnStateOf, TURN_STATE_SELECT } from '../sessions/session-turn-state';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService, type WakeupMissedReason } from '../push/push.service';
@@ -420,7 +420,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       const session = await this.prisma.session.findUnique({ where: { id: tick.sessionId }, select: SILENT_SESSION });
       if (!session) return;
       const runnerOnline = runnerIsOnline(session.assignedRunner, now.getTime());
-      if (runnerOnline && sessionTurnState(session) === 'IN_FLIGHT' && (await this.turnRunning(tick.sessionId))) return;
+      if (runnerOnline && turnStateOf(session) === 'IN_FLIGHT' && (await this.turnRunning(tick.sessionId))) return;
       if (!(await claimLoopAlert(this.prisma, tick.loopId, silentSince, now))) return;
       const standing = tickStanding(tick.session, now);
       const reason: WakeupMissedReason = !runnerOnline

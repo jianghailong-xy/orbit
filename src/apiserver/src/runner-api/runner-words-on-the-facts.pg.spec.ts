@@ -3,7 +3,7 @@
  * §2.3 and §3.2).
  *
  * The runner API no longer reads `session.status`: it reads the turn state (`turn_state`, through
- * sessions/session-legacy-words.ts) and answers runners the projector's word. A held row the backfill (task T3) has not
+ * sessions/session-turn-state.ts) and answers runners the projector's word (sessions/session-legacy-words.ts). A held row the backfill (task T3) has not
  * reached has no turn state, and reads its stored word's. This file pins, through the runner door's own handlers, for
  * every held word, both with its turn state (as the D1 trigger keeps it) and without one (as a row not written since
  * migration 1611 has it):

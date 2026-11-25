@@ -20,8 +20,8 @@
 import { Prisma } from '@prisma/client';
 import { RunStatus, SessionEndReason } from '@orbit/shared';
 
-import { isHeldStatus } from '../common/session-release';
 import { landingContainerStatus } from '../projects/landing-session';
+import { heldSessionWord } from './session-turn-state';
 
 /** The session columns the projector reads. */
 export interface LegacyStatusFacts {
@@ -85,21 +85,16 @@ export function withoutWordFacts<T>(row: T): Omit<T, Exclude<keyof LegacyStatusF
   return rest as unknown as Omit<T, Exclude<keyof LegacyStatusFacts, 'endReason' | 'status'>>;
 }
 
-const HELD_WORD_OF_TURN_STATE: Record<HeldTurnState, RunStatus> = {
-  QUEUED: RunStatus.PENDING,
-  IN_FLIGHT: RunStatus.RUNNING,
-  ABANDONED: RunStatus.INTERRUPTED,
-};
-
-/** The columns a held row's word and turn state read. */
-export type HeldTurnFacts = Pick<LegacyStatusFacts, 'status' | 'finishedAt' | 'turnState'>;
-
-/** The word of a held row: its turn state's, or with none its stored word (parked, or not yet backfilled). */
-function heldWord(facts: HeldTurnFacts): RunStatus {
-  if (facts.turnState != null) return HELD_WORD_OF_TURN_STATE[facts.turnState as HeldTurnState] ?? RunStatus.AWAITING_INPUT;
-  // No turn state: parked, or not yet backfilled. A parked row stores AWAITING_INPUT, so both read the stored word.
-  const session = facts;
-  return isHeldStatus(session.status) ? session.status as RunStatus : RunStatus.AWAITING_INPUT;
+/**
+ * Raw SQL: the word legacySessionStatus gives the session row the query names `sessionAlias`, through its SQL twin
+ * (migration 1621), with a LANDING container's settlement read from its `project_landing` row. Text.
+ */
+export function legacySessionStatusSql(sessionAlias: string): Prisma.Sql {
+  const session = Prisma.raw(sessionAlias);
+  return Prisma.sql`session_legacy_status(${session}."finished_at", ${session}."turn_state", ${session}."end_reason",
+    ${session}."last_turn_outcome", ${session}."started_at", ${session}."import_source_cwd", ${session}."kind",
+    (SELECT landing."settled_as" FROM "project_landing" landing WHERE landing."session_id" = ${session}."id"),
+    ${session}."status"::text)`;
 }
 
 /**
@@ -107,7 +102,7 @@ function heldWord(facts: HeldTurnFacts): RunStatus {
  * for every other session, and for a landing with no row, which reads as unsettled-without-landing: CANCELLED).
  */
 export function legacySessionStatus(facts: LegacyStatusFacts, landing?: LandingSettlement | null): RunStatus {
-  if (facts.finishedAt == null) return heldWord(facts);
+  if (facts.finishedAt == null) return heldSessionWord(facts);
   if (facts.endReason == null) {
     if (facts.lastTurnOutcome === 'FAILED') return RunStatus.FAILED;
     if (facts.lastTurnOutcome == null && facts.importSourceCwd != null) return RunStatus.FAILED;
@@ -160,106 +155,4 @@ export function statusWordFilter(word: string): Prisma.SessionWhereInput | undef
     default:
       return undefined;
   }
-}
-
-/**
- * Where a held session's turn stands for the runner (plan §1.3): QUEUED waits for a claim, IN_FLIGHT is a dispatched
- * turn holding a runner slot, ABANDONED had its runner stopped under it; null is parked. The readers that decided on
- * PENDING, RUNNING or INTERRUPTED ask these instead, one for one (plan §2.1, Q, F, I; A is null on a held row).
- */
-export type HeldTurnState = 'QUEUED' | 'IN_FLIGHT' | 'ABANDONED';
-
-/** The held word each turn state reads. */
-const HELD_WORD_OF = HELD_WORD_OF_TURN_STATE;
-
-/** The held words that name a turn state; a held row stored with any other (AWAITING_INPUT) has none. */
-const WORDS_WITH_A_TURN: RunStatus[] = Object.values(HELD_WORD_OF_TURN_STATE);
-
-/**
- * A session's turn state: null when it is released or parked. A held row with no `turn_state` (not yet backfilled,
- * task T3) reads its stored word's, through the projector, so this answers exactly what the word answered.
- */
-export function sessionTurnState(facts: HeldTurnFacts): HeldTurnState | null {
-  if (facts.finishedAt != null) return null;
-  return TURN_STATE_OF_HELD_WORD[heldWord(facts)] ?? null;
-}
-
-/** HELD_WORD_OF_TURN_STATE read the other way. */
-const TURN_STATE_OF_HELD_WORD: Partial<Record<string, HeldTurnState>> = Object.fromEntries(
-  (Object.entries(HELD_WORD_OF_TURN_STATE) as Array<[HeldTurnState, RunStatus]>).map(([state, word]) => [word, state]),
-);
-
-/**
- * The turn state a writer stores beside the word it writes (deploy 2 writes both, plan §2.2): the word's own, one for
- * one, null for AWAITING_INPUT and every released word. The same mapping as `session_turn_state_of_status`
- * (migration 1611), whose trigger derives it from the word in the same row and the CHECK of 1622 holds it to.
- */
-export function turnStateOfWord(word: RunStatus | string): HeldTurnState | null {
-  return TURN_STATE_OF_HELD_WORD[word] ?? null;
-}
-
-/**
- * The held word a session reads, or null when it is released: `legacySessionStatus` for a held row, from the three
- * columns that decide it. For the readers that branch on the held words only; a released row's word needs the
- * release facts (`legacySessionStatus`).
- */
-export function heldSessionWord(facts: HeldTurnFacts): RunStatus | null {
-  return facts.finishedAt == null ? heldWord(facts) : null;
-}
-
-/** The columns `sessionTurnState` and `heldSessionWord` read, for a Prisma `select`. */
-export const TURN_STATE_SELECT = {
-  status: true,
-  finishedAt: true,
-  turnState: true,
-} as const;
-
-/**
- * Raw SQL: TURN_STATE_SELECT for a raw statement over the session row it names `sessionAlias` (a constant, never
- * input; `"session"` for a statement with no alias), as the columns `status` and `turnState`, for `heldSessionWord`
- * and `sessionTurnState` to read.
- */
-export function turnStateColumnsSql(sessionAlias: string): Prisma.Sql {
-  const alias = Prisma.raw(sessionAlias);
-  return Prisma.sql`${alias}."status"::text AS "status", ${alias}."turn_state" AS "turnState"`;
-}
-
-/**
- * Prisma: held sessions in one of these turn states (null: parked), exactly the rows `sessionTurnState` gives them.
- * A row with `turn_state` set reads it; one with none reads its stored word's, as `sessionTurnState` does, until the
- * backfill has filled every row (then the second arm selects nothing).
- */
-export function turnStateWhere(...states: Array<HeldTurnState | null>): Prisma.SessionWhereInput {
-  const set = states.filter((state): state is HeldTurnState => state != null);
-  const parked = states.includes(null);
-  const words = set.map((state) => HELD_WORD_OF[state]);
-  const unfilled: Prisma.SessionWhereInput = {
-    turnState: null,
-    status: parked ? { notIn: WORDS_WITH_A_TURN.filter((word) => !words.includes(word)) } : { in: words },
-  };
-  return {
-    finishedAt: null,
-    OR: [...(set.length > 0 ? [{ turnState: { in: set } }] : []), unfilled],
-  };
-}
-
-/**
- * Raw SQL: the session row the query names `sessionAlias` (a constant, never input) is held in one of these turn
- * states (null: parked): `turnStateWhere` for a raw statement. The `turn_state` arm is the partial indexes' access
- * path (migrations 1627-1633); the stored word's arm reads a row not yet backfilled, as `sessionTurnState` does.
- */
-export function sessionTurnStateSql(sessionAlias: string, ...states: Array<HeldTurnState | null>): Prisma.Sql {
-  const alias = Prisma.raw(sessionAlias);
-  const set = states.filter((state): state is HeldTurnState => state != null);
-  const parked = states.includes(null);
-  const words = set.map((state) => HELD_WORD_OF[state]);
-  // Constants of this module written as literals, not parameters: the planner proves a partial index's predicate, and
-  // matches the stored word's index, only against a constant of the column's own type.
-  const list = (values: string[]) => Prisma.raw(values.map((value) => `'${value}'`).join(', '));
-  const unfilledWords = parked ? WORDS_WITH_A_TURN.filter((word) => !words.includes(word)) : words;
-  const unfilled = !parked
-    ? Prisma.sql`${alias}."status" IN (${list(unfilledWords)})`
-    : unfilledWords.length > 0 ? Prisma.sql`${alias}."status" NOT IN (${list(unfilledWords)})` : Prisma.sql`TRUE`;
-  const filled = set.length > 0 ? Prisma.sql`${alias}."turn_state" IN (${list(set)}) OR ` : Prisma.empty;
-  return Prisma.sql`(${alias}."finished_at" IS NULL AND (${filled}(${alias}."turn_state" IS NULL AND ${unfilled})))`;
 }
