@@ -100,3 +100,70 @@ Two actions, both on every surface that shows Draining:
 
 Separate bug, own task: a session that is running reads PENDING in the database while its runner
 drains, which would also make the new gate name the wrong state.
+
+## 7. What the update wait holds, and what goes through
+
+Owner-approved on 2026-11-13, revised 2026-11-24. This is the rule for the wait that
+`drainForUpdate` starts; it is not a description of the code as of that date.
+
+The fault it removes: a draining runner's session loop took the next queued message off the inbox
+and then blocked in `waitTurnPermit` (`waitActive`, `heldForUpdate` set by `holdFollowUpForUpdate`).
+The inbox is read one turn at a time, so an interrupt filed after that was not read until the update
+ended, and the owner's Stop did nothing. If the follow-up had not been fetched yet, Stop was refused
+with `SESSION_NEXT_TURN_STARTING`. Either way the session read Running, because the control plane
+had kept its slot for the follow-up when the turn completed.
+
+### 7.1 What is held
+
+The update wait is a dispatch pause of one runner, with the semantics of the administrator's
+dispatch pause (`src/apiserver/src/queue/dispatch-pause.ts`): it holds work that has not started,
+and nothing else.
+
+| Inbox turn | During the update wait |
+|---|---|
+| `message` | held |
+| `shell`, including `!cmd &` | held |
+| `reload` (it replaces the engine's process) | held |
+| `interrupt` | goes through |
+| `end` | goes through |
+| `steer` (written into the turn already running) | goes through |
+| `withdraw` | goes through |
+| `setconfig` | goes through |
+| `diff` | goes through |
+| redelivery of a `message` or `shell` turn already running (expired lease, own-lease redelivery) | goes through |
+
+Held turns stay `PENDING` on the server. As under the dispatch pause, a session that is `RUNNING`
+with no `message` or `shell` turn in flight and one queued is put back in the queue rather than left
+`RUNNING` with nothing running.
+
+### 7.2 Where the hold lives
+
+On the control plane. The runner says it is draining on every inbox fetch and every turn completion,
+each in an optional request field, and the server decides from that request what it hands out and
+whether the slot is kept. The heartbeat's `draining` flag lags the runner, so it is not used for
+this.
+
+The runner's own hold (`heldForUpdate`) stays only as a backstop for a control plane too old to read
+those fields. It never stops the session loop from reading control turns: a held `message` or
+`shell` must not block an `interrupt`, `end` or other turn from §7.1 filed behind it.
+
+### 7.3 A turn that ends on a draining runner
+
+It does not keep the slot for a queued follow-up. The session goes back to the queue and reads phase
+`PENDING`, `waitingOn: HOLD`, `queuedReason: runner_updating`: the queued state this design already
+has (board 5 of `docs/mocks/runner-update-drain/`), not a new one. Its follow-ups run after the
+update, through the ordinary claim.
+
+### 7.4 Stop on such a session
+
+Stop on a session queued behind the update:
+
+- drops its queued messages;
+- ends its background work (`stopBackgroundWork`);
+- leaves the session idle.
+
+It is never refused with `SESSION_NEXT_TURN_STARTING`.
+
+### 7.5 Not covered here
+
+The Codex app-server has interrupt gaps that predate the update wait. They are fixed separately.
