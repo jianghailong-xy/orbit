@@ -15,6 +15,7 @@
 -- statement that writes is undone as soon as it has been measured. `without_old` and `writes` take table locks on
 -- session: use those two on a rehearsal copy or a throwaway database only, never on a database that serves.
 -- scripts/session-status-query-plans-seed.sql seeds a throwaway one.
+-- docs/session-status-query-plans.md records what it showed.
 --
 -- Reading the summary: `buffers` is shared blocks hit + read by the whole statement (the second of two runs);
 -- `intended` names the indexes the plan means this query to use, and `uses_intended` says whether the plan used one.
