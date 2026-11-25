@@ -459,3 +459,21 @@ public extension ProjectDoneSubject {
         return OwnerCardTranslations.foot(translates: translates, showOriginal: showOriginal)
     }
 }
+
+public extension ProjectDocument {
+    /// A criterion's text as the project page's Acceptance criteria list draws it: in the owner's
+    /// language by the criterion's id while a usable translation names it, as written otherwise. The
+    /// row's presses and dialogs (modes, Confirm…, Move…) keep reading `criterion.text`.
+    func criterionText(_ criterion: ProjectCriterion, owner: TranslationLanguage?, showOriginal: Bool) -> String {
+        guard !showOriginal, let t = OwnerCardTranslations.usable(translation, owner: owner) else { return criterion.text }
+        return OwnerCardTranslations.over(criterion.text, t.criteria?.first { $0.id == criterion.id }?.text)
+    }
+
+    /// The one foot under that list, drawn while a usable translation changes one of its criteria.
+    func criteriaTranslationFoot(owner: TranslationLanguage?, showOriginal: Bool) -> [SessionTranslation.FootPart] {
+        let translates = acceptanceCriteriaItems.contains {
+            criterionText($0, owner: owner, showOriginal: false) != $0.text
+        }
+        return OwnerCardTranslations.foot(translates: translates, showOriginal: showOriginal)
+    }
+}

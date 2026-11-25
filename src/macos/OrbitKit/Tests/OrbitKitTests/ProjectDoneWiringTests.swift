@@ -315,5 +315,16 @@ final class ProjectDoneWiringTests: XCTestCase {
                                    to: "struct ProjectDoneRequestRow: View {"))
         XCTAssertTrue(why.contains("TranslationFootView(parts: subject.whyNotDoneFoot(why, owner: owner, showOriginal: showOriginal)) { _ in"))
         XCTAssertTrue(why.contains("let item = subject.shown(owner: owner, showOriginal: showOriginal) .criterion(criterion.definitionId)"))
+
+        // The project page's own Acceptance criteria list: each row's words as drawn, one foot under
+        // the rows, and the row's presses still handed the criterion itself.
+        let page = try source(Self.projects)
+        let list = code(try section(page, from: "private func criteriaSection(", to: "private func criterionRow("))
+        XCTAssertTrue(list.contains("text: document.criterionText(criterion, owner: owner, showOriginal: criteriaShowOriginal),"))
+        XCTAssertTrue(list.contains("TranslationFootView(parts: document.criteriaTranslationFoot(owner: owner,"))
+        XCTAssertTrue(list.contains("criteriaShowOriginal.toggle()"))
+        let row = code(try section(page, from: "private func criterionRow(", to: "private func confirmationWork("))
+        XCTAssertTrue(row.contains("Text(text).font(.orbitSubtext)"))
+        XCTAssertFalse(row.contains("Text(criterion.text)"), "the row draws the shown words, not the original")
     }
 }

@@ -4,7 +4,8 @@ import XCTest
 /// Settings › Translation on a project's own words (`translation` on `GET /projects/:id`,
 /// @orbit/shared `ProjectTextTranslation`): both project documents decode it, and "Is this project
 /// done?" (asked or not), its Done when list and the why-not-done card draw the title and criteria
-/// in the owner's language, matched by criterion id, with one "Translated · Show original" foot —
+/// in the owner's language, matched by criterion id, with one "Translated · Show original" foot, as
+/// does the project page's own Acceptance criteria list —
 /// and the originals with no translation, a failed one, one in another language, or translation off.
 final class ProjectTextTranslationTests: XCTestCase {
 
@@ -185,6 +186,44 @@ final class ProjectTextTranslationTests: XCTestCase {
         // It draws no title, so a translation of the title alone draws no foot there.
         let titleOnly = try document(#"{"lang":"zh-Hans","title":"标题"}"#).doneSubject
         XCTAssertEqual(titleOnly.whyNotDoneFoot(why, owner: zh, showOriginal: false), [])
+    }
+
+    // MARK: the project page's Acceptance criteria list
+
+    func testThePagesCriteriaListDrawsTheTranslatedTextByIdWithOneFoot() throws {
+        let doc = try document(zhTranslation)
+        let rows = doc.acceptanceCriteriaItems.map { doc.criterionText($0, owner: zh, showOriginal: false) }
+        XCTAssertEqual(rows, ["开启翻译后，GET /projects/:id 提供翻译。", "网页绘制翻译后的标题和标准。",
+                              "iOS、macOS 和 Android 绘制相同的翻译。", "在真实环境中，卡片显示中文。"],
+                       "each row by its own id, in the document's order")
+        XCTAssertEqual(doc.criteriaTranslationFoot(owner: zh, showOriginal: false), translatedFoot)
+        // Show original: the agent's words, and the foot offers the translation back.
+        XCTAssertEqual(doc.acceptanceCriteriaItems.map { doc.criterionText($0, owner: zh, showOriginal: true) },
+                       doc.acceptanceCriteriaItems.map(\.text))
+        XCTAssertEqual(doc.criteriaTranslationFoot(owner: zh, showOriginal: true), originalFoot)
+        XCTAssertTrue(doc.acceptanceCriteriaItems[0].text.hasPrefix("With translation on"),
+                      "the criterion itself, which every press reads, stays as written")
+    }
+
+    func testThePagesCriteriaListIsAsWrittenWithoutAUsableTranslation() throws {
+        let cases: [(String, ProjectDocument, TranslationLanguage?)] = [
+            ("no translation", try document(nil), zh),
+            ("failed", try document(#"{"lang":"zh-Hans","failed":true}"#), zh),
+            ("another language", try document(zhTranslation), .ja),
+            ("translation off", try document(zhTranslation), nil),
+            ("title only", try document(#"{"lang":"zh-Hans","title":"标题"}"#), zh),
+        ]
+        for (label, doc, owner) in cases {
+            XCTAssertEqual(doc.acceptanceCriteriaItems.map { doc.criterionText($0, owner: owner, showOriginal: false) },
+                           doc.acceptanceCriteriaItems.map(\.text), label)
+            XCTAssertEqual(doc.criteriaTranslationFoot(owner: owner, showOriginal: false), [], label)
+        }
+        // One criterion the translation does not name keeps its words; the others are translated.
+        let partial = try document(#"{"lang":"zh-Hans","criteria":[{"id":"3xdXhR5bImqxrNhWBBmZuB","text":"网页。"}]}"#)
+        XCTAssertEqual(partial.acceptanceCriteriaItems.map { partial.criterionText($0, owner: zh, showOriginal: false) },
+                       [partial.acceptanceCriteriaItems[0].text, "网页。", partial.acceptanceCriteriaItems[2].text,
+                        partial.acceptanceCriteriaItems[3].text])
+        XCTAssertEqual(partial.criteriaTranslationFoot(owner: zh, showOriginal: false), translatedFoot)
     }
 
     // MARK: the fallbacks
