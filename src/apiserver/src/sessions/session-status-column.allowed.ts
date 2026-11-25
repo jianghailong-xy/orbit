@@ -55,7 +55,8 @@ export const SESSION_STATUS_USES: Readonly<Record<string, SessionStatusUses>> = 
   'realtime/reaper.service.ts': { writes: 1 },
   // Reads none (task T8). Its runner-driven writers write the word and `turnState` together, as deploy 2 does; T14
   // takes these to 0.
-  'runner-api/runner-api.controller.ts': { writes: 9 },
+  // The tenth is main's return-slot (f49915d0b8), moved onto the facts with T10's landing merge.
+  'runner-api/runner-api.controller.ts': { writes: 10 },
   'runners/attention-fix.ts': { reads: 2 },
   'runners/claude-account-swap.ts': { reads: 6 },
   'runners/runner-background-holders.ts': { reads: 1 },
