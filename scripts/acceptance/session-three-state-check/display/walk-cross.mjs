@@ -200,10 +200,13 @@ for (const [label, c] of Object.entries(cases)) {
   };
   c.sharedPage = await anon.evaluate(READ_HEAD);
   await shot(anon, `shared-${slug(label)}`, { clip: { x: 0, y: 0, width: 900, height: 140 } });
-  await guestPage.goto(`${origin}/sessions/${c.publicId}`);
-  await guestPage.waitForSelector('.status-pill', { timeout: 8_000 }).catch(() => {});
-  await settle(guestPage, 500);
-  c.guestPage = await guestPage.evaluate(READ_HEAD);
+  // A loaded host can take longer than one wait to draw the head: read again after a reload before calling it missing.
+  for (let attempt = 0; attempt < 3 && !c.guestPage; attempt += 1) {
+    await guestPage.goto(`${origin}/sessions/${c.publicId}`);
+    await guestPage.waitForSelector('.status-pill', { timeout: 20_000 }).catch(() => {});
+    await settle(guestPage, 700);
+    c.guestPage = await guestPage.evaluate(READ_HEAD);
+  }
 }
 
 await desk.goto(`${origin}/`);
@@ -220,9 +223,14 @@ for (const [label, c] of Object.entries(cases)) {
   if (!c.publicId) continue;
   await box.fill(c.title);
   const row = desk.locator('.ssearch-row', { has: desk.locator('.ssearch-title', { hasText: new RegExp(`^${c.title.replace(/[()]/g, '\\$&')}$`) }) }).first();
-  await row.waitFor({ timeout: 8_000 }).catch(() => {});
+  await row.waitFor({ timeout: 20_000 }).catch(() => {});
   await settle(desk, 500);
-  if (!(await row.count())) continue;
+  if (!(await row.count())) {
+    // What the palette held instead, for whoever reads the miss.
+    c.searchMiss = await desk.locator('.ssearch-row, .ssearch-empty').allTextContents();
+    await shot(desk, `search-miss-${slug(label)}`);
+    continue;
+  }
   c.search = await row.evaluate((r) => ({
     state: r.querySelector('[data-state]')?.getAttribute('data-state') ?? null,
     word: r.querySelector('.ssearch-meta > span:not(.ssearch-workspace):not(.ssearch-in):not(.session-marks)')?.textContent?.trim() ?? null,

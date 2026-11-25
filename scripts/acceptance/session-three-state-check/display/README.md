@@ -1,8 +1,9 @@
 # Cross-client display check: the same state and marks on web, Mac, iPhone and Android?
 
-The check of project 353SgnUjvamRr06Sho0EZ criterion 7, last run on the project tip b0e9924cb1 (revision 2; revision 1
-ran on 38d75a2d22). The results are in [report.md](report.md), [display-table.md](display-table.md) (one row per case: state and each
-mark per client, for list rows and for search, Shared with me and the shared / guest head; older server; groups) and [surfaces.md](surfaces.md) (every payload kind and surface).
+The check of project 353SgnUjvamRr06Sho0EZ criterion 7, last run on the project tip 61a13a1aa9 (revision 3; revisions 1
+and 2 ran on 38d75a2d22 and b0e9924cb1). The results are in [report.md](report.md), [display-table.md](display-table.md) (one row per case: state and each
+mark per client, for list rows and for search, Shared with me, the shared / guest head, the task run label and shared
+Markdown; Apple's live update; older server; groups) and [surfaces.md](surfaces.md) (every payload kind and surface).
 [table-send.md](table-send.md) is the previous rig's own table (send, wait, words, run label) rerun on the same tip.
 
 ## Pieces
