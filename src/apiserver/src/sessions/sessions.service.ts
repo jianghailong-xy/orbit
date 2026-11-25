@@ -518,6 +518,8 @@ type ListOverlay = {
   waitingKind: ReturnType<typeof sessionWaitingKind>;
   confirmationUnderReview: (Awaited<ReturnType<typeof readConfirmationsUnderReview>> extends Map<string, infer V> ? V : never) | null;
   ownerItems: ReturnType<typeof ownerItemsForRow>;
+  ownerRequests: ReturnType<typeof ownerRequestsForRow>;
+  taskMoves: ReturnType<typeof taskMovesForRow>;
   awaitingReplyFrom: OpenRequestPeers['awaitingReplyFrom'];
   owesReplyTo: OpenRequestPeers['owesReplyTo'];
 };
@@ -581,6 +583,8 @@ function emptyOverlayMark(): string {
     waitingKind: sessionWaitingKind(0, undefined),
     confirmationUnderReview: null,
     ownerItems: ownerItemsForRow(undefined),
+    ownerRequests: ownerRequestsForRow(undefined),
+    taskMoves: taskMovesForRow(undefined),
     awaitingReplyFrom: [],
     owesReplyTo: [],
   } satisfies ListOverlay);
@@ -595,6 +599,8 @@ function overlayOf(row: ListOverlay): ListOverlay {
     waitingKind: row.waitingKind,
     confirmationUnderReview: row.confirmationUnderReview,
     ownerItems: row.ownerItems,
+    ownerRequests: row.ownerRequests,
+    taskMoves: row.taskMoves,
     awaitingReplyFrom: row.awaitingReplyFrom,
     owesReplyTo: row.owesReplyTo,
   };
@@ -5503,7 +5509,9 @@ export class SessionsService {
     const underReview = await readConfirmationsUnderReview(this.prisma, ownerId, {
       sessionIds: inputs.map((s) => s.id),
     });
-    return new Map(inputs.map((s) => {
+    // The return type holds this to ListOverlay's fields: a mark taken from a built row (`overlayOf`) and one
+    // taken from here hash alike only while both name the same ones.
+    return new Map(inputs.map((s): [string, ListOverlay] => {
       const approvals = byId.get(s.id) ?? 0;
       const waiting = decisions.get(s.id);
       const peers = requests.get(s.id);
