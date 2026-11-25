@@ -54,6 +54,8 @@ internal object NavShell {
     @Volatile var folders = "[]"
     @Volatile var tags = "[]"
     @Volatile var failWorkspaces: Int? = null
+    /** Answers a test adds before the fixture's own (the drive's routes): null passes the request on. */
+    @Volatile var routes: ((ApiRequest) -> ApiResponse?)? = null
 
     fun reset() {
         calls.clear(); muted = false; refuse = null; mergeAnswer = "merged"; mergeStatus = null
@@ -62,7 +64,7 @@ internal object NavShell {
         // and post its toast here.
         holdDelete = null; holdOpen = null; holdDeletes.clear()
         holdScope = null; scopeStatus = null; extra = emptyMap(); scheduled = emptyMap(); scheduleHistory = false
-        folders = "[]"; tags = "[]"; failWorkspaces = null
+        folders = "[]"; tags = "[]"; failWorkspaces = null; routes = null
     }
 
     /** A row of Alpha's. [fields] are more of its JSON, starting with a comma. */
@@ -118,6 +120,7 @@ internal object NavShell {
         if (path == "auth/login") return@HttpTransport ok("""{"accessToken":"a05c-access","refreshToken":"a05c-refresh","user":{"id":"u1","email":"owner@a05c.test","name":"Owner"}}""")
         val query = api.query.joinToString("&") { (k, v) -> "$k=$v" }
         calls += "$method $path" + if (query.isEmpty()) "" else "?$query"
+        routes?.invoke(api)?.let { return@HttpTransport it }
         val id = api.path.getOrNull(1)?.let { part -> listOf(SESSION, PLAIN, RUN).firstOrNull { ObjectId.same(it, part) } }
         if (method == "DELETE") (id?.let { holdDeletes[it] } ?: holdDelete)?.await()
         if (method != "GET") refuse?.let { (status, message) -> return@HttpTransport ApiResponse(status, """{"message":"$message"}""".encodeToByteArray()) }

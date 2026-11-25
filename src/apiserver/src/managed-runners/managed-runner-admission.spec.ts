@@ -112,6 +112,31 @@ test('the authorized Pod is admitted: the manager, the fixed name, the reserved 
   assert.deepEqual(decide(create(unlabelled)), { allowed: true, reason: 'AUTHORIZED' });
 });
 
+test('the template with /tmp on the data volume is admitted, and a running Pod of the earlier emptyDir template still updates', () => {
+  const pod = authorizedPod();
+  assert.ok((pod.spec.containers as Array<{ volumeMounts: Array<{ subPath?: string }> }>)[0].volumeMounts.some((m) => m.subPath === '.orbit-tmp'));
+  assert.deepEqual(decide(create(pod)), { allowed: true, reason: 'AUTHORIZED' });
+  // A Pod made before the change keeps its emptyDir /tmp until it stops; the next generation is the new template.
+  const earlier = structuredClone(pod);
+  earlier.metadata.uid = 'pod-uid';
+  earlier.spec.volumes = [...earlier.spec.volumes!, { name: 'temporary', emptyDir: { sizeLimit: '1Gi' } }];
+  for (const c of [...(earlier.spec.initContainers as Array<{ volumeMounts: Array<{ name: string; mountPath: string }> }>),
+    ...(earlier.spec.containers as Array<{ volumeMounts: Array<{ name: string; mountPath: string }> }>)]) {
+    c.volumeMounts = c.volumeMounts.map((m) => (m.mountPath === '/tmp' ? { name: 'temporary', mountPath: '/tmp' } : m));
+  }
+  const relabelled = structuredClone(earlier);
+  relabelled.metadata.labels = { ...relabelled.metadata.labels, extra: 'x' };
+  const recorded = reserved({ podUid: 'pod-uid', managementState: 'READY', resourceOperationState: 'COMPLETED' });
+  assert.deepEqual(
+    decide({ ...create(relabelled, 'system:serviceaccount:kube-system:generic-garbage-collector'), operation: 'UPDATE', oldObject: earlier }, recorded),
+    { allowed: true, reason: 'UNCHANGED' },
+  );
+  // A volume of its own mounted at /tmp, a hostPath, is still no managed runner's.
+  const hostTmp = structuredClone(pod);
+  hostTmp.spec.volumes = [...hostTmp.spec.volumes!, { name: 'host-tmp', hostPath: { path: '/tmp' } }];
+  refusedWith(decide(create(hostTmp)), 'NOT_THE_TEMPLATE', 'a hostPath /tmp');
+});
+
 test('any other Pod using the volume is refused: another name, no labels, a Job, a read-only mount, on the same node or another', () => {
   const tenant = 'system:serviceaccount:orbit-cloud-test:default';
   const cases: Array<[string, PodAdmissionRequest, string]> = [
@@ -157,8 +182,8 @@ test('the manager itself is refused for anything but the reserved generation’s
   tampered((pod) => void (pod.spec.ephemeralContainers = [{ name: 'debug', image: profile.runner.image }]), 'an ephemeral container');
 });
 
-test('the Documents drive is the one addition: exactly its CSI volume, mounted only by the runner as designed', () => {
-  // docs/documents-drive-technical-design.md §6.1 (B13): the Pod of a profile with the drive.
+test('the Drive is the one addition: exactly its CSI volume, mounted only by the runner as designed', () => {
+  // docs/drive-technical-design.md §6.1 (B13): the Pod of a profile with the drive.
   const drivePod = (generation = 3) =>
     buildManagedPod({ ownerId: OWNER, runnerId: RUNNER, generation, namespace: NS }, PVC_UID, testManagedRunnerProfile({ files: true }));
   assert.deepEqual(decide(create(drivePod())), { allowed: true, reason: 'AUTHORIZED' });
@@ -167,8 +192,8 @@ test('the Documents drive is the one addition: exactly its CSI volume, mounted o
 
   type Mount = Record<string, unknown>;
   const runnerMounts = (pod: Pod) => (pod.spec.containers as Array<{ volumeMounts: Mount[] }>)[0].volumeMounts;
-  const driveMount = (pod: Pod) => runnerMounts(pod).find((m) => m.name === 'orbit-documents')!;
-  const driveVolume = (pod: Pod) => pod.spec.volumes!.find((v) => v.name === 'orbit-documents') as unknown as { csi: Record<string, unknown> };
+  const driveMount = (pod: Pod) => runnerMounts(pod).find((m) => m.name === 'orbit-drive')!;
+  const driveVolume = (pod: Pod) => pod.spec.volumes!.find((v) => v.name === 'orbit-drive') as unknown as { csi: Record<string, unknown> };
   const tampered = (change: (pod: Pod) => void, label: string) => {
     const pod = drivePod();
     change(pod);
@@ -178,17 +203,17 @@ test('the Documents drive is the one addition: exactly its CSI volume, mounted o
   tampered((pod) => void (driveVolume(pod).csi.volumeAttributes = { runnerId: RUNNER, extra: 'x' }), 'an attribute beyond runnerId');
   tampered((pod) => void (driveVolume(pod).csi.volumeAttributes = {}), 'no runnerId');
   tampered((pod) => void delete driveVolume(pod).csi.volumeAttributes, 'no attributes');
-  tampered((pod) => void (driveVolume(pod).csi.driver = 'documents.orbit.dev.evil'), 'another CSI driver');
+  tampered((pod) => void (driveVolume(pod).csi.driver = 'drive.orbit.dev.evil'), 'another CSI driver');
   tampered((pod) => void (driveVolume(pod).csi.readOnly = true), 'a read-only CSI volume');
   tampered((pod) => void (driveVolume(pod).csi.nodePublishSecretRef = { name: 'mrf-x' }), 'a publish Secret');
-  tampered((pod) => void pod.spec.volumes!.push({ name: 'orbit-documents-2', csi: { driver: 'documents.orbit.dev', volumeAttributes: { runnerId: RUNNER } } }), 'a second drive volume');
+  tampered((pod) => void pod.spec.volumes!.push({ name: 'orbit-drive-2', csi: { driver: 'drive.orbit.dev', volumeAttributes: { runnerId: RUNNER } } }), 'a second drive volume');
   tampered((pod) => void pod.spec.volumes!.push({ name: 'rbd', csi: { driver: 'rbd.csi.ceph.com', volumeAttributes: {} } }), 'any other CSI volume');
   tampered((pod) => void (driveMount(pod).mountPath = '/home/orbit/Documents'), 'mounted elsewhere');
   tampered((pod) => void (driveMount(pod).mountPropagation = 'Bidirectional'), 'Bidirectional propagation');
   tampered((pod) => void delete driveMount(pod).mountPropagation, 'no propagation');
   tampered((pod) => void (driveMount(pod).readOnly = true), 'mounted read-only');
   tampered((pod) => void (driveMount(pod).subPath = 'drive'), 'a subPath');
-  tampered((pod) => void (pod.spec.initContainers as Array<{ volumeMounts: Mount[] }>)[0].volumeMounts.push({ name: 'orbit-documents', mountPath: '/run/orbit-documents', mountPropagation: 'HostToContainer' }), 'mounted in the init container');
+  tampered((pod) => void (pod.spec.initContainers as Array<{ volumeMounts: Mount[] }>)[0].volumeMounts.push({ name: 'orbit-drive', mountPath: '/run/orbit-drive', mountPropagation: 'HostToContainer' }), 'mounted in the init container');
   // Everything else is as strict as before, drive or not.
   tampered((pod) => void ((pod.spec.containers as Array<Record<string, unknown>>)[0].securityContext = { privileged: true }), 'a privileged container beside the drive');
   tampered((pod) => void pod.spec.volumes!.push({ name: 'host', hostPath: { path: '/dev/fuse' } }), 'a host path beside the drive');
@@ -199,41 +224,53 @@ test('the Documents drive is the one addition: exactly its CSI volume, mounted o
   refusedWith(decide(update(drivePod())), 'IMMUTABLE_IDENTITY', 'the drive added by an update');
 });
 
-test('during the rename to Documents the old drive is admitted too, files.orbit.dev at /run/orbit-files only', () => {
-  // deploy/managed-runner/documents-csi/README.md, "Moving from files.orbit.dev": a Pod an apiserver from before the
-  // rename creates has the old driver at the old path, and is as strictly the template as a new one.
-  type Mount = Record<string, unknown>;
-  const legacyPod = (change: (volume: { name: string; csi: Record<string, unknown> }, mount: Mount) => void = () => {}) => {
-    const pod = buildManagedPod({ ownerId: OWNER, runnerId: RUNNER, generation: 3, namespace: NS }, PVC_UID, testManagedRunnerProfile({ files: true }));
-    const volume = pod.spec.volumes!.find((v) => v.name === 'orbit-documents') as unknown as { name: string; csi: Record<string, unknown> };
-    const mount = (pod.spec.containers as Array<{ volumeMounts: Mount[] }>)[0].volumeMounts.find((m) => m.name === 'orbit-documents')!;
-    volume.name = 'orbit-files';
-    volume.csi.driver = 'files.orbit.dev';
-    mount.name = 'orbit-files';
-    mount.mountPath = '/run/orbit-files';
-    change(volume, mount);
-    return pod;
-  };
-  assert.deepEqual(decide(create(legacyPod())), { allowed: true, reason: 'AUTHORIZED' });
-  // An old Pod's own updates (the manager taking its finalizer off, a label) are not refused either.
-  const old = legacyPod();
-  const relabelled = legacyPod();
-  relabelled.metadata.labels = { ...relabelled.metadata.labels, touched: 'yes' };
-  assert.deepEqual(decide({ ...create(relabelled), operation: 'UPDATE', object: relabelled, oldObject: old }), { allowed: true, reason: 'UNCHANGED' });
+// deploy/managed-runner/drive-csi/README.md, "Moving from an older driver": a Pod an apiserver from before the rename
+// to Drive creates has documents.orbit.dev at /run/orbit-documents, and one from before the rename to Drive has
+// files.orbit.dev at /run/orbit-files. Each is admitted while it drains, as strictly the template as a new one.
+for (const [driver, volumeName, mountPath] of [
+  ['documents.orbit.dev', 'orbit-documents', '/run/orbit-documents'],
+  ['files.orbit.dev', 'orbit-files', '/run/orbit-files'],
+] as const) {
+  test(`while old Pods drain, the old driver ${driver} is admitted too, at ${mountPath} only`, () => {
+    type Mount = Record<string, unknown>;
+    const legacyPod = (change: (volume: { name: string; csi: Record<string, unknown> }, mount: Mount) => void = () => {}) => {
+      const pod = buildManagedPod({ ownerId: OWNER, runnerId: RUNNER, generation: 3, namespace: NS }, PVC_UID, testManagedRunnerProfile({ files: true }));
+      const volume = pod.spec.volumes!.find((v) => v.name === 'orbit-drive') as unknown as { name: string; csi: Record<string, unknown> };
+      const mount = (pod.spec.containers as Array<{ volumeMounts: Mount[] }>)[0].volumeMounts.find((m) => m.name === 'orbit-drive')!;
+      volume.name = volumeName;
+      volume.csi.driver = driver;
+      mount.name = volumeName;
+      mount.mountPath = mountPath;
+      change(volume, mount);
+      return pod;
+    };
+    assert.deepEqual(decide(create(legacyPod())), { allowed: true, reason: 'AUTHORIZED' });
+    // An old Pod's own updates (the manager taking its finalizer off, a label) are not refused either.
+    const old = legacyPod();
+    const relabelled = legacyPod();
+    relabelled.metadata.labels = { ...relabelled.metadata.labels, touched: 'yes' };
+    assert.deepEqual(decide({ ...create(relabelled), operation: 'UPDATE', object: relabelled, oldObject: old }), { allowed: true, reason: 'UNCHANGED' });
+    // Nor is it changed to the new driver by an update: a Pod's volumes are fixed.
+    const renewed = buildManagedPod({ ownerId: OWNER, runnerId: RUNNER, generation: 3, namespace: NS }, PVC_UID, testManagedRunnerProfile({ files: true }));
+    refusedWith(decide({ ...create(renewed), operation: 'UPDATE', object: renewed, oldObject: old }), 'IMMUTABLE_IDENTITY', 'an old Pod moved to the new driver by an update');
 
-  // Each driver only at its own path, and the old one no looser than the new one.
-  refusedWith(decide(create(legacyPod((_, mount) => void (mount.mountPath = '/run/orbit-documents')))), 'NOT_THE_TEMPLATE', 'the old driver at the new path');
-  const newAtOldPath = buildManagedPod({ ownerId: OWNER, runnerId: RUNNER, generation: 3, namespace: NS }, PVC_UID, testManagedRunnerProfile({ files: true }));
-  (newAtOldPath.spec.containers as Array<{ volumeMounts: Mount[] }>)[0].volumeMounts.find((m) => m.name === 'orbit-documents')!.mountPath = '/run/orbit-files';
-  refusedWith(decide(create(newAtOldPath)), 'NOT_THE_TEMPLATE', 'the new driver at the old path');
-  refusedWith(decide(create(legacyPod((volume) => void (volume.csi.volumeAttributes = { runnerId: OTHER_RUNNER })))), 'NOT_THE_TEMPLATE', 'another runner’s old drive');
-  refusedWith(decide(create(legacyPod((volume) => void (volume.csi.driver = 'files.orbit.dev.evil')))), 'NOT_THE_TEMPLATE', 'a look-alike of the old driver');
-  refusedWith(decide(create(legacyPod((volume) => void (volume.csi.readOnly = true)))), 'NOT_THE_TEMPLATE', 'a read-only old drive');
-  refusedWith(decide(create(legacyPod((_, mount) => void (mount.mountPropagation = 'Bidirectional')))), 'NOT_THE_TEMPLATE', 'the old drive with Bidirectional propagation');
-  const both = legacyPod();
-  both.spec.volumes!.push({ name: 'orbit-documents', csi: { driver: 'documents.orbit.dev', volumeAttributes: { runnerId: RUNNER } } });
-  refusedWith(decide(create(both)), 'NOT_THE_TEMPLATE', 'both drivers in one Pod');
-});
+    // Each driver only at its own path, and the old one no looser than the new one.
+    for (const other of ['/run/orbit-drive', '/run/orbit-documents', '/run/orbit-files'].filter((p) => p !== mountPath)) {
+      refusedWith(decide(create(legacyPod((_, mount) => void (mount.mountPath = other)))), 'NOT_THE_TEMPLATE', `${driver} at ${other}`);
+    }
+    const newAtOldPath = buildManagedPod({ ownerId: OWNER, runnerId: RUNNER, generation: 3, namespace: NS }, PVC_UID, testManagedRunnerProfile({ files: true }));
+    (newAtOldPath.spec.containers as Array<{ volumeMounts: Mount[] }>)[0].volumeMounts.find((m) => m.name === 'orbit-drive')!.mountPath = mountPath;
+    refusedWith(decide(create(newAtOldPath)), 'NOT_THE_TEMPLATE', `drive.orbit.dev at ${mountPath}`);
+    refusedWith(decide(create(legacyPod((volume) => void (volume.csi.volumeAttributes = { runnerId: OTHER_RUNNER })))), 'NOT_THE_TEMPLATE', 'another runner’s old drive');
+    refusedWith(decide(create(legacyPod((volume) => void (volume.csi.driver = `${driver}.evil`)))), 'NOT_THE_TEMPLATE', 'a look-alike of the old driver');
+    refusedWith(decide(create(legacyPod((volume) => void (volume.csi.readOnly = true)))), 'NOT_THE_TEMPLATE', 'a read-only old drive');
+    refusedWith(decide(create(legacyPod((_, mount) => void (mount.mountPropagation = 'Bidirectional')))), 'NOT_THE_TEMPLATE', 'the old drive with Bidirectional propagation');
+    refusedWith(decide(create(legacyPod((_, mount) => void (mount.mountPath = '/home/orbit/Drive')))), 'NOT_THE_TEMPLATE', 'the old drive mounted elsewhere');
+    const both = legacyPod();
+    both.spec.volumes!.push({ name: 'orbit-drive', csi: { driver: 'drive.orbit.dev', volumeAttributes: { runnerId: RUNNER } } });
+    refusedWith(decide(create(both)), 'NOT_THE_TEMPLATE', 'both drivers in one Pod');
+  });
+}
 
 test('volumes are resolved from the database, never from the Pod: unknown, aliased and doubled claims are refused', () => {
   const tenant = 'system:serviceaccount:orbit-cloud-test:default';

@@ -49,6 +49,10 @@ const OWNER_ITEM_WRITERS: Record<string, string> = {
     + '(§4.6 X-E5), whose items are opened by projects/open-item-escalation.service.ts and announced '
     + 'there',
   'projects/project-fuse.service.ts': 'evaluate (F-T1), which announces after its transaction',
+  'projects/project-orphan-sweep.service.ts':
+    'openEvidenceItem: the EVIDENCE_UNDECIDED item for a revision nobody can decide, or that was handed '
+    + 'to nobody, still unanswered the project\'s window after its notice; escalateEvidence announces it '
+    + 'after the commit',
   'projects/owner-decision-signal.ts': 'a READ: it counts the owner’s items, it opens none',
   'runner-api/integration-job-relay.ts':
     'no item of its own: the string labels the timeline fact (`HANDED_TO`, §2.9 LS2) that this '
@@ -67,6 +71,8 @@ const ANNOUNCERS: Record<string, string> = {
     'a question filed for the owner (R9), an item handed over when nobody can read it (X-D6), and '
     + 'a failure opened with the owner on it already (X-C3)',
   'projects/project-fuse.service.ts': 'the coordinator pausing itself (F-T1)',
+  'projects/project-orphan-sweep.service.ts':
+    'the evidence nobody could decide, or nobody was handed, that waited out the window after its notice',
   'projects/open-item-escalation.service.ts':
     'the clock handing an item over (X-E1), and the one it opens for a claim whose runner stopped '
     + 'reporting (X-E5)',

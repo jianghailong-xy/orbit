@@ -340,7 +340,7 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     assert.equal(failed.attempt, 3);
     assert.deepEqual({ ...(failed.lastError as object), detail: undefined }, {
       code: 'RETRY_EXHAUSTED',
-      message: 'Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.',
+      message: 'Provisioning kept failing on transient infrastructure errors and stopped. It is tried again by itself later while work is waiting for it, and a retry tries it now.',
       retryable: true,
       detail: undefined,
     });

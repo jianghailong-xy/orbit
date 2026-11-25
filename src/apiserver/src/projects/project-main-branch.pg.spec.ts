@@ -82,6 +82,7 @@ import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectFuseService } from './project-fuse.service';
 import { ProjectHandoffService } from './project-handoff.service';
 import { enqueueForDoneTask } from './project-integration-job';
+import { projectBranchRef } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
@@ -111,6 +112,8 @@ interface Account { ownerId: string; runnerId: string }
 interface Fixture extends Account {
   projectId: string;
   publicId: string;
+  /** The project branch a line nobody named gets, as a full ref (`projectBranchRef`). */
+  branchRef: string;
   workspaceId: string;
   sessionId: string;
 }
@@ -306,7 +309,10 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     await projects.update(who.ownerId, projectId, {
       acceptanceCriteriaItems: [{ text: CRITERION, verificationMethod: METHOD }],
     } as never);
-    return { ...who, projectId, publicId: uuidToBase62(projectId), workspaceId, sessionId };
+    return {
+      ...who, projectId, publicId: uuidToBase62(projectId),
+      branchRef: projectBranchRef(projectId, `${label} project`), workspaceId, sessionId,
+    };
   }
 
   async function seal(f: Fixture): Promise<string> {
@@ -429,7 +435,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     assert.equal(onBranch.status, 201, onBranch.body);
     const branchedRow = await bindingOf(branched);
     assert.equal(branchedRow?.upstream_ref, 'refs/heads/develop');
-    assert.equal(branchedRow?.integration_ref, `refs/heads/project/${branched.publicId}`);
+    assert.equal(branchedRow?.integration_ref, branched.branchRef);
     assert.ok(branchedRow?.upstream_ref_chosen_at instanceof Date);
   });
 
@@ -451,7 +457,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     assert.equal(chosen.status, 200, chosen.body);
     const row = await bindingOf(next);
     assert.equal(row?.upstream_ref, 'refs/heads/master', 'bound on the main branch chosen last');
-    assert.equal(row?.integration_ref, `refs/heads/project/${next.publicId}`);
+    assert.equal(row?.integration_ref, next.branchRef);
     assert.equal(row?.upstream_ref_chosen_at, null,
       'carrying the owner’s last choice is not a choice of this project’s');
     const view = await integrationOf(next);
@@ -862,7 +868,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     // coordination workspace's checkout.
     const branched = await project(lister, 'on-its-branch', REPO_URL);
     assert.equal((await configure(branched, { line: 'PROJECT_BRANCH', upstreamRef: 'refs/heads/master' })).status, 200);
-    const projectBranch = `project/${branched.publicId}`;
+    const projectBranch = branched.branchRef.slice('refs/heads/'.length);
     assert.equal((await bindingOf(branched))?.integration_ref, `refs/heads/${projectBranch}`);
     // One straight onto master, whose integration ref is master itself.
     const straight = await project(lister, 'straight-onto-master', REPO_URL);
@@ -874,7 +880,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     const stranger = await account('lister-stranger');
     const theirs = await project(stranger, 'theirs-on-its-branch', REPO_URL);
     assert.equal((await configure(theirs, { line: 'PROJECT_BRANCH' })).status, 200);
-    const theirBranch = `project/${theirs.publicId}`;
+    const theirBranch = theirs.branchRef.slice('refs/heads/'.length);
 
     // The coordinator's own session is the newest in its workspace: what its runner reports there.
     const report = async (f: Fixture, names: string[]) => {

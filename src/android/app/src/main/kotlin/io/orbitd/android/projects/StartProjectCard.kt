@@ -125,7 +125,7 @@ internal fun StartProjectCard(
         // record says what it started with, in one line.
         StartCardHead(StartProjectCopy.howItRuns)
         if (recorded) StartCardPanel {
-            Text(StartProjectCopy.settingsLine(draft, StartProjectCopy.branch(request.settings.projectBranchName, projectId)),
+            Text(StartProjectCopy.settingsLine(draft, StartProjectCopy.branch(request.settings.projectBranchName, request.defaultProjectBranchName, projectId)),
                 Modifier.padding(12.dp).testTag("$tag-settings"), style = MaterialTheme.typography.bodySmall, color = muted)
         } else StartCardPanel {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -346,7 +346,7 @@ private fun LineRow(draft: StartProjectCopy.Draft, request: StartProjectCopy.Req
                 Text("${if (draft.line == "MAIN") RunSettings.lineMain(draft.main) else RunSettings.lineProjectBranch} ▾", maxLines = 1) }
             DropdownMenu(menu, { menu = false }) {
                 listOf(Triple("PROJECT_BRANCH", RunSettings.lineProjectBranch,
-                    "${StartProjectCopy.branch(request.settings.projectBranchName, projectId)} — ${RunSettings.lineProjectBranchHint}"),
+                    "${StartProjectCopy.branch(request.settings.projectBranchName, request.defaultProjectBranchName, projectId)} — ${RunSettings.lineProjectBranchHint}"),
                     Triple("MAIN", RunSettings.lineMain(draft.main), RunSettings.lineMainHint(draft.main))).forEach { (value, title, hint) ->
                     DropdownMenuItem(text = { Column(Modifier.widthIn(max = 280.dp)) {
                         Text(if (draft.line == value) "✓ $title" else title); Text(hint, style = MaterialTheme.typography.labelSmall) } },

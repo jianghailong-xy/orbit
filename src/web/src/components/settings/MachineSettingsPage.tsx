@@ -312,7 +312,11 @@ export function MachineSettingsPage() {
   // into the runner list at once, so a control doesn't snap back to the old number while the save lands.
   const capacityMut = useMutation({
     mutationFn: (patch: { maxConcurrent?: number; burstConcurrent?: number; minFreeDiskMb?: number | null }) =>
-      api(`/runners/${runnerId}`, { method: 'PATCH', body: patch }),
+      api<{ notice?: string }>(`/runners/${runnerId}`, { method: 'PATCH', body: patch }),
+    // A managed runner's Max Concurrent is at most what its memory allows: the server says when it lowered the value.
+    onSuccess: (saved) => {
+      if (saved?.notice) message.info('Max Concurrent lowered', saved.notice);
+    },
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: ['runners'] });
       const previous = qc.getQueryData<Runner[]>(['runners']);

@@ -78,7 +78,8 @@ import {
   verificationEpochNeedsHumanSql,
   verificationEpochOpenSql,
 } from '../tasks/verification-dependency';
-import { type CoordinatorHandoffSuccessor, ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
+import { type CoordinatorHandoffSuccessor, PROJECT_REOPEN_NOTES, ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
+import { settlePendingProjectReopens, type SettledProjectReopen } from '../owner-requests/project-reopen';
 import {
   CRITERIA_DECISIONS,
   CreateProjectDto,
@@ -3076,7 +3077,7 @@ export class ProjectsService {
       settingChanges,
       blockers,
       integration: {
-        ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+        ...projectIntegrationView(codebase, project.exceptionEscalationSeconds, project),
         lastMainBranch: lastMainBranchView(mainBranchMemory),
       },
       // The projection itself, whole: `withheld` is every clause that does not hold — ALL of them,
@@ -3161,7 +3162,7 @@ export class ProjectsService {
   async integration(ownerId: string, id: string): Promise<ProjectIntegrationView> {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
-      select: { exceptionEscalationSeconds: true },
+      select: { exceptionEscalationSeconds: true, title: true },
     });
     if (!project) throw new NotFoundException('project not found');
     return readProjectIntegrationView(
@@ -3170,6 +3171,7 @@ export class ProjectsService {
       projectIntegrationView(
         await readProjectCodebase(this.prisma, id),
         project.exceptionEscalationSeconds,
+        { id, title: project.title },
       ),
     );
   }
@@ -4190,6 +4192,15 @@ export class ProjectsService {
         const reopen = await ProjectsService.reopenRecord(
           tx, ownerId, id, dto.status, locked.status, credential,
         );
+        // A write that takes the project out of DONE or CANCELLED answers every agent's waiting request to reopen it
+        // (PROJECT_REOPEN, docs/project-reopen-request-design.md §4.3), in this transaction: no card stays up for a
+        // project that is already open.
+        const reopenRequests = dto.status === SharedProjectStatus.OPEN && locked.status !== SharedProjectStatus.OPEN
+          ? await settlePendingProjectReopens(tx, ownerId, id, 'DONE', {
+            resolvedByUserId: credential?.kind === 'LOGIN' ? ownerId : null,
+            resolutionNote: PROJECT_REOPEN_NOTES.reopenedFromPage,
+          }, new Date())
+          : [];
         const project = await tx.project.update({
           where: { id },
           data: { ...data, ...pause, ...reopen },
@@ -4223,7 +4234,7 @@ export class ProjectsService {
         const switchedOn = dto.coordinatorEnabled === true
           && (locked.coordinator_enabled === false || pause?.pausedAt === null)
           && projectMoves(project);
-        return { project, changedSessionId, held, switchedOn, pauseMoved: pause !== null };
+        return { project, changedSessionId, held, switchedOn, pauseMoved: pause !== null, reopenRequests };
       }, loggedRetry(this.logger, 'projects.update'));
     try {
       let projectResult: {
@@ -4232,6 +4243,7 @@ export class ProjectsService {
         held: HeldCriteriaEdit | null;
         switchedOn: boolean;
         pauseMoved: boolean;
+        reopenRequests: SettledProjectReopen[];
       } | null = null;
       for (let bindingAttempt = 1; bindingAttempt <= 4; bindingAttempt += 1) {
         try {
@@ -4253,8 +4265,12 @@ export class ProjectsService {
         }
       }
       if (!projectResult) throw new CoordinatorBindingChanged();
-      const { project, changedSessionId, held, switchedOn, pauseMoved } = projectResult;
+      const { project, changedSessionId, held, switchedOn, pauseMoved, reopenRequests } = projectResult;
       if (changedSessionId) this.sessions?.announceProjectSessionChanged?.(changedSessionId);
+      // The answered reopen requests' askers read their waiting state again; the delivery worker's poll sends the endings.
+      if (reopenRequests.length > 0) {
+        this.realtime?.publishOwnerSignalChanged(ownerId, reopenRequests.flatMap((request) => request.askers));
+      }
       // The older switch paused or resumed the project: every other client of the owner re-reads it.
       if (pauseMoved) this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
       // The Automatic switch is the other press that starts a project (`project-started.ts`), and
@@ -4856,6 +4872,7 @@ export class ProjectsService {
    */
   async remove(ownerId: string, id: string) {
     let releasedCoordinatorSessionId: string | null = null;
+    let withdrawnReopenRequests: SettledProjectReopen[] = [];
     try {
       // Retried whole: a delete re-reads what it is deleting under the row lock, and deleting
       // something already gone is the same answer on any attempt.
@@ -4871,6 +4888,10 @@ export class ProjectsService {
         releasedCoordinatorSessionId = locked[0].coordinator_session_id;
         const tasks = await tx.task.count({ where: { projectId: id } });
         if (tasks > 0) throw new ConflictException(this.notEmptyRefusal(id, tasks));
+        // An agent's waiting request to reopen it has nothing left to reopen (PROJECT_REOPEN, design §4.3).
+        withdrawnReopenRequests = await settlePendingProjectReopens(tx, ownerId, id, 'WITHDRAWN', {
+          resolutionNote: PROJECT_REOPEN_NOTES.projectDeleted,
+        }, new Date());
         await tx.project.delete({ where: { id } });
       }, loggedRetry(this.logger, 'projects.remove'));
     } catch (e) {
@@ -4880,6 +4901,9 @@ export class ProjectsService {
         throw new ConflictException(this.notEmptyRefusal(id));
       }
       throw e;
+    }
+    if (withdrawnReopenRequests.length > 0) {
+      this.realtime?.publishOwnerSignalChanged(ownerId, withdrawnReopenRequests.flatMap((request) => request.askers));
     }
     if (releasedCoordinatorSessionId) {
       // The Project is already durably gone. Provenance cleanup is best effort: surfacing its

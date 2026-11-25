@@ -2105,6 +2105,20 @@ func (t *Transport) requestProjectDone(sessionID, id string, body map[string]int
 	return out, err
 }
 
+// requestProjectReopen files a session's request that the account owner reopen a DONE or CANCELLED
+// project, and returns at once: the owner answers on the card. Any session may ask; the session
+// header names the asker. A project already OPEN is 409 PROJECT_ALREADY_OPEN and an ask the owner
+// declined is 409 REOPEN_REQUEST_DECLINED, both travelling as the server raised them.
+func (t *Transport) requestProjectReopen(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/reopen-requests", body,
+		&out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // criterionConfirmationCall is the coordinator's confirm, withdraw or start-a-check on one of its
 // project's CONFIRMATION criteria (migration 0545). The session header is the authority: the server
 // checks it against the project's own coordinator pointer.
@@ -3053,6 +3067,23 @@ func (t *Transport) writeWikiNote(sessionID string, body interface{}) (json.RawM
 func (t *Transport) draftWiki(sessionID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	_, err := t.doWiki(http.MethodPost, "/runner/wiki/drafts", body, &out, taskOpTimeout, sessionHeader(sessionID), wikiRecordsOnce(body))
+	return out, err
+}
+
+// readWiki is a wiki chat's read of its space (`wiki_read`, contract `chat.read`). Only a read: it is sent again like one.
+func (t *Transport) readWiki(sessionID string, query wikiReadQueryArgs) (json.RawMessage, error) {
+	values := url.Values{}
+	for name, value := range map[string]string{"q": query.Q, "doc": query.Doc, "section": query.Section, "draft": query.Draft, "more": query.More} {
+		if value != "" {
+			values.Set(name, value)
+		}
+	}
+	path := "/runner/wiki/read"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var out json.RawMessage
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 

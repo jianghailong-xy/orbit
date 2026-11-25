@@ -55,7 +55,9 @@ managed_runner_of_tag() {
   [[ "$1" =~ $RELEASE_TAG_PATTERN ]] || return 1
   commit="$(git rev-parse -q --verify "refs/tags/$1^{commit}" 2>/dev/null || true)"
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || return 1
-  git show "$commit:deploy/managed-runner/image/Dockerfile" 2>/dev/null | grep -q '^ARG ORBIT_RELEASE_VERSION' || return 1
+  # grep reads to the end: `grep -q` exits at its match, and git show still writing then dies of SIGPIPE, which the
+  # callers' pipefail turned into "no ORBIT_RELEASE_VERSION" (v0.1.261-beta.94, about 3% of runs under systemd-run).
+  git show "$commit:deploy/managed-runner/image/Dockerfile" 2>/dev/null | grep '^ARG ORBIT_RELEASE_VERSION' >/dev/null || return 1
   MR_RELEASE_TAG="$1"
   MR_REVISION="$commit"
   MR_VERSION="${1#v}"

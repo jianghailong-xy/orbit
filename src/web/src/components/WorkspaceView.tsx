@@ -287,7 +287,7 @@ import { startHistoryImport } from '../lib/claudeHistoryImport';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
-import { useDocumentsEnabled } from '../lib/documentsSwitch';
+import { useDriveEnabled } from '../lib/driveSwitch';
 import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
@@ -394,7 +394,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { DocumentsFilePicker } from './documents/DocumentsFilePicker';
+import { DriveFilePicker } from './drive/DriveFilePicker';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
@@ -12497,10 +12497,10 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // The `+` menu's Documents picker (board docs/mocks/documents, 02-web frame 8).
-  const [documentsPickerOpen, setDocumentsPickerOpen] = useState(false);
-  // No Documents item on a server without Documents (ORBIT_DOCUMENTS_ENABLED), nor until that is read.
-  const documentsEnabled = useDocumentsEnabled().enabled;
+  // The `+` menu's Drive picker (board docs/mocks/drive, 02-web frame 8).
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  // No Drive item on a server without Drive (ORBIT_DRIVE_ENABLED), nor until that is read.
+  const driveEnabled = useDriveEnabled().enabled;
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -12692,8 +12692,8 @@ export function SessionComposer({
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   // Files the drive picker returned go into the draft as chips (`#name`, like a `#` reference) that are sent as their
-  // `/home/orbit/Documents/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
-  const insertDocumentsFiles = (files: { id: string; name: string; path: string }[]): void => {
+  // `/home/orbit/Drive/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
+  const insertDriveFiles = (files: { id: string; name: string; path: string }[]): void => {
     let refs = composerRefs;
     let chips = '';
     for (const file of files) {
@@ -12705,7 +12705,7 @@ export function SessionComposer({
     }
     setComposerRefs(refs);
     setText((t) => `${t}${t && !/\s$/.test(t) ? ' ' : ''}${chips}`);
-    setDocumentsPickerOpen(false);
+    setDrivePickerOpen(false);
     setTimeout(() => taRef.current?.focus(), 0);
   };
   const insertShell = (): void => {
@@ -13192,7 +13192,7 @@ export function SessionComposer({
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
-              // This device's File and Image, then the account's Documents.
+              // This device's File and Image, then the account's Drive.
               {
                 key: 'file',
                 icon: <PaperClipOutlined />,
@@ -13207,13 +13207,13 @@ export function SessionComposer({
                 label: 'Image',
                 onSelect: () => imageInputRef.current?.click(),
               },
-              ...(documentsEnabled
+              ...(driveEnabled
                 ? [
                     {
                       key: 'drive',
                       icon: <FolderOpenOutlined />,
-                      label: 'Documents',
-                      onSelect: () => setTimeout(() => setDocumentsPickerOpen(true), 0),
+                      label: 'Drive',
+                      onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
                     },
                   ]
                 : []),
@@ -13261,21 +13261,21 @@ export function SessionComposer({
           }
         />
         )}
-        {!shellMode && documentsEnabled && (
+        {!shellMode && driveEnabled && (
           <Popover
             side="top"
             align="start"
             arrow={false}
             title={null}
-            open={documentsPickerOpen}
-            onOpenChange={setDocumentsPickerOpen}
+            open={drivePickerOpen}
+            onOpenChange={setDrivePickerOpen}
             disabled={composerDisabled}
             popupClassName="drive-picker-popover"
-            // No chip of its own: the picker opens from the `+` menu's Documents, and this
+            // No chip of its own: the picker opens from the `+` menu's Drive, and this
             // zero-width, unfocusable button only anchors it beside the `+`.
             trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
           >
-            <DocumentsFilePicker projectFolder={projectFolder} onClose={() => setDocumentsPickerOpen(false)} onPick={insertDocumentsFiles} />
+            <DriveFilePicker projectFolder={projectFolder} onClose={() => setDrivePickerOpen(false)} onPick={insertDriveFiles} />
           </Popover>
         )}
         {/* The workspace is only a Select when it can actually be picked (new, unlocked

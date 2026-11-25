@@ -31,6 +31,7 @@ import {
   isEngine,
   keyDialect,
   planUsageBlockedUntil,
+  PROJECT_REOPEN_TOOL,
   planUsageReported,
   RunEventType,
   SessionEndReason,
@@ -105,6 +106,8 @@ import {
 } from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
+import { TaskRunIdleService } from '../projects/task-run-idle.service';
+import { ProjectLineBlockedService } from '../projects/project-line-blocked.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from './evidence-review.service';
 import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
@@ -2362,6 +2365,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      */
     @Optional() conditions?: ConditionsService,
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
+    @Optional() private readonly runIdle?: TaskRunIdleService,
+    @Optional() private readonly lineBlocked?: ProjectLineBlockedService,
   ) {
     this.conditions = conditions ?? new ConditionsService(prisma);
     // A task's startWhen fired (docs/condition-triggers-design.md §5.2): in the firing's own transaction, the task
@@ -2835,6 +2840,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
       .then(() => this.deliverLooksFinishedOwedTo())
       .then(() => this.coordinatorFacts?.deliverOwedTo())
+      .then(() => this.runIdle?.tick())
+      .then(() => this.lineBlocked?.tick())
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
       .then(() => this.evidenceReviews?.deliverOwedTo())
       .then(() => this.evidenceReviews?.deliverSendBacksOwedTo())
@@ -7140,7 +7147,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             + `${uuidToBase62(from)}, which is settled, and a settled project gives up only work `
             + 'none of its criteria count'
           : `project ${to ? uuidToBase62(to) : '(none)'} is not open, and a settled project takes no work until `
-            + 'it is reopened');
+            + 'the account owner reopens it. The session that asked for this move can ask them with '
+            + `${PROJECT_REOPEN_TOOL} (the project id, why, and the work it plans to add)`);
     }
     await this.handoffs.assertMoveNotLanding(tx, ownerId, taskId, {
       handoffId: row.id,
@@ -14396,7 +14404,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           mimeType: source.mimeType,
           sizeBytes: source.sizeBytes,
           fileName: source.fileName,
-          // The same stored bytes as the source; only a row from before Documents carries `data`.
+          // The same stored bytes as the source; only a row from before Drive carries `data`.
           sha256: source.sha256,
           data: source.data,
         },
@@ -14418,7 +14426,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * already scoped to it, which is what `createTurn`/`resume` require of an attachment they link.
    * Returns [] for a task with no inputs, so a caller pays one indexed read and nothing else.
    *
-   * A copy is a ROW, never the bytes again (docs/documents-design.md §2.1): it names the template's
+   * A copy is a ROW, never the bytes again (docs/drive-design.md §2.1): it names the template's
    * stored bytes by their sha256, and the bytes are read by neither. A template from before Orbit
    * Files, whose bytes are still in `data`, has them kept in the file store the first time it is
    * copied (`FilesService.referenceOf`), and is copied the same way from then on.

@@ -522,7 +522,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 	if err != nil {
 		return failedOpenCodeSpawn("stderr", err, emit)
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		if ctx.Err() != nil {
 			return cancelledOpenCodeTurn(ctx, result.RuntimeSessionID)
 		}
@@ -1101,7 +1101,7 @@ func applyOpenCodePermissions(permission map[string]interface{}, agent AgentExec
 		permission["bash"] = "ask"
 	}
 
-	// The Documents drive is a workspace root: outside the checkout, so its external-directory check is told. Plan
+	// The drive is a workspace root: outside the checkout, so its external-directory check is told. Plan
 	// keeps its denial of every edit above, so there the drive is only read (design §7.2).
 	if guarded {
 		if roots := driveGrantRoots(); len(roots) > 0 {

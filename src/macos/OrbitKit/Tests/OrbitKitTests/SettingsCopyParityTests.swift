@@ -267,7 +267,7 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.accessTokenWords)
         assertSays(words, "}).concat(scopes.includes(NOTIFY_SCOPE) ? ['\(AccessTokensList.scopeSummary([AccessTokensList.notifyScope]))'] : []).join(' · ');",
                    in: Self.accessTokenWords)
-        XCTAssertEqual(AccessTokensList.scopeSummary(["tasks:read", "documents", "notify"]), "Tasks: read · Documents: read & write · Notifications: send")
+        XCTAssertEqual(AccessTokensList.scopeSummary(["tasks:read", "drive", "notify"]), "Tasks: read · Drive: read & write · Notifications: send")
         assertSays(words, "export const NEVER_EXPIRES = '\(AccessTokensList.neverExpires)';", in: Self.accessTokenWords)
         assertSays(words, "return 'in less than an hour';", in: Self.accessTokenWords)
         assertSays(words, "hours === 1 ? 'in 1 hour' : `in ${hours} hours`", in: Self.accessTokenWords)

@@ -1,4 +1,4 @@
-import { underEveryDocumentsPrefix } from '../documents/documents-routes';
+import { underEveryDrivePrefix } from '../drive/drive-routes';
 
 /**
  * Every route behind JwtAuthGuard that refuses a TERMINAL credential 403 TERMINAL_ROUTE_NOT_ALLOWED
@@ -326,6 +326,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /owner-requests/:id/create-wiki',
   'POST /owner-requests/:id/decline',
   'POST /owner-requests/:id/done',
+  'POST /owner-requests/:id/reopen-project',
   'POST /owner-requests/:id/secret',
   'POST /owner-requests/:id/secret/cancel',
   'POST /owner-requests/:id/secret/revoke',
@@ -540,37 +541,37 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   // Conditions (conditions/conditions.controller.ts): the owner's read of one condition a task or a schedule waits on;
   // a terminal drives sessions, not the conditions that start work.
   'GET /conditions/:id',
-  // Documents (documents/documents.controller.ts), under /documents and its /drive alias: the owner's Documents page; a
-  // terminal drives sessions, and an agent reaches Documents through its mount or the runner drive door, never these routes.
+  // Drive (drive/drive.controller.ts), under /drive and its /documents alias: the owner's Drive page; a
+  // terminal drives sessions, and an agent reaches Drive through its mount or the runner drive door, never these routes.
   ...[
-    'GET /documents/entries',
-    'GET /documents/entries/:id',
-    'GET /documents/resolve',
-    'GET /documents/search',
-    'POST /documents/folders',
-    'PATCH /documents/entries/:id',
-    'DELETE /documents/entries/:id',
-    'GET /documents/entries/:id/versions',
-    'POST /documents/versions/:id/restore',
-    'DELETE /documents/versions/:id',
-    'GET /documents/trash',
-    'GET /documents/trash/groups/:id',
-    'POST /documents/trash/groups/:id/restore',
-    'POST /documents/trash/groups/:id/items/:entryId/restore',
-    'POST /documents/entries/:id/download-link',
-    'DELETE /documents/trash/groups/:id',
-    'DELETE /documents/trash',
-    'GET /documents/changes',
-    'GET /documents/usage',
-    'GET /documents/syncs',
-    'GET /documents/syncs/:id',
-    'POST /documents/uploads',
-    'GET /documents/uploads/:id',
-    'PUT /documents/uploads/:id/chunks/:idx',
-    'POST /documents/uploads/:id/complete',
-    'DELETE /documents/uploads/:id',
-    'GET /documents/entries/:id/content',
-    'GET /documents/versions/:id/content',
-    'POST /documents/entries/:id/share-check',
-  ].flatMap(underEveryDocumentsPrefix),
+    'GET /drive/entries',
+    'GET /drive/entries/:id',
+    'GET /drive/resolve',
+    'GET /drive/search',
+    'POST /drive/folders',
+    'PATCH /drive/entries/:id',
+    'DELETE /drive/entries/:id',
+    'GET /drive/entries/:id/versions',
+    'POST /drive/versions/:id/restore',
+    'DELETE /drive/versions/:id',
+    'GET /drive/trash',
+    'GET /drive/trash/groups/:id',
+    'POST /drive/trash/groups/:id/restore',
+    'POST /drive/trash/groups/:id/items/:entryId/restore',
+    'POST /drive/entries/:id/download-link',
+    'DELETE /drive/trash/groups/:id',
+    'DELETE /drive/trash',
+    'GET /drive/changes',
+    'GET /drive/usage',
+    'GET /drive/syncs',
+    'GET /drive/syncs/:id',
+    'POST /drive/uploads',
+    'GET /drive/uploads/:id',
+    'PUT /drive/uploads/:id/chunks/:idx',
+    'POST /drive/uploads/:id/complete',
+    'DELETE /drive/uploads/:id',
+    'GET /drive/entries/:id/content',
+    'GET /drive/versions/:id/content',
+    'POST /drive/entries/:id/share-check',
+  ].flatMap(underEveryDrivePrefix),
 ];

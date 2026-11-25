@@ -9,7 +9,7 @@ import { saveUserFile } from '../lib/userFile';
 import { AttachmentImage, type RunEvent, Transcript } from './Transcript';
 
 /**
- * What a reply's file leaves behind once its bytes have gone (docs/documents-design.md §2.8): a read answers 410, and the
+ * What a reply's file leaves behind once its bytes have gone (docs/drive-design.md §2.8): a read answers 410, and the
  * conversation draws the grey tile an evidence card draws, in the card's words. Only that answer: anything else that goes wrong
  * with a read may come back, and stays what it has always been. Whether `fetchAttachmentObjectUrl` turns a 410 into this error
  * is asserted beside it, against a real `Response`.

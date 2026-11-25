@@ -1459,8 +1459,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * An agent's directory sync into the owner's Documents started, reported progress or ended
-   * (docs/documents-directory-sync-design.md S4). THE PAYLOAD IS THE SYNC'S ID AND NOTHING ELSE: the tray reads
+   * An agent's directory sync into the owner's Drive started, reported progress or ended
+   * (docs/drive-directory-sync-design.md S4). THE PAYLOAD IS THE SYNC'S ID AND NOTHING ELSE: the tray reads
    * `GET /drive/syncs`, and re-reads it on focus and reconnect. Published after the write commits, and only to the
    * streams that declared `hints=drive_syncs`.
    */
@@ -1474,7 +1474,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The owner's drive changed (docs/documents-drive-technical-design.md §5.4): a write committed rows to its change feed,
+   * The owner's drive changed (docs/drive-technical-design.md §5.4): a write committed rows to its change feed,
    * the highest of them `seq`. THE PAYLOAD IS THE SEQ AND NOTHING ELSE: no name, path or size. An accelerant only: the Files
    * page reads `GET /drive/changes` for what changed, and re-reads it on focus and reconnect. Published after the write
    * commits, and only to the streams that declared `hints=drive_changed`.

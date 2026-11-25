@@ -28,7 +28,12 @@ class ApiRequest(
     val onUploadProgress: ((Long, Long) -> Unit)? = null,
     /** How long to wait for the answer once the request is sent, where OkHttp's 10 s default is too short (a DeepSeek call). */
     val readTimeoutSeconds: Long? = null,
+    /** The whole call's limit where the 30 s default is too short: an 8 MiB Drive chunk on a slow connection. */
+    val callTimeoutSeconds: Long? = null,
+    /** More request headers, such as a Drive chunk's `X-Orbit-Chunk-Sha256` or a preview's `Range`. */
+    headers: List<Pair<String, String>> = emptyList(),
 ) {
+    val headers = headers.toList()
     val path = path.toList()
     val query = query.toList()
     val body = body?.copyOf()
@@ -104,10 +109,15 @@ class OkHttpTransport : HttpTransport {
             .header("X-Orbit-Client", "android/${request.clientVersion}")
             .header("Accept", "application/json")
             .apply { request.accessToken?.let { header("Authorization", "Bearer $it") } }
+            .apply { api.headers.forEach { (name, value) -> header(name, value) } }
             .method(api.method.name, body)
             .build()
         return suspendCancellableCoroutine { continuation ->
-            val call = (api.readTimeoutSeconds?.let { client.newBuilder().readTimeout(it, TimeUnit.SECONDS).build() } ?: client).newCall(wire)
+            val tuned = if (api.readTimeoutSeconds == null && api.callTimeoutSeconds == null) client else client.newBuilder().apply {
+                api.readTimeoutSeconds?.let { readTimeout(it, TimeUnit.SECONDS) }
+                api.callTimeoutSeconds?.let { callTimeout(it, TimeUnit.SECONDS) }
+            }.build()
+            val call = tuned.newCall(wire)
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {

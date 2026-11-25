@@ -82,6 +82,7 @@ import {
   runTasksAtATime,
   startAskedLine,
   startBarCaption,
+  startCardBranch,
   startComesToYou,
   startDoneWhenHead,
   startExplanation,
@@ -1011,7 +1012,6 @@ export function SessionStartProjectCard({
       <Alert type="info" title={unread ? CONFIRMATION_UNREAD_EXPLANATION : START_REQUEST_GONE} />
     );
   }
-  const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${project}`;
   const card = (
     <StartProjectCard
       ref={anchor}
@@ -1025,7 +1025,7 @@ export function SessionStartProjectCard({
       plan={startPlanView(graphRead.data ?? null, document?._count?.tasks ?? 0)}
       graph={graphRead.data ?? null}
       facts={startProjectFacts(document, true)}
-      branch={branchRef.replace(/^refs\/heads\//u, '')}
+      branch={startCardBranch(request, project)}
       branches={integration?.branches ?? null}
       lastMainBranch={integration?.lastMainBranch ?? null}
       draft={draft}
@@ -1142,6 +1142,8 @@ function OwnerStartProjectCard({
       planDigest: '',
       repository: null,
       warnings: [],
+      // The branch the server would name, for a card with none named: it is the server's to say.
+      ...(view?.defaultProjectBranch ? { defaultProjectBranchName: `refs/heads/${view.defaultProjectBranch}` } : {}),
     }
     : null;
   // The owner's edits, once there are any; until then the defaults, as the reads resolve them.
@@ -1174,7 +1176,6 @@ function OwnerStartProjectCard({
     );
   }
   const criteria = document?.acceptanceCriteriaItems ?? null;
-  const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${projectId}`;
   return (
     <StartProjectCard
       projectId={projectId}
@@ -1185,7 +1186,7 @@ function OwnerStartProjectCard({
       plan={startPlanView(graph, document?._count?.tasks ?? 0)}
       graph={graph}
       facts={startProjectFacts(document, false)}
-      branch={branchRef.replace(/^refs\/heads\//u, '')}
+      branch={startCardBranch(request, projectId)}
       branches={view?.branches ?? null}
       lastMainBranch={view?.lastMainBranch ?? null}
       draft={draft}

@@ -153,7 +153,7 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
     return found;
   };
 
-  // What /auth/capabilities answers: the Documents switch (ORBIT_DOCUMENTS_ENABLED).
+  // What /auth/capabilities answers: the Documents switch (ORBIT_DRIVE_ENABLED).
   let capabilities: unknown = { managedRunners: { enabled: false }, documents: { enabled: true } };
 
   beforeEach(() => {
@@ -222,18 +222,18 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
   it('draws the native menu: command group under the thumb, media group above the rule', async () => {
     const menu = await openMenu();
 
-    expect(drawn(menu)).toEqual(['File', 'Image', 'Documents', '─', 'Shell', 'Skill', 'Command']);
+    expect(drawn(menu)).toEqual(['File', 'Image', 'Drive', '─', 'Shell', 'Skill', 'Command']);
     // …in the variant that sizes it like the native one on a phone (below).
     expect(menu.dataset.variant).toBe('attachment');
   });
 
-  it('offers Documents when the capability member is absent (a server from before the switch)', async () => {
+  it('offers Drive when the capability member is absent (a server from before the switch)', async () => {
     capabilities = { managedRunners: { enabled: false } };
     const menu = await openMenu();
-    expect(drawn(menu)).toContain('Documents');
+    expect(drawn(menu)).toContain('Drive');
   });
 
-  it('leaves out Documents, and asks nothing of the drive, when Documents is off', async () => {
+  it('leaves out Drive, and asks nothing of the drive, when Drive is off', async () => {
     capabilities = { managedRunners: { enabled: false }, documents: { enabled: false } };
     const menu = await openMenu();
     expect(drawn(menu)).toEqual(['File', 'Image', '─', 'Shell', 'Skill', 'Command']);

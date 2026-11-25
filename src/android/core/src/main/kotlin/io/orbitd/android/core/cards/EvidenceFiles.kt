@@ -58,7 +58,7 @@ data class EvidenceFilesOnCard(val shown: List<EvidenceFile>, val rest: Int)
 data class EvidenceFileGroup(val name: String, val files: List<EvidenceFile>)
 
 /**
- * What an evidence card says about the files a version of evidence cites (docs/documents-design.md §2.5, §2.6): the words, and the
+ * What an evidence card says about the files a version of evidence cites (docs/drive-design.md §2.5, §2.6): the words, and the
  * reading of the rows those words come from. Every word and rule here is the web's `src/web/src/lib/evidenceFiles.ts`, held to it by
  * EvidenceFilesCopyParityTest; the words a phone adds are named below it. The views in `EvidenceFilesViews.kt` draw this and decide nothing.
  *

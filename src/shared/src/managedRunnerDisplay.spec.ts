@@ -6,9 +6,11 @@ import {
   MANAGED_RUNNER_COPY,
   MANAGED_RUNNER_HOME,
   MANAGED_RUNNER_ROW_TONE,
+  MANAGED_RUNNER_UNAVAILABLE,
   firstSessionProvider,
   managedSetupState,
   managedRunnerDisplay,
+  managedRunnerNextTry,
   managedRunnerRow,
   managedRunnersOffered,
   type ManagedRunnerDisplay,
@@ -85,8 +87,10 @@ describe('managed-runner-states.fixture.json', () => {
     for (const { name, status, display } of fixture.states) {
       if (!display) continue;
       expect(display.startsNewSession, name).toBe(display.acceptsWork && !!status.firstSessionProvider);
+      // FAILED takes work only with its slow retry scheduled, as the server's demand answers it coming back.
+      const slowRetry = status.managementState === 'FAILED' && !!status.nextAttemptAt && status.reason?.retryable === true;
       if (['FAILED', 'FENCING', 'DELETING', 'DELETED', 'NOT_PROVISIONED'].includes(status.managementState)) {
-        expect(display.acceptsWork, name).toBe(false);
+        expect(display.acceptsWork, name).toBe(slowRetry && status.reason?.code !== MANAGED_RUNNER_UNAVAILABLE);
       }
       // Asleep, a runner the server offers no wake for takes no work: a disabled account's.
       if (['SLEEPING', 'DRAINING'].includes(status.managementState) && !status.actions.canWake) {
@@ -171,5 +175,36 @@ describe('managed-runner-states.fixture.json', () => {
     }
     // A sleeping runner a message wakes is in the fixture, read as asleep and not as a fault.
     expect(asleep).toBeGreaterThan(0);
+  });
+
+  it('reads FAILED with its next automatic try as taking work, and FAILED without one as not', () => {
+    const byName = (name: string) => fixture.states.find((state) => state.name === name)!;
+    const scheduled = byName('failed: kept running out of memory, its slow retry scheduled');
+    const due = byName('failed: kept filling its temporary storage, its slow retry due');
+    const none = byName('failed: kept running out of memory');
+    expect(scheduled.status.nextAttemptAt).toBeTruthy();
+    expect(managedRunnerDisplay(scheduled.status)).toMatchObject({ kind: 'failed', acceptsWork: true, retry: true });
+    expect(managedRunnerDisplay(due.status)).toMatchObject({ kind: 'failed', acceptsWork: true, retry: true });
+    expect(none.status.nextAttemptAt).toBeNull();
+    expect(managedRunnerDisplay(none.status)).toMatchObject({ kind: 'failed', acceptsWork: false });
+    // Not a setup card's asleep or preparing: it failed.
+    expect(managedSetupState(scheduled.status.runnerId, scheduled.status)).toBeNull();
+    // A next try recorded on a reason that needs an operator is no slow retry.
+    const operator = { ...scheduled.status, reason: { code: 'PVC_MISSING', message: 'x', retryable: false } };
+    expect(managedRunnerDisplay(operator)!.acceptsWork).toBe(false);
+  });
+
+  it('gives the attempt and the next automatic try of a runner restarting or failed with one, and nothing otherwise', () => {
+    const now = new Date(fixture.now);
+    const byName = (name: string) => fixture.states.find((state) => state.name === name)!.status;
+    expect(managedRunnerNextTry(byName('failed: kept running out of memory, its slow retry scheduled'), now))
+      .toEqual({ attempt: 6, at: new Date('2026-10-09T08:30:00.000Z') });
+    expect(managedRunnerNextTry(byName('failed: kept filling its temporary storage, its slow retry due'), now))
+      .toEqual({ attempt: 7, at: null });
+    expect(managedRunnerNextTry(byName('waking: restarting after it filled its temporary storage, its next try scheduled'), now))
+      .toEqual({ attempt: 2, at: new Date('2026-10-09T08:00:20.000Z') });
+    expect(managedRunnerNextTry(byName('failed: kept running out of memory'), now)).toBeNull();
+    expect(managedRunnerNextTry(byName('sleeping'), now)).toBeNull();
+    expect(managedRunnerNextTry(byName('preparing: provisioning, retrying a transient error'), now)).toBeNull();
   });
 });

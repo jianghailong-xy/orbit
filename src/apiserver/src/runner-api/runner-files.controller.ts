@@ -10,7 +10,7 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { sessionOfRemoteSubagent } from './subagent-remote';
 
 /**
- * What `file_list`, `file_fetch` and a folder's `file_upload` call (docs/documents-design.md §2.2, §2.3): the agent
+ * What `file_list`, `file_fetch` and a folder's `file_upload` call (docs/drive-design.md §2.2, §2.3): the agent
  * tool API, so it speaks public ids and stays on HTTPS (D14). The upload of a file itself is
  * RunnerApiController's, beside the other upload, and a file's bytes are read from the attachment route.
  *
