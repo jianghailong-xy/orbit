@@ -62,6 +62,7 @@ import {
   watchHintFor,
 } from './watch-evaluator.service';
 import { WATCH_PREDICATE_VERSION } from './watch-predicate';
+import { vectorSessionStatus } from './watch-vector.fixture';
 import { redactReason, redactSnapshot } from './watch-redaction';
 import { WatchesService } from './watches.service';
 
@@ -528,7 +529,7 @@ test('every leaf decides the contract vectors from the rows the evaluator reads'
     vectors += 1;
     const session = givenSession
       ? await insertSession({
-          status: givenSession.status,
+          status: vectorSessionStatus(givenSession),
           endReason: givenSession.endReason ?? null,
           completedAt: givenSession.completedAt != null,
           deletedAt: givenSession.deletedAt != null,
@@ -1754,7 +1755,7 @@ test('the contract vectors that ask SESSION_QUIESCENT are decided as they say', 
     if (!('SESSION_QUIESCENT' in vector.expect)) continue;
     const given = vector.given.session;
     const target = await quiescentSession({
-      status: given.status,
+      status: vectorSessionStatus(given),
       endReason: given.endReason ?? null,
       jobs: (vector.given.jobs ?? []).map((job: { id: string }) => job.id),
       subagents: given.runningSubagents ?? [],
