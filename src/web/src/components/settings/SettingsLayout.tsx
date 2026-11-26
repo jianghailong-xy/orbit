@@ -59,6 +59,7 @@ import {
 } from '../../lib/runnerAttention';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useToast } from '../../lib/toast';
+import { getWebPushConfig } from '../../lib/webPush';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { INTEGRATION_PAGES, MODEL_ROUTING_PAGE, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
@@ -254,6 +255,14 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
     return items.length > 0 ? 'attention' : 'online';
   };
 
+  // Asked only once there is a query: the This browser row exists, and is found, only where the server sends web push.
+  const webPush = useQuery({
+    queryKey: ['push', 'web-config'],
+    queryFn: getWebPushConfig,
+    retry: false,
+    enabled: query.trim() !== '',
+  });
+
   const keyCount = providers.data?.length ?? 0;
   const poolCount = pools.data?.length ?? 0;
 
@@ -280,6 +289,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
           managedRunnerId,
           keys: providers.data ?? [],
           workspaces: workspaces.map((workspace) => ({ ...workspace, machine: machineOf(workspace) })),
+          webPush: Boolean(webPush.data),
         })}
       />
       {/* While there is a query its results are the nav; the groups stay mounted, as they were left. */}

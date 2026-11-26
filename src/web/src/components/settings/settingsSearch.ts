@@ -39,6 +39,8 @@ export type SettingsSearchSources = {
     workDir?: string | null;
     machine?: string | null;
   }>;
+  /** The server sends web push, so Notifications has its This browser row (docs/web-push-design.md). */
+  webPush?: boolean;
 };
 
 const has = (text: string | null | undefined, needle: string): boolean => !!text && text.toLowerCase().includes(needle);
@@ -63,6 +65,7 @@ export function searchSettings(query: string, sources: SettingsSearchSources): S
     to: page.path,
   }));
   for (const s of Object.values(PERSONAL_SETTINGS)) {
+    if (s === PERSONAL_SETTINGS.browserNotifications && !sources.webPush) continue;
     const description = 'description' in s ? s.description : undefined;
     if (!has(s.title, q) && !has(description, q)) continue;
     (s.path === MODEL_ROUTING_PAGE.path ? routingRows : personal).push({

@@ -109,6 +109,7 @@ const EXEMPT: Record<string, string> = {
   'src/pages/FeishuConnectGroupPage.tsx#1': "Feishu chat routing is integration configuration; no control-plane event announces it",
   'src/pages/FeishuIntegrationPage.tsx#1': "Feishu integration settings are written from this tab; no control-plane event announces them",
   'src/pages/settings/NotificationsPage.tsx#1': "the server's web push key, set in its environment; no control-plane event announces it",
+  'src/components/settings/SettingsLayout.tsx#2': "the server's web push key, which only decides whether search lists This browser's row; no control-plane event announces it",
 };
 
 /** Calls whose first argument is a query options object (useQueries names its queries property). */
