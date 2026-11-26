@@ -103,15 +103,17 @@ DECLARE
   seq_scan boolean;
 BEGIN
   SELECT * INTO t FROM plan_target;
+  -- A target the data does not have (no held session with a batch, a tree, a task or a list) is the nil uuid, which
+  -- matches no row: quote_literal(NULL) would turn the whole statement into NULL.
   sql := replace(q, '{runner}', quote_literal(t.runner) || '::uuid');
   sql := replace(sql, '{owner}', quote_literal(t.owner) || '::uuid');
-  sql := replace(sql, '{batch}', quote_literal(t.batch) || '::uuid');
-  sql := replace(sql, '{root}', quote_literal(t.root) || '::uuid');
+  sql := replace(sql, '{batch}', quote_literal(COALESCE(t.batch, '00000000-0000-0000-0000-000000000000'::uuid)) || '::uuid');
+  sql := replace(sql, '{root}', quote_literal(COALESCE(t.root, '00000000-0000-0000-0000-000000000000'::uuid)) || '::uuid');
   sql := replace(sql, '{claim_request}', quote_literal(t.claim_request));
   sql := replace(sql, '{supervised}', quote_literal(t.supervised) || '::uuid[]');
   sql := replace(sql, '{tasks}', quote_literal(t.tasks) || '::uuid[]');
-  sql := replace(sql, '{task}', quote_literal(t.task) || '::uuid');
-  sql := replace(sql, '{list}', quote_literal(t.list) || '::uuid');
+  sql := replace(sql, '{task}', quote_literal(COALESCE(t.task, '00000000-0000-0000-0000-000000000000'::uuid)) || '::uuid');
+  sql := replace(sql, '{list}', quote_literal(COALESCE(t.list, '00000000-0000-0000-0000-000000000000'::uuid)) || '::uuid');
   -- Twice, the first to warm the cache; each run is undone (the claim and the cap re-stamp write).
   FOR i IN 1..2 LOOP
     BEGIN
