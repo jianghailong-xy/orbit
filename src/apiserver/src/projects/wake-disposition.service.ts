@@ -611,10 +611,14 @@ export class WakeDispositionService {
     const serving = stated
       .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
       .flatMap((row) => row.servingTasks.map((task) => ({ row, task })));
-    const [branches, asked, nothingOfItsOwn] = await Promise.all([
+    const [branches, asked, nothingOfItsOwn, codebase] = await Promise.all([
       readLandingBranches(this.prisma, fact.projectId),
       this.questionsAbout(fact.projectId, serving.map(({ task }) => task.id)),
       this.deliveredNothingOfItsOwn(serving.map(({ task }) => task.id)),
+      this.prisma.projectCodebase.findFirst({
+        where: { projectId: fact.projectId, slot: 'primary' },
+        select: { canonicalRepoUrl: true },
+      }),
     ]);
 
     return serving.map(({ row, task }) => {
@@ -641,7 +645,7 @@ export class WakeDispositionService {
           statedCriterionMoved:
             task.criterionRevision != null && task.criterionRevision !== row.revision,
           changedPaths: ownChangedPaths(task.sessions[0], nothingOfItsOwn.has(task.id)),
-          declaredPaths: declaredPaths(task),
+          declaredPaths: declaredPaths(task, codebase?.canonicalRepoUrl),
           // The branch test is the landing fold's own, asked without its result: a conflict on
           // some other branch is a conflict about somewhere else, exactly as a merge into one is.
           // And only this delivery's, like the landing: a merge git refused before the task was

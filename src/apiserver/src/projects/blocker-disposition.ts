@@ -194,17 +194,31 @@ const PATH_TOKEN = /(?<![\w./-])(?:[\w.-]+\/)+[\w.-]*/g;
  * Over-permissive in one known way, on purpose: a path-shaped token that is part of a URL or a
  * command line is read as a declared path too. That widens the authorized set, and widening it can
  * only ever silence this fold — never make it accuse a delivery of something it did not do.
+ *
+ * One token is not that: the repository's own `owner/name`, which says where the work is and not
+ * which files. Read as a path it was the whole declared scope of a task that named its repository
+ * and a bare file, and every file it changed was outside it. Punctuation a sentence put after a
+ * path (a full stop) is the sentence's, not the path's.
  */
 export function declaredPaths(declaration: {
   title?: string | null;
   description?: string | null;
   acceptanceCriteria?: string | null;
-}): string[] {
+}, repositoryUrl?: string | null): string[] {
   const text = [declaration.title, declaration.description, declaration.acceptanceCriteria]
     .filter((part): part is string => !!part)
     .join('\n');
-  const found = text.match(PATH_TOKEN) ?? [];
-  return [...new Set(found.map((token) => token.replace(/\/$/, '')).filter(Boolean))].sort();
+  const found = (text.match(PATH_TOKEN) ?? []).map((token) => token.replace(/[./]+$/, ''));
+  const repository = repositoryNames(repositoryUrl);
+  return [...new Set(found.filter((path) => path !== '' && !repository.has(path.toLowerCase())))].sort();
+}
+
+/** The ways prose names the bound repository: `owner/name`, with or without its host and `.git`. */
+function repositoryNames(url: string | null | undefined): Set<string> {
+  const parts = (url ?? '').toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?/, '').replace(/\.git$/, '').split('/');
+  if (parts.length < 3) return new Set();
+  const [host, slug] = [parts[0], parts.slice(1).join('/')];
+  return new Set([slug, `${slug}.git`, `${host}/${slug}`, `${host}/${slug}.git`]);
 }
 
 /**
