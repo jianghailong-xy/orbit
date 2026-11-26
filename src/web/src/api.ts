@@ -2401,10 +2401,17 @@ export const cleanUpWorkspaceRepo = (workspaceId: string) =>
     { method: 'POST' },
   );
 
-/** The main checkout as the workspace's runner sees it now, with the patches of `diffPaths`
- *  (docs/main-checkout-git-contract.md §10.4). */
-export const getMainCheckout = (workspaceId: string, diffPaths: readonly string[] = [], signal?: AbortSignal) => {
-  const q = diffPaths.map((p) => `diff=${encodeURIComponent(p)}`).join('&');
+/** The main checkout as the workspace's runner sees it now, with the patches of `diffPaths` — taken from `commit`
+ *  (the full sha of one the snapshot lists) when given (docs/main-checkout-git-contract.md §10.4). */
+export const getMainCheckout = (
+  workspaceId: string,
+  diffPaths: readonly string[] = [],
+  signal?: AbortSignal,
+  commit?: string,
+) => {
+  const params = diffPaths.map((p) => `diff=${encodeURIComponent(p)}`);
+  if (commit) params.push(`commit=${encodeURIComponent(commit)}`);
+  const q = params.join('&');
   return api<MainCheckoutView>(`/workspaces/${workspaceId}/main-checkout${q ? `?${q}` : ''}`, { signal });
 };
 
