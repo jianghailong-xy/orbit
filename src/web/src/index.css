@@ -342,7 +342,7 @@ body {
   margin: 0;
   border: 1px solid var(--border-subtle);
   background: var(--bg-raised);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
   color: var(--text-1);
   font: inherit;
   font-size: 14px;
@@ -374,7 +374,7 @@ button.toast--pill:hover {
   width: 100%;
   min-height: 56px;
   padding: 12px 12px 12px 14px;
-  border-radius: 12px;
+  border-radius: 18px;
 }
 /* ③: tinted over the raised surface (the dark theme's tints are translucent), the server's words
    in a block of their own, and selectable — the thing you read twice and paste somewhere. */
@@ -468,7 +468,7 @@ button.toast--pill:hover {
   overflow: auto;
   padding: 7px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg-raised);
   color: var(--text-2);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -488,7 +488,7 @@ button.toast--pill:hover {
   height: 28px;
   padding: 0 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 7px;
+  border-radius: 10px;
   background: var(--bg-raised);
   color: var(--text-1);
   font: inherit;
