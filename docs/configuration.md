@@ -121,7 +121,7 @@ Two deployment values matter to it:
 
 See [Google sign-in](self-hosting.md#google-sign-in) for the Google Cloud console steps and who can sign in.
 
-### Drive
+### Drive storage
 
 Attachment bytes live outside PostgreSQL: one copy per content, named by its sha256 ([design](drive-design.md)).
 `local` keeps them under `./data/files`, which Compose mounts at `/var/lib/orbit/files`; `s3` keeps them in an

@@ -18,7 +18,10 @@
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
 import http from 'node:http';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import { toUuid } from '@orbit/shared';
@@ -88,7 +91,10 @@ test('Drive: held chunks and batched writes for a directory sync', { skip: !URL,
   const aliceRunner = await runnerOf(alice, 'alice-laptop');
   const bobRunner = await runnerOf(bob, 'bob-laptop');
 
-  const server = await startApiserver(url, `drive-batch-${RUN}`);
+  // Its own files directory: the default, /var/lib/orbit/files, is not writable where CI runs specs.
+  const filesDir = mkdtempSync(path.join(tmpdir(), 'drive-batch-files-'));
+  t.after(() => rmSync(filesDir, { recursive: true, force: true }));
+  const server = await startApiserver(url, `drive-batch-${RUN}`, { ORBIT_DRIVE_DIR: filesDir });
   t.after(() => server.stop());
   const as = (token: string, method: string, route: string, body?: unknown) => call(server, method, `/api/runner/drive${route}`, token, body);
   const held = async (token: string, chunks: Array<{ sha256: string; size: number }>) =>
