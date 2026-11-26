@@ -89,6 +89,7 @@ const RESUME_CALLERS: Record<string, { calls: number; key: string; g6: string | 
   'sessions/auto-retry.service.ts': { calls: 2, key: 'auto-retry:, the re-send of a failed turn', g6: null },
   'sessions/sessions.controller.ts': { calls: 1, key: 'the owner\'s own key (POST /sessions/:id/resume)', g6: null },
   'sessions/sessions.service.ts': { calls: 2, key: 'a merge repair\'s random key; the routed re-entry of the same request', g6: null },
+  'tasks/task-rerun-check.service.ts': { calls: 1, key: 'system:task-acceptance:v1:rerun:<newest round>:<expected>, Re-run the check on a FAILED EXECUTABLE task\'s latest run', g6: null },
   'tasks/tasks.service.ts': { calls: 1, key: 'task-run:, a task run\'s brief', g6: null },
 };
 
