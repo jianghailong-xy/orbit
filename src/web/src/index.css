@@ -7441,27 +7441,24 @@ button.toast--pill:focus-visible {
    moves the `+` or Send. 24px corners, and 24px is also where everything inside starts: the
    corner's curve meets the straight edge 24px in, and the thumbnails, the text and the `+`'s left
    arm all begin on that line (see `.composer-field` and `.composer-toolbar`). Focus deepens
-   the rim instead of turning it blue: the only coloured rim a composer has is shell mode's. */
+   the rim instead of turning it blue: the only coloured rim a composer has is shell mode's.
+   Its edge is the panels' (docs/mocks/composer-shadow, option 3): the subtle rim and the panel
+   elevation, which is no shadow below the drawer breakpoint, where `--panel-shadow` is unset. */
 .composer-box {
   position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 24px;
   background: var(--bg-raised);
-  box-shadow:
-    0 2px 10px rgba(31, 35, 41, 0.05),
-    0 10px 30px rgba(31, 35, 41, 0.04);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: var(--panel-shadow);
+  transition: border-color 0.15s;
 }
 .composer-box:focus-within,
 /* Its `+`, its model control or one of its pickers open: focus is in that control's popup, still the
    box's own, so the box keeps the rim it had when the control was pressed. */
 .composer-box:has(.composer-attach-btn[data-popup-open], .composer-model-chip[data-popup-open], .orbit-select[data-open]) {
   border-color: color-mix(in srgb, var(--text-1) 28%, var(--border));
-  box-shadow:
-    0 3px 14px rgba(31, 35, 41, 0.08),
-    0 12px 34px rgba(31, 35, 41, 0.05);
 }
 /* `!cmd` shell mode: the whole box reads as a command line, not a message box. Unlike the
    focus rim above this holds whether or not the composer is focused — the mode is a property
