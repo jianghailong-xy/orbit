@@ -142,8 +142,13 @@ async function loadPages(page, state, pages = Infinity) {
   await expect.poll(() => read().length).toBeGreaterThan(0);
   while (read().length < pages && read().at(-1).next) {
     const before = read().length;
-    await scrollListTo(page, 10_000_000);
-    await expect.poll(() => read().length).toBeGreaterThan(before);
+    // Again until it is read: scrolled to the end before the last page was drawn, the column has nowhere to
+    // move once it is.
+    await expect(async () => {
+      await scrollListTo(page, (await mounted(page)).scrollTop - 64);
+      await scrollListTo(page, 10_000_000);
+      expect(read().length).toBeGreaterThan(before);
+    }).toPass();
   }
   await frames(page, 4);
 }
@@ -185,8 +190,7 @@ test('↓ and ↑ walk the open session past the viewport, the row scrolled in a
   await row(page, title(21)).focus();
   await expect(row(page, title(21))).toBeFocused();
   const steps = 60;
-  // Each step waits for the row it opened to be drawn as the open one: the list's ↑ / ↓ handler is the one
-  // of the render that drew it, so a key pressed sooner would step from the row before.
+  // Each step waits for the row it opened to be drawn as the open one: every row on the way is drawn.
   for (let i = 0; i < steps; i += 1) {
     await page.keyboard.press('ArrowDown');
     await expect(page).toHaveURL(new RegExp(`/sessions/${seededRows()[21 + i].id}`));
@@ -207,6 +211,28 @@ test('↓ and ↑ walk the open session past the viewport, the row scrolled in a
   await expect(page).toHaveURL(new RegExp(`/sessions/${seededRows()[20].id}`));
   await expect(row(page, title(21))).toBeFocused();
   expect(await inView(page, row(page, title(21)))).toBe(true);
+});
+
+test('↓ and ↑ pressed with no wait between them step from the row the key before chose', async ({ page }, testInfo) => {
+  desktop(testInfo);
+  const state = await seedList(page, { theme: testInfo.project.use.colorScheme });
+  await page.goto(`/sessions/${seededRows()[20].id}`);
+  await expect(row(page, title(21))).toBeVisible();
+  // Every row loaded first: ↓ stops at the last one loaded, and 60 steps reach past the first page.
+  await loadPages(page, state);
+  await scrollListTo(page, 0);
+  await row(page, title(21)).focus();
+  await expect(row(page, title(21))).toBeFocused();
+  const steps = 60;
+  for (const [key, to] of [['ArrowDown', 21 + steps], ['ArrowUp', 21]]) {
+    for (let i = 0; i < steps; i += 1) await page.keyboard.press(key);
+    await expect(page).toHaveURL(new RegExp(`/sessions/${seededRows()[to - 1].id}`));
+    const target = row(page, title(to));
+    await expect(target).toHaveClass(/active/);
+    await expect(list(page).locator('.session-row.active')).toHaveCount(1);
+    await expect(target).toBeFocused();
+    expect(await inView(page, target)).toBe(true);
+  }
 });
 
 test('a row dragged from deep in the list scrolls the column up and drops onto a folder row', async ({ page }, testInfo) => {

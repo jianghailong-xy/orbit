@@ -120,7 +120,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { copyText } from '../lib/clipboard';
 import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
 import { routeId, encodeId } from '../lib/idCodec';
@@ -4793,15 +4793,28 @@ export function WorkspaceView({
     sessionItemPath,
   ]);
 
+  // The session ↑ / ↓ step from: the one a navigation's commit drew as open, then each one a key chose after
+  // it. <BrowserRouter> commits a navigation in a transition, so a repeating key arrives before the render of
+  // the step before it — and a commit can still be drawing an entry the browser has already left, which is not
+  // read back. Nor is any render but a navigation's: it still draws the row the key left.
+  const locationKey = useLocation().key;
+  const stepFrom = useRef(selectedId);
+  useLayoutEffect(() => {
+    const entry = (window.history.state as { key?: string } | null)?.key;
+    if (entry && entry !== locationKey) return;
+    stepFrom.current = selectedId;
+  }, [selectedId, locationKey]);
+
   // Step the open session up/down the visible list, for the window-level Up/Down handler
   // below. Returns false (a no-op) at the list ends, on an empty list, or on the trash
   // view with nothing open. With nothing selected, Down enters from the top, Up from
   // the bottom.
   const stepSession = useCallback(
     (dir: 1 | -1): boolean => {
-      if (!selectedId && view === 'trash') return false;
+      const from = stepFrom.current;
+      if (!from && view === 'trash') return false;
       if (orderedSessions.length === 0) return false;
-      const cur = orderedSessions.findIndex((s) => s.id === selectedId);
+      const cur = orderedSessions.findIndex((s) => s.id === from);
       let next: number;
       if (cur === -1) next = dir === 1 ? 0 : orderedSessions.length - 1;
       else {
@@ -4813,17 +4826,20 @@ export function WorkspaceView({
       // the row's click does, even with none open (owner 2026-11-14).
       const rowProjectId = isMobile ? undefined : listedCoordinatorProjects.get(target.id);
       if (rowProjectId) carryProjectPage(rowProjectId);
+      stepFrom.current = target.id;
       navigate(sessionItemPath(target));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects],
+    [orderedSessions, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
   // session like tabs. Skipped while typing in an input/textarea (so the composer and
-  // Ant dropdowns keep their own arrows).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
+  // Ant dropdowns keep their own arrows). The window listener is added once and calls
+  // the handler of the last commit.
+  const onArrowKey = useRef<(e: KeyboardEvent) => void>(() => {});
+  useLayoutEffect(() => {
+    onArrowKey.current = (e) => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       if (menuOpenId || e.defaultPrevented) return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -4835,9 +4851,12 @@ export function WorkspaceView({
         return;
       if (stepSession(e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault();
     };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => onArrowKey.current(e);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpenId, stepSession]);
+  }, []);
 
   // Keep the highlighted row in view when arrowing through a long list, and keyboard focus on it when
   // focus was on a row: ↑ / ↓ from a focused row carry the focus with the selection. The column mounts
@@ -4845,11 +4864,16 @@ export function WorkspaceView({
   // once the window has drawn it.
   const listItemsNow = useRef(listItems);
   listItemsNow.current = listItems;
+  // A row's focus still on its way to the open one: a key repeating faster than the window draws takes the
+  // next step after the row the focus was on has gone, and before the one it was headed for has it.
+  const focusOwed = useRef(false);
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
     const focused = document.activeElement;
-    const rowFocused = focused instanceof HTMLElement && focused.classList.contains('session-row') && list.contains(focused);
+    const rowFocused = (focused instanceof HTMLElement && focused.classList.contains('session-row') && list.contains(focused))
+      || (focusOwed.current && focused === document.body);
+    focusOwed.current = false;
     const reveal = (): boolean => {
       const active = list.querySelector<HTMLElement>('.session-row.active');
       if (!active) return false;
@@ -4863,11 +4887,15 @@ export function WorkspaceView({
     const index = listItemsNow.current.findIndex((item) => item.kind === 'entry' ? holds(item.entry)
       : item.kind === 'coordinator' && item.section.sessions.some(holds));
     if (index < 0) return;
+    focusOwed.current = rowFocused;
     listWindowRef.current?.scrollToIndex(index);
     let frame = 0;
     let tries = 0;
     const retry = (): void => {
-      if (reveal() || (tries += 1) > 10) return;
+      if (reveal() || (tries += 1) > 10) {
+        focusOwed.current = false;
+        return;
+      }
       frame = requestAnimationFrame(retry);
     };
     frame = requestAnimationFrame(retry);
