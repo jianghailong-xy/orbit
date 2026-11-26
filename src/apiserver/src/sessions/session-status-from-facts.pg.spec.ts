@@ -103,7 +103,7 @@ test('D3: the stored word follows the facts, for rollback only (1671)', { skip, 
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
   t.after(() => sql.end().catch(() => undefined));
-  // The database deploy D3 left: since deploy D4 (migration 1691) the column is put back by its down script. So this
+  // The database deploy D3 left: since deploy D4 (migration 1711) the column is put back by its down script. So this
   // file also holds that what the down script restores keeps the word from the facts on every write.
   await restoreStatusColumn(sql);
   // Every row here has no engine, so the engine guards pass every claim (0414's rule) but the one (5) asks about.

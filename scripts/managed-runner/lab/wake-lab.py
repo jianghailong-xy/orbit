@@ -138,7 +138,7 @@ def ms_since(started):
 
 def session_word(row):
     """SQL for the status word of the session row the query names `row`: the server's projector over its facts
-    (migration 1621). It reads no stored word: session.status left with deploy D4 (migration 1691)."""
+    (migration 1621). It reads no stored word: session.status left with deploy D4 (migration 1711)."""
     return (f'session_legacy_status({row}.finished_at, {row}.turn_state, {row}.end_reason, {row}.last_turn_outcome, '
             f'{row}.started_at, {row}.import_source_cwd, {row}.kind, '
             f'(select l.settled_as from project_landing l where l.session_id = {row}.id))')

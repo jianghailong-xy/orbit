@@ -197,7 +197,7 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  // The column session.status was dropped in deploy D4 (migration 1691): this file rehearses deploys it
+  // The column session.status was dropped in deploy D4 (migration 1711): this file rehearses deploys it
   // was part of, on the database deploy D3 left, as the D4 down script restores it.
   await restoreStatusColumn(sql);
   const db = new PrismaClient({ adapter: pgAdapterFor(url) });
@@ -387,7 +387,7 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
       await sql.query('BEGIN');
       try {
         // Every label as the stored word, PARKED among them: the database deploy D2 left, where the word was
-        // written and the facts followed it (1691's and 1671's down scripts, rolled back with the rest of this transaction).
+        // written and the facts followed it (1711's and 1671's down scripts, rolled back with the rest of this transaction).
         await sql.query(D3_DOWN);
         await sql.query(`DROP INDEX "${drop}"`);
         const [taskId] = (await sql.query(

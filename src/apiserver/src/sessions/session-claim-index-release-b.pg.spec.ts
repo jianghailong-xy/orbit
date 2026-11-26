@@ -448,7 +448,7 @@ test('one live run per task, release B (migration 1444): rehearsal before and af
   ownClient = sql;
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  // The column session.status was dropped in deploy D4 (migration 1691): this file rehearses deploys it
+  // The column session.status was dropped in deploy D4 (migration 1711): this file rehearses deploys it
   // was part of, on the database deploy D3 left, as the D4 down script restores it.
   await restoreStatusColumn(sql);
   const database = ((await sql.query('SELECT current_database() AS d')).rows[0] as { d: string }).d;

@@ -384,7 +384,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'order key when a session ends or is completed, and 70 once 1611 added `session_aa_turn_state_from_status` and '
     + '`session_zz_phase` to `session`, which kept the row\'s own `turn_state` and `phase` from its stored word; 1671 '
     + 'replaced the first with `session_aa_status_from_facts`, which kept the stored word from the facts, and 69 once '
-    + '1691 dropped it with the column');
+    + '1711 dropped it with the column');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own

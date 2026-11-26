@@ -155,7 +155,7 @@ test('the session triggers and functions read the facts and answer as before (16
   const sql = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  // The column session.status was dropped in deploy D4 (migration 1691): this file rehearses deploys it
+  // The column session.status was dropped in deploy D4 (migration 1711): this file rehearses deploys it
   // was part of, on the database deploy D3 left, as the D4 down script restores it.
   await restoreStatusColumn(sql);
   const db = prismaClientFor(URL!);

@@ -1,17 +1,17 @@
 /**
- * DEPLOY D4 OF THE session.status RETIREMENT: THE COLUMN AND ITS TYPE ARE DROPPED (migration 1691), AND PUT BACK BY THE
+ * DEPLOY D4 OF THE session.status RETIREMENT: THE COLUMN AND ITS TYPE ARE DROPPED (migration 1711), AND PUT BACK BY THE
  * DOWN SCRIPT (scripts/session-status-drop-down.sql). docs/session-status-retirement-plan.md §4.1 and §4.3, task T15.
- * Against PostgreSQL, on a database of its own holding what deploy D3 left (every migration up to 1691):
+ * Against PostgreSQL, on a database of its own holding what deploy D3 left (every migration up to 1711):
  *
- *   (1) 1691 refuses to drop anything while something it does not know still names the column or the type: a view, a
+ *   (1) 1711 refuses to drop anything while something it does not know still names the column or the type: a view, a
  *       trigger column list, an index, a CHECK, a function body naming it (by an alias, by a row variable, by NEW, in a
  *       cast); each named in the error, the database left as it was
- *   (2) over rows of every shape, 1691 (applied by `prisma migrate deploy`, as a server boots) drops the column, the
+ *   (2) over rows of every shape, 1711 (applied by `prisma migrate deploy`, as a server boots) drops the column, the
  *       type and what exists only for them, writes no row, and every row's legacy word is what it was
  *   (3) a server of deploy D3 boots on the database D4 left: its `prisma migrate deploy` finds nothing to apply, its
  *       writes (facts only) run, and the word it answers is the facts'
  *   (4) the down script gives back the D3 database: every function, trigger, index, constraint, column and enum equal to
- *       the one taken before 1691 (column order aside); every row's stored word is the projector's, which is the word
+ *       the one taken before 1711 (column order aside); every row's stored word is the projector's, which is the word
  *       D3 stored for every row D3 wrote (a released row D2 left with a word of its own comes back with the facts',
  *       plan §3.4); D3's trigger and CHECKs hold writes again; the script a second time does nothing; going on to D2
  *       (1671's down script) works; and migrating forward again drops it all again
@@ -38,7 +38,7 @@ const skip = !URL;
 
 const API = join(__dirname, '..', '..');
 const MIGRATIONS = join(API, 'prisma', 'migrations');
-const D4 = '1691_session_status_drop';
+const D4 = '1711_session_status_drop';
 const MIGRATION_SQL = readFileSync(join(MIGRATIONS, D4, 'migration.sql'), 'utf8');
 const D3_DOWN = readFileSync(join(REPO_SCRIPTS, 'session-status-from-facts-down.sql'), 'utf8');
 
@@ -182,7 +182,7 @@ const PLANTS: ReadonlyArray<[what: string, sql: string, named: RegExp]> = [
     $$ BEGIN RETURN (word::run_status)::text; END $$`, /planted_cast/],
 ];
 
-test('D4: session.status and run_status are dropped, and the down script gives them back (1691)', {
+test('D4: session.status and run_status are dropped, and the down script gives them back (1711)', {
   skip, concurrency: 1, timeout: 900_000,
 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
@@ -209,7 +209,7 @@ test('D4: session.status and run_status are dropped, and the down script gives t
   for (const shape of WORD_SHAPES) ids.set(shape.name, await insertShape(sql, w, shape));
   const d3 = await catalog(sql);
 
-  await t.test('(1) 1691 refuses while anything else names the column or the type, and drops nothing', async () => {
+  await t.test('(1) 1711 refuses while anything else names the column or the type, and drops nothing', async () => {
     for (const [what, plant, named] of PLANTS) {
       await sql.query(plant);
       const before = await catalog(sql);
@@ -242,7 +242,7 @@ test('D4: session.status and run_status are dropped, and the down script gives t
   const wordsAtD3 = await words(sql);
   const rowsAtD3 = (await sql.query(`SELECT count(*)::int AS n, sum(xmin::text::bigint) AS x FROM "session"`)).rows[0];
 
-  await t.test('(2) 1691 drops the column, the type and their objects, writing no row; every word stays', async () => {
+  await t.test('(2) 1711 drops the column, the type and their objects, writing no row; every word stays', async () => {
     const out = migrateDeploy(url, null);
     assert.match(out, new RegExp(D4));
     assert.deepEqual(await columnAndType(sql), { columns: 0, types: 0 });
@@ -299,12 +299,12 @@ test('D4: session.status and run_status are dropped, and the down script gives t
     const after = await catalog(sql);
     await restoreStatusColumn(sql);
     assert.deepEqual(await catalog(sql), after);
-    // D3's own boot on it, once 1691's record is deleted as the script says, and further back to D2.
+    // D3's own boot on it, once 1711's record is deleted as the script says, and further back to D2.
     await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = $1`, [D4]);
     assert.match(migrateDeploy(url, D4), /No pending migrations to apply/);
     await sql.query(D3_DOWN);
     await sql.query(`UPDATE "session" SET "status" = 'RUNNING', "turn_state" = 'IN_FLIGHT' WHERE "id" = $1`, [held]);
-    // Forward again from D2: 1671 and then 1691 are applied once their records are gone.
+    // Forward again from D2: 1671 and then 1711 are applied once their records are gone.
     await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = '1671_session_status_from_facts'`);
     const out = migrateDeploy(url, null);
     assert.match(out, /1671_session_status_from_facts/);
@@ -328,7 +328,7 @@ test('D4: session.status and run_status are dropped, and the down script gives t
     assert.deepEqual(await storedWords(sql), await words(sql));
     started = Date.now();
     await sql.query(MIGRATION_SQL);
-    console.log(`# 1691 over the same rows: ${Date.now() - started} ms`);
+    console.log(`# 1711 over the same rows: ${Date.now() - started} ms`);
     assert.deepEqual(await columnAndType(sql), { columns: 0, types: 0 });
   });
 });

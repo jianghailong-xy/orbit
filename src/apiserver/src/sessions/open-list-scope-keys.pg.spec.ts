@@ -406,7 +406,7 @@ test('8. rollout: the old aggregation sees every bump, and the per-base-source e
   await old.connect();
   t.after(() => old.end());
   await old.query('BEGIN');
-  // Those functions read session.status, dropped in deploy D4 (migration 1691): put back inside this transaction.
+  // Those functions read session.status, dropped in deploy D4 (migration 1711): put back inside this transaction.
   await restoreStatusColumn(old);
   await old.query(functionsBefore1464());
   const oldStart = await epochs(old, before.ownerId);

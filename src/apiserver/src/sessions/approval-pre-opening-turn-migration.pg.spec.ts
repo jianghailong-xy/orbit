@@ -216,7 +216,7 @@ test('0258 settles the pre-0252 approvals nothing is asking any more, and only t
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  // The replayed migration predates deploy D4 (migration 1691), which dropped session.status: it runs on the
+  // The replayed migration predates deploy D4 (migration 1711), which dropped session.status: it runs on the
   // database deploy D3 left, as the D4 down script restores it.
   await restoreStatusColumn(sql);
   const db = prismaClientFor(url);

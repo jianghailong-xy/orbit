@@ -3559,12 +3559,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1671_session_status_from_facts',
-      // 1691 (deploy D4) drops session.status, the type run_status and what exists only for them (1671's trigger and
+      // 1711 (deploy D4) drops session.status, the type run_status and what exists only for them (1671's trigger and
       // function, session_turn_state_of_status, the nine-argument session_legacy_status, the two word CHECKs, six
       // indexes), points three session functions at the eight-argument projector, and re-creates the 13 session triggers
       // without `status` in their column lists. Only `session` is touched; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
-      '1691_session_status_drop'],
+      '1711_session_status_drop'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

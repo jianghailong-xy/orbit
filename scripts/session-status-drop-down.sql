@@ -1,4 +1,4 @@
--- Undo migration 1691 (deploy D4 of docs/session-status-retirement-plan.md §4.1): session.status and the type
+-- Undo migration 1711 (deploy D4 of docs/session-status-retirement-plan.md §4.1): session.status and the type
 -- run_status are back, filled from the facts, and everything deploy D3 (migration 1671) left is as it was, so a
 -- rollback to the D3 release works (its Run now gate, sessions/queued-gate.ts, reads the column: without this script
 -- that release's session list answers 500 on a D4 database), and going further back can start from here with
@@ -19,8 +19,8 @@
 --
 --   psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f scripts/session-status-drop-down.sql
 --
--- After it, delete 1691's row of _prisma_migrations, or the next `prisma migrate deploy` will not drop them again:
---   DELETE FROM _prisma_migrations WHERE migration_name = '1691_session_status_drop';
+-- After it, delete 1711's row of _prisma_migrations, or the next `prisma migrate deploy` will not drop them again:
+--   DELETE FROM _prisma_migrations WHERE migration_name = '1711_session_status_drop';
 --
 -- LOCKS AND TIME. One transaction (one DO statement). It asks for ACCESS EXCLUSIVE on session, 2 s at a time, 1 s
 -- apart, up to 45 tries, then rewrites every row (the fill) and builds the six indexes under that lock, so writers wait

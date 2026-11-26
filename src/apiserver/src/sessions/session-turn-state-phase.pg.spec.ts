@@ -24,7 +24,7 @@
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-turn-state-phase.pg.spec.ts
  *
- * It runs on the database deploy D2 left: migrations 1691 (D4) and 1671 (D3) are rolled back first, with their down
+ * It runs on the database deploy D2 left: migrations 1711 (D4) and 1671 (D3) are rolled back first, with their down
  * scripts (scripts/session-status-drop-down.sql, scripts/session-status-from-facts-down.sql), since D4 dropped the
  * column and D3 replaced the D1 trigger this file holds to account; what D3 stores is
  * sessions/session-status-from-facts.pg.spec.ts's.
@@ -179,7 +179,7 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
-  // The database deploy D2 left: migrations 1691 (D4) and 1671 (D3) rolled back, as their down scripts do it. What this file holds to
+  // The database deploy D2 left: migrations 1711 (D4) and 1671 (D3) rolled back, as their down scripts do it. What this file holds to
   // account is D1's trigger, which keeps the facts from the word, and which D3 replaced with one that does the opposite.
   await restoreStatusColumn(sql);
   await sql.query(readFileSync(join(SCRIPTS, 'session-status-from-facts-down.sql'), 'utf8'));

@@ -1,6 +1,6 @@
 # The status word of a session row, for the drills that print or wait on it: derived from the row's facts by the
 # server's own SQL projector (migration 1621; docs/session-status-retirement-plan.md §2.6). Source it; the shell twin
-# of session-word.mjs. The projector reads no stored word: session.status left with deploy D4 (migration 1691).
+# of session-word.mjs. The projector reads no stored word: session.status left with deploy D4 (migration 1711).
 
 # session_word_sql ROW: SQL text for the word of the session row the query names ROW (a constant, never input).
 session_word_sql() {

@@ -15,7 +15,7 @@ import { TURN_STATE_SELECT, turnStateOf, type TurnStateFacts } from '../sessions
  * `sessionHeldSql` (plan step 4.3). As status sets, the same members every hand-copied live/terminal set held, for
  * the readers that have not moved onto the facts yet (docs/session-status-retirement-plan.md, tasks T10 to T12).
  * The two are the same rows: a projected word is terminal exactly when `finished_at` is set (the database held the
- * stored word to that until deploy D4 dropped it, migration 1691). The partial indexes on `finished_at IS NULL` (migrations 1628, 1633) are the held rows' access
+ * stored word to that until deploy D4 dropped it, migration 1711). The partial indexes on `finished_at IS NULL` (migrations 1628, 1633) are the held rows' access
  * paths, so no reader states the held statuses beside the column for the planner any more.
  */
 

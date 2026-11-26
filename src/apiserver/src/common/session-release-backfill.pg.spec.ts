@@ -248,7 +248,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  // The column session.status was dropped in deploy D4 (migration 1691): this file rehearses deploys it
+  // The column session.status was dropped in deploy D4 (migration 1711): this file rehearses deploys it
   // was part of, on the database deploy D3 left, as the D4 down script restores it.
   await restoreStatusColumn(sql);
   const db = prismaClientFor(url);

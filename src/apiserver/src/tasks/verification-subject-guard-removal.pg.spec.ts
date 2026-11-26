@@ -250,7 +250,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + 'and 67 once 1060 added `condition_ended_with_task` to `task`, which ends a task\'s condition when it is cancelled, '
     + 'done or failed, and 68 once 1490 added `session_listed_at_settle` to `session`, which sets the row\'s own '
     + '`listed_at` when it settles, and 70 once 1611 added `session_aa_turn_state_from_status` and `session_zz_phase` '
-    + 'to `session`, which set the row\'s own `turn_state` and `phase` from its stored word, and 69 once 1691 '
+    + 'to `session`, which set the row\'s own `turn_state` and `phase` from its stored word, and 69 once 1711 '
     + 'dropped the trigger that kept the stored word with the column');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);

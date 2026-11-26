@@ -13,7 +13,7 @@ datasource db {
   provider = "postgresql"
 }
 
-// A session stores no status word: deploys D3 and D4 (migrations 1671 and 1691;
+// A session stores no status word: deploys D3 and D4 (migrations 1671 and 1711;
 // docs/session-status-retirement-plan.md §4.1, §4.3) took the stored one and its enum type away. The words the API
 // answers are `RunStatus` of @orbit/shared, derived from the facts.
 
@@ -2779,7 +2779,7 @@ model Session {
   // caller names no provider (workspaces/workspace-provider.ts).
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([parentSessionId])
-  // The indexes on `status` went with the column (deploy D4, migration 1691); their replacements on the facts are
+  // The indexes on `status` went with the column (deploy D4, migration 1711); their replacements on the facts are
   // migrations 1627 to 1633.
   @@index([ownerId])
   // The session's Settings panel (docs/mocks/session-settings, migration 0700). `env` is the

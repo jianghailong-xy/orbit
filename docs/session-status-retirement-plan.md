@@ -602,7 +602,7 @@ depend on them (project goal) and may ride any of them.
 | **Backfill** | — (runbook, §4.4) | — | — | nothing to undo: the facts are derived from the word |
 | **D2** | assert no row disagrees (refuse otherwise); `session_turn_state_agrees_chk`, `session_turn_state_released_chk`, `phase` NOT NULL, each NOT VALID then validated in a file of its own; the partial indexes, concurrently (§4.5); the triggers and functions restated to read the facts (§4.2) | every reader reads the facts; every writer writes the word **and** `turn_state` with the matching value; the wire words come from the projector; the `?status=` filter translates (§6) | D1 code writes the word only; the trigger derives the facts; the CHECK keeps the two spellings equal for both replicas | free, to D1 code: it reads and writes the word, the trigger and CHECK keep the facts equal to it, and the restated database functions read facts equal to it |
 | **D3** | replace `session_aa_turn_state_from_status` with `session_aa_status_from_facts`: BEFORE INSERT OR UPDATE OF the facts (not of `status`), the word follows the facts through `session_legacy_status` | writers write the facts only; the field `status` and the Prisma enum `RunStatus` leave `schema.prisma`; nothing in the server reads or writes the column | D2 code writes both, consistently (its rule, guarded and spec'd); a stray D2 write of the word alone fails the CHECK loudly instead of being undone silently | to D2 code only: the trigger keeps the word valid and the CHECKs hold. Not to D1 code: it writes the word alone |
-| **D4** | 1691, one DO block: drop 1671's trigger and function, the two transition CHECKs, `session_turn_state_of_status` and the nine-argument `session_legacy_status` (its three callers restated to the eight-argument form), recreate the 13 triggers whose column lists name `status` without it, check that nothing else depends on the column (pg_depend and function bodies, as 1443 does), `DROP COLUMN status` (its six indexes go with it), `DROP TYPE run_status` | the Run now gate's last read of the column (`sessions/queued-gate.ts`), which must ship **first** (below) | a replica whose code names the column nowhere; the release live on 2026-11-27 (feeb45cf16) is not one | **irreversible** as a migration, the stored words are gone: to D3 code only after `scripts/session-status-drop-down.sql` |
+| **D4** | 1711, one DO block: drop 1671's trigger and function, the two transition CHECKs, `session_turn_state_of_status` and the nine-argument `session_legacy_status` (its three callers restated to the eight-argument form), recreate the 13 triggers whose column lists name `status` without it, check that nothing else depends on the column (pg_depend and function bodies, as 1443 does), `DROP COLUMN status` (its six indexes go with it), `DROP TYPE run_status` | the Run now gate's last read of the column (`sessions/queued-gate.ts`), which must ship **first** (below) | a replica whose code names the column nowhere; the release live on 2026-11-27 (feeb45cf16) is not one | **irreversible** as a migration, the stored words are gone: to D3 code only after `scripts/session-status-drop-down.sql` |
 
 From D3 on, "the column is no longer written" holds for all code; the D3 trigger writes it for rollback alone, and D4
 removes it. The criterion's end state is D4.
@@ -610,7 +610,7 @@ removes it. The criterion's end state is D4.
 **D4 ships behind one code fix.** The Run now gate of every session list read still filtered on `session.status` in
 feeb45cf16 (a lateral naming no table, so the guard of §5 did not see it; found by task T15's column-less PG runs).
 On a database without the column those reads answer 500. The fix reads `turn_state`, needs no migration, and is a
-commit of its own: deploy it to every replica, and only then a release that carries 1691. T17 rehearses the hand-over
+commit of its own: deploy it to every replica, and only then a release that carries 1711. T17 rehearses the hand-over
 with a replica that has it.
 
 **Rolling back past D4.** Deploy the older release only after `scripts/session-status-drop-down.sql` has run on the
@@ -624,7 +624,7 @@ the triggers, each equal to the D3 definition; the column goes to the end of the
    container's settlement included), rewrites the rows and builds the indexes, so writers wait until it commits (the
    PG spec times it on 100,000 rows). A released row that deploy-2 code left with a word of its own (§3.4, C1-C8)
    comes back with the facts' word, which is what D3 and D2 code answer for it;
-3. `DELETE FROM _prisma_migrations WHERE migration_name = '1691_session_status_drop';`, or the next forward deploy
+3. `DELETE FROM _prisma_migrations WHERE migration_name = '1711_session_status_drop';`, or the next forward deploy
    will not drop it again;
 4. deploy the older release. To go back to deploy 2, apply `scripts/session-status-from-facts-down.sql` on top.
 
@@ -659,7 +659,7 @@ main silently reverts later changes to the function (wiki pitfall `34WsH2gujacTu
 
 ### 4.3 The column and the type
 
-The column is dropped, in D4 (migration 1691). It is the only column of type `run_status` (catalog section 1), so the whole type is
+The column is dropped, in D4 (migration 1711). It is the only column of type `run_status` (catalog section 1), so the whole type is
 dropped with it and the dead labels (`PARKED`, and with it every other) go too: the "PostgreSQL cannot drop an enum
 label" limit (`prisma/schema.prisma:25-28`) does not apply to dropping the type. Prisma selects every field it declares,
 so the column can go only one deploy after the field left `schema.prisma` (1443's header; `sessions/session-release-column-compat.pg.spec.ts:1-17`),

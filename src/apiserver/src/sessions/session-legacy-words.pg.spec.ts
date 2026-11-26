@@ -2,7 +2,7 @@
  * THE SQL TWIN OF THE LEGACY STATUS WORD PROJECTOR, AND THE ?status= CONDITION, AGAINST POSTGRESQL (task T4 of
  * docs/session-status-retirement-plan.md, §3.1 and §6):
  *
- *   (1) session_legacy_status (migration 1671's eight-argument form, the only one since deploy D4's migration 1691
+ *   (1) session_legacy_status (migration 1671's eight-argument form, the only one since deploy D4's migration 1711
  *       dropped 1621's nine-argument one) answers what legacySessionStatus answers over every combination of the facts
  *       it reads, the landing's settlement among them
  *   (2) a session of every shape of session-legacy-words.fixture.ts, written to the database, derives from its stored

@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 1691: session.status and the type run_status are dropped (docs/session-status-retirement-plan.md §4.1 and §4.3,
+-- 1711: session.status and the type run_status are dropped (docs/session-status-retirement-plan.md §4.1 and §4.3,
 -- deploy D4; project 353SgnUjvamRr06Sho0EZ, task T15).
 --
 -- Deploy D3 (1671, live on production 2026-11-26) took the field out of schema.prisma: no server code reads or writes
@@ -67,8 +67,9 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 1691: main, every project/*, pushed orbit/* and probe/* branch and every local worktree held at most 1681 on
--- 2026-11-27. Not a multiple of 10. Can run twice: CREATE OR REPLACE and IF EXISTS throughout, and the dependency
+-- 1711: main, every project/*, pushed orbit/* and probe/* branch and every local worktree held at most 1700 on
+-- 2026-11-27 (1700 on a local branch of the Drive chat project, taken after this file was first written as 1691). Not a
+-- multiple of 10. Can run twice: CREATE OR REPLACE and IF EXISTS throughout, and the dependency
 -- check reads nothing once the column and the type are gone.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

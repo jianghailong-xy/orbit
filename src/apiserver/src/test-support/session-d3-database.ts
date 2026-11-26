@@ -1,6 +1,6 @@
 /**
  * The database deploy D3 left (docs/session-status-retirement-plan.md §4.1), for the specs that hold what D3 and the
- * deploys before it did to account: since deploy D4 (migration 1691) session.status and run_status are gone from a
+ * deploys before it did to account: since deploy D4 (migration 1711) session.status and run_status are gone from a
  * migrated database, so such a spec puts them back with the rollback script operators run,
  * scripts/session-status-drop-down.sql, before it starts (and applies the older down scripts on top of that).
  * What that script restores is held to the D3 database itself by sessions/session-status-drop.pg.spec.ts.

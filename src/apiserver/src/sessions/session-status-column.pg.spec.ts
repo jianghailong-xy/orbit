@@ -1,6 +1,6 @@
 /**
  * THE SESSION TABLE HAS NO `status` COLUMN (docs/session-status-retirement-plan.md §5, deploy D4, task T15; migration
- * 1691). session-status-column.spec.ts reads the server's source; what it cannot see are the objects the database
+ * 1711). session-status-column.spec.ts reads the server's source; what it cannot see are the objects the database
  * holds. On a database every migration has been applied to:
  *
  *   (1) there is no column session.status, no type run_status, and nothing — a trigger column list or WHEN clause, a

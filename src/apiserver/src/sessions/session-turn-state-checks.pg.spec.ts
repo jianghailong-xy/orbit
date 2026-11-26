@@ -25,7 +25,7 @@
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-turn-state-checks.pg.spec.ts
  *
- * Run it on a database of its own, as run-pg-spec.sh does: it rolls migrations 1691 (deploy D4) and 1671 (D3) back
+ * Run it on a database of its own, as run-pg-spec.sh does: it rolls migrations 1711 (deploy D4) and 1671 (D3) back
  * first (scripts/session-status-drop-down.sql, scripts/session-status-from-facts-down.sql), and (4) takes constraints
  * away and puts them back.
  */
@@ -113,7 +113,7 @@ test('D2: the agreement CHECKs, phase NOT NULL, the partial indexes, the fill an
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
   t.after(() => sql.end().catch(() => undefined));
-  // The database deploy D2 left: migrations 1691 (D4) and 1671 (D3) rolled back, as their down scripts do it. What this
+  // The database deploy D2 left: migrations 1711 (D4) and 1671 (D3) rolled back, as their down scripts do it. What this
   // file holds to account are D2's CHECKs, whose deploy-1 writes (the word alone) D3's trigger would not keep the facts
   // beside.
   await restoreStatusColumn(sql);

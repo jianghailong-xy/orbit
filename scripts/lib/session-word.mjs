@@ -1,7 +1,7 @@
 // The status word of a session row, for the drills that print or wait on it: derived from the row's facts by the
 // server's own SQL projector (migration 1621, src/apiserver/src/sessions/session-legacy-words.ts;
 // docs/session-status-retirement-plan.md §2.6). It reads no stored word: session.status left with deploy D4 (migration
-// 1691).
+// 1711).
 
 /** SQL text for the word of the `session` row the query names `row` (a constant, never input). */
 export const sessionWordSql = (row) =>

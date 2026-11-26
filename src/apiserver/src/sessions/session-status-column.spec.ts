@@ -9,7 +9,7 @@ import { type Hit, readSchema, scanSessionStatus } from '../test-support/session
  * Criterion: no apiserver code reads or writes `session.status` (docs/session-status-retirement-plan.md §5, task T1).
  * The readers and writers moved onto `phase`, `turn_state` and the facts beside them (tasks T7 to T12, and T14 for the
  * writers, deploy D3), and the allow-list that counted the uses left on the way is gone: no product file may hold one.
- * Migration 1691 (task T15, deploy D4) dropped the column and its type; session-status-column.pg.spec.ts holds that.
+ * Migration 1711 (task T15, deploy D4) dropped the column and its type; session-status-column.pg.spec.ts holds that.
  *
  * Read: every .ts file under src/apiserver/src except tests (.spec, .test, .it, .e2e), `.fixture(s).ts`, test-support
  * and __tests__. Comments are stripped first. What counts, each reported as `file:line: …`:

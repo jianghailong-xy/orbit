@@ -13,7 +13,7 @@
  *   P4  its task ended DONE (`task_done`) and it had started                     SUCCEEDED
  *   P5  anything else                                                            CANCELLED
  * The released kinds that read another word than the one stored before deploy D3 are the plan's §3.4 (C1-C8). No word
- * is stored since deploy D4 (migration 1691): this projector and its SQL twin are where the words come from.
+ * is stored since deploy D4 (migration 1711): this projector and its SQL twin are where the words come from.
  */
 import { Prisma } from '@prisma/client';
 import { RunStatus, SessionEndReason } from '@orbit/shared';
