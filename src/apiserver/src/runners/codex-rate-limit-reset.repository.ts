@@ -118,14 +118,18 @@ export class CodexRateLimitResetRepository {
     return count === 1;
   }
 
-  /** A runner's active operation and its most recent one, which is the same row while one is active. */
+  /** A runner's active operation and its most recent one, which is the same row while one is active — of
+   *  one account when `accountFingerprint` names it, else of whichever account. */
   async forRunner(
     ownerId: string,
     runnerId: string,
+    accountFingerprint?: string,
   ): Promise<{ active: CodexRateLimitResetOperationState | null; latest: CodexRateLimitResetOperationState | null }> {
+    // Prisma drops an undefined filter.
+    const where = { ownerId, runnerId, accountFingerprint };
     const [active, latest] = await Promise.all([
-      this.prisma.codexRateLimitResetOperation.findFirst({ where: { ownerId, runnerId, ...ACTIVE }, orderBy: NEWEST_FIRST }),
-      this.prisma.codexRateLimitResetOperation.findFirst({ where: { ownerId, runnerId }, orderBy: NEWEST_FIRST }),
+      this.prisma.codexRateLimitResetOperation.findFirst({ where: { ...where, ...ACTIVE }, orderBy: NEWEST_FIRST }),
+      this.prisma.codexRateLimitResetOperation.findFirst({ where, orderBy: NEWEST_FIRST }),
     ]);
     return { active: active && stateOf(active), latest: latest && stateOf(latest) };
   }

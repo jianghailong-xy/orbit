@@ -11,6 +11,8 @@
  *       reset waits its turn behind the added slot's (one command per heartbeat) and is then sent naming
  *       `default`.
  *   (2) the slot column is immutable and holds `default` or an 8-hex id only, whatever writes it.
+ *   (3) `GET …/codex-rate-limit-reset?accountFingerprint=` answers one account's active and latest operation;
+ *       without the filter, the runner's.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runners/codex-reset-added-account.pg.spec.ts
  *
@@ -85,6 +87,8 @@ interface World {
   sql: Client;
   /** A user route: the bearer token is the user id. A runner route: the bearer token is the runner's. */
   send(path: string, token: string, body: unknown, headers?: Record<string, string>): Promise<Sent>;
+  /** A user route's read. */
+  get(path: string, token: string): Promise<Sent>;
 }
 interface Machine {
   id: string;
@@ -146,23 +150,28 @@ async function world(t: TestContext): Promise<World> {
     await prisma.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
+  const answer = async (response: Response): Promise<Sent> => {
+    const text = await response.text();
+    let json: Json = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+    return { status: response.status, text, json };
+  };
   return {
     prisma,
     sql,
     async send(route, token, body, headers = {}) {
-      const response = await fetch(`${base}${route}`, {
+      return answer(await fetch(`${base}${route}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...headers },
         body: JSON.stringify(body),
-      });
-      const text = await response.text();
-      let json: Json = null;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
-      }
-      return { status: response.status, text, json };
+      }));
+    },
+    async get(route, token) {
+      return answer(await fetch(`${base}${route}`, { headers: { authorization: `Bearer ${token}` } }));
     },
   };
 }
@@ -376,3 +385,42 @@ test('(2) the slot column is immutable and holds Default or an 8-hex slot id onl
   assert.equal(replayed.status, 200, replayed.text);
   assert.equal(replayed.json.replayed, true);
 });
+
+test('(3) the operations read answers for one account at a time when it is asked for one', {
+  skip, timeout: 120_000,
+}, async (t) => {
+  const w = await world(t);
+  const m = await newMachine(w);
+  await heartbeat(w, m);
+  const list = (query = '', token = m.ownerId) => w.get(`/runners/${m.id}/codex-rate-limit-reset${query}`, token);
+  const of = (fingerprint: string) => list(`?accountFingerprint=${fingerprint}`);
+  /** The account and operation each of `active` and `latest` names. */
+  const named = (sent: Sent) => {
+    assert.equal(sent.status, 200, sent.text);
+    return [sent.json.active, sent.json.latest].map((op: Json) => op && [op.accountFingerprint, uuidOf(op.id)]);
+  };
+
+  const work = await confirm(w, m, { accountFingerprint: WORK_FINGERPRINT, accountSlot: WORK });
+  assert.equal(work.status, 201, work.text);
+  const workOp = [WORK_FINGERPRINT, uuidOf(work.json.operation.id)];
+  // Default has nothing yet: Work's operation, in flight, is not Default's.
+  assert.deepEqual(named(await of(DEFAULT_FINGERPRINT)), [null, null]);
+  assert.deepEqual(named(await of(WORK_FINGERPRINT)), [workOp, workOp]);
+
+  const own = await confirm(w, m, { accountFingerprint: DEFAULT_FINGERPRINT });
+  assert.equal(own.status, 201, own.text);
+  const defaultOp = [DEFAULT_FINGERPRINT, uuidOf(own.json.operation.id)];
+  assert.deepEqual(named(await of(DEFAULT_FINGERPRINT)), [defaultOp, defaultOp]);
+  assert.deepEqual(named(await of(WORK_FINGERPRINT)), [workOp, workOp], "a newer operation of Default does not hide Work's");
+  // Without the filter it is the runner's newest, whichever account — what older clients read.
+  assert.deepEqual(named(await list()), [defaultOp, defaultOp]);
+
+  for (const query of ['?accountFingerprint=', '?accountFingerprint=default', `?accountFingerprint=${WORK_FINGERPRINT}&accountFingerprint=${DEFAULT_FINGERPRINT}`]) {
+    const refused = await list(query);
+    assert.equal(refused.status, 400, `${query}: ${refused.text}`);
+  }
+  // Another user's runner stays unfound, filtered or not.
+  const stranger = await newMachine(w);
+  assert.equal((await list(`?accountFingerprint=${WORK_FINGERPRINT}`, stranger.ownerId)).status, 404);
+});
+

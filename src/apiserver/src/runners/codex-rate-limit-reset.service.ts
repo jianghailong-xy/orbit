@@ -19,6 +19,7 @@ import {
   codexResetOperationView,
   codexResetRefusal,
   createCodexResetRequestViolations,
+  isCodexAccountFingerprint,
   newCodexResetOperation,
   type CodexRateLimitResetOperations,
   type CodexRateLimitResetOperationState,
@@ -188,10 +189,17 @@ export class CodexRateLimitResetService {
     return { operation: codexResetOperationView(created.operation), replayed: created.replayed };
   }
 
-  /** The runner's active operation and its most recent one: what a page polls while one is active. */
-  async operationsFor(ownerId: string, runnerId: string): Promise<CodexRateLimitResetOperations> {
+  /**
+   * The runner's active operation and its most recent one: what a page polls while one is active. With
+   * `accountFingerprint`, that account's alone — a page drawing one card per account asks per account, or
+   * one account's operation would stand in for another's. Without it, the runner's, whichever account.
+   */
+  async operationsFor(ownerId: string, runnerId: string, accountFingerprint?: unknown): Promise<CodexRateLimitResetOperations> {
+    if (accountFingerprint !== undefined && !isCodexAccountFingerprint(accountFingerprint)) {
+      throw new BadRequestException('query.accountFingerprint must match cxa1_ + 32 lowercase hex');
+    }
     await this.ownRunner(ownerId, runnerId);
-    const { active, latest } = await this.operations.forRunner(ownerId, runnerId);
+    const { active, latest } = await this.operations.forRunner(ownerId, runnerId, accountFingerprint);
     return {
       active: active && codexResetOperationView(active),
       latest: latest && codexResetOperationView(latest),
