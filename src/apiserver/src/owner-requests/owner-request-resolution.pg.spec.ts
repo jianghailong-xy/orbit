@@ -112,9 +112,9 @@ test('owner requests: an ending starts exactly one turn in the asking session', 
   const session = async (status: string): Promise<string> => {
     const id = randomUUID();
     await sql.query(
-      `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+      `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                              "provider","provider_builtin","num_turns","started_at","runtime_session_id")
-       VALUES ($1,'asking session','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5)`,
+       VALUES ($1,'asking session','the opening prompt',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,'claude',TRUE,1,now(),$5)`,
       [id, ownerId, status, runnerId, `runtime-${id}`],
     );
     return id;
@@ -276,7 +276,7 @@ test('owner requests: an ending starts exactly one turn in the asking session', 
 
     const ended = await session('RUNNING');
     const late = await file(ended, { kind: 'CONFIRM' });
-    await sql.query(`UPDATE "session" SET "status" = 'INTERRUPTED', "end_reason" = 'ended' WHERE "id" = $1`, [ended]);
+    await sql.query(`UPDATE "session" SET "turn_state" = 'ABANDONED', "end_reason" = 'ended' WHERE "id" = $1`, [ended]);
     await end(ended, late.id, 'DECLINED');
     await delivery.drain();
     assert.deepEqual((await turnsOn(ended)).filter((turn) => turn.clientTurnId.startsWith('owner-request:')), []);

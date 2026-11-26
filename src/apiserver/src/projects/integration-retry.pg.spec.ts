@@ -13,11 +13,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { receiveOpenItem } from '../test-support/open-item-delivery';
@@ -222,7 +222,7 @@ async function world(stack: Stack, label: string, automatic = true): Promise<Wor
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -325,7 +325,7 @@ async function doneTask(
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -379,8 +379,8 @@ async function doneTask(
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: worktree
-        ? { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
-        : { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        ? { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
+        : { turnState: null, finishedAt: new Date() },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -888,7 +888,7 @@ test('the rerun lands the branch the task\'s work ended on, not the one the fail
           title: 'the second run',
           prompt: 'the second run',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED, 
+          turnState: null, 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           startedAt: new Date(),
@@ -1263,7 +1263,7 @@ test('a taken unanswered exception survives an owner-card wait beyond the window
       const { task } = await failedLanding(stack, w, 'retry-owner-card-wait');
       const [item] = await itemsOf(stack.db, task.taskId);
       await stack.openItems.deliverForItems([item!.id]);
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.RUNNING } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: 'IN_FLIGHT' } });
       const handed = await dequeue(stack, w.coordinatorSessionId, w.runnerId);
       assert.ok(handed);
       const turn = await stack.db.conversationTurn.findUniqueOrThrow({ where: { id: handed.turnId } });
@@ -1302,7 +1302,7 @@ test('escalated: a failure that went to the owner on the clock is theirs, and th
       const [item] = await itemsOf(stack.db, task.taskId);
       await receiveOpenItem(stack.db, item!.id);
       // A taken item only escalates after its coordinator can no longer carry it.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: new Date()} });
       await stack.db.$executeRaw(
         Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                     WHERE "id" = ${item!.id}::uuid`,

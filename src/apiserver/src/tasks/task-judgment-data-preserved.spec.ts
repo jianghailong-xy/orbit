@@ -3553,6 +3553,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // phase alone on the rows with retry_at set that it reads differently. Only `session` is touched; no preserved
       // relation, trigger, function of one or DONE fence changes.
       '1670_session_phase_retry_pending',
+      // 1671 (deploy D3) adds an eight-argument session_legacy_status and points the nine-argument one at it, drops the
+      // stored-word fallback from session_held_turn_state, replaces session_aa_turn_state_from_status (and its function)
+      // with session_aa_status_from_facts, which writes session.status from the facts, and re-creates nine session
+      // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1671_session_status_from_facts',
       // 1672 creates task_acceptance_round (one EXECUTABLE acceptance round's record), cascading with task and with its
       // conversation_turn; no preserved relation, row, trigger, function or DONE fence changes.
       '1672_task_acceptance_round'],

@@ -231,7 +231,7 @@ test('Feishu: a connected group sends work, one topic per request', {
     try {
       await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
       await sql.query(
-        `UPDATE "session" SET "status" = 'RUNNING', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
+        `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
                 "inbox_lease_generation" = $4::uuid, "started_at" = coalesce("started_at", now())
           WHERE "id" = $1::uuid`,
         [sessionId, runnerId, lease.owner, lease.generation]);
@@ -255,7 +255,7 @@ test('Feishu: a connected group sends work, one topic per request', {
     });
     assert.equal(done.status, 200, done.text);
     // Parked again, as a session whose turn ended is.
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [sessionId]);
   }
   const sentOutbox = (turnId: string) => until(`the reply of turn ${turnId} sent`, async () => {
     const row = await db.feishuOutbox.findUnique({ where: { turnId } });
@@ -428,7 +428,7 @@ test('Feishu: a connected group sends work, one topic per request', {
     await sql.query('BEGIN');
     await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
     await sql.query(
-      `UPDATE "session" SET "status" = 'RUNNING', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
+      `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
               "inbox_lease_generation" = $4::uuid, "started_at" = coalesce("started_at", now()), "runtime_session_id" = coalesce("runtime_session_id", 'runtime')
         WHERE "id" = $1::uuid`, [sessionId, runnerId, lease.owner, lease.generation]);
     await sql.query('COMMIT');

@@ -36,12 +36,12 @@ import { BadRequestException, ConflictException, HttpException } from '@nestjs/c
 import { JwtService } from '@nestjs/jwt';
 import {
   ProjectStatus,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   type PrismaClient,
   type Runner,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { PROJECT_REOPEN_NOTES, uuidToBase62, type ProjectReopenPayload } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -151,7 +151,7 @@ test('project reopen requests: an agent asks, the owner answers once, and the pr
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: title, provider: 'claude',
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, numTurns: 1, startedAt: new Date(),
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, numTurns: 1, startedAt: new Date(),
         runtimeSessionId: randomUUID(), startsTaskWork: false,
       },
     });
@@ -226,7 +226,7 @@ test('project reopen requests: an agent asks, the owner answers once, and the pr
     await prisma.session.create({
       data: {
         id: run, ownerId, creatorId: ownerId, taskId: task.id, title: `ran ${task.id}`, prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: `orbit/${task.id}`, isolationStatus: 'worktree',
+        turnState: null, finishedAt: new Date(), branch: `orbit/${task.id}`, isolationStatus: 'worktree',
       },
     });
     const done = await sql.query(

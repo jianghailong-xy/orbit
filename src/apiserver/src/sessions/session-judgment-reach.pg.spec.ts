@@ -33,7 +33,8 @@ import { test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { CreatorType, type Prisma, RunStatus, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { CreatorType, type Prisma, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -68,6 +69,8 @@ import { TaskOwnerConfirmationService } from '../tasks/task-owner-confirmation.s
 import { TasksService } from '../tasks/tasks.service';
 import { sessionMessageBlock } from './session-message';
 import { SessionsService } from './sessions.service';
+import { type SessionFixture, WORD_SELECT, wordOf } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -226,22 +229,22 @@ test('what a session answers about a run reaches the run only as the table says'
   }
   await accountDefault(null);
 
-  type Shape = Partial<Prisma.SessionUncheckedCreateInput>;
+  type Shape = SessionFixture;
   type TaskShape = Partial<Prisma.TaskUncheckedCreateInput>;
 
   /** A session parked between turns, in a mode and on an engine. A stored mode of null is written as null. */
   async function sessionIn(mode: string | null, extra: Shape = {}): Promise<string> {
     const id = randomUUID();
     const engine = extra.engine ?? 'claude';
-    const fixtureStatus = extra.status ?? RunStatus.AWAITING_INPUT;
+    const { status: fixtureStatus = RunStatus.AWAITING_INPUT, ...extraFacts } = extra;
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: `${mode} ${id.slice(-6)}`, prompt: `${mode}`,
         provider: engine, providerBuiltin: true, engine, permissionMode: mode,
-        status: RunStatus.AWAITING_INPUT, numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
+        turnState: turnStateOfWord(fixtureStatus), numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
         dispatchOrigin: SessionDispatchOrigin.USER,
-        ...extra,
+        ...extraFacts,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
         } : {}),
@@ -466,7 +469,7 @@ test('what a session answers about a run reaches the run only as the table says'
     });
     const run = await prisma.session.findUniqueOrThrow({
       where: { id: stop.run },
-      select: { status: true, endReason: true, completedAt: true, deletedAt: true, cancelRequestedAt: true, taskId: true },
+      select: { ...WORD_SELECT, endReason: true, completedAt: true, deletedAt: true, cancelRequestedAt: true, taskId: true },
     });
     const turns = await prisma.conversationTurn.count({ where: { sessionId: stop.run } });
     const decisions = await prisma.taskEvidenceDecision.count({ where: { taskId: stop.taskId } });
@@ -711,8 +714,9 @@ test('what a session answers about a run reaches the run only as the table says'
 
   // ── SEND_BACK: only the session it would give a turn to is asked ─────────────────────────────
   const NO_TURN: Record<string, Shape> = {
-    'SUCCEEDED': { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
-    'FAILED': { status: RunStatus.FAILED, finishedAt: new Date() },
+    // Released with its work finished: its task ended DONE (`task_done`), the end that reads SUCCEEDED (plan §3.1 P4).
+    'SUCCEEDED': { status: RunStatus.SUCCEEDED, finishedAt: new Date(), endReason: 'task_done' },
+    'FAILED': { status: RunStatus.FAILED, finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
     'CANCELLED': { status: RunStatus.CANCELLED, finishedAt: new Date() },
     'asked to stop': { cancelRequestedAt: new Date() },
     'in Trash': { deletedAt: new Date() },
@@ -725,8 +729,8 @@ test('what a session answers about a run reaches the run only as the table says'
       assertWent(answer, 'SEND_BACK');
       assert.equal((await decisionOf(stop.taskId))?.note, NOTE, 'the note stays on the revision');
       assert.equal(await sentBackTurn(stop), null, 'no turn');
-      const row = await prisma.session.findUniqueOrThrow({ where: { id: stop.run }, select: { status: true } });
-      assert.equal(row.status, shape.status ?? RunStatus.AWAITING_INPUT, 'nothing brought it back');
+      const row = await prisma.session.findUniqueOrThrow({ where: { id: stop.run }, select: { ...WORD_SELECT } });
+      assert.equal(wordOf(row), shape.status ?? RunStatus.AWAITING_INPUT, 'nothing brought it back');
     });
   }
   for (const live of [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED]) {
@@ -1034,7 +1038,7 @@ test('what a session answers about a run reaches the run only as the table says'
     return JSON.stringify({
       check: await taskRow(pair.check),
       subject: await taskRow(pair.subject),
-      run: await prisma.session.findUniqueOrThrow({ where: { id: pair.run }, select: { status: true, endReason: true, cancelRequestedAt: true } }),
+      run: await prisma.session.findUniqueOrThrow({ where: { id: pair.run }, select: { ...WORD_SELECT, endReason: true, cancelRequestedAt: true } }),
     });
   }
 

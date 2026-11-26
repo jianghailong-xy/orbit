@@ -45,7 +45,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -283,7 +284,7 @@ async function doneCodeTask(stack: Stack, w: World): Promise<{ taskId: string; s
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -333,7 +334,7 @@ async function doneCodeTask(stack: Stack, w: World): Promise<{ taskId: string; s
   await db.$transaction(async (tx) => {
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt},
+      data: { turnState: null, finishedAt},
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);

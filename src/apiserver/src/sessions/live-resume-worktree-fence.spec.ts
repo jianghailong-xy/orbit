@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
+import { writtenWord } from '../test-support/session-word';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -180,7 +181,7 @@ for (const tc of [
     assert.deepEqual(h.outerUpdates, []);
     assert.equal(h.lockedUpdates.length, 1);
     const data = (h.lockedUpdates[0] as { data: Record<string, unknown> }).data;
-    assert.equal(data.status, RunStatus.PENDING);
+    assert.equal(writtenWord(data), RunStatus.PENDING);
     for (const [field, value] of Object.entries(tc.expected)) {
       assert.equal(data[field], value, `${field} was not cleared under the row lock`);
     }
@@ -240,7 +241,7 @@ for (const tc of [
     // Queued for a slot, and the claimed epoch is left untouched so it still completes.
     assert.equal(h.lockedUpdates.length, 1);
     const data = (h.lockedUpdates[0] as { data: Record<string, unknown> }).data;
-    assert.equal(data.status, RunStatus.PENDING);
+    assert.equal(writtenWord(data), RunStatus.PENDING);
     for (const field of tc.opFields) {
       assert.equal(data[field], undefined, `${field} must not be cleared`);
     }

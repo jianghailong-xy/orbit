@@ -24,7 +24,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 
-import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, type Runner, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { CoordinatorPendingWait } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -138,7 +139,7 @@ async function coordinatorSession(db: PrismaClient, ownerId: string, workspaceId
   return (await db.session.create({
     data: {
       ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: 'coordinate',
-      provider: 'claude', engine: 'claude', model: 'claude-opus-5-5', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+      provider: 'claude', engine: 'claude', model: 'claude-opus-5-5', turnState: null, numTurns: 1,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, titleManagedByProject: true,
     },
   })).id;

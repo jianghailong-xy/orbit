@@ -459,9 +459,9 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
     await admin.query(INSERT_EDGE, [manual.dependentTaskId, manual.openTaskId]);
     await assert.rejects(
       admin.query(
-        `INSERT INTO "session" ("id", "title", "prompt", "status", "creator_id", "owner_id",
+        `INSERT INTO "session" ("id", "title", "prompt", "turn_state", "creator_id", "owner_id",
            "task_id", "workspace_id", "dispatch_origin", "updated_at")
-         VALUES ($1::uuid, 'manual', 'manual', 'PENDING', $2::uuid, $2::uuid, $3::uuid, $4::uuid,
+         VALUES ($1::uuid, 'manual', 'manual', 'QUEUED', $2::uuid, $2::uuid, $3::uuid, $4::uuid,
                  'USER', CURRENT_TIMESTAMP)`,
         [manual.sessionId, manual.ownerId, manual.dependentTaskId, manual.workspaceId],
       ),

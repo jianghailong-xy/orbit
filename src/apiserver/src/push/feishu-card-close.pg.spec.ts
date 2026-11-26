@@ -25,7 +25,8 @@ import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import type { ConfigService } from '@nestjs/config';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -44,6 +45,7 @@ import { SessionsController } from '../sessions/sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { FeishuTransport } from './feishu-transport';
 import { PushService } from './push.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY = `feishu-card-close-${randomUUID()}`;
@@ -101,7 +103,7 @@ test('a card whose matter was settled elsewhere is drawn as its outcome, without
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: 'the work',
-        provider: 'claude', status, engineTurnActive: status === RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+        provider: 'claude', turnState: turnStateOfWord(status), engineTurnActive: status === RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(), runtimeSessionId: randomUUID(),
       },
     });
@@ -250,7 +252,7 @@ test('a card whose matter was settled elsewhere is drawn as its outcome, without
       where: { id: itemId },
       data: { state: 'RESOLVED', resolution: 'ANSWERED', resolvedAt: new Date(), resolvedBy: 'USER', resolvedByUserId: ownerId, answer: { option: 0 } },
     });
-    await db.session.update({ where: { id: coordinator }, data: { status: RunStatus.RUNNING } });
+    await db.session.update({ where: { id: coordinator }, data: { turnState: 'IN_FLIGHT' } });
     realtime.publish(coordinator, { seq: 0, type: RunEventType.STATUS, payload: { status: RunStatus.RUNNING }, ts: new Date().toISOString() });
     await reconciled();
 
@@ -267,7 +269,7 @@ test('a card whose matter was settled elsewhere is drawn as its outcome, without
     const row = await approvalCard(s, [id]);
 
     // The runner reports the session parked: it is not RUNNING, so nothing on it is waiting on the owner.
-    await db.session.update({ where: { id: s }, data: { status: RunStatus.AWAITING_INPUT, engineTurnActive: false } });
+    await db.session.update({ where: { id: s }, data: { turnState: null, engineTurnActive: false } });
     realtime.publish(s, { seq: 0, type: RunEventType.STATUS, payload: { status: RunStatus.AWAITING_INPUT }, ts: new Date().toISOString() });
     await reconciled();
 

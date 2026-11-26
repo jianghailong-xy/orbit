@@ -26,7 +26,8 @@ import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import type { ConfigService } from '@nestjs/config';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { FeishuAppService } from '../feishu/feishu-app.service';
@@ -143,7 +144,7 @@ test('one stretch of approvals is one Feishu card, between two apiserver process
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: 'the work',
-        provider: 'claude', status: RunStatus.RUNNING, engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
+        provider: 'claude', turnState: 'IN_FLIGHT', engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(), runtimeSessionId: randomUUID(),
       },
     });

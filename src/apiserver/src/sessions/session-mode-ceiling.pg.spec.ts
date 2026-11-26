@@ -29,7 +29,8 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -70,6 +71,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
 import '../test-support/daemon-routes-over-http';
+import { fixtureFacts } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -269,10 +271,10 @@ test('a session cannot start a session wider than itself', {
         providerBuiltin: true,
         engine,
         permissionMode: mode,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
-        ...extra,
+        ...fixtureFacts(extra),
       },
     });
     return id;
@@ -510,7 +512,7 @@ test('a session cannot start a session wider than itself', {
         provider: 'claude',
         providerBuiltin: true,
         permissionMode: 'plan',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });

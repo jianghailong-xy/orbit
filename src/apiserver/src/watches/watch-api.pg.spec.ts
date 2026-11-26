@@ -212,9 +212,9 @@ async function session(h: Harness, ownerId: string, shape: SessionShape = {}): P
   const id = randomUUID();
   // `archived_at` is the deprecated mirror of `completed_at`; a fixture keeps the two in step.
   await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","status","end_reason",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","turn_state","end_reason",
                            "completed_at","archived_at","deleted_at","updated_at", "finished_at")
-     VALUES ($1,'watched session','p',$2,$2,$3,$4,$5,$5,$6,now(),
+     VALUES ($1,'watched session','p',$2,$2,(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,$5,$5,$6,now(),
              CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, ownerId, shape.status ?? 'RUNNING', shape.endReason ?? null, shape.completedAt ?? null, shape.deletedAt ?? null],
   );
@@ -954,9 +954,9 @@ test('a watch carries its targets\' titles, and none for a target its account ca
 async function run(h: Harness, ownerId: string, taskId: string, status: 'RUNNING' | 'PENDING'): Promise<string> {
   const id = randomUUID();
   await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","task_id","status",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","task_id","turn_state",
                            "dispatch_origin","starts_task_work","updated_at")
-     VALUES ($1,'a run of it','p',$2,$2,$3,$4,'USER',TRUE,now())`,
+     VALUES ($1,'a run of it','p',$2,$2,$3,(CASE ($4)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),'USER',TRUE,now())`,
     [id, ownerId, taskId, status],
   );
   return id;
@@ -1065,7 +1065,7 @@ test('a session target names the task its session runs, and no other', { skip, t
   assert.deepEqual(named(one.body.targets), created, 'the reads name what the create named');
 
   // The standing is the task's as it is now: the run failed, and the task with it.
-  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = now() WHERE "id" = $1`, [runOfWork]);
+  await h.sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = now() WHERE "id" = $1`, [runOfWork]);
   await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [work]);
   const ended = await call(h, owner.bearer, 'GET', `/watches/${overSessions.id}`);
   expectStatus(ended, 200, 'the watch reads back after the run ended');

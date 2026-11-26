@@ -21,7 +21,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -69,7 +70,7 @@ test('every route of the four browser tools answers 404 with the switch off, abs
   const sessionId = (await prisma.session.create({
     data: {
       ownerId: userId, creatorId: userId, assignedRunnerId: runnerId, provider: 'claude', engine: 'claude', model: 'claude-opus-5-5',
-      title: 'browsing', prompt: 'browse', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+      title: 'browsing', prompt: 'browse', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
     },
     select: { id: true },
   })).id;

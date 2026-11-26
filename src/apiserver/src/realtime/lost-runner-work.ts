@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 
 import { isHeld } from '../common/session-release';
-import { isSessionExecuting, type SessionExecutionRow } from '../common/session-working';
+import { isSessionExecuting } from '../common/session-working';
 import {
   BACKGROUND_WAKE_TURN_PREFIX,
   type BackgroundWakeDto,
@@ -13,7 +13,6 @@ import {
 import { interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from '../runner-api/subagent-wake';
 import { RUNNER_BEATS, type RunnerBeats } from '../runners/runner-presence';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
-import { legacySessionStatusSql } from '../sessions/session-legacy-words';
 import { sessionTurnStateSql, turnStateOf, type TurnState } from '../sessions/session-turn-state';
 import { SessionNotSendable, type SessionsService } from '../sessions/sessions.service';
 
@@ -69,8 +68,6 @@ export interface LostRunnerWork {
 
 interface LockedRow {
   ownerId: string;
-  /** The word the session answers with now (sessions/session-legacy-words.ts), which `isSessionExecuting` reads. */
-  status: SessionExecutionRow['status'];
   turnState: TurnState | null;
   finishedAt: Date | null;
   assignedRunnerId: string | null;
@@ -108,7 +105,7 @@ export async function settleLostRunnerWork(
   const runner = await tx.runner.findUnique({ where: { id: runnerId }, select: RUNNER_LIVENESS });
   if (!looksOffline(runner)) return null;
   const rows = await tx.$queryRaw<LockedRow[]>`
-    SELECT "owner_id" AS "ownerId", ${legacySessionStatusSql('"session"')} AS "status",
+    SELECT "owner_id" AS "ownerId",
            ${sessionTurnStateSql('"session"')} AS "turnState", "finished_at" AS "finishedAt",
            "assigned_runner_id" AS "assignedRunnerId",
            "cancel_requested_at" AS "cancelRequestedAt", "run_claimed_at" AS "runClaimedAt",

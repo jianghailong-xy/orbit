@@ -461,3 +461,178 @@ killed client and was ended with `pg_terminate_backend`. The scratch directory w
 rows moved during the run (live traffic), so before and after counts are two snapshots. The SubAgent saw 73 untracked
 files in `/root/orbit` that it did not create and did not examine. bg_run is unavailable there, so the production steps
 have the SubAgent run id, not `bgj_` ids.
+
+## Rehearsal of D2 to D3 alone, the rollback and forward again (task T17a, 2026-11-26)
+
+The owner ruled on 2026-11-26 (ask_owner `354KUz2RJ4fvFN7KLwVzQ`): "Rehearse T14 alone, then ask to ship". This run
+rehearses deploy D3 (plan §4.1) by itself, on the HPC seeded copy, with a rollback to D2 and a second move forward. Nothing
+touched production. The stack was isolated: loopback only, the Compose project `orbit-link-t17a`, and state under
+`/mnt/tmp/t17a`. Every number below comes from a runner-hosted job, named by its `bgj_` id. The records and the
+T17a variant of the kit are the attachment `354MQXRKsqmwISfIWRbc3` (`t17a-records.tgz`). The kit variant is not on the
+branch: this task commits only this file.
+
+**Releases.** D2 is `5a08c866c4`, origin/main at the time and the main commit the T14 branch merged. It holds 1651–1669
+and no 1671. Production's deployed commit was not read; the task allows origin/main in its place. D3 is the project head `041d0d7f7a`, which carries T14 and `1671_session_status_from_facts`. The images
+`orbit-link-t17a-apiserver:d2` (`sha256:08fd2803…`) and `:d3` (`sha256:5555fa32…`) were built from a `git archive` of
+each commit under the HPC heavy-work lock (bgj_4ae9534d55aa). `src/runner-go` and `src/link-gateway` are the same at both
+commits. The runner is a `go build` of the head (bgj_c7294f9db694), and its only engine is the fake claude.
+
+**The copy.** A fresh database was migrated by D2 code. With both apiservers stopped, the plans seed and the 57 projector
+shapes went in (bgj_45b52e8b139c), so the session triggers filled `turn_state` and `phase` as D2's writers leave them.
+The T16 shapes hold no C8 row, so four were added as T16b found them on the restored production backup: stored SUCCEEDED,
+`completed`, no outcome, CONVERSATION, filed in Completed (`seed-c8.sql`, copies of seeded rows). That gave 101,954
+sessions with every §3.4 kind. C2 and C5 have no fact of their own, so the census counts them with C1/C3 and C4.
+
+**Topology and load.** Two apiserver slots ran on one database, `apiserver` (A) and `apiserver-b` (B). The link gateway
+sent the runners' calls to both in turn. Each release change was the upgrade skill's hand-over, done one slot at a time:
+B's container was replaced by the new image, which runs `prisma migrate deploy` as it starts, while A's old release
+served. A walk then went through B with both releases up. Then A was replaced. Two kinds of load ran throughout:
+- **Real API and runner traffic** (`load.mjs`): a second runner (`max_concurrent` 3) and the owner's API, round robin over
+  whichever slots were up. Every 1.5 s it made a new session (a claim, a turn completion, a park). It also sent
+  follow-ups, ended running and parked sessions (releases), and ran task runs that were batch-stopped (cancels).
+  Heartbeats and event reports came from both runners.
+- **Statement-level writer loop** (`writer-loop.cjs`, as T16's but writing as the serving release does): event-ingestion
+  updates every 100 ms. Its cycle wrote the word and `turn_state` together under D2, and `turn_state` alone under D3.
+  No lock timeout was set.
+- **Lock sampler** (`sample-locks.sh`, every 0.2 s), from before the first D2 start to the end.
+
+### Timeline and timings
+
+| Step | What ran | Took | Job |
+|---|---|---|---|
+| Census at D2, before any server | clean (below) | 1.0 s | bgj_3f44c50f85df |
+| D2 start | both slots at D2 (no migration pending); the writer loop, the sampler and the load on | 1.9 s, 1.7 s to healthy | bgj_3f44c50f85df |
+| **D2 → D3** | B replaced by D3 while A (D2) served: **1671 applied at B's boot in 21 ms** (`_prisma_migrations` 15:17:34.882–.903). B was healthy 3.4 s after start. Walk `h1-mix` ran through B with A at D2. Then A replaced (no migration pending), healthy after 2.1 s | B 5.1 s stop + 3.4 s start; A 4.6 s + 2.1 s | bgj_561dab912f8f |
+| **Rollback D3 → D2** | B replaced by the D2 image on the same database. D2's `migrate deploy` said "705 migrations found … No pending migrations to apply": no error and no drift complaint about the 1671 row it does not know. Walk `h2-mix` through B (D2) with A at D3. Then A replaced by D2. **1671's down script was not run**: plan §4.1 and 1671's header say a rollback to D2 code is free | B 6.4 s + 5.7 s; A 5.3 s + 3.4 s | bgj_31b9dcfdb757 |
+| **Forward D2 → D3** | the same hand-over again: "706 migrations found … No pending migrations to apply". Walk `h3-mix` through B (D3) with A at D2 | B 4.5 s + 2.2 s; A 4.7 s + 2.9 s | bgj_42a58aaaa66e |
+| Load off, summaries, teardown | `docker compose … down`, then no `t17a` container left | — | bgj_2c9da308fab8 |
+
+Each "stop" above includes the old apiserver's graceful exit (`docker stop -t 30`). The web gateway answered 200 after each
+replacement of A.
+
+### Lock waits
+
+Lock samples are grouped by window below. "Waiters" counts distinct backends seen waiting, and each wait is the waiter's
+statement time when sampled, so it is an upper bound. The full list is in `locks.jsonl`, and the summary is in
+bgj_2c9da308fab8.
+
+| Window | Waiters | Longest waits |
+|---|---|---|
+| D2 alone (15:09:44–15:17:27) | 2 | 204 ms, an app `UPDATE session` behind an app `UPDATE conversation_turn` (row lock) |
+| **D2 → D3 hand-over, 1671 included (15:17:27–15:19:11)** | **0** | none: 1671's `DO` block (its `DROP`/`CREATE TRIGGER` take `ACCESS EXCLUSIVE`/`SHARE ROW EXCLUSIVE` on `session`) never showed up as a holder or a waiter |
+| D3 alone (15:19:11–15:34:45) | 36 | **22.9 s and 10.3 s: the runner claim (`WITH caller AS …`) waiting for `AccessShareLock` on `pg_toast.pg_toast_25704`, the TOAST table of `runner_presence`, behind an autovacuum truncating it**; the rest ≤ 3.7 s, row locks between app statements |
+| Rollback D3 → D2 (15:34:45–15:36:54) | 1 | 723 ms, an app read behind an app `UPDATE session` (row lock) |
+| D2 alone after the rollback (15:36:54–15:42:54) | 11 | **18.0 s: the same claim behind the same autovacuum truncation of `runner_presence`'s TOAST**; the rest ≤ 1.5 s |
+| Forward D2 → D3 (15:42:54–15:44:42) | 5 | ≤ 55 ms, row locks between app statements |
+| D3 alone again (15:44:42–15:47:15) | 1 | 13 ms, an advisory lock of the claim |
+
+- **The long claim waits are not D3's.** They hit D3 and D2 alike, and T14 does not touch `runner_presence`. PostgreSQL
+  logged each one as "canceling autovacuum task … while truncating relation pg_toast.pg_toast_25704", which is the usual
+  cancel when an autovacuum's truncation blocks a waiter. That cancel came 10–23 s late because the host was starved of I/O
+  then: load average 30–58, and its checkpoints took 206–270 s to write 1,900–3,000 buffers. It delays claims on a busy
+  host. It is not a change in who gets claimed; the walk's claims, slots and refusals stayed equal.
+- **The writer loop.** It wrote 10,160 + 9,300 ingest updates across both runs, with 0 errors. Its p50 was 4 ms in both.
+  Its p99 was 64 ms in run 1 (to 15:26:54) and 258 ms in run 2, with a 3.8 s maximum during the I/O stall.
+- **The writer's word cycle ran in only two windows, and neither was a hand-over.** It changed rows from 15:09:44 to about
+  15:14 (D2: 313 rows) and from 15:27 to about 15:33 (D3 alone, turn_state only: 491 rows, 0 errors). Each reaper released
+  the cycled sessions, which sat RUNNING on seeded runners whose turns no runner takes. The first run had no refill. The
+  refill added in run 2 used up the parked seeded sessions by 15:33. After those times its writes matched no row. So
+  during the three hand-overs the statement-level word cycle wrote nothing. The real D2 and D3 code wrote the whole time
+  (the load, below).
+- **The load.** 3,158 owner calls: 1,463 answered by D2 and 1,656 by D3, with **0 HTTP errors**. 39 calls reached a
+  container while it was being replaced (connection refused) and were sent again to the other slot. The runners' own
+  claims, turn completions and reports went through the link gateway to both slots. The latency p99 reached seconds in the
+  windows when I/O was starved.
+
+### Censuses
+
+`census.cjs` was run as T16 ran it, once in each release's image, so each release's projector gave the words it sends; the
+kit's copy also passes `retry_at` to `deriveSessionPhase` (migration 1667). `facts-word.sql` compares every row's stored
+word with the facts' word: the body of 1671's eight-argument `session_legacy_status`, written out, so it runs at either
+release. In it, "touched" means the row's newest version was written after xid 49713, the start of the first D3 hand-over.
+
+| When | Projector | Rows | Word changed | Not a §3.4 kind | Held changed | phase off | turn_state off | Stored ≠ facts | of them held | Touched since D3 | touched and ≠ | Job |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| D2, before any server (C8 added) | D2 | 101,954 | 379 | **0** | **0** | **0** | **0** | 379 | **0** | — | — | bgj_3f44c50f85df |
+| after D2 → D3 | D3 | 102,490 | 383 | **0** | **0** | **0** | **0** | 383 | **0** | 346 | **0** | bgj_561dab912f8f |
+| after D2 → D3 | D2 | 102,492 | 383 | **0** | **0** | **0** | **0** | 383 | **0** | 347 | **0** | bgj_561dab912f8f |
+| after the rollback | D2 | 103,248 | 383 | **0** | **0** | **0** | **0** | 383 | **0** | 1,194 | **0** | bgj_31b9dcfdb757 |
+| after the rollback | D3 | 103,252 | 383 | **0** | **0** | **0** | **0** | 383 | **0** | 1,196 | **0** | bgj_31b9dcfdb757 |
+| after forward again | D3 | 103,608 | 383 | **0** | **0** | **0** | **0** | 383 | **0** | 1,569 | **0** | bgj_42a58aaaa66e |
+| after forward again | D2 | 103,609 | 383 | **0** | **0** | **0** | **0** | 383 | **0** | 1,571 | **0** | bgj_42a58aaaa66e |
+
+The 383 changed words by kind were the same in every census from D3 on: C4/C5 325, C1/C2/C3 39, C3 (`task_done`) 5,
+C6 5, C7 5, C8 4. The jump from 379 to 383 came from four C1 rows that D2's reaper released before the first hand-over,
+the `wd2-s8r` run among them. **Both projectors give every row the same words** in each census: the same counts, line for
+line.
+
+**The stored word against the facts' word.** Every row written since D3 came in stores the facts' word: 1,569 rows,
+D2's own writes after the rollback included. D2 writes both spellings, and 1671's trigger, which stays through the
+rollback, overwrites the word with the facts'. The only rows whose stored word differs are the **383 released rows of
+the §3.4 kinds that no write has touched since D3**. These are exactly the census's changed words: no held row, and no
+row written since. 1671 writes no row by design (its header: "No row is written"), so these rows keep the word D2
+stored. Nothing at D3 reads that column, and D2 after a rollback reads the projector, so no payload shows it. **So
+"stored word equals the facts' word on every row" holds for every row written since D3, not for these 383.** For it to
+hold on every row, those rows would have to be written once (any statement naming one of the trigger's columns). D4
+drops the column anyway. The coordinator decides whether that matters.
+
+### The walk (plan §7.3) on each release
+
+These are T16's `walk.mjs` scenarios: S1, S3–S10, S11, S12 and, in its own pass, S8r. They were driven through the
+owner's API and read back from the database. Every pass is compared with the D2 baseline `wd2` by T16's `compare.mjs`,
+on every observation but time.
+
+| Pass | Releases serving | API through | Against `wd2` | Job |
+|---|---|---|---|---|
+| `wd2` | D2, D2 | A | the baseline, every scenario passes | bgj_7a6fc4f4d37c |
+| `wd2r` | D2, D2 | B | **0 differences** (the walk repeats under this load) | bgj_38a819855db8 |
+| `h1-mix` | A D2, B D3 just migrated | B (D3) | **0 differences** | bgj_561dab912f8f |
+| `wd3` | D3, D3 | A | 2 differences, both in S7's word trace (below) | bgj_1d6fd344aaea |
+| `wd3r` | D3, D3 | A | 1 difference, in S7's word trace | bgj_b8e542ead6eb |
+| `wd3r2` | D3, D3 | A | **0 differences** | bgj_b8e542ead6eb |
+| `h2-mix` | A D3, B D2 (the rollback) | B (D2) | **0 differences** | bgj_31b9dcfdb757 |
+| `wrb` | D2, D2 after the rollback | A | 1 difference, in S10's word trace after the pause lifts | bgj_9f1f9428b4ff |
+| `h3-mix` | A D2, B D3 (forward) | B (D3) | 2 differences, both in S7's word trace | bgj_42a58aaaa66e |
+| `wf` | D3, D3 after forward | A | **0 differences** | bgj_42a58aaaa66e |
+| recheck of `wd2`'s 23 sessions | D3 | A | payloads **equal** to what D2 served | bgj_1d6fd344aaea |
+| recheck of `wd2`, `wrb` | D3 after forward | A | payloads **equal** | bgj_42a58aaaa66e |
+
+- **Claims, runner slots and dispatch were the same as D2's in every pass.** The S1 slot counts were 2 full, 2 after one
+  finishes and 0 parked. S3: the first Run now started and the second was refused `409 RUN_NOW_REFUSED`. In S4 a session
+  parked with a background job holds no slot, and its message waited QUEUED, then was claimed. S5's sub-agent took no slot.
+  S6's reclaim and takeover lines after a runner restart were the same, with the ABANDONED session left ABANDONED (written
+  at D3 as D3's writer would write it, `turn_state` alone). In S9 the execution claim held, a second Run was refused
+  `409 TASK_ALREADY_RUNNING`, and batch stop released CANCELLED. In S10 nothing was claimed while paused: PENDING,
+  `waitingOn` HOLD after 10 s, and each pass's prompt was claimed 10.3–48.8 s after its session was made (bgj_2c9da308fab8).
+  S11's `?status=` filters gave the same rows. S12's payload words were equal.
+- **The trace differences are sampling, not behaviour.** S7 and S10 record the word every 200 ms through `docker exec`
+  until the session parks. The passes that differ ran while the host was at load 25–58 (`wd3r` took 252 s against about
+  90). There a sample took longer than the turn, so the trace missed a passing RUNNING or the last park. The rows are the
+  same in every pass: S7's single turn was answered, its two follow-up turns were answered in order, and each session
+  parked IDLE (bgj_5b3d5c61a2eb). S10's turn was answered after the pause lifted (bgj_feb49796ee2f). `wd3r2` and `wf`, run
+  at normal load, equal the baseline in full.
+- **S8r, an end the runner does not honour** (§3.4 C1), was run once at each release: `wd2-s8r` (bgj_7a6fc4f4d37c),
+  `wd3-s8r` (bgj_1d6fd344aaea), and `wrb-s8r` after the rollback (bgj_9f1f9428b4ff). All three serve the same payload,
+  CANCELLED / ENDED / CANCELLED (status, runState, sessionState), `cancelled`, last outcome CANCELLED, "cancel not
+  honored". They still read the same through D2 at the end (bgj_9f1f9428b4ff). The only difference is the stored word.
+  At D2 before D3, D2's reaper stored FAILED. At D3, and at D2 after the rollback, 1671's trigger stored the facts'
+  CANCELLED: the reaper at D2 still writes FAILED, and the trigger overwrites it.
+- **The legacy words that deployed apps and runners get are unchanged.** The rechecks gave equal payloads, the S12
+  payloads matched pass for pass, and the censuses gave the same words through either release's projector. The golden
+  `session-payloads-legacy.golden.json` spec was not run here; the census through the projector stands in for it, as the
+  task allows.
+
+### What this does not establish
+
+1. **Production's rows and timings.** The copy is the seed and the fixture shapes (C8 added by hand), not a backup.
+   1671 took 21 ms here on 102,000 rows on a host under heavy load. Production's time depends on its own traffic, because
+   1671 must take its locks between production's statements. The `DO` block's 2 s × 45 tries were never needed here.
+2. **The writer loop's word cycle during the hand-overs.** It wrote no row in any of the three hand-overs (above). D2's
+   statement shape under 1671's trigger was covered only by real D2 code, in the rollback window and the mixed walks: its
+   rows all store the facts' word.
+3. **The stored word on the 383 untouched §3.4 rows** (above): unchanged at D3 by design.
+4. **Not run:** the plans of §4.5 at D3, D4 (T15), 1671's down script (not needed for the rollback), S2 (batch cap and
+   spawn tree), S7 on release v1, S5's Merge hold, S11's `session_create --wait` and imports, the web, and any older
+   runner binary. The runner was the head's, which is the same as D2's.
+5. **A quiet host.** Load average 25–58 for most of the run, from other work. It shows in the claim delays and in the
+   trace samples, not in any outcome.

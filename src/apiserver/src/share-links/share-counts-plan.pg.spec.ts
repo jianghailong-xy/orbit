@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -114,7 +115,7 @@ test('a shared session\'s counts read the index and no heap page, and answer the
         await db.session.create({
           data: {
             id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-            status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+            turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           },
         });
         return id;

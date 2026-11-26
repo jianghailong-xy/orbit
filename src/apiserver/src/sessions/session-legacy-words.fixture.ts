@@ -3,10 +3,12 @@
  * every release shape of common/session-release-shapes.fixture.ts as migration 1441 left the stored row, the held
  * words, and the shapes the projector's own rules turn on. Each carries the facts a database row of that shape has.
  */
-import type { RunStatus } from '@prisma/client';
+import type { RunStatus as RunStatusEnum } from '@orbit/shared';
 
 import { backfilled, RELEASE_SHAPES, releaseShape, type ReleaseShape } from '../common/session-release-shapes.fixture';
 import type { LandingSettlement, LegacyStatusFacts } from './session-legacy-words';
+
+type RunStatus = `${RunStatusEnum}`;
 
 export interface WordShape {
   name: string;
@@ -30,7 +32,6 @@ function wordShape(shape: ReleaseShape, name: string = shape.name, over: Partial
     name,
     stored: shape.status,
     facts: {
-      status: shape.status,
       finishedAt: shape.released ? AT : null,
       turnState: shape.released ? null : TURN_STATE_OF_WORD[shape.status] ?? null,
       endReason: shape.endReason,
@@ -61,7 +62,6 @@ const held = (status: RunStatus, over: Partial<LegacyStatusFacts> = {}, name = `
 export function factsOfWord(status: RunStatus | string, over: Partial<LegacyStatusFacts> = {}): LegacyStatusFacts {
   const released = status === 'SUCCEEDED' || status === 'FAILED' || status === 'CANCELLED';
   return {
-    status,
     finishedAt: released ? AT : null,
     turnState: TURN_STATE_OF_WORD[status as RunStatus] ?? null,
     endReason: status === 'SUCCEEDED' ? 'task_done' : null,

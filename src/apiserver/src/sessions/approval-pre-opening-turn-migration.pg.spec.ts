@@ -38,7 +38,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -47,6 +48,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { APPROVAL_ABANDONED_STATUS } from './abandoned-approvals';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -126,7 +128,7 @@ async function session(
       title: `${label} session`,
       prompt: `${label} session`,
       provider: 'claude',
-      status,
+      turnState: turnStateOfWord(status),
       ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
         ? { finishedAt: new Date()}
         : status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),

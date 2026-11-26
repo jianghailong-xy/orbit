@@ -6,10 +6,10 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62, type TaskRunReason } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -27,6 +27,8 @@ import { taskRunResumeTurnId } from '../tasks/task-run-identity';
 import { TasksService } from '../tasks/tasks.service';
 import { BG_JOB_ACTIVITY_STALE_AFTER_MS } from './background-job-activity';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
+import { wordOf, WORD_SELECT } from '../test-support/session-word';
 
 /**
  * A work session parked at AWAITING_INPUT with something that will wake it is still running its
@@ -160,7 +162,7 @@ async function world(
     data: {
       id: w.sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: w.taskId,
       workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title: `${label} run`,
-      prompt: 'the task brief', provider: 'claude', status,
+      prompt: 'the task brief', provider: 'claude', turnState: turnStateOfWord(status),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       startedAt: new Date(Date.now() - 60 * 60_000), numTurns: 1,
       ...parked,
@@ -299,9 +301,9 @@ async function assertRunRefused(stack: Stack, w: World) {
   assert.equal(await turnsOn(stack.db, w.sessionId), turns,
     'the task brief was delivered into the session that is waiting');
   const after = await stack.db.session.findUniqueOrThrow({
-    where: { id: w.sessionId }, select: { status: true },
+    where: { id: w.sessionId }, select: { ...WORD_SELECT },
   });
-  assert.equal(after.status, RunStatus.AWAITING_INPUT, 'the waiting session was woken by Run');
+  assert.equal(wordOf(after), RunStatus.AWAITING_INPUT, 'the waiting session was woken by Run');
   assert.equal(await stack.db.session.count({ where: { taskId: w.taskId } }), 1,
     'and no second run was opened beside it');
 }

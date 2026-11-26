@@ -27,7 +27,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -90,7 +91,7 @@ test('the browser state and Clear saved logins: owner only, 404 when off, the cl
   const session = await prisma.session.create({
     data: {
       ownerId: a.id, creatorId: a.id, assignedRunnerId: managed.id, provider: 'claude', engine: 'claude', model: 'claude-opus-5-5',
-      title: 'a session on the managed runner', prompt: 'browse', status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      title: 'a session on the managed runner', prompt: 'browse', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
     },
     select: { id: true },
   });

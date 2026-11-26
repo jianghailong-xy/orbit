@@ -809,10 +809,9 @@ export const SESSION_ENDING_SELECT = {
 } as const;
 
 export interface SessionEnding {
-  status: string;
   finishedAt: Date | null;
-  /** Read through turnStateOf (sessions/session-turn-state.ts); a row without it reads its stored word. */
-  turnState?: string | null;
+  /** Read through turnStateOf (sessions/session-turn-state.ts). */
+  turnState: string | null;
   endReason: string | null;
   lastTurnOutcome: string | null;
   completedAt: Date | null;

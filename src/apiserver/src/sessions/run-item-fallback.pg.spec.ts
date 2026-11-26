@@ -34,8 +34,8 @@ test('R4 migration, R10/M6 once-only ring across passes and replicas, R11 close,
       { conname: 'session_request_state_chk', convalidated: true },
     ], 'all three CHECKs are present and validated after migration');
     await db.user.create({ data: { id: ownerId, email: `${ownerId}@fallback.invalid`, name: 'Fallback', passwordHash: 'x' } });
-    const from = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Run', provider: 'codex', status: 'RUNNING' } });
-    const to = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', status: 'AWAITING_INPUT' } });
+    const from = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Run', provider: 'codex', turnState: 'IN_FLIGHT' } });
+    const to = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', turnState: null } });
     async function approval(status = 'PENDING', decidedById: string | null = null) {
       return db.approval.create({ data: { sessionId: from.id, toolName: 'AskUserQuestion', input: {}, status, decidedById } });
     }

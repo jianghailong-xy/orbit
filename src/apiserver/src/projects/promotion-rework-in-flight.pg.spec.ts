@@ -29,7 +29,8 @@ import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, type PrismaClient } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -122,7 +123,7 @@ test('a rework that lands while a promotion is in flight is not read as on main 
     await prisma.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, title, prompt: title, branch,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, startsTaskWork: true,
+        isolationStatus: 'worktree', turnState: null, startsTaskWork: true,
         finishedAt: new Date(Date.now() - 3_000_000), worktreeBranch: branch, worktreeDirty: false,
       },
     });

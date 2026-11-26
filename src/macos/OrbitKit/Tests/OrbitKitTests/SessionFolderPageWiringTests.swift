@@ -379,4 +379,71 @@ final class SessionFolderPageWiringTests: XCTestCase {
             XCTAssertEqual(try branches(of: part, in: app), [], "`\(part)` is every platform's")
         }
     }
+
+    // MARK: a filed session opened by its id (owner demand, 2026-11-24)
+
+    /// A session opened by its id from outside its list — a route (link, notification, search) —
+    /// opens the list on its folder's page, where its row is. One function decides:
+    /// `folderForOpening`, over the folder library, the list's own folder mode and a folder
+    /// already showing; an unlisted session's detail settles it afterwards, under the path guard.
+    func testASessionOpenedByItsIDOpensItsFoldersPage() throws {
+        let app = code(try appSource("AppModel.swift"))
+
+        let helper = try slice(app, from: "private func folderForOpening(_ session: Session) -> SessionFolderAddress? {",
+                               to: "\n    }")
+        XCTAssertTrue(helper.contains("guard folderShownForSessionID != key else { return nil }"),
+                      "once per open: the same open is not pulled back into its folder")
+        XCTAssertTrue(helper.contains("SessionFolderAddress.forOpening(session, folders: sessionFolders,"))
+        XCTAssertTrue(helper.contains("listShowsFolders: sessionListShowsFolders,"))
+        XCTAssertTrue(helper.contains("alreadyShowing: nav.folderColumn != nil)"),
+                      "a folder already showing is kept, not moved")
+
+        let open = try slice(app, from: "private func openSession(_ id: String, inScheduledRuns: Bool) {",
+                             to: "\n    }")
+        XCTAssertTrue(open.contains("beginOpen(id)"))
+        XCTAssertTrue(open.contains(": folderForOpening(id)"),
+                      "an ordinary route no longer passes no folder")
+        XCTAssertTrue(open.contains("refreshUnlistedSession(id, adoptingAgent: true, inScheduledRuns: inScheduledRuns, opening: true)"))
+
+        let refresh = try slice(app, from: "private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool, inScheduledRuns: Bool = false,",
+                                to: "\n    }\n")
+        XCTAssertTrue(refresh.contains("guard opening, self.nav.path == openingPath else { return }"),
+                      "the detail's folder step keeps the navigation made while it loaded")
+        XCTAssertTrue(refresh.contains("} else if let folder = self.folderForOpening(resolved) {"))
+        XCTAssertTrue(refresh.contains("self.nav.path = [.folder(folder)] + openingPath.suffix(1)"))
+    }
+
+    /// A link inside a conversation is a push over that conversation even when the session it opens
+    /// is filed: on a phone Back must return to the conversation it came from, never to a folder's
+    /// page that replaced it.
+    func testAConversationLinkKeepsTheConversationBeneathEvenWhenFiled() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let push = try slice(app, from: "func pushConsole(_ id: String) {", to: "\n    }")
+        XCTAssertTrue(push.contains("push(.console(sessionID: id, origin: .conversation))"),
+                      "the conversation goes on top of the one it was linked from")
+        XCTAssertFalse(push.contains("folderForOpening"), "no folder page replaces the conversation beneath")
+        XCTAssertFalse(push.contains("opening: true"), "and its refresh is not an open's")
+    }
+
+    /// A console opened over a phone's folder page goes *over* it, so Back returns to the folder and
+    /// the reader is not moved off the page they were on.
+    func testAConsoleOpenedOverAPhonesFolderPageGoesOverIt() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let show = try slice(app, from: "private func show(_ node: NavNode, agent agentID: String? = nil, folder: SessionFolderAddress? = nil) {",
+                             to: "\n    }")
+        XCTAssertTrue(show.contains("} else if case .console = node, nav.folderPage != nil {"))
+        XCTAssertTrue(show.contains("push(node)"))
+    }
+
+    /// The list says whether it is drawing folder rows — its scope, tag filter, Group by Tag and
+    /// search — so the model can tell whether a folder's page is a page this list shows.
+    func testTheListWritesBackWhetherItDrawsFolderRows() throws {
+        let agents = code(try appSource("Views/AgentsView.swift"))
+        let mode = try slice(agents, from: "private var listShowsFolders: Bool {", to: "\n    }")
+        XCTAssertTrue(mode.contains("!isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)"))
+        XCTAssertTrue(agents.contains(".onChange(of: listShowsFolders, initial: true) { _, shows in app.sessionListShowsFolders = shows }"))
+
+        let app = code(try appSource("AppModel.swift"))
+        XCTAssertTrue(app.contains("var sessionListShowsFolders = true"))
+    }
 }

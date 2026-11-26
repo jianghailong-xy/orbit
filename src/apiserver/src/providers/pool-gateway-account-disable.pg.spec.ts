@@ -42,7 +42,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { HttpException, Module, ValidationPipe, type ExecutionContext } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { ClaimedSession } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
@@ -256,11 +257,11 @@ suite("a disabled account's pool gateway tokens, end to end on real PostgreSQL",
 
   /** The runner asking for work — which has to be `sessionId` — leaving it parked, as a turn would. */
   async function claim(who: Person, sessionId: string): Promise<ClaimedSession> {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED', cancelRequestedAt: null } });
     const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
     return claimed;
   }
   /** A session of `who`'s on the pool `slug`, claimed: the token its engine was handed. */

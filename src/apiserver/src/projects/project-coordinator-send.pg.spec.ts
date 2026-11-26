@@ -6,12 +6,12 @@ import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   type Runner,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { isReleasedStatus } from '../common/session-release';
@@ -29,6 +29,8 @@ import {
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { establishProjectContractForPgTest } from './project-contract-test-helper';
 import { COORDINATOR_MESSAGE_UNDELIVERED_CODE, ProjectsService } from './projects.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * The agent's `send` door, against a real PostgreSQL: a MESSAGE addressed to a PROJECT, resolved to
@@ -195,7 +197,7 @@ async function world(
     data: {
       id: actingSessionId, ownerId, creatorId: ownerId, workspaceId: actingWorkspaceId,
       assignedRunnerId: runnerId, title: `${label} acting`, prompt: `${label} acting`,
-      provider: 'claude', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+      provider: 'claude', turnState: null, numTurns: 1,
       startedAt: new Date(), runtimeSessionId: `runtime-${actingSessionId}`,
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
     },
@@ -213,7 +215,7 @@ async function world(
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId: landingWorkspaceId,
       assignedRunnerId: shape.offlineRunner ? offlineRunnerId : runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status,
+      turnState: turnStateOfWord(status),
       ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       startedAt: shape.startedAt === undefined ? new Date() : shape.startedAt,
       completedAt: shape.completedAt ?? null,
@@ -353,9 +355,9 @@ test('an ENDED conversation its runner can still revive is REVIVED by the messag
       assert.equal(turns[0].clientTurnId, CLIENT_TURN_ID);
       const standing = await stack.db.session.findUniqueOrThrow({
         where: { id: w.coordinatorSessionId },
-        select: { status: true, completedAt: true },
+        select: { ...WORD_SELECT, completedAt: true },
       });
-      assert.equal(standing.status, RunStatus.PENDING, 'the revive must put the row back in the queue');
+      assert.equal(wordOf(standing), RunStatus.PENDING, 'the revive must put the row back in the queue');
     } finally {
       await stack.db.$disconnect();
     }
@@ -394,13 +396,13 @@ test('a conversation whose runner is offline is replaced AND delivered to, in on
 
       const outgoing = await stack.db.session.findUniqueOrThrow({
         where: { id: w.coordinatorSessionId },
-        select: { completedAt: true, status: true },
+        select: { completedAt: true, ...WORD_SELECT },
       });
       assert.ok(
         outgoing.completedAt instanceof Date,
         'a conversation left behind by a rotation is completed, not merely unpointed at',
       );
-      assert.equal(outgoing.status, RunStatus.CANCELLED, 'a terminal row is not re-run by an ending');
+      assert.equal(wordOf(outgoing), RunStatus.CANCELLED, 'a terminal row is not re-run by an ending');
 
       // And the message went to the REPLACEMENT — behind its own opening turn, which is the placement
       // every send gets on a conversation that has not run yet.

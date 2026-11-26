@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { CreatorType, Prisma, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunFailureKind, RunStatus as SharedRunStatus, SESSION_RELEASE_V1 } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,6 +17,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * Phase 2 of docs/routing-account-health-design.md §10, against a real PostgreSQL: the replacement of §7.3 and the pin
@@ -110,7 +112,7 @@ async function fixture(
   await db.session.create({
     data: {
       ownerId: f.ownerId, creatorId: f.ownerId, prompt: 'hello', workspaceId: f.agentId, title: 'a conversation on Cursor',
-      provider: 'cursor', providerBuiltin: true, engine: 'cursor', status: RunStatus.AWAITING_INPUT,
+      provider: 'cursor', providerBuiltin: true, engine: 'cursor', turnState: null,
       createdAt: new Date(Date.now() - 3_600_000),
     },
   });
@@ -141,7 +143,7 @@ async function claimed(s: Services, f: Fixture, sessionId: string): Promise<stri
     await tx.$executeRaw`SELECT set_config('orbit.runner_supports_cursor', '1', true)`;
     await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.RUNNING, assignedRunnerId: f.runnerId, startedAt: new Date(), engineTurnActive: true, runtimeSessionId: randomUUID() },
+      data: { turnState: 'IN_FLIGHT', assignedRunnerId: f.runnerId, startedAt: new Date(), engineTurnActive: true, runtimeSessionId: randomUUID() },
     });
   });
   await s.db.conversationTurn.deleteMany({ where: { sessionId } });
@@ -161,7 +163,7 @@ async function refused(s: Services, f: Fixture, sessionId: string, failure: { ki
 }) {
   await claimed(s, f, sessionId);
   await s.api.finalize({ id: f.runnerId }, sessionId, { status: SharedRunStatus.FAILED, error: CURSOR_ERROR, failure, admission: true } as never);
-  assert.equal((await s.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true } })).status, RunStatus.FAILED);
+  assert.equal(wordOf((await s.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: WORD_SELECT }))), RunStatus.FAILED);
 }
 
 /** The claimed run does its work: the turn completes, which is the account working (§6.3). */
@@ -171,7 +173,7 @@ async function admitted(s: Services, f: Fixture, sessionId: string) {
     turnId, status: SharedRunStatus.SUCCEEDED, subtype: 'success', numTurns: 1, costUsd: 0.2, result: 'done',
   } as never);
   // And the run ends, so the next start is a fresh, routed run rather than a turn handed to this one.
-  await s.db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() } });
+  await s.db.session.update({ where: { id: sessionId }, data: { turnState: null, finishedAt: new Date() } });
 }
 
 const runOf = (db: PrismaClient, id: string) => db.session.findUniqueOrThrow({
@@ -210,7 +212,7 @@ test('a task that does not auto-run gets one replacement after a refusal, on ano
       assert.equal((await runsOf(s.db, taskId)).length, 2);
       assert.equal(await s.db.taskComment.count({ where: replacedNote }), 1, 'recorded once');
       // An ordinary failure is not replaced.
-      await s.db.session.update({ where: { id: replacement }, data: { status: RunStatus.FAILED, finishedAt: new Date(), error: 'tests failed' } });
+      await s.db.session.update({ where: { id: replacement }, data: { turnState: null, finishedAt: new Date(), error: 'tests failed' } });
       assert.equal(await s.tasks.replaceRefusedRun(replacement), null);
     } finally {
       await s.db.$disconnect();
@@ -238,8 +240,8 @@ test('under the release protocol the failed turn holds the task, and its release
       assert.equal(await s.tasks.replaceRefusedRun(run1), null, 'not while the run still holds the task');
 
       await s.api.release({ id: f.runnerId }, run1, {} as never, SESSION_RELEASE_V1);
-      const released = await s.db.session.findUniqueOrThrow({ where: { id: run1 }, select: { status: true, finishedAt: true, failureKind: true } });
-      assert.equal(released.status, RunStatus.FAILED);
+      const released = await s.db.session.findUniqueOrThrow({ where: { id: run1 }, select: { ...WORD_SELECT, finishedAt: true, failureKind: true } });
+      assert.equal(wordOf(released), RunStatus.FAILED);
       assert.ok(released.finishedAt);
       assert.equal(released.failureKind, RunFailureKind.ACCOUNT_ACTION_REQUIRED, 'the release keeps the turn report\'s classification');
       const [row] = await s.db.accountHealth.findMany({ where: { ownerId: f.ownerId, clearedAt: null } });
@@ -266,7 +268,7 @@ test('at most three replacements an hour; a refused trial\'s replacement is not 
         where: { id },
         data: {
           // Released by a failure, as every failure release records it: its last turn failed (common/session-release.ts).
-          status: RunStatus.FAILED, finishedAt: new Date(), lastTurnOutcome: 'FAILED', error: CURSOR_ERROR,
+          turnState: null, finishedAt: new Date(), lastTurnOutcome: 'FAILED', error: CURSOR_ERROR,
           failureKind: RunFailureKind.ACCOUNT_ACTION_REQUIRED, failureSaid: PAYMENT, admissionFailure: true, accountHealthEffect: effect,
         },
       });

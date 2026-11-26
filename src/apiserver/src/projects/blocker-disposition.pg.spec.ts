@@ -8,11 +8,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RunEventType, type ChangedFile, RunStatus as SharedRunStatus } from '@orbit/shared';
@@ -293,7 +293,7 @@ async function fixture(
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
     },
@@ -469,7 +469,7 @@ async function queueRound(stack: Stack, f: Fixture, taskId: string, label: strin
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       branch: `orbit/${label}`,
@@ -636,7 +636,7 @@ async function coordinatorReads(db: PrismaClient, sessionId: string): Promise<vo
     where: { sessionId, status: 'PENDING' },
     data: { status: 'ANSWERED', deliveredAt: now, answeredAt: now },
   });
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+  await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
 }
 
 /** Whether this task was started — the observable half of "the next one was released". */

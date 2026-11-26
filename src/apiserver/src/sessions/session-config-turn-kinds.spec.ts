@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { encryptSecret } from '../providers/provider-crypto';
 import { SessionsService } from './sessions.service';
 
