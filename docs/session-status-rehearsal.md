@@ -286,3 +286,120 @@ the plans of §4.5 (word against facts) at D1 and at D2, and the write measureme
 because production's deploy had already applied them. bg_run was not available on orbit-prod (`BG_TRANSPORT_UNAVAILABLE`),
 so the steps ran as host processes, with no `bgj_` ids. A 4.7 GB docker build cache from the image build is still on
 orbit-prod.
+
+## The census, backfill and plans on a restored production backup (task T16c, 2026-11-26): clean
+
+This reruns T16b after the owner accepted its four rows as kind C8 (ruling 2026-11-26), which
+`census.cjs` lists from `905dfecfb0`. SubAgent run `3541VByT9o6uZgJGt7z5s` did the work on orbit-prod. Two earlier runs,
+`3540wZTtjBSsGtSA5uBuu` and `3541F7IAkvYWnBh5JgYFN`, ended mid-restore and left only a part-extracted volume, which this
+run threw away. Only counts and redacted plans left the host. The full plans, with every id replaced, are the attachment
+`3541wVU98llbNsYzrqrk0` (`t16c-plans-redacted.txt`).
+
+**The copy.** Base backup `20261125T063344Z`, plus 418 WAL segments (`…B600000066` to `…B800000007`). The base was
+streamed in by `cat` and the WAL copied by `cp`, so the archive was never mounted. It was restored onto a volume of the
+Compose project `t16c-restore`, in `postgres:16` with `network_mode: none` and `archive_mode=off`. `primary_conninfo` was
+deleted with `sed` without being printed, and `pg_hba.conf` was set to trust only. Extraction took 542 s and redo 215 s;
+the copy was promoted on timeline 3, last commit 2026-11-26 01:36:07Z. It holds **13,161 sessions**.
+
+- Migration head: `1643_schedule_run_idle_seen_at`, 700 rows. One is unfinished and rolled back:
+  `1202_turn_outcome_backfill`, production's own history.
+- `phase` is nullable. `session_turn_state_agrees_unless_null_chk` and `session_turn_state_released_chk` are
+  `NOT VALID`; the other 24 CHECKs are validated.
+- Nothing was applied to the copy before the first census.
+
+**The projector.** The census ran in the deployed apiserver image `41d995c8…`, tagged `e28aae1d68`, in a container
+sharing the copy's empty network namespace. That is production's image as of the run, not one built for it.
+`eef31bea27..e28aae1d68` holds only two drive-sync commits, with no migration and no projector change.
+
+**The censuses** (`census.cjs`, with `scripts/session-turn-state-census.sql` beside it, whose counts agree):
+
+| When | Rows | Word changed | Not a §3.4 kind | Held rows changed | phase off | turn_state off | phase NULL | exit |
+|---|---|---|---|---|---|---|---|---|
+| before the backfill | 13,161 | 335 | **0** | **0** | 0 | 3 (not yet filled) | 13,143 | 1 (turn_state only) |
+| after the backfill | 13,161 | 335 | **0** | **0** | **0** | **0** | **0** | **0** |
+
+After the backfill the SQL census reads turn_state_disagrees 0, phase_disagrees 0, phase_null 0, parked_rows 0 and
+released_with_turn 0. In both runs runState changed on 335 rows and sessionState on 304.
+
+The §3.4 kinds found (the same before and after):
+
+| stored → sent | runState | sessionState | end reason | outcome | filed | §3.4 kind | rows |
+|---|---|---|---|---|---|---|---|
+| SUCCEEDED → CANCELLED | SUCCEEDED → ENDED | COMPLETED → DORMANT | | | open | C4/C5 | 291 |
+| SUCCEEDED → CANCELLED | SUCCEEDED → ENDED | COMPLETED | | | completed | C4/C5 | 27 |
+| FAILED → CANCELLED | FAILED → ENDED | FAILED → COMPLETED | `completed` | FAILED | completed | C1/C2/C3 | 13 |
+| SUCCEEDED → CANCELLED | SUCCEEDED → ENDED | COMPLETED | `completed` | | completed | C8 | 4 |
+
+- **No kind outside §3.4, and no disagreement.** C8's four rows are T16b's four.
+- The other 38 lines (12,826 rows) keep all three words.
+- By stored word after the backfill: SUCCEEDED 7,867, CANCELLED 3,536, FAILED 1,004, AWAITING_INPUT 748,
+  INTERRUPTED 3 (now `ABANDONED`), RUNNING 3.
+
+**The backfill** (`scripts/session-turn-state-backfill.sh`, on the copy only): **13,143 rows in 27 batches, 35.7 s**;
+batch 28 wrote 0. No batch failed, so none hit its 2 s lock timeout. The lock sampler (`sample-locks.sh`, 0.2 s) recorded
+**no lock waits**. The copy had no other writer, so this measures the backfill's own cost, not contention with production's
+writers.
+
+**The plans** (`scripts/session-status-query-plans.sql`, `plans=1`, after the backfill at D2). Run as written, the script
+aborted: no held session has a batch, so `quote_literal(NULL)` made the statement NULL. The plans below come from a copy
+with that one target coalesced to the nil uuid. That fix is now in the script (`f7ef402803`). The target is the busy
+runner: 5,028 of the 13,161 sessions, 181 of the 754 held. Shared buffers of one warm run:
+
+| § | query | word | facts | facts use the intended index |
+|---|---|---|---|---|
+| 1 | Run now overflow probe | 2 | 2 | yes |
+| 1 | claim replay | 2 | 1 | yes |
+| 1 | claim with the runner, batch and tree caps | 7 | 5 | yes |
+| 1 | claim, caps off (candidate and order) | 2 | 1 | yes |
+| 2 | batchActiveTurns | 2 | 1 | yes |
+| 2 | runnerActiveTurns | 2 | 1 | yes |
+| 2 | runnerBackgroundHeldSessions | 0 | 0 | yes |
+| 2 | treeActiveTurns | 2 | 1 | yes |
+| 3 | dispatch pause: turns still running | 2,143 | 259 | **no** (see below) |
+| 3 | dispatch resume: inboxes to wake | 2,170 | 490 | **no** (see below) |
+| 3 | dispatch resume: runners to hint | 2 | 1 | yes |
+| 3 | draining runner: waiting work | 177 | 170 | yes |
+| 3 | held sessions of one runner (step 4.3 case) | 180 | 112 | yes |
+| 3 | managed sleep: ACTIVE_TURN and QUEUED_TURN | 4 | 2 | yes |
+| 3 | managed sleep: BACKGROUND_WORK | 180 | 171 | yes |
+| 3 | runner link: approvals decided | 180 | 171 | yes |
+| 4 | heartbeat ownership fence | 126 | 119 | yes |
+| 4 | reclaim set | 177 | 170 | yes |
+| 5 | batch cap re-stamp (task list update) | 2 | 2 | no index intended |
+| 5 | live runs of a task list (list delete) | 509 | 175 | yes |
+| 5 | live runs of tasks (batch stop, delete, reach) | 110 | 50 | yes |
+| 5 | reclaimStalledTask: occupied count | 4 | 4 | yes |
+| 5 | the task carrier, over 50 tasks | 213 | 207 | yes |
+| 6 | slot budget per capped list | 12 | 10 | yes |
+| 6 | slot budget per runner | 29 | 27 | yes |
+| 6 | the reaper's sweep | 633 | **649** | yes |
+| 7 | listForOrchestration AWAITING_INPUT | 558 | 558 | yes |
+| 7 | listForOrchestration CANCELLED | 2,123 | **4,233** (sequential scan) | no index intended |
+| 7 | listForOrchestration FAILED | 884 | 801 | yes |
+| 7 | listForOrchestration INTERRUPTED | 5 | 4 | yes |
+| 7 | listForOrchestration PENDING | 2 | 1 | yes |
+| 7 | listForOrchestration RUNNING | 4 | 4 | yes |
+| 7 | listForOrchestration SUCCEEDED | 4,233 | 4,233 (sequential scan, both) | no index intended |
+
+- **Two facts queries did not use their intended index:** the dispatch pause's and resume's held-turn reads. On real
+  data the planner starts from `conversation_turn_session_id_status_idx` (5 turns in flight) and joins `session` by
+  `session_pkey`. That reads 8× and 4× fewer buffers than the word form. It is a cheaper plan than the intended one, not a
+  slower one, but the script's "expected: none" list is not empty.
+- **Two facts queries read more buffers than their word form:** the reaper's sweep (633 → 649, +2.5%) and
+  `?status=CANCELLED` (2,123 → 4,233, a sequential scan like SUCCEEDED's in both forms). Both are among the cases T16's
+  copy left as "a judgment for review"; §4.5 asks for that judgment.
+- Every other facts query used its intended index and read no more than its word form.
+
+**What was not touched.** No command connected to the live database or mounted the archive. `orbit-postgres` and
+`orbit-pgbackup` showed the same container Id, StartedAt and restart count (0) before and after. The base backup's four
+files kept their sizes and mtimes.
+
+**Teardown.** `docker compose -p t16c-restore down -v` removed the container and the volume. The pulled `postgres:16`
+image and `/var/tmp/t16c-restore` were removed too. `docker ps -a` and `docker volume ls` filtered on the project's label
+list nothing; the deployed apiserver image was kept. No credential was printed: the SubAgent counted the matching lines
+of `postgresql.auto.conf` (1 before the `sed`, 0 after) and never read the file.
+
+**Not run.** The plans' write and HOT measurement (`writes=1`) and the `without_old` end state were not asked for. The
+plans script ran with one target patched, as above. The deployed projector was `e28aae1d68`, not the `eef31bea27` in the
+brief: production was redeployed between the brief and the run. bg_run is unavailable on orbit-prod, so these steps have
+SubAgent run ids, not `bgj_` ids.
