@@ -55,10 +55,13 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     expect(SOURCE).not.toContain("searchParams.get('schedule')");
   });
 
-  it('has an ordinary session’s header: no crumb, its own line and its Follow chip (owner 2026-11-19)', () => {
+  it('has an ordinary session’s header: no crumb, the title’s row and Follow in ⋯ (2026-11-19; one row 2026-11-26)', () => {
     expect(SOURCE).not.toContain('ScheduleRunCrumb');
     expect(SOURCE).not.toContain('scheduleRunHeadText');
-    expect(SOURCE).toContain('!composing && selectedId && !selectedTrashed && !selectedMissing && (\n                <SessionWatchBadges sessionId={selectedId} follow={isMobile} />');
+    // The header is the title's row alone now, and Follow is a ⋯ item on every width, so no pill
+    // is drawn on a phone for a schedule run's session either.
+    expect(SOURCE).toContain('<SessionWatchBadges sessionId={selectedId} follow={false} />');
+    expect(SOURCE).not.toContain('follow={isMobile}');
   });
 
   it('keeps the session column: a run’s session is an ordinary session page (owner 2026-11-19)', () => {
