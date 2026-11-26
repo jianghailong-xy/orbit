@@ -120,6 +120,10 @@ internal object QueuedCapacity {
         return "$who is running $active of $sessions. This message is sent as soon as one finishes."
     }
 
+    /** The same gate's sentence, said of a scheduled run waiting for its first turn. */
+    fun runText(gate: QueuedGate, machine: String?): String =
+        messageText(gate, machine).replace("This message is sent", "The run starts")
+
     /** `Waiting 15 min`, from when the session went PENDING; null with no clock to read (web `capacityHeldWaited`). */
     fun waited(gate: QueuedGate, now: Instant): String? {
         val since = gate.since ?: return null
