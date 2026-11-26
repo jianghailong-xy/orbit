@@ -111,9 +111,9 @@ export function resetAccountsRunner(
       {
         engine: 'codex',
         accounts: [
-          { id: 'default', auth: 'yes' },
-          { id: WORK_SLOT, name: 'work@example.com', auth: 'yes' },
-          { id: SIDE_SLOT, name: 'side@example.com', auth: 'yes' },
+          { id: 'default', home: '/home/dev/.codex', auth: 'yes' },
+          { id: WORK_SLOT, name: 'work@example.com', home: `/home/dev/.orbit/codex-accounts/${WORK_SLOT}`, auth: 'yes' },
+          { id: SIDE_SLOT, name: 'side@example.com', home: `/home/dev/.orbit/codex-accounts/${SIDE_SLOT}`, auth: 'yes' },
         ],
       },
     ],
