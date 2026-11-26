@@ -1,7 +1,9 @@
 -- Undo migration 1691 (deploy D4 of docs/session-status-retirement-plan.md §4.1): session.status and the type
 -- run_status are back, filled from the facts, and everything deploy D3 (migration 1671) left is as it was, so a
--- rollback to the D3 release works, and going further back can start from here with
--- scripts/session-status-from-facts-down.sql (D2 code reads the facts and writes both spellings).
+-- rollback to the D3 release works (its Run now gate, sessions/queued-gate.ts, reads the column: without this script
+-- that release's session list answers 500 on a D4 database), and going further back can start from here with
+-- scripts/session-status-from-facts-down.sql (D2 code reads the facts and writes both spellings). Run it BEFORE the
+-- older release starts to serve.
 --
 -- THE WORDS. The column is filled with session_legacy_status of each row (the projector's SQL twin, with a landing
 -- container's project_landing.settled_as), the word deploy D3's trigger stores. A released row that no write has

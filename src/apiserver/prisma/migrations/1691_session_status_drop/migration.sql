@@ -42,14 +42,20 @@
 -- or any function body in `public` still names the column or the type. Then nothing has changed: the file is one
 -- transaction.
 --
--- THE HAND-OVER, ROLLBACK
--- -----------------------
--- D3 code, which serves while this runs, neither selects nor writes the column and calls only the eight-argument
--- function, so both replicas work throughout. IRREVERSIBLE as a migration: the stored words are gone. A rollback of
--- the code to the D3 release after this file runs needs the column back: scripts/session-status-drop-down.sql re-adds
--- it, fills it from the facts through session_legacy_status and puts 1671's objects back. Deploy 3's code does not
--- read the column, so it also serves a database left at D4; the down script is for a D3 database as D3 left it
--- (its guards, its trigger and its specs), and for going further back through 1671's down script.
+-- THE HAND-OVER: NOT FROM THE D3 RELEASE feeb45cf16
+-- ------------------------------------------------
+-- The replica that serves while this runs must name the column nowhere. The release live on 2026-11-27 (feeb45cf16)
+-- does in ONE place: the Run now gate (sessions/queued-gate.ts, `WHERE s.status = 'PENDING'`), part of every session
+-- list read, which answers 500 once the column is gone. The fix reads turn_state, needs no migration and is its own
+-- commit of task T15: it must be live on every replica BEFORE a release that carries this file starts. Nothing else
+-- of D3 reads or writes the column (the PG specs run the server on the schema this file leaves).
+--
+-- ROLLBACK
+-- --------
+-- IRREVERSIBLE as a migration: the stored words are gone. A rollback of the code to the D3 release feeb45cf16 after
+-- this file runs needs the column back: scripts/session-status-drop-down.sql re-adds it, fills it from the facts
+-- through session_legacy_status and puts 1671's objects back, and going further back starts from there with 1671's
+-- down script. A release that carries the gate's fix, and not this file, serves a database left at D4 as it is.
 --
 -- LOCKS
 -- -----
