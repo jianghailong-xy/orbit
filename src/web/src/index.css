@@ -384,6 +384,13 @@ button.toast--pill:hover {
   gap: 10px;
   user-select: text;
 }
+/* A failure card is one press: to its session, or back to the page it was raised on. */
+.toast--attention.toast--opens {
+  cursor: pointer;
+}
+.toast--attention .toast-reason {
+  cursor: text;
+}
 .toast--error {
   border-color: var(--error-border);
   background: linear-gradient(var(--error-bg), var(--error-bg)), var(--bg-raised);
@@ -477,12 +484,6 @@ button.toast--pill:hover {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.toast-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-left: 32px;
-}
 .toast-action {
   flex: none;
   height: 28px;
@@ -498,15 +499,6 @@ button.toast--pill:hover {
 }
 .toast-action:hover {
   background: var(--bg-hover);
-}
-.toast-action--primary {
-  border-color: var(--brand);
-  background: var(--brand);
-  color: #fff;
-}
-.toast-action--primary:hover {
-  border-color: var(--brand-strong);
-  background: var(--brand-strong);
 }
 /* A result card's one action — Undo — in the tint the lifecycle card's Undo always had. */
 .toast--card:not(.toast--attention) > .toast-action {

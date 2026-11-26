@@ -3543,17 +3543,8 @@ export function WorkspaceView({
             event: 'merge-result',
             headline: `Couldn't merge into ${target}`,
             detail: d.mergeError ?? 'Merge aborted; your branch is unchanged.',
+            // The card opens the session, whose merge bar offers Resolve in session.
             tone: 'error',
-            action: d.branch ? {
-              label: 'Resolve in session',
-              ariaLabel: `Resolve the conflict in ${operation.title}`,
-              onClick: () => resolveMut.mutate({
-                id: operation.id,
-                title: operation.title,
-                branch: d.branch!,
-                target,
-              }),
-            } : undefined,
           });
         } else {
           message.sessionNotice({
