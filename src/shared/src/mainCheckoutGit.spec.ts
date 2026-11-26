@@ -6,6 +6,7 @@ import {
   MAIN_CHECKOUT_ACTION_KINDS,
   MAIN_CHECKOUT_CARD_HANDLED_COPY,
   MAIN_CHECKOUT_CARD_HEALTH_LAG_SECONDS,
+  MAIN_CHECKOUT_COMMITS_MAX,
   MAIN_CHECKOUT_FILE_LIMIT,
   MAIN_CHECKOUT_GIT_CAPABILITY,
   MAIN_CHECKOUT_LINK_ACTIONS,
@@ -37,6 +38,7 @@ import {
   type MainCheckoutFile,
   type MainCheckoutLineView,
   type MainCheckoutRepoHealth,
+  type MainCheckoutRunnerRequest,
   type MainCheckoutSnapshot,
 } from './mainCheckoutGit';
 import * as shared from './index';
@@ -64,7 +66,10 @@ const fixture = JSON.parse(readFileSync(path.join(__dirname, 'main-checkout-git.
   refusalCodes: string[];
   noticeKinds: Record<string, string>;
   snapshot: MainCheckoutSnapshot;
+  commitsMax: number;
   truncatedSnapshot: MainCheckoutSnapshot;
+  unpushedSnapshot: MainCheckoutSnapshot;
+  snapshotRequest: Extract<MainCheckoutRunnerRequest, { op: 'snapshot' }>;
   fingerprints: Array<{ head?: string; files: MainCheckoutFile[]; fingerprint: string }>;
   heartbeatRepo: MainCheckoutRepoHealth;
   requests: MainCheckoutActionRequest[];
@@ -124,6 +129,21 @@ describe('main checkout Git contract', () => {
     expect(fingerprint(head, edited)).not.toBe(fixture.snapshot.fingerprint);
     expect(fingerprint('0'.repeat(40), files)).not.toBe(fixture.snapshot.fingerprint);
     expect(fixture.snapshot.fingerprint.startsWith(`mc1:${head}:`)).toBe(true);
+  });
+
+  it('lists the commits not pushed on the snapshot, and reads one of them by sha', () => {
+    expect(MAIN_CHECKOUT_COMMITS_MAX).toBe(20);
+    expect(fixture.commitsMax).toBe(MAIN_CHECKOUT_COMMITS_MAX);
+    const { commits, commitsTruncated, ahead, fingerprint: fp, head } = fixture.unpushedSnapshot;
+    expect(commits![0].sha).toBe(head);
+    expect(commits!.map((c) => Date.parse(c.committedAt))).toEqual(
+      commits!.map((c) => Date.parse(c.committedAt)).sort((a, b) => b - a),
+    );
+    expect(commitsTruncated).toBe(true);
+    expect(ahead).toBeGreaterThan(MAIN_CHECKOUT_COMMITS_MAX);
+    expect(fingerprint(head, [])).toBe(fp);
+    expect(fixture.snapshotRequest.commit).toBe(commits![0].sha);
+    expect(fixture.snapshot.commits).toBeUndefined();
   });
 
   it('keeps the heartbeat to counts and the fingerprint', () => {

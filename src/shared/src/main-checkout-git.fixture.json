@@ -1,7 +1,8 @@
 {
-  "_comment": "Main checkout Git contract examples (docs/main-checkout-git-contract.md). Read by src/shared/src/mainCheckoutGit.spec.ts and src/runner-go/main_checkout_types_test.go; neither writes it.",
+  "_comment": "Main checkout Git contract examples (docs/main-checkout-git-contract.md). Read by src/shared/src/mainCheckoutGit.spec.ts and src/runner-go/main_checkout_types_test.go; neither writes it. unpushedSnapshot's commits are abridged: a real runner lists commitsMax of them before it sets commitsTruncated.",
   "capability": "main-checkout-git/v1",
   "fileLimit": 200,
+  "commitsMax": 20,
   "actionKinds": [
     "move",
     "commit",
@@ -183,6 +184,66 @@
     "truncated": true,
     "fingerprint": "mc1:62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7:0000000000000000000000000000000000000000000000000000000000000000",
     "checkedAt": "2026-11-12T08:00:00.000Z"
+  },
+  "unpushedSnapshot": {
+    "root": "/root/orbit",
+    "branch": "main",
+    "head": "9a1f3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f70",
+    "state": "clean",
+    "upstream": "origin/main",
+    "ahead": 23,
+    "behind": 0,
+    "commits": [
+      {
+        "sha": "9a1f3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f70",
+        "subject": "Add retry backoff",
+        "body": "A flaky upstream answered 503.",
+        "committedAt": "2026-11-12T07:55:00Z",
+        "files": [
+          {
+            "path": "src/api/client.ts",
+            "additions": 12,
+            "deletions": 3
+          },
+          {
+            "path": "assets/logo.png",
+            "additions": -1,
+            "deletions": -1
+          }
+        ]
+      },
+      {
+        "sha": "62325fb4a1c0d3e5f6a7b8c9d0e1f2a3b4c5d6e7",
+        "subject": "Save uncommitted work",
+        "committedAt": "2026-11-12T07:40:00Z",
+        "savedBy": "session-end",
+        "files": [
+          {
+            "path": "src/api/retry.ts",
+            "additions": 41,
+            "deletions": 0
+          }
+        ],
+        "filesTruncated": true
+      }
+    ],
+    "commitsTruncated": true,
+    "files": [],
+    "fileCount": 0,
+    "truncated": false,
+    "fingerprint": "mc1:9a1f3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f70:e41e1324d42de2d338b2beab13f160492f06c9220a4bfa418a70d83fd7419152",
+    "checkedAt": "2026-11-12T08:00:00.000Z"
+  },
+  "snapshotRequest": {
+    "id": "read-1",
+    "op": "snapshot",
+    "root": "/root/orbit",
+    "diffPaths": [
+      "src/api/client.ts"
+    ],
+    "commit": "9a1f3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f70",
+    "requestedAt": "2026-11-12T08:00:00.000Z",
+    "expiresAt": "2026-11-12T08:00:20.000Z"
   },
   "heartbeatRepo": {
     "root": "/root/orbit",

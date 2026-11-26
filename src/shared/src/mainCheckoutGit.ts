@@ -1,4 +1,4 @@
-import type { RunnerRepoHealth } from './dto';
+import type { BranchCommit, RunnerRepoHealth } from './dto';
 
 /**
  * Main checkout Git: the contract every layer shares (docs/main-checkout-git-contract.md, design board
@@ -29,6 +29,8 @@ export const MAIN_CHECKOUT_FILE_LIMIT = 200;
 export const MAIN_CHECKOUT_CARD_VISIBLE_FILES = 8;
 /** Bytes of one file's patch the diff read returns before cutting it off (`patchTruncated`). */
 export const MAIN_CHECKOUT_PATCH_MAX_BYTES = 256 * 1024;
+/** The most commits a snapshot's `commits` lists. Past it the runner sets `commitsTruncated`. */
+export const MAIN_CHECKOUT_COMMITS_MAX = 20;
 /** How long the apiserver waits for a runner's result before failing the request with TIMEOUT. */
 export const MAIN_CHECKOUT_ACTION_TIMEOUT_SECONDS = 300;
 
@@ -65,6 +67,11 @@ export interface MainCheckoutSnapshot {
   /** Commits on the branch not on upstream / on upstream not on the branch (as of the last fetch). */
   ahead?: number;
   behind?: number;
+  /** The commits not pushed (`upstream..HEAD`), newest first, at most MAIN_CHECKOUT_COMMITS_MAX. Absent without an
+   *  upstream, on a detached HEAD, and from older runners. On this on-demand read only, never on the heartbeat. */
+  commits?: BranchCommit[];
+  /** There are more commits not pushed than `commits` lists. */
+  commitsTruncated?: boolean;
   /** Sorted by path (UTF-8 byte order). At most MAIN_CHECKOUT_FILE_LIMIT entries. */
   files: MainCheckoutFile[];
   /** How many files the runner counted: files.length, or the limit when truncated. */
@@ -81,7 +88,7 @@ export interface MainCheckoutSnapshot {
 export interface MainCheckoutFileDiff {
   path: string;
   binary: boolean;
-  /** Unified diff against HEAD; absent for binary files. */
+  /** Unified diff against HEAD (in a `commit` read, that commit against its first parent); absent for binary files. */
   patch?: string;
   /** The patch was cut at MAIN_CHECKOUT_PATCH_MAX_BYTES. */
   patchTruncated?: boolean;
@@ -228,6 +235,8 @@ export type MainCheckoutRunnerRequest =
       root: string;
       /** Files whose patch to read too (≤ MAIN_CHECKOUT_DIFF_PATHS_MAX), each capped at MAIN_CHECKOUT_PATCH_MAX_BYTES. */
       diffPaths?: string[];
+      /** Full sha of a commit in `upstream..HEAD`: `diffPaths` are answered from it against its first parent. */
+      commit?: string;
       requestedAt: string;
       expiresAt: string;
     }
