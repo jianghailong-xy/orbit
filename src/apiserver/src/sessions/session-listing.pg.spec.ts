@@ -184,8 +184,8 @@ async function seed(c: Case): Promise<Seeded> {
     const state: Partial<Prisma.SessionUncheckedCreateInput> =
       completed ? { status: 'SUCCEEDED', finishedAt: new Date(), ...(s.archivedAt ? { archivedAt: new Date() } : { completedAt: new Date() }) }
         : s.activity === 'needsYou' || s.activity === 'running' ? { status: 'RUNNING' }
-            : s.activity === 'jobs' ? { status: 'AWAITING_INPUT', runningBgJobs: ['bgj_listing'], runningBgJobActivity: {} }
-              : { status: 'AWAITING_INPUT' };
+          : s.activity === 'jobs' ? { status: 'AWAITING_INPUT', runningBgJobs: ['bgj_listing'], runningBgJobActivity: {} }
+            : { status: 'AWAITING_INPUT' };
     await h.db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, title: s.id, prompt: 'p', dispatchOrigin: 'USER',
