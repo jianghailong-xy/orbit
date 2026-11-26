@@ -55,7 +55,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { type INestApplication, Logger, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { type PrismaClient, RunStatus } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -321,7 +322,7 @@ test('durable events over the runner link: one bad event fails alone, seqs stay 
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: 'USER',
         startsTaskWork: false,
         startedAt: new Date(),

@@ -30,7 +30,8 @@ import { test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { type Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { type Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SESSION_CURRENT_WORK_ROUTING_V1, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -58,6 +59,8 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { type SessionFixture, wordOf } from '../test-support/session-word';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -151,8 +154,9 @@ test('a background job wakes its session through the runner door', {
   });
 
   /** A session on this runner, parked between turns: the state a long wait leaves it in. */
-  async function session(data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
+  async function session(input: SessionFixture = {}): Promise<string> {
     const id = randomUUID();
+    const { status: word, ...data } = input;
     await prisma.session.create({
       data: {
         id,
@@ -161,15 +165,15 @@ test('a background job wakes its session through the runner door', {
         title: 'a session parked on a CI run',
         prompt: 'watch CI and fix what fails',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: turnStateOfWord(word ?? RunStatus.AWAITING_INPUT),
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
         assignedRunnerId: runnerId,
         numTurns: 1,
         ...data,
-        ...(data.status === RunStatus.SUCCEEDED || data.status === RunStatus.FAILED
+        ...(word === RunStatus.SUCCEEDED || word === RunStatus.FAILED
           ? { finishedAt: data.finishedAt ?? new Date()}
-          : data.status === RunStatus.CANCELLED ? { finishedAt: data.finishedAt ?? new Date()} : {}),
+          : word === RunStatus.CANCELLED ? { finishedAt: data.finishedAt ?? new Date()} : {}),
       },
     });
     return id;
@@ -231,7 +235,7 @@ test('a background job wakes its session through the runner door', {
 
   /** What the runner's claim does to a queued session, then the inbox poll that follows it. */
   async function claimAndPoll(sessionId: string): Promise<Answer> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await prisma.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     return send('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
   }
 
@@ -248,7 +252,7 @@ test('a background job wakes its session through the runner door', {
     assert.equal(turns[0].status, 'PENDING');
     assert.ok(!turns[0].content, `the turn records words as the person's: ${JSON.stringify(turns[0].content)}`);
     const queued = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(queued.status, RunStatus.PENDING, 'the wake did not ask for a runner slot');
+    assert.equal(wordOf(queued), RunStatus.PENDING, 'the wake did not ask for a runner slot');
     assert.equal(queued.lastUserText, null, 'the session list would preview the wake as the person\'s message');
 
     const delivered = await claimAndPoll(sessionId);
@@ -330,7 +334,7 @@ test('a background job wakes its session through the runner door', {
       assert.equal(answer.json.outcome, 'DROPPED', `${how}: ${answer.text}`);
       assert.equal((await turnsOf(sessionId)).length, 0, `${how}: a wake was queued on a session that has ended`);
       const after = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-      assert.equal(after.status, before.status, `${how}: the wake moved the session's status`);
+      assert.equal(wordOf(after), wordOf(before), `${how}: the wake moved the session's status`);
     }
 
     // Another runner's session is not this runner's to wake.

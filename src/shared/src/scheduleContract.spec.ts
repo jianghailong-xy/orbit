@@ -7,6 +7,7 @@ import {
   SCHEDULE_CIRCLES,
   SCHEDULE_CONTROL_REFUSALS,
   SCHEDULE_COPY,
+  SCHEDULE_RUN_STATUS_COPY,
   SCHEDULE_ENDED_REASONS,
   SCHEDULE_ENVELOPE_PARTS,
   SCHEDULE_FAILURE_REASONS,
@@ -69,6 +70,10 @@ function strings(value: unknown): string[] {
 describe('schedule contract', () => {
   it('SCHEDULE_COPY is the contract copy, byte for byte', () => {
     expect(CONTRACT.copy).toEqual(JSON.parse(JSON.stringify(SCHEDULE_COPY)));
+  });
+
+  it('SCHEDULE_RUN_STATUS_COPY is the contract runStatusCopy, byte for byte', () => {
+    expect(CONTRACT.runStatusCopy).toEqual(JSON.parse(JSON.stringify(SCHEDULE_RUN_STATUS_COPY)));
   });
 
   it('every line is English', () => {

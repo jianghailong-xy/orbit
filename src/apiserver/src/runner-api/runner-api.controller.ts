@@ -42,7 +42,6 @@ import { MachineProtocol } from '../common/machine-protocol';
 import { isStopping, pauseUnlessStopping } from '../common/graceful-stop';
 import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
-import { answeredPerson } from '../sessions/session-listed-at';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
 import { reloadCarriesEnv } from '../sessions/session-settings';
@@ -5769,10 +5768,10 @@ export class RunnerApiController {
         where: { sessionId, kind: { in: ['message', 'shell'] }, status },
       });
       if (await executable('IN_FLIGHT') > 0) return { status: RunStatus.RUNNING, returned: false };
-      // Back in the queue behind the update, or parked; both spellings, as deploy 2 writes them.
+      // Back in the queue behind the update, or parked.
       const turnState = await executable('PENDING') > 0 ? 'QUEUED' as const : null;
       const status = turnState === 'QUEUED' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT;
-      await tx.session.update({ where: { id: sessionId }, data: { status, turnState, engineTurnActive: false } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState, engineTurnActive: false } });
       return { status, returned: true };
     }, loggedRetry(this.logger, 'runnerApi.returnSlot'));
     await this.recordRunnerDraining(runner.id);
@@ -6230,7 +6229,6 @@ export class RunnerApiController {
             await tx.session.update({
               where: { id: sessionId },
               data: {
-                status: RunStatus.PENDING,
                 turnState: 'QUEUED',
                 ...(until || pooledUntil ? { error: `Account paused until ${(until ?? pooledUntil)!.toISOString()}` } : {}),
                 inboxLeaseGeneration: fence,
@@ -6277,7 +6275,6 @@ export class RunnerApiController {
             await tx.session.update({
               where: { id: sessionId },
               data: {
-                status: RunStatus.PENDING,
                 turnState: 'QUEUED',
                 inboxLeaseGeneration: fence,
                 inboxLeaseOwner: null,
@@ -7476,9 +7473,6 @@ export class RunnerApiController {
           ...LEGACY_STATUS_SELECT,
           taskId: true,
           startsTaskWork: true,
-          // Whose opening this session's first turn is, for `answeredPerson` below (parentSessionId is read further down).
-          openedBy: true,
-          promptByOrbit: true,
           ownerId: true,
           creatorId: true,
           workspaceId: true,
@@ -7559,7 +7553,6 @@ export class RunnerApiController {
           leaseGeneration: true,
           coordinatorContextKey: true,
           senderSessionId: true,
-          byPerson: true,
         },
       });
       // A dequeue only proposes that context was delivered. The successful top-level turn is its
@@ -7772,7 +7765,7 @@ export class RunnerApiController {
           // is the same transition an ordinary send makes.
           await tx.session.updateMany({
             where: { id: sessionId, ...turnStateFilter([null]), cancelRequestedAt: null },
-            data: { status: RunStatus.PENDING, turnState: 'QUEUED', lastTurnAt: new Date() },
+            data: { turnState: 'QUEUED', lastTurnAt: new Date() },
           });
           // A background job's exit the engine never read is a wake turn of its own again, and a
           // wake already queued for the next turn joins it rather than opening a second one.
@@ -7851,7 +7844,6 @@ export class RunnerApiController {
           ? await tx.session.updateMany({
               where: { id: sessionId, cancelRequestedAt: null, ...turnStateFilter(['IN_FLIGHT']) },
               data: {
-                status: RunStatus.PENDING,
                 turnState: 'QUEUED',
                 engineTurnActive: false,
                 error: dto.error || dto.result || null,
@@ -8496,7 +8488,6 @@ export class RunnerApiController {
           ...turnStateFilter(['IN_FLIGHT']),
         },
         data: {
-          status: nextStatus,
           turnState: turnStateOfWord(nextStatus),
           engineTurnActive: false,
           // On a failed turn claude is still alive (the turn errored, the process didn't
@@ -8551,12 +8542,10 @@ export class RunnerApiController {
           ...branchCommitsData(dto.branchCommits),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
-          // The turn ended on its owner: a person's message answered and nothing queued behind it, so the row moves to
-          // the top of their list (session.listed_at, migration 1434). A wake-up's, a notification's or a task brief's
-          // end leaves it where it was; FAILED and every other end move it through the session_listed_at_settle trigger.
-          ...(nextStatus === RunStatus.AWAITING_INPUT && answeredPerson(current, completedTurn, sessionId)
-            ? { listedAt: new Date() }
-            : {}),
+          // The turn ended on its owner with nothing queued behind it, so the row moves to the top of their list
+          // (session.listed_at, migration 1490), whoever started the turn: a wake-up's or another session's reply is
+          // news too (owner 2026-11-26). FAILED and every other end move it through the session_listed_at_settle trigger.
+          ...(nextStatus === RunStatus.AWAITING_INPUT ? { listedAt: new Date() } : {}),
           numTurns: { increment: turnInc },
           costUsd: { increment: gatewayBooked ? 0 : turnCostUsd },
           // The totals this turn was measured to, for the next completion to be measured from.
@@ -10663,7 +10652,6 @@ export class RunnerApiController {
       const res = await tx.session.updateMany({
         where: { id: sessionId, ...turnStateFilter(['IN_FLIGHT', 'ABANDONED', null]) },
         data: {
-          status: effectiveStatus,
           // Released: no turn, slot or claim (session_turn_state_released_chk).
           turnState: null,
           result: dto.result,
@@ -11027,7 +11015,6 @@ export class RunnerApiController {
     const rested = await tx.session.updateMany({
       where: { id: sessionId, ...turnStateFilter(['IN_FLIGHT', 'ABANDONED', null]) },
       data: {
-        status,
         turnState: turnStateOfWord(status),
         error: dto.error || dto.result || null,
         engineTurnActive: false,
@@ -11126,7 +11113,6 @@ export class RunnerApiController {
             // The runner read a real title out of the transcript; it wins over the placeholder.
             ...(dto.title ? { title: dto.title } : {}),
             ...(fork ? { runtimeSessionId: fork } : {}),
-            status: pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
             turnState: pendingExecutable > 0 ? 'QUEUED' : null,
           },
         });
@@ -11146,7 +11132,6 @@ export class RunnerApiController {
       await tx.session.update({
         where: { id: sessionId },
         data: {
-          status: RunStatus.FAILED,
           turnState: null,
           error: dto.error ?? 'import failed',
           deletedAt: new Date(),

@@ -37,7 +37,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { type PrismaClient, RunStatus } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -163,7 +164,7 @@ test('a claim whose runner hung up claims nothing', {
         title,
         prompt: title,
         provider: 'claude',
-        status: RunStatus.PENDING,
+        turnState: 'QUEUED',
         dispatchOrigin: 'USER',
         startsTaskWork: false,
       },

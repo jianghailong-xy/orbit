@@ -24,7 +24,7 @@ import org.junit.Test
  *
  * Facts present: the state icon and word are `phase` alone ([SessionDisplay.state]), the marks are the facts ([SessionDisplay.marks]), and
  * every Android surface on the board says them: the list row's value (TalkBack), the task run label and the copied task Markdown's Runs
- * line. The Needs you / Working group is the board's group column, unchanged. Facts absent (an older server): both functions answer null
+ * line. Needs you / Working is the list's own rule (contracts/session-list-order.fixtures.json): phase RUNNING is Working. Facts absent (an older server): both functions answer null
  * and each surface says what it said before this change (legacy-baseline.android.json, recorded before it).
  */
 class SessionDisplayRowsTest {
@@ -109,7 +109,7 @@ class SessionDisplayRowsTest {
     @Test fun row12_releasedByAFailedTurn_withoutFacts_drawsToday() = withoutFacts(12)
     @Test fun row13_releasedByEnd_withFacts_isIdleEnded() = withFacts(13, I, listOf("Ended"), "-")
     @Test fun row14_releasedByEnd_withoutFacts_drawsToday() = withoutFacts(14)
-    @Test fun row15_aJobWithNoTurn_withFacts_isRunningBackgroundOutsideWorking() = withFacts(15, R, listOf("Background"), "-")
+    @Test fun row15_aJobWithNoTurn_withFacts_isRunningBackgroundInWorking() = withFacts(15, R, listOf("Background"), "Working")
     @Test fun row16_aJobWithNoTurn_withoutFacts_drawsToday() = withoutFacts(16)
     @Test fun row17_waitingOnAnApproval_withFacts_isRunningNeedsYou() = withFacts(17, R, listOf("Needs you"), "Needs you")
     @Test fun row18_waitingOnAnApproval_withoutFacts_drawsToday() = withoutFacts(18)
@@ -121,9 +121,9 @@ class SessionDisplayRowsTest {
     @Test fun row24_oldPlainSucceeded_withoutFacts_drawsToday() = withoutFacts(24)
     @Test fun row25_endingAfterAnInterruptedTurn_withFacts_isIdleInterrupted() = withFacts(25, I, listOf("Interrupted"), "-")
     @Test fun row26_endingAfterAnInterruptedTurn_withoutFacts_drawsToday() = withoutFacts(26)
-    @Test fun row27_engineStartedItsOwnTurn_withFacts_isRunningWithNoMarkOutsideWorking() = withFacts(27, R, listOf(), "-")
+    @Test fun row27_engineStartedItsOwnTurn_withFacts_isRunningWithNoMarkInWorking() = withFacts(27, R, listOf(), "Working")
     @Test fun row28_engineStartedItsOwnTurn_withoutFacts_drawsToday() = withoutFacts(28)
-    @Test fun row29_subAgentRunning_withFacts_isRunningWithNoMarkOutsideWorking() = withFacts(29, R, listOf(), "-")
+    @Test fun row29_subAgentRunning_withFacts_isRunningWithNoMarkInWorking() = withFacts(29, R, listOf(), "Working")
     @Test fun row30_subAgentRunning_withoutFacts_drawsToday() = withoutFacts(30)
     @Test fun row31_willWake_withFacts_isIdleWillResume() = withFacts(31, I, listOf("Will resume"), "-")
     @Test fun row32_willWake_withoutFacts_drawsToday() = withoutFacts(32)

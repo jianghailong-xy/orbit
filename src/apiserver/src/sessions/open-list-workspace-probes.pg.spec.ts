@@ -23,7 +23,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { MessageEvent } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { ControlEventType, type ControlEvent } from '@orbit/shared';
 import { Client } from 'pg';
 import { EventsController } from '../events/events.controller';
@@ -39,6 +40,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { linkBeatDigests, writeLinkBeatReports } from '../runner-api/link-heartbeat';
 import { OPEN_LIST_UNDRAWN_WORKSPACE_COLUMNS, readOpenListVersion, readOpenListVersionParts } from './open-list-version';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -111,7 +113,7 @@ async function fixture(t: T): Promise<Fixture> {
     data: {
       id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: `olw ${id}`,
       prompt: 'olw', provider: 'claude', model: 'claude-opus-5-5', providerBuiltin: true,
-      status: running ? RunStatus.RUNNING : RunStatus.PENDING,
+      turnState: turnStateOfWord(running ? RunStatus.RUNNING : RunStatus.PENDING),
       startedAt: running ? new Date() : null, lastTurnAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
@@ -293,7 +295,7 @@ test('1. heartbeats: probe writes are silent unless free bytes cross a queued se
 
   // Once the session has run, no gate reads the disk for it: the same crossing is silent.
   const toldBefore = received.length;
-  await f.db.session.update({ where: { id: f.queuedId }, data: { status: RunStatus.RUNNING, startedAt: new Date() } });
+  await f.db.session.update({ where: { id: f.queuedId }, data: { turnState: 'IN_FLIGHT', startedAt: new Date() } });
   const started = await readOpenListVersion(f.prisma, f.ownerId);
   assert.ok(await until(() => received.length > toldBefore, 2_500), 'the session starting sent no hint');
   const counter = await workspaceCounter(f);

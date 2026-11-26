@@ -202,10 +202,10 @@ pgTest('(d)(e) session_send delivers to an AWAITING_INPUT session and never answ
     await admin.query(
       `INSERT INTO "session"(
          id, title, prompt, owner_id, creator_id, assigned_runner_id, provider,
-         provider_builtin, status, num_turns, updated_at
+         provider_builtin, turn_state, num_turns, updated_at
        ) VALUES (
          $1::uuid, 'parked', 'opening prompt', $2::uuid, $2::uuid, $3::uuid, 'claude',
-         TRUE, 'AWAITING_INPUT', 1, clock_timestamp()
+         TRUE, NULL, 1, clock_timestamp()
        )`,
       [PARKED_SESSION_ID, OWNER_ID, RUNNER_ID],
     );
@@ -275,10 +275,10 @@ pgTest('(e) the same door writes into the turn a live session is already running
   await admin.query(
     `INSERT INTO "session"(
        id, title, prompt, owner_id, creator_id, assigned_runner_id, provider,
-       provider_builtin, status, num_turns, updated_at
+       provider_builtin, turn_state, num_turns, updated_at
      ) VALUES (
        $1::uuid, 'live', 'opening prompt', $2::uuid, $2::uuid, $3::uuid, 'claude',
-       TRUE, 'RUNNING', 1, clock_timestamp()
+       TRUE, 'IN_FLIGHT', 1, clock_timestamp()
      )`,
     [LIVE_SESSION_ID, OWNER_ID, RUNNER_ID],
   );
@@ -320,10 +320,10 @@ pgTest('(f) a session still starts: its seeded opening turn keeps its prompt and
     await admin.query(
       `INSERT INTO "session"(
          id, title, prompt, owner_id, creator_id, assigned_runner_id, provider,
-         provider_builtin, status, num_turns, updated_at
+         provider_builtin, turn_state, num_turns, updated_at
        ) VALUES (
          $1::uuid, 'seeding', 'the opening prompt', $2::uuid, $2::uuid, $3::uuid, 'claude',
-         TRUE, 'RUNNING', 0, clock_timestamp()
+         TRUE, 'IN_FLIGHT', 0, clock_timestamp()
        )`,
       [SEEDING_SESSION_ID, OWNER_ID, RUNNER_ID],
     );

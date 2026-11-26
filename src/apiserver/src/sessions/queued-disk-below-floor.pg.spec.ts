@@ -17,7 +17,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -73,7 +74,7 @@ test('queuedReason disk_below_floor: a new session waits while its runner is bel
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: r.workspaceId, assignedRunnerId: r.id, title,
-        prompt: title, provider: 'claude', providerBuiltin: true, status: RunStatus.PENDING,
+        prompt: title, provider: 'claude', providerBuiltin: true, turnState: 'QUEUED',
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...(ranBefore ? { startedAt: new Date(Date.now() - 60_000), runtimeSessionId: randomUUID(), numTurns: 1 } : {}),
       },

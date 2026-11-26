@@ -140,7 +140,7 @@ test('Documents retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, as
     await db.session.create({
       data: {
         id, title, prompt: title, ownerId: who.ownerId, creatorId: who.ownerId, workspaceId: who.workspaceId,
-        assignedRunnerId: who.runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
+        assignedRunnerId: who.runnerId, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         provider: 'claude', taskId, startsTaskWork: taskId !== undefined,
       },
     });

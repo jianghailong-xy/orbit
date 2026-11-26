@@ -46,7 +46,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -268,7 +269,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -317,7 +318,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.SUCCEEDED, finishedAt, 
+        turnState: null, finishedAt, 
         branchSha: TASK_BRANCH_TIP, worktreeBranch: branch, worktreeDirty: false,
       },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
@@ -413,7 +414,7 @@ test('(b) the hourly Trash purge takes a failed landing\'s session and its neigh
       const neighbour = await stack.db.session.create({
         data: {
           ownerId: w.ownerId, creatorId: w.ownerId, title: 'a chat', prompt: 'p',
-          status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+          turnState: null, finishedAt: new Date(), 
         },
         select: { id: true },
       });

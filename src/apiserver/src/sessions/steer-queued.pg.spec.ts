@@ -16,7 +16,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { type PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SESSION_CURRENT_WORK_ROUTING_V1 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -85,7 +86,7 @@ test('a queued message is sent into the running turn, or stays queued', {
     await prisma.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title: 'fix the export', prompt: 'fix the export', provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title: 'fix the export', prompt: 'fix the export', provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       },
@@ -122,7 +123,7 @@ test('a queued message is sent into the running turn, or stays queued', {
     const sent = await send(w, 'run the full test suite');
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: w.sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: w.sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
     const handed = await dequeue(w);
     assert.equal(handed?.turnId, sent.turnId, 'the running message was not the one handed out');

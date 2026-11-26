@@ -30,7 +30,8 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { toUuid } from '@orbit/shared';
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -86,7 +87,7 @@ test('browser_clear_logins: the profile is cleared only on the owner\'s yes; a d
     (await prisma.session.create({
       data: {
         ownerId, creatorId: ownerId, assignedRunnerId: runnerId, provider: 'claude', engine: 'claude', model: 'claude-opus-5-5',
-        title, prompt: 'browse', status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        title, prompt: 'browse', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       },
       select: { id: true },
     })).id;

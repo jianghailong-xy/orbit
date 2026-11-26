@@ -32,7 +32,6 @@ import { ModuleRef } from '@nestjs/core';
 import {
   type ConversationTurn,
   Prisma,
-  RunStatus,
   type Session,
   SessionDispatchOrigin,
   SessionRunSource,
@@ -54,7 +53,7 @@ import {
   LEGACY_STATUS_SELECT, legacySessionStatus, legacySessionStatusSql, readLandingSettlements, statusWordFilter, withoutWordFacts,
 } from './session-legacy-words';
 import {
-  heldWordOf, isParked, sessionTurnStateSql, type TurnState, type TurnStateFacts, TURN_STATE_SELECT, turnStateAfterTurnEnqueued,
+  isParked, sessionTurnStateSql, type TurnState, type TurnStateFacts, TURN_STATE_SELECT, turnStateAfterTurnEnqueued,
   turnStateFilter, turnStateOf,
 } from './session-turn-state';
 import { deriveSessionPhase, readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
@@ -169,6 +168,7 @@ import {
   type QuestionAnswers,
   type ReplyTranslationRetryResponse,
   type TurnTranslation,
+  RunStatus,
 } from '@orbit/shared';
 import {
   ANCHOR_ROLE,
@@ -458,6 +458,7 @@ import { returnWaitingSessionsToOpen } from './return-to-open';
 import { readLandingView } from '../projects/landing-view';
 import {
   deriveSessionCapabilities,
+  type LegacyStatusWord,
   withSessionCapabilities,
   withSessionState,
 } from './session-state';
@@ -1909,8 +1910,7 @@ export class SessionsService {
         branch,
         workSubdir,
         prompt: dto.prompt,
-        status: RunStatus.PENDING,
-        // Its first turn waits for a claim (plan §2.2 #18: deploy 2 writes both).
+        // Its first turn waits for a claim (plan §2.2 #18).
         turnState: 'QUEUED',
         provider,
         providerBuiltin,
@@ -2471,7 +2471,6 @@ export class SessionsService {
             title,
             branch,
             prompt: '',
-            status: RunStatus.PENDING,
             // Its first turn waits for a claim (plan §2.2 #19).
             turnState: 'QUEUED',
             provider: AgentProvider.CLAUDE,
@@ -2839,8 +2838,8 @@ export class SessionsService {
     },
   ): Promise<{
     id: string;
-    status: RunStatus;
-    runStatus: RunStatus;
+    status: LegacyStatusWord;
+    runStatus: LegacyStatusWord;
     sessionState: SessionState;
     runState: SessionRunState;
     lifecycleState: SessionLifecycleState;
@@ -4459,7 +4458,7 @@ export class SessionsService {
     // Completed orders by when the session was completed
     // (completed_at, newest first) — not by last activity — and deliberately ignores
     // pinning, which is an Open-list affordance. Every other view floats pinned
-    // sessions to the top and orders by `listed_at` (migration 1434, session-listed-at.ts): the
+    // sessions to the top and orders by `listed_at` (migration 1490, session-listed-at.ts): the
     // clock that moves only when the session changes for its owner, not with every event.
     // The clients sort on the same key, read as created_at where an older server left it NULL.
     // With `limit` that is not cosmetic: a differently ordered page would cut exactly
@@ -5293,7 +5292,7 @@ export class SessionsService {
         s.kind            AS "sessionKind",
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
-        -- The list's order key (migration 1434): moved only when the session changes for its owner. NULL only on a row
+        -- The list's order key (migration 1490): moved only when the session changes for its owner. NULL only on a row
         -- an older server inserted mid-deploy, which is read as its creation.
         COALESCE(s.listed_at, s.created_at) AS "listedAt",
         -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
@@ -7509,7 +7508,7 @@ export class SessionsService {
   }
 
   /** Whether an engine runs for the session now: the test getLive refuses with "the session has ended". */
-  private static engineLive(session: { status: RunStatus; finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
+  private static engineLive(session: { turnState: string | null; finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
     return isHeldPastClaim(session) && !session.cancelRequestedAt;
   }
 
@@ -7832,7 +7831,7 @@ export class SessionsService {
       /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
       senderClient?: string;
       senderClientDetail?: string | null;
-      /** A person sent it (migration 1434): its end, waiting for input, moves the session's `listedAt`. */
+      /** A person sent it (migration 1490): its arrival moves the session's `listedAt`, as every turn's end on the owner does. */
       byPerson?: boolean;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
@@ -8131,7 +8130,7 @@ export class SessionsService {
       translated?: { content: string; from: TranslationLanguage };
       /**
        * A person sent this turn — the owner at one of their own doors, a guest, a Feishu sender — so the session moves
-       * to the top of the session list (`session.listed_at`, migration 1434). An option of this call and never a field
+       * to the top of the session list (`session.listed_at`, migration 1490). An option of this call and never a field
        * of `dto`; every platform delivery (wake-ups, notifications, task briefs, re-sends) and every session-to-session
        * door leaves it unset, which is what keeps a session busy with those where its owner left it.
        */
@@ -8478,7 +8477,6 @@ export class SessionsService {
       await tx.session.update({
         where: { id },
         data: {
-          status: heldWordOf(nextTurn),
           turnState: nextTurn,
           lastTurnAt: new Date(),
           // A person's message moves the row; anything else that queues a turn leaves it where it is.
@@ -8756,7 +8754,7 @@ export class SessionsService {
       nextTurn = turnStateAfterTurnEnqueued(turnBefore);
       if (nextTurn !== turnBefore) {
         await tx.session.update({
-          where: { id: sessionId }, data: { status: heldWordOf(nextTurn), turnState: nextTurn, lastTurnAt: new Date() },
+          where: { id: sessionId }, data: { turnState: nextTurn, lastTurnAt: new Date() },
         });
       }
       return { turn: updated };
@@ -9078,9 +9076,9 @@ export class SessionsService {
         ...(interruptPayload ? { content: interruptPayload } : {}),
       });
       if (!followUp) {
-        // Parked (plan §2.2: deploy 2 writes both).
+        // Parked (plan §2.2).
         if (idleAfterStop) {
-          await tx.session.update({ where: { id }, data: { status: RunStatus.AWAITING_INPUT, turnState: null } });
+          await tx.session.update({ where: { id }, data: { turnState: null } });
         }
         return { turn: null, wakeQueue: false, wakeInbox: true, idempotent: false, idled: idleAfterStop };
       }
@@ -9110,8 +9108,7 @@ export class SessionsService {
       await tx.session.update({
         where: { id },
         data: {
-          // Both, the unchanged value included (plan §2.2 #22).
-          status: heldWordOf(nextTurn),
+          // The unchanged value included, so the triggers on turn_state fire as they did (plan §2.2 #22).
           turnState: nextTurn,
           lastTurnAt: new Date(),
           ...(opts?.listed ? { listedAt: new Date() } : {}),
@@ -9642,7 +9639,7 @@ export class SessionsService {
         await tx.session.update({
           where: { id },
           // Parked again (plan §2.2 #23).
-          data: { status: RunStatus.AWAITING_INPUT, turnState: null, lastTurnAt: new Date() },
+          data: { turnState: null, lastTurnAt: new Date() },
         });
       }
       return null;
@@ -10885,7 +10882,7 @@ export class SessionsService {
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
-    status: RunStatus;
+    status: LegacyStatusWord;
     lifecycleState: SessionLifecycleState;
     /** @deprecated Compatibility representation of lifecycleState. */
     filingState: SessionFilingState;
@@ -11020,7 +11017,6 @@ export class SessionsService {
         data: {
           ...lifecycleData,
           ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-          status: RunStatus.CANCELLED,
           // Released: no turn (plan §2.2 #24).
           turnState: null,
           endReason: reason,
@@ -12251,7 +12247,6 @@ export class SessionsService {
       await tx.session.update({
         where: { id },
         data: {
-          status: RunStatus.PENDING,
           // Held again with its turn waiting for a claim (plan §2.2 #25).
           turnState: 'QUEUED',
           // A terminal revive starts a fresh runner-supervisor epoch. Keep the

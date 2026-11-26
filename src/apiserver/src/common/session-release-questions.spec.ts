@@ -5,6 +5,7 @@ import test from 'node:test';
 
 import { releaseFinishedTheWork, releaseWasFailure, type SessionReleaseFacts } from './session-release';
 import { backfilled, RELEASE_SHAPES, releaseFactsOfShape, type ReleaseShape } from './session-release-shapes.fixture';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * Removal steps R3, R4 and R7 (docs/session-three-state-design.md §12.2, decision D9): the two release questions of
@@ -34,9 +35,10 @@ import { backfilled, RELEASE_SHAPES, releaseFactsOfShape, type ReleaseShape } fr
  * Set ORBIT_RELEASE_SHAPES_TABLE to a file path to write the table as markdown.
  */
 
-/** Deploy 2's reading of "released by a failure": the turn outcome, or the status bridge `status = 'FAILED'`. */
-function deploy2Failed(facts: SessionReleaseFacts): boolean {
-  return releaseWasFailure(facts) || (facts.finishedAt != null && facts.endReason == null && facts.status === 'FAILED');
+/** Deploy 2's reading of "released by a failure": the turn outcome, or the status bridge `status = 'FAILED'` (the
+ *  shape's stored word). */
+function deploy2Failed(facts: SessionReleaseFacts, stored: string): boolean {
+  return releaseWasFailure(facts) || (facts.finishedAt != null && facts.endReason == null && stored === 'FAILED');
 }
 
 interface Answers {
@@ -58,7 +60,7 @@ function answersOf(shape: ReleaseShape): Answers {
   return {
     shape,
     statusFailed: shape.released && shape.status === 'FAILED',
-    deploy2: deploy2Failed(facts),
+    deploy2: deploy2Failed(facts, shape.status),
     failed: releaseWasFailure(facts),
     failedBackfilled: releaseWasFailure(releaseFactsOfShape(backfilled(shape), AT)),
     finished: releaseFinishedTheWork(facts),
@@ -136,7 +138,7 @@ test('the failure question reads no status word, and neither does the work quest
   for (const shape of RELEASE_SHAPES) {
     const facts = releaseFactsOfShape(shape);
     const answers = (['SUCCEEDED', 'CANCELLED', 'FAILED'] as const).map((status) => {
-      const row: SessionReleaseFacts = { ...facts, status };
+      const row: SessionReleaseFacts = { ...facts, turnState: turnStateOfWord(status) };
       return { failed: releaseWasFailure(row), finished: releaseFinishedTheWork(row) };
     });
     assert.equal(new Set(answers.map((a) => a.failed)).size, 1, `${shape.name}: the failure question reads no status`);

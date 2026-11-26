@@ -399,7 +399,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     const session = await db.session.create({
       data: {
         title: 'drive writer', prompt: 'drive writer', ownerId: owner, creatorId: owner, workspaceId: workspace.id,
-        assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(),
+        assignedRunnerId: runnerId, turnState: null, startedAt: new Date(),
       },
     });
     const id = await fileWith(null, 'attributed.txt', 'x');

@@ -50,7 +50,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { type PrismaClient, RunStatus } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -318,7 +319,7 @@ test('a merged event call commits past a held notification lock, and its events 
     await prisma.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: title,
-        provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, dispatchOrigin: 'USER', startsTaskWork: false,
+        provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', dispatchOrigin: 'USER', startsTaskWork: false,
         startedAt: new Date(), inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation,
       },
     });

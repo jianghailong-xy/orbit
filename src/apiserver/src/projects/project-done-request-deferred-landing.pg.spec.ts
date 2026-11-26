@@ -63,7 +63,7 @@ test('done readiness refuses a deferred landing until the work session finishes 
     const session = await db.session.create({
       data: {
         ownerId, creatorId: ownerId, workspaceId: workspace.id, taskId: task.id, assignedRunnerId: runner.id,
-        title: 'Work session', prompt: 'Do the work', status: 'AWAITING_INPUT', startsTaskWork: true,
+        title: 'Work session', prompt: 'Do the work', turnState: null, startsTaskWork: true,
         isolationStatus: 'worktree', branch: 'orbit/deferred-done-request', branchSha: sha, baseSha: sha,
         changedFiles: [], startedAt: new Date(), numTurns: 1,
       },
@@ -85,7 +85,7 @@ test('done readiness refuses a deferred landing until the work session finishes 
 
     const settlement = await db.$transaction(async (tx) => {
       const finished = await tx.session.update({
-        where: { id: session.id }, data: { status: 'SUCCEEDED', finishedAt: new Date() },
+        where: { id: session.id }, data: { turnState: null, finishedAt: new Date() },
       });
       return settleDeliveredIdentityAfterFinish(tx, finished);
     });

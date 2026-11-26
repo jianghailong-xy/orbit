@@ -15,11 +15,11 @@ import { ConflictException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -83,7 +83,7 @@ async function fixture(db: PrismaClient, opts: { inProject: boolean; acceptanceC
       title: 'the run',
       prompt: 'run the task',
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },

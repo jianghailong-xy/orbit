@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, type TurnCompleteRequest } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -61,7 +62,7 @@ test('turn-complete persists Codex tokens and preserves Claude model usage', {
     return db.session.create({
       data: {
         ownerId, creatorId: ownerId, assignedRunnerId: runnerId, provider, model,
-        title: 'usage session', prompt: 'report usage', status: RunStatus.RUNNING,
+        title: 'usage session', prompt: 'report usage', turnState: 'IN_FLIGHT',
         engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
       },
       select: { id: true },
@@ -70,7 +71,7 @@ test('turn-complete persists Codex tokens and preserves Claude model usage', {
 
   async function turn(sessionId: string, seq = 1) {
     await db.session.update({
-      where: { id: sessionId }, data: { status: RunStatus.RUNNING, engineTurnActive: true },
+      where: { id: sessionId }, data: { turnState: 'IN_FLIGHT', engineTurnActive: true },
     });
     const row = await db.conversationTurn.create({
       data: {

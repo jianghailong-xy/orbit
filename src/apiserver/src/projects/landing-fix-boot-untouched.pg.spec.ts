@@ -7,11 +7,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -122,7 +122,7 @@ test('a pre-existing OPEN integration item, DONE task and task_done session are 
       await db.session.create({
         data: {
           id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-          title: 'coordinator: boot', prompt: 'coordinator: boot', provider: 'claude', status: RunStatus.AWAITING_INPUT,
+          title: 'coordinator: boot', prompt: 'coordinator: boot', provider: 'claude', turnState: null,
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, titleManagedByProject: true, numTurns: 1,
           startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
         },
@@ -152,7 +152,7 @@ test('a pre-existing OPEN integration item, DONE task and task_done session are 
       await db.session.create({
         data: {
           id: sessionId, ownerId, creatorId: ownerId, taskId, workspaceId, assignedRunnerId: runnerId,
-          title: 'work boot', prompt: 'work', provider: 'claude', status: RunStatus.SUCCEEDED,
+          title: 'work boot', prompt: 'work', provider: 'claude', turnState: null,
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
           branch: 'orbit/boot', branchSha: sha('a'), baseSha: sha('b'), numTurns: 1, startedAt: minutesAgo(30),
           createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),

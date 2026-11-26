@@ -24,7 +24,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -37,6 +38,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { AutoRetryService } from '../sessions/auto-retry.service';
 import type { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import { WORD_SELECT, withWord } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -150,7 +152,7 @@ test('two sweeps meeting over one database write once', {
     await one.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: 'reaped as offline',
-        prompt: 'reaped as offline', provider: 'claude', providerBuiltin: true, status: RunStatus.FAILED,
+        prompt: 'reaped as offline', provider: 'claude', providerBuiltin: true, turnState: null,
         lastTurnOutcome: 'FAILED',
         error: 'runner offline', runtimeSessionId: randomUUID(), startedAt: new Date(Date.now() - 50 * MINUTE),
         finishedAt: new Date(Date.now() - 40 * MINUTE), retryAt: new Date(Date.now() - MINUTE),
@@ -173,8 +175,8 @@ test('two sweeps meeting over one database write once', {
 
     const ended = await meeting('session', [sweepOf(one), sweepOf(two)]);
     assert.deepEqual(ended.map((e) => e.status), ['fulfilled', 'fulfilled']);
-    const row = await one.session.findUniqueOrThrow({ where: { id: sessionId }, select: { retryAt: true, status: true } });
-    assert.deepEqual(row, { retryAt: null, status: RunStatus.FAILED }, 'the retry has ended and the failure stands');
+    const row = await one.session.findUniqueOrThrow({ where: { id: sessionId }, select: { retryAt: true, ...WORD_SELECT } });
+    assert.deepEqual(withWord(row), { retryAt: null, status: RunStatus.FAILED }, 'the retry has ended and the failure stands');
     assert.deepEqual(announced, [sessionId], 'its end is announced once, not once per sweep');
   });
 });

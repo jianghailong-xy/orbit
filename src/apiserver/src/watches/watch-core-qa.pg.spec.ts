@@ -391,9 +391,9 @@ async function insertTask(owner: string, status: string): Promise<string> {
 async function insertSession(owner: string, status: string, runnerId: string | null): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id", "finished_at")
-     VALUES ($1,'watch qa','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5,
+     VALUES ($1,'watch qa','the opening prompt',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,'claude',TRUE,1,now(),$5,
              CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
@@ -856,7 +856,7 @@ qa('QA-04', 'notifications lost on purpose: events published on a replica whose 
     [randomUUID(), asking],
   );
   writer.hub.publish(asking, runEvent(RunEventType.APPROVAL_REQUEST, { approvalId: randomUUID() }));
-  await sql.query(`UPDATE "session" SET "status" = 'INTERRUPTED' WHERE "id" = $1`, [parking]);
+  await sql.query(`UPDATE "session" SET "turn_state" = 'ABANDONED' WHERE "id" = $1`, [parking]);
   writer.hub.publish(parking, runEvent(RunEventType.STATUS, { status: 'INTERRUPTED' }));
   await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [cancelled]);
   await sql.query(`DELETE FROM "task" WHERE "id" = $1`, [deleted]);

@@ -91,6 +91,13 @@ data class OrbitNavigation(
         val left = if (folder != null) foldersLeftOpen + (section to folder) else foldersLeftOpen - section
         return copy(section = key, stacks = mapOf(key to listOf(root)), foldersLeftOpen = left)
     }
+    /** The session on top, filed in [folder], gets its folder's page under it: [workspace]'s list, then the folder's page in [view],
+     * so Back reaches the session's row (web WorkspaceView's "A filed session opened from anywhere but its folder's page"). */
+    fun underFolder(workspace: String, folder: String, view: String): OrbitNavigation {
+        val session = current
+        return land(workspace, OrbitRoute(Destination.WORKSPACE, workspace, workspace))
+            .push(OrbitRoute(Destination.FOLDER, folder, workspace, sessionView = view)).push(session)
+    }
     /** A link opens over the page showing. One that [waitsForDirectory] stays [pending], signed in or not, and a later link
      * replaces it. A link to the app itself (`orbit://active`) only opens it (iOS `route(to: .active)`): a workspace's stack stays as
      * it is, and from anywhere else it goes home. */

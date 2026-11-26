@@ -1275,6 +1275,74 @@ button.toast--pill:focus-visible {
 .tp-add:hover {
   color: var(--brand);
 }
+/* The one-time offer of this browser's notifications (components/WebPushOffer.tsx). */
+:root:has(.web-push-offer--bar) {
+  --web-push-offer-bar: 40px;
+  --app-vh: calc(100svh - var(--impersonation-bar, 0px) - var(--web-push-offer-bar));
+}
+.web-push-offer {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-1);
+  font-size: 13px;
+}
+.web-push-offer--bar {
+  height: var(--web-push-offer-bar);
+  justify-content: center;
+  padding: 0 12px;
+  background: var(--brand-tint);
+  border-bottom: 1px solid var(--brand-border);
+}
+.web-push-offer--rail {
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  background: var(--brand-tint);
+  line-height: 1.4;
+}
+@media (max-width: 480px) {
+  .web-push-offer--bar .web-push-offer-more {
+    display: none;
+  }
+}
+.web-push-offer--bar .web-push-offer-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.web-push-offer-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.web-push-offer--rail .web-push-offer-actions {
+  justify-content: space-between;
+}
+.web-push-offer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.web-push-offer-close:hover {
+  background: var(--brand-tint-hover);
+  color: var(--text-1);
+}
 .tp-user {
   flex: none;
   border-top: 1px solid var(--border-subtle);
@@ -3602,6 +3670,8 @@ button.toast--pill:focus-visible {
 .coordinator-badge-link:hover,
 .coordinator-badge-link:focus-visible { background: color-mix(in srgb, var(--brand) 14%, var(--bg-base)); border-color: var(--brand); }
 .coordinator-badge-link:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: 1px; }
+/* The Task badge while its task is open beside the conversation: pressed, and a press closes it. */
+.coordinator-badge-link[aria-pressed='true'] { background: color-mix(in srgb, var(--brand) 14%, var(--bg-base)); border-color: var(--brand); }
 /* The title as the button that opens the session's settings (docs/mocks/session-settings-column ③): plain at
    rest and while the settings are open (owner 11-25: the open state needs no look of its own), a light ground and
    a › on hover. Keyboard focus shows as hover does, in place of the browser's ring. */
@@ -5077,30 +5147,6 @@ button.toast--pill:focus-visible {
 }
 .workspace-header-jump[hidden] {
   display: none;
-}
-/* A phone's header has no room for the capsule beside the title, and floating it over the
-   transcript covers the message the reader scrolled up to. Docked here instead: the header wraps,
-   the capsule takes a line of its own below the title's (last in the header, so it wraps under
-   the actions rather than pushing them down), and the conversation starts under the header's
-   rule where nothing covers it. */
-@media (max-width: 960px) {
-  .workspace-header:has(> .workspace-header-jump.is-phone) {
-    flex-wrap: wrap;
-  }
-  .workspace-header-jump.is-phone {
-    position: static;
-    /* The base rule centres itself over the row; docked, it is a row of its own. */
-    transform: none;
-    flex: 1 1 100%;
-    max-width: 100%;
-  }
-  .workspace-header-jump.is-phone .chat-older-pill.chat-older-split {
-    max-width: 100%;
-  }
-  /* Docked, it is part of the header rather than a chip floating over content. */
-  .workspace-header-jump.is-phone .chat-older-pill {
-    box-shadow: none;
-  }
 }
 /* Centred over the whole row, so the title stops short of the pill's half instead of running under it. */
 .workspace-header.has-jump {
@@ -17223,7 +17269,7 @@ button.chat-jump-start:hover {
   /* Fixed top bar carrying the drawer toggle, under the band while one is shown. */
   .app-topbar {
     position: fixed;
-    top: var(--impersonation-bar, 0px);
+    top: calc(var(--impersonation-bar, 0px) + var(--web-push-offer-bar, 0px));
     left: 0;
     right: 0;
     height: 48px;
@@ -17261,7 +17307,7 @@ button.chat-jump-start:hover {
      region fills the full width and the page stops overflowing sideways. */
   .app-nav {
     position: fixed;
-    top: var(--impersonation-bar, 0px);
+    top: calc(var(--impersonation-bar, 0px) + var(--web-push-offer-bar, 0px));
     left: 0;
     bottom: 0;
     z-index: 60;
@@ -17337,11 +17383,9 @@ button.chat-jump-start:hover {
   .workspace-split.show-conversation .workspace-header {
     padding-bottom: 10px;
   }
-  /* Beside ←, the Project sessions button and ⋯, a title sharing its row with the Coordinator badge
-     and the watch chips is left a few letters. Here the title takes the row to itself and the badges
-     and chips drop onto the status line under it: the title line's box steps aside (display:
-     contents) so its children wrap in the header column, the title a full row. The status text
-     follows the badges while it fits beside them and takes the next line when it does not. */
+  /* One row: ←, the title (or the capsule naming the reader's last question), its badges, ⋯. The
+     status line that used to sit under it is gone (owner, 2026-11-26) — its Follow, the tags, the run
+     state and the time live in ⋯ and the session's settings sheet now. */
   .workspace-header-main {
     display: flex;
     flex-wrap: wrap;
@@ -17350,10 +17394,15 @@ button.chat-jump-start:hover {
     row-gap: 2px;
   }
   .workspace-header-main > .workspace-title-line {
-    display: contents;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    min-width: 0;
+    flex: 1 1 auto;
   }
   .workspace-title-line > .workspace-name {
-    flex: 0 0 100%;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .workspace-header-main > .workspace-sub {
     flex: 1 1 auto;
@@ -17362,6 +17411,30 @@ button.chat-jump-start:hover {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* Off the tail the capsule takes the title's place in that row — the iOS console's nav-bar
+     principal — so the header is one row in both states and never grows as the reader scrolls. It
+     stays mounted while hidden (its strip's line is what says something waits), and `.shows-jump`
+     steps the title and its badges aside while it shows. */
+  .workspace-title-jump {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .workspace-title-jump[hidden] {
+    display: none;
+  }
+  .workspace-title-jump .chat-older-pill.chat-older-split {
+    flex: 1 1 auto;
+    max-width: 100%;
+    min-width: 0;
+  }
+  /* In the row, it is part of the header rather than a chip floating over content. */
+  .workspace-title-jump .chat-older-pill {
+    box-shadow: none;
+  }
+  .workspace-title-line.shows-jump > :not(.workspace-title-jump) {
+    display: none;
   }
   /* In-pane back button: leaves the open conversation for the session list. */
   .workspace-back-mobile {
@@ -27859,7 +27932,7 @@ button.project-open-item-action:disabled {
 .wk-toc-sep { height: 1px; background: var(--border-subtle); margin: 8px 8px 0; }
 
 .wk-contents-backdrop { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, .4); }
-.wk-contents { position: fixed; top: var(--impersonation-bar, 0px); left: 0; bottom: 0; z-index: 60; width: min(320px, 84vw); height: var(--app-vh, 100vh);
+.wk-contents { position: fixed; top: calc(var(--impersonation-bar, 0px) + var(--web-push-offer-bar, 0px)); left: 0; bottom: 0; z-index: 60; width: min(320px, 84vw); height: var(--app-vh, 100vh);
                display: flex; flex-direction: column; background: var(--bg-raised); box-shadow: 2px 0 16px rgba(0, 0, 0, .18); }
 .wk-contents-h { display: flex; align-items: center; gap: 8px; height: 52px; flex: none; padding: 0 8px 0 16px;
                  border-bottom: 1px solid var(--border-subtle); }
@@ -31598,6 +31671,20 @@ td > .routing-report-tier + .model-routing-flag {
     border: 1px solid var(--border-subtle);
     border-radius: var(--panel-radius);
     box-shadow: var(--panel-float);
+  }
+  /* Beside a conversation on a wide window it is a column in the shell's row instead, narrowing the
+     page as Help does (docs/mocks/session-task-column, A: 420px). TaskOverPagePanel sets .is-docked. */
+  .app-shell .project-task-panel.is-docked {
+    display: contents;
+  }
+  .app-shell .project-task-panel.is-docked > .task-detail-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    z-index: auto;
+    width: 420px;
+    margin: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+    box-shadow: var(--panel-shadow);
   }
 
   /* Scheduled: the list is one panel and the inspector beside it another. */

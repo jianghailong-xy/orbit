@@ -265,7 +265,6 @@ export async function ensureLandingSession(
         : null;
 
     const settled = landing.settledAt !== null;
-    const status = landingContainerStatus(landing);
 
     const [created] = await tx.session.createManyAndReturn({
       data: [{
@@ -276,7 +275,6 @@ export async function ensureLandingSession(
         titleManagedByProject: true,
         prompt: LANDING_PROMPT,
         sessionKind: 'LANDING',
-        status,
         // A container never holds a turn: parked while its subject is open, released once it settled (plan §2.2 #2).
         turnState: null,
         startsTaskWork: false,
@@ -394,7 +392,6 @@ async function settleLanding(
       await tx.session.update({
         where: { id: locked.sessionId },
         data: {
-          status: landingContainerStatus({ settledAt, settledAs }),
           // Released: no turn (plan §2.2 #3).
           turnState: null,
           completedAt: settledAt,

@@ -7,7 +7,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 import {
   ACCOUNT_MOVE_CAPABILITY,
@@ -23,15 +24,12 @@ type Facts = Parameters<typeof cursorConversationStarted>[0];
 const RELEASED: readonly string[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 /**
  * A Cursor CLI session waiting for its first claim, unless `over` says otherwise. Stored as the server stores it: a
- * released word with its release column, a held one with no turn state yet (it reads its word, as before the backfill).
+ * released word with its release column, a held one with its word's turn state.
  */
-const session = (over: Partial<Facts> = {}): Facts => {
-  const status = over.status ?? RunStatus.PENDING;
-  return {
-    numTurns: 0, runtimeSessionId: null, engineTurnActive: false,
-    finishedAt: RELEASED.includes(status) ? new Date() : null, turnState: null, ...over, status,
-  };
-};
+const session = ({ status = RunStatus.PENDING, ...over }: Partial<Facts> & { status?: RunStatus } = {}): Facts => ({
+  numTurns: 0, runtimeSessionId: null, engineTurnActive: false,
+  finishedAt: RELEASED.includes(status) ? new Date() : null, turnState: turnStateOfWord(status), ...over,
+});
 
 test('P6b a Cursor CLI session has talked once a turn settled, once Cursor opened its conversation, or while a turn runs', () => {
   const talked: Array<[string, Facts]> = [

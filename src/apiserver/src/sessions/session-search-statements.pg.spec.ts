@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
 import { pgAdapterFor } from '../prisma/prisma-client';
@@ -11,6 +12,8 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
+import { WORD_SELECT } from '../test-support/session-word';
 
 /**
  * A search hit carries the six session facts and the Background mark's inputs (task 353YrK2AEGTm6mfl8GrW9), read for
@@ -53,7 +56,7 @@ async function owner(db: PrismaClient, run: string, n: number): Promise<{ ownerI
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: `search ${run} ${i}`, prompt: 'hello',
         provider: 'claude', dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(), numTurns: 1, taskId,
-        status: shape === 1 || shape === 3 ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING,
+        turnState: turnStateOfWord(shape === 1 || shape === 3 ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING),
         lastTurnOutcome: shape === 1 || shape === 3 ? 'ANSWERED' : null,
         createdAt: new Date(Date.now() - i * 1000),
         ...(shape === 1 ? { runningBgShells: [job], runningBgJobs: [job], runningBgJobActivity: { [job]: Date.now() } } : {}),
@@ -113,7 +116,7 @@ test('a search page costs the same statements for 50 hits as for 5, and each hit
     // The batch the page is counted with says, session by session, what the one-session count says.
     const readers = await db.session.findMany({
       where: { id: { in: large.ids } },
-      select: { id: true, taskId: true, status: true, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+      select: { id: true, taskId: true, ...WORD_SELECT, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
     });
     const batched = await countLiveApprovalsBySession(db as never, readers);
     for (const reader of readers) {

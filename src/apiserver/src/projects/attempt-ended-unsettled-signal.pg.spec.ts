@@ -18,11 +18,11 @@ import { uuidToBase62 } from '@orbit/shared';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,6 +41,7 @@ import {
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { assertCoordinatorPgUrlIsIsolated } from './coordinator-pg-test-safety';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -178,7 +179,7 @@ async function fixture(
       title: `${label}-session`,
       prompt: label,
       provider: 'claude',
-      status: sessionStatus,
+      turnState: turnStateOfWord(sessionStatus),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       numTurns: 1,

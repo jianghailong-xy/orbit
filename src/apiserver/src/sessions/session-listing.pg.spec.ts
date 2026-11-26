@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionTagsService } from '../session-tags/session-tags.service';
+import { fixtureFacts, type SessionFixture } from '../test-support/session-word';
 import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
@@ -182,7 +183,7 @@ async function seed(c: Case): Promise<Seeded> {
         })).id
       : null;
     const completed = s.lifecycle === 'completed';
-    const state: Partial<Prisma.SessionUncheckedCreateInput> =
+    const state: SessionFixture =
       completed ? { status: 'SUCCEEDED', finishedAt: new Date(), ...(s.archivedAt ? { archivedAt: new Date() } : { completedAt: new Date() }) }
         : s.activity === 'needsYou' || s.activity === 'running' ? { status: 'RUNNING' }
           : s.activity === 'jobs' ? { status: 'AWAITING_INPUT', runningBgJobs: ['bgj_listing'], runningBgJobActivity: {} }
@@ -193,7 +194,7 @@ async function seed(c: Case): Promise<Seeded> {
         workspaceId: s.workspace === 'elsewhere' ? workspaces.elsewhere : workspaces.here,
         folderId: s.folder ? ids.get(s.folder)! : null,
         taskId,
-        ...state,
+        ...fixtureFacts(state),
       } as Prisma.SessionUncheckedCreateInput,
     });
     if (project && s.role === 'COORDINATOR') {

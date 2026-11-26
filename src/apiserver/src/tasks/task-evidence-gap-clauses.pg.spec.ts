@@ -25,11 +25,11 @@ import { HttpException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { uuidToBase62 } from '@orbit/shared';
 import {
@@ -104,7 +104,7 @@ async function fixture(db: PrismaClient) {
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: forTask !== null,
     },

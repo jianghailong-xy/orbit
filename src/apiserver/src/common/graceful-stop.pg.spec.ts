@@ -24,7 +24,8 @@ import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { JwtService } from '@nestjs/jwt';
-import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -123,7 +124,7 @@ test('SIGTERM: a real apiserver refuses new connections, ends its streams, answe
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: 'a stopping apiserver',
       prompt: 'stop', provider: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER, numTurns: 1,
-      engineTurnActive: false, runtimeSessionId: randomUUID(), startedAt: new Date(), status: RunStatus.RUNNING,
+      engineTurnActive: false, runtimeSessionId: randomUUID(), startedAt: new Date(), turnState: 'IN_FLIGHT',
     },
   });
   const store = (seq: number) =>

@@ -50,8 +50,6 @@ export const MOVE_REFUSAL = {
 
 /** The session's own state, as §5.2 judges it. */
 export interface SessionMoveFacts extends TurnStateFacts {
-  /** The stored word, which turnStateOf reads only for a held row not yet backfilled (session-turn-state.ts). */
-  status: string;
   /** The release column (common/session-release.ts): set on an ended session. */
   finishedAt: Date | null;
   /** Why an end was asked for, and the last turn's outcome: with the status and the release column, what "released by a

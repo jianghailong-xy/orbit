@@ -93,10 +93,10 @@ async function seedStartingWindow(): Promise<void> {
   await admin.query(
     `INSERT INTO "session"(
        id, title, prompt, owner_id, creator_id, assigned_runner_id, provider,
-       provider_builtin, status, num_turns, updated_at
+       provider_builtin, turn_state, num_turns, updated_at
      ) VALUES (
        $1::uuid, 'race', 'opening prompt', $2::uuid, $2::uuid, $3::uuid, 'codex',
-       TRUE, 'RUNNING', 0, clock_timestamp()
+       TRUE, 'IN_FLIGHT', 0, clock_timestamp()
      )`,
     [SESSION_ID, OWNER_ID, RUNNER_ID],
   );
@@ -113,8 +113,8 @@ async function seedCrossSessionTarget(): Promise<void> {
   await admin.query(`DELETE FROM "session" WHERE id = $1::uuid`, [OTHER_SESSION_ID]);
   await admin.query(
     `INSERT INTO "session"(
-       id, title, prompt, owner_id, creator_id, status, num_turns, updated_at
-     ) VALUES ($1::uuid, 'other', 'other', $2::uuid, $2::uuid, 'RUNNING', 1, clock_timestamp())`,
+       id, title, prompt, owner_id, creator_id, turn_state, num_turns, updated_at
+     ) VALUES ($1::uuid, 'other', 'other', $2::uuid, $2::uuid, 'IN_FLIGHT', 1, clock_timestamp())`,
     [OTHER_SESSION_ID, OWNER_ID],
   );
   await admin.query(

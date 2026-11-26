@@ -57,11 +57,11 @@ import { test } from 'node:test';
 import { HttpException } from '@nestjs/common';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import {
   type ProjectStartFinding,
@@ -230,7 +230,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
         title: label,
         prompt: label,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -426,7 +426,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
         provider: 'claude',
         branch: `orbit/${label}`,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED, 
+        turnState: null, 
         finishedAt: new Date(Date.now() - 60_000),
       },
     });

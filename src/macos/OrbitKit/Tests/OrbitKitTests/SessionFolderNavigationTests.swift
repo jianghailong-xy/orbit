@@ -241,4 +241,84 @@ final class SessionFolderNavigationTests: XCTestCase {
         XCTAssertEqual(nav.folderPage?.view, .completed)
         XCTAssertNotEqual(nav.folderPage, release)
     }
+
+    // MARK: - Opening a filed session by its id (owner demand, 2026-11-24)
+
+    private func session(_ id: String, workspace: String = "a1", folderID: String? = nil,
+                         lifecycle: SessionLifecycleState? = nil) -> Session {
+        Session(id: id, title: id, status: .running, lifecycleState: lifecycle, agentId: workspace,
+                assignedRunnerId: nil, pendingApprovals: nil, branch: nil, updatedAt: nil,
+                folderId: folderID)
+    }
+
+    /// A session filed in a folder, opened by its id from outside the list — a link, a notification,
+    /// a search result — opens that folder's page in its own workspace: the workspace's top level
+    /// lists no filed session, so this is the only page its row is on.
+    func testAFiledSessionOpenedByItsIDShowsItsFoldersPage() {
+        let filed = session("s1", workspace: "a1", folderID: "f1")
+
+        XCTAssertEqual(SessionFolderAddress.forOpening(filed, folders: library,
+                                                       listShowsFolders: true, alreadyShowing: false),
+                       SessionFolderAddress(folderID: "f1", agentID: "a1", view: .open))
+    }
+
+    /// The page's scope is the session's: a completed one opens the folder's Completed page, where
+    /// the row is drawn.
+    func testAFiledSessionsPageCarriesItsOwnScope() {
+        let done = session("s1", workspace: "a1", folderID: "f1", lifecycle: .completed)
+
+        XCTAssertEqual(SessionFolderAddress.forOpening(done, folders: library,
+                                                       listShowsFolders: true, alreadyShowing: false),
+                       SessionFolderAddress(folderID: "f1", agentID: "a1", view: .completed))
+    }
+
+    /// A session in no folder is unchanged: there is no page to show.
+    func testAnUnfiledSessionOpenedByItsIDShowsNoFolderPage() {
+        XCTAssertNil(SessionFolderAddress.forOpening(session("s1", workspace: "a1"), folders: library,
+                                                     listShowsFolders: true, alreadyShowing: false))
+    }
+
+    /// An unknown folder — deleted since, or another workspace's — is nobody's page: the session
+    /// stays where it was rather than vanishing into a folder that cannot be opened.
+    func testAFolderTheSessionsWorkspaceDoesNotHaveIsNotOpened() {
+        XCTAssertNil(SessionFolderAddress.forOpening(session("s1", workspace: "a1", folderID: "nope"),
+                                                     folders: library,
+                                                     listShowsFolders: true, alreadyShowing: false))
+        XCTAssertNil(SessionFolderAddress.forOpening(session("s1", workspace: "a1", folderID: "f3"),
+                                                     folders: library,
+                                                     listShowsFolders: true, alreadyShowing: false),
+                     "f3 belongs to another workspace")
+    }
+
+    /// A list that draws no folder rows — Trash, a tag filter or Group by Tag, search — shows no
+    /// folder page, and neither does a trashed session's own scope.
+    func testAListThatDrawsNoFolderRowsOpensNoPage() {
+        let filed = session("s1", workspace: "a1", folderID: "f1")
+        XCTAssertNil(SessionFolderAddress.forOpening(filed, folders: library,
+                                                     listShowsFolders: false, alreadyShowing: false))
+
+        let trashed = session("s1", workspace: "a1", folderID: "f1", lifecycle: .trash)
+        XCTAssertNil(SessionFolderAddress.forOpening(trashed, folders: library,
+                                                     listShowsFolders: true, alreadyShowing: false))
+    }
+
+    /// A reader already on a folder's page keeps it: the link opens the session over that page
+    /// rather than moving them to another folder (the web keeps the address's own page).
+    func testAlreadyOnAFolderPageKeepsIt() {
+        XCTAssertNil(SessionFolderAddress.forOpening(session("s1", workspace: "a1", folderID: "f1"),
+                                                     folders: library,
+                                                     listShowsFolders: true, alreadyShowing: true))
+    }
+
+    /// Back from a filed session opened by its id lands on its folder's page, not the workspace's
+    /// list — the frame shape a route and a conversation link both produce.
+    func testBackFromAFiledSessionReturnsToItsFolderPage() {
+        let folder = SessionFolderAddress(folderID: "f1", agentID: "a1", view: .open)
+        var nav = NavState(section: .agents)
+        nav.path = [.folder(folder), .console(sessionID: "s1", origin: .deepLink)]
+
+        XCTAssertEqual(nav.folderColumn, folder, "a wide shell's column draws it")
+        nav.pop()
+        XCTAssertEqual(nav.folderPage, folder, "and a phone's Back returns to it")
+    }
 }

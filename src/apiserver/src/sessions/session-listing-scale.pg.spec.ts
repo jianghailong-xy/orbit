@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionTagsService } from '../session-tags/session-tags.service';
+import { fixtureFacts, type SessionFixture } from '../test-support/session-word';
 import { AutoRetryService } from './auto-retry.service';
 import { listingRowIsWorking, listingRowNeedsOwner, type ListingRowFacts } from './session-listing';
 import { MergeReceiptService } from './merge-receipt.service';
@@ -123,9 +124,9 @@ test(`first page of the listing vs the whole Open list on ${SESSIONS} Open sessi
   const t0 = Date.parse('2026-11-01T00:00:00.000Z');
   const rows: Prisma.SessionCreateManyInput[] = [];
   const coordinators: Array<{ projectId: string; sessionId: string }> = [];
-  const base = (i: number, extra: Partial<Prisma.SessionCreateManyInput> = {}): Prisma.SessionCreateManyInput => ({
+  const base = (i: number, { status = 'AWAITING_INPUT', ...extra }: Partial<Prisma.SessionCreateManyInput> & Pick<SessionFixture, 'status'> = {}): Prisma.SessionCreateManyInput => fixtureFacts<Prisma.SessionCreateManyInput & Pick<SessionFixture, 'status'>>({
     id: randomUUID(), ownerId, creatorId: ownerId, title: `Scale session ${i} — a title of ordinary length`,
-    prompt: 'p', dispatchOrigin: 'USER', workspaceId, status: 'AWAITING_INPUT',
+    prompt: 'p', dispatchOrigin: 'USER', workspaceId, status,
     createdAt: new Date(t0 + i * 60_000), listedAt: new Date(t0 + i * 60_000 + 30_000),
     lastAssistantText: 'Recap: '.padEnd(400, 'x'),
     // Every row names the same columns: a column one row of a createMany leaves out is written NULL, not its default.
@@ -163,7 +164,7 @@ test(`first page of the listing vs the whole Open list on ${SESSIONS} Open sessi
   // A session in another workspace of the account, written before each read so the version moves.
   const other = (await h.db.workspace.create({ data: { ownerId, runnerId, name: `scale other ${ownerId}`, enabled: true } })).id;
   const nudge = (await h.db.session.create({
-    data: { ownerId, creatorId: ownerId, title: 'nudge', prompt: 'p', dispatchOrigin: 'USER', workspaceId: other, status: 'AWAITING_INPUT' },
+    data: { ownerId, creatorId: ownerId, title: 'nudge', prompt: 'p', dispatchOrigin: 'USER', workspaceId: other, turnState: null },
   })).id;
   let n = 0;
   const timed = async (url: string) => {
@@ -213,15 +214,15 @@ test(`first page of the listing vs the whole Open list on ${SESSIONS} Open sessi
 
   // Deep in the list, among the oldest rows of their own: a failure nobody retries (Needs you) and one a retry is
   // armed for (Working).
-  const deep = rows.filter((r, i) => i >= PROJECTS * (MEMBERS + 1) && !r.folderId && !r.pinnedAt && r.status === 'AWAITING_INPUT'
+  const deep = rows.filter((r, i) => i >= PROJECTS * (MEMBERS + 1) && !r.folderId && !r.pinnedAt && r.turnState === null
     && !(r.runningBgJobs as string[]).length).slice(0, 2);
   await h.db.session.update({
     where: { id: deep[0].id! },
-    data: { status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
+    data: fixtureFacts({ status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED' }),
   });
   await h.db.session.update({
     where: { id: deep[1].id! },
-    data: { status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED', retryAt: new Date(Date.now() + 60_000) },
+    data: fixtureFacts({ status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED', retryAt: new Date(Date.now() + 60_000) }),
   });
   // A settled status stamps listed_at (migration 1490): put them back where they were listed.
   for (const r of deep) await h.sql.query('UPDATE session SET listed_at = $2 WHERE id = $1', [r.id, r.listedAt]);

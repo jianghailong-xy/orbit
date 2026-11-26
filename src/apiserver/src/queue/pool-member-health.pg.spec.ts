@@ -68,7 +68,7 @@ suite('pool member choice at claim skips a member account health blocks', { time
   } });
   const session = (slug: string, extra: Record<string, unknown> = {}) => db.session.create({ data: {
     ownerId: owner.id, creatorId: owner.id, workspaceId: workspace.id, assignedRunnerId: runner.id,
-    title: 'pool-health', prompt: 'hello', provider: slug, providerBuiltin: false, status: 'PENDING',
+    title: 'pool-health', prompt: 'hello', provider: slug, providerBuiltin: false, turnState: 'QUEUED',
     usesRuntimeDefaultModel: true, ...extra,
   } });
 

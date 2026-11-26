@@ -64,6 +64,16 @@ final class AppModel {
     /// folder rows, and on iOS the Move panel, which lists the ones in the session's own workspace.
     /// See `loadSessionFolders`.
     var sessionFolders: [SessionFolder] = []
+    /// Whether the session list is drawing folder rows right now — its scope, tag filter, Group by
+    /// Tag and search wrapped up in `SessionFolderGrouping.listShowsFolders`, written back by the
+    /// list as they change (`AgentPanes`). A route that opens a filed session puts the list on that
+    /// folder's page only where the list would have drawn the folder's row. The default is the list
+    /// a cold launch draws, before any pane has said otherwise.
+    var sessionListShowsFolders = true
+    /// The session whose folder page an open from outside its list has already shown, so leaving
+    /// the folder afterwards is not undone by a later refresh of the same open — the web's
+    /// `folderShownForRef`. Cleared when another session is opened.
+    private var folderShownForSessionID: String?
     // Top-level nav: which AppShell section is showing, and every section's navigation stack. The
     // app lands on the Agents section (the first agent's session list); the agent is selected once
     // the list loads — see `loadAgentsThenLand`.
@@ -4241,6 +4251,10 @@ final class AppModel {
         if let agentID, selectedAgentID != agentID { selectedAgentID = agentID }
         if let folder {
             nav.path = [.folder(folder), node]
+        } else if case .console = node, nav.folderPage != nil {
+            // A link while the reader is on a phone's folder page: the console goes over it, so the
+            // folder stays the page Back returns to and the reader is not moved to another one.
+            push(node)
         } else {
             nav.replaceTop(with: node)
         }
@@ -4352,20 +4366,54 @@ final class AppModel {
         // A route replaces what the detail pane / stack top is showing (a draft included) — the same
         // "select this session" act as a list row, so the three-column shells land exactly where
         // they did when this was a selection write.
-        let folder = inScheduledRuns ? session(id: id).flatMap(SessionFolderAddress.scheduledRuns(for:)) : nil
+        beginOpen(id)
+        let folder = inScheduledRuns
+            ? session(id: id).flatMap(SessionFolderAddress.scheduledRuns(for:))
+            : folderForOpening(id)
         show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id), folder: folder)
-        refreshUnlistedSession(id, adoptingAgent: true, inScheduledRuns: inScheduledRuns)
+        refreshUnlistedSession(id, adoptingAgent: true, inScheduledRuns: inScheduledRuns, opening: true)
     }
 
     /// Another session's conversation over the one on screen — a link in a conversation, on a phone —
     /// so the back swipe returns to the conversation the link was in rather than to a session list.
     /// Its record is refreshed as a route's is; the agent whose sessions the stack's root lists is
-    /// left alone, since that list is under both conversations.
+    /// left alone, since that list is under both conversations. It is a push even when the session
+    /// is filed in a folder: a folder's page would replace the conversation it was linked from.
     func pushConsole(_ id: String) {
         let id = PublicID.toPublic(id)
         guard nav.focusedConsoleSessionID != id else { return }
         push(.console(sessionID: id, origin: .conversation))
         refreshUnlistedSession(id, adoptingAgent: false)
+    }
+
+    /// Start an open of `id` from outside the list. A second open of the session already on screen
+    /// is not a new one: the "folder already shown" note stays, so a reader who left the folder is
+    /// not walked back into it. Any other id clears it, so a later open of this session may show its
+    /// folder again (the web's `folderShownForRef`, keyed by the selected id).
+    private func beginOpen(_ id: String) {
+        if nav.focusedConsoleSessionID.map(PublicID.storageKey) != PublicID.storageKey(id) {
+            folderShownForSessionID = nil
+        }
+    }
+
+    /// The folder page this open of a filed session should show, or nil. Nil when the session is in
+    /// no folder, its folder is not one of its workspace's known to the app, the list is not drawing
+    /// folders, a folder is already showing, or this open has already settled the question — so
+    /// leaving the folder afterwards stays left.
+    private func folderForOpening(_ id: String) -> SessionFolderAddress? {
+        guard let session = session(id: id) else { return nil }
+        return folderForOpening(session)
+    }
+
+    private func folderForOpening(_ session: Session) -> SessionFolderAddress? {
+        let key = PublicID.storageKey(session.id)
+        guard folderShownForSessionID != key else { return nil }
+        // Settled for this open whether or not a folder comes of it, as the web marks its ref before
+        // it asks about the folder.
+        folderShownForSessionID = key
+        return SessionFolderAddress.forOpening(session, folders: sessionFolders,
+                                               listShowsFolders: sessionListShowsFolders,
+                                               alreadyShowing: nav.folderColumn != nil)
     }
 
     /// What a page opened from inside a conversation does — a link in it, a row of its Watching or
@@ -4415,7 +4463,12 @@ final class AppModel {
     /// control-plane refreshed; everything else (including an old detail-cache hit) is read again so
     /// repeated search/deep-link navigation cannot resurrect stale lifecycle or capability state.
     /// `adoptingAgent`: a route also makes the session's agent the one whose sessions are listed.
-    private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool, inScheduledRuns: Bool = false) {
+    /// `opening`: this refresh is the tail of an open by the session's address (a route), so a
+    /// filed session's folder page is put up from the detail that just arrived; a refresh driven by
+    /// the session stream or a conversation link's push is not, and leaves the stack where the
+    /// reader put it.
+    private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool, inScheduledRuns: Bool = false,
+                                        opening: Bool = false) {
         guard !sessions.contains(where: { $0.id == id }), let api else { return }
         let openingPath = nav.path
         // Capture this instance synchronously. Reading `self.api` only after the Task starts could
@@ -4431,12 +4484,18 @@ final class AppModel {
                 // Feed an already-hydrated console immediately too; ComposerView observes the
                 // same cache, while this closes the race where its initial observation ran first.
                 self.consoleRegistry?.peek(id)?.adoptServerSnapshot(resolved)
-                guard adoptingAgent, self.selectedSection == .agents,
+                guard self.selectedSection == .agents,
                       self.selectedAgentSessionID == id else { return } // stale navigation resolve
-                self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
-                // A cold route learns its folder from the detail. Keep any navigation made while it loaded.
-                if inScheduledRuns, self.nav.path == openingPath,
-                   let folder = SessionFolderAddress.scheduledRuns(for: resolved), self.nav.folderColumn != folder {
+                if adoptingAgent { self.selectedAgentID = resolved.agent?.id ?? resolved.agentId }
+                // A cold open learns its folder from the detail. Keep any navigation made while it
+                // loaded, and leave it alone when this was a refresh, not an open.
+                guard opening, self.nav.path == openingPath else { return }
+                if inScheduledRuns {
+                    if let folder = SessionFolderAddress.scheduledRuns(for: resolved),
+                       self.nav.folderColumn != folder {
+                        self.nav.path = [.folder(folder)] + openingPath.suffix(1)
+                    }
+                } else if let folder = self.folderForOpening(resolved) {
                     self.nav.path = [.folder(folder)] + openingPath.suffix(1)
                 }
             } catch APIError.http(let status, _) where status == 404 {

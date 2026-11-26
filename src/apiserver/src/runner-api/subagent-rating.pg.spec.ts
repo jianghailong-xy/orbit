@@ -22,7 +22,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, type Runner, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -32,6 +33,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { RunnerSubagentsController } from './runner-subagents.controller';
 import { SubagentRatingDto } from './subagent-rating';
 import { subagentTierView } from './subagent-route';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -96,7 +98,7 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
       data: {
         ownerId: of.ownerId, creatorId: of.ownerId, workspaceId: of.workspaceId, assignedRunnerId: of.runner.id,
         title: 'rating spec', prompt: 'rating spec', provider: data.provider ?? 'claude', engine: data.engine ?? 'claude',
-        model: data.model ?? OPUS, effort: 'high', status: data.status ?? RunStatus.AWAITING_INPUT, numTurns: 1,
+        model: data.model ?? OPUS, effort: 'high', turnState: turnStateOfWord(data.status ?? RunStatus.AWAITING_INPUT), numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: Boolean(data.taskId), taskId: data.taskId ?? null,
         error: data.error ?? null, ...(data.createdAt ? { createdAt: data.createdAt } : {}),
         // A terminal status is a released session: session_release_fact_chk (1401/1402) wants finished_at with it.

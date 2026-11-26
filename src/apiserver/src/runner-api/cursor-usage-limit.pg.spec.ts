@@ -32,7 +32,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   AgentProvider,
   PermissionMode,
@@ -216,7 +217,7 @@ test('P6a a Cursor CLI account’s usage limit on PostgreSQL', { skip, concurren
         model: 'default[]',
         permissionMode: PermissionMode.ACCEPT_EDITS,
         cursorAccount: opts.account ?? 'default',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         engineTurnActive: true,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),

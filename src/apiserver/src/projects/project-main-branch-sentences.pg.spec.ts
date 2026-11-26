@@ -30,7 +30,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type {
   IntegrationCheckResult,
   IntegrationJobCommand,
@@ -245,7 +246,7 @@ test('the sentences about a merge into main name the project’s main branch, an
       data: {
         ownerId, creatorId: ownerId, taskId: task.id, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
         title, prompt: 'do the work', branch: `orbit/work-${task.id.slice(0, 8)}`,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, startsTaskWork: true,
+        isolationStatus: 'worktree', turnState: null, startsTaskWork: true,
         finishedAt: new Date(Date.now() - 60_000), worktreeBranch: `orbit/work-${task.id.slice(0, 8)}`,
         worktreeDirty: false, changedFiles: [{ path: 'src/the-work.ts' }] as never,
       },
@@ -334,7 +335,7 @@ test('the sentences about a merge into main name the project’s main branch, an
       const coordinator = await prisma.session.create({
         data: {
           ownerId, creatorId: ownerId, title: 'Review integration items', prompt: 'Review integration items',
-          workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, status: RunStatus.AWAITING_INPUT,
+          workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, turnState: null,
         },
       });
       await prisma.project.update({

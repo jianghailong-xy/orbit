@@ -509,6 +509,9 @@ struct AgentPanes: View {
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
+        // A session opened by id puts this list on its folder's page only where this list would
+        // draw the folder's row; the model asks (`AppModel.folderForOpening`).
+        .onChange(of: listShowsFolders, initial: true) { _, shows in app.sessionListShowsFolders = shows }
         #if os(macOS)
         .modifier(TerminalRequestsCurrent(now: $terminalNow))
         #endif
@@ -984,7 +987,8 @@ struct AgentPanes: View {
     /// rendered without its title (see the list body). Over what is left after the folders take
     /// theirs — a session inside a folder is drawn behind its row, not here (§3.3).
     private static func timeSections(_ folderListing: SessionFolderListing, _ inputs: SessionListInputs) -> [SessionTimeSection] {
-        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: inputs.view == .open && inputs.tagFilter == nil)
+        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: inputs.view == .open && inputs.tagFilter == nil,
+                                     attention: inputs.view == .open)
     }
 
     /// This workspace's list, split by folder (§3.3): the folder rows the list draws at its top,
@@ -1128,10 +1132,16 @@ struct AgentPanes: View {
             onTag: { taggingSession = $0 }, onShare: { sharingSession = $0 }, onMove: { movingSession = $0 })
     }
 
+    /// Whether this list is drawing folder rows: not Trash, and not under a tag filter, Group by
+    /// Tag or search (`SessionFolderGrouping.listShowsFolders`). Also written back to the model, so
+    /// a session opened by id knows whether this list has a folder's page to show.
+    private var listShowsFolders: Bool {
+        !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
+    }
+
     /// Somewhere to drop a row: this workspace's folder rows over the list (none in Trash or by tag).
     private var folderDropTargets: Bool {
-        !isSearching && SessionFolderGrouping.listShowsFolders(view: view, byTag: tagFilter != nil || groupByTag)
-            && app.sessionFolders.contains { $0.workspaceId == agent.id }
+        listShowsFolders && app.sessionFolders.contains { $0.workspaceId == agent.id }
     }
 
     /// New Folder…: make the folder in this workspace and keep it, so its row draws at

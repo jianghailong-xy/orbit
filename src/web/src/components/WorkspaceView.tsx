@@ -223,6 +223,9 @@ import { HeaderMoreIcon, HeaderShareIcon } from './SessionHeaderIcons';
 import {
   type SessionTagRef,
   compareListed,
+  sessionElapsed,
+  sessionListedAt,
+  sessionListSectionOptions,
   sessionTagSections,
   sessionTimeSections,
   sessionsWithTag,
@@ -615,7 +618,7 @@ import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../li
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
 import { rememberSessionTag, setSessionTags } from '../lib/sessionTags';
-import { SessionTagChips, useSessionTagLevel } from './SessionTagPicker';
+import { useSessionTagLevel } from './SessionTagPicker';
 import {
   isSessionBusy,
   isSessionLive,
@@ -724,7 +727,7 @@ import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSess
 import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
-import { useOpenTaskOverPage } from '../lib/taskInPlace';
+import { useCloseTaskOverPage, useOpenTaskOverPage, useTaskOverPage } from '../lib/taskInPlace';
 import {
   OPTIMIZE_SHORTCUT,
   optimizedSendOf,
@@ -1221,6 +1224,13 @@ const fmtTime = (d?: string): string => {
   });
 };
 
+/** A row's time (contracts/session-list-order.fixtures.json): how long the turn has run while its spinner shows, nothing if
+ *  the server sent no start, and otherwise when the row was listed, so the time agrees with where the row sits. */
+export const sessionRowTime = (s: any): string => {
+  if (statusGlyphMotion(s) === 'spinner') return s.currentTurnStartedAt ? sessionElapsed(s.currentTurnStartedAt) : '';
+  return fmtTime(sessionListedAt(s) ?? undefined);
+};
+
 // Shorten a tool id for the live status line: mcp__orbit__task_create -> task_create;
 // plain tool names (Bash, Read, Edit) pass through unchanged.
 const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
@@ -1625,7 +1635,7 @@ export function SessionTitleRow({
           </span>
         </Tooltip>
       )}
-      <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
+      <span className="session-time">{sessionRowTime(s)}</span>
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
@@ -1763,7 +1773,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
       <div className="session-main">
         <div className="session-title-row">
           <div className="session-title">{project.title}</div>
-          <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
+          <span className="session-time">{fmtTime(sessionListedAt(project) ?? undefined)}</span>
         </div>
         <div className="session-sub">
           <Tooltip content={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
@@ -2986,6 +2996,8 @@ export function WorkspaceView({
   const navigate = useNavigate();
   // A task opens over this conversation, not on its own page (lib/taskInPlace).
   const openTaskOverPage = useOpenTaskOverPage();
+  const taskOverPage = useTaskOverPage();
+  const closeTaskOverPage = useCloseTaskOverPage();
   const [searchParams, setSearchParams] = useSearchParams();
   // How this console names its machine: Orbit Cloud for the account's managed runner (machineName).
   const managedRunnerId = useManagedRunnerId() ?? managed?.status.runnerId ?? null;
@@ -3823,8 +3835,8 @@ export function WorkspaceView({
     // Complete reconciles via refetch, so the server order holds. Trust it verbatim.
     if (effectiveView === 'completed') return rows;
     return rows.sort((a, b) => {
-      // Pinned sessions float to the top; among themselves they keep time order.
-      if (!!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
+      // Pinned sessions float to the top of Open; among themselves they keep time order. Trash ignores the pin.
+      if (effectiveView === 'open' && !!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
       // listedAt, never lastTurnAt: streamed activity must not move a row (contracts/session-list-order.fixtures.json).
       return compareListed(a, b);
     });
@@ -3961,6 +3973,9 @@ export function WorkspaceView({
   // Session settings as a column (docs/mocks/session-settings-column): on a wide screen, in the project column's
   // slot, which it takes while it is open (one column at a time); on a phone a sheet instead.
   const settingsColumnShown = settingsOpen && !isMobile && !!selected && !selectedTrashed;
+  // Whether this session's own task is open beside (or over) it: the Task badge reads pressed then.
+  const selectedTaskOpen =
+    !!selected?.taskId && taskOverPage != null && routeId(taskOverPage) === routeId(selected.taskId);
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
   // Whether a public link opens this conversation right now: the detail's open link once it has
   // been read, the list row's flag until then. The Trash pauses a link, so a trashed one is not.
@@ -4582,10 +4597,7 @@ export function WorkspaceView({
           title: s.tag?.name ?? 'Untagged',
           sessions: s.sessions,
         }))
-      : sessionTimeSections(folderListing.entries, {
-          pinnedFirst: view === 'open' && !tagFilter,
-          attention: view === 'open',
-        }).map((s) => ({
+      : sessionTimeSections(folderListing.entries, sessionListSectionOptions(view, !!tagFilter)).map((s) => ({
           key: s.title,
           tag: null as SessionTagRef | null,
           ...s,
@@ -11709,7 +11721,14 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
-            <div className="workspace-title-line">
+            <div className={`workspace-title-line${isMobile && capsuleMounted && topPillShown ? ' shows-jump' : ''}`}>
+              {/* Off the tail, a phone's capsule takes this row — the iOS console's nav-bar principal —
+                  and the title and its badges step aside (`.shows-jump`), so the header is one row in
+                  both states. It stays mounted whether or not it shows: the strip's line inside it is
+                  what tells the capsule when something waits. */}
+              {isMobile && capsuleMounted && (
+                <div className="workspace-title-jump" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
+              )}
               {selected && !selectedTrashed && !composing ? (
                 // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
                 // it is renamed there, in the Name field.
@@ -11718,7 +11737,11 @@ export function WorkspaceView({
                     type="button"
                     className="workspace-name workspace-name-button"
                     aria-expanded={settingsOpen}
-                    onClick={() => setSettingsOpen((open) => !open)}
+                    onClick={() => {
+                      // One column at a time beside the conversation (docs/mocks/session-task-column).
+                      if (!settingsOpen && taskOverPage) closeTaskOverPage();
+                      setSettingsOpen((open) => !open);
+                    }}
                   >
                     <span className="workspace-name-text">{selected.title}</span>
                     <RightOutlined className="workspace-name-chevron" aria-hidden />
@@ -11754,7 +11777,17 @@ export function WorkspaceView({
                     type="button"
                     className="coordinator-badge coordinator-badge-link"
                     aria-label={selected.taskTitle ? `Task · Open task ${selected.taskTitle}` : 'Task · Open task'}
-                    onClick={() => openTaskOverPage(encodeId(selected.taskId))}
+                    // A second press closes the task beside the conversation (docs/mocks/session-task-column);
+                    // opening it takes the column session settings had.
+                    aria-pressed={selectedTaskOpen}
+                    onClick={() => {
+                      if (selectedTaskOpen) {
+                        closeTaskOverPage();
+                        return;
+                      }
+                      setSettingsOpen(false);
+                      openTaskOverPage(encodeId(selected.taskId));
+                    }}
                   >
                     Task
                     <RightOutlined aria-hidden />
@@ -11774,7 +11807,8 @@ export function WorkspaceView({
                 </Tooltip>
               )}
               {!composing && selectedId && !selectedTrashed && !selectedMissing && (
-                <SessionWatchBadges sessionId={selectedId} follow={isMobile} />
+                // Follow is a ⋯ item on every width now: the phone header has no line to carry the pill.
+                <SessionWatchBadges sessionId={selectedId} follow={false} />
               )}
               {/* The status line is gone from a wide header, so a handoff in flight says so beside the title. */}
               {!isMobile && !composing && handingOver && (
@@ -11794,22 +11828,11 @@ export function WorkspaceView({
                 </Tooltip>
               )}
             </div>
-            {/* docs/mocks/session-header-compact: a wide window's header is the title alone; the run word, the
-                lifecycle, the time and the tags stay on a phone's. */}
-            {/* A draft's phone header is its way back and its name: where it runs is said under the engine. */}
-            {(isMobile || !selected) && !(composing && !machineDraft) && <div className="workspace-sub">
+            {/* A session's header is the title's row alone (owner, 2026-11-26): the run word, the lifecycle,
+                the time and the tags that sat under it on a phone are in ⋯ and the session's settings now.
+                A header with no session row keeps its line — a machine draft says where it will run. */}
+            {!selected && !(composing && !machineDraft) && <div className="workspace-sub">
               {headSub}
-              {/* The session's tags, seen without opening anything; a press opens ⋯ at its Tags level. */}
-              {!composing && selected && !selectedTrashed && (
-                <SessionTagChips
-                  tags={(selected.tags ?? []) as SessionTagRef[]}
-                  compact={isMobile}
-                  onOpen={() => {
-                    setHeaderMenuOpen(true);
-                    setHeaderTagsOpen(true);
-                  }}
-                />
-              )}
             </div>}
             {/* A run of a task forked from a session says where its checkout came from, in the
                 server's own words (docs/task-fork-from-session-design.md §2.3). */}
@@ -11940,17 +11963,17 @@ export function WorkspaceView({
                           levelHeader: headerTagLevel.levelHeader,
                           levelFooter: headerTagLevel.levelFooter,
                         },
-                        ...(!isMobile
-                          ? [{
-                              key: 'follow',
-                              icon: <EyeOutlined />,
-                              label: 'Follow…',
-                              onSelect: () => {
-                                setHeaderMenuOpen(false);
-                                setFollowOpen(true);
-                              },
-                            }]
-                          : []),
+                        // Every width: the phone header has no second line, so the pill that used
+                        // to say Follow there is this item now.
+                        {
+                          key: 'follow',
+                          icon: <EyeOutlined />,
+                          label: 'Follow…',
+                          onSelect: () => {
+                            setHeaderMenuOpen(false);
+                            setFollowOpen(true);
+                          },
+                        },
                         { key: 'divider-share', type: 'separator' as const },
                         // Two words for two links (docs/share-links-design.md §8): Copy link is
                         // the signed-in address, for yourself; Share… is the public one. Keeping a
@@ -12066,14 +12089,11 @@ export function WorkspaceView({
               </div>
             </>
           )}
-          {/* Off the live tail, the transcript's top pill is drawn here instead of floating over the
-              messages: centred in the row on a wide window, and on a line of its own under it on a
-              phone, where a centred pill would leave the title no room. Being in the header, it
-              takes its place in the layout rather than covering the message the reader scrolled
-              to (`.workspace-header-jump.is-phone`). Last in the DOM, so a phone's
-              keyboard order reaches the header's own buttons first. */}
-          {capsuleMounted && (
-            <div className={`workspace-header-jump${isMobile ? ' is-phone' : ''}`} hidden={!topPillShown}>
+          {/* Off the live tail, a wide window draws the transcript's top pill here, centred in the
+              header row instead of floating over the messages; a phone draws it in the title's row
+              (`.workspace-title-jump`). */}
+          {!isMobile && capsuleMounted && (
+            <div className="workspace-header-jump" hidden={!topPillShown}>
               {topPill(decisionStrip('line'))}
             </div>
           )}

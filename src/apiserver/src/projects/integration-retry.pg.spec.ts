@@ -13,11 +13,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { receiveOpenItem } from '../test-support/open-item-delivery';
@@ -222,7 +222,7 @@ async function world(stack: Stack, label: string, automatic = true): Promise<Wor
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -325,7 +325,7 @@ async function doneTask(
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -379,8 +379,8 @@ async function doneTask(
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: worktree
-        ? { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
-        : { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        ? { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
+        : { turnState: null, finishedAt: new Date() },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -888,7 +888,7 @@ test('the rerun lands the branch the task\'s work ended on, not the one the fail
           title: 'the second run',
           prompt: 'the second run',
           provider: 'claude',
-          status: RunStatus.SUCCEEDED, 
+          turnState: null, 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           startedAt: new Date(),
@@ -1263,7 +1263,7 @@ test('a taken unanswered exception survives an owner-card wait beyond the window
       const { task } = await failedLanding(stack, w, 'retry-owner-card-wait');
       const [item] = await itemsOf(stack.db, task.taskId);
       await stack.openItems.deliverForItems([item!.id]);
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.RUNNING } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: 'IN_FLIGHT' } });
       const handed = await dequeue(stack, w.coordinatorSessionId, w.runnerId);
       assert.ok(handed);
       const turn = await stack.db.conversationTurn.findUniqueOrThrow({ where: { id: handed.turnId } });
@@ -1302,7 +1302,7 @@ test('escalated: a failure that went to the owner on the clock is theirs, and th
       const [item] = await itemsOf(stack.db, task.taskId);
       await receiveOpenItem(stack.db, item!.id);
       // A taken item only escalates after its coordinator can no longer carry it.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: new Date()} });
       await stack.db.$executeRaw(
         Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                     WHERE "id" = ${item!.id}::uuid`,
@@ -2258,6 +2258,83 @@ for (const ending of ['fix landed', 'retry', 'resolve'] as const) {
           assert.equal((await landings(stack.db, expected.taskId!)).length, 2,
             'J5: a task-owned red still queues no next generation');
         }
+      } finally {
+        await stack.db.$disconnect();
+      }
+    });
+}
+
+/**
+ * 2026-11-26, project 354EYHJTnEWkqJ4CeyjlH, task 354FnwOeMe3wToFoLct6h: the task filed to fix an OPEN baseline
+ * item is exempt from its hold, so K5 queues it no held generation. When its own landing came back baseline-red
+ * under a new (U, T0) — main had moved — it opened its own ICB item, and `integration_retry` of it answered 500
+ * (P2025: the baseline branch looked for a QUEUED generation nobody had queued). The retry queues exactly one next
+ * generation itself and closes that item RETRIED; the original baseline item stays OPEN and holds the others.
+ */
+for (const door of ['coordinator', 'owner'] as const) {
+  test(`K5: the ${door}'s retry of a baseline fix whose own landing is baseline-red queues its next generation`,
+    { skip, timeout: 180_000 }, async () => {
+      const stack = await connect();
+      try {
+        const w = await world(stack, `baseline-fix-retry-${door}`);
+        const held = await failedLanding(stack, w, 'held', BASELINE_RED);
+        const original = (await itemsOf(stack.db, held.task.taskId))[0]!;
+        const fix = await doneTask(stack, w, 'baseline-fix');
+        await stack.db.task.update({ where: { id: fix.taskId }, data: { fixesOpenItemId: original.id } });
+        const [claimed] = await claim(stack, w, 'fix-exempt');
+        const failedFix = (await landings(stack.db, fix.taskId))[0]!;
+        assert.equal(claimed?.jobId, failedFix.id, 'the fix is exempt from the hold it was filed against');
+        const movedUpstream = '7'.repeat(40);
+        assert.equal((await report(stack, w, claimed!, { ...BASELINE_RED, upstreamSha: movedUpstream })).accepted, true);
+
+        // The state production was in: generation 1 CHECK_FAILED, nothing queued, the fix's own baseline item OPEN.
+        assert.deepEqual((await landings(stack.db, fix.taskId)).map((job) => [job.generation, job.state]),
+          [[1, 'CHECK_FAILED']], 'K5 queues a baseline fix no held generation');
+        const [own] = await itemsOf(stack.db, fix.taskId);
+        assert.equal(own?.state, 'OPEN');
+        assert.equal(own?.integrationJobId, failedFix.id);
+        assert.equal(own?.payload.failureClass, 'BASELINE_RED');
+        assert.notEqual(own?.id, original.id, 'a new (U, T0) opens its own baseline item');
+        if (door === 'owner') {
+          await stack.db.projectOpenItem.update({ where: { id: own!.id }, data: { assignee: 'OWNER', escalateAt: null } });
+        }
+
+        const reason = 'the merge check now runs go test with -timeout 30m; the red was its 10-minute default';
+        const rerun = door === 'owner'
+          ? await ownerRetry(stack, w, fix.taskId, reason)
+          : await retry(stack, w, fix.taskId, reason);
+        const after = await landings(stack.db, fix.taskId);
+        assert.equal(after.length, 2, 'exactly one next generation');
+        const next = after[1]!;
+        assert.equal(rerun.jobId, next.id);
+        assert.equal(rerun.generation, 2);
+        assert.equal(rerun.failureClass, 'BASELINE_RED');
+        assert.equal(rerun.retryOfJobId, failedFix.id);
+        assert.equal(next.state, 'QUEUED');
+        assert.equal(next.retryOfJobId, failedFix.id);
+        assert.equal(next.retryFailureClass, 'BASELINE_RED');
+        assert.equal(next.retryReason, reason);
+        assert.equal(next.retryRequestedBySessionId, door === 'owner' ? null : w.coordinatorSessionId);
+        assert.equal(next.retryRequestedByUserId, door === 'owner' ? w.ownerId : null);
+        const closed = (await itemsOf(stack.db, fix.taskId)).find((item) => item.id === own!.id)!;
+        assert.equal(closed.state, 'RESOLVED');
+        assert.equal(closed.resolution, 'RETRIED');
+        assert.equal(closed.resolvedBy, door === 'owner' ? 'USER' : 'COORDINATOR');
+        assert.equal(closed.resolutionNote, reason);
+        assert.equal((await itemsOf(stack.db, held.task.taskId))[0]?.state, 'OPEN', 'the original baseline item still holds');
+
+        const again = await denied(() => (door === 'owner'
+          ? ownerRetry(stack, w, fix.taskId, reason)
+          : retry(stack, w, fix.taskId, reason)));
+        assert.equal(again.status, 409, 'a second press queues nothing beside it');
+        assert.equal(again.code, 'INTEGRATION_RETRY_IN_FLIGHT');
+        assert.equal((await landings(stack.db, fix.taskId)).length, 2);
+
+        const [resumed] = await claim(stack, w, 'fix-rerun');
+        assert.equal(resumed?.jobId, next.id, 'the rerun is claimed; the held landing still waits');
+        await report(stack, w, resumed!, LANDED);
+        const landed = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: original.id } });
+        assert.equal(landed.resolution, 'LANDED', 'the fix landing closes the item it was filed against');
       } finally {
         await stack.db.$disconnect();
       }

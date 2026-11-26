@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionEndReason, SessionLifecycleState } from '@orbit/shared';
 import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
+import { writtenWord } from '../test-support/session-word';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -100,7 +101,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   let queuedTurnUpdates = 0;
   const session = {
     id: SESSION_ID,
-    status: RunStatus.PENDING,
+    turnState: 'QUEUED', status: RunStatus.PENDING,
     cancelRequestedAt: null,
     assignedRunnerId: RUNNER_ID,
     completedAt: null,
@@ -153,7 +154,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   const service = new SessionsService(prisma, {} as never, realtime);
 
   assert.deepEqual(await service.remove(OWNER_ID, SESSION_ID), { ok: true });
-  assert.equal(updateData?.status, RunStatus.CANCELLED);
+  assert.equal(writtenWord(updateData), RunStatus.CANCELLED);
   assert.equal(updateData?.endReason, SessionEndReason.DELETED);
   assert.ok(updateData?.deletedAt instanceof Date);
   assert.equal(drained, 1);

@@ -31,7 +31,8 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import type { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
@@ -39,6 +40,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
 import { pastCreateAllowance } from '../test-support/past-create-allowance';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -94,11 +96,11 @@ test('who may write the verification relation', { skip: !URL, concurrency: 1, ti
   await db.workspace.create({ data: { id: otherWorkspaceId, ownerId, runnerId, name: 'two', enabled: true } });
   const bearer = await new JwtService({ secret: jwtSecret }).signAsync({ sub: ownerId, email });
 
-  const sessionOf = async (title: string, taskId?: string, status: RunStatus = 'AWAITING_INPUT') => {
+  const sessionOf = async (title: string, taskId?: string, status: `${RunStatus}` = 'AWAITING_INPUT') => {
     const id = randomUUID();
     await db.session.create({
       data: {
-        id, title, prompt: title, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, status,
+        id, title, prompt: title, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, turnState: turnStateOfWord(status),
         startedAt: new Date(), runtimeSessionId: `runtime-${id}`, provider: 'claude', taskId, startsTaskWork: taskId !== undefined,
       },
     });

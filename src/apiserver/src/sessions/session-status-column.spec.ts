@@ -3,14 +3,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { type Hit, type HitKind, readSchema, scanSessionStatus } from '../test-support/session-status-scan';
-import { SESSION_STATUS_USES, type SessionStatusUses } from './session-status-column.allowed';
+import { type Hit, readSchema, scanSessionStatus } from '../test-support/session-status-scan';
 
 /**
  * Criterion: no apiserver code reads or writes `session.status` (docs/session-status-retirement-plan.md §5, task T1).
- * While the readers and writers move onto `phase`, `turn_state` and the facts beside them, no NEW one may appear: the
- * uses of today are counted per file in session-status-column.allowed.ts. A listed file may fall below its numbers but
- * never rise above them, and a file that is not listed must have none.
+ * The readers and writers moved onto `phase`, `turn_state` and the facts beside them (tasks T7 to T12, and T14 for the
+ * writers, deploy D3), and the allow-list that counted the uses left on the way is gone: no product file may hold one.
+ * The stored word is written only by migration 1671's trigger, for a rollback to deploy-2 code, until T15 drops it.
  *
  * Read: every .ts file under src/apiserver/src except tests (.spec, .test, .it, .e2e), `.fixture(s).ts`, test-support
  * and __tests__. Comments are stripped first. What counts, each reported as `file:line: …`:
@@ -24,15 +23,15 @@ import { SESSION_STATUS_USES, type SessionStatusUses } from './session-status-co
  * - Raw SQL: `status` of the statement's session alias, the SET, WHERE and INSERT columns of a session statement,
  *   the fragments that name an interpolated session alias, and a cast to `run_status`.
  * - The enum: `RunStatus` of `@prisma/client`, which is the column's type (the protocol's is `@orbit/shared`'s).
- * - Dual write: a write of `status` with no `turnState` beside it.
+ * - Dual write: a write of `status` with no `turnState` beside it (deploy 2's rule; since D3 every write is refused).
  * - Phase: `session.phase` read in queue/, runners/, managed-runners/, common/session-tree-sql.ts or
  *   common/session-scheduling.ts, which decide slots, claims and dispatch. None is allowed.
  *
  * What text cannot see: a row handed to a function under another name and only compared with a bare word
  * (`run.status !== 'FAILED'`), a status copied into a differently named fact (`runStatus`), a query argument built
- * in another file with no `Prisma.` type, and Prisma rows spread into a payload. The `tsc` of the field leaving
- * schema.prisma (T14) and the column-less PG spec (T15) close that; session-status-column.pg.spec.ts holds the
- * database's own objects.
+ * in another file with no `Prisma.` type, and Prisma rows spread into a payload. The field has left schema.prisma
+ * (T14), so `tsc` refuses every such Prisma read or write, and the column-less PG spec (T15) closes the raw SQL;
+ * session-status-column.pg.spec.ts holds the database's own objects.
  */
 
 const REPO = path.resolve(__dirname, '../../../..');
@@ -41,9 +40,6 @@ const SKIP_DIRS = new Set(['node_modules', 'test-support', '__tests__', '__fixtu
 const NOT_PRODUCT = /\.(spec|test|it|e2e|fixtures?)\.ts$/;
 const schema = readSchema(readFileSync(path.join(REPO, 'src/apiserver/prisma/schema.prisma'), 'utf8'));
 
-const COUNTED: Array<[Exclude<HitKind, 'phase'>, keyof SessionStatusUses]> = [
-  ['read', 'reads'], ['write', 'writes'], ['alone', 'alone'], ['enum', 'enums'],
-];
 
 function sources(dir = '', found: string[] = []): string[] {
   for (const entry of readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
@@ -68,16 +64,9 @@ function report(file: string, hit: Hit): string {
   return `src/apiserver/src/${file}:${hit.line}: ${what} (${hit.how})`;
 }
 
-/** Everything a file holds that the allow-list does not cover, one line each. */
-function problemsOf(file: string, text: string, allowed: SessionStatusUses = {}): string[] {
-  const hits = scanSessionStatus(file, text, schema);
-  const problems = hits.filter((hit) => hit.kind === 'phase').map((hit) => report(file, hit));
-  for (const [kind, key] of COUNTED) {
-    const has = hits.filter((hit) => hit.kind === kind);
-    if (has.length <= (allowed[key] ?? 0)) continue;
-    problems.push(`src/apiserver/src/${file}: ${key}: allowed ${allowed[key] ?? 0}, has ${has.length}`, ...has.map((hit) => report(file, hit)));
-  }
-  return problems;
+/** Every use a file holds, one line each. */
+function problemsOf(file: string, text: string): string[] {
+  return scanSessionStatus(file, text, schema).map((hit) => report(file, hit));
 }
 
 const found = (text: string, file = 'x/planted.ts'): string[] =>
@@ -154,38 +143,32 @@ test('phase is refused where slots, claims and dispatch are decided, and only th
   assert.deepEqual(found("if (report.phase === 'draining' || pod.status.phase === 'Failed') go();", 'runners/x.ts'), []);
 });
 
-test('a planted read and a planted write fail by name, in a listed file and in a new one', () => {
+test('a planted read and a planted write fail by name, in a product file and in a new one', () => {
   const read = "await db.session.findMany({ where: { status: 'RUNNING' } });";
-  const write = "await db.session.update({ where: { id }, data: { status: 'PENDING', turnState: 'QUEUED' } });";
+  const write = "await db.session.update({ where: { id }, data: { turnState: 'QUEUED', status: 'PENDING' } });";
   assert.deepEqual(problemsOf('new/file.ts', read), [
-    'src/apiserver/src/new/file.ts: reads: allowed 0, has 1',
     'src/apiserver/src/new/file.ts:1: reads session.status (Prisma where)',
   ]);
   assert.deepEqual(problemsOf('new/file.ts', write), [
-    'src/apiserver/src/new/file.ts: writes: allowed 0, has 1',
     'src/apiserver/src/new/file.ts:1: writes session.status (Prisma data)',
   ]);
   const file = 'queue/queue.service.ts';
   const today = readFileSync(path.join(ROOT, file), 'utf8');
+  assert.deepEqual(problemsOf(file, today), [], `${file} holds no use today`);
   const line = today.split('\n').length;
-  for (const [text, key] of [[read, 'reads'], [write, 'writes']] as const) {
-    const problems = problemsOf(file, `${today}\n${text}\n`, SESSION_STATUS_USES[file]);
-    assert.match(problems[0], new RegExp(`^src/apiserver/src/${file}: ${key}: allowed \\d+, has \\d+$`));
-    assert.ok(problems.some((p) => p.startsWith(`src/apiserver/src/${file}:${line + 1}: `)), problems.join('\n'));
+  for (const [text, how] of [[read, 'reads session.status (Prisma where)'], [write, 'writes session.status (Prisma data)']] as const) {
+    assert.deepEqual(problemsOf(file, `${today}\n${text}\n`), [`src/apiserver/src/${file}:${line + 1}: ${how}`]);
   }
 });
 
-test('no new reader or writer of session.status outside the allow-list', () => {
+test('no apiserver product file reads or writes session.status', () => {
   const files = sources();
   assert.ok(files.length > 500, `the scan found only ${files.length} files: is REPO (${REPO}) the repository root?`);
-  const problems = files.flatMap((file) => problemsOf(file, readFileSync(path.join(ROOT, file), 'utf8'), SESSION_STATUS_USES[file]));
-  for (const file of Object.keys(SESSION_STATUS_USES)) {
-    if (!files.includes(file)) problems.push(`src/apiserver/src/${file}: listed, but not a product file the scan reads: delete its row`);
-  }
+  const problems = files.flatMap((file) => problemsOf(file, readFileSync(path.join(ROOT, file), 'utf8')));
   assert.deepEqual(
     problems,
     [],
-    `\n${problems.join('\n')}\nsession.status is being retired (docs/session-status-retirement-plan.md §2.1 says what to ask instead); `
-      + 'do not raise a number in session-status-column.allowed.ts.\n',
+    `\n${problems.join('\n')}\nsession.status is retired (docs/session-status-retirement-plan.md §2.1 says what to ask instead): `
+      + 'read the facts, and write turn_state and the release beside it.\n',
   );
 });

@@ -108,12 +108,13 @@ test('a session-based Ask stays read-only', {
   assert.equal(ordinary.status, 201, ordinary.text);
   const ordinaryId = toUuid(ordinary.json.id);
 
-  // The Ask, as 0850's Ask was written: a session on the owner's machine with `help_ask`, in no workspace.
+  // The Ask, as 0850's Ask was written: a session on the owner's machine with `help_ask`, in no workspace. A run that
+  // succeeded, in the facts it is written with since deploy D3 (migration 1671 stores the word SUCCEEDED from them).
   const askId = randomUUID();
   await sql.query(
-    `INSERT INTO "session" ("id", "title", "prompt", "owner_id", "creator_id", "updated_at", "status", "finished_at",
-                            "assigned_runner_id", "engine", "help_ask")
-     VALUES ($1, 'Why is build-box offline?', 'Why is build-box offline?', $2, $2, now(), 'SUCCEEDED', now(), $3, 'claude', $4::jsonb)`,
+    `INSERT INTO "session" ("id", "title", "prompt", "owner_id", "creator_id", "updated_at", "started_at", "finished_at",
+                            "end_reason", "assigned_runner_id", "engine", "help_ask")
+     VALUES ($1, 'Why is build-box offline?', 'Why is build-box offline?', $2, $2, now(), now(), now(), 'task_done', $3, 'claude', $4::jsonb)`,
     [askId, owner.id, ask.runnerId, JSON.stringify({ page: PAGE })],
   );
 
