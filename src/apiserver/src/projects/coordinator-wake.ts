@@ -484,6 +484,8 @@ export function lineBlockedFact(
     idleSince: Date;
     lastProgress: string | null;
     lastWords: string | null;
+    /** The line-sync item with no sync task filed: the task and session are the conflict's, and no run is idle. */
+    awaitingSyncTask?: boolean;
   },
   line: {
     itemId: string;
@@ -505,6 +507,7 @@ export function lineBlockedFact(
       idleSince: idle.idleSince.toISOString(),
       lastProgress: idle.lastProgress,
       ...(idle.lastWords ? { lastWords: idle.lastWords } : {}),
+      ...(idle.awaitingSyncTask ? { awaitingSyncTask: true } : {}),
       blockedLine: {
         itemId: line.itemId,
         itemTitle: line.itemTitle,

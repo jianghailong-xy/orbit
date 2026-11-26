@@ -666,7 +666,7 @@ describe('Move', { timeout: 60_000 }, () => {
 
   it('moves the open session to another workspace with End and Move, after saying what stays behind', async () => {
     await mountOnLoose();
-    await click(mounted().querySelector('.workspace-header button[title="More actions"]'), 'the header ⋯');
+    await click(mounted().querySelector('.workspace-header button[aria-label="More actions"]'), 'the header ⋯');
     await until(() => expect(menuItem('Move…')).toBeTruthy());
     await click(menuItem('Move…'), 'Move…');
     await until(() => expect(option('wikova-develop')).toBeTruthy());

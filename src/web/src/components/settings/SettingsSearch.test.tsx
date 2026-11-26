@@ -367,11 +367,20 @@ describe('Settings search', () => {
   });
 
   it('searches every setting in the index, by title', () => {
-    const sources = { runners: [], keys: [], workspaces: [] };
+    const sources = { runners: [], keys: [], workspaces: [], webPush: true };
     for (const setting of Object.values(PERSONAL_SETTINGS)) {
       const found = searchSettings(setting.title, sources).flatMap((g) => g.hits);
       expect(found).toContainEqual(expect.objectContaining({ to: setting.path, anchor: setting.anchor }));
     }
+  });
+
+  it('finds This browser\'s notifications switch only where the server sends web push', () => {
+    const hits = (webPush: boolean) =>
+      searchSettings('browser', { runners: [], keys: [], workspaces: [], webPush }).flatMap((g) => g.hits);
+    expect(hits(true)).toContainEqual(
+      expect.objectContaining({ label: 'Notifications in this browser', to: '/settings/notifications', anchor: 'browserNotifications' }),
+    );
+    expect(hits(false).map((h) => h.anchor)).not.toContain('browserNotifications');
   });
 });
 

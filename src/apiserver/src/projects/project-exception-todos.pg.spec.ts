@@ -1,4 +1,5 @@
 import { seedPromotionRequest } from '../test-support/promotion-request';
+import { asLegacyMainSyncItem } from '../test-support/legacy-main-sync';
 import { receiveOpenItem } from '../test-support/open-item-delivery';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -1517,7 +1518,7 @@ test('an integration failure with no coordinator to hand it to is the owner\'s',
     const { task, job } = await claimedLanding(stack, w, 'conflict-unowned');
     await reportFailure(stack, w, job, {
       state: 'CONFLICT',
-      phase: 'MAIN_SYNC',
+      phase: 'REBASE',
       sourceSha: 'a'.repeat(40),
       targetShaBefore: 'c'.repeat(40),
       conflicts: ['docs/project-integration-line-contract.md'],
@@ -1706,6 +1707,10 @@ test('a MAIN_SYNC conflict holds the line\'s other landings, but not the next la
         targetShaBefore: 'c'.repeat(40),
         conflicts: ['src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts'],
       });
+      // Revision 45 opens the task-less line-sync item for this (line-sync-hold.pg.spec.ts); this case pins the
+      // LEGACY task-level item, still in force for items opened before it (docs/design/project-line-upstream-sync.md
+      // §4.6 item 7).
+      await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: task.taskId });
       const item = await onlyItemFor(stack.db, w, task.taskId, 'the absorb conflicted');
       assert.equal(item.state, 'OPEN');
 
@@ -1799,6 +1804,8 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
         targetShaBefore: 'c'.repeat(40),
         conflicts: ['src/apiserver/src/runner-api/integration-job-relay.ts'],
       });
+      // Narrowed to the LEGACY task-level item, as above (revision 45).
+      await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: conflicted.taskId });
       const item = await onlyItemFor(stack.db, w, conflicted.taskId, 'the absorb conflicted');
       assert.equal(item.state, 'OPEN');
       assert.equal(item.assignee, 'COORDINATOR');
@@ -1843,6 +1850,7 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
         targetShaBefore: 'c'.repeat(40),
         conflicts: ['src/apiserver/src/runner-api/integration-job-relay.ts'],
       });
+      await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: fix.taskId });
       const fixItem = await onlyItemFor(stack.db, w, fix.taskId, 'the fix met the same conflict');
       assert.equal(fixItem.kind, 'INTEGRATION_CONFLICT');
       assert.equal(fixItem.state, 'OPEN');
@@ -1869,14 +1877,18 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
       const after = await itemNow(stack, w, item.id);
       assert.equal(after.state, 'OPEN');
       assert.ok(after.assignedAt.getTime() > before.assignedAt.getTime(), 'the item was handed back');
-      assert.deepEqual(await heartbeat('lease-still-held'), [],
-        'the line stays held until the coordinator answers the item');
-
-      // The coordinator closes it, and the line moves on its own: both held landings are claimed in
-      // turn, the oldest first.
-      await stack.openItems.resolveOpenItem(w.ownerId, w.projectId, item.id,
-        { note: 'the fix carried the conflicted task\'s work' },
-        { kind: 'SESSION', sessionId: w.coordinatorSessionId! });
+      // Revision 45's bridge for legacy items (docs/design/project-line-upstream-sync.md §4.6 item 7): the fix's
+      // landing gave the line main, so the conflicted task's own landing is queued again in that transaction — no
+      // reopen — and, exempt from its own item, it is the only landing the next beat hands out.
+      const bridged = await heartbeat('lease-bridged');
+      assert.deepEqual(
+        await Promise.all(bridged.map((row) => taskOf(row.jobId))),
+        [conflicted.taskId],
+        `the conflicted task's landing is queued again by the bridge, and only it is claimed — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+      // Its landing answers the item (J-T5), and the line moves on its own: the oldest held landing is next.
+      assert.equal((await reportLanding(stack, w, bridged[0]!)).accepted, true);
+      assert.equal((await itemNow(stack, w, item.id)).resolution, 'LANDED');
       const next = await heartbeat('lease-after');
       assert.deepEqual(
         await Promise.all(next.map((row) => taskOf(row.jobId))),
@@ -2008,7 +2020,7 @@ test('an integration item survives a task write that is not one of its terminal 
       const { task, job } = await claimedLanding(stack, w, 'kept-open');
       await reportFailure(stack, w, job, {
         state: 'CONFLICT',
-        phase: 'MAIN_SYNC',
+        phase: 'REBASE',
         sourceSha: 'a'.repeat(40),
         targetShaBefore: 'c'.repeat(40),
         conflicts: ['README.md'],

@@ -3478,6 +3478,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1574 adds three nullable columns to wiki_chat_draft (auto_queued_at, held, held_by_id), two checks, a partial index,
       // and loosens its undone, seen and told checks; no preserved relation, row, trigger, function or DONE fence changes.
       '1574_wiki_chat_draft_auto',
+      // 1582 widens the enqueue event cause CHECK to admit MAIN_SYNC_HELD and adds its LAND_TASK-only twin of 0518's
+      // baseline CHECK (docs/design/project-line-upstream-sync.md §5); no preserved rows or DONE fence changes.
+      '1582_integration_main_sync_held',
       // 1590 rewrites the access token scopes `documents` and `files` to `drive` in personal_access_token.scopes and
       // pat_device_login.scopes: two UPDATEs of those tables only, none of the preserved relations, no row added or
       // removed, and no table, column, trigger, function or DONE fence changes.

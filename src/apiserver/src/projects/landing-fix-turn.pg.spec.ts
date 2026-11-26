@@ -417,13 +417,15 @@ test('W6: a conflict\'s landing-fix turn names the phase, the commit and the fil
     const w = await world(stack, 'words-conflict');
     const t = await finishedTask(stack, w, 'words-conflict');
     const command = await claimJob(stack, w, 'LAND_TASK');
-    const itemId = await fail(stack, w, command, conflict('MAIN_SYNC'));
+    // A REBASE conflict: since revision 45 a MAIN_SYNC conflict is the line's and never reaches the work session
+    // (docs/design/project-line-upstream-sync.md §4.2; line-sync-hold.pg.spec.ts).
+    const itemId = await fail(stack, w, command, conflict('REBASE'));
     await deliver(stack, w, itemId);
     const [turn, ...more] = await turnOf(stack, t.sessionId, command.jobId);
     assert.deepEqual(more, []);
     const target = `project/${w.projectId}`;
     assert.ok(turn!.content!.includes(
-      `Conflict while syncing main into ${target} at ${sha('c')}:\nsrc/a.ts, src/b.ts\n`,
+      `Conflict while rebasing onto ${target} at ${sha('c')}:\nsrc/a.ts, src/b.ts\n`,
     ), turn!.content!);
     const item = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: itemId } });
     assert.equal(landingFixMessage((await readLandingFixFacts(stack.db, {

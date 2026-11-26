@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8">
+<style>
+body{margin:0;background:#f3f3f1;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:#1f1f1f}
+.board{width:1100px;padding:28px;box-sizing:border-box;background:#f3f3f1}
+h1{font-size:20px;margin:0 0 4px} .sub{color:#666;font-size:13px;margin-bottom:20px}
+.row{display:flex;gap:20px;margin-bottom:18px}
+.frame{background:#fff;border:1px solid #e2e2e0;border-radius:12px;padding:14px 16px;flex:1}
+.frame h2{font-size:14px;margin:0 0 10px}
+.frame .k{font-size:12px;color:#777;margin-top:10px;line-height:1.5}
+.zoom{zoom:2;display:flex;justify-content:flex-end;align-items:center;height:66px;padding-right:10px;background:#fff}
+.btn{flex:none;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:#1f1f1f;font-size:18px}
+.today .share{margin-left:2px} .new .share{margin-left:14px}
+img.ref{height:132px;display:block;margin-left:auto}
+table{border-collapse:collapse;font-size:12.5px;width:100%} td,th{border-top:1px solid #eee;padding:6px 8px;text-align:left;vertical-align:top} th{color:#777;font-weight:500}
+code{font-family:'JetBrains Mono',monospace;font-size:11.5px}
+</style>
+<div class="board">
+<h1>会话头部 ⋯ / Share 图标 — 对齐参考图</h1>
+<div class="sub">参考 = 你给的图 1；① 今天 = 我们（图 2 / 现有代码）；② 提案。三栏同一比例（放大 2 倍）。</div>
+<div class="row">
+ <div class="frame"><h2>参考（图 1）</h2><img class="ref" src="ref-owner.png">
+  <div class="k">托盘是敞口 U 形（无上沿肩），比我们宽、矮；箭头更长，在托盘上方。⋯ 与 Share 间距更大。</div></div>
+ <div class="frame today"><h2>① 今天</h2><div class="zoom"><div class="btn"><svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.45"/><circle cx="8" cy="8" r="1.45"/><circle cx="13" cy="8" r="1.45"/></svg></div><div class="btn share"><svg width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M5.6 6.2H4.6a1.1 1.1 0 0 0-1.1 1.1v5.6a1.1 1.1 0 0 0 1.1 1.1h6.8a1.1 1.1 0 0 0 1.1-1.1V7.3a1.1 1.1 0 0 0-1.1-1.1h-1"/><path d="M8 1.6v8.2"/><path d="M5.7 3.9 8 1.6l2.3 2.3"/></svg></div></div>
+  <div class="k">方框带上沿肩（square.and.arrow.up），12px 宽；两按钮间 2px。</div></div>
+ <div class="frame new"><h2>② 提案</h2><div class="zoom"><div class="btn"><svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.45"/><circle cx="8" cy="8" r="1.45"/><circle cx="13" cy="8" r="1.45"/></svg></div><div class="btn share"><svg width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5v2.7a2.6 2.6 0 0 0 2.6 2.6h6.8a2.6 2.6 0 0 0 2.6-2.6V8.5"/><path d="M8 1.8v8"/><path d="M4.45 5.35 8 1.8l3.55 3.55"/></svg></div></div>
+  <div class="k">敞口托盘，15px 宽、底角大圆角；箭头 8px 长、箭翼更开；两按钮间 14px。⋯ 不变（与参考一致）。</div></div>
+</div>
+<div class="frame"><h2>改动</h2><table>
+<tr><th>项</th><th>今天</th><th>提案</th><th>文件</th></tr>
+<tr><td>Share 字形</td><td>带肩方框 12×13.5px</td><td>敞口 U 托盘 15×14.5px，描边 1.35 不变</td><td><code>src/web/src/components/SessionHeaderIcons.tsx</code></td></tr>
+<tr><td>⋯ → Share 间距</td><td><code>margin-left: 2px</code>（字形间 ≈19.5px）</td><td><code>margin-left: 14px</code>（字形间 ≈29.5px，同参考）</td><td><code>src/web/src/index.css</code> 5083</td></tr>
+<tr><td>⋯ 字形、尺寸、颜色、live 绿点</td><td colspan="2">不变</td><td></td></tr>
+<tr><td>待你定</td><td colspan="3">Apple 客户端仍用 SF 的 square.and.arrow.up（带肩）。只改 Web，还是 Mac/iOS 也换成同样的托盘？</td></tr>
+</table></div>
+</div>

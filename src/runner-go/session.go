@@ -2630,17 +2630,20 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				}
 				// Prepend any buffered `!`-shell output as context - claude sees the
 				// command+output with this message (CLI `!` semantics), no turn spent on it.
+				// The CLI runs a slash command only when the text starts with it: nothing goes in front of one,
+				// and what would have (shell output, the reset note, a reply-file correction) waits for the next message.
+				slashCommand := isClaudeSlashCommand(resp.Content)
 				feedText := resp.Content
-				if len(pendingShellCtx) > 0 {
+				if len(pendingShellCtx) > 0 && !slashCommand {
 					feedText = strings.Join(pendingShellCtx, "\n") + "\n\n" + resp.Content
 					// NOT cleared here: a message the runtime refuses below is never fed, and
 					// the shell output it was carrying still belongs to whatever is fed next.
 				}
 				// A conversation compacted or resumed since the last message: this one says so first. Like the
 				// shell output, the flag is cleared only once the message is accepted below.
-				carriesReset := !steer && contextReset.Load()
+				carriesReset := !steer && !slashCommand && contextReset.Load()
 				feedText = withContextResetNote(feedText, carriesReset, job.insideRecordedWork())
-				if !steer {
+				if !steer && !slashCommand {
 					feedText = withReplyFileCorrection(feedText, replyFilesOf(job.SessionID).takeCorrection())
 				}
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
@@ -2707,7 +2710,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// so everything that answers for it can be put in place before it can be
 				// answered.
 				deliveries.accept(delivery, slot.receipt)
-				pendingShellCtx = nil // this message carries it now
+				if !slashCommand {
+					pendingShellCtx = nil // this message carries it now
+				}
 				if carriesReset {
 					contextReset.Store(false)
 				}

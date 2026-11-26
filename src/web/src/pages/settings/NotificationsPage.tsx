@@ -6,7 +6,6 @@ import { disableWebPush, enableWebPush, getWebPushConfig, getWebPushState, type 
 import { usePreferences } from './preferences';
 import { PERSONAL_SETTINGS as S } from './settingsIndex';
 
-const BROWSER_DESCRIPTION = 'Show Orbit alerts on this computer, even with no Orbit tab open.';
 const BROWSER_PROMPT = "Allow notifications in the browser's prompt…";
 const BROWSER_BLOCKED = "Blocked for this site. Allow notifications in your browser's site settings, then turn this on.";
 const BROWSER_UNSUPPORTED =
@@ -59,15 +58,16 @@ function ThisBrowserCard({ publicKey }: { publicKey: string }) {
         ? BROWSER_BLOCKED
         : prompting
           ? BROWSER_PROMPT
-          : (error ?? BROWSER_DESCRIPTION);
+          : (error ?? S.browserNotifications.description);
   return (
     <SettingsCard>
       <SettingsRow
-        title="Notifications in this browser"
+        anchor={S.browserNotifications.anchor}
+        title={S.browserNotifications.title}
         description={description}
         control={
           <Switch
-            aria-label="Notifications in this browser"
+            aria-label={S.browserNotifications.title}
             checked={state === 'on' || prompting}
             onCheckedChange={(v) => void toggle(v)}
             disabled={state === null || state === 'unsupported' || state === 'blocked'}

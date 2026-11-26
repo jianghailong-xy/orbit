@@ -8,6 +8,7 @@ import { findMatches, type FindSegment } from '../lib/findMatches';
 import { elementForSeq as elementForSeqIn } from '../lib/transcriptDeepLink';
 import { REVEAL_EVENT, relTime } from './Transcript';
 import { EXCHANGE_REVEAL_EVENT } from './OrbitExchangeFold';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * Find within the open session (⌘F / Ctrl+F).
@@ -479,15 +480,21 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
         >
           {jumping ? <LoadingOutlined spin /> : status}
         </span>
-        <button type="button" className="find-btn" onClick={() => step(-1)} title="Previous match (⇧↵)">
-          <UpOutlined />
-        </button>
-        <button type="button" className="find-btn" onClick={() => step(1)} title="Next match (↵)">
-          <DownOutlined />
-        </button>
-        <button type="button" className="find-btn" onClick={close} title="Close (Esc)">
-          <CloseOutlined />
-        </button>
+        <Tooltip side="bottom" content="Previous match (⇧↵)">
+          <button type="button" className="find-btn" onClick={() => step(-1)} aria-label="Previous match (⇧↵)">
+            <UpOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip side="bottom" content="Next match (↵)">
+          <button type="button" className="find-btn" onClick={() => step(1)} aria-label="Next match (↵)">
+            <DownOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip side="bottom" align="end" content="Close (Esc)">
+          <button type="button" className="find-btn" onClick={close} aria-label="Close (Esc)">
+            <CloseOutlined />
+          </button>
+        </Tooltip>
       </div>
 
       {hits.length > 0 && (

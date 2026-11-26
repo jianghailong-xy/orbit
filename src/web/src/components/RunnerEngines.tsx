@@ -652,7 +652,8 @@ function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setD
         align="end"
         popupClassName="re-account-menu"
         items={items}
-        trigger={<Button ref={moreRef} size="small" variant="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions" title="More actions"
+        tooltip="More actions"
+        trigger={<Button ref={moreRef} size="small" variant="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions"
           onFocus={() => {
             if (!renameOnFocus.current) return;
             renameOnFocus.current = false;

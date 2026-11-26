@@ -26,6 +26,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentPropsWithRef,
   type FocusEvent,
 } from 'react';
 import {
@@ -211,15 +212,12 @@ export function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
           disabled={data.removing}
           onConfirm={() => data.onRemoveDependency?.(data.task.id)}
           trigger={
-            <button
+            <RemovePrerequisiteButton
               type="button"
               className="tdg-node-remove nodrag nopan"
               disabled={data.removing}
               aria-label={`Remove ${data.task.title} as a prerequisite`}
-              title="Remove direct prerequisite"
-            >
-              <CloseOutlined />
-            </button>
+            />
           }
         />
       )}
@@ -227,6 +225,18 @@ export function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
         <Handle type="source" position={data.vertical ? Position.Bottom : Position.Right} isConnectable={false} />
       )}
     </div>
+  );
+}
+
+/** A component rather than a wrapped element, so the confirmation's trigger props reach the button
+ *  through the tooltip. */
+function RemovePrerequisiteButton(props: ComponentPropsWithRef<'button'>) {
+  return (
+    <Tooltip content="Remove direct prerequisite">
+      <button {...props}>
+        <CloseOutlined />
+      </button>
+    </Tooltip>
   );
 }
 

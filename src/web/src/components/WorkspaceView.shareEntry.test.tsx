@@ -156,7 +156,7 @@ const listRow = (title: string): HTMLElement => {
 
 /** Opens the conversation header's ⋯ menu and hands back the popup the menu mounted. */
 async function openHeaderMenu(): Promise<HTMLElement> {
-  await click(mounted().querySelector('.workspace-header button[title="More actions"]'), 'the header ⋯ button');
+  await click(mounted().querySelector('.workspace-header button[aria-label="More actions"]'), 'the header ⋯ button');
   await act(async () => {
     await vi.waitFor(() => expect(document.querySelector('[role="menu"]:not([data-closed])')).not.toBeNull(), {
       timeout: 10_000,
@@ -287,6 +287,9 @@ describe('a shared session in the session list and its conversation', { timeout:
     container?.remove();
     await mount(PLAIN_PUBLIC);
     expect(mounted().querySelector('.workspace-header-share')?.getAttribute('aria-label')).toBe('Share…');
+    // The header's two icons use the app's Tooltip, not the browser's own tip.
+    expect(mounted().querySelector('.workspace-header-share')?.hasAttribute('title')).toBe(false);
+    expect(mounted().querySelector('.workspace-header-more')?.hasAttribute('title')).toBe(false);
     expect(mounted().querySelector('.workspace-header-share.is-live')).toBeNull();
   });
 

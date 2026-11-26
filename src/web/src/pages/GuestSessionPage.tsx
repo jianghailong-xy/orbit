@@ -24,6 +24,7 @@ import {
   Transcript,
 } from '../components/Transcript';
 import { Image } from '../components/ui/Image';
+import { Tooltip } from '../components/ui/Tooltip';
 import { ALLOWED_IMAGE_TYPES, type ComposerImage, useComposerImages } from '../components/WorkspaceView';
 import { memoizeEventFull } from '../lib/eventFull';
 import { meQuery } from '../lib/queries';
@@ -596,15 +597,16 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
             }}
           />
           <div className="guest-composer-foot">
-            <button
-              type="button"
-              className="guest-composer-attach"
-              aria-label="Attach image"
-              title="Attach image"
-              onClick={() => imageInputRef.current?.click()}
-            >
-              <PictureOutlined />
-            </button>
+            <Tooltip content="Attach image">
+              <button
+                type="button"
+                className="guest-composer-attach"
+                aria-label="Attach image"
+                onClick={() => imageInputRef.current?.click()}
+              >
+                <PictureOutlined />
+              </button>
+            </Tooltip>
             <span className={`guest-composer-hint${sendError ? ' is-error' : ''}`}>{sendError ?? hint}</span>
             <button
               type="submit"

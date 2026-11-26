@@ -42,6 +42,7 @@ import {
   updateSessionConfig,
 } from '../api';
 import { Menu } from './ui/Menu';
+import { Tooltip } from './ui/Tooltip';
 import { ApprovalPanel } from './ApprovalPanel';
 import { PendingTray } from './PendingTray';
 import { SessionConversation } from './SessionConversation';
@@ -251,22 +252,27 @@ export function WikiChatPanel({
           <span className="t">{title}</span>
           <CaretDownOutlined className="caret" />
         </button>
-        <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_NEW} title={WIKI_CHAT_NEW} onClick={() => onChat(WIKI_CHAT_NEW_PARAM)}>
-          <PlusOutlined />
-        </button>
-        <button
-          type="button"
-          className="wk-chat-ib"
-          aria-label={WIKI_CHAT_OPEN_SESSION}
-          title={WIKI_CHAT_OPEN_SESSION}
-          disabled={fresh || history}
-          onClick={() => navigate(`/sessions/${encodeId(sessionId!)}`)}
-        >
-          <ArrowRightOutlined />
-        </button>
-        <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_CLOSE} title={WIKI_CHAT_CLOSE} onClick={onClose}>
-          <CloseOutlined />
-        </button>
+        <Tooltip content={WIKI_CHAT_NEW} side="bottom">
+          <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_NEW} onClick={() => onChat(WIKI_CHAT_NEW_PARAM)}>
+            <PlusOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip content={WIKI_CHAT_OPEN_SESSION} side="bottom">
+          <button
+            type="button"
+            className="wk-chat-ib"
+            aria-label={WIKI_CHAT_OPEN_SESSION}
+            disabled={fresh || history}
+            onClick={() => navigate(`/sessions/${encodeId(sessionId!)}`)}
+          >
+            <ArrowRightOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip content={WIKI_CHAT_CLOSE} side="bottom" align="end">
+          <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_CLOSE} onClick={onClose}>
+            <CloseOutlined />
+          </button>
+        </Tooltip>
       </div>
       {history && (
         <WikiChatHistory

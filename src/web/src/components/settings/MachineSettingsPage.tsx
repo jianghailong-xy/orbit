@@ -777,8 +777,9 @@ export function MachineSettingsPage() {
           <Menu
             align="end"
             items={kebab}
+            tooltip="Actions"
             trigger={
-              <Button ref={actionsButton} className="machine-more" icon={<MoreOutlined />} title="Actions" aria-label="Actions" />
+              <Button ref={actionsButton} className="machine-more" icon={<MoreOutlined />} aria-label="Actions" />
             }
           />
         </div>

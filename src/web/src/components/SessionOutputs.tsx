@@ -939,12 +939,12 @@ function MergeButton({
             </>
           )
         }
+        tooltip="Merge into another branch"
         trigger={
           <button
             type="button"
             className={`wt-merge-caret${failed ? ' wt-merge-btn-failed' : ''}`}
             aria-label="Choose a branch to merge into"
-            title="Merge into another branch"
             onClick={(e) => e.stopPropagation()}
           >
             ▾
@@ -1702,13 +1702,17 @@ function DiffPane({
   const head = (
     <>
       <span className="wt-diff-nav">
-        <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file" title="Previous file">
-          ‹
-        </button>
+        <Tooltip side="bottom" content="Previous file">
+          <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file">
+            ‹
+          </button>
+        </Tooltip>
         <span className="wt-diff-nav-pos">{pos}</span>
-        <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file" title="Next file">
-          ›
-        </button>
+        <Tooltip side="bottom" content="Next file">
+          <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file">
+            ›
+          </button>
+        </Tooltip>
       </span>
       <span className="wt-diff-pane-path">{file.path}</span>
     </>

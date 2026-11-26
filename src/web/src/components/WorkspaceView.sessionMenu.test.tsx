@@ -400,7 +400,7 @@ describe('Rename… on a session row', () => {
   // docs/mocks/session-settings-column ④: a session is renamed in its settings' Name field.
   it("the open conversation's More actions offers Rename…, which opens the settings with Name selected", async () => {
     await mount();
-    await click(container!.querySelector('.workspace-header button[title="More actions"]'));
+    await click(container!.querySelector('.workspace-header button[aria-label="More actions"]'));
     const rename = () => openMenuItems().find((el) => el.textContent?.trim() === 'Rename…');
     await until(() => expect(rename()).toBeTruthy());
     await click(rename());

@@ -16,6 +16,7 @@
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own project.
  */
+import { asLegacyMainSyncItem } from '../test-support/legacy-main-sync';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -595,6 +596,10 @@ test('an open MAIN_SYNC conflict holds the next landing as a project-line sync, 
         where: { id: conflicted.sessionId }, data: { endReason: 'ended', finishedAt: new Date() },
       });
       await report(stack, w, claimed[0]!, SYNC_CONFLICT);
+      // Revision 45 opens the task-less line-sync item for this (line-sync-hold.pg.spec.ts). This case pins the LEGACY
+      // task-level item's rule, still in force for items opened before it (docs/design/project-line-upstream-sync.md
+      // §4.6 item 7): the conflicted task's own next generation is exempt.
+      await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId: conflicted.taskId });
       const stopped = await read(stack, w, conflicted);
       assert.equal(stopped.state, 'CONFLICT');
       assert.ok(stopped.openItemId, 'the conflict opened its item');

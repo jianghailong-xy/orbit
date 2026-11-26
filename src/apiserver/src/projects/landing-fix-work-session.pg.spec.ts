@@ -369,7 +369,7 @@ async function landing(stack: Stack, label: string, body: object,
 
 // ─── W-T1: the results that are handed off ────────────────────────────────────────────────────────
 
-for (const phase of ['REBASE', 'MERGE', 'MAIN_SYNC'] as const) {
+for (const phase of ['REBASE', 'MERGE'] as const) {
   test(`W-T1: a task landing's CONFLICT in ${phase} opens its item in the work session's hands`, { skip }, async () => {
     const stack = await connect();
     try {
@@ -381,6 +381,28 @@ for (const phase of ['REBASE', 'MERGE', 'MAIN_SYNC'] as const) {
     }
   });
 }
+
+// Revision 45 (docs/design/project-line-upstream-sync.md §4.2): a MAIN_SYNC conflict is the line's, not the work's.
+// It opens the task-less line-sync item for the coordinator, and the finished task's session is not revived for it.
+test('W-T1, revision 45: a task landing\'s CONFLICT in MAIN_SYNC is not handed to the work session', { skip }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'conflict-main-sync', 'PROJECT_BRANCH');
+    const t = await finishedTask(stack, w, 'conflict-main-sync');
+    const command = await claim(stack, w, 'LAND_TASK');
+    await report(stack, w, command, conflict('MAIN_SYNC'));
+    const items = await stack.db.projectOpenItem.findMany({ where: { projectId: w.projectId, state: 'OPEN' } });
+    assert.equal(items.length, 1);
+    assert.equal(items[0]!.taskId, null, 'the line-sync item names no task');
+    assert.ok(items[0]!.dedupeKey.startsWith('IMS:'));
+    assert.equal(items[0]!.workSessionId, null, 'not offered to the work session');
+    assert.equal(items[0]!.assignee, 'COORDINATOR');
+    const session = await stack.db.session.findUniqueOrThrow({ where: { id: t.sessionId }, select: { finishedAt: true } });
+    assert.notEqual(session.finishedAt, null, 'the finished work session was not revived');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
 
 test('W-T1: a task landing\'s CHECK_FAILED of its own making is handed off, and W9 refuses resolve and retry',
   { skip }, async () => {

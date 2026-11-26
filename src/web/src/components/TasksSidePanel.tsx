@@ -66,6 +66,7 @@ import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { unregisterWebPushOnSignOut } from '../lib/webPush';
 import { useDriveEnabled } from '../lib/driveSwitch';
+import { SIDEBAR_WIDTH_KEY, clampSidebarWidth, savedSidebarWidth } from '../lib/sidebarWidth';
 import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { setConversationProjectPage, useConversationProjectPage } from '../lib/conversationProjectPage';
@@ -113,7 +114,7 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
-import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
+import { HELP_PATH } from '../lib/helpDrawer';
 import { OPTIMIZE_LABELS } from '../lib/settingsChange';
 import { MODEL_ROUTING_PAGE } from '../pages/settings/settingsIndex';
 
@@ -203,15 +204,8 @@ const TOP: TopNavItem[] = [
   // there — so it is reached as the phone reaches it, from Settings.
 ];
 
-// The left sidebar is user-resizable; the chosen width persists across refreshes.
-const SIDEBAR_WIDTH_KEY = 'orbit:sidebar-width';
 // Whether the user collapsed the panel to its icon rail; persisted like the width.
 const SIDEBAR_COLLAPSED_KEY = 'orbit:sidebar-collapsed';
-const DEFAULT_SIDEBAR_WIDTH = 280;
-const MIN_SIDEBAR_WIDTH = 200;
-const MAX_SIDEBAR_WIDTH = 480;
-const clampWidth = (w: number): number =>
-  Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -395,7 +389,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const help = useHelpDrawer();
   // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
   // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
   // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
@@ -542,10 +535,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // rows pass under it (docs/mocks/sidebar-projects-scroll, 03).
   const listsRef = useRef<HTMLDivElement>(null);
 
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
-    return saved > 0 ? clampWidth(saved) : DEFAULT_SIDEBAR_WIDTH;
-  });
+  const [sidebarWidth, setSidebarWidth] = useState<number>(savedSidebarWidth);
 
   // Collapse the whole panel to a slim icon rail (desktop) — hands the content
   // region the full width back. Persisted so the choice survives a refresh.
@@ -594,7 +584,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     // The panel hugs the viewport's left edge, so clientX is the target width.
     let next = sidebarWidth;
     const onMove = (ev: MouseEvent) => {
-      next = clampWidth(ev.clientX);
+      next = clampSidebarWidth(ev.clientX);
       setSidebarWidth(next);
     };
     const onUp = () => {
@@ -946,15 +936,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           </svg>
         </span>
         <span className="tp-brand-name">Orbit</span>
-        <button
-          type="button"
-          className="tp-collapse-btn"
-          onClick={toggleCollapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-        </button>
+        <Tooltip side="bottom" content={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          <button
+            type="button"
+            className="tp-collapse-btn"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          </button>
+        </Tooltip>
       </div>
 
       {/* Collapsed-only icon rail: the fixed top-nav as icons. The dynamic lists (workspaces,
@@ -1401,18 +1392,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               ),
               onSelect: () => navigate(MODEL_ROUTING_PAGE.path),
             },
-            {
-              key: 'settings',
-              icon: <SettingOutlined />,
-              label: 'Settings',
-              onSelect: () => navigate('/settings'),
-            },
             // The full help center (board help-center 01 ⓪②), where a reader who looks in the account menu finds it.
             {
               key: 'help',
               icon: <QuestionCircleOutlined />,
               label: 'Help center',
               onSelect: () => navigate(HELP_PATH),
+            },
+            {
+              key: 'settings',
+              icon: <SettingOutlined />,
+              label: 'Settings',
+              onSelect: () => navigate('/settings'),
             },
             // User management, for admins only. It opens a settings page as the row above does, so
             // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
@@ -1454,25 +1445,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             </button>
           }
         />
-        {/* Help, beside the avatar (board help-center 01 ⓪①); above it on the collapsed rail. */}
-        <Tooltip
-          side="top"
-          content={
-            <>
-              Help<kbd className="tp-help-key">?</kbd>
-            </>
-          }
-        >
-          <button
-            type="button"
-            className={`tp-help${help.open ? ' is-open' : ''}`}
-            aria-label="Help"
-            aria-pressed={help.open}
-            onClick={help.toggleHelp}
-          >
-            <QuestionCircleOutlined />
-          </button>
-        </Tooltip>
       </div>
 
       <div
@@ -1570,8 +1542,9 @@ export function WikiRow({
           items={menu}
           open={menuOpen}
           onOpenChange={setMenuOpen}
+          tooltip="Actions"
           trigger={
-            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`} title="Actions">
+            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`}>
               <MoreOutlined />
             </button>
           }
@@ -1834,8 +1807,9 @@ export function WorkspaceRow({
           items={menu}
           open={menuOpen}
           onOpenChange={setMenuOpen}
+          tooltip="Actions"
           trigger={
-            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`} title="Actions">
+            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`}>
               <MoreOutlined />
             </button>
           }
@@ -1865,18 +1839,19 @@ function SortableWorkspaceRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
       {children(
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          className="tp-ico tp-workspace-handle"
-          title="Drag to reorder"
-          aria-label={`Reorder ${workspace.name}`}
-          disabled={disabled}
-          {...attributes}
-          {...listeners}
-        >
-          <HolderOutlined />
-        </button>,
+        <Tooltip content="Drag to reorder">
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            className="tp-ico tp-workspace-handle"
+            aria-label={`Reorder ${workspace.name}`}
+            disabled={disabled}
+            {...attributes}
+            {...listeners}
+          >
+            <HolderOutlined />
+          </button>
+        </Tooltip>,
       )}
     </div>
   );
