@@ -8,7 +8,7 @@ node src/web/perf/session-list-scale/measure.mjs \
   --before b0bf3799bed176cec027d3c2811082b722751134 \
   --after  0522c25db849a345daec87225a7d8f1a3f988af2 \
   --work /mnt/tmp/session-list-scale/work --out /mnt/tmp/session-list-scale/results \
-  --runs 10 --frames 20
+  --runs 10 --frames 20 --max-load 16
 ```
 
 It needs Docker (`postgres:16-alpine`, `nginx:alpine`), the Node version the repository asks for and
@@ -23,7 +23,7 @@ apiserver and the web app, then starts:
 - a second web build with React's profiling renderer (`profiling.vite.config.mjs`), used only for commit times.
 
 Loads are cold (a new browser context each), at 1440×900, with no network or CPU throttling, and the two builds
-take turns. `--out` gets `results.json`, `table.md` (also `node report.mjs results.json`) and the logs.
+take turns. `--max-load` holds each timed step until the host is that quiet. `--out` gets `results.json`, `table.md` (also `node report.mjs results.json`) and the logs.
 
 | Metric | How it is read |
 | --- | --- |

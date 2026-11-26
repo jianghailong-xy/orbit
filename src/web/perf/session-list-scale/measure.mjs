@@ -4,7 +4,7 @@
 // and drives it with Chromium. See README.md.
 //
 //   node src/web/perf/session-list-scale/measure.mjs \
-//     --before <rev> --after <rev> --work <scratch dir> --out <results dir> [--runs 10] [--frames 20]
+//     --before <rev> --after <rev> --work <scratch dir> --out <results dir> [--runs 10] [--frames 20] [--max-load <n>]
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
@@ -23,7 +23,7 @@ const repo = resolve(here, '../../../..');
 const { values: args } = parseArgs({
   options: {
     before: { type: 'string' }, after: { type: 'string' }, work: { type: 'string' }, out: { type: 'string' },
-    runs: { type: 'string', default: '10' }, frames: { type: 'string', default: '20' },
+    runs: { type: 'string', default: '10' }, frames: { type: 'string', default: '20' }, 'max-load': { type: 'string' },
   },
 });
 for (const name of ['before', 'after', 'work', 'out']) if (!args[name]) throw new Error(`--${name} is required`);
@@ -35,6 +35,15 @@ mkdirSync(out, { recursive: true });
 const sh = (cmd, argv, options = {}) => execFileSync(cmd, argv, { stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1 << 28, ...options }).toString().trim();
 const log = (line) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+/** With --max-load, holds the next timed step until the host's 1-minute load average is at most that, so other
+ *  work on the machine is not what gets timed. After 20 minutes it goes on anyway; every sample records the load. */
+async function calm() {
+  const max = Number(args['max-load'] ?? Infinity);
+  for (let waited = 0; loadavg()[0] > max && waited < 1200; waited += 10) {
+    if (waited % 120 === 0) log(`waiting for the load average (${loadavg()[0].toFixed(1)}) to come down to ${max}`);
+    await sleep(10_000);
+  }
+}
 const freePort = () => new Promise((done) => {
   const server = createServer().listen(0, '127.0.0.1', () => { const { port } = server.address(); server.close(() => done(port)); });
 });
@@ -202,6 +211,7 @@ try {
   // One untimed load of each first, so neither build pays for a cold database or server.
   for (const build of builds) await measureLoad(browser, build.web, await signIn(build.web), facts, { scroll: false });
   for (let run = 0; run < Number(args.runs); run += 1) {
+    await calm();
     // Alternating, and in turn first, so a change in the host's load falls on both builds alike.
     for (const build of run % 2 ? [...builds].reverse() : builds) {
       const load = await measureLoad(browser, build.web, await signIn(build.web), facts, { scroll: run < 3 });
@@ -213,6 +223,7 @@ try {
   for (const kind of ['web', 'profiling']) {
     for (const round of [0, 1]) {
       for (const build of round ? [...builds].reverse() : builds) {
+        await calm();
         const frames = await measureWatchFrames(browser, build[kind], await signIn(build[kind]), facts, {
           frames: Math.ceil(Number(args.frames) / 2), profiling: kind === 'profiling',
         });
