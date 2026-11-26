@@ -184,15 +184,22 @@ export interface WikiChatRow {
   needsYou: number;
 }
 
-/** `GET /api/wiki/spaces/:id/chats`. */
-export interface WikiChatList {
-  spaceId: string;
+/**
+ * A chats read as the chat host reads it, whatever page it is docked on (the Wiki's, Drive's): the workspace a new chat
+ * runs in, the ones it may run in instead, the round button's counts, and one page of the chats.
+ */
+export interface ChatHostList {
   workspace: (WikiChatWorkspace & { eligible: boolean }) | null;
   choices: WikiChatWorkspace[];
   fab: WikiChatFabCounts;
   chats: WikiChatRow[];
   /** More chats match past this page (contract `chat.list.page`). Absent from an older server, read as none. */
   more?: boolean;
+}
+
+/** `GET /api/wiki/spaces/:id/chats`. */
+export interface WikiChatList extends ChatHostList {
+  spaceId: string;
 }
 
 /**
@@ -305,43 +312,56 @@ export function wikiChatSearch(search: string, chat: string | null): string {
   return next ? `?${next}` : '';
 }
 
-const CLOSED_KEY = 'orbit.wikiChat.closed';
+/**
+ * Where a chat host keeps what it remembers on the device: whether the owner hid the panel with ✕ (local storage), the
+ * chat a tab shows (session storage), and the panel's dragged width (local storage). The Wiki's are per space; another
+ * host (Drive) names its own keys, so the two never read each other's.
+ */
+export interface ChatHostStore {
+  closed: string;
+  open: string;
+  width: string;
+}
+
+export const WIKI_CHAT_STORE: ChatHostStore = {
+  closed: 'orbit.wikiChat.closed',
+  open: 'orbit.wikiChat.open',
+  width: 'orbit.wikiChat.width',
+};
 
 /**
  * Whether the owner hid the panel with ✕ in this space (board 45, owner 11-11, Q1 A): kept on the device, across
  * tabs and restarts, until the round button opens the panel again. While it is, a wiki page no longer opens with
  * the panel shown.
  */
-export function readWikiChatClosed(spaceSlug: string): boolean {
+export function readWikiChatClosed(spaceSlug: string, key: string = WIKI_CHAT_STORE.closed): boolean {
   try {
-    const all = JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '{}') as Record<string, unknown>;
+    const all = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
     return all[spaceSlug] === true;
   } catch {
     return false;
   }
 }
 
-export function writeWikiChatClosed(spaceSlug: string, closed: boolean): void {
+export function writeWikiChatClosed(spaceSlug: string, closed: boolean, key: string = WIKI_CHAT_STORE.closed): void {
   try {
-    const all = JSON.parse(localStorage.getItem(CLOSED_KEY) ?? '{}') as Record<string, unknown>;
+    const all = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
     if (closed) all[spaceSlug] = true;
     else delete all[spaceSlug];
-    localStorage.setItem(CLOSED_KEY, JSON.stringify(all));
+    localStorage.setItem(key, JSON.stringify(all));
   } catch {
     // Storage refused: the panel opens by default again next time, which is the lesser loss.
   }
 }
-
-const OPEN_KEY = 'orbit.wikiChat.open';
 
 /**
  * The chat this tab's panel shows for a space, kept so that turning to another page of the wiki — whose links do
  * not carry `?chat=` — keeps the panel open: the address is put back with it (`WikiChatHost`). Hiding the panel
  * forgets it. Per space, because a chat belongs to one (design §4.1).
  */
-export function readWikiChatOpen(spaceSlug: string): string | null {
+export function readWikiChatOpen(spaceSlug: string, key: string = WIKI_CHAT_STORE.open): string | null {
   try {
-    const all = JSON.parse(sessionStorage.getItem(OPEN_KEY) ?? '{}') as Record<string, unknown>;
+    const all = JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, unknown>;
     const chat = all[spaceSlug];
     return typeof chat === 'string' && chat ? chat : null;
   } catch {
@@ -349,12 +369,12 @@ export function readWikiChatOpen(spaceSlug: string): string | null {
   }
 }
 
-export function writeWikiChatOpen(spaceSlug: string, chat: string | null): void {
+export function writeWikiChatOpen(spaceSlug: string, chat: string | null, key: string = WIKI_CHAT_STORE.open): void {
   try {
-    const all = JSON.parse(sessionStorage.getItem(OPEN_KEY) ?? '{}') as Record<string, unknown>;
+    const all = JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, unknown>;
     if (chat) all[spaceSlug] = chat;
     else delete all[spaceSlug];
-    sessionStorage.setItem(OPEN_KEY, JSON.stringify(all));
+    sessionStorage.setItem(key, JSON.stringify(all));
   } catch {
     // Storage refused (private mode, quota): the address alone keeps the panel, as a reload does.
   }
@@ -394,13 +414,19 @@ export function wikiChatLayout(windowWidth: number): WikiChatLayout {
 
 /**
  * The panel's width: the dragged one where it can be dragged (wide), held between 320 and half the window; else a
- * third of the window between 400 and 720. A sheet is as wide as the window.
+ * third of the window between 400 and 720, or `fixed` where the host keeps one width (Drive's 400, board drive-chat 01).
+ * A sheet is as wide as the window.
  */
-export function wikiChatPanelWidth(layout: WikiChatLayout, dragged: number | null, windowWidth: number): number | null {
+export function wikiChatPanelWidth(
+  layout: WikiChatLayout,
+  dragged: number | null,
+  windowWidth: number,
+  fixed: number | null = null,
+): number | null {
   const { share, initial, cap, min } = WIKI_CHAT_WIDTH.panel;
   if (layout === 'sheet') return null;
   if (layout !== 'wide' || dragged === null || !Number.isFinite(dragged)) {
-    return Math.min(cap, Math.max(initial, Math.round(windowWidth * share)));
+    return fixed ?? Math.min(cap, Math.max(initial, Math.round(windowWidth * share)));
   }
   return Math.min(wikiChatPanelMax(windowWidth), Math.max(min, Math.round(dragged)));
 }
@@ -418,20 +444,18 @@ export const wikiChatFoldsDirectory = (layout: WikiChatLayout): boolean => !wiki
 /** Whether the open panel shows the app sidebar as its icon rail: a column in a window narrower than wide. */
 export const wikiChatFoldsSidebar = (layout: WikiChatLayout): boolean => layout === 'docked';
 
-const WIDTH_KEY = 'orbit.wikiChat.width';
-
-export function readWikiChatWidth(): number | null {
+export function readWikiChatWidth(key: string = WIKI_CHAT_STORE.width): number | null {
   try {
-    const raw = Number(localStorage.getItem(WIDTH_KEY));
+    const raw = Number(localStorage.getItem(key));
     return Number.isFinite(raw) && raw > 0 ? raw : null;
   } catch {
     return null;
   }
 }
 
-export function writeWikiChatWidth(width: number): void {
+export function writeWikiChatWidth(width: number, key: string = WIKI_CHAT_STORE.width): void {
   try {
-    localStorage.setItem(WIDTH_KEY, String(Math.round(width)));
+    localStorage.setItem(key, String(Math.round(width)));
   } catch {
     // Not kept: the next panel opens at the default.
   }
@@ -502,11 +526,15 @@ export function wikiChatSnap(
 
 // ── The attachments, and what a message sends ──────────────────────────────────────────────────
 
-/** The page the reader is on, as the composer's page chip names it (design §4.2). */
+/**
+ * The page the reader is on, as the composer's page chip names it (design §4.2): on the Wiki a document's section, an
+ * entry or a plan; on Drive the folder open (null for the drive's top level, board drive-chat 01 ② ③).
+ */
 export type WikiChatPage =
   | { kind: 'doc'; docSlug: string; sectionKey: string; label: string }
   | { kind: 'entry'; entryId: string; label: string }
-  | { kind: 'plan'; docSlug: string; sectionKey?: string; label: string };
+  | { kind: 'plan'; docSlug: string; sectionKey?: string; label: string }
+  | { kind: 'folder'; folderId: string | null; label: string };
 
 /**
  * The composer's attachments (design §4.2): the page, which follows the reader until the message is sent, and
@@ -648,6 +676,18 @@ export const sendWikiChatTurn = (
   wikiContext: WikiChatContext | undefined,
   options: { intent?: SessionTurnIntent; attachmentIds?: string[]; kind?: 'message' | 'shell' } = {},
   clientTurnId: string = compatibleUuid(),
+) => sendChatTurn(sessionId, content, wikiContext ? { wikiContext } : undefined, options, clientTurnId);
+
+/**
+ * A chat's next message, whatever page it is docked on: `context` is what rides beside the words for that page — the
+ * Wiki's `{ wikiContext }`, Drive's `{ driveContext }` — or nothing.
+ */
+export const sendChatTurn = (
+  sessionId: string,
+  content: string,
+  context: Record<string, unknown> | undefined,
+  options: { intent?: SessionTurnIntent; attachmentIds?: string[]; kind?: 'message' | 'shell' } = {},
+  clientTurnId: string = compatibleUuid(),
 ) =>
   api<{ turnId: string; seq: number; kind: string; placement: SessionTurnPlacement; targetTurnId?: string }>(
     `/sessions/${encodeURIComponent(sessionId)}/turns/current-work-routing`,
@@ -659,7 +699,7 @@ export const sendWikiChatTurn = (
         intent: options.intent ?? 'NEXT_TURN',
         ...(options.attachmentIds?.length ? { attachmentIds: options.attachmentIds } : {}),
         ...(options.kind === 'shell' ? { kind: 'shell' } : {}),
-        ...(wikiContext ? { wikiContext } : {}),
+        ...(context ?? {}),
       },
     },
   );
