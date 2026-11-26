@@ -35,7 +35,7 @@ import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
-import { Fragment, lazy, type MouseEvent as ReactMouseEvent, type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, type MouseEvent as ReactMouseEvent, type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { TaskAccountHoldNote, RelaxedRunNote } from './TaskAccountHold';
 import { Link, useNavigate } from 'react-router-dom';
 import Markdown from './Markdown';
@@ -744,6 +744,12 @@ interface WorkspaceRow {
   modelRouting?: boolean;
 }
 
+/** A run row: a link to its session, or — for the conversation the panel is docked beside — the same row, not a link. */
+function SessionRowLink({ here, to, className, children }: { here: boolean; to: string; className: string; children: ReactNode }) {
+  if (here) return <div className={`${className} is-here`} aria-current="page">{children}</div>;
+  return <Link to={to} className={className}>{children}</Link>;
+}
+
 export function TaskDetailPanel({
   taskId,
   summary,
@@ -751,6 +757,8 @@ export function TaskDetailPanel({
   onClose,
   onDelete,
   deleting,
+  docked = false,
+  hereSessionId = null,
 }: {
   taskId: string;
   summary?: TaskSummary;
@@ -759,6 +767,11 @@ export function TaskDetailPanel({
   /** The list owns the delete, so the row selection and the open panel are cleared in one place. */
   onDelete: () => void;
   deleting: boolean;
+  /** A column of fixed width beside the conversation it was opened from (docs/mocks/session-task-column):
+   *  no drag handle, and the width the Tasks page stores is not applied. */
+  docked?: boolean;
+  /** The conversation the panel sits beside: its run row says so instead of linking to itself. */
+  hereSessionId?: string | null;
 }) {
   const qc = useQueryClient();
   const message = useToast();
@@ -1619,6 +1632,8 @@ export function TaskDetailPanel({
     const ranOn: string | null = s.model || (applied ? route?.model : null) || null;
     const ranAt: string | null = s.effort || (applied ? route?.effort : null) || null;
     const whyShown = route != null && whyOpen === s.id;
+    // The conversation this panel is docked beside: the row names it, and is not a link to the page already open.
+    const here = hereSessionId != null && encodeId(s.id) === encodeId(hereSessionId);
     // The row is the way into the run; its tier answers why instead.
     const toggleWhy = (e: ReactMouseEvent) => {
       e.preventDefault();
@@ -1627,7 +1642,8 @@ export function TaskDetailPanel({
     };
     return (
       <Fragment key={s.id}>
-        <Link
+        <SessionRowLink
+          here={here}
           to={`/sessions/${encodeId(s.id)}`}
           className={`tdp-session${failed ? ' is-failed' : ''}`}
         >
@@ -1636,7 +1652,7 @@ export function TaskDetailPanel({
             {/* Workspace leads — it's what tells two runs of the same task apart; the
                 system-generated title just repeats the task name. */}
             <div className="tdp-session-title">
-              {s.workspace?.name || s.title || 'Untitled session'}
+              {here ? 'This conversation' : s.workspace?.name || s.title || 'Untitled session'}
             </div>
             <div className="tdp-session-sub">
               {fmt(s.createdAt)}
@@ -1666,7 +1682,7 @@ export function TaskDetailPanel({
           </div>
           <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
           <SessionMarkChips marks={marks} />
-        </Link>
+        </SessionRowLink>
         {s.route?.relaxedRun && <RelaxedRunNote sentence={s.route.relaxedRun} />}
         {route && whyShown && (
           <div className="tdp-route-why">
@@ -1785,13 +1801,15 @@ export function TaskDetailPanel({
   return (
     <aside
       ref={asideRef}
-      className="task-detail-panel"
-      style={width != null ? { width } : undefined}
+      className={`task-detail-panel${docked ? ' is-docked' : ''}`}
+      style={width != null && !docked ? { width } : undefined}
     >
-      <div
-        className={`tdp-resizer${resizing ? ' resizing' : ''}`}
-        onMouseDown={startResize}
-      />
+      {!docked && (
+        <div
+          className={`tdp-resizer${resizing ? ' resizing' : ''}`}
+          onMouseDown={startResize}
+        />
+      )}
       <div className="tdp-head">
         <div className="tdp-head-main">
           {/* The project it is filed under. Its tasks are not listed on the Tasks page, so a task

@@ -2277,7 +2277,7 @@ model Session {
   // report one; a reader with no window shows the token count, not a percentage of a guess.
   contextWindow        Int?      @map("context_window")
   lastTurnAt           DateTime? @map("last_turn_at")
-  // Where the session sits in the session list (migration 1434). Unlike lastTurnAt, the liveness clock, it moves only
+  // Where the session sits in the session list (migration 1490). Unlike lastTurnAt, the liveness clock, it moves only
   // when the session changes for its owner: created, a person's message, a turn ending on the owner, ended or completed
   // (the last two by the session_listed_at_settle trigger). Null only on a row an older server inserted mid-deploy.
   listedAt             DateTime? @default(now()) @map("listed_at")
@@ -3283,8 +3283,8 @@ model ConversationTurn {
   /// platform's own deliveries, and every turn written before 0662.
   senderClient       String? @map("sender_client")
   senderClientDetail String? @map("sender_client_detail")
-  // A person sent this turn — the owner at their own doors, a guest, a Feishu sender (migration 1434). Its end, waiting
-  // for input, moves the session's listedAt; a platform delivery's end does not.
+  // A person sent this turn — the owner at their own doors, a guest, a Feishu sender (migration 1490). Its arrival moves
+  // the session's listedAt; a platform delivery's arrival does not (any turn's end on the owner does, owner 2026-11-26).
   byPerson        Boolean   @default(false) @map("by_person")
   /// Session translation (migration 0532, @orbit/shared translation.ts): what the owner wrote, when the turn was
   /// translated for the engine — `content` is then the English delivered. Null on every turn translation was not

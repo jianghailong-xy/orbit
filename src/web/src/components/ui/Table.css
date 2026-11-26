@@ -2,9 +2,12 @@
    sideways (at least the box's width) and shades an edge with more beyond it; a semibold header row
    over a split line, with 1px separators between its cells; 16px cells; a row washes on hover; an
    empty table says so in one faint centred row (tr.orbit-table-empty > td > div). */
+/* Framed as the menus are: a hairline edge and 12px corners all round, the last row's line given to the edge. */
 .orbit-table-scroll {
   position: relative;
-  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
   background: var(--bg-raised);
   /* The replaced table's scrollbar colours, which also keep the browser's own (overlay) scrollbar
      in place of the app's 8px one. */
@@ -22,11 +25,11 @@
 }
 .orbit-table-scroll::before {
   inset-inline-start: 0;
-  border-start-start-radius: 8px;
+  border-start-start-radius: 11px;
 }
 .orbit-table-scroll::after {
   inset-inline-end: 0;
-  border-start-end-radius: 8px;
+  border-start-end-radius: 11px;
 }
 .orbit-table-scroll[data-more-start]::before {
   box-shadow: inset 10px 0 8px -8px var(--orbit-border-split);
@@ -36,7 +39,7 @@
 }
 .orbit-table-content {
   overflow: auto hidden;
-  border-radius: 8px 8px 0 0;
+  border-radius: 11px;
   /* Its width is the visible width the empty-table message keeps to (100cqw below). */
   container-type: inline-size;
 }
@@ -67,10 +70,13 @@
   transition: background-color 0.2s;
 }
 .orbit-table thead th:first-child {
-  border-start-start-radius: 8px;
+  border-start-start-radius: 11px;
 }
 .orbit-table thead th:last-child {
-  border-start-end-radius: 8px;
+  border-start-end-radius: 11px;
+}
+.orbit-table tbody tr:last-child > td {
+  border-bottom: 0;
 }
 /* The replaced table measured every column with a space in it, so a column with nothing in its header
    is a space wide too. */
@@ -117,7 +123,9 @@
 }
 .orbit-table-frame-body {
   position: relative;
-  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
   background: var(--bg-raised);
   transition: opacity 0.3s;
 }

@@ -8,7 +8,8 @@ import XCTest
 /// the header word and subtitle, the task run label and shared Markdown line (`ShareMarkdown.runLabel`), the session
 /// link card, the phone row's marks and VoiceOver value. With the facts absent (an older server) both functions
 /// answer nil, and LegacyBaselineTests / LegacySurfacesBaselineTests hold the drawing to today's.
-/// The list group (Needs you / Working) is the board's group column, unchanged by the display.
+/// The list group (Needs you / Working) is the board's group column, except that rows 15, 27 and 29 (work running with
+/// no turn: phase RUNNING) are Working, as on web: contracts/session-list-order.fixtures.json (owner 2026-11-26).
 final class SessionDisplayTests: XCTestCase {
     private static let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -135,7 +136,7 @@ final class SessionDisplayTests: XCTestCase {
     }
 
     func testRow15_RunningAJobWithNoTurn_FactsPresent() throws {
-        try assertDrawn(row: 15, state: .running, marks: [.background], group: "")
+        try assertDrawn(row: 15, state: .running, marks: [.background], group: "Working")
     }
 
     func testRow16_RunningAJobWithNoTurn_FactsAbsent() throws {
@@ -183,7 +184,7 @@ final class SessionDisplayTests: XCTestCase {
     }
 
     func testRow27_ParkedEngineStartedItsOwnTurn_FactsPresent() throws {
-        try assertDrawn(row: 27, state: .running, marks: [], group: "")
+        try assertDrawn(row: 27, state: .running, marks: [], group: "Working")
     }
 
     func testRow28_ParkedEngineStartedItsOwnTurn_FactsAbsent() throws {
@@ -191,7 +192,7 @@ final class SessionDisplayTests: XCTestCase {
     }
 
     func testRow29_ParkedSubAgentRunning_FactsPresent() throws {
-        try assertDrawn(row: 29, state: .running, marks: [], group: "")
+        try assertDrawn(row: 29, state: .running, marks: [], group: "Working")
     }
 
     func testRow30_ParkedSubAgentRunning_FactsAbsent() throws {

@@ -211,6 +211,9 @@ import { HeaderMoreIcon, HeaderShareIcon } from './SessionHeaderIcons';
 import {
   type SessionTagRef,
   compareListed,
+  sessionElapsed,
+  sessionListedAt,
+  sessionListSectionOptions,
   sessionTagSections,
   sessionTimeSections,
   sessionsWithTag,
@@ -704,7 +707,7 @@ import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSess
 import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
-import { useOpenTaskOverPage } from '../lib/taskInPlace';
+import { useCloseTaskOverPage, useOpenTaskOverPage, useTaskOverPage } from '../lib/taskInPlace';
 import {
   OPTIMIZE_SHORTCUT,
   optimizedSendOf,
@@ -1201,6 +1204,13 @@ const fmtTime = (d?: string): string => {
   });
 };
 
+/** A row's time (contracts/session-list-order.fixtures.json): how long the turn has run while its spinner shows, nothing if
+ *  the server sent no start, and otherwise when the row was listed, so the time agrees with where the row sits. */
+export const sessionRowTime = (s: any): string => {
+  if (statusGlyphMotion(s) === 'spinner') return s.currentTurnStartedAt ? sessionElapsed(s.currentTurnStartedAt) : '';
+  return fmtTime(sessionListedAt(s) ?? undefined);
+};
+
 // Shorten a tool id for the live status line: mcp__orbit__task_create -> task_create;
 // plain tool names (Bash, Read, Edit) pass through unchanged.
 const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
@@ -1605,7 +1615,7 @@ export function SessionTitleRow({
           </span>
         </Tooltip>
       )}
-      <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
+      <span className="session-time">{sessionRowTime(s)}</span>
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
@@ -1743,7 +1753,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
       <div className="session-main">
         <div className="session-title-row">
           <div className="session-title">{project.title}</div>
-          <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
+          <span className="session-time">{fmtTime(sessionListedAt(project) ?? undefined)}</span>
         </div>
         <div className="session-sub">
           <Tooltip content={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
@@ -2549,6 +2559,8 @@ export function WorkspaceView({
   const navigate = useNavigate();
   // A task opens over this conversation, not on its own page (lib/taskInPlace).
   const openTaskOverPage = useOpenTaskOverPage();
+  const taskOverPage = useTaskOverPage();
+  const closeTaskOverPage = useCloseTaskOverPage();
   const [searchParams, setSearchParams] = useSearchParams();
   // How this console names its machine: Orbit Cloud for the account's managed runner (machineName).
   const managedRunnerId = useManagedRunnerId() ?? managed?.status.runnerId ?? null;
@@ -3358,8 +3370,8 @@ export function WorkspaceView({
     // Complete reconciles via refetch, so the server order holds. Trust it verbatim.
     if (effectiveView === 'completed') return rows;
     return rows.sort((a, b) => {
-      // Pinned sessions float to the top; among themselves they keep time order.
-      if (!!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
+      // Pinned sessions float to the top of Open; among themselves they keep time order. Trash ignores the pin.
+      if (effectiveView === 'open' && !!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
       // listedAt, never lastTurnAt: streamed activity must not move a row (contracts/session-list-order.fixtures.json).
       return compareListed(a, b);
     });
@@ -3492,6 +3504,9 @@ export function WorkspaceView({
   // Session settings as a column (docs/mocks/session-settings-column): on a wide screen, in the project column's
   // slot, which it takes while it is open (one column at a time); on a phone a sheet instead.
   const settingsColumnShown = settingsOpen && !isMobile && !!selected && !selectedTrashed;
+  // Whether this session's own task is open beside (or over) it: the Task badge reads pressed then.
+  const selectedTaskOpen =
+    !!selected?.taskId && taskOverPage != null && routeId(taskOverPage) === routeId(selected.taskId);
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
   // Whether a public link opens this conversation right now: the detail's open link once it has
   // been read, the list row's flag until then. The Trash pauses a link, so a trashed one is not.
@@ -4029,10 +4044,7 @@ export function WorkspaceView({
           title: s.tag?.name ?? 'Untagged',
           sessions: s.sessions,
         }))
-      : sessionTimeSections(folderListing.entries, {
-          pinnedFirst: view === 'open' && !tagFilter,
-          attention: view === 'open',
-        }).map((s) => ({
+      : sessionTimeSections(folderListing.entries, sessionListSectionOptions(view, !!tagFilter)).map((s) => ({
           key: s.title,
           tag: null as SessionTagRef | null,
           ...s,
@@ -11198,7 +11210,11 @@ export function WorkspaceView({
                     type="button"
                     className="workspace-name workspace-name-button"
                     aria-expanded={settingsOpen}
-                    onClick={() => setSettingsOpen((open) => !open)}
+                    onClick={() => {
+                      // One column at a time beside the conversation (docs/mocks/session-task-column).
+                      if (!settingsOpen && taskOverPage) closeTaskOverPage();
+                      setSettingsOpen((open) => !open);
+                    }}
                   >
                     <span className="workspace-name-text">{selected.title}</span>
                     <RightOutlined className="workspace-name-chevron" aria-hidden />
@@ -11234,7 +11250,17 @@ export function WorkspaceView({
                     type="button"
                     className="coordinator-badge coordinator-badge-link"
                     aria-label={selected.taskTitle ? `Task · Open task ${selected.taskTitle}` : 'Task · Open task'}
-                    onClick={() => openTaskOverPage(encodeId(selected.taskId))}
+                    // A second press closes the task beside the conversation (docs/mocks/session-task-column);
+                    // opening it takes the column session settings had.
+                    aria-pressed={selectedTaskOpen}
+                    onClick={() => {
+                      if (selectedTaskOpen) {
+                        closeTaskOverPage();
+                        return;
+                      }
+                      setSettingsOpen(false);
+                      openTaskOverPage(encodeId(selected.taskId));
+                    }}
                   >
                     Task
                     <RightOutlined aria-hidden />

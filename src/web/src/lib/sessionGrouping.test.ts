@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../../../../contracts/session-list-order.fixtures.json';
 import {
+  sessionListedAt,
+  sessionListSectionOptions,
   sessionNeedsOwner,
   sessionTagSections,
   sessionTimeSections,
@@ -202,6 +204,27 @@ describe('session list order fixture', () => {
     const out = shape(asked);
     expect(out.find((s) => s.section === 'Needs you')?.ids[0]).toBe('work-ci');
     expect(out.find((s) => s.section === 'Working')?.ids).not.toContain('work-ci');
+  });
+
+  // The rows as the list draws them in each view: the options the workspace list passes, over the rows in any order.
+  const view = (rows: typeof fixture.sessions, name: string, tagFiltered = false) =>
+    sessionTimeSections([...rows].reverse(), { ...sessionListSectionOptions(name, tagFiltered), now: new Date(fixture.now) })
+      .map((s) => ({ section: s.title, ids: s.sessions.map((x) => x.id) }));
+
+  it('draws the Open list with the options the workspace list passes', () => {
+    expect(view(open, 'open')).toEqual(fixture.expected);
+  });
+
+  it('with a tag filter, drops only Pinned: a pinned row is placed like any other', () => {
+    expect(view(open, 'open', true)).toEqual(fixture.expectedTagFilter);
+  });
+
+  it('orders and buckets Trash by listedAt, with no pin and no attention sections', () => {
+    expect(view(fixture.sessions.filter((s) => !!s.deletedAt && !s.completedAt), 'trash')).toEqual(fixture.expectedTrash);
+  });
+
+  it('dates every row by listedAt (createdAt when null), never lastTurnAt', () => {
+    for (const s of fixture.sessions) expect(sessionListedAt(s), s.id).toBe(s.listedAt ?? s.createdAt);
   });
 });
 

@@ -17,34 +17,38 @@ const ROOT = path.resolve(__dirname, '../../../..');
 interface ServerFacts {
   finishedAt: string | null; turnState: string | null; endReason?: string | null; lastTurnOutcome?: string | null;
   startedAt?: string | null;
+  /** Work runs for the session outside a turn: a background job or a SubAgent (session-phase.ts, OUTSIDE_TURN_FACTS). */
+  runningWork?: boolean;
 }
 interface Row {
   id: string; status: string; serverFacts: ServerFacts; pinnedAt: string | null; pendingApprovals: number; retryAt: string | null;
   completedAt: string | null; deletedAt: string | null; needsOwner: boolean;
-  listedAt: string | null; lastTurnAt: string | null; createdAt: string;
+  listedAt: string | null; lastTurnAt: string | null; createdAt: string; phase?: string;
 }
 const FIXTURE = JSON.parse(readFileSync(path.join(ROOT, 'contracts/session-list-order.fixtures.json'), 'utf8')) as {
   rule: string[]; sectionTitles: string[]; now: string; timeZone: string; sessions: Row[];
-  expected: Array<{ section: string; ids: string[] }>;
+  expected: Section[]; expectedTagFilter: Section[]; expectedTrash: Section[];
 };
+type Section = { section: string; ids: string[] };
+type View = 'open' | 'tagFilter' | 'trash';
 
 const DATE_TITLES = ['Today', 'Yesterday', '2–7 days ago', '8–30 days ago', 'Older'];
 const failed = ({ serverFacts: f }: Row) => f.finishedAt != null && f.endReason == null && f.lastTurnOutcome === 'FAILED';
 const turnOpen = ({ serverFacts: f }: Row) => f.turnState === 'QUEUED' || f.turnState === 'IN_FLIGHT';
 const needsOwner = (s: Row) => s.pendingApprovals > 0 || (failed(s) && s.retryAt == null);
-const working = (s: Row) => turnOpen(s) || (failed(s) && s.retryAt != null);
+const working = (s: Row) => turnOpen(s) || s.serverFacts.runningWork === true || (failed(s) && s.retryAt != null);
 const listed = (s: Row) => Date.parse(s.listedAt ?? s.createdAt);
 // Calendar days in UTC, the fixture's time zone.
 const day = (ms: number) => Math.floor(ms / 86_400_000);
 
-function sections(rows: Row[], now: Date) {
+function sections(rows: Row[], now: Date, view: View = 'open') {
   const out = new Map<string, Row[]>(FIXTURE.sectionTitles.map((t) => [t, []]));
   for (const s of rows) {
-    if (s.completedAt || s.deletedAt) continue;
+    if (s.completedAt || (view === 'trash') !== (s.deletedAt != null)) continue;
     let title: string;
-    if (s.pinnedAt) title = 'Pinned';
-    else if (needsOwner(s)) title = 'Needs you';
-    else if (working(s)) title = 'Working';
+    if (view === 'open' && s.pinnedAt) title = 'Pinned';
+    else if (view !== 'trash' && needsOwner(s)) title = 'Needs you';
+    else if (view !== 'trash' && working(s)) title = 'Working';
     else {
       const back = day(now.getTime()) - day(listed(s));
       title = DATE_TITLES[back <= 0 ? 0 : back === 1 ? 1 : back <= 7 ? 2 : back <= 30 ? 3 : 4];
@@ -77,6 +81,15 @@ test('each row\'s status is the wire word its facts give', () => {
   }
 });
 
+test('a row that carries phase carries the one its facts give', () => {
+  for (const s of FIXTURE.sessions) {
+    if (s.phase === undefined) continue;
+    const phase = s.serverFacts.turnState === 'IN_FLIGHT' || s.serverFacts.runningWork ? 'RUNNING'
+      : s.serverFacts.turnState === 'QUEUED' ? 'PENDING' : 'IDLE';
+    assert.equal(s.phase, phase, s.id);
+  }
+});
+
 test('each row\'s needsOwner flag is the one the rule derives', () => {
   for (const s of FIXTURE.sessions) assert.equal(s.needsOwner, needsOwner(s), s.id);
 });
@@ -85,7 +98,15 @@ test('the expected sections and order are the rule applied to the rows', () => {
   assert.deepEqual(sections(FIXTURE.sessions, new Date(FIXTURE.now)), FIXTURE.expected);
 });
 
+test('with a tag filter, and in Trash, the same rule without the sections those views do not draw', () => {
+  assert.deepEqual(sections(FIXTURE.sessions, new Date(FIXTURE.now), 'tagFilter'), FIXTURE.expectedTagFilter);
+  assert.deepEqual(sections(FIXTURE.sessions, new Date(FIXTURE.now), 'trash'), FIXTURE.expectedTrash);
+  assert.ok(!FIXTURE.expectedTagFilter.some((e) => e.section === 'Pinned'));
+  assert.ok(FIXTURE.expectedTrash.every((e) => DATE_TITLES.includes(e.section)));
+});
+
 test('lastTurnAt is never an order key: scrambling it changes nothing', () => {
   const scrambled = FIXTURE.sessions.map((s, i) => ({ ...s, lastTurnAt: new Date(Date.parse(FIXTURE.now) - i * 1000).toISOString() }));
   assert.deepEqual(sections(scrambled, new Date(FIXTURE.now)), FIXTURE.expected);
+  assert.deepEqual(sections(scrambled, new Date(FIXTURE.now), 'trash'), FIXTURE.expectedTrash);
 });

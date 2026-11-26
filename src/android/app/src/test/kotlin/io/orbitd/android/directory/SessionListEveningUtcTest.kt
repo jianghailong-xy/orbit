@@ -21,7 +21,7 @@ class SessionListEveningUtcTest {
         assertEquals(listOf("Today", "2–7 days ago"), titles("UTC"))
     }
 
-    @Test fun theRowTimeIsTheElapsedTimeFromTheLastTurnInEitherZone() {
+    @Test fun theRowTimeIsTheElapsedTimeFromListedAtInEitherZone() {
         val prev = java.util.TimeZone.getDefault()
         try {
             for (zone in listOf("Asia/Shanghai", "UTC")) {
