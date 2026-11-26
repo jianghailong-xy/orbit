@@ -551,14 +551,15 @@ export function ProjectBlockersCard({
           the chain strip and the queue beside it are all sections of this zone, not cards. */}
       <h4 className="project-blockers-heading orbit-typography" style={{ marginBottom: 8 }}>
         <span className="project-blockers-heading-label">Blockers</span>
-        <span
-          className="project-blockers-summary orbit-typography orbit-typography-secondary"
-          style={{ fontSize: 12, fontWeight: 400 }}
-          title={`${open.length} open`}
-        >
-          {' '}
-          {`${open.length} open`}
-        </span>
+        <Tooltip content={`${open.length} open`} truncatedOnly>
+          <span
+            className="project-blockers-summary orbit-typography orbit-typography-secondary"
+            style={{ fontSize: 12, fontWeight: 400 }}
+          >
+            {' '}
+            {`${open.length} open`}
+          </span>
+        </Tooltip>
       </h4>
       <ul className="project-blockers-list">
         {open.map((blocker) => (

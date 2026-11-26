@@ -1,4 +1,5 @@
 import {
+  CODEX_DEFAULT_ACCOUNT_SLOT,
   CODEX_RATE_LIMIT_RESET_ENUMS,
   CODEX_RATE_LIMIT_RESET_TIMING,
   CODEX_RATE_LIMIT_RESET_WIRE,
@@ -9,6 +10,7 @@ import {
   codexResetRefusal,
   codexResetSnapshotFresh,
   isCodexAccountFingerprint,
+  isCodexAccountSlot,
   isCodexResetUuid,
   type CodexRateLimitResetOperations,
   type CodexRateLimitResetOperationView,
@@ -17,6 +19,7 @@ import {
   type CodexResetCreditDetails,
   type PlanUsage,
   type PlanUsageRateLimitReset,
+  type RunnerEngineHealth,
 } from '@orbit/shared';
 import { ApiError } from '../api';
 
@@ -52,6 +55,7 @@ export interface CodexResetRunner {
   heartbeatLeaseOwner?: string | null;
   heartbeatDraining?: boolean | null;
   planUsage?: PlanUsage | null;
+  engines?: readonly Pick<RunnerEngineHealth, 'engine' | 'accounts'>[] | null;
 }
 
 export type CodexResetAvailability =
@@ -103,14 +107,13 @@ export const CODEX_RESET_HIDDEN_REFUSALS: ReadonlySet<CodexRateLimitResetRefusal
 ]);
 
 /**
- * The create route's `readRequiredAfter` for this account, read off the runner's operation list
+ * The create route's `readRequiredAfter` for this account, read off its operation list
  * (CodexRateLimitResetRepository.unrefreshedSpendSettledAt): when the latest operation settled, if it is
  * this account's and may have used a credit no refresh confirmed — consumeState UNRESOLVED, or CONFIRMED
  * with refreshState FAILED. The latest is enough: one account's operations run one at a time, each was
  * admitted only on a read later than every such settlement before it, and the stored block never moves
- * back (contract §8). But the list's latest is the runner's, whatever its account: when another account's
- * operation came after this account's last one, an earlier settlement is out of sight, and the create
- * route can still refuse what the card offers (runbook §8 R3).
+ * back (contract §8). The page asks for one account's list (runbook §8 R3); a latest of another account
+ * says nothing about this one.
  */
 function unrefreshedSpendSettledAt(
   operations: CodexRateLimitResetOperations | null | undefined,
@@ -124,7 +127,24 @@ function unrefreshedSpendSettledAt(
 }
 
 /**
- * The reset card for one runner, or null when there is nothing to show: no block (an older runner),
+ * The Codex accounts a Plan usage popover draws a reset card for, by slot: the session's own first, then
+ * every other the runner reports, in the runner's order. One ChatGPT account signed in to two slots has
+ * one set of credits (contract §12.1), so it is listed once, where it comes first.
+ */
+export function codexResetAccountSlots(runner: CodexResetRunner, sessionSlot: string): string[] {
+  const reported = runner.engines?.find((entry) => entry.engine === 'codex')?.accounts ?? [];
+  const seen = new Set<string>();
+  return [...new Set([sessionSlot, ...reported.map((account) => account.id)])].filter((slot) => {
+    const fingerprint = codexRateLimitResetOf(runner.planUsage, slot)?.accountFingerprint;
+    if (!fingerprint) return true;
+    if (seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  });
+}
+
+/**
+ * The reset card for one account of a runner, or null when there is nothing to show: no block (an older runner),
  * a block that fails the contract, or a support answer the contract hides. The button's state is
  * `codexResetRefusal` over the same inputs the create route reads — the account override is the
  * create route's to judge, since only it knows the workspace's derived provider and env — with the
@@ -135,8 +155,9 @@ export function codexResetCard(
   now: Date,
   activeOperation: boolean,
   operations?: CodexRateLimitResetOperations | null,
+  accountSlot: string = CODEX_DEFAULT_ACCOUNT_SLOT,
 ): CodexResetCard | null {
-  const block = codexRateLimitResetOf(runner.planUsage);
+  const block = codexRateLimitResetOf(runner.planUsage, accountSlot);
   if (!block || codexRateLimitResetViolations(block).length > 0) return null;
   if (block.support !== 'SUPPORTED' && block.support !== 'CREDITS_UNAVAILABLE') return null;
   const accountFingerprint = block.accountFingerprint;
@@ -149,6 +170,7 @@ export function codexResetCard(
     runnerCapabilities: runner.capabilities,
     heartbeatLeaseOwner: runner.heartbeatLeaseOwner,
     runnerDraining: runner.heartbeatDraining === true,
+    accountSlot,
     rateLimitReset: block,
     expectedAccountFingerprint: accountFingerprint,
     readRequiredAfter: unrefreshedSpendSettledAt(operations, accountFingerprint),
@@ -437,6 +459,8 @@ export interface CodexResetIntent {
   v: 1;
   runnerId: string;
   accountFingerprint: string;
+  /** The slot whose card it was confirmed on; absent means Default. */
+  accountSlot?: string;
   confirmedAt: string;
   clientRequestId?: string;
   workspaceId?: string;
@@ -457,45 +481,96 @@ function intentStore(): Storage | null {
 const isInstant = (value: unknown): value is string => typeof value === 'string' && !Number.isNaN(Date.parse(value));
 const isNonEmpty = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 
-export function readCodexResetIntent(runnerId: string): CodexResetIntent | null {
-  const store = intentStore();
-  if (!store) return null;
-  let raw: unknown = null;
+/** One confirmation is remembered per runner and account. */
+const intentKey = (runnerId: string, accountFingerprint: string) =>
+  `${INTENT_KEY_PREFIX}${runnerId}:${accountFingerprint}`;
+
+function parseIntent(raw: string | null, runnerId: string): CodexResetIntent | null {
+  let value: unknown = null;
   try {
-    raw = JSON.parse(store.getItem(INTENT_KEY_PREFIX + runnerId) ?? 'null');
+    value = JSON.parse(raw ?? 'null');
   } catch {
-    raw = undefined;
+    return null;
   }
-  if (raw === null) return null;
-  const intent = (isObject(raw) ? raw : {}) as Partial<Record<keyof CodexResetIntent, unknown>>;
+  const intent = (isObject(value) ? value : {}) as Partial<Record<keyof CodexResetIntent, unknown>>;
   const valid =
     intent.v === 1 &&
     intent.runnerId === runnerId &&
     isCodexAccountFingerprint(intent.accountFingerprint) &&
+    (intent.accountSlot === undefined || isCodexAccountSlot(intent.accountSlot)) &&
     isInstant(intent.confirmedAt) &&
     (intent.clientRequestId === undefined || isCodexResetUuid(intent.clientRequestId)) &&
     (intent.operationId === undefined || isNonEmpty(intent.operationId)) &&
     (intent.clientRequestId !== undefined || intent.operationId !== undefined) &&
     (intent.workspaceId === undefined || isNonEmpty(intent.workspaceId)) &&
     (intent.settledAt === undefined || (isInstant(intent.settledAt) && intent.operationId !== undefined));
-  if (!valid) {
-    clearCodexResetIntent(runnerId);
-    return null;
+  return valid ? (intent as CodexResetIntent) : null;
+}
+
+/**
+ * Every confirmation this browser remembers for a runner, one per account. An entry that does not parse
+ * is removed. One stored under the runner alone, by a page that knew only Default, moves to its
+ * account's key.
+ */
+export function readCodexResetIntents(runnerId: string): CodexResetIntent[] {
+  const store = intentStore();
+  if (!store) return [];
+  const legacy = INTENT_KEY_PREFIX + runnerId;
+  const keys: string[] = [];
+  for (let i = 0; i < store.length; i += 1) {
+    const key = store.key(i);
+    if (key === legacy || key?.startsWith(`${legacy}:`)) keys.push(key);
   }
-  return intent as CodexResetIntent;
+  const intents: CodexResetIntent[] = [];
+  for (const key of keys) {
+    const intent = parseIntent(store.getItem(key), runnerId);
+    if (intent && key === intentKey(runnerId, intent.accountFingerprint)) {
+      intents.push(intent);
+      continue;
+    }
+    removeItem(key);
+    if (intent && key === legacy && store.getItem(intentKey(runnerId, intent.accountFingerprint)) === null) {
+      writeCodexResetIntent(intent);
+      intents.push(intent);
+    }
+  }
+  return intents;
+}
+
+/**
+ * The confirmation one account's card picks back up: the one of the account its slot is signed in to,
+ * else the newest confirmed on this slot for an account no card holds any more — the slot changed
+ * accounts, and the card still says what became of that reset.
+ */
+export function findCodexResetIntent(runner: CodexResetRunner, accountSlot: string): CodexResetIntent | null {
+  const intents = readCodexResetIntents(runner.id);
+  const fingerprintOf = (slot: string) => codexRateLimitResetOf(runner.planUsage, slot)?.accountFingerprint;
+  const own = intents.find((intent) => intent.accountFingerprint === fingerprintOf(accountSlot));
+  if (own) return own;
+  const reported = runner.engines?.find((entry) => entry.engine === 'codex')?.accounts ?? [];
+  const held = new Set([CODEX_DEFAULT_ACCOUNT_SLOT, ...reported.map((account) => account.id)].map(fingerprintOf));
+  return (
+    intents
+      .filter((intent) => (intent.accountSlot ?? CODEX_DEFAULT_ACCOUNT_SLOT) === accountSlot && !held.has(intent.accountFingerprint))
+      .sort((a, b) => Date.parse(b.confirmedAt) - Date.parse(a.confirmedAt))[0] ?? null
+  );
 }
 
 export function writeCodexResetIntent(intent: CodexResetIntent): void {
   try {
-    intentStore()?.setItem(INTENT_KEY_PREFIX + intent.runnerId, JSON.stringify(intent));
+    intentStore()?.setItem(intentKey(intent.runnerId, intent.accountFingerprint), JSON.stringify(intent));
   } catch {
     // Private mode or a full quota: the confirmation still runs, it just can't outlive the page.
   }
 }
 
-export function clearCodexResetIntent(runnerId: string): void {
+export function clearCodexResetIntent(runnerId: string, accountFingerprint: string): void {
+  removeItem(intentKey(runnerId, accountFingerprint));
+}
+
+function removeItem(key: string): void {
   try {
-    intentStore()?.removeItem(INTENT_KEY_PREFIX + runnerId);
+    intentStore()?.removeItem(key);
   } catch {
     // Nothing stored to lose.
   }

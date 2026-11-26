@@ -8,6 +8,7 @@ import { MutationObserver, QueryClient, QueryClientProvider } from '@tanstack/re
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
+import { hoverTooltip } from '../test/tooltipHover';
 import { newRunRequestToken } from '../lib/runRequestToken';
 import {
   ProjectReadyToRun,
@@ -176,11 +177,13 @@ describe('ProjectReadyToRun', () => {
 
     // The summary can be longer than a phone's content width. Keep the heading on one line and
     // make only that secondary copy shrink; its full value remains readable to assistive tech and
-    // through the native title even when the painted line ends in an ellipsis.
+    // through its tip when the painted line ends in an ellipsis.
     expect(container.querySelector('.project-ready-heading-label')?.textContent).toBe('Run queue');
     const summary = container.querySelector<HTMLElement>('.project-ready-summary');
     expect(summary?.textContent).toContain('7 ready · sorted by work unblocked');
-    expect(summary?.title).toBe('7 ready · sorted by work unblocked');
+    Object.defineProperty(summary!, 'clientWidth', { value: 200, configurable: true });
+    Object.defineProperty(summary!, 'scrollWidth', { value: 500, configurable: true });
+    expect((await hoverTooltip(summary!))?.trim()).toBe('7 ready · sorted by work unblocked');
 
     const headingRule =
       styles.match(/\.project-ready-heading\.orbit-typography\s*\{([^}]*)\}/)?.[1] ?? '';

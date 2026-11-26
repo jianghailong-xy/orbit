@@ -85,7 +85,7 @@ func readCodexResetThroughFake(t *testing.T, reader *codexResetReader, account, 
 	}
 	done := make(chan outcome, 1)
 	go func() {
-		usage, err := reader.readCodexPlanUsage(context.Background(), fake.app)
+		usage, _, err := reader.readCodexPlanUsage(context.Background(), fake.app)
 		done <- outcome{usage, err}
 	}()
 	read := codexResetFakeRead{accountRequest: fake.take(codexAccountReadMethod), accountAskedAt: time.Now()}

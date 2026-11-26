@@ -507,11 +507,13 @@ export interface PlanUsageRateLimitResetCredits {
   credits: PlanUsageRateLimitResetCredit[] | null;
 }
 
-/** Earned rate-limit reset state of the runner's default Codex account, carried inside the Codex
- *  plan-usage snapshot. Absent from runners that predate docs/codex-rate-limit-reset-contract.md,
- *  which every reader treats as "reset not offered" — never as "zero credits". */
+/** Earned rate-limit reset state of one Codex account, carried inside that account's plan-usage
+ *  snapshot: Default's beside Default's windows, an added slot's in its entry under `accounts`
+ *  (contract v2, docs/codex-rate-limit-reset-contract.md §12). Absent from runners that predate the
+ *  contract, and from an account the runner has not read one for, which every reader treats as
+ *  "reset not offered" — never as "zero credits". */
 export interface PlanUsageRateLimitReset {
-  /** The contract version this block was written under (CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION). */
+  /** The block format version: 1, which contract v2 keeps (CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSIONS.block). */
   protocolVersion: number;
   support: CodexRateLimitResetSupport;
   /** Non-sensitive account fingerprint, `cxa1_` + 32 hex. Present exactly when `support` is
@@ -594,12 +596,15 @@ export interface PlanUsageSnapshot {
   credits?: PlanUsageCredits;
   /** All Codex limit buckets, in display order. */
   rateLimits?: PlanUsageRateLimit[];
-  /** Codex earned rate-limit reset state (docs/codex-rate-limit-reset-contract.md). Absent from
-   *  older runners and from non-Codex snapshots. */
+  /** Codex earned rate-limit reset state of the account this snapshot is about
+   *  (docs/codex-rate-limit-reset-contract.md): Default's here, an added slot's in its `accounts`
+   *  entry. Read with codexRateLimitResetOf(planUsage, slot). Absent from older runners and from
+   *  non-Codex snapshots. */
   rateLimitReset?: PlanUsageRateLimitReset;
   /** The snapshot of every other account on the runner — of Codex, Claude Code, Antigravity, Kimi
    *  Code or Cursor CLI — keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
-   *  (codexAccountSnapshot). An entry never carries a reset block — reset is Default's alone. Absent
+   *  (codexAccountSnapshot). A Codex entry may carry its own reset block (contract v2 §12), ordered on
+   *  its own; an entry of any other engine never does. Absent
    *  from older runners, and until the runner has read an account other than Default. On a runner
    *  Orbit serves with that engine's Default removed (RunnerEngineHealth.removedDefault), the windows
    *  beside it are the one remaining account's, and there are none when two or more remain. */
@@ -2177,6 +2182,9 @@ export interface CodexRateLimitResetCommand {
   /** The account the operation is bound to. The runner re-reads the account before acting and
    *  calls nothing when it no longer matches. */
   accountFingerprint: string;
+  /** Which Codex login the runner reads and consumes in: `default` (the runner's own CODEX_HOME) or
+   *  an added slot's 8-hex id. Present exactly on protocolVersion 2; a version 1 command is Default's. */
+  accountSlot?: string;
   /** The operation's persisted provider idempotency key, present exactly on CONSUME. Sent to
    *  `account/rateLimitResetCredit/consume` as `idempotencyKey`, alone: protocol v1 has no creditId. */
   providerIdempotencyKey?: string;
@@ -2218,6 +2226,9 @@ export interface CreateCodexRateLimitResetRequest {
   clientRequestId: string;
   /** The fingerprint of the snapshot the user confirmed against. */
   accountFingerprint: string;
+  /** The account slot whose block the user confirmed against: `default` or an added slot's 8-hex id.
+   *  Absent means `default`. */
+  accountSlot?: string;
   /** The workspace whose Plan usage the confirmation came from, when not the runner's own page. */
   workspaceId?: string;
 }
@@ -2228,6 +2239,9 @@ export interface CodexRateLimitResetOperationView {
   runnerId: string;
   clientRequestId: string;
   accountFingerprint: string;
+  /** The added slot (8-hex id) the operation resets in. Absent for Default's, so a Default view
+   *  reads exactly as it did under contract v1. */
+  accountSlot?: string;
   status: CodexRateLimitResetOperationStatus;
   consumeState: CodexRateLimitResetConsumeState;
   consumeOutcome: CodexRateLimitResetConsumeOutcome | null;

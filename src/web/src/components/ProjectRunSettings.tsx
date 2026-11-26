@@ -95,6 +95,7 @@ import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Switch } from './ui/Switch';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * "How it runs" — every setting the start card set, in one block on the project page once the
@@ -527,7 +528,9 @@ export function ProjectRunSettings({
                 onValueChange={(line) => set({ line: line || null })}
               >
                 <Radio value="PROJECT_BRANCH">
-                  <b>{RUN_LINE_PROJECT_BRANCH}</b> · <code className="start-card-branch" title={branch}>{shortBranch(branch)}</code>
+                  <b>{RUN_LINE_PROJECT_BRANCH}</b> · <Tooltip content={branch} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+                    <code className="start-card-branch">{shortBranch(branch)}</code>
+                  </Tooltip>
                   {/* What each line means, while it can still be chosen. Once it is locked the choice
                       is history, and the sentence under the two — or under Main branch, on a project
                       that shows one — says why it cannot move. */}

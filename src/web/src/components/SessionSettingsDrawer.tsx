@@ -24,6 +24,7 @@ import { Input } from './ui/Input';
 import { Menu } from './ui/Menu';
 import { Select } from './ui/Select';
 import { Switch } from './ui/Switch';
+import { Tooltip } from './ui/Tooltip';
 import './SessionSettingsDrawer.css';
 
 /** The session-env key rule the server enforces (PATCH /sessions/:id/settings). */
@@ -425,7 +426,9 @@ export function SessionSettingsDrawer({
 
         <Section title="Environment" note="Applies when the engine next starts">
           <Row label="Working directory" hint={workDir.hint}>
-            <span className="ss-mono ss-value ss-path" title={workDir.path}>{workDir.path}</span>
+            <Tooltip content={workDir.path} truncatedOnly mono align="end">
+              <span className="ss-mono ss-value ss-path">{workDir.path}</span>
+            </Tooltip>
           </Row>
           <Row label="Compact at" hint="Claude Code summarizes the conversation near this size">
             <Select
@@ -441,7 +444,10 @@ export function SessionSettingsDrawer({
             <div className="ss-env-head">Variables</div>
             {inheritedRows.map(([k, v]) => (
               <div key={k} className="ss-env-row inherited">
-                <span className="ss-mono">{k}</span><span className="ss-mono ss-env-val" title={v}>{v}</span>
+                <span className="ss-mono">{k}</span>
+                <Tooltip content={v} truncatedOnly mono>
+                  <span className="ss-mono ss-env-val">{v}</span>
+                </Tooltip>
                 <span className="ss-env-from">Workspace</span>
               </div>
             ))}
@@ -519,18 +525,22 @@ export function SessionSettingsDrawer({
             </dd>
             <dt>Session ID</dt>
             <dd className="ss-mono ss-copy">
-              <button type="button" className="ss-copy-btn" title={sessionId} aria-label="Copy session ID"
-                onClick={() => copy(session?.id ?? sessionId, 'Session ID copied')}>
-                {tail(session?.id ?? sessionId)} <CopyOutlined />
-              </button>
+              <Tooltip content={session?.id ?? sessionId} mono align="end">
+                <button type="button" className="ss-copy-btn" aria-label="Copy session ID"
+                  onClick={() => copy(session?.id ?? sessionId, 'Session ID copied')}>
+                  {tail(session?.id ?? sessionId)} <CopyOutlined />
+                </button>
+              </Tooltip>
             </dd>
             <dt>Engine session</dt>
             <dd className="ss-mono ss-copy">
               {session?.runtimeSessionId ? (
-                <button type="button" className="ss-copy-btn" title={session.runtimeSessionId} aria-label="Copy engine session ID"
-                  onClick={() => copy(session.runtimeSessionId!, 'Engine session ID copied')}>
-                  {tail(session.runtimeSessionId)} <CopyOutlined />
-                </button>
+                <Tooltip content={session.runtimeSessionId} mono align="end">
+                  <button type="button" className="ss-copy-btn" aria-label="Copy engine session ID"
+                    onClick={() => copy(session.runtimeSessionId!, 'Engine session ID copied')}>
+                    {tail(session.runtimeSessionId)} <CopyOutlined />
+                  </button>
+                </Tooltip>
               ) : '—'}
             </dd>
           </dl>

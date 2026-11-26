@@ -3604,10 +3604,11 @@ button.toast--pill:focus-visible {
   outline: none;
 }
 .workspace-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); opacity: 0; }
+/* The › takes no room at rest, so a long title runs right up to the badges after it. */
+.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); display: none; }
 .workspace-name-button:hover, .workspace-name-button:focus-visible { background: var(--orbit-control-hover-bg); }
 .workspace-name-button:hover .workspace-name-chevron,
-.workspace-name-button:focus-visible .workspace-name-chevron { opacity: 1; }
+.workspace-name-button:focus-visible .workspace-name-chevron { display: inline-flex; }
 .workspace-sub {
   font-size: 12.5px;
   color: var(--text-3);
@@ -4129,6 +4130,31 @@ button.toast--pill:focus-visible {
   background: var(--warning-bg);
   color: var(--warning);
 }
+/* A phone's branch row is one line, and cannot hold the branch, the count, the latest subject, the
+   pending tag, the diff stat and Commit at once — its left edge used to cut the tag mid-word
+   ("+ unco"), and letting the branch shrink instead cut the branch name to "or…". The two pieces
+   of prose give way: the pending tag, because the Commit button beside it is drawn only while the
+   worktree is dirty and says the same thing, and the latest subject, which is one tap away in the
+   commit list. The branch name ellipsizes only as a last resort. */
+@media (max-width: 600px) {
+  .wt-row .wt-branch,
+  .wt-row .wt-branch-name {
+    min-width: 0;
+  }
+  .wt-row .wt-stat {
+    flex: none;
+  }
+  /* On the commits row the count is a word, not an ellipsis: it stays whole and the branch name
+     takes the squeeze. (A row with no commits yet keeps its own shrinking lead, so the branch
+     keeps its name there.) */
+  .wt-row .wt-commits-lead:has(.wt-commits-subject) {
+    min-width: max-content;
+  }
+  .wt-commits-lead .wt-commits-subject,
+  .wt-commits-lead .wt-commit-tag-pending {
+    display: none;
+  }
+}
 .wt-commits-foot {
   display: flex;
   align-items: center;
@@ -4157,7 +4183,7 @@ button.toast--pill:focus-visible {
 .wt-rail-tab {
   flex: 1 1 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   background: none;
   padding: 3px 8px;
   font: inherit;
@@ -5019,8 +5045,7 @@ button.toast--pill:focus-visible {
     }
   }
 }
-/* A wide window's top pill, moved up into the middle of the header row (the same pill the
-   transcript floats on a phone). */
+/* The transcript's top pill, in the header row: centred in it on a wide window. */
 .workspace-header-jump {
   position: absolute;
   left: 50%;
@@ -5035,6 +5060,30 @@ button.toast--pill:focus-visible {
 }
 .workspace-header-jump[hidden] {
   display: none;
+}
+/* A phone's header has no room for the capsule beside the title, and floating it over the
+   transcript covers the message the reader scrolled up to. Docked here instead: the header wraps,
+   the capsule takes a line of its own below the title's (last in the header, so it wraps under
+   the actions rather than pushing them down), and the conversation starts under the header's
+   rule where nothing covers it. */
+@media (max-width: 960px) {
+  .workspace-header:has(> .workspace-header-jump.is-phone) {
+    flex-wrap: wrap;
+  }
+  .workspace-header-jump.is-phone {
+    position: static;
+    /* The base rule centres itself over the row; docked, it is a row of its own. */
+    transform: none;
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .workspace-header-jump.is-phone .chat-older-pill.chat-older-split {
+    max-width: 100%;
+  }
+  /* Docked, it is part of the header rather than a chip floating over content. */
+  .workspace-header-jump.is-phone .chat-older-pill {
+    box-shadow: none;
+  }
 }
 /* Centred over the whole row, so the title stops short of the pill's half instead of running under it. */
 .workspace-header.has-jump {
@@ -8372,6 +8421,17 @@ button.toast--pill:focus-visible {
     min-width: 0;
     flex-shrink: 1;
   }
+  /* The "<Language> → English" tag is a long word pair, and it used to keep its whole width on a
+     phone: it pushed the account and model names to an ellipsis and left nothing between itself
+     and Send. It gives way with the names, and it is the one that takes the ellipsis when the
+     toolbar runs out — the account and model are what a reader changes; the tag is what they
+     read. */
+  .composer-toolbar > .composer-translation-tag {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .composer-pill-workspace .orbit-select {
     min-width: 0;
   }
@@ -8393,6 +8453,46 @@ button.toast--pill:focus-visible {
    jumping as the status line comes and goes; the cap keeps it on a narrow phone screen. */
 .cu-pop.cu-pop-reset {
   width: min(320px, calc(100vw - 48px));
+}
+/* A card per account can be taller than the room above the composer: the body scrolls under the title.
+   The side padding, taken back by the margin, keeps focus rings inside the scroll box. */
+.cu-pop.cu-pop-accounts {
+  max-height: calc(var(--available-height, 80vh) - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  width: min(328px, calc(100vw - 40px));
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+}
+/* Scrolling, not squeezing: a flex column would otherwise shrink its parts to fit. */
+.cu-pop.cu-pop-accounts > * {
+  flex-shrink: 0;
+}
+/* Another account's reset: ruled off, its name and one line of its usage over the same card. */
+.cu-other {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.cu-other .cu-account {
+  padding-bottom: 10px;
+  border-bottom: 0;
+}
+.cu-other-usage {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.cu-other-usage b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.cu-other-usage b.spent {
+  color: var(--error-solid);
+}
+.cu-other .cu-rc {
+  padding-top: 0;
+  border-top: 0;
 }
 /* Focus lands on the popover body when a press opens it; the controls inside carry the rings. */
 .cu-pop:focus {
@@ -8593,12 +8693,17 @@ button.composer-usage:focus-visible {
 }
 .cu-rc-confirm-usage {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-2);
+}
+.cu-rc-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
 }
 .cu-rc-confirm-value {
   font-weight: 600;
@@ -14725,6 +14830,61 @@ button.chat-jump-start:hover {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-1);
+}
+/* The pictures a question attached — the mocks it is asking the owner to choose between. Tiles
+   under the words, not in line with them: a question often IS the choice between these, and the
+   options and Send answer have to stay one look away. A tile opens the viewer on tap. */
+.coordinator-question-images-caption {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.coordinator-question-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.coordinator-question-images.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.coordinator-question-images .orbit-image {
+  display: block;
+  min-width: 0;
+}
+/* `.orbit-image .orbit-image-img` sets the height from the picture's own aspect ratio; a tile has
+   one height for every picture in the grid, so this selector carries one class more than it. */
+.coordinator-question-images .orbit-image .orbit-image-img {
+  width: 100%;
+  height: 184px;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  background: var(--bg-base);
+}
+/* One picture is drawn at its own shape, capped by the card's width or 340px of height — a tile
+   grid's fixed height would letterbox it into a box wider than the picture. */
+.coordinator-question-images.is-single .orbit-image .orbit-image-img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 340px;
+  margin: 0 auto;
+}
+.coordinator-question-images .md-image-loading {
+  display: block;
+  width: 100%;
+  height: 184px;
+}
+/* The card is the width of a phone's conversation here; one column reads better than two halves. */
+@media (max-width: 600px) {
+  .coordinator-question-images {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .coordinator-question-images .orbit-image .orbit-image-img,
+  .coordinator-question-images .md-image-loading {
+    height: 150px;
+  }
 }
 /* An option is the answer, so it is the tap target: a whole row, 44pt-ish, and the chosen one is
    outlined rather than merely ticked. */
@@ -23628,7 +23788,7 @@ div.landing-jobs-open {
   gap: 2px;
   margin-bottom: 14px;
   padding: 2px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--fill-inset);
 }
 .following-tab {
@@ -23637,7 +23797,7 @@ div.landing-jobs-open {
   gap: 6px;
   padding: 5px 12px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-2);
   font: inherit;
@@ -23647,7 +23807,7 @@ div.landing-jobs-open {
   background: var(--bg-raised);
   color: var(--text-1);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
 }
 .following-count {
   color: var(--text-3);
@@ -27414,10 +27574,10 @@ button.project-open-item-action:disabled {
 .rv-head { display: flex; align-items: flex-end; gap: 16px; margin-top: 8px; }
 .rv-head .page-title { font-size: 20px; }
 .rv-sub { margin-top: 4px; font-size: 13px; color: var(--text-2); }
-.wk-seg { display: inline-flex; gap: 2px; margin-left: auto; padding: 2px; border-radius: 6px; background: var(--fill-muted); }
-.wk-seg button { padding: 3px 12px; border: 0; border-radius: 4px; background: transparent; font-size: 13px; line-height: 20px;
+.wk-seg { display: inline-flex; gap: 2px; margin-left: auto; padding: 2px; border-radius: 10px; background: var(--fill-muted); }
+.wk-seg button { padding: 3px 12px; border: 0; border-radius: 8px; background: transparent; font-size: 13px; line-height: 20px;
                  color: var(--text-2); white-space: nowrap; cursor: pointer; }
-.wk-seg button.on { background: var(--bg-raised); color: var(--text-1); font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+.wk-seg button.on { background: var(--bg-raised); color: var(--text-1); font-weight: 500; box-shadow: 0 1px 3px rgba(0, 0, 0, .1), 0 0 0 .5px rgba(0, 0, 0, .04); }
 .wk-seg button b { margin-left: 5px; font-weight: 600; color: var(--text-3); }
 /* The phone's card pager (mock 09): one proposal card at a time, with the position between two plain
    buttons. It is drawn only on a phone — a desktop shows the queue as a list. */

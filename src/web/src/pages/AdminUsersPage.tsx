@@ -127,9 +127,11 @@ function UserCell({ user, you }: { user: AdminUser; you: boolean }) {
           {you && <Badge tone="blue">You</Badge>}
           {user.role === 'ADMIN' && <Badge tone="gold">Admin</Badge>}
         </div>
-        <div className="admin-users-email" title={user.email}>
-          {user.email}
-        </div>
+        <Tooltip content={user.email} truncatedOnly>
+          <div className="admin-users-email">
+            {user.email}
+          </div>
+        </Tooltip>
       </div>
     </div>
   );

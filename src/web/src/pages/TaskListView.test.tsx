@@ -22,6 +22,17 @@ import { TaskListView, batchRunMutationOptions, runRowMutationOptions } from './
 // The component reaches for the network on mount; these tests seed the cache instead and assert
 // on what gets rendered from it, so nothing should ever be fetched. Partial, because the detail
 // panel this view imports pulls other exports out of the same module at import time.
+// A static render opens no tip: the app Tooltip renders its child here, carrying what it would say.
+vi.mock('../components/ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
+
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: vi.fn(() => new Promise(() => {})),
@@ -496,7 +507,7 @@ describe('a task that starts on a schedule, on its row in the list', () => {
     const long = '[FineWeb][CC-MAIN-2025-26] 004_00040.parquet';
     const html = rowsIn(SHANGHAI, { paged: [task('1', long, { runAt: AT })] });
 
-    expect(html).toContain(`<span class="task-title" title="${long}">${long}</span>`);
+    expect(html).toContain(`<span class="task-title" data-tip="${long}">${long}</span>`);
     const [cell] = titleCells(html);
     expect(cell).toContain('class="task-run-at"');
     // After the title, so the cell's whole shrink goes to the title beside it.

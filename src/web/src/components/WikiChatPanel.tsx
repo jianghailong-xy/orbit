@@ -1077,17 +1077,19 @@ function WikiChatPick({
   onChange: (value: string) => void;
 }) {
   return (
-    <span className="wk-chat-pick" title={label}>
-      <span className="v">{shown}</span>
-      <DownOutlined className="ic" />
-      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </span>
+    <Tooltip content={label}>
+      <span className="wk-chat-pick">
+        <span className="v">{shown}</span>
+        <DownOutlined className="ic" />
+        <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </span>
+    </Tooltip>
   );
 }
 

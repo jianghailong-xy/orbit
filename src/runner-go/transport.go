@@ -93,6 +93,7 @@ func init() {
 		sessionCodexCoordinatorContextV1,
 		sessionSourcePinV1,
 		codexRateLimitResetCapabilityV1,
+		codexRateLimitResetCapabilityV2,
 		integrationJobCapabilityV1,
 		integrationObserveCapabilityV1,
 		integrationProgressV2Capability,

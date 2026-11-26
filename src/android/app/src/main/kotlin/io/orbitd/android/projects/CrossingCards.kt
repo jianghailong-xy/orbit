@@ -16,6 +16,8 @@ data class CrossingBatch(val rows: List<JsonObject>, val inTarget: Boolean = tru
     val kind get() = first.text("kind").orEmpty()
     /** Where the card is placed in the conversation. */
     val moment get() = first.text("requestedAt")
+    /** A move with no target takes its tasks out of their project; the session read is the only one that serves it. */
+    val out get() = kind == ProjectCrossings.moveKind && ProjectCrossings.hasNoTarget(first)
     val pending get() = rows.filter { ProjectCrossings.isAnswerable(it.text("state")) }
     val live get() = pending.isNotEmpty()
     val verdict: CrossingCards.Verdict? get() = when {
@@ -44,13 +46,17 @@ object CrossingCards {
     /** Who answered a batch, as this process knows it. */
     enum class Answerer { HERE, ELSEWHERE }
 
-    const val fromOrbit = "From Orbit — not the requesting agent."
+    /** Who wrote the card, not where the tasks come from: the From/To lines under it say that. */
+    const val fromOrbit = "Written by Orbit — not the requesting agent."
     const val toThisProject = "To this project"
     const val decisionRecorded = "Decision recorded"
     const val approve = "Approve"
     const val refuse = "Refuse"
     const val batchMoveConsequence =
         "Confirming is the move: the tasks join the target project as soon as you answer, and nobody has to send the request again."
+    /** [ProjectCrossings.moveOutApproveConsequence], said of more than one task. */
+    const val batchMoveOutConsequence =
+        "Confirming takes the tasks out of this project as soon as you answer; no project's acceptance counts them any more."
 
     /** ISO instants by time where they parse, as strings where they don't. */
     internal val byTime = Comparator<String> { a, b ->
@@ -103,11 +109,38 @@ object CrossingCards {
 
     /** The project the batch goes into, by name: what the asking session's card says where the target's conversation says "this project". */
     fun targetTitle(batch: CrossingBatch) = batch.first.obj("toProject")?.text("title")?.takeIf { it.isNotBlank() } ?: ProjectCrossings.unnamedProject
-    /** "this project" in the target's conversation; the target's name in the asking session. */
-    fun toText(batch: CrossingBatch) = if (batch.inTarget) thisProject else targetTitle(batch)
+    /** "this project" in the target's conversation; the target's name in the asking session; "No project" for a move out. */
+    fun toText(batch: CrossingBatch) = if (batch.out) noProject else if (batch.inTarget) thisProject else targetTitle(batch)
     const val thisProject = "this project"
+    const val noProject = "No project"
 
-    fun title(batch: CrossingBatch) = if (batch.kind == ProjectCrossings.moveKind && !batch.inTarget)
+    /** The heading: the question while it asks, what happened once it is answered. */
+    fun title(batch: CrossingBatch): String = batch.verdict?.let { answeredTitle(batch, it) } ?: when {
+        batch.out -> if (many(batch)) "Take these tasks out of the project?" else "Take this task out of the project?"
+        else -> question(batch)
+    }
+
+    /** An answered card's heading, in the past tense; a mixed answer says only that. */
+    fun answeredTitle(batch: CrossingBatch, verdict: Verdict): String {
+        val noun = if (batch.kind == "DEPEND_ON_TASK") (if (many(batch)) "Dependencies" else "Dependency") else if (many(batch)) "Tasks" else "Task"
+        return when (verdict) {
+            Verdict.MIXED -> if (many(batch)) "Requests answered" else "Request answered"
+            Verdict.REFUSED -> when {
+                batch.out -> "$noun kept in the project"
+                batch.kind == ProjectCrossings.moveKind -> if (many(batch)) "Moves refused" else "Move refused"
+                batch.kind == "DEPEND_ON_TASK" -> "$noun refused"
+                else -> if (many(batch)) "Filings refused" else "Filing refused"
+            }
+            Verdict.APPROVED -> when {
+                batch.out -> "$noun taken out of the project"
+                batch.kind == ProjectCrossings.moveKind -> if (batch.inTarget) "$noun moved here" else "$noun moved into ${targetTitle(batch)}"
+                batch.kind == "DEPEND_ON_TASK" -> "$noun allowed"
+                else -> "$noun filed here"
+            }
+        }
+    }
+
+    private fun question(batch: CrossingBatch) = if (batch.kind == ProjectCrossings.moveKind && !batch.inTarget)
         (if (many(batch)) "Move these tasks into ${targetTitle(batch)}?" else "Move this task into ${targetTitle(batch)}?")
     else when (batch.kind) {
         ProjectCrossings.moveKind -> if (many(batch)) "Move these tasks here?" else "Move this task here?"
@@ -117,7 +150,7 @@ object CrossingCards {
 
     fun badge(batch: CrossingBatch): String = when (batch.verdict) {
         null -> when (batch.kind) { ProjectCrossings.moveKind -> "move"; "DEPEND_ON_TASK" -> "depend"; else -> "file" }
-        Verdict.APPROVED -> if (batch.kind == ProjectCrossings.moveKind) "moved" else "approved"
+        Verdict.APPROVED -> if (batch.out) "taken out" else if (batch.kind == ProjectCrossings.moveKind) "moved" else "approved"
         Verdict.REFUSED -> "refused"
         Verdict.MIXED -> "answered"
     }
@@ -125,7 +158,7 @@ object CrossingCards {
     fun noun(batch: CrossingBatch) =
         if (batch.kind == "DEPEND_ON_TASK") (if (many(batch)) "dependencies" else "dependency") else if (many(batch)) "tasks" else "task"
 
-    fun listHead(batch: CrossingBatch) = when (batch.kind) {
+    fun listHead(batch: CrossingBatch) = if (batch.out) "Tasks to take out" else when (batch.kind) {
         ProjectCrossings.moveKind -> "Tasks to move"
         "DEPEND_ON_TASK" -> "Tasks waited on"
         else -> "Tasks to file"
@@ -160,9 +193,21 @@ object CrossingCards {
         return "for ${if (named == 1) "criterion" else "criteria"} ${parts.joinToString(", ")}"
     }
 
-    /** "8 tasks from Runner v1 · for criteria 4–11". */
-    fun summary(batch: CrossingBatch) =
-        listOfNotNull("${batch.rows.size} ${noun(batch)} from ${sourceTitle(batch)}", criteria(batch)).joinToString(" · ")
+    /** "8 tasks from Runner v1 · for criteria 4–11"; a move out says what it takes out of where, then what became of them. */
+    fun summary(batch: CrossingBatch): String {
+        val what = "${batch.rows.size} ${noun(batch)}"
+        if (batch.out) return when (batch.verdict) {
+            null -> "$what to take out of ${sourceTitle(batch)}"
+            Verdict.APPROVED -> "$what taken out of ${sourceTitle(batch)}"
+            Verdict.REFUSED -> "$what kept in ${sourceTitle(batch)}"
+            Verdict.MIXED -> "$what from ${sourceTitle(batch)}"
+        }
+        return listOfNotNull("$what from ${sourceTitle(batch)}", criteria(batch)).joinToString(" · ")
+    }
+
+    /** The two buttons, in the words of what they do: a move out takes its tasks out or keeps them here. */
+    fun approveLabel(batch: CrossingBatch) = if (!batch.out) approve else if (many(batch)) "Take them out" else "Take it out"
+    fun refuseLabel(batch: CrossingBatch) = if (!batch.out) refuse else if (many(batch)) "Keep them here" else "Keep it here"
 
     fun link(batch: CrossingBatch) = if (batch.live) CardPreviews.viewDetailsAndAct else CardPreviews.viewDetails
 
@@ -172,22 +217,30 @@ object CrossingCards {
     /** The subject a row names: a move's or a dependency's task as it reads now, a filing's title. */
     fun subject(row: JsonObject) = if (row.text("kind") == "FILE_TASK") row.text("title").orEmpty() else ProjectCrossings.subjectTitle(row)
 
-    /** The lines under a row's subject: the criteria it asks for and serves now, and where it stands once answered. */
-    fun rowNotes(row: JsonObject): List<String> = buildList {
+    /** The lines under a row's subject: the criteria it asks for and serves now, and where it stands once answered — unless every
+     *  row of its batch went the same way ([showState] false), which the receipt says once. */
+    fun rowNotes(row: JsonObject, showState: Boolean = true): List<String> = buildList {
         row.obj("requestedCriterion")?.let { criterion ->
             add("${ProjectCrossings.moveRequestedCriterionLabel}: ${criterionName(criterion) ?: ProjectCrossings.moveCriterionGone}")
         }
         row.obj("withdrawnCriterion")?.let(::criterionName)?.let { add("${ProjectCrossings.moveWithdrawnCriterionLabel}: $it") }
-        row.text("state")?.takeUnless(ProjectCrossings::isAnswerable)?.let { add(ProjectCrossings.label(it)) }
+        if (showState) row.text("state")?.takeUnless(ProjectCrossings::isAnswerable)?.let { add(ProjectCrossings.label(it)) }
     }
 
     /** "That answer was not recorded CODE", the door's sentence under it. */
     fun refusalHead(refusal: ProjectCrossings.Refusal) = ProjectCrossings.notRecorded + (refusal.code?.let { " $it" } ?: "")
 
+    /** Whether a batch's rows name their own state: while it asks, or once it was answered both ways. */
+    fun showsRowStates(batch: CrossingBatch) = batch.verdict == null || batch.verdict == Verdict.MIXED
+
+    /** The label over the quoted reasons: they are the agent's words, under a card Orbit wrote. */
+    fun reasonsHead(count: Int) = if (count == 1) "Reason given by the requesting agent" else "Reasons given by the requesting agent"
+
     /** Each distinct reason once, quoted. */
     fun reasons(batch: CrossingBatch) = batch.rows.mapNotNull { it.text("reason")?.trim()?.takeIf(String::isNotEmpty) }.distinct().map { "“$it”" }
 
     fun consequence(batch: CrossingBatch) = when {
+        batch.out -> if (many(batch)) batchMoveOutConsequence else ProjectCrossings.moveOutApproveConsequence
         batch.kind != ProjectCrossings.moveKind -> ProjectCrossings.fileApproveConsequence
         many(batch) -> batchMoveConsequence
         else -> ProjectCrossings.moveApproveConsequence

@@ -80,10 +80,12 @@ export function CommitSummary({
     <span className="wt-commits-lead">
       {commits.length > 1 && <span className="wt-commits-count">{commitCountLabel(commits.length)}</span>}
       {dirty && <span className="wt-commit-tag wt-commit-tag-pending">+ uncommitted</span>}
-      <span className="wt-commits-subject" title={latest.subject}>
-        {commits.length > 1 && <span className="wt-dim">· latest: </span>}
-        {latest.subject}
-      </span>
+      <Tooltip content={latest.subject} truncatedOnly>
+        <span className="wt-commits-subject">
+          {commits.length > 1 && <span className="wt-dim">· latest: </span>}
+          {latest.subject}
+        </span>
+      </Tooltip>
     </span>
   );
 }

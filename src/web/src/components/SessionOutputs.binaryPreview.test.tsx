@@ -137,6 +137,9 @@ const row = (path: string) =>
     .find((b) => b.querySelector('.session-file-name')?.textContent === path.split('/').at(-1)) ?? null;
 const head = () => document.querySelector('.wt-diff-pane-head');
 const pane = () => document.querySelector('.wt-diff-pane');
+const folder = (name: string) =>
+  [...document.querySelectorAll('.wt-diff-group-head')]
+    .find((b) => b.querySelector('.wt-diff-group-dir')?.textContent === `${name}/`) ?? null;
 const buttonIn = (scope: Element | null, label: string) =>
   [...(scope?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.trim() === label);
 
@@ -169,7 +172,7 @@ describe('a binary file in the diff drawer', () => {
   it('is not read when it is not a picture, until Download asks for it', async () => {
     vi.mocked(getWorktreeFile).mockResolvedValue(new Blob([new Uint8Array(110_000)]));
     await openDrawer();
-    await press(document.querySelector('.wt-diff-group-head[title="docs/mocks/board/fonts"]'));
+    await press(folder('fonts'));
 
     await press(row(FONT));
 
@@ -231,7 +234,7 @@ describe('a binary file in the diff drawer', () => {
   it('never makes an address that would open as a page, for drawing or for saving', async () => {
     vi.mocked(getWorktreeFile).mockResolvedValue(new Blob(['<html>'], { type: 'text/html' }));
     await openDrawer();
-    await press(document.querySelector('.wt-diff-group-head[title="docs/mocks/board/fonts"]'));
+    await press(folder('fonts'));
     await press(row(BOARD));
     await press(row(FONT));
     await press(buttonIn(pane(), 'Download'));
