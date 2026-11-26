@@ -1,3 +1,5 @@
+import { underEveryDrivePrefix } from '../drive/drive-routes';
+
 /**
  * The owner channel's doors (docs/personal-access-token-design.md §5): every route behind JwtAuthGuard
  * that refuses a personal access token as the account owner's own decision,
@@ -117,6 +119,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/doc-versions/:id/restore',
   // Making a wiki chat (contract `chat.door`): the owner's interactive credential's, as the binding writes are.
   'POST /wiki/spaces/:id/chats',
+  // Making a Drive chat (drive/drive-chat.ts), under /drive and its /documents alias: the owner's interactive
+  // credential's, as making a wiki chat is; it also refuses an acting session, DRIVE_CHAT_OWNER_CHANNEL_ONLY.
+  ...underEveryDrivePrefix('POST /drive/chats'),
   // The six presses of a chat's card (contract `chat.presses`): the owner's alone, as decide is.
   'POST /wiki/chat-drafts/:id/apply',
   'POST /wiki/chat-drafts/:id/edit',

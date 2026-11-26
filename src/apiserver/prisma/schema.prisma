@@ -2254,7 +2254,7 @@ model Session {
   phase                String?
   /// Who opened this conversation (migration 0670, docs/workspace-default-model-design.md §2.2):
   /// PERSON, or the Orbit door that opened it on its own — COORDINATOR, COORDINATOR_JUDGMENT,
-  /// TASK_LIST_CONSOLE, WIKI_CHAT, FEISHU, SERVICE_TOKEN, MENTION_REPLY, or ORBIT for a row 0670 knew
+  /// TASK_LIST_CONSOLE, WIKI_CHAT, DRIVE_CHAT, FEISHU, SERVICE_TOKEN, MENTION_REPLY, or ORBIT for a row 0670 knew
   /// was Orbit's but not through which door. Held to that set by `session_opened_by_check`. Written by
   /// the creating door, never from a title; the workspace default (workspace-provider.ts) counts only
   /// PERSON, through the partial index `session_workspace_person_opened_idx` (SQL only).
@@ -2527,6 +2527,11 @@ model Session {
   /// delivery'"'"'s own transaction, so a claim rolled back sends both again; NULL = never delivered.
   wikiChatPromptDigest     String?   @map("wiki_chat_prompt_digest")
   wikiChatContentsVersion  Int?      @map("wiki_chat_contents_version")
+  /// What this Drive chat's delivery last told its agent (migration 1680, drive/drive-chat-notes.ts): the digest of the
+  /// `<orbit_drive_chat>` guidance. Written in the delivery's own transaction, so a claim rolled back sends it again;
+  /// NULL = never delivered. A session is a Drive chat when `openedBy` is DRIVE_CHAT; its partial index over
+  /// (owner_id, created_at) is migration 1681's alone, as schema.prisma cannot spell one.
+  driveChatPromptDigest    String?   @map("drive_chat_prompt_digest")
   /// The help center's Ask (migration 0850, @orbit/shared HelpAskMarker `{ page }`): a session is an Ask exactly
   /// when it is set. Written by the Ask door (help/help-ask.ts) in this row's own INSERT and never afterwards (a
   /// trigger refuses the UPDATE). An Ask belongs to no workspace, is in no session list, starts read-only on its
@@ -3329,6 +3334,10 @@ model ConversationTurn {
   /// `chat.notes.wikiContext`, migration 0476), as ids. Delivery reads what they name and appends it as
   /// the control plane's note, so `content` stays the owner's words. Null for every other turn.
   wikiContext     Json?     @map("wiki_context")
+  /// A Drive chat's message: the folder the owner had open and the items they selected (`{ folderId, entryIds }`,
+  /// migration 1680), as ids. Delivery reads what they name and appends it as `<orbit_drive_chat>`, so `content` stays
+  /// the owner's words. Null for every other turn.
+  driveContext    Json?     @map("drive_context")
   answeredAt      DateTime? @map("answered_at")
   /// How this turn's latest completion ended (migration 1201, CHECK conversation_turn_outcome_chk):
   /// ANSWERED | FAILED | INTERRUPTED | CANCELLED, written by runner turn-complete in the write that settles

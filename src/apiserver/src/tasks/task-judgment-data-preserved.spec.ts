@@ -3552,7 +3552,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1670 restates 1667's six-argument session_phase_of (an armed retry reads PENDING, held or released) and writes
       // phase alone on the rows with retry_at set that it reads differently. Only `session` is touched; no preserved
       // relation, trigger, function of one or DONE fence changes.
-      '1670_session_phase_retry_pending'],
+      '1670_session_phase_retry_pending',
+      // 1680 adds a nullable session.drive_chat_prompt_digest and conversation_turn.drive_context (catalog-only) and
+      // widens session_opened_by_check by 'DRIVE_CHAT' NOT VALID; 1681 validates it and builds a partial index
+      // CONCURRENTLY. No row is written, and no preserved relation's trigger, function or DONE fence changes.
+      '1680_drive_chat_session',
+      '1681_drive_chat_session_index'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

@@ -524,6 +524,9 @@ test('the owner channel refuses a personal access token door by door and field b
     { route: 'POST /wiki/doc-versions/:id/restore', path: `/wiki/doc-versions/${nobody()}/restore`, login: 404 },
     // A chat that says nothing is not made: the door answers a login 400, content is the owner's first message.
     { route: 'POST /wiki/spaces/:id/chats', path: `/wiki/spaces/${spaceId}/chats`, body: {}, login: 400 },
+    // A Drive chat that says nothing is not made: the door answers a login 400, text is the owner's first message.
+    { route: 'POST /drive/chats', path: '/drive/chats', body: {}, login: 400 },
+    { route: 'POST /documents/chats', path: '/documents/chats', body: {}, login: 400 },
     // A card that names nothing: the login is answered the door's 404 for another owner's card, or none — an Edit with no
     // ops is refused for its shape first, before any card is read.
     { route: 'POST /wiki/chat-drafts/:id/apply', path: `/wiki/chat-drafts/${nobody()}/apply`, login: 404 },

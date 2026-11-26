@@ -32,6 +32,8 @@ export type SessionOpenedBy =
   | 'COORDINATOR_JUDGMENT'
   | 'TASK_LIST_CONSOLE'
   | 'WIKI_CHAT'
+  /** A chat opened from Drive (drive/drive-chat.ts, migration 1680). */
+  | 'DRIVE_CHAT'
   | 'FEISHU'
   | 'SERVICE_TOKEN'
   | 'MENTION_REPLY'

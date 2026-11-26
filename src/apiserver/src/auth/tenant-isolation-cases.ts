@@ -1375,6 +1375,17 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     'PATCH /drive/entries/:id body parentId': {
       request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),
     },
+    // A Drive chat named into another account's workspace: no such workspace for this one (DriveChat.ownedWorkspace).
+    'POST /drive/chats body workspaceId': {
+      request: (of) => ({ params: {}, body: { workspaceId: of.workspaceId, text: 'from the census', clientTurnId: CENSUS_CHAT_TURN } }),
+    },
+    // Its first message sent with another account's upload: no such file for this one, as for a new session.
+    'POST /drive/chats body attachmentIds': {
+      request: (of, mine) => ({
+        params: {},
+        body: { workspaceId: mine.workspaceId, text: 'from the census', clientTurnId: CENSUS_CHAT_TURN, attachmentIds: [of.attachmentId] },
+      }),
+    },
   }),
 
   // ── providers, phones, runners ───────────────────────────────────────────────────────────────

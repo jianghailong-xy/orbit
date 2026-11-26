@@ -576,5 +576,8 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
     'GET /drive/entries/:id/content',
     'GET /drive/versions/:id/content',
     'POST /drive/entries/:id/share-check',
+    // The Drive chat (drive/drive-chat.controller.ts): the owner's, as the wiki chat's routes are.
+    'GET /drive/chats',
+    'POST /drive/chats',
   ].flatMap(underEveryDrivePrefix),
 ];
