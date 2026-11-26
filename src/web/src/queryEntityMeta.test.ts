@@ -65,6 +65,7 @@ const EXEMPT: Record<string, string> = {
   'src/components/ProjectShareControls.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/RunnerRegisterGuide.tsx#1': "runner state is polled; no control-plane event announces a runner change",
   'src/components/RunnerSignIn.tsx#2': "a runner's login state is polled; no control-plane event announces it",
+  'src/pages/RunnerBrowserPage.tsx#1': "a runner's login state is polled; no control-plane event announces it",
   'src/components/SessionSettingsDrawer.tsx#3': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/ShareModal.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/TaskDetailPanel.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",

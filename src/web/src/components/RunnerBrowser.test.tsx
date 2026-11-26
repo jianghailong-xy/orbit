@@ -124,6 +124,8 @@ let browser: RunnerBrowserState | 'off' = 'off';
 let calls: string[] = [];
 /** The owner's open requests, as GET /owner-requests?state=open answers them. */
 let openRequests: OwnerRequest[] = [];
+/** GET /runners/:id/login: the runner's engine sign-in, as the sign-in card reads it. */
+let login: Record<string, unknown> = { status: null, engine: null, url: null, userCode: null, message: null };
 /** The last mount's query client, to re-read a list as the realtime stream would. */
 let queryClient: QueryClient | null = null;
 
@@ -194,6 +196,7 @@ beforeEach(() => {
   browser = 'off';
   calls = [];
   openRequests = [];
+  login = { status: null, engine: null, url: null, userCode: null, message: null };
   opened = [];
   clipboard = [];
   vnc.made.length = 0;
@@ -208,6 +211,7 @@ beforeEach(() => {
     }
     if (path === `/runners/${RUNNER}/browser/clear` && init?.method === 'POST') return { requestedAt: '2026-11-18T05:01:00.000Z' };
     if (path === '/owner-requests?state=open') return { requests: openRequests };
+    if (path === `/runners/${RUNNER}/login`) return login;
     const done = /^\/owner-requests\/([^/]+)\/done$/.exec(path);
     if (done && init?.method === 'POST') {
       const answered = openRequests.find((r) => r.id === decodeURIComponent(done[1]));
@@ -589,5 +593,52 @@ describe('a sign-in request in the browser tab (board 03-agent-tools frame ①, 
     await openTab(`/runners/${RUNNER}/browser?control=1`);
     await press(buttonNamed('I’m signed in'));
     expect(banners()[0].querySelector('[role="alert"]')?.textContent).toBe("Couldn't send your answer");
+  });
+});
+
+describe('an engine sign-in that fails in the browser tab', () => {
+  const openTab = () =>
+    mount(
+      <MemoryRouter initialEntries={[`/runners/${RUNNER}/browser?control=1`]}>
+        <Routes>
+          <Route path="/runners/:id/browser" element={<RunnerBrowserPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  const failure = () => host!.querySelector<HTMLElement>('.rb-sign-in.is-failed');
+  const readLogin = async () => {
+    await act(async () => void queryClient!.invalidateQueries({ queryKey: ['runner-login', RUNNER] }));
+    await settle();
+  };
+  const ELIGIBILITY =
+    'Google sign-in could not be verified — Antigravity answered: Eligibility check failed: Your current account is not eligible for Antigravity. Verify your account to continue.';
+
+  it('says what the runner said once a sign-in it saw under way in the runner’s browser fails', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    await openTab();
+    expect(failure()).toBeNull();
+    login = { ...login, status: 'awaiting_code', engine: 'antigravity', url: 'https://accounts.google.com/o/oauth2/auth', browser: 'code-taken' };
+    await readLogin();
+    expect(failure()).toBeNull();
+    login = { ...login, status: 'failed', url: null, browser: undefined, message: ELIGIBILITY };
+    await readLogin();
+    expect(failure()?.textContent).toBe(`Couldn't sign in to Antigravity — ${ELIGIBILITY} Try again from the sign-in card.`);
+    expect(writes()).toEqual([]);
+    // A new attempt under way takes it down.
+    login = { ...login, status: 'pending', message: null };
+    await readLogin();
+    expect(failure()).toBeNull();
+  });
+
+  it('shows nothing for a failure that had already happened, or one that never went through this browser', async () => {
+    browser = running({ holderSessionId: null, holderTitle: null });
+    login = { ...login, status: 'failed', engine: 'antigravity', message: ELIGIBILITY };
+    await openTab();
+    expect(failure()).toBeNull();
+    login = { ...login, status: 'awaiting_code', message: null };
+    await readLogin();
+    login = { ...login, status: 'failed', message: ELIGIBILITY };
+    await readLogin();
+    expect(failure()).toBeNull();
   });
 });
