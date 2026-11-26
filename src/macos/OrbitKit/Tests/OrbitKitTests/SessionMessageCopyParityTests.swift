@@ -137,7 +137,10 @@ final class SessionMessageCopyParityTests: XCTestCase {
     /// is the sender line's tooltip (docs/mocks/session-message-bubble).
     func testTheFootLineIsBuiltTheSameWay() throws {
         let card = try flat(Self.webCard)
-        XCTAssertTrue(card.contains("title={SESSION_MESSAGE_NOT_YOU}"), "who this is not is no longer the sender line's tooltip")
+        let tip = try XCTUnwrap(card.range(of: "<Tooltip content={SESSION_MESSAGE_NOT_YOU}"),
+                                "who this is not is no longer the sender line's tooltip")
+        let head = try XCTUnwrap(card.range(of: "<div className=\"smc-head\">"), "the sender line drifted")
+        XCTAssertTrue(tip.lowerBound < head.lowerBound, "the not-you tooltip no longer wraps the sender line")
         XCTAssertTrue(card.contains("const sentAt = ts ? relTime(ts) : null;"), "the foot line's time drifted")
         let foot = try section(card, from: "<div className=\"smc-meta\">", to: "</div>", Self.webCard)
         let time = try XCTUnwrap(foot.range(of: "{sentAt && <span>{sentAt}</span>}"), "the foot line no longer opens with the time")
