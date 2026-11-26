@@ -44,10 +44,10 @@ code{{font:13px "JetBrains Mono",monospace;background:#f1f2f5;padding:1px 5px;bo
 </div></div>
 
 <div id="part-2">
-<h2>② B 窗口（建议）</h2>
+<h2>② B 窗口（你已选 · 2026-11-26）</h2>
 <div class="row">
-{frame('b-wide', '<span class="tag r">B 窗口 · 建议</span>同 A，另外卡片周围那一圈是浅灰底（列表和会话区仍是白色），像微信那样：灰色的窗口缝把右栏围成第二个窗口。拖拽分隔线仍在卡片左边缘，只是不再画线。')}
-{frame('b-narrow', '<span class="tag r">B 窗口 · 窄窗口 1120</span>右栏盖在会话区上时（按 ⊞），同样是四边留缝、圆角加阴影的浮窗，而不是今天贴边的一块。')}
+{frame('b-wide', '<span class="tag r">B 窗口 · 已选</span>同 A，卡片周围是浅灰的窗口缝。按你的反馈：左边（会话列表 + 会话区）也是一个面板，上下各留 8px，和右栏<b>同高对齐</b>，<b>右侧两个角是圆角</b>，像微信那样两个窗口并排。拖拽分隔线仍在两个面板之间，只是不再画线。')}
+{frame('b-narrow', '<span class="tag r">B 窗口 · 窄窗口 1120</span>右栏盖在会话区上时（按 ⊞），它是四边留缝、圆角加阴影的浮窗；底下的左边不变成面板（它被盖住了，只在并排时才两个面板对齐）。')}
 </div></div>
 
 <div id="part-3">
@@ -55,20 +55,21 @@ code{{font:13px "JetBrains Mono",monospace;background:#f1f2f5;padding:1px 5px;bo
 <table>
 <tr><th style="width:300px">部分</th><th>今天</th><th>提案 B</th></tr>
 <tr><td>右栏外形</td><td>直角，顶满窗口上下右三边，左边 1px 竖线</td><td>上下右各留 8px；圆角 12px；1px <code>--border-subtle</code> 边；阴影 <code>0 1px 3px / 6%</code> + <code>0 8px 28px / 10%</code></td></tr>
-<tr><td>右栏周围</td><td>白色</td><td>浅灰（文字色 6% 混入背景色，深色主题下自动变成深灰）；列表和会话区仍是原来的白底</td></tr>
+<tr><td>右栏周围</td><td>白色</td><td>浅灰（文字色 6% 混入背景色，深色主题下自动变成深灰）</td></tr>
+<tr><td>左边（列表 + 会话区）</td><td>顶满窗口上下</td><td>右栏打开并排时：白底面板，上下各留 8px，和右栏同高；1px 细边；右上、右下 12px 圆角，左边贴着导航栏。右栏收起时和今天一样</td></tr>
 <tr><td>拖拽分隔线</td><td>1px 竖线，悬停变蓝</td><td>不画线，抓取区不变；悬停仍变蓝</td></tr>
 <tr><td>窄窗口盖在会话上</td><td>贴边一块，左侧阴影</td><td>同样的浮窗（四边留缝、圆角、阴影）</td></tr>
 <tr><td>手机</td><td colspan="2">不变：项目列表是底部弹窗</td></tr>
 </table>
 <h2>改动的文件</h2>
 <table>
-<tr><td style="width:300px"><code>src/web/src/index.css</code></td><td>只改样式：<code>.session-project-column</code>、<code>.session-project-column-over</code>、它前面的 <code>.session-resizer</code>、<code>.workspace-split</code> 在有右栏时的底色；会话设置右栏（<code>.ss-column</code>）同样处理</td></tr>
+<tr><td style="width:300px"><code>src/web/src/index.css</code></td><td>只改样式：<code>.session-project-column</code>、<code>.session-project-column-over</code>、它前面的 <code>.session-resizer</code>、<code>.workspace-split</code> 在有右栏时的底色，以及其中的 <code>.session-col</code> / <code>.workspace-view</code> 变成同高的左面板；会话设置右栏（<code>.ss-column</code>）同样处理</td></tr>
 <tr><td>组件 / 测试</td><td>不动 DOM，不动逻辑</td></tr>
 <tr><td>macOS / iOS / Android</td><td>不动（macOS 的右侧检查器如果也要，另开任务）</td></tr>
 </table>
 <h2>待你定</h2>
-<div class="ask">1. 选 <b>A 卡片</b> 还是 <b>B 窗口</b>？<b>建议 B</b>：只有加上周围的灰缝，才像你截图里那样读成"另一个窗口"。<br>
-2. 范围：项目右栏 + 会话设置右栏（同一种列）。Tasks 页的任务详情面板、Wiki 的条目抽屉要不要一起改？<b>建议先只改会话页的两种右栏</b>，看过效果再推到其他页面。</div>
+<div class="ask">已定：B 窗口，左右面板同高，左面板右侧圆角。<br>
+仍待定 · 范围：项目右栏 + 会话设置右栏（同一种列）。Tasks 页的任务详情面板、Wiki 的条目抽屉要不要一起改？<b>建议先只改会话页的两种右栏</b>，看过效果再推到其他页面。</div>
 </div>
 </div></body></html>'''
 open(f'{here}/01-board.html', 'w').write(html)

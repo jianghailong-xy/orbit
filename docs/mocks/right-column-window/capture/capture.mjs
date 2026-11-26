@@ -155,7 +155,7 @@ const WIDE = { width: 1440, height: 820 };
 const NARROW = { width: 1120, height: 820 };
 // A: the column is a card with its own corners and shadow, inset from the window edge, on the same white.
 // B: as A, and the strip around the card is the window's grey, so it reads as a second window beside the
-//    conversation (the reference: a WeChat article opened beside the chat list).
+//    conversation (the reference: a WeChat article opened beside the chat list); with PANEL, the owner's pick.
 const CARD = `
 .session-project-column { margin: 8px 8px 8px 0; border-radius: 12px; border: 1px solid var(--border-subtle);
   background: var(--bg-raised); box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 8px 28px rgba(0,0,0,.10);
@@ -163,15 +163,23 @@ const CARD = `
 .session-resizer:has(+ .session-project-column) { background: transparent; }
 .session-project-column-over { top: 0; bottom: 0; right: 0; border-left: 1px solid var(--border-subtle); }`;
 const GREY = `
-.workspace-split:has(> .session-project-column) { background: color-mix(in srgb, var(--text-1) 6%, var(--bg-base)); }
-.workspace-split:has(> .session-project-column) > .session-col:not(.session-project-column),
-.workspace-split:has(> .session-project-column) > .workspace-view { background: var(--bg-base); }`;
+.workspace-split:has(> .session-project-column) { background: color-mix(in srgb, var(--text-1) 6%, var(--bg-base)); }`;
+// B2 (owner 2026-11-26): the list and the conversation are the left panel, inset like the card above and
+// below so both panels are one height, its right corners rounded — two windows side by side.
+const PANEL = `
+.workspace-split:has(> .session-project-column:not(.session-project-column-over)) > :is(.session-col:not(.session-project-column), .workspace-view, .session-resizer:not(:has(+ .session-project-column))) {
+  margin-top: 8px; margin-bottom: 8px; height: auto; }
+.workspace-split:has(> .session-project-column:not(.session-project-column-over)) > .session-col:not(.session-project-column) {
+  background: var(--bg-base); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
+.workspace-split:has(> .session-project-column:not(.session-project-column-over)) > .workspace-view {
+  background: var(--bg-base); border: 1px solid var(--border-subtle); border-left: 0; border-radius: 0 12px 12px 0; }
+.workspace-split:has(> .session-project-column-over) > :is(.session-col, .workspace-view) { background: var(--bg-base); }`;
 const SCENES = {
   'today-wide': { vp: WIDE },
   'a-wide': { vp: WIDE, css: CARD },
-  'b-wide': { vp: WIDE, css: CARD + GREY },
+  'b-wide': { vp: WIDE, css: CARD + GREY + PANEL },
   'today-narrow': { vp: NARROW, pressButton: true },
-  'b-narrow': { vp: NARROW, pressButton: true, css: CARD + GREY },
+  'b-narrow': { vp: NARROW, pressButton: true, css: CARD + GREY + PANEL },
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, ignoreDefaultArgs: ['--hide-scrollbars'] });
