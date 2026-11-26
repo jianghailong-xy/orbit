@@ -108,6 +108,7 @@ const EXEMPT: Record<string, string> = {
   'src/pages/AdminUsersPage.tsx#4': "access tokens are written from this tab; no control-plane event announces them",
   'src/pages/FeishuConnectGroupPage.tsx#1': "Feishu chat routing is integration configuration; no control-plane event announces it",
   'src/pages/FeishuIntegrationPage.tsx#1': "Feishu integration settings are written from this tab; no control-plane event announces them",
+  'src/pages/settings/NotificationsPage.tsx#1': "the server's web push key, set in its environment; no control-plane event announces it",
 };
 
 /** Calls whose first argument is a query options object (useQueries names its queries property). */

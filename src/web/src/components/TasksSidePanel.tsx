@@ -64,6 +64,7 @@ import type {
 } from '@orbit/shared';
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
+import { unregisterWebPushOnSignOut } from '../lib/webPush';
 import { useDriveEnabled } from '../lib/driveSwitch';
 import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
@@ -372,6 +373,7 @@ export function workspaceRunnerIsOffline(
 }
 
 async function logout() {
+  await unregisterWebPushOnSignOut(); // this browser's notifications, while the token still signs the request
   await logoutSession(); // revoke the refresh token server-side (best-effort) before clearing
   clearToken();
   location.href = '/login';
