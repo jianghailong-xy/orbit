@@ -44,13 +44,17 @@ export function useSessionProjectData(opts: {
   view: SessionListView;
   enabled: boolean;
   controlLive: boolean;
+  /** Projects the list shows that no row of it names: a listing's project entries (lib/sessionListing). */
+  projectIds?: readonly string[];
 }): {
   coordinators: SessionListItem[];
   contentSessions: SessionListItem[];
   sessionCounts: ReadonlyMap<string, number>;
   placing: boolean;
 } {
-  const projectIds = sessionProjectIds(opts.sessions, opts);
+  const named = sessionProjectIds(opts.sessions, opts);
+  const projectIds = opts.enabled && opts.view !== 'trash' && opts.projectIds?.length
+    ? [...new Set([...named, ...opts.projectIds])].sort() : named;
   const view = opts.view === 'completed' ? 'completed' : 'open';
   const enabled = projectIds.length > 0;
   const placement = useQuery({

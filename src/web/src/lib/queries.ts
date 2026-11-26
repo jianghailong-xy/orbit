@@ -1,4 +1,4 @@
-import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions, replaceEqualDeep } from '@tanstack/react-query';
 import type {
   EventSearchResponse,
   LinkPreviewRef,
@@ -88,6 +88,7 @@ import {
 } from './taskPages';
 import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
 import { readOpenList, type OpenListAnswer } from './openListDelta';
+import { latestListingPages, type SessionListingPage } from './sessionListingData';
 import type { SessionReach, SessionReachDeclaration, TaskReachDeclaration } from './sessionReach';
 
 export type { ConfiguredProvider };
@@ -452,6 +453,50 @@ export const sessionsQuery = (
     // The stream marks a list stale the moment an event touches it, so while it is live what was
     // just read is still good to show: the console mounting on the list the splash read moments ago
     // (BootGate) reads it once, not twice (docs/list-freshness-design.md W5).
+    staleTime: streamStaleTime,
+  });
+};
+
+/**
+ * One workspace's session list as top-level entries, a page at a time (`GET /sessions/listing`,
+ * docs/session-list-scale-design.md §3.2): the read of a list that shows folders or projects, or of a folder's
+ * page (`folderId`), which used to be the whole Open list so the client could group it. Each page is
+ * `SESSION_PAGE_SIZE` entries; `next` is the following page's `after`.
+ *
+ * Under `['sessions']`, so every write's refresh reads it, and keyed like sessionsQuery — `['sessions',
+ * runnerId, workspaceId, view, 'listing', folderId]` — so an Open listing is an Open list to the stream
+ * (useControlPlane isOpenList): read on a `sessions.list_changed` hint naming its workspace, or by the list
+ * budget's safety read. Each page is a plain GET carrying the Open list's version ETag, so a read of pages
+ * that did not move is answered 304. BootGate warms this same key, so a page load reads it once.
+ *
+ * An answer with `restarted: true` replaces every page read before it (latestListingPages): it is applied
+ * where React Query writes the cache, so a next page, a refetch and an optimistic write all keep to it.
+ */
+export const sessionListingQuery = (opts: {
+  runnerId?: string | null;
+  workspaceId: string | null;
+  view: 'open' | 'completed';
+  folderId?: string | null;
+}) => {
+  const runnerId = opts.runnerId ?? null;
+  const workspaceId = opts.workspaceId ?? null;
+  const folderId = opts.folderId ?? null;
+  return infiniteQueryOptions({
+    queryKey: ['sessions', runnerId, workspaceId, opts.view, 'listing', folderId] as readonly unknown[],
+    meta: {
+      entities: ['session', 'workspace', 'tag', 'folder', 'project'],
+      sessionReach: { workspace: workspaceId } satisfies SessionReach,
+    },
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => {
+      const qs = new URLSearchParams({ workspaceId: workspaceId ?? '', view: opts.view });
+      if (folderId) qs.set('folderId', folderId);
+      qs.set('limit', String(SESSION_PAGE_SIZE));
+      if (pageParam) qs.set('after', pageParam);
+      return api<SessionListingPage>(`/sessions/listing?${qs}`);
+    },
+    getNextPageParam: (page) => page.next,
+    structuralSharing: (prev, next) => replaceEqualDeep(prev, latestListingPages(next)),
     staleTime: streamStaleTime,
   });
 };

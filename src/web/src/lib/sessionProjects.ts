@@ -113,6 +113,9 @@ export const SESSION_PROJECT_COPY = {
   markHint: (title: string) => `Part of ${title} · open its sessions`,
   waitingSession: (text: string, title: string) => `${text} · ${title}`,
   noCoordinator: 'No coordinator',
+  /** A project row whose title nothing the list read names: a project with no coordinator, no sidebar row and
+   *  no member the list holds (a list read a page at a time). */
+  untitled: 'Project',
   openSession: 'Open Session',
   complete: 'Complete',
   openCoordinator: 'Open Coordinator',
@@ -729,22 +732,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     : !folderId || !knownFolders.has(folderId);
   const loose = sessions.filter((session) => !heldBy(session) && inScope(session.folderId));
   const summaries = new Map(projects.map((project) => [project.id, project]));
-  const looseEntries = loose.map((session): SessionProjectEntry<T> => {
-    const membership = session.projectMembership;
-    if (!membership) return { ...session, kind: 'session' };
-    const summary = summaries.get(membership.projectId);
-    return {
-      ...session,
-      kind: 'session',
-      projectMark: {
-        projectId: membership.projectId,
-        title: summary?.title ?? membership.projectTitle,
-        status: summary?.status ?? membership.projectStatus,
-        taskCounts: summary?.taskCounts,
-        runningCount: summary?.buckets.running ?? 0,
-      },
-    };
-  });
+  const looseEntries = loose.map((session) => sessionEntry(session, summaries));
   if (!groups.size) {
     return { folders: opts.folderId ? [] : folderListing.folders, projects: [], sessions: loose, entries: looseEntries };
   }
@@ -754,101 +742,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     const coordinator = coordinators.get(projectId) ?? null;
     const folderId = coordinator?.folderId ?? null;
     if (!inScope(folderId)) continue;
-    const summary = summaries.get(projectId);
-    const membership = members[0].projectMembership!;
-    const content = opts.contentSessions ? [...new Map([
-      ...opts.contentSessions.filter((session) => session.projectMembership?.projectId === projectId),
-      ...members,
-    ].map((session) => [session.id, session])).values()] : members;
-    const lines = new Map(content.map((session) => [session.id, opts.line(session)]));
-    const coordinatorLine = coordinator ? (lines.get(coordinator.id) ?? opts.line(coordinator)) : null;
-    const waiting = content.filter((session) => lines.get(session.id)?.tone === 'approval');
-    waiting.sort((a, b) => {
-      const left = waitingInstant(a);
-      const right = waitingInstant(b);
-      if (left !== right) {
-        if (!Number.isFinite(left)) return 1;
-        if (!Number.isFinite(right)) return -1;
-        return left - right;
-      }
-      return a.id.localeCompare(b.id);
-    });
-    const now = opts.now ?? Date.now();
-    const fuse = summary?.fuse;
-    const pause: ProjectRowPause | null = fuse?.paused && fuse.episodeId ? { kind: 'fuse', episodeId: fuse.episodeId }
-      : summary?.pausedAt ? { kind: 'owner' } : null;
-    const runningNow = summary?.buckets.running ?? 0;
-    const pausedLine: SessionProjectLine | null = fuse?.paused
-      ? { text: SESSION_PROJECT_COPY.pausedAtLimit(fuse.observed, fuse.limit), tone: 'warning', glyph: 'pause' }
-      : summary?.pausedAt
-        ? { text: runningNow > 0 ? SESSION_PROJECT_COPY.pausedRuns(runningNow) : SESSION_PROJECT_COPY.pausedAgo(elapsedLabel(summary.pausedAt, now)), tone: 'paused', glyph: 'pause' }
-        : null;
-    const landing = sessionProjectLandingLine(
-      summary?.integration, opts.now ?? Date.now(), mainBranchName(summary?.mainBranch));
-    let line: SessionProjectLine;
-    let target: SessionProjectRow<T>['target'];
-    if (coordinatorLine?.tone === 'approval') {
-      line = coordinatorLine;
-      target = { kind: 'session', id: coordinator!.id };
-    } else if (waiting.length) {
-      const lead = waiting[0];
-      line = { text: SESSION_PROJECT_COPY.waitingSession(lines.get(lead.id)!.text, lead.title ?? ''), tone: 'approval' };
-      target = { kind: 'session', id: lead.id };
-    } else if (pausedLine) {
-      line = pausedLine;
-      target = coordinator ? { kind: 'session', id: coordinator.id } : { kind: 'project', id: projectId };
-    } else if (coordinator && summary?.attention?.coordinatorItems) {
-      const held = summary.attention.coordinatorItems;
-      const copy = SESSION_PROJECT_COORDINATOR_COPY[held.leadKind];
-      line = { text: [copy, elapsedLabel(held.oldestWaitingSince, opts.now ?? Date.now())].filter(Boolean).join(' · '), tone: 'running' };
-      target = { kind: 'session', id: coordinator.id };
-    } else if (coordinator && coordinatorLine && !opts.runnerOffline && opts.motion(coordinator) === 'spinner') {
-      line = coordinatorLine;
-      target = { kind: 'session', id: coordinator.id };
-    } else if (landing) {
-      line = landing;
-      target = coordinator ? { kind: 'session', id: coordinator.id } : { kind: 'project', id: projectId };
-    } else if (coordinatorLine) {
-      line = coordinatorLine;
-      target = { kind: 'session', id: coordinator!.id };
-    } else {
-      line = { text: SESSION_PROJECT_COPY.noCoordinator, tone: 'preview' };
-      target = { kind: 'project', id: projectId };
-    }
-    const latest = members.reduce((newest, session) => instant(session.listedAt ?? session.createdAt) > instant(newest.listedAt ?? newest.createdAt) ? session : newest);
-    // The member that spoke last dates the row, as on Apple and Android; `latest` only places it.
-    const spoke = members.reduce((newest, session) => instant(session.lastTurnAt ?? session.createdAt) > instant(newest.lastTurnAt ?? newest.createdAt) ? session : newest);
-    const motions = opts.runnerOffline ? [] : members.map(opts.motion);
-    const needsYou = members.some((session) => lines.get(session.id)?.tone === 'approval');
-    const running = motions.includes('spinner');
-    const jobs = motions.includes('pulse');
-    rows.push({
-      id: projectId,
-      projectId,
-      title: summary?.title ?? membership.projectTitle,
-      status: summary?.status ?? membership.projectStatus,
-      members: [...members],
-      sessionCount: Math.max(
-        new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
-        opts.sessionCounts?.get(projectId) ?? 0,
-      ),
-      coordinator,
-      folderId,
-      pinnedAt: coordinator?.pinnedAt ?? null,
-      lastTurnAt: spoke.lastTurnAt ?? spoke.createdAt,
-      listedAt: latest.listedAt ?? latest.createdAt,
-      createdAt: coordinator?.createdAt ?? latest.createdAt,
-      needsYou,
-      running,
-      jobs,
-      indicator: needsYou ? 'needs-you' : running ? 'running' : jobs ? 'jobs' : null,
-      line,
-      target,
-      taskCounts: summary?.taskCounts,
-      runningCount: summary?.buckets.running ?? motions.filter((motion) => motion === 'spinner').length,
-      startedAt: summary?.startedAt ?? null,
-      pause,
-    });
+    rows.push(sessionProjectRow(projectId, members, coordinator, summaries.get(projectId), opts));
   }
   const entries: SessionProjectEntry<T>[] = [
     ...looseEntries,
@@ -861,4 +755,162 @@ export function sessionProjectListing<T extends SessionProjectSession>(
     return left === right ? 0 : left > right ? -1 : 1;
   });
   return { folders: opts.folderId ? [] : folderListing.folders, projects: rows, sessions: loose, entries };
+}
+
+/** A session's own entry in the list: a member of a project that has no row here carries the project's mark. */
+export function sessionEntry<T extends SessionProjectSession>(
+  session: T,
+  summaries: ReadonlyMap<string, SidebarProject>,
+): SessionProjectEntry<T> {
+  const membership = session.projectMembership;
+  if (!membership) return { ...session, kind: 'session' };
+  const summary = summaries.get(membership.projectId);
+  return {
+    ...session,
+    kind: 'session',
+    projectMark: {
+      projectId: membership.projectId,
+      title: summary?.title ?? membership.projectTitle,
+      status: summary?.status ?? membership.projectStatus,
+      taskCounts: summary?.taskCounts,
+      runningCount: summary?.buckets.running ?? 0,
+    },
+  };
+}
+
+/** What a project row is worked out with: `sessionProjectListing`'s options, as far as one row reads them. */
+export type SessionProjectRowOptions<T> = {
+  now?: number;
+  runnerOffline?: boolean;
+  contentSessions?: readonly T[];
+  sessionCounts?: ReadonlyMap<string, number>;
+  line: (session: T) => SessionProjectLine;
+} & FolderSessionReadings<T>;
+
+/** Where `GET /sessions/listing` placed a project's entry (docs/session-list-scale-design.md §3.2): a list
+ *  read a page at a time holds none of the members the entry stands for, so the server says where it goes,
+ *  when it last spoke and how many it holds. */
+export interface SessionProjectPlacement {
+  placedAt: string;
+  spokeAt: string;
+  memberCount: number;
+}
+
+/**
+ * One project's row: `members` are the sessions it holds here as far as the list has them. A list that
+ * holds them all (`sessionProjectListing`) places the row by them; a list read a page at a time passes
+ * the server's `placed` instead, and the members it knows of — the coordinator and the members waiting on
+ * you here — say what the row reads.
+ */
+export function sessionProjectRow<T extends SessionProjectSession>(
+  projectId: string,
+  members: readonly T[],
+  coordinator: T | null,
+  summary: SidebarProject | undefined,
+  opts: SessionProjectRowOptions<T>,
+  placed?: SessionProjectPlacement,
+): SessionProjectRow<T> {
+  const content = opts.contentSessions ? [...new Map([
+    ...opts.contentSessions.filter((session) => session.projectMembership?.projectId === projectId),
+    ...members,
+  ].map((session) => [session.id, session])).values()] : [...members];
+  const membership = [...members, ...(coordinator ? [coordinator] : []), ...content]
+    .find((session) => session.projectMembership?.projectId === projectId)?.projectMembership ?? null;
+  const lines = new Map(content.map((session) => [session.id, opts.line(session)]));
+  const coordinatorLine = coordinator ? (lines.get(coordinator.id) ?? opts.line(coordinator)) : null;
+  const waiting = content.filter((session) => lines.get(session.id)?.tone === 'approval');
+  waiting.sort((a, b) => {
+    const left = waitingInstant(a);
+    const right = waitingInstant(b);
+    if (left !== right) {
+      if (!Number.isFinite(left)) return 1;
+      if (!Number.isFinite(right)) return -1;
+      return left - right;
+    }
+    return a.id.localeCompare(b.id);
+  });
+  const now = opts.now ?? Date.now();
+  const fuse = summary?.fuse;
+  const pause: ProjectRowPause | null = fuse?.paused && fuse.episodeId ? { kind: 'fuse', episodeId: fuse.episodeId }
+    : summary?.pausedAt ? { kind: 'owner' } : null;
+  const runningNow = summary?.buckets.running ?? 0;
+  const pausedLine: SessionProjectLine | null = fuse?.paused
+    ? { text: SESSION_PROJECT_COPY.pausedAtLimit(fuse.observed, fuse.limit), tone: 'warning', glyph: 'pause' }
+    : summary?.pausedAt
+      ? { text: runningNow > 0 ? SESSION_PROJECT_COPY.pausedRuns(runningNow) : SESSION_PROJECT_COPY.pausedAgo(elapsedLabel(summary.pausedAt, now)), tone: 'paused', glyph: 'pause' }
+      : null;
+  const landing = sessionProjectLandingLine(
+    summary?.integration, opts.now ?? Date.now(), mainBranchName(summary?.mainBranch));
+  let line: SessionProjectLine;
+  let target: SessionProjectRow<T>['target'];
+  if (coordinatorLine?.tone === 'approval') {
+    line = coordinatorLine;
+    target = { kind: 'session', id: coordinator!.id };
+  } else if (waiting.length) {
+    const lead = waiting[0];
+    line = { text: SESSION_PROJECT_COPY.waitingSession(lines.get(lead.id)!.text, lead.title ?? ''), tone: 'approval' };
+    target = { kind: 'session', id: lead.id };
+  } else if (pausedLine) {
+    line = pausedLine;
+    target = coordinator ? { kind: 'session', id: coordinator.id } : { kind: 'project', id: projectId };
+  } else if (coordinator && summary?.attention?.coordinatorItems) {
+    const held = summary.attention.coordinatorItems;
+    const copy = SESSION_PROJECT_COORDINATOR_COPY[held.leadKind];
+    line = { text: [copy, elapsedLabel(held.oldestWaitingSince, opts.now ?? Date.now())].filter(Boolean).join(' · '), tone: 'running' };
+    target = { kind: 'session', id: coordinator.id };
+  } else if (coordinator && coordinatorLine && !opts.runnerOffline && opts.motion(coordinator) === 'spinner') {
+    line = coordinatorLine;
+    target = { kind: 'session', id: coordinator.id };
+  } else if (landing) {
+    line = landing;
+    target = coordinator ? { kind: 'session', id: coordinator.id } : { kind: 'project', id: projectId };
+  } else if (coordinatorLine) {
+    line = coordinatorLine;
+    target = { kind: 'session', id: coordinator!.id };
+  } else {
+    line = { text: SESSION_PROJECT_COPY.noCoordinator, tone: 'preview' };
+    target = { kind: 'project', id: projectId };
+  }
+  const latest = members.length
+    ? members.reduce((newest, session) => instant(session.listedAt ?? session.createdAt) > instant(newest.listedAt ?? newest.createdAt) ? session : newest)
+    : null;
+  // The member that spoke last dates the row, as on Apple and Android; `latest` only places it.
+  const spoke = members.length
+    ? members.reduce((newest, session) => instant(session.lastTurnAt ?? session.createdAt) > instant(newest.lastTurnAt ?? newest.createdAt) ? session : newest)
+    : null;
+  const motions = opts.runnerOffline ? [] : members.map(opts.motion);
+  const needsYou = members.some((session) => lines.get(session.id)?.tone === 'approval');
+  // Placed by the server, the row holds members the list never read: the project's own running count says
+  // whether any of them runs.
+  const running = motions.includes('spinner') || (!!placed && !opts.runnerOffline && runningNow > 0);
+  const jobs = motions.includes('pulse');
+  const listedAt = placed?.placedAt ?? latest?.listedAt ?? latest?.createdAt ?? null;
+  return {
+    id: projectId,
+    projectId,
+    title: summary?.title ?? membership?.projectTitle ?? SESSION_PROJECT_COPY.untitled,
+    status: summary?.status ?? membership?.projectStatus ?? 'OPEN',
+    members: [...members],
+    sessionCount: Math.max(
+      new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
+      opts.sessionCounts?.get(projectId) ?? 0,
+      placed?.memberCount ?? 0,
+    ),
+    coordinator,
+    folderId: coordinator?.folderId ?? null,
+    pinnedAt: coordinator?.pinnedAt ?? null,
+    lastTurnAt: placed?.spokeAt ?? spoke?.lastTurnAt ?? spoke?.createdAt ?? null,
+    listedAt,
+    createdAt: coordinator?.createdAt ?? latest?.createdAt ?? listedAt,
+    needsYou,
+    running,
+    jobs,
+    indicator: needsYou ? 'needs-you' : running ? 'running' : jobs ? 'jobs' : null,
+    line,
+    target,
+    taskCounts: summary?.taskCounts,
+    runningCount: summary?.buckets.running ?? motions.filter((motion) => motion === 'spinner').length,
+    startedAt: summary?.startedAt ?? null,
+    pause,
+  };
 }
