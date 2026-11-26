@@ -293,7 +293,7 @@ const PAGING_A_SESSION_LIST: readonly string[] = [
   '| Field | Meaning |',
   '| --- | --- |',
   '| `folders` | The folder rows, `{ folderId, rowCount, needsYou, running, jobs }`: only on a first page without `folderId`. |',
-  '| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator }`, in list order; a project\'s `running` / `jobs` say whether a member it holds runs / has a background job moving. |',
+  '| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator }`, in list order (in Open: Pinned, then Needs you, then Working, then the rest, each newest listed first, as the web\'s sections draw them); a project\'s `running` / `jobs` say whether a member it holds runs / has a background job moving. |',
   '| `next` | The `after` of the following page, or `null` at the end. |',
   '| `restarted` | `true` when `after` was written under an order the list no longer has (Completed switches order on whether any session is held by a project): this is the first page again, with its `folders`, and replaces the pages already read. Absent otherwise. |',
   '',
