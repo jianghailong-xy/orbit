@@ -42,6 +42,12 @@ interface Row {
   lifecycleState?: string | null;
   runSource?: string | null;
   status?: string | null;
+  runStatus?: string | null;
+  retryAt?: string | null;
+  phase?: string | null;
+  released?: boolean | null;
+  lastTurnOutcome?: string | null;
+  endReason?: string | null;
   pendingApprovals?: number | null;
   runningBgJobCount?: number | null;
   waitingKind?: string | null;
@@ -107,6 +113,11 @@ export function answerListing(
       id: uuid(row.id), folderId: uuid(row.folderId), pinnedAt: date(row.pinnedAt), listedAt: date(row.listedAt),
       createdAt: date(row.createdAt) ?? new Date(0), lastTurnAt: date(row.lastTurnAt),
       completedAt: date(row.completedAt ?? row.archivedAt), projectId: uuid(row.projectMembership?.projectId),
+      // The row's own fields, which place it in Open's attention sections (ListingRowFacts).
+      row: {
+        pendingApprovals: row.pendingApprovals, status: row.status ?? row.runStatus, retryAt: row.retryAt, phase: row.phase,
+        released: row.released, lastTurnOutcome: row.lastTurnOutcome, endReason: row.endReason,
+      },
     })),
     coordinators,
     folders: folders.filter((folder) => folder.workspaceId === workspaceId).map((folder) => ({ id: uuid(folder.id), name: folder.name })),
