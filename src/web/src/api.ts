@@ -768,6 +768,14 @@ export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
   return userFileUrl(await attachmentBlob(res, id));
 };
 
+/** An attachment's bytes as a File, to stage again as a new upload: a withdrawn turn's attachments are
+ *  deleted with it, so its put-back cannot reference the old id. */
+export const fetchAttachmentFile = async (id: string, name: string | undefined, mime: string): Promise<File> => {
+  const res = await authedFetch(`/api/attachments/${encodeURIComponent(id)}`);
+  const blob = await attachmentBlob(res, id);
+  return new File([blob], name || 'attachment', { type: mime || blob.type });
+};
+
 /** Pin a file, or take its pin away. A pin brings back a file with a tombstone whose bytes remain; once they have gone, 410. */
 export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
   api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
