@@ -29,6 +29,7 @@ import { EMPTY_LIVE_TASK_PROGRESS, type LiveTaskProgress } from '../lib/liveTask
 import { TaskProgressBlock } from './TaskProgressBlock';
 import { stopBackgroundJob } from '../api';
 import { Popconfirm } from './ui/Popconfirm';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** The Job card a bg_run job's row scrolls to (JobCard marks it), where it is on the page. */
 const jobCardOf = (jobId: string): HTMLElement | null =>
@@ -312,9 +313,11 @@ function BgShellRow({
       <div className="bg-shell-head" onClick={onToggle}>
         <BgStatusIcon status={shell.status} />
         {task && <span className="bg-shell-kind">{shell.kind === 'workflow' ? 'Workflow' : 'Agent'}</span>}
-        <span className="bg-shell-cmd" title={shell.command || title}>
-          {title}
-        </span>
+        <Tooltip content={shell.command || title} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="bg-shell-cmd">
+            {title}
+          </span>
+        </Tooltip>
         <span className="bg-shell-id">{shell.shellId}</span>
         {shell.startedTs && <span className="bg-shell-age">{relAge(shell.startedTs)}</span>}
         {onStop && (

@@ -342,7 +342,7 @@ body {
   margin: 0;
   border: 1px solid var(--border-subtle);
   background: var(--bg-raised);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
   color: var(--text-1);
   font: inherit;
   font-size: 14px;
@@ -374,7 +374,7 @@ button.toast--pill:hover {
   width: 100%;
   min-height: 56px;
   padding: 12px 12px 12px 14px;
-  border-radius: 12px;
+  border-radius: 18px;
 }
 /* ③: tinted over the raised surface (the dark theme's tints are translucent), the server's words
    in a block of their own, and selectable — the thing you read twice and paste somewhere. */
@@ -383,6 +383,13 @@ button.toast--pill:hover {
   align-items: stretch;
   gap: 10px;
   user-select: text;
+}
+/* A failure card is one press: to its session, or back to the page it was raised on. */
+.toast--attention.toast--opens {
+  cursor: pointer;
+}
+.toast--attention .toast-reason {
+  cursor: text;
 }
 .toast--error {
   border-color: var(--error-border);
@@ -468,7 +475,7 @@ button.toast--pill:hover {
   overflow: auto;
   padding: 7px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg-raised);
   color: var(--text-2);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -477,18 +484,12 @@ button.toast--pill:hover {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.toast-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-left: 32px;
-}
 .toast-action {
   flex: none;
   height: 28px;
   padding: 0 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 7px;
+  border-radius: 10px;
   background: var(--bg-raised);
   color: var(--text-1);
   font: inherit;
@@ -498,15 +499,6 @@ button.toast--pill:hover {
 }
 .toast-action:hover {
   background: var(--bg-hover);
-}
-.toast-action--primary {
-  border-color: var(--brand);
-  background: var(--brand);
-  color: #fff;
-}
-.toast-action--primary:hover {
-  border-color: var(--brand-strong);
-  background: var(--brand-strong);
 }
 /* A result card's one action — Undo — in the tint the lifecycle card's Undo always had. */
 .toast--card:not(.toast--attention) > .toast-action {
@@ -3616,29 +3608,6 @@ button.toast--pill:focus-visible {
 .workspace-name-button:hover, .workspace-name-button:focus-visible { background: var(--orbit-control-hover-bg); }
 .workspace-name-button:hover .workspace-name-chevron,
 .workspace-name-button:focus-visible .workspace-name-chevron { opacity: 1; }
-.workspace-header-task {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  margin-bottom: 3px;
-  padding: 0;
-  border: none;
-  background: none;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--text-3);
-  cursor: pointer;
-}
-.workspace-header-task:hover {
-  color: var(--brand);
-}
-.workspace-header-task-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .workspace-sub {
   font-size: 12.5px;
   color: var(--text-3);
@@ -17206,7 +17175,6 @@ button.chat-jump-start:hover {
   .workspace-header-main > .workspace-title-line {
     display: contents;
   }
-  .workspace-header-main > .workspace-header-task,
   .workspace-title-line > .workspace-name {
     flex: 0 0 100%;
   }
@@ -30680,10 +30648,12 @@ td > .routing-report-tier + .model-routing-flag {
   color: var(--text-1);
 }
 
-/* A coordinator question still waiting on the owner: orange and heavier-edged, the colour of the
-   `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
+/* A coordinator question still waiting on the owner: the brand tone, solid and heavier-edged.
+   Blue is the product's "somebody is being asked" colour — the same reason the card's mark is
+   brand — and the warning tone stays for what is wrong (owner's pick, 2026-11-26; it replaced
+   the 2026-11-13 orange edge). */
 .approval-card.coordinator-question {
-  border: 1.5px solid var(--warning-solid);
+  border: 1.5px solid var(--brand);
 }
 
 /* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's

@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 569 |
+| `user` | 570 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **904** |
+| **Total** | **905** |
 
 ## Public routes
 
@@ -102,9 +102,9 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
 | `ALL` | `/api/gw/codex/{*path}` | — | `PoolGatewayController.forward` |
 | `GET` | `/api/health` | — | `HealthController.read` |
-| `GET` | `/api/help` | — | `HelpController.index` |
-| `GET` | `/api/help/articles/:slug` | path `slug` | `HelpController.article` |
-| `GET` | `/api/help/search` | query `q` | `HelpController.search` |
+| `GET` | `/api/help` | query `lang` | `HelpController.index` |
+| `GET` | `/api/help/articles/:slug` | path `slug`; query `lang` | `HelpController.article` |
+| `GET` | `/api/help/search` | query `lang`, `q` | `HelpController.search` |
 | `GET` | `/api/integrations/github/callback` | query `code`, `error`, `setup_action`, `state` | `GithubCallbackController.callback` |
 | `POST` | `/api/integrations/github/webhook` | — | `GithubWebhookController.receive` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
@@ -243,10 +243,11 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `DELETE` | `/api/guest-sessions/:id/turns/:turnId` | path `id`, `turnId` | `GuestSessionsController.cancelTurn` |
 | `POST` | `/api/guest-sessions/:id/turns/:turnId/steer` | path `id`, `turnId` | `GuestSessionsController.steerTurn` |
 | `POST` | `/api/help/ask` | body `Object` | `HelpAskController.create` |
-| `POST` | `/api/help/ask/:id/admin` | body `Object`; path `id` | `HelpAskController.askAdmin` |
+| `GET` | `/api/help/ask/:id` | path `id` | `HelpAskController.get` |
+| `POST` | `/api/help/ask/:id/admin` | path `id` | `HelpAskController.askAdmin` |
+| `POST` | `/api/help/ask/:id/messages` | body `Object`; path `id` | `HelpAskController.followUp` |
 | `GET` | `/api/help/ask/:id/stuck` | path `id` | `HelpAskController.stuck` |
-| `GET` | `/api/help/ask/choices` | — | `HelpAskController.choices` |
-| `GET` | `/api/help/ask/sessions` | — | `HelpAskController.list` |
+| `GET` | `/api/help/ask/conversations` | — | `HelpAskController.list` |
 | `POST` | `/api/help/feedback` | body `HelpFeedbackDto` | `HelpFeedbackController.record` |
 | `DELETE` | `/api/integrations/feishu` | — | `FeishuController.remove` |
 | `GET` | `/api/integrations/feishu` | — | `FeishuController.read` |

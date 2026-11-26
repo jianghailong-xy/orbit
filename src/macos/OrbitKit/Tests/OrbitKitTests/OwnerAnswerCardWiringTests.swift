@@ -119,8 +119,8 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
 
         let open = try section(cards, from: "private struct CoordinatorQuestionCardView: View {",
                                to: "private var previewSummary: String {")
-        XCTAssertTrue(open.contains("symbol: \"questionmark.bubble.fill\", tone: open ? .orange : .blue,"),
-                      "the open question card is no longer orange while it waits, blue once it does not")
+        XCTAssertTrue(open.contains("symbol: \"questionmark.bubble.fill\", tone: .blue,"),
+                      "the open question card no longer wears the brand tone while it waits")
         XCTAssertTrue(open.contains("dimmed: !open, emphasized: open)"),
                       "the open question card no longer draws its heavier edge while it waits")
     }

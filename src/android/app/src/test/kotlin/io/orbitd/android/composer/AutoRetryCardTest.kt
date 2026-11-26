@@ -28,7 +28,7 @@ class AutoRetryCardTest : ComposerShellTest() {
         failed(Instant.now().plusSeconds(11 * 60), 0, user(1, "Ship it"), assistant(2, quota))
         signIn(); openSession()
         awaitText("5-hour limit reached")
-        awaitText("The 5-hour quota for claude on “wikova” is used up.")
+        awaitText("The 5-hour quota for Claude Code on “wikova” is used up.")
         assertTrue(shows("Auto-retry when the quota resets"))
         assertTrue(shows("Runs on the server — you don't have to stay here."))
         assertTrue(shows("The quota hasn’t reset yet — this will likely fail again."))
@@ -58,7 +58,7 @@ class AutoRetryCardTest : ComposerShellTest() {
         ComposerShell.retryMessage = """{"text":"","nothingToResend":true}"""
         failed(null, 1, assistant(5, quota))
         signIn(); openSession()
-        awaitText("The 5-hour quota for claude on “wikova” is used up. Nothing to re-send — the limit landed on a turn that wasn’t yours.")
+        awaitText("The 5-hour quota for Claude Code on “wikova” is used up. Nothing to re-send — the limit landed on a turn that wasn’t yours.")
         assertTrue(shows("Continue when the quota resets"))
         assertTrue(shows("Off — nothing will continue until you do."))
         assertTrue(shows("Sends “Continue where you left off.”"))

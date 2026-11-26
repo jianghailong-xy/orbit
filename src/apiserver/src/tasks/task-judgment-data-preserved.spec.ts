@@ -3541,11 +3541,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // on the released rows with retry_at set. Only `session` is touched; no preserved relation, trigger, function or
       // DONE fence changes.
       '1667_session_phase_retry_running',
-      // 1668 adds `codex_rate_limit_reset_operation.account_slot` (NOT NULL DEFAULT 'default', so no row is rewritten),
+      // 1668 creates `help_ask_conversation` only, with foreign keys to `user` and `task`; no existing table,
+      // trigger, function or DONE fence is touched.
+      '1668_help_ask_conversation',
+      // 1669 adds `codex_rate_limit_reset_operation.account_slot` (NOT NULL DEFAULT 'default', so no row is rewritten),
       // a CHECK on it, and replaces that table's own guard function to list the column as immutable. Only that table is
       // touched; no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another writer
       // of the DONE fence.
-      '1668_codex_reset_operation_account_slot'],
+      '1669_codex_reset_operation_account_slot'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

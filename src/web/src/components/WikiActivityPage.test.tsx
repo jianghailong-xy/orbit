@@ -417,8 +417,8 @@ describe('one number in four places, over two spaces whose plans wait', () => {
     expect(waiting).toBe(6);
     expect(wikiPlanPending(ORBIT_PLAN, null) + wikiPlanPending(WIKOVA_PLAN, null)).toBe(3);
 
-    expect(side).toContain(`title="${waiting} waiting on you" aria-label="${waiting} waiting on you">${waiting}</span>`);
-    const badge = page.match(/class="orbit-button[^"]*wk-activity-btn[^"]*"[\s\S]*?class="tp-rail-badge needs-you" title="(\d+) waiting on you" aria-label="\d+ waiting on you">(\d+)</);
+    expect(side).toMatch(new RegExp(`class="tp-rail-badge needs-you" aria-label="${waiting} waiting on you"[^>]*>${waiting}</span>`));
+    const badge = page.match(/class="orbit-button[^"]*wk-activity-btn[^"]*"[\s\S]*?class="tp-rail-badge needs-you" aria-label="(\d+) waiting on you"[^>]*>(\d+)</);
     expect(badge?.[1]).toBe(String(waiting));
     expect(badge?.[2]).toBe(String(waiting));
 

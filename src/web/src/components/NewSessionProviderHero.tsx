@@ -7,6 +7,7 @@ import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { providerNameOn, type EngineChoice } from '../lib/sessionProviderChoices';
 import { Popover } from './ui/Popover';
+import { Tooltip } from './ui/Tooltip';
 
 /** The brand mark. Same artwork and tile as /providers, sized up: at hero size it carries a soft
  *  shadow in its own brand colour, which a 20px row chip can't. The composer's Provider menu draws
@@ -215,18 +216,18 @@ export function NewSessionProviderHero({
   // rather than disappearing and leaving the absence to be explained.
   const row = (engine: EngineChoice) =>
     engine.unavailable || !engine.provider ? (
-      <Link
-        key={engine.slug}
-        to={fixLink(engine)}
-        className="np-row np-unavailable"
-        data-row-focus=""
-        title={`${engine.label}: ${engine.unavailable}${onRunner(engine)}${engine.regionBlocked ? '' : ' — fix it on the Machines & models page'}`}
-        onClick={() => setOpen(false)}
-      >
-        <BrandMark choice={engine} size={20} />
-        <span className="np-row-name">{engine.label}</span>
-        <span className="np-row-model np-fix">{engine.unavailable}</span>
-      </Link>
+      <Tooltip key={engine.slug} content={`${engine.label}: ${engine.unavailable}${onRunner(engine)}${engine.regionBlocked ? '' : ' — fix it on the Machines & models page'}`}>
+        <Link
+          to={fixLink(engine)}
+          className="np-row np-unavailable"
+          data-row-focus=""
+          onClick={() => setOpen(false)}
+        >
+          <BrandMark choice={engine} size={20} />
+          <span className="np-row-name">{engine.label}</span>
+          <span className="np-row-model np-fix">{engine.unavailable}</span>
+        </Link>
+      </Tooltip>
     ) : (
       <button
         key={engine.slug}

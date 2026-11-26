@@ -337,6 +337,8 @@ model User {
   helpAskAdminRequests     HelpAskAdminRequest[] @relation("HelpAskAdminRequestOwner") // Asks this user sent to an admin (0890)
   helpAskAdminRequestsToMe HelpAskAdminRequest[] @relation("HelpAskAdminRequestAdmin") // Asks sent to this admin (0890)
   helpFeedback             HelpFeedback[] // this user's Did this help? / Did this answer it? votes (0900)
+  helpAskConversations     HelpAskConversation[] @relation("HelpAskConversationOwner") // this user's Asks (1668)
+  helpAskConversationsToMe HelpAskConversation[] @relation("HelpAskConversationAdmin") // Asks sent to this admin (1668)
   terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0660)
   terminalCredentials TerminalCredential[] // the terminals this user approved (0660)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
@@ -7027,6 +7029,8 @@ model Task {
   /// 0120 used for (decision, project).
   /// The Ask this task carries to an admin (Still stuck → Ask your admin, migration 0890), when it is one.
   helpAskAdminRequests HelpAskAdminRequest[]
+  /// The Ask this task carries to an admin (1668), when it is one.
+  helpAskConversations HelpAskConversation[]
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
 }
@@ -8669,7 +8673,7 @@ model CodexRateLimitResetOperation {
   runnerId               String    @map("runner_id") @db.Uuid
   runner                 Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   accountFingerprint     String    @map("account_fingerprint")
-  /// `default` or an added slot's 8-hex id: the Codex login the reset runs in (migration 1668). Immutable.
+  /// `default` or an added slot's 8-hex id: the Codex login the reset runs in (migration 1669). Immutable.
   accountSlot            String    @default("default") @map("account_slot")
   clientRequestId        String    @map("client_request_id") @db.Uuid
   providerIdempotencyKey String    @unique @map("provider_idempotency_key") @db.Uuid
@@ -11138,6 +11142,30 @@ model HelpAskAdminRequest {
 }
 
 /// Did this help? / Did this answer it? (migration 0900; docs/mocks/help-center board 03, decision 3): one person's
+/// One help center Ask (migration 1668), answered on the server's DeepSeek key by help/help-ask.ts: its first
+/// question as title, the page it was asked from, the conversation as `messages` (`{ role, text, at, error? }[]`),
+/// and `status` working / answered / failed. Still stuck → Ask your admin sets the admin columns once.
+/// Written only by help/help-ask.ts.
+model HelpAskConversation {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  owner         User      @relation("HelpAskConversationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  title         String
+  page          Json?
+  messages      Json      @default("[]")
+  status        String
+  adminId       String?   @map("admin_id") @db.Uuid
+  admin         User?     @relation("HelpAskConversationAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+  adminTaskId   String?   @map("admin_task_id") @db.Uuid
+  adminTask     Task?     @relation(fields: [adminTaskId], references: [id], onDelete: SetNull)
+  sentToAdminAt DateTime? @map("sent_to_admin_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@map("help_ask_conversation")
+}
+
 /// Yes / No on one article (`kind` article, `itemId` its slug) or one Ask answer (`kind` answer, `itemId`
 /// `<Ask session id>:<seq>`). One vote per person per item, the last one standing. No text column, by decision:
 /// Admin → Help feedback shows counts only. Written only by help/help-feedback.ts#record.

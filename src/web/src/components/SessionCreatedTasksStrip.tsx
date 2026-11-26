@@ -18,6 +18,7 @@ import { isLiveWatch, taskStaleLines, watchedTasks, watchesFollowing } from '../
 import { TaskStatusPill } from './TaskStatusPill';
 import { relTime } from './Transcript';
 import { useNow } from './WatchParts';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The session's Tasks card, above the composer between Background processes and the branch bar: the
@@ -85,21 +86,25 @@ export function SessionCreatedTasksStrip({
         ) : (
           <>
             {card.watching > 0 && (
-              <span className={`ct-watching${card.stale ? ' is-stale' : ''}`} title="Watched by this session">
-                <EyeOutlined /> {card.watching}
-              </span>
+              <Tooltip content="Watched by this session" delay={TEXT_TOOLTIP_DELAY_MS}>
+                <span className={`ct-watching${card.stale ? ' is-stale' : ''}`}>
+                  <EyeOutlined /> {card.watching}
+                </span>
+              </Tooltip>
             )}
             {band && (
               <>
-                <span className="bg-tray-count ct-count" title={band.row.title}>
-                  {band.failed > 0 && (
-                    <>
-                      <span className="ct-failed">{`${band.failed} failed`}</span>
-                      {' · '}
-                    </>
-                  )}
-                  {band.text}
-                </span>
+                <Tooltip content={band.row.title} delay={TEXT_TOOLTIP_DELAY_MS}>
+                  <span className="bg-tray-count ct-count">
+                    {band.failed > 0 && (
+                      <>
+                        <span className="ct-failed">{`${band.failed} failed`}</span>
+                        {' · '}
+                      </>
+                    )}
+                    {band.text}
+                  </span>
+                </Tooltip>
               </>
             )}
           </>
@@ -146,13 +151,13 @@ export function SessionCreatedTasksStrip({
           {data && data.projects.length > 0 && (
             <div className="ct-foot">
               {data.projects.map((project) => (
-                <Link
-                  key={project.id}
-                  to={pageHref({ kind: 'project', id: toUuid(project.id) })}
-                  title={project.title}
-                >
-                  {COPY.openProject}
-                </Link>
+                <Tooltip key={project.id} content={project.title} align="start">
+                  <Link
+                    to={pageHref({ kind: 'project', id: toUuid(project.id) })}
+                  >
+                    {COPY.openProject}
+                  </Link>
+                </Tooltip>
               ))}
             </div>
           )}

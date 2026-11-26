@@ -3,6 +3,11 @@ import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip';
 import { calloutArrowStyle, useFloating, useWholePixelOffsets, type FloatingProps } from './Floating';
 import './Floating.css';
 
+/** How long a pointer rests before a tip opens: a control's (a button's name or what it does) at once, a tip on
+ *  plain text (a badge, a count, a time) only once the pointer stops, so moving across a list opens none. */
+export const CONTROL_TOOLTIP_DELAY_MS = 100;
+export const TEXT_TOOLTIP_DELAY_MS = 600;
+
 export interface TooltipProps extends Omit<FloatingProps, 'returnFocus'> {
   children: ReactElement;
   content: ReactNode;
@@ -13,16 +18,19 @@ export interface TooltipProps extends Omit<FloatingProps, 'returnFocus'> {
   /** False: the tip is placed when it opens and stays there, as the replaced tip (aligned once) did — for a trigger that
    *  turns (a spinner), whose box changes with every frame and would bob a tracking tip up and down with it (P5.3). */
   trackTrigger?: boolean;
+  /** Milliseconds a pointer rests on the trigger before the tip opens: CONTROL_TOOLTIP_DELAY_MS (the default) on a
+   *  control, TEXT_TOOLTIP_DELAY_MS on plain text. */
+  delay?: number;
 }
 
-export function Tooltip({ children, content, disabled, toggleOnClick = false, trackTrigger = true, side = 'top', align = 'center', popupClassName, popupStyle, ...state }: TooltipProps) {
+export function Tooltip({ children, content, disabled, toggleOnClick = false, trackTrigger = true, delay = CONTROL_TOOLTIP_DELAY_MS, side = 'top', align = 'center', popupClassName, popupStyle, ...state }: TooltipProps) {
   const layer = useFloating(state);
   const id = useId();
   const anchor = useRef<HTMLButtonElement>(null);
   const { positionerRef, ...offsets } = useWholePixelOffsets(anchor, 12, 8);
   const describedBy = [((children.props as AriaAttributes)['aria-describedby']), layer.open && id].filter(Boolean).join(' ') || undefined;
   return <BaseTooltip.Root open={layer.open} onOpenChange={layer.setOpen} disabled={disabled || content == null || content === ''}>
-    <BaseTooltip.Trigger ref={anchor} render={children} aria-describedby={describedBy} delay={100} closeDelay={100}
+    <BaseTooltip.Trigger ref={anchor} render={children} aria-describedby={describedBy} delay={delay} closeDelay={100}
       closeOnClick={!toggleOnClick} onClick={toggleOnClick ? () => layer.setOpen(!layer.open) : undefined} />
     <BaseTooltip.Portal container={layer.container()}>
       <BaseTooltip.Positioner ref={positionerRef} side={side} align={align} {...offsets} collisionPadding={8} positionMethod={layer.positionMethod} disableAnchorTracking={!trackTrigger} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex + 70 }}>

@@ -15,7 +15,7 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- =========================
--- 1668 is above every migration on main, project/* and the pushed orbit/* branches (2026-11-26). Re-runnable:
+-- 1669 is above every migration on main, project/* and the pushed orbit/* branches (2026-11-26). Re-runnable:
 -- IF NOT EXISTS, the constraint inside a `duplicate_object` guard, the function replaced in place.
 
 ALTER TABLE "codex_rate_limit_reset_operation" ADD COLUMN IF NOT EXISTS "account_slot" TEXT NOT NULL DEFAULT 'default';

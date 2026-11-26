@@ -18,7 +18,7 @@ import { Drawer } from './ui/Drawer';
 import { Input } from './ui/Input';
 import { Menu, type MenuItem } from './ui/Menu';
 import { Segmented } from './ui/Segmented';
-import { Tooltip } from './ui/Tooltip';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import { WorktreeFilePreview } from './WorktreeFilePreview';
 import {
   CommitHead,
@@ -462,10 +462,12 @@ export function SessionOutputs({
             />
           ) : detail.mergeStatus === 'conflict' ? (
             <div className="wt-merge-manual">
-              <div className="wt-merge-head" title={detail.mergeError ?? undefined}>
-                <ExclamationCircleFilled className="wt-commit-fail-icon" aria-hidden="true" />
-                Merge conflict with {mergeTargetName}
-              </div>
+              <Tooltip content={detail.mergeError ?? undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+                <div className="wt-merge-head">
+                  <ExclamationCircleFilled className="wt-commit-fail-icon" aria-hidden="true" />
+                  Merge conflict with {mergeTargetName}
+                </div>
+              </Tooltip>
               <div className="wt-merge-why">
                 The merge was aborted and nothing changed.{' '}
                 {onResolveInSession ? (
@@ -777,9 +779,11 @@ function MergeButton({
     // Annotate the target only when it's an unusual one — keep the common main/master merge clean.
     const elsewhere = mergeTarget && mergeTarget !== 'main' && mergeTarget !== 'master';
     return (
-      <span className="wt-merge-done" title={`Merged into ${mergeTarget || 'main'}`}>
-        ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
-      </span>
+      <Tooltip content={`Merged into ${mergeTarget || 'main'}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="wt-merge-done">
+          ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
+        </span>
+      </Tooltip>
     );
   }
   // The branch already landed in its target (merged out-of-band — a command-line push, or an
@@ -791,9 +795,11 @@ function MergeButton({
     const landed =
       mergeTarget || (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : 'main');
     return (
-      <span className="wt-merge-done" title={`This branch is already in ${landed}`}>
-        ✓ In {landed}
-      </span>
+      <Tooltip content={`This branch is already in ${landed}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="wt-merge-done">
+          ✓ In {landed}
+        </span>
+      </Tooltip>
     );
   }
   // The server's resolved target includes a project task's integration line. Fall back to the
@@ -1307,29 +1313,30 @@ function FileRow({
   const status = (file.status || 'M').slice(0, 1).toUpperCase();
   const { dir, name } = splitPath(file.path);
   return (
-    <button
-      type="button"
-      className={`session-file session-file-btn${active ? ' active' : ''}`}
-      style={indent != null ? { paddingLeft: 8 + indent * 16 } : undefined}
-      onClick={onClick}
-      title={`View diff · ${file.path}`}
-    >
-      <span className={`session-file-status st-${status.toLowerCase()}`} title={status}>
-        {status}
-      </span>
-      <span className="session-file-path">
-        {display === 'full' && dir && <span className="session-file-dir">{dir}</span>}
-        <span className="session-file-name">{name}</span>
-      </span>
-      {binary ? (
-        <span className="session-file-bin">binary</span>
-      ) : (
-        <span className="session-file-stat">
-          <span className="add">+{file.additions}</span>
-          <span className="del">−{file.deletions}</span>
+    <Tooltip content={`View diff · ${file.path}`}>
+      <button
+        type="button"
+        className={`session-file session-file-btn${active ? ' active' : ''}`}
+        style={indent != null ? { paddingLeft: 8 + indent * 16 } : undefined}
+        onClick={onClick}
+      >
+        <span className={`session-file-status st-${status.toLowerCase()}`} title={status}>
+          {status}
         </span>
-      )}
-    </button>
+        <span className="session-file-path">
+          {display === 'full' && dir && <span className="session-file-dir">{dir}</span>}
+          <span className="session-file-name">{name}</span>
+        </span>
+        {binary ? (
+          <span className="session-file-bin">binary</span>
+        ) : (
+          <span className="session-file-stat">
+            <span className="add">+{file.additions}</span>
+            <span className="del">−{file.deletions}</span>
+          </span>
+        )}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1591,12 +1598,13 @@ export function WorktreeDiffDrawer({
     >
       <div className="wt-diff-body" ref={bodyRef}>
         {!maximized && (
-          <div
-            className={`wt-diff-resizer${resizing ? ' resizing' : ''}`}
-            onMouseDown={startResize}
-            onDoubleClick={resetWidth}
-            title="Drag to resize · double-click to reset"
-          />
+          <Tooltip content="Drag to resize · double-click to reset" side="right" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <div
+              className={`wt-diff-resizer${resizing ? ' resizing' : ''}`}
+              onMouseDown={startResize}
+              onDoubleClick={resetWidth}
+            />
+          </Tooltip>
         )}
         <div className="wt-diff-list" ref={listRef} style={listWidth != null ? { width: listWidth } : undefined}>
           {source ? (
@@ -1634,15 +1642,16 @@ export function WorktreeDiffDrawer({
             <FileTree files={files} activePath={openPath} onSelect={onSelect} />
           )}
         </div>
-        <div
-          className={`wt-diff-list-resizer${listResizing ? ' resizing' : ''}`}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize file list"
-          onPointerDown={startListResize}
-          onDoubleClick={resetListWidth}
-          title="Drag to resize · double-click to reset"
-        />
+        <Tooltip content="Drag to resize · double-click to reset" side="right" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div
+            className={`wt-diff-list-resizer${listResizing ? ' resizing' : ''}`}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize file list"
+            onPointerDown={startListResize}
+            onDoubleClick={resetListWidth}
+          />
+        </Tooltip>
         <div className="wt-diff-pane">
           {commit && <CommitHead commit={commit} mixed={mixed} />}
           {active ? (

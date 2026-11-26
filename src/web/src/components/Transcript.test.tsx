@@ -484,7 +484,7 @@ describe('message delivery', () => {
     );
 
     expect(html).toContain('Not delivered');
-    expect(html).toContain('claude stdin is closed');
+    // The reason is the row's tooltip (Transcript.tips.test.tsx).
   });
 
   it('says nothing about a message that arrived', () => {
@@ -664,7 +664,7 @@ describe('a message steered into the running turn', () => {
     );
 
     expect(html).toContain('Not delivered');
-    expect(html).toContain('no turn is running');
+    // The reason is the row's tooltip (Transcript.tips.test.tsx).
     expect(html).not.toContain('Sending…');
     expect(html).not.toContain('chat-steer-state');
   });
@@ -1334,7 +1334,7 @@ describe('engine stderr', () => {
 
     expect(html).toContain(`>${MISSING_OUTPUT}<`);
     expect(html).toContain('data-level="ERROR"');
-    expect(html).toContain('title="2026-08-12T15:31:40.112363Z ERROR codex_core::util:');
+    // The raw line is the row's tooltip (Transcript.tips.test.tsx).
   });
 
   it('carries a warning at its own level rather than as an error', () => {

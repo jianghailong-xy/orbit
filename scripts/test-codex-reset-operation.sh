@@ -29,7 +29,7 @@ API="$REPO/src/apiserver"
 UNIT=0255_codex_rate_limit_reset_operation
 # Later migrations that alter 0255's table. They cannot apply without it, so the database without 0255 goes
 # without them too, and rolling 0255 back and forward again re-applies them after it.
-DEPENDENTS=(1668_codex_reset_operation_account_slot)
+DEPENDENTS=(1669_codex_reset_operation_account_slot)
 SPEC=src/apiserver/src/runners/codex-rate-limit-reset.pg.spec.ts
 # The reporter a `node --test` child is pinned to, and the parser that decides whether its summary can
 # be believed; shared with run-pg-spec.sh.

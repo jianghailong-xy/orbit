@@ -1,6 +1,6 @@
 /**
  * Codex earned rate-limit reset on an added account (docs/codex-rate-limit-reset-contract.md §12; migration
- * 1668), end to end over the real routes and a real PostgreSQL: the user's create route
+ * 1669), end to end over the real routes and a real PostgreSQL: the user's create route
  * (`POST /runners/:id/codex-rate-limit-reset`) and the runner's heartbeat and result routes.
  *
  *   (1) a workspace whose chosen Codex account is an added slot creates its reset — not ACCOUNT_OVERRIDE —

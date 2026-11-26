@@ -81,7 +81,7 @@ import { NumberInput } from '../components/ui/NumberInput';
 import { Popconfirm } from '../components/ui/Popconfirm';
 import { Segmented } from '../components/ui/Segmented';
 import { Spinner } from '../components/ui/Spinner';
-import { Tooltip } from '../components/ui/Tooltip';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../components/ui/Tooltip';
 import type { SessionReach } from '../lib/sessionReach';
 import '../components/ui/Badge.css';
 
@@ -320,31 +320,31 @@ function BatchesTable({
         const donePct = (row.done / row.total) * 100;
         const runPct = (row.inProgress / row.total) * 100;
         return (
-          <div
-            key={row.label}
-            className="batch-row clickable"
-            onClick={() => onPick(row.label)}
-            title={`Show the ${row.total.toLocaleString()} tasks labelled ${row.label}`}
-          >
-            <div className="batch-name">{row.label}</div>
-            <div className="batch-meter">
-              <div className="task-progress-track">
-                {/* A zero-width segment renders nothing at all — no sliver, and no gap either. */}
-                {donePct > 0 && (
-                  <span className="task-progress-seg done" style={{ width: `${donePct}%` }} />
-                )}
-                {runPct > 0 && (
-                  <span
-                    className="task-progress-seg ongoing"
-                    style={{ width: `${runPct}%`, marginLeft: donePct > 0 ? 2 : 0 }}
-                  />
-                )}
+          <Tooltip key={row.label} content={`Show the ${row.total.toLocaleString()} tasks labelled ${row.label}`} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <div
+              className="batch-row clickable"
+              onClick={() => onPick(row.label)}
+            >
+              <div className="batch-name">{row.label}</div>
+              <div className="batch-meter">
+                <div className="task-progress-track">
+                  {/* A zero-width segment renders nothing at all — no sliver, and no gap either. */}
+                  {donePct > 0 && (
+                    <span className="task-progress-seg done" style={{ width: `${donePct}%` }} />
+                  )}
+                  {runPct > 0 && (
+                    <span
+                      className="task-progress-seg ongoing"
+                      style={{ width: `${runPct}%`, marginLeft: donePct > 0 ? 2 : 0 }}
+                    />
+                  )}
+                </div>
               </div>
+              <div className="batch-num strong">{row.done.toLocaleString()}</div>
+              <div className="batch-num">{row.total.toLocaleString()}</div>
+              <div className="batch-num muted">{(row.total - row.done).toLocaleString()}</div>
             </div>
-            <div className="batch-num strong">{row.done.toLocaleString()}</div>
-            <div className="batch-num">{row.total.toLocaleString()}</div>
-            <div className="batch-num muted">{(row.total - row.done).toLocaleString()}</div>
-          </div>
+          </Tooltip>
         );
       })}
       {truncated && (
@@ -1244,17 +1244,18 @@ export function TaskListView() {
                   content has no such caveat. Name-from-content concatenates the element's text in
                   order, so the suffix only adds what is missing — that it fires ONCE, and whose
                   clock the time is written on — instead of repeating the words above it.
-              `title` stays for a sighted reader hovering, where it can also afford the exact
+              The tooltip stays for a sighted reader hovering, where it can also afford the exact
               instant a to-the-minute local rendering rounds off. */}
           {starts ? (
-            <time
-              className="task-run-at"
-              dateTime={starts.iso}
-              title={`Starts once, at ${starts.local} in your own time zone (${starts.iso})`}
-            >
-              Starts {starts.local}
-              <span className="task-run-at-note">, once, in your own time zone</span>
-            </time>
+            <Tooltip content={`Starts once, at ${starts.local} in your own time zone (${starts.iso})`} delay={TEXT_TOOLTIP_DELAY_MS}>
+              <time
+                className="task-run-at"
+                dateTime={starts.iso}
+              >
+                Starts {starts.local}
+                <span className="task-run-at-note">, once, in your own time zone</span>
+              </time>
+            </Tooltip>
           ) : null}
         </div>
         {showAssigneeCol && (
@@ -1365,14 +1366,15 @@ export function TaskListView() {
                 />
               </h1>
               {isListView && (
-                <Button
-                  size="small"
-                  onClick={openConsole}
-                  loading={openingConsole}
-                  title="Open the conversation this list is steered from"
-                >
-                  Steering session ›
-                </Button>
+                <Tooltip content="Open the conversation this list is steered from" side="bottom" align="end">
+                  <Button
+                    size="small"
+                    onClick={openConsole}
+                    loading={openingConsole}
+                  >
+                    Steering session ›
+                  </Button>
+                </Tooltip>
               )}
             </div>
 

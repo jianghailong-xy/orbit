@@ -643,7 +643,7 @@ bash scripts/test-codex-reset-fault-injection.sh # 加固：真实控制面 + Go
 - **ACCOUNT_OVERRIDE 重新定义**（§3）：工作区选的新增账户是目标槽（`codexResetContextSlot`），不再是 override；仍是 override 的
   只有非内置 provider 与上下文自带的 env 凭据（`CODEX_HOME`、`CODEX_API_KEY`、`OPENAI_*`）。
 - I1（在途唯一）仍按 `(runnerId, accountFingerprint)`：同一账户签进两个槽时，两个槽共用一份 credit，也就共用一个在途名额。
-- apiserver（迁移 1668）：`account_slot` 列，缺省 `default`，CHECK 只收 `default` 或槽 id，guard trigger 把它列为不可变；在途唯一索引不变。
+- apiserver（迁移 1669）：`account_slot` 列，缺省 `default`，CHECK 只收 `default` 或槽 id，guard trigger 把它列为不可变；在途唯一索引不变。
   创建路由的槽：请求写明的 `accountSlot`；否则工作区选的账户（`codexResetContextSlot`）；工作区为 Automatic 或从 runner 页确认时，
   取存储块指纹等于确认指纹的槽（先 Default，再按槽 id 升序），都不匹配则为 `default`（随后按 Default 的块判定）。重放只比请求写明的槽。
   heartbeat 一次只交出一条 command（§6.2）：已交出一条后，其余在途 operation 本次只做到期 / 换账户结算，不认领、不续约；

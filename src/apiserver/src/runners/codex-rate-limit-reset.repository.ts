@@ -15,7 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Where `codex_rate_limit_reset_operation` rows become the contract's operation state and back
- * (docs/codex-rate-limit-reset-contract.md §7, §9.3, §12.4; migrations 0255 and 1668).
+ * (docs/codex-rate-limit-reset-contract.md §7, §9.3, §12.4; migrations 0255 and 1669).
  *
  * Two writes and no more. `insertIfAbsent` adds the row a confirmation built with
  * `newCodexResetOperation`; `transition` is the only way an existing row changes, and it changes one
@@ -188,7 +188,7 @@ function stateOf(row: CodexRateLimitResetOperation): CodexRateLimitResetOperatio
     ownerId: row.ownerId,
     runnerId: row.runnerId,
     accountFingerprint: row.accountFingerprint,
-    // 1668's CHECK admits `default` and an 8-hex slot id only.
+    // 1669's CHECK admits `default` and an 8-hex slot id only.
     accountSlot: row.accountSlot,
     clientRequestId: row.clientRequestId,
     providerIdempotencyKey: row.providerIdempotencyKey,

@@ -1736,13 +1736,14 @@ export function TaskDetailPanel({
             {q.data?.creatorSession ? (
               <>
                 {' from '}
-                <Link
-                  to={`/sessions/${encodeId(q.data.creatorSession.id)}`}
-                  className="tdp-field-link"
-                  title="Go to the session that created this task"
-                >
-                  {q.data.creatorSession.title || 'Untitled session'}
-                </Link>
+                <Tooltip content="Go to the session that created this task">
+                  <Link
+                    to={`/sessions/${encodeId(q.data.creatorSession.id)}`}
+                    className="tdp-field-link"
+                  >
+                    {q.data.creatorSession.title || 'Untitled session'}
+                  </Link>
+                </Tooltip>
               </>
             ) : null}
           </span>

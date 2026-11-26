@@ -512,8 +512,7 @@ describe("a machine's engine rows", () => {
     expect(html).toContain('not auto-updated');
     // ...and the part it had to leave out — which path, which account — is one hover away
     // rather than gone. Without this, "not auto-updated" would be unactionable.
-    expect(html).toContain('it runs as husong');
-    expect(html).toContain('title="Installed at');
+    // The hover itself is in RunnerEngines.tips.test.tsx.
   });
 
   it('keeps a working machine quiet, with the fact still on the row', () => {

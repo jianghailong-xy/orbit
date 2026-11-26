@@ -234,7 +234,7 @@ describe('a current landing’s title', () => {
 
   it('opens the landing session when the generation names one', () => {
     const html = render(view({ landTasks: landings(LANDING) }));
-    expect(html).toContain(`class="project-land-task-title" href="/sessions/${encodeId(LANDING)}"`);
+    expect(html).toMatch(new RegExp(`class="project-land-task-title"[^>]* href="/sessions/${encodeId(LANDING)}"`));
   });
 
   it('opens the task when it names none', () => {

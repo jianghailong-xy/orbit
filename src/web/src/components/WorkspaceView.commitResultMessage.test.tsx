@@ -424,8 +424,8 @@ describe('a failed commit handed to the session', () => {
   });
 });
 
-describe('a merge conflict handed directly from its toast to the session', () => {
-  it.each(['main', 'release/1.2'])('resolves the originating branch onto %s after leaving its session', async (target) => {
+describe('a merge conflict toast', () => {
+  it.each(['main', 'release/1.2'])('opens its session from anywhere on the card, sending nothing, after merging into %s', async (target) => {
     const reason = 'CONFLICT (content): Merge conflict in src/web/src/api.ts';
     server.worktreeDirty = false;
     server.mergeTargets = [target];
@@ -435,7 +435,6 @@ describe('a merge conflict handed directly from its toast to the session', () =>
       server.mergeError = reason;
       return undefined as never;
     });
-    resumeMock.mockResolvedValue({} as never);
     await mountWorkspace();
     const merge = [...mounted().querySelectorAll<HTMLButtonElement>('.wt-bar button')].find(
       (button) => button.textContent === `Merge to ${target}`,
@@ -449,15 +448,13 @@ describe('a merge conflict handed directly from its toast to the session', () =>
     await act(async () => mounted().querySelector<HTMLElement>('.session-new')!.click());
     await waitForUi(() => expect(mounted().querySelector('.wt-bar')).toBeNull());
     const card = document.body.querySelector<HTMLElement>('.toast--attention')!;
-    const actions = [...card.querySelectorAll<HTMLButtonElement>('.toast-actions button')];
-    expect(actions.map((button) => button.textContent)).toEqual(['Resolve in session', 'Copy error']);
-    await act(async () => actions[0]!.click());
-    await waitForUi(() => expect(resumeMock).toHaveBeenCalledOnce());
-    const [id, content, , , , clientTurnId] = resumeMock.mock.calls[0]!;
-    expect(id).toBe(SESSION_PUBLIC);
-    expect(content).toContain(`Rebase this branch onto the latest ${target} and resolve any conflicts.`);
-    expect(content).toContain('checked out on orbit/commit-while-building-1a2b3c.');
-    expect(content).toContain(`Run git rebase ${target}`);
-    expect(clientTurnId).toEqual(expect.any(String));
+    // No buttons but its ×: Resolve in session is the session's merge bar's, not the toast's.
+    expect([...card.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual([
+      expect.stringMatching(/^Open /),
+      'Dismiss',
+    ]);
+    await act(async () => card.querySelector<HTMLElement>('.toast-reason')!.click());
+    await waitForUi(() => expect(mounted().querySelector('.wt-bar')).not.toBeNull());
+    expect(resumeMock).not.toHaveBeenCalled();
   });
 });

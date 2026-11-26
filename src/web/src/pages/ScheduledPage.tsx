@@ -79,6 +79,7 @@ import { useConfirm } from '../components/ui/ConfirmDialog';
 import { RenameField } from '../components/RenameField';
 import { Menu } from '../components/ui/Menu';
 import { Switch } from '../components/ui/Switch';
+import { Tooltip } from '../components/ui/Tooltip';
 import '../components/Scheduled.css';
 
 const C = SCHEDULE_COPY;
@@ -953,9 +954,11 @@ function ScheduleInspector({ schedule, ask, onAsked }: {
         />
       ) : (
         <h2 className="sched-inspector-title">
-          <button type="button" className="sched-title" title={C.actions.rename} onClick={startRename}>
-            {s.title}
-          </button>
+          <Tooltip content={C.actions.rename} side="bottom" align="start">
+            <button type="button" className="sched-title" onClick={startRename}>
+              {s.title}
+            </button>
+          </Tooltip>
         </h2>
       )}
       <div className="sched-inspector-meta">

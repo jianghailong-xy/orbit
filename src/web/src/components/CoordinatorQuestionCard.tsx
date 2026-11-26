@@ -31,6 +31,7 @@ import { markdownToPlainText } from '../lib/markdownText';
 import { projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 import { streamPoll } from '../lib/listBudget';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The question a project's coordinator put to the account owner, as a card (mock 5,
@@ -274,9 +275,11 @@ export function CoordinatorQuestionCard({
     <div className="approval-card coordinator-question">
       <div className="approval-head coordinator-question-head">
         <span className="coordinator-question-heading">{COORDINATOR_QUESTION_HEADING}</span>
-        <span className="criteria-provenance prov-brand" title={FROM_COORDINATOR_TITLE}>
-          {FROM_COORDINATOR}
-        </span>
+        <Tooltip content={FROM_COORDINATOR_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance prov-brand">
+            {FROM_COORDINATOR}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions coordinator-question-body">
         {/* The question as the coordinator wrote it — the same Markdown the approval cards render
@@ -648,9 +651,11 @@ export function AnsweredQuestionCard({
       >
         <div className="approval-body is-questions coordinator-question-body">
           <div className="answered-question-provenance">
-            <span className="criteria-provenance prov-brand" title={FROM_COORDINATOR_TITLE}>
-              {FROM_COORDINATOR}
-            </span>
+            <Tooltip content={FROM_COORDINATOR_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+              <span className="criteria-provenance prov-brand">
+                {FROM_COORDINATOR}
+              </span>
+            </Tooltip>
             <span className="answered-question-asked">{`asked ${decisionReceiptTime(record.askedAt, now)}`}</span>
           </div>
           {/* The question as it was asked, in the Markdown the open card renders it in. */}

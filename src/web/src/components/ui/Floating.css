@@ -60,6 +60,8 @@
    12px: the arrow of a popover aligned to one end sits 12px in, where a rounder corner would still be curving. */
 .orbit-popover { border-radius: 12px; filter: drop-shadow(0 0 .5px var(--orbit-popover-edge)) var(--orbit-popover-shadow); }
 .orbit-tooltip { --orbit-callout-bg: var(--orbit-tooltip-bg); position: relative; max-width: 250px; min-height: 32px; padding: 6px 10px; color: #fff; background: var(--orbit-tooltip-bg); border-radius: 10px; overflow-wrap: break-word; }
+/* A tip written on several lines (an error and when it was last tried) keeps its line breaks, as a title did. */
+.orbit-tooltip { white-space: pre-line; }
 /* A tooltip takes the menus' soft shadow; its corners stay 10px, inside the 12px where an end-aligned arrow sits. */
 .orbit-tooltip { filter: var(--orbit-popover-shadow); }
 /* Retains Ant Design's rounded arrow geometry (MIT; the Ant Design license file in this directory). */

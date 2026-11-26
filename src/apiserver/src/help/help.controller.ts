@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   CanActivate,
   Controller,
   ExecutionContext,
@@ -10,7 +11,14 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import type { HelpArticle, HelpIndex, HelpSearchResult } from '@orbit/shared';
+import {
+  DEFAULT_HELP_LANGUAGE,
+  isHelpLanguage,
+  type HelpArticle,
+  type HelpIndex,
+  type HelpLanguage,
+  type HelpSearchResult,
+} from '@orbit/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
@@ -54,20 +62,35 @@ export class HelpController {
     return user?.role === 'ADMIN';
   }
 
+  /** `?lang=<HELP_LANGUAGES code>`: the language the reader asked for; absent is English. */
+  private language(raw: unknown): HelpLanguage {
+    if (raw === undefined) return DEFAULT_HELP_LANGUAGE;
+    if (!isHelpLanguage(raw)) throw new BadRequestException(`unknown help language: ${String(raw)}`);
+    return raw;
+  }
+
   @Get()
-  async index(@Req() req: { user?: AuthUser }): Promise<HelpIndex> {
-    return this.library.index(await this.admin(req));
+  async index(@Req() req: { user?: AuthUser }, @Query('lang') lang: unknown): Promise<HelpIndex> {
+    return this.library.index(await this.admin(req), this.language(lang));
   }
 
   @Get('articles/:slug')
-  async article(@Req() req: { user?: AuthUser }, @Param('slug') slug: string): Promise<HelpArticle> {
-    const article = this.library.article(slug, await this.admin(req));
+  async article(
+    @Req() req: { user?: AuthUser },
+    @Param('slug') slug: string,
+    @Query('lang') lang: unknown,
+  ): Promise<HelpArticle> {
+    const article = this.library.article(slug, await this.admin(req), this.language(lang));
     if (!article) throw new NotFoundException('no such help article');
     return article;
   }
 
   @Get('search')
-  async search(@Req() req: { user?: AuthUser }, @Query('q') q: unknown): Promise<HelpSearchResult> {
-    return this.library.search(typeof q === 'string' ? q : '', await this.admin(req));
+  async search(
+    @Req() req: { user?: AuthUser },
+    @Query('q') q: unknown,
+    @Query('lang') lang: unknown,
+  ): Promise<HelpSearchResult> {
+    return this.library.search(typeof q === 'string' ? q : '', await this.admin(req), this.language(lang));
   }
 }
