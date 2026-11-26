@@ -60,7 +60,7 @@ import {
   UndoOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
 import {
   applyReferencePick,
@@ -141,6 +141,15 @@ import {
 import { useControlPlaneLive, useRefreshSessionLists } from '../lib/useControlPlane';
 import { listPollMs, pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { useSessionProjectData } from '../lib/useSessionProjectData';
+import { listingFolderRows, listingProjectRows, sessionListingView } from '../lib/sessionListing';
+import {
+  dropProjectFromListings,
+  listingEntryCount,
+  listingRows,
+  patchListingRows,
+  patchListings,
+  type SessionListingPage,
+} from '../lib/sessionListingData';
 import {
   workspacesQuery,
   type Me,
@@ -150,6 +159,7 @@ import {
   sessionQuery,
   sessionFoldersQuery,
   type SessionListView,
+  sessionListingQuery,
   sessionsQuery,
   sessionTagsQuery,
   ownerConfirmationQuery,
@@ -2934,6 +2944,9 @@ export function lastUserEventSeq(
   return null;
 }
 
+/** A listing not read yet: no pages, one object, so the list's memos hold still meanwhile. */
+const NO_LISTING_PAGES: readonly SessionListingPage[] = [];
+
 // Remembers the session the user last had open per workspace (workspace id → session id). Switching
 // away to another workspace and back reopens that conversation instead of the workspace's most-recent
 // one. In-memory only (a full reload deep-links via the URL) and at module scope so it survives
@@ -3630,10 +3643,9 @@ export function WorkspaceView({
     () => (foldersQ.data ?? []).filter((f) => f.workspaceId === scopeWorkspaceId),
     [foldersQ.data, scopeWorkspaceId],
   );
-  // Folders split the list on the client, as on iOS, so a workspace that has any loads its whole
-  // list for the view rather than one page: a folder's count, its marks and its page all need every
-  // session filed in it. That is the request every native client makes for every list; a workspace
-  // without folders keeps paging as before.
+  // A list that shows folders or projects reads the server's listing a page at a time (`listingRead` below),
+  // which groups it there: a folder's count and marks are the server's, and a folder's page is the same read
+  // with the folder named. Narrowed to or grouped by a tag, the list is flat and keeps paging GET /sessions.
   const listByTag = !!tagFilter || groupByTag;
   // The page the list is on: an encoded folder id, `scheduled` for Scheduled runs, or null for the
   // workspace's own list. A list's own address keeps it as `?folder=`, so a reload and Back keep the
@@ -3673,8 +3685,8 @@ export function WorkspaceView({
   // The workspace's Scheduled runs folder is open (`?folder=scheduled`): the list is its runs' sessions alone, which
   // every other list leaves out, with no folder or project rows of its own.
   const onScheduledRuns = !listProjectId && folderParam === SCHEDULED_RUNS_FOLDER;
-  // A folder's page, by its page alone: it reads the workspace's whole list as the folder rows do, and
-  // keeps doing so while a tag narrows it, which takes the folder rows off the workspace's own list.
+  // A folder's page, by its page alone: it reads the listing with the folder named, as long as no tag narrows
+  // it; under a tag it pages the tag's list and shows the sessions filed in the folder.
   const onFolderPage = !listProjectId && !onScheduledRuns && !!folderParam;
   const foldersShown = !onScheduledRuns && listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
   const projectScope = `${runner.id}:${scopeWorkspaceId}:${effectiveView}:${tagFilter ?? ''}`;
@@ -3685,6 +3697,13 @@ export function WorkspaceView({
   });
   const projectsShown = !onScheduledRuns && listShowsProjects(effectiveView, listByTag) &&
     ((projectsQ.data?.length ?? 0) > 0 || membershipScope === projectScope);
+  // A workspace's list that shows folders or projects, and a folder's page, read `GET /sessions/listing` a
+  // page at a time (docs/session-list-scale-design.md §3): the server groups it, so no read is the whole
+  // Open list. Trash, a tag's list and Scheduled runs keep the flat `GET /sessions` read.
+  const listingRead = !!scopeWorkspaceId && !listProjectId && !onScheduledRuns && !listByTag &&
+    effectiveView !== 'trash' && (foldersShown || projectsShown || onFolderPage);
+  const listingView: 'open' | 'completed' = effectiveView === 'completed' ? 'completed' : 'open';
+  const listingFolderId = onFolderPage ? (routeId(folderParam) ?? null) : null;
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({
@@ -3692,8 +3711,11 @@ export function WorkspaceView({
     workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
-    limit: scopeWorkspaceId && (foldersShown || projectsShown || onScheduledRuns || onFolderPage) ? null : sessionLimit,
+    limit: scopeWorkspaceId && onScheduledRuns ? null : sessionLimit,
     scheduled: onScheduledRuns,
+  });
+  const listingOpts = sessionListingQuery({
+    runnerId: runner.id, workspaceId: scopeWorkspaceId, view: listingView, folderId: listingFolderId,
   });
   const sessionsKey = sessionsOpts.queryKey;
   // While the control-plane stream is connected it re-reads the list on every event that touches
@@ -3711,9 +3733,9 @@ export function WorkspaceView({
       return qc.invalidateQueries({ queryKey: ['session', id], exact: true });
     },
   });
-  const sessionsQ = useQuery({
+  const flatSessionsQ = useQuery({
     ...sessionsOpts,
-    enabled: !listProjectId,
+    enabled: !listProjectId && !listingRead,
     refetchInterval: listProjectId ? false : (query) => listPollMs(controlLive, query),
     // Widening the window re-keys the query, so hold the rows already on screen while the
     // larger page loads instead of blanking the list. Only within one scope (every key part
@@ -3725,6 +3747,25 @@ export function WorkspaceView({
       return prev;
     },
   });
+  // The listing's pages, read as the flat list is: on the stream's hint for its workspace or the list
+  // budget's safety read (queries.ts sessionListingQuery); the next page as the column nears its end.
+  const listingQ = useInfiniteQuery({
+    ...listingOpts,
+    enabled: listingRead,
+    refetchInterval: (query) => listPollMs(controlLive, query),
+  });
+  const listingSessions = useMemo(() => (listingQ.data ? listingRows(listingQ.data) : undefined), [listingQ.data]);
+  // The rows the list holds, from whichever read it is: a listing's are its session entries and its projects'
+  // coordinators.
+  const sessionsQ = listingRead
+    ? {
+        data: listingSessions,
+        isSuccess: listingQ.isSuccess,
+        isPending: listingQ.isPending,
+        isPlaceholderData: listingQ.isPlaceholderData,
+        isFetching: listingQ.isFetching,
+      }
+    : flatSessionsQ;
   useEffect(() => {
     if (sessionsQ.data?.some((s) => s.projectMembership)) setMembershipScope(projectScope);
   }, [sessionsQ.data, projectScope]);
@@ -4131,9 +4172,20 @@ export function WorkspaceView({
   // Other workspaces may contain only workers. Read the project's words across workspaces,
   // keeping this view's activity and folder count scoped to its own members. From the list's first
   // frame, not a render later when `projectsShown` catches up: the landing waits on these reads.
+  // The listing's pages, as long as they are the workspace's the route names: in the frame before the scope
+  // catches up with a switch, the last workspace's must not stand in for this one's (the filter above, for a
+  // flat list).
+  const listingPages = listingRead
+    ? (!resolvedWorkspaceId || resolvedWorkspaceId === scopeWorkspaceId ? listingQ.data?.pages ?? NO_LISTING_PAGES : NO_LISTING_PAGES)
+    : null;
+  // A listing's project entries are placed by this read too, a project with no coordinator included, which no
+  // row of the list names.
+  const listingProjectIds = useMemo(() => (listingPages ?? []).flatMap((page) =>
+    page.entries.flatMap((entry) => entry.kind === 'project' ? [entry.projectId] : [])), [listingPages]);
   const projectData = useSessionProjectData({
     sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !listProjectId,
     controlLive,
+    projectIds: listingProjectIds,
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
   // read ever sees one (§2.9 LS6). `priority`: the page is waiting on these two, so they do not
@@ -4326,13 +4378,22 @@ export function WorkspaceView({
           return { folders: [], projects: [], sessions: inside,
             entries: inside.map((session): SessionProjectEntry<SessionListItem> => ({ ...session, kind: 'session' })) };
         })()
+      // Read a page at a time, the list is the server's entries and folder tallies (lib/sessionListing).
+      : listingPages
+        ? sessionListingView(listingPages, workspaceFolders, projectsQ.data ?? [], {
+            ...listingOptions,
+            view: listingView,
+            folderId: listingFolderId,
+            motion: (s) => statusGlyphMotion(s),
+            line: (s) => sessionLine(s, effectiveView !== 'trash', null, recapsEnabled, runnerShownName),
+          })
       : sessionProjectListing(visibleSessions, workspaceFolders, projectsQ.data ?? [], {
       ...listingOptions,
       motion: (s) => statusGlyphMotion(s),
       line: (s) => sessionLine(s, effectiveView !== 'trash', null, recapsEnabled, runnerShownName),
     }),
-    [openFolder, listByTag, visibleSessions, workspaceFolders, projectsQ.data, listingOptions, effectiveView, recapsEnabled,
-      runnerShownName],
+    [openFolder, listByTag, listingPages, listingView, listingFolderId, visibleSessions, workspaceFolders, projectsQ.data,
+      listingOptions, effectiveView, recapsEnabled, runnerShownName],
   );
   // The folder rows and project rows as they read now. A folder row's dots and a project row's line
   // speak for the sessions in them, watches, clone frames and the open conversation's detail included,
@@ -4348,12 +4409,20 @@ export function WorkspaceView({
     { folders: new Map(), projects: new Map() });
   const liveListing = useMemo(() => {
     if (openFolder && listByTag) return { folders: [] as SessionFolderRow[], projects: new Map<string, SessionProjectEntry<SessionListItem>>() };
-    const live = sessionProjectListing(filedSessions, workspaceFolders, projectsQ.data ?? [], {
-      ...listingOptions,
-      motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
-      line: (s) => sessionLine(listedSelection?.id === s.id ? listedSelection : s,
+    const liveReadings = {
+      motion: (s: SessionListItem) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
+      line: (s: SessionListItem) => sessionLine(listedSelection?.id === s.id ? listedSelection : s,
         effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, runnerShownName),
-    });
+    };
+    // Read a page at a time, a folder row reads the server's tallies, and a project row the members the list
+    // knows of (lib/sessionListing).
+    const listingLive = listingPages && { ...listingOptions, ...liveReadings, view: listingView, folderId: listingFolderId };
+    const live = listingLive
+      ? {
+          folders: listingFolderRows(listingPages, workspaceFolders, listingLive),
+          projects: listingProjectRows(listingPages, projectsQ.data ?? [], listingLive),
+        }
+      : sessionProjectListing(filedSessions, workspaceFolders, projectsQ.data ?? [], { ...listingOptions, ...liveReadings });
     const before = liveRows.current;
     const folders = live.folders.map((row) => {
       const prev = before.folders.get(row.folder.id);
@@ -4367,8 +4436,8 @@ export function WorkspaceView({
     }));
     liveRows.current = { folders: new Map(folders.map((row) => [row.folder.id, row])), projects };
     return { folders, projects };
-  }, [openFolder, listByTag, filedSessions, workspaceFolders, projectsQ.data, listingOptions, watchingBySession, listedSelection,
-    effectiveView, recapsEnabled, runnerShownName, cloneHeardVersion]);
+  }, [openFolder, listByTag, listingPages, listingView, listingFolderId, filedSessions, workspaceFolders, projectsQ.data,
+    listingOptions, watchingBySession, listedSelection, effectiveView, recapsEnabled, runnerShownName, cloneHeardVersion]);
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
   // for the coordinator; one with no coordinator is passed over, as a folder row is.
   const listedSessions = useMemo(
@@ -4440,18 +4509,25 @@ export function WorkspaceView({
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
-  const hasMoreSessions = !listProjectId && !foldersShown && !projectsShown && !onFolderPage &&
-    (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  // Nothing to list: no session, or, read a page at a time, no entry and no session in a folder either.
+  const listEmpty = listingRead
+    ? folderListing.entries.length === 0 && folderListing.folders.every((row) => row.sessionCount === 0)
+    : visibleSessions.length === 0;
+  // A listing says so itself: its last page's `next`.
+  const hasMoreSessions = listingRead ? listingQ.hasNextPage
+    : !listProjectId && (sessionsQ.data?.length ?? 0) >= sessionLimit;
   // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
   // flash anything over rows that are already correct.
   const loadingProjectSessions = projectSessionsQ.isPending || completedProjectSessionsQ.isPending;
   const loadingSessions = listProjectId ? loadingProjectSessions : sessionsQ.isPending || sessionsQ.isPlaceholderData;
+  const fetchNextListingPage = listingQ.fetchNextPage;
   const loadMoreSessions = useCallback(() => {
     if (!hasMoreSessions || sessionsQ.isFetching) return;
-    setSessionLimit((n) => n + SESSION_PAGE_SIZE);
-  }, [hasMoreSessions, sessionsQ.isFetching]);
+    if (listingRead) void fetchNextListingPage();
+    else setSessionLimit((n) => n + SESSION_PAGE_SIZE);
+  }, [hasMoreSessions, sessionsQ.isFetching, listingRead, fetchNextListingPage]);
   // A new scope starts at one page again: a window grown by scrolling deep into one workspace's
   // history must not make the next workspace (or view, or tag) fetch just as deep.
   useEffect(() => {
@@ -4460,10 +4536,14 @@ export function WorkspaceView({
   // The server pages what the column shows, but a frame where the client narrows further (an
   // workspace that hasn't resolved into the query yet) can hold too few visible rows to be
   // scrollable — and without a scroll there is nothing to trigger the next page. Top it up here.
+  // A listing counts its entries (a project is one), and a folder's page under a tag the sessions filed in it,
+  // which a page of the tag's list may hold few of.
+  const shownCount = listingRead ? listingEntryCount(listingQ.data)
+    : openFolder && listByTag ? folderListing.entries.length : visibleSessions.length;
   useEffect(() => {
-    if (visibleSessions.length >= SESSION_PAGE_SIZE) return;
+    if (shownCount >= SESSION_PAGE_SIZE) return;
     loadMoreSessions();
-  }, [visibleSessions.length, loadMoreSessions]);
+  }, [shownCount, loadMoreSessions]);
   // Widen the window as the list nears its end, so scrolling reads as one continuous list. The column
   // mounts only the rows near the viewport (SessionListWindow), so it is the last row in view that says
   // how near the end the scroll is.
@@ -7497,6 +7577,7 @@ export function WorkspaceView({
     qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
     );
+    patchListings(qc, (row) => (row.id === id ? null : row));
     void qc.cancelQueries({ queryKey: ['sessions'], fetchStatus: 'fetching' });
     qc.setQueriesData<any[]>({ queryKey: ['project-sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
@@ -7528,6 +7609,7 @@ export function WorkspaceView({
     onSuccess: (_d, { projectId, memberIds }) => {
       if (selectedId && memberIds.includes(selectedId)) leaveIfOpen(selectedId);
       memberIds.forEach((id) => dropFromLists(id, projectId));
+      dropProjectFromListings(qc, projectId);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: (e: Error) => message.error("Couldn't complete the project's sessions", e.message),
@@ -7778,6 +7860,7 @@ export function WorkspaceView({
         Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, title } : s)) : old;
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, patch);
       qc.setQueriesData<any[]>({ queryKey: ['project-sessions'] }, patch);
+      patchListings(qc, (row) => (row.id === id ? { ...row, title } : row));
     },
     onError: (e: Error) => message.error("Couldn't rename the session", e.message),
     onSettled: () => {
@@ -7799,6 +7882,7 @@ export function WorkspaceView({
           : old;
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, patch);
       if (projectId) qc.setQueriesData<any[]>({ queryKey: ['project-sessions', projectId] }, patch);
+      patchListings(qc, (row) => (row.id === id ? { ...row, pinnedAt: pin ? new Date().toISOString() : null } : row));
     },
     onError: (e: Error, { pin }) =>
       message.error(pin ? "Couldn't pin the session" : "Couldn't unpin the session", e.message),
@@ -7831,6 +7915,7 @@ export function WorkspaceView({
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
         Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, tags } : s)) : old,
       );
+      patchListings(qc, (row) => (row.id === id ? { ...row, tags } : row));
       qc.setQueryData<any>(['session', id], (old: any) => (old ? { ...old, tags } : old));
       return { previousLists, previousDetail };
     },
@@ -7838,6 +7923,7 @@ export function WorkspaceView({
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
         Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, tags } : s)) : old,
       );
+      patchListings(qc, (row) => (row.id === id ? { ...row, tags } : row));
       qc.setQueryData<any>(['session', id], (old: any) => (old ? { ...old, tags } : old));
     },
     onError: (e: Error, { id }, context) => {
@@ -8191,10 +8277,19 @@ export function WorkspaceView({
       qc.setQueryData<any[]>(sessionsKey, (old) =>
         (old ?? []).map((s) => (s.id === selected!.id ? { ...s, ...cfg } : s)),
       );
-      return { prev };
+      // The listing the column reads, when it is read a page at a time.
+      const listingKey = listingOpts.queryKey;
+      const prevListing = qc.getQueryData(listingKey);
+      if (prevListing) {
+        await qc.cancelQueries({ queryKey: listingKey });
+        qc.setQueryData(listingKey, patchListingRows(prevListing, (row) =>
+          (row.id === selected!.id ? { ...row, ...cfg } as typeof row : row)) as typeof prevListing);
+      }
+      return { prev, prevListing, listingKey };
     },
     onError: (e: Error, cfg, ctx) => {
       if (ctx?.prev) qc.setQueryData(sessionsKey, ctx.prev);
+      if (ctx?.prevListing) qc.setQueryData(ctx.listingKey, ctx.prevListing);
       // Named by what was picked: a provider switch carries the model, mode and effort that follow
       // it, and a model switch its mode and effort.
       message.error(
@@ -9699,6 +9794,7 @@ export function WorkspaceView({
         qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
           Array.isArray(old) ? old.map((s) => (s.folderId === folder.id ? { ...s, folderId: null } : s)) : old,
         );
+        patchListings(qc, (row) => (row.folderId === folder.id ? { ...row, folderId: null } : row));
         void qc.invalidateQueries({ queryKey: ['session-folders'] });
         refreshSessionLists();
         if (openFolder?.id === folder.id) leaveFolder(true);
@@ -11469,7 +11565,7 @@ export function WorkspaceView({
                         )}
                       </div>
                     )
-                  : visibleSessions.length === 0 &&
+                  : listEmpty &&
                     !loadingSessions && (
                       <div className="chat-note">
                         {tagFilter

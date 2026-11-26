@@ -23,6 +23,9 @@ export interface SessionListingProject {
   spokeAt: string;
   /** How many members it holds in this workspace. */
   memberCount: number;
+  /** Whether a member it holds runs / has a background job moving (workspaceSessionCounts' predicates). */
+  running?: boolean;
+  jobs?: boolean;
   /** The project's coordinator in either lifecycle, or null for a project with none. */
   coordinator: SessionListItem | null;
 }

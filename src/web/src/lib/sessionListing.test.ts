@@ -31,7 +31,10 @@ interface Read {
   folderId: string | null;
   expected: {
     folders: Array<{ folderId: string; rowCount: number; needsYou: number; running: boolean; jobs: boolean }> | null;
-    entries: Array<{ kind: string; id: string; coordinator?: string | null; memberCount?: number; placedAt?: string; spokeAt?: string }>;
+    entries: Array<{
+      kind: string; id: string; coordinator?: string | null; memberCount?: number; placedAt?: string; spokeAt?: string;
+      running?: boolean; jobs?: boolean;
+    }>;
   };
 }
 interface Case {
@@ -87,6 +90,8 @@ function listingPages(c: Case, read: Read, size: number): SessionListingPage[] {
         placedAt: entry.placedAt!,
         spokeAt: entry.spokeAt!,
         memberCount: entry.memberCount!,
+        running: entry.running,
+        jobs: entry.jobs,
         coordinator: entry.coordinator ? byId.get(entry.coordinator)! : null,
       });
   const pages: SessionListingPage[] = [];
@@ -103,7 +108,8 @@ function listingPages(c: Case, read: Read, size: number): SessionListingPage[] {
 const shape = (entries: readonly SessionProjectEntry<Row>[]) =>
   entries.map((entry) => entry.kind === 'project'
     ? { kind: 'project', id: entry.projectId, coordinator: entry.coordinator?.id ?? null, listedAt: entry.listedAt,
-        lastTurnAt: entry.lastTurnAt, pinned: !!entry.pinnedAt, needsYou: entry.needsYou }
+        lastTurnAt: entry.lastTurnAt, pinned: !!entry.pinnedAt, needsYou: entry.needsYou, running: entry.running, jobs: entry.jobs,
+        indicator: entry.indicator }
     : { kind: 'session', id: entry.id, mark: entry.projectMark?.projectId ?? null });
 
 describe('the list drawn from GET /sessions/listing (contracts/session-listing.fixtures.json)', () => {
@@ -208,9 +214,16 @@ describe('sessionListingView', () => {
     if (entry.kind !== 'project') return;
     expect(entry).toMatchObject({
       title: 'Project one', listedAt: '2026-11-22T00:00:00.000Z', lastTurnAt: '2026-11-22T01:00:00.000Z',
-      sessionCount: 5, needsYou: true, running: true, target: { kind: 'session', id: 'm1' },
+      sessionCount: 5, needsYou: true, running: false, target: { kind: 'session', id: 'm1' },
     });
     expect(entry.members.map((m) => m.id)).toEqual(['c1', 'm1']);
+    // A member it holds runs, or has a job moving, though the list holds no row of it: the server's entry says so.
+    const busy = (flags: { running?: boolean; jobs?: boolean }, runnerOffline = false) =>
+      sessionListingView([{ entries: [{ ...pages[0].entries[0], ...flags } as SessionListingEntry], next: null }], [], [],
+        { ...opts, runnerOffline }).entries[0];
+    expect(busy({ running: true, jobs: true })).toMatchObject({ running: true, jobs: true, indicator: 'running' });
+    expect(busy({ jobs: true })).toMatchObject({ running: false, jobs: true, indicator: 'jobs' });
+    expect(busy({ running: true, jobs: true }, true)).toMatchObject({ running: false, jobs: false, indicator: null });
     // A project with no coordinator, no sidebar row and no member the list holds still has a name.
     const bare = sessionListingView([{ entries: [{ ...pages[0].entries[0], coordinator: null } as SessionListingEntry], next: null }], [], [], opts);
     expect(bare.entries[0]).toMatchObject({ kind: 'project', title: 'Project', line: { text: 'No coordinator' } });

@@ -794,6 +794,9 @@ export interface SessionProjectPlacement {
   placedAt: string;
   spokeAt: string;
   memberCount: number;
+  /** Whether a member it holds runs / has a background job moving, which the list holds no row to read off. */
+  running?: boolean;
+  jobs?: boolean;
 }
 
 /**
@@ -880,10 +883,8 @@ export function sessionProjectRow<T extends SessionProjectSession>(
     : null;
   const motions = opts.runnerOffline ? [] : members.map(opts.motion);
   const needsYou = members.some((session) => lines.get(session.id)?.tone === 'approval');
-  // Placed by the server, the row holds members the list never read: the project's own running count says
-  // whether any of them runs.
-  const running = motions.includes('spinner') || (!!placed && !opts.runnerOffline && runningNow > 0);
-  const jobs = motions.includes('pulse');
+  const running = motions.includes('spinner') || (!opts.runnerOffline && !!placed?.running);
+  const jobs = motions.includes('pulse') || (!opts.runnerOffline && !!placed?.jobs);
   const listedAt = placed?.placedAt ?? latest?.listedAt ?? latest?.createdAt ?? null;
   return {
     id: projectId,
