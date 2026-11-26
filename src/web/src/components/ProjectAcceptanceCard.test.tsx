@@ -20,6 +20,7 @@ import {
   criteriaPreview,
   type AcceptanceCriterionItem,
 } from './ProjectAcceptanceCard';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // Migration 0229 removed the project acceptance judgment, so this card no longer draws a verdict
 // per row, a pass ratio or a meter: there is nothing that CONCLUDES anything about a criterion.
@@ -670,12 +671,10 @@ describe('ProjectAcceptanceCard on what the work has done', () => {
 
     // Each reason names ITS OWN tasks, and each named task carries what would settle it. A title
     // alone says a red dot has a name; `requiredAction` says who does what next.
+    // (Each one's code is on hover: see 'makes every blocked task openable'.)
     expect(reasons[0]).toContain('Carry the derivation onto the project read');
-    expect(reasons[0]).toContain('RUN_ACCEPTANCE_COMMAND');
     expect(reasons[0]).toContain('Prove the read has no N+1');
-    expect(reasons[0]).toContain('OBTAIN_INDEPENDENT_VERIFICATION_PASS');
     expect(reasons[1]).toContain('Reword the landing lane');
-    expect(reasons[1]).toContain('SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION');
     // Grouped, not run together: the stale task is under the stale clause and nowhere else.
     expect(reasons[0]).not.toContain('Reword the landing lane');
   });
@@ -726,7 +725,7 @@ describe('ProjectAcceptanceCard on what the work has done', () => {
     }
   });
 
-  it('makes every blocked task openable and says what it needs in words', () => {
+  it('makes every blocked task openable and says what it needs in words', async () => {
     const qc = client();
     seed(qc, DERIVED);
 
@@ -755,9 +754,19 @@ describe('ProjectAcceptanceCard on what the work has done', () => {
     expect(accessibleText(reasons[0])).not.toContain('RUN_ACCEPTANCE_COMMAND');
 
     // Kept, not discarded: a reader matching this row against an API response still has the code.
-    expect(reasons[0]).toContain('title="RUN_ACCEPTANCE_COMMAND"');
-    expect(reasons[0]).toContain('title="OBTAIN_INDEPENDENT_VERIFICATION_PASS"');
-    expect(reasons[1]).toContain('title="SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION"');
+    const tips: (string | null)[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const { container, cleanup } = await mount(qc);
+      const row = [...container.querySelectorAll('li')]
+        .find((each) => each.textContent?.includes('A reader can see what is holding a criterion open'))!;
+      tips.push(await hoverTooltip(row.querySelectorAll('span.acceptance-held-up-action')[index]));
+      await cleanup();
+    }
+    expect(tips).toEqual([
+      'RUN_ACCEPTANCE_COMMAND',
+      'OBTAIN_INDEPENDENT_VERIFICATION_PASS',
+      'SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION',
+    ]);
 
     // A code this build does not recognise prints as itself rather than vanishing — the same
     // treatment an unknown clause already gets. Dropping it would say the task needs nothing.

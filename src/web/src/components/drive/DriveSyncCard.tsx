@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { formatSize } from '../../lib/drive';
 import { useDriveSync, syncRunning, type DriveSync } from '../../lib/driveSyncs';
 import { durationText, rateText, timeLeftText } from '../../lib/driveTransfer';
+import { Tooltip } from '../ui/Tooltip';
 
 /** Failed paths the card shows before "Show all". */
 const FAILED_SHOWN = 5;
@@ -198,13 +199,15 @@ export function DriveSyncCard({ syncId }: { syncId: string }) {
       {sync.failed.length > 0 && (
         <ul className="drive-xfer-list">
           {shown.map((f) => (
-            <li key={f.path} className="drive-xfer-row is-failed" title={f.path}>
-              <span className="drive-xfer-mark" aria-hidden="true">
-                ✕
-              </span>
-              <span className="drive-xfer-name">{f.path}</span>
-              <span className="drive-xfer-size">{f.error}</span>
-            </li>
+            <Tooltip key={f.path} content={f.path} truncatedOnly mono>
+              <li className="drive-xfer-row is-failed">
+                <span className="drive-xfer-mark" aria-hidden="true">
+                  ✕
+                </span>
+                <span className="drive-xfer-name">{f.path}</span>
+                <span className="drive-xfer-size">{f.error}</span>
+              </li>
+            </Tooltip>
           ))}
           {more > 0 && (
             <li className="drive-xfer-more">

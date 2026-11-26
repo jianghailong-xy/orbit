@@ -1,0 +1,105 @@
+/* Mock only. .cra-* is board chrome and the proposal's new pieces; everything else comes from
+   src/web/src/index.css. */
+html, body { height: auto; overflow: visible; }
+body.cra { margin: 0; background: #f5f6f8; font: 14px/1.5715 Inter, "Noto Sans", "Noto Sans CJK SC", "WenQuanYi Zen Hei", sans-serif; color: var(--text-1); }
+.cra-part { width: 1180px; padding: 24px 28px 30px; background: #f5f6f8; }
+.cra-part h2 { font-size: 20px; margin: 0 0 4px; color: #1f2329; }
+.cra-part p.cra-lede { margin: 0 0 18px; color: #646a73; max-width: 900px; }
+.cra-row { display: flex; gap: 28px; align-items: flex-start; }
+.cra-col { width: 340px; flex: none; }
+.cra-cap { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: #1f2329; }
+.cra-note { font-size: 12.5px; color: #646a73; margin: 10px 0 0; }
+.cra-note b { color: #1f2329; }
+
+.cra-pop { width: max-content; padding: 12px; border-radius: 12px; background: var(--bg-elevated, #fff); box-shadow: 0 0 0 .5px rgba(0,0,0,.12), 0 8px 28px rgba(0,0,0,.14); color: var(--text-1); }
+.cra-title { font-weight: 600; margin: 0 0 8px; }
+.cra-pop .cu-pop-reset { width: 300px; }
+.cra-pop-phone { border-radius: 14px; }
+.cra-pop-phone .cu-pop-reset { width: 300px; }
+
+/* the shipped Button, drawn */
+.cra-btn { width: 100%; height: 32px; border: 0; border-radius: 6px; background: var(--brand); color: #fff; font: inherit; font-size: 14px; }
+.cra-btn:disabled { background: var(--border-subtle); color: var(--text-4); }
+.cra-btn-sm { width: auto; height: 28px; padding: 0 14px; font-size: 13px; flex: none; }
+.cra-btn-plain { background: transparent; border: 1px solid var(--border-subtle); color: var(--text-1); }
+.cu-rc svg, .cra-compact svg { display: block; }
+
+/* Proposal A: one block per other account, ruled off by the card's own top border. */
+.cra-acct { padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+.cra-acct .cu-account { padding-bottom: 0; border-bottom: 0; }
+.cra-summary { margin: 2px 0 10px; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.cra-summary b { color: var(--text-1); font-weight: 600; }
+.cra-summary b.cra-spent { color: var(--error-solid); }
+.cu-rc.cra-bare { padding-top: 0; border-top: 0; }
+
+/* Alternative B */
+.cra-others { padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; }
+.cra-others-h { font-size: 13px; font-weight: 600; color: var(--text-3); }
+.cra-compact { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: var(--brand-tint); }
+.cra-compact .cu-rc-icon { margin: 0; }
+.cra-compact-body { flex: 1; min-width: 0; }
+.cra-compact-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cra-compact .cu-rc-meta b { color: var(--text-1); }
+
+.cra-dialog { width: 312px; padding: 20px 24px; border-radius: 12px; background: var(--bg-elevated, #fff); box-shadow: 0 8px 28px rgba(0,0,0,.18); color: var(--text-1); }
+.cra-dialog-title { font-size: 16px; font-weight: 600; margin: 0 0 12px; }
+.cra-confirm-box { display: block; }
+.cra-confirm-box > div { display: flex; justify-content: space-between; gap: 16px; }
+.cra-confirm-box > div + div { margin-top: 6px; }
+.cra-dialog-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+.cra-dark { background: #141416; border-radius: 14px; padding: 16px; width: max-content; }
+.cra-phone { box-sizing: content-box; width: 320px; height: 720px; border-radius: 40px; border: 10px solid #2a2a2c; background: var(--bg-base, #fff); position: relative; overflow: hidden; }
+.cra-phone .cra-pop { position: absolute; left: 0; bottom: 44px; box-sizing: border-box; width: 320px; padding: 12px 10px; }
+.cra-phone .cu-pop-reset { width: 300px; }
+.cra-phone-comp { position: absolute; left: 10px; right: 10px; bottom: 10px; height: 26px; border-radius: 14px; border: 1px solid var(--border-subtle); }
+
+/* The shipped dark tokens (src/web/src/index.css :root[data-theme=dark]), scoped to one frame. */
+.cra-dark {
+  color-scheme: dark;
+  --bg-base: #202023;
+  --bg-raised: #2b2b2e;
+  --bg-subtle: #252528;
+  --bg-sunken: #17171a;
+  --bg-hover: #343437;
+  --bg-hover-strong: #424246;
+  --fill-muted: #38383c;
+  /* 0.25 so a panel on --bg-raised lands where --bg-base used to: the depth dark mode already
+     had, now reproduced on tinted cards too. */
+  --fill-inset: rgba(0, 0, 0, 0.25);
+  --border: #424246;
+  --border-subtle: #343437;
+  --scrollbar-hover: #565a62;
+  --text-1: #c9ced5;
+  --text-2: #a7adb6;
+  /* text-4 holds 4.5:1 on --bg-base; text-3 sits a step above it (board dark-palette, item B). */
+  --text-3: #9a9fa8;
+  --text-4: #858a93;
+  --dot-idle: #4a4e56;
+  --brand: #5b8cff;
+  --brand-strong: #7aa2ff;
+  --brand-tint: rgba(91, 140, 255, 0.16);
+  --brand-tint-hover: rgba(91, 140, 255, 0.24);
+  --brand-border: rgba(91, 140, 255, 0.32);
+  --success: #4ac26b;
+  --success-solid: #3fb45b;
+  --success-bg: rgba(46, 161, 33, 0.18);
+  --success-border: rgba(46, 161, 33, 0.35);
+  --error: #f0837b;
+  --error-solid: #e5613c;
+  --error-bg: rgba(245, 74, 69, 0.16);
+  --error-border: rgba(245, 74, 69, 0.38);
+  --warning: #e0a23b;
+  --warning-solid: #e0902b;
+  --warning-bg: rgba(250, 140, 22, 0.15);
+  --warning-border: rgba(250, 140, 22, 0.38);
+  --route-shadow: #b69cf5;
+  --fixing: #a99bf5;
+  --fixing-bg: rgba(124, 108, 240, 0.16);
+  --fixing-border: rgba(124, 108, 240, 0.36);
+  --invert-surface: #e6e8eb;
+  --invert-surface-hover: #ffffff;
+  --invert-text: #16171a;
+  color: var(--text-1);
+}
+.cra-dark .cra-pop { background: var(--bg-raised); }

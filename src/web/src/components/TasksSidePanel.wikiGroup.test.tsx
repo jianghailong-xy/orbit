@@ -130,7 +130,7 @@ const entry = () =>
   [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item')].find(
     (item) => item.querySelector('.tp-label')?.textContent === 'Wiki',
   );
-const railIcon = () => container!.querySelector<HTMLElement>('.tp-rail-item[title="Wiki"]')!;
+const railIcon = () => container!.querySelector<HTMLElement>('.tp-rail-item .sidebar-nav-icon-wiki')!.closest<HTMLElement>('.tp-rail-item')!;
 /** Every row of the panel lit as the page on screen, by what it says. */
 const lit = () =>
   [...container!.querySelectorAll('.tp-scroll [aria-current="page"] .tp-label')].map((label) => label.textContent);

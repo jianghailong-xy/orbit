@@ -407,14 +407,8 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
         />
       )}
       {mark.kind !== 'MOTIF' ? (
-        <button
-          type="button"
-          className="pdg-fold-main nodrag nopan"
-          onClick={() => data.onToggle(mark.id, mark.members[0]?.taskId ?? null)}
-          disabled={mark.kind === 'RUN' && !mark.expandable}
-          aria-label={label}
-          title={
-            mark.kind === 'SETTLED'
+        // The span takes the pointer while a long run is disabled, so why it cannot open still shows.
+        <Tooltip content={mark.kind === 'SETTLED'
               ? data.expanded
                 ? 'Fold this finished work back up'
                 : 'Show the finished tasks'
@@ -422,11 +416,19 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
                 ? data.expanded
                   ? 'Fold these steps back up'
                   : 'Show these steps'
-                : 'Too long to open here — the task list below has all of it'
-          }
-        >
-          {mark.kind === 'SETTLED' ? settledBody : body}
-        </button>
+                : 'Too long to open here — the task list below has all of it'}>
+          <span className="nodrag nopan" style={{ display: 'flex', width: '100%', height: '100%', minWidth: 0 }}>
+            <button
+              type="button"
+              className="pdg-fold-main nodrag nopan"
+              onClick={() => data.onToggle(mark.id, mark.members[0]?.taskId ?? null)}
+              disabled={mark.kind === 'RUN' && !mark.expandable}
+              aria-label={label}
+            >
+              {mark.kind === 'SETTLED' ? settledBody : body}
+            </button>
+          </span>
+        </Tooltip>
       ) : (
         <Popover
           title={mark.title}

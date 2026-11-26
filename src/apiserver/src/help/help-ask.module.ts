@@ -1,17 +1,17 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
-import { SessionsModule } from '../sessions/sessions.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { HelpAsk } from './help-ask';
 import { HelpAskController } from './help-ask.controller';
 import { HelpAskRunnerFence, HelpAskSessions, RunnerHelpAskController } from './help-ask-reads';
+import { HelpModule } from './help.module';
 
 /**
- * The help center's Ask (help-ask.ts): its own module because an Ask is made through SessionsService.create, as the
- * wiki chat's is (wiki-chat.module.ts), while the article library's module needs nothing of Sessions. The fence holds
- * an Ask's tools to its four reads on every runner door.
+ * The help center's Ask (help-ask.ts), answered on the server's DeepSeek key from the article library (HelpModule) and
+ * the account reads; Ask your admin makes a task (TasksModule). The runner doors and the fence serve the session-based
+ * Asks made before migration 1668: the fence holds such an Ask's tools to its four reads on every runner door.
  */
 @Module({
-  imports: [SessionsModule, TasksModule],
+  imports: [HelpModule, TasksModule],
   controllers: [HelpAskController, RunnerHelpAskController],
   providers: [HelpAsk, HelpAskSessions, HelpAskRunnerFence],
 })

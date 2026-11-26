@@ -182,27 +182,28 @@ export function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
       {data.hasIncoming && (
         <Handle type="target" position={data.vertical ? Position.Top : Position.Left} isConnectable={false} />
       )}
-      <button
-        type="button"
-        className="tdg-node-main nodrag nopan"
-        onClick={() => data.onOpenTask(data.task.id)}
-        onFocus={() => data.onHighlight(data.task.id)}
-        onBlur={() => data.onHighlight(null)}
-        aria-label={`${data.task.title}, ${label}${data.isFocus ? ', current task' : ''}`}
-        title={`Open task: ${data.task.title}`}
-      >
-        <span className="tdg-node-title-row">
-          <span className="tdg-node-title">{data.task.title}</span>
-          {data.isFocus && <span className="tdg-current-tag">Current</span>}
-        </span>
-        <TaskStatusPill
-          status={data.task.status}
-          running={data.task.running}
-          queued={data.task.queued}
-          queuedOnHold={data.task.queuedOnHold}
-          runReason={data.task.runReason}
-        />
-      </button>
+      <Tooltip content={`Open task: ${data.task.title}`}>
+        <button
+          type="button"
+          className="tdg-node-main nodrag nopan"
+          onClick={() => data.onOpenTask(data.task.id)}
+          onFocus={() => data.onHighlight(data.task.id)}
+          onBlur={() => data.onHighlight(null)}
+          aria-label={`${data.task.title}, ${label}${data.isFocus ? ', current task' : ''}`}
+        >
+          <span className="tdg-node-title-row">
+            <span className="tdg-node-title">{data.task.title}</span>
+            {data.isFocus && <span className="tdg-current-tag">Current</span>}
+          </span>
+          <TaskStatusPill
+            status={data.task.status}
+            running={data.task.running}
+            queued={data.task.queued}
+            queuedOnHold={data.task.queuedOnHold}
+            runReason={data.task.runReason}
+          />
+        </button>
+      </Tooltip>
       {data.isDirect && !data.isFocus && data.onRemoveDependency && (
         <Popconfirm
           title="Remove prerequisite?"

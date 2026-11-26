@@ -8,6 +8,7 @@ import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import './ui/Typography.css';
 
 /**
@@ -303,9 +304,11 @@ function RefusedTaskList({ projectId, taskIds }: { projectId: string; taskIds: s
             </a>
             {/* What this blocker says about that row: its start is the one this line refused. Not
                 the task's own status, which a refusal deliberately does not change. */}
-            <span className="project-blockers-task-state" title={blockerTaskStateTitle}>
-              Refused
-            </span>
+            <Tooltip content={blockerTaskStateTitle} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+              <span className="project-blockers-task-state">
+                Refused
+              </span>
+            </Tooltip>
           </li>
         );
       })}
@@ -548,14 +551,15 @@ export function ProjectBlockersCard({
           the chain strip and the queue beside it are all sections of this zone, not cards. */}
       <h4 className="project-blockers-heading orbit-typography" style={{ marginBottom: 8 }}>
         <span className="project-blockers-heading-label">Blockers</span>
-        <span
-          className="project-blockers-summary orbit-typography orbit-typography-secondary"
-          style={{ fontSize: 12, fontWeight: 400 }}
-          title={`${open.length} open`}
-        >
-          {' '}
-          {`${open.length} open`}
-        </span>
+        <Tooltip content={`${open.length} open`} truncatedOnly>
+          <span
+            className="project-blockers-summary orbit-typography orbit-typography-secondary"
+            style={{ fontSize: 12, fontWeight: 400 }}
+          >
+            {' '}
+            {`${open.length} open`}
+          </span>
+        </Tooltip>
       </h4>
       <ul className="project-blockers-list">
         {open.map((blocker) => (

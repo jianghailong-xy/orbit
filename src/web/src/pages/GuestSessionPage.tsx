@@ -626,9 +626,11 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
     <div className="share-page guest-view">
       <header className="share-header">
         <div className="share-crumbs">
-          <span className="share-crumb is-here" title={titleFirstLine(head.title)}>
-            {titleFirstLine(head.title)}
-          </span>
+          <Tooltip content={titleFirstLine(head.title)} truncatedOnly side="bottom" align="start">
+            <span className="share-crumb is-here">
+              {titleFirstLine(head.title)}
+            </span>
+          </Tooltip>
           <span className="share-subtitle">Shared by {owner}</span>
         </div>
         <div className="share-right">

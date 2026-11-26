@@ -65,6 +65,17 @@ import { sessionLine, statusLabel } from './WorkspaceView';
  * assertions go through `escaped()`.
  */
 
+// A static render opens no tip: the app Tooltip renders its child here, carrying what it would say.
+vi.mock('./ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
+
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: vi.fn(),
@@ -536,7 +547,7 @@ describe('If you confirm, on a branch with no changes', () => {
       }),
     });
     expect(html).toContain(`>${IF_CONFIRMED_NO_CHANGES}<`);
-    expect(html).toContain(`title="${NAME}">${NAME}<`);
+    expect(html).toContain(`data-tip="${NAME}">${NAME}<`);
     expect(html).toContain('Starts 1 task waiting on this one');
     expect(html).not.toContain('Not on develop yet');
     expect(html).not.toContain('Goes onto the integration line');

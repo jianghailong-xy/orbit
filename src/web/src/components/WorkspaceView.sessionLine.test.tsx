@@ -768,7 +768,7 @@ describe('the guests mark on a session row', () => {
     const row = (s: Record<string, unknown>) =>
       renderToStaticMarkup(<SessionTitleRow session={{ title: 'Retry budget for flaky pg specs', lastTurnAt: new Date().toISOString(), ...s }} />);
     const shown = row({ hasGuests: true, shared: true });
-    expect(shown).toContain(`<span class="session-guests" title="${SESSION_GUESTS_TIP}" aria-label="${SESSION_GUESTS_TIP}">`);
+    expect(shown).toContain(`<span class="session-guests" aria-label="${SESSION_GUESTS_TIP}"`);
     // Beside the globe, both before the time.
     expect(shown.indexOf('session-shared')).toBeLessThan(shown.indexOf('session-guests'));
     expect(shown.indexOf('session-guests')).toBeLessThan(shown.indexOf('session-time'));

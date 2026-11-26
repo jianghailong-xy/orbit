@@ -187,8 +187,6 @@ const BLANK_GUARDED: Record<string, readonly string[]> = {
   'wiki-chat.controller.ts': ['workspaceId', 'attachmentIds'],
   // wiki/wiki-chat-drafts.pg.spec.ts: 'a rewrite card …', whose cases include a blank replaces: WIKI_SCHEMA, nothing made.
   'runner-wiki.controller.ts': ['replaces'],
-  // help/help-ask.pg.spec.ts: '2. asking makes an ordinary session…', whose refusals include a blank runnerId.
-  'help-ask.controller.ts': ['runnerId'],
 };
 
 test('a blank body id is not decoded — the pipe hands it straight through', () => {

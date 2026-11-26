@@ -13,6 +13,7 @@ import type { OwnerCardTranslation } from '@orbit/shared';
 import { OTHER_OPTION, RECOMMENDED } from './CoordinatorQuestionCard';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import { Textarea } from './ui/Textarea';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * The review bar of the owner-confirmation card (docs/owner-confirmation-review-contract.md §6–§9).
@@ -525,7 +526,9 @@ export function OwnerConfirmationReviewBar({
       <div className="owner-confirmation-review-head">
         <span className="owner-confirmation-review-who">
           <span className="owner-confirmation-key">{`${REVIEW_HEADING} · `}</span>
-          <span className="owner-confirmation-review-name" title={bar.reviewer}>{bar.reviewer}</span>
+          <Tooltip content={bar.reviewer} truncatedOnly>
+            <span className="owner-confirmation-review-name">{bar.reviewer}</span>
+          </Tooltip>
           {bar.time ? <span className="owner-confirmation-key">{` · ${bar.time}`}</span> : null}
         </span>
         {bar.sha ? (
@@ -579,9 +582,11 @@ function ReviewLine({
       return <div className="owner-confirmation-review-note">{line.text}</div>;
     case 'HEADLINE':
       return (
-        <div className={`owner-confirmation-review-headline${line.warn ? ' is-warn' : ''}`} title={line.text}>
-          {line.text}
-        </div>
+        <Tooltip content={line.text} truncatedOnly>
+          <div className={`owner-confirmation-review-headline${line.warn ? ' is-warn' : ''}`}>
+            {line.text}
+          </div>
+        </Tooltip>
       );
     case 'ANSWERS':
       return onChoose ? (

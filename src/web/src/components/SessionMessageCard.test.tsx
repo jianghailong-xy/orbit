@@ -8,6 +8,7 @@ import { parseSessionMessage } from '../lib/sessionMessage';
 import { acceptedUserTurnEvent } from '../lib/acceptedUserTurn';
 import { SessionMessageCard } from './SessionMessageCard';
 import { Transcript, type RunEvent } from './Transcript';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Another Orbit session's message is drawn from who the control plane recorded as sending it — NOT
@@ -104,7 +105,7 @@ describe('another session’s message', () => {
     expect(el!.querySelector('.smc-body')?.textContent).not.toContain('orbit-session-message');
     // That it is not the reader's is the From line's tooltip and its screen-reader text, not a line
     // of its own (docs/mocks/session-message-bubble).
-    expect(head?.getAttribute('title')).toBe('Sent by another Orbit session, not by you');
+    expect(await hoverTooltip(head!)).toBe('Sent by another Orbit session, not by you');
     expect(head?.querySelector('.smc-not-you')?.textContent).toBe('Sent by another Orbit session, not by you');
     // The foot row is one grey line: the time and the sender's task.
     const meta = el!.querySelector('.smc-meta');

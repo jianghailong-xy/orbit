@@ -29,6 +29,7 @@ import { EMPTY_LIVE_TASK_PROGRESS, type LiveTaskProgress } from '../lib/liveTask
 import { TaskProgressBlock } from './TaskProgressBlock';
 import { stopBackgroundJob } from '../api';
 import { Popconfirm } from './ui/Popconfirm';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** The Job card a bg_run job's row scrolls to (JobCard marks it), where it is on the page. */
 const jobCardOf = (jobId: string): HTMLElement | null =>
@@ -275,17 +276,21 @@ function FoldedName({ name, rotation }: { name: BackgroundRowName; rotation: Rot
 function RowName({ item, className }: { item: BackgroundRowItem; className: string }) {
   if (item.truncate === 'tail') {
     return (
-      <span className={className} data-truncate="tail" title={item.name}>
-        {item.name}
-      </span>
+      <Tooltip content={item.name} truncatedOnly>
+        <span className={className} data-truncate="tail">
+          {item.name}
+        </span>
+      </Tooltip>
     );
   }
   const keep = Math.min(16, Math.floor(item.name.length / 2));
   return (
-    <span className={`${className} bg-name-mid`} data-truncate="middle" title={item.name}>
-      <span className="bg-name-head">{item.name.slice(0, item.name.length - keep)}</span>
-      <span className="bg-name-tail">{item.name.slice(item.name.length - keep)}</span>
-    </span>
+    <Tooltip content={item.name} truncatedOnly mono>
+      <span className={`${className} bg-name-mid`} data-truncate="middle">
+        <span className="bg-name-head">{item.name.slice(0, item.name.length - keep)}</span>
+        <span className="bg-name-tail">{item.name.slice(item.name.length - keep)}</span>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -312,9 +317,11 @@ function BgShellRow({
       <div className="bg-shell-head" onClick={onToggle}>
         <BgStatusIcon status={shell.status} />
         {task && <span className="bg-shell-kind">{shell.kind === 'workflow' ? 'Workflow' : 'Agent'}</span>}
-        <span className="bg-shell-cmd" title={shell.command || title}>
-          {title}
-        </span>
+        <Tooltip content={shell.command || title} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="bg-shell-cmd">
+            {title}
+          </span>
+        </Tooltip>
         <span className="bg-shell-id">{shell.shellId}</span>
         {shell.startedTs && <span className="bg-shell-age">{relAge(shell.startedTs)}</span>}
         {onStop && (
@@ -356,10 +363,12 @@ function BgShellRow({
               workspace hasn't read its .output file.
             </div>
           )}
-          <div className="bg-shell-meta" title={shell.outputPath}>
-            {shell.outputPath || shell.shellId}
-            {shell.latestOutputTs ? ` · updated ${relAge(shell.latestOutputTs)}` : ''}
-          </div>
+          <Tooltip content={shell.outputPath} truncatedOnly mono>
+            <div className="bg-shell-meta">
+              {shell.outputPath || shell.shellId}
+              {shell.latestOutputTs ? ` · updated ${relAge(shell.latestOutputTs)}` : ''}
+            </div>
+          </Tooltip>
         </div>
       )}
     </div>

@@ -1,58 +1,38 @@
 import { queryOptions } from '@tanstack/react-query';
-import type { HelpArticleMeta, HelpAskChoices, HelpAskCreateBody, HelpAskList, HelpAskMachine, HelpAskPage } from '@orbit/shared';
+import type { HelpArticleMeta, HelpAskConversation, HelpAskCreateBody, HelpAskList, HelpAskMessage, HelpAskPage } from '@orbit/shared';
 import { api } from '../../api';
-import type { SessionReachDeclaration } from '../sessionReach';
-import type { RunEvent } from '../useSessionStream';
 import { helpArticleLink, ORBIT_LINK_PREFIX } from './helpContent';
 
-// The help center's Ask on the web (docs/mocks/help-center board 02): the Runs on picker, asking, Your questions,
-// and how an answer reads — its [n] citations, its source list and its link buttons, and the one collapsed line that
-// says what it looked at. The answer is the session's own transcript; nothing here is stored apart from it.
+// The help center's Ask on the web (docs/mocks/help-center board 02): asking, Your questions, and how an answer
+// reads — its [n] citations, its source list and its link buttons. The server answers on its own DeepSeek key
+// (apiserver help/help-ask.ts); the person only sends questions.
 
-/** GET /api/help/ask/choices: the Runs on picker and the pick remembered. */
-export const helpAskChoicesQuery = () =>
+/** How often an Ask being answered is read again. */
+export const HELP_ASK_POLL_MS = 1_000;
+
+/** GET /api/help/ask/:id: one Ask, read again while the server is answering it. */
+export const helpAskQuery = (id: string) =>
   queryOptions({
-    queryKey: ['help', 'ask', 'choices'] as const,
-    queryFn: () => api<HelpAskChoices>('/help/ask/choices'),
-    staleTime: 15_000,
+    queryKey: ['help', 'ask', 'conversation', id] as const,
+    queryFn: () => api<HelpAskConversation>(`/help/ask/${id}`),
+    refetchInterval: (q) => (q.state.data?.status === 'working' ? HELP_ASK_POLL_MS : false),
   });
 
-/** GET /api/help/ask/sessions: /help → Your questions. It declares `session`, so an event of one of its questions'
- *  sessions refreshes it, and a session.created, which may be a question asked elsewhere (lib/sessionReach). */
+/** GET /api/help/ask/conversations: /help → Your questions. */
 export const helpAskListQuery = () =>
   queryOptions({
-    queryKey: ['sessions', 'help-ask'] as const,
-    meta: {
-      entities: ['session'],
-      sessionReach: ((data: unknown) => ({
-        sessions: ((data as HelpAskList | undefined)?.questions ?? []).map((row) => row.sessionId),
-        created: true,
-      })) satisfies SessionReachDeclaration,
-    },
-    queryFn: () => api<HelpAskList>('/help/ask/sessions'),
+    queryKey: ['help', 'ask', 'list'] as const,
+    queryFn: () => api<HelpAskList>('/help/ask/conversations'),
+    refetchInterval: (q) => (q.state.data?.questions.some((row) => row.outcome === 'working') ? HELP_ASK_POLL_MS * 3 : false),
   });
 
 /** POST /api/help/ask: the first question. */
 export const createHelpAsk = (body: HelpAskCreateBody) =>
-  api<{ sessionId: string }>('/help/ask', { method: 'POST', body });
+  api<{ id: string }>('/help/ask', { method: 'POST', body });
 
-/** The machines an Ask can run on now: online, on a runner that answers read-only, with an engine for it. */
-export function askableMachines(choices: HelpAskChoices | undefined): HelpAskMachine[] {
-  return (choices?.machines ?? []).filter((m) => m.online && m.supported && m.engines.some((e) => e.askable));
-}
-
-/** What the picker starts on: the remembered pick while it can still answer, else the first machine that can. */
-export function defaultAskPick(choices: HelpAskChoices | undefined): { runnerId: string; engine: string } | null {
-  const machines = askableMachines(choices);
-  const remembered = choices?.remembered;
-  if (remembered) {
-    const machine = machines.find((m) => m.id === remembered.runnerId);
-    if (machine?.engines.some((e) => e.engine === remembered.engine && e.askable)) return remembered;
-  }
-  const first = machines[0];
-  const engine = first?.engines.find((e) => e.askable);
-  return first && engine ? { runnerId: first.id, engine: engine.engine } : null;
-}
+/** POST /api/help/ask/:id/messages: a follow-up; answers with the Ask, working. */
+export const followUpHelpAsk = (id: string, content: string) =>
+  api<HelpAskConversation>(`/help/ask/${id}/messages`, { method: 'POST', body: { content } });
 
 // ── suggested questions (board 02 ①②) ────────────────────────────────────────────────────────────────────────────
 
@@ -202,73 +182,28 @@ export const isOrbitLink = (href: string | undefined): boolean => !!href?.starts
 
 // ── one exchange of the conversation ─────────────────────────────────────────────────────────────────────────────
 
-export interface AskToolCall {
-  name: string;
-  /** What it was about: the article it read, the pattern it searched for, the state it checked. */
-  about: string;
-}
-
 export interface AskExchange {
   question: string;
-  seq: number;
-  tools: AskToolCall[];
-  /** The last thing the engine said in this exchange. */
+  /** The question's place in the Ask's messages: what an answer's Yes / No is counted under. */
+  index: number;
   answer: string;
-  answerSeq: number | null;
   error: string | null;
 }
 
-const READS: Record<string, string> = {
-  help_machines: 'machines',
-  help_sessions: 'sessions',
-  help_tasks: 'tasks',
-  help_quota: 'quota',
-};
-
-/** An MCP tool's name without its server prefix (`mcp__orbit__help_machines` is `help_machines`). */
-const bareToolName = (name: string) => name.replace(/^mcp__[^_]+__/u, '');
-
-function toolCallOf(name: string, input: unknown): AskToolCall {
-  const bare = bareToolName(name);
-  const args = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
-  if (READS[bare]) return { name: bare, about: READS[bare] };
-  const path = typeof args.file_path === 'string' ? args.file_path : typeof args.path === 'string' ? args.path : '';
-  const pattern = typeof args.pattern === 'string' ? args.pattern : '';
-  return { name: bare, about: path ? path.split('/').slice(-2).join('/') : pattern };
-}
-
-/** The conversation as exchanges: each question, what was looked at, and the answer. */
-export function askExchanges(events: readonly RunEvent[]): AskExchange[] {
+/** The conversation as exchanges: each question, and the answer it got or why there is none. */
+export function askExchanges(messages: readonly HelpAskMessage[]): AskExchange[] {
   const out: AskExchange[] = [];
-  for (const ev of [...events].sort((a, b) => a.seq - b.seq)) {
-    const p = (ev.payload ?? {}) as Record<string, unknown>;
-    if (ev.type === 'user' && typeof p.text === 'string' && !p.steer && !p.parentToolUseId) {
-      out.push({ question: p.text, seq: ev.seq, tools: [], answer: '', answerSeq: null, error: null });
-      continue;
+  messages.forEach((m, index) => {
+    if (m.role === 'user') {
+      out.push({ question: m.text, index, answer: '', error: null });
+      return;
     }
     const current = out[out.length - 1];
-    if (!current || p.parentToolUseId) continue;
-    if (ev.type === 'tool_use') current.tools.push(toolCallOf(String(p.name ?? ''), p.input));
-    else if (ev.type === 'assistant' && typeof p.text === 'string' && p.text.trim()) {
-      current.answer = p.text;
-      current.answerSeq = ev.seq;
-    } else if (ev.type === 'error' && typeof p.message === 'string') current.error = p.message;
-  }
+    if (!current) return;
+    if (m.error) current.error = m.error;
+    else current.answer = m.text;
+  });
   return out;
-}
-
-/** The collapsed line under a question (board 02 ②①): "Read 2 articles · Checked build-box". */
-export function toolLine(tools: readonly AskToolCall[]): string {
-  const articles = new Set(
-    tools.filter((t) => t.name === 'Read' && /\.md$/u.test(t.about) && !/INDEX\.md$/u.test(t.about)).map((t) => t.about),
-  );
-  const searched = tools.some((t) => t.name === 'Grep' || t.name === 'Glob');
-  const checked = [...new Set(tools.filter((t) => READS[t.name]).map((t) => READS[t.name]))];
-  const parts: string[] = [];
-  if (searched && articles.size === 0) parts.push('Searched the articles');
-  if (articles.size > 0) parts.push(`Read ${articles.size} article${articles.size === 1 ? '' : 's'}`);
-  if (checked.length > 0) parts.push(`Checked ${checked.join(', ')}`);
-  return parts.join(' · ');
 }
 
 /** The page chip: where the person is, by what the board calls it ("Settings → Machines"). */

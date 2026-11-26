@@ -50,6 +50,7 @@ import {
 } from '../lib/wiki';
 import { wikiRecentRows } from '../lib/wikiReviewMode';
 import { wikiProposalsBanner, wikiProposalsElsewhere, wikiProposalsWaiting, wikiSpaceNames } from '../lib/wikiSpace';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * Activity (design §12.3.2, mocks 31 ② and 33 ④): what the Wiki home said besides its content — how the
@@ -331,9 +332,11 @@ export function WikiActivityButton({ spaceSlug, waiting, on }: { spaceSlug: stri
     >
       {phone ? null : WIKI_ACTIVITY}
       {waiting > 0 && (
-        <span id={badge} className="tp-rail-badge needs-you" title={wikiWaitingOnYou(waiting)} aria-label={wikiWaitingOnYou(waiting)}>
-          {waiting}
-        </span>
+        <Tooltip content={wikiWaitingOnYou(waiting)} side="bottom" align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span id={badge} className="tp-rail-badge needs-you" aria-label={wikiWaitingOnYou(waiting)}>
+            {waiting}
+          </span>
+        </Tooltip>
       )}
     </Button>
   );

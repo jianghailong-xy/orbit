@@ -1,5 +1,7 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
-import type { PlanUsageSnapshot } from '@orbit/shared';
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
+import { CODEX_DEFAULT_ACCOUNT_SLOT, type PlanUsageSnapshot } from '@orbit/shared';
+import { codexResetAccountSlots } from '../lib/codexResetCredit';
+import { accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
 import {
   bindingPlanUsageRow,
   CLAUDE_USAGE_PAGE,
@@ -11,10 +13,11 @@ import {
   planUsageRowSpent,
 } from '../lib/planUsage';
 import {
-  CodexResetConfirm,
+  CodexResetAccount,
   CodexResetCreditCard,
-  useCodexResetCredit,
+  codexResetCardShown,
   type CodexResetContext,
+  type CodexResetCreditState,
 } from './CodexResetCredit';
 import { Popover } from './ui/Popover';
 
@@ -34,7 +37,7 @@ export interface PlanUsageAccount {
 // Compact plan-usage indicator for the composer footer (right of the effort pill).
 // The pill shows the binding/primary window of what `model` spends; hover or press reveals every
 // reported window, the account they belong to and, for a session on the runner's own Codex sign-in,
-// its earned reset credits.
+// the earned reset credits of each of the runner's Codex accounts, the session's first.
 export function PlanUsageIndicator({
   usage,
   model,
@@ -52,11 +55,43 @@ export function PlanUsageIndicator({
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const credit = useCodexResetCredit(reset, open, () => panel.current);
+  const focusPanel = useCallback(() => panel.current, []);
+  // Each account's reset, as its CodexResetAccount below last reported it.
+  const [credits, setCredits] = useState<ReadonlyMap<string, CodexResetCreditState>>(new Map());
+  const onCredit = useCallback((slot: string, state: CodexResetCreditState | null) => {
+    setCredits((before) => {
+      const next = new Map(before);
+      if (state) next.set(slot, state);
+      else next.delete(slot);
+      return next;
+    });
+  }, []);
   // The pill's one number is the window that stops this login (bindingPlanUsageRow), not the first —
   // of the windows the model spends: an Antigravity Gemini Flash run is not stopped by Argon's bucket.
   const primary = bindingPlanUsageRow(currentPlanUsageRows(modelPlanUsage(usage, model)));
   if (!primary) return null;
+
+  const sessionSlot = reset?.accountSlot ?? CODEX_DEFAULT_ACCOUNT_SLOT;
+  const codexAccounts = reset?.runner.engines?.find((entry) => entry.engine === 'codex')?.accounts ?? [];
+  const accounts = (reset ? codexResetAccountSlots(reset.runner, sessionSlot) : []).map((slot) => {
+    const own = slot === sessionSlot;
+    const row = codexAccounts.find((each) => each.id === slot) ?? { id: slot };
+    const snapshot = own ? null : accountPlanUsage(reset?.runner.planUsage, 'codex', slot);
+    const windows = snapshot ? currentPlanUsageRows(snapshot) : [];
+    return {
+      slot,
+      own,
+      label: accountNameOf(row),
+      windows,
+      percent: own ? primary.percent : bindingPlanUsageRow(windows)?.percent,
+      credit: credits.get(slot),
+    };
+  });
+  const ownCredit = accounts.find((each) => each.own)?.credit;
+  const others = accounts.filter((each) => !each.own && each.credit && codexResetCardShown(each.credit));
+  const busy = accounts.some((each) => each.credit?.busy);
+  // The confirmation open over the popover, whichever account's it is.
+  const confirming = accounts.some((each) => each.credit?.confirmOpen);
 
   const close = () => {
     setOpen(false);
@@ -84,7 +119,7 @@ export function PlanUsageIndicator({
   const pop = (
     <div
       ref={panel}
-      className={`cu-pop${reset ? ' cu-pop-reset' : ''}`}
+      className={`cu-pop${reset ? ' cu-pop-reset' : ''}${others.length > 0 ? ' cu-pop-accounts' : ''}`}
       tabIndex={-1}
       onKeyDown={onPanelKeyDown}
     >
@@ -135,7 +170,30 @@ export function PlanUsageIndicator({
           </a>
         </div>
       )}
-      <CodexResetCreditCard state={credit} />
+      {ownCredit && <CodexResetCreditCard state={ownCredit} />}
+      {others.map(({ slot, label, windows, credit }) => (
+        <div className="cu-other" key={slot} role="group" aria-label={label}>
+          <div className="cu-account">
+            <div className="cu-head">
+              <span className="cu-label">Account</span>
+              <span className="cu-account-name">{label}</span>
+            </div>
+            {windows.length > 0 && (
+              <div className="cu-other-usage">
+                {windows.map((row, index) => (
+                  <span key={row.key}>
+                    {index > 0 && ' · '}
+                    {row.groupLabel ? `${row.groupLabel} ` : ''}
+                    {row.label.replace(/ limit$/, '')}{' '}
+                    <b className={planUsageRowSpent(row) ? 'spent' : undefined}>{row.headline ?? `${row.percent}%`}</b>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <CodexResetCreditCard state={credit!} />
+        </div>
+      ))}
     </div>
   );
   return (
@@ -152,9 +210,9 @@ export function PlanUsageIndicator({
         openOnHover
         initialFocus={panel}
         // The confirmation is a modal over this popover: pressing inside it is not leaving the popover.
-        open={open || credit.confirmOpen}
+        open={open || confirming}
         onOpenChange={(next) => {
-          if (!next && credit.confirmOpen) return;
+          if (!next && confirming) return;
           setOpen(next);
         }}
         trigger={
@@ -162,7 +220,7 @@ export function PlanUsageIndicator({
             ref={trigger}
             type="button"
             className={`composer-pill composer-usage ${planUsageRowSpent(primary) ? 'spent' : primary.nearLimit ? 'full' : ''}`}
-            aria-label={`Plan usage ${primary.headline ?? `${primary.percent}%${primary.remaining ? ' left' : ''}`}${credit.busy ? ', reset in progress' : ''}`}
+            aria-label={`Plan usage ${primary.headline ?? `${primary.percent}%${primary.remaining ? ' left' : ''}`}${busy ? ', reset in progress' : ''}`}
           >
             <span className="composer-usage-bar">
               <span
@@ -173,13 +231,26 @@ export function PlanUsageIndicator({
             <span className="composer-usage-pct">
               {primary.headline ?? `${primary.percent}%${primary.remaining ? ' left' : ''}`}
             </span>
-            {credit.busy && <span className="composer-usage-resetting" aria-hidden="true" />}
+            {busy && <span className="composer-usage-resetting" aria-hidden="true" />}
           </button>
         }
       >
         {pop}
       </Popover>
-      {reset && <CodexResetConfirm state={credit} usagePercent={primary.percent} />}
+      {reset &&
+        accounts.map((each) => (
+          <CodexResetAccount
+            key={`${reset.runner.id}:${each.slot}`}
+            runner={reset.runner}
+            workspaceId={reset.workspaceId}
+            accountSlot={each.slot}
+            accountLabel={accounts.length > 1 ? each.label : undefined}
+            usagePercent={each.percent}
+            visible={open}
+            fallbackFocus={focusPanel}
+            onState={onCredit}
+          />
+        ))}
     </>
   );
 }

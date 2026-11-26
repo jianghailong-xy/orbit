@@ -9,6 +9,7 @@ import type { Runner } from './TasksSidePanel';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
 import { SessionSearch } from './SessionSearch';
 import { projectSessionsQuery } from '../lib/queries';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // Exercise navigation, menus and both list scopes through the real WorkspaceView. Named API reads
 // call api() within api.ts, so stub them separately from the query factories' api export.
@@ -516,7 +517,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
   it('draws the progress tag as part of the entry, with the session-count hint', async () => {
     await mount();
     const progress = projectRow().querySelector('.session-project-progress');
-    expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
+    expect(await hoverTooltip(progress!)).toBe('2 sessions · 1 running');
     expect(progress?.closest('button')).toBeNull();
     await click(progress, 'the project progress tag');
     await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
@@ -955,7 +956,7 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     await click(projectRow(), 'the project row');
     await until(() => expect(column()).not.toBeNull());
     await until(() => expect(button().textContent).toBe('2'));
-    expect(button().getAttribute('title')).toBe('Project sessions');
+    expect(await hoverTooltip(button())).toBe('Project sessions');
     expect(button().classList.contains('orbit-button')).toBe(true);
     expect(button().querySelector('.orbit-button-icon svg, .orbit-button-icon .anticon, .orbit-button-icon img, .orbit-button-icon *')).not.toBeNull();
     // Left of the ⋯ More actions button and Share (docs/mocks/session-header-share-more).
@@ -1302,8 +1303,9 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
   const conversation = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.workspace-scroll-wrap > .workspace-sessions');
   const card = (): HTMLElement | null => conversation()?.querySelector<HTMLElement>('.owner-request-card') ?? null;
   // Where things sit: the conversation's scroller at y=100, the waiting card far below the fold at
-  // y=900, so a reveal that brings the card's top to the scroller's top scrolls by 900 - 100 - 48 (clear of the
-  // "Jump to the beginning" pill, which a transcript scrolled off its top and tail offers).
+  // y=900, so a reveal that brings the card near the scroller's top scrolls by 900 - 100 - 16 (the
+  // air the reveal keeps above the card; the "Jump to the beginning" pill is in the header now,
+  // outside the scroller, so nothing floats there to clear).
   const scrollTops = new WeakMap<Element, number>();
   // How far content that landed after the open has pushed the waiting card down.
   let grownAbove = 0;
@@ -1351,9 +1353,9 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       await click(projectRow(), 'the project row');
       await until(() => expect(shown()).toBe(memberAddress));
       await until(() => expect(card()).not.toBeNull());
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
-      // The card's header and title are in view, with the gap above them clear of anything pinned.
-      expect(card()!.getBoundingClientRect().top).toBe(100 + 48);
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 16));
+      // The card's header and title are in view, under the reveal's own gap.
+      expect(card()!.getBoundingClientRect().top).toBe(100 + 16);
       expect(card()!.querySelector('.owner-request-waiting')?.textContent).toBe('Waiting on you');
       expect(card()!.querySelector('.owner-request-title')?.textContent).toBe(request.title);
       if (phone) {
@@ -1374,7 +1376,7 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
     it('keeps the waiting card in place as the conversation lands above it, until the reader scrolls', async () => {
       await mount();
       await click(projectRow(), 'the project row');
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 16));
       const stream = (): FakeEventSource => FakeEventSource.streams[FakeEventSource.streams.length - 1];
       await until(() => expect(stream()?.url).toContain(`/sessions/${TASK.id}/`));
       const land = async (seq: number): Promise<void> => {
@@ -1386,12 +1388,12 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       // Rows land above the card: it is put back at the top, not left where the new rows pushed it.
       grownAbove = 300;
       await land(3);
-      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 48);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 16);
       // The reader takes the scroller: what lands next moves the card, and nothing brings it back.
       await act(async () => { conversation()!.dispatchEvent(new Event('wheel')); });
       grownAbove = 500;
       await land(4);
-      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 48);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 16);
     });
 
     // Owner 2026-11-16 (docs/mocks/coordinator-question-jump): the coordinator waiting on you with a
@@ -1419,7 +1421,7 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       await until(() => expect(shown()).toBe(coordinatorAddress));
       await until(() => expect(conversation()?.querySelector('#question-item-question')).not.toBeNull());
       await until(() => expect(conversation()?.querySelector('#question-record-item-answered')).not.toBeNull());
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 16));
     });
 
     it('opens the coordinator when nobody is waiting', async () => {
