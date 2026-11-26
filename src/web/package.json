@@ -21,7 +21,9 @@
     "test:ui-toasts": "playwright test --config ui-migration/toasts.config.mjs",
     "pretest:ui-toasts": "npm run build -w @orbit/shared",
     "test:ui-composer": "playwright test --config ui-migration/composer.config.mjs",
-    "pretest:ui-composer": "npm run build -w @orbit/shared"
+    "pretest:ui-composer": "npm run build -w @orbit/shared",
+    "test:session-list-scale": "playwright test --config ui-migration/session-list-scale.config.mjs",
+    "pretest:session-list-scale": "npm run build -w @orbit/shared && npm run build"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
