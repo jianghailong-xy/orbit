@@ -18,6 +18,7 @@ import {
   type AgentParent,
   type SubagentSessionSummary,
 } from "../lib/subagentRuns";
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from "./ui/Tooltip";
 
 /** The `delegate` block a run was started from, where it is on the page (ToolView marks it). */
 const delegateBlockOf = (toolUseId: string): HTMLElement | null =>
@@ -196,15 +197,16 @@ function AgentChip({
 }) {
   const name = engine ? agentShortName(engine) : null;
   return (
-    <span
-      className={`ag-chip${extra ? " ag-chip-extra" : ""}`}
-      data-engine={engine ?? undefined}
-      title={name && !label.startsWith(name) ? `${name} · ${label}` : label}
-    >
-      {name && <i className="ag-chip-mark">{name.charAt(0)}</i>}
-      <span className="ag-chip-name">{label}</span>
-      {count !== undefined && <span className="ag-chip-n">×{count}</span>}
-    </span>
+    <Tooltip content={name && !label.startsWith(name) ? `${name} · ${label}` : label} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span
+        className={`ag-chip${extra ? " ag-chip-extra" : ""}`}
+        data-engine={engine ?? undefined}
+      >
+        {name && <i className="ag-chip-mark">{name.charAt(0)}</i>}
+        <span className="ag-chip-name">{label}</span>
+        {count !== undefined && <span className="ag-chip-n">×{count}</span>}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -219,11 +221,13 @@ function MachineFact({
   title?: string;
 }) {
   return (
-    <span className="ag-fact" title={title}>
-      <DesktopOutlined />
-      {text}
-      {word && <span className="ag-word">{word}</span>}
-    </span>
+    <Tooltip content={title} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="ag-fact">
+        <DesktopOutlined />
+        {text}
+        {word && <span className="ag-word">{word}</span>}
+      </span>
+    </Tooltip>
   );
 }
 

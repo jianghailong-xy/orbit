@@ -48,6 +48,17 @@ import {
   type PendingDecisionQueue,
 } from './DecisionRail';
 
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('./ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
+
 /**
  * What the delivered card puts on screen, and — the half this file exists for — what it REFUSES to
  * offer once the question it was about has moved on.

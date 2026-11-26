@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ORBIT_RELEASE_REPOSITORY_DEFAULT } from '@orbit/shared';
-import { adminTaskDescription, privateNamesOf, releaseRepository } from './help-ask';
+import { adminTaskDescription, exchangesOf, privateNamesOf, releaseRepository } from './help-ask';
 
 // Still stuck's pure parts (help/help-ask.ts): where a report goes, which names it leaves out, and the admin's task.
 
@@ -27,13 +27,23 @@ test('the admin\'s task says who is stuck, links the Ask, and holds the question
   const text = adminTaskDescription({
     asker: { name: 'Mia', email: 'mia@example.com' },
     link: 'https://orbit.example/help/questions/abc',
-    machine: 'build-box',
-    engine: 'Claude Code',
     exchanges: [{ question: 'Why is build-box offline?', answer: 'It slept.' }, { question: 'It is awake.', answer: '' }],
   });
   assert.match(text, /^Mia \(mia@example\.com\) asked Orbit's help, is still stuck/u);
   assert.ok(text.includes('Ask: https://orbit.example/help/questions/abc'));
-  assert.ok(text.includes('Answered on: build-box · Claude Code'));
   assert.ok(text.includes('## Question 1\n\nWhy is build-box offline?\n\n## Answer 1\n\nIt slept.'));
   assert.ok(text.includes('## Answer 2\n\n(no answer)'));
+});
+
+test('the admin\'s task pairs each question with the answer it got, and a failed one with none', () => {
+  const at = '2026-11-26T00:00:00.000Z';
+  assert.deepEqual(
+    exchangesOf([
+      { role: 'user', text: 'Why is build-box offline?', at },
+      { role: 'assistant', text: 'It slept.', at },
+      { role: 'user', text: 'It is awake.', at },
+      { role: 'assistant', text: '', at, error: 'DeepSeek answered 503.' },
+    ]),
+    [{ question: 'Why is build-box offline?', answer: 'It slept.' }, { question: 'It is awake.', answer: '' }],
+  );
 });

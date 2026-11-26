@@ -323,7 +323,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
   const litTopEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);
   const litRailEntries = () =>
-    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('title'));
+    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('aria-label'));
 
   it('is none of the fixed rows, which are the work, as on the iPhone drawer', async () => {
     serve();
@@ -356,7 +356,7 @@ describe('Files, the row under the Wiki', () => {
   const litTopEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);
   const litRailEntries = () =>
-    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('title'));
+    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('aria-label'));
 
   it('sits directly under the Wiki, with neither a count nor a shortcut', async () => {
     serve();

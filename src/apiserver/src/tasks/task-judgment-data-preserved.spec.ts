@@ -3541,6 +3541,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // on the released rows with retry_at set. Only `session` is touched; no preserved relation, trigger, function or
       // DONE fence changes.
       '1667_session_phase_retry_running',
+      // 1668 creates `help_ask_conversation` only, with foreign keys to `user` and `task`; no existing table,
+      // trigger, function or DONE fence is touched.
+      '1668_help_ask_conversation',
       // 1672 creates task_acceptance_round (one EXECUTABLE acceptance round's record), cascading with task and with its
       // conversation_turn; no preserved relation, row, trigger, function or DONE fence changes.
       '1672_task_acceptance_round'],

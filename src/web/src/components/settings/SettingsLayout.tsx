@@ -48,7 +48,7 @@ import { MachineOsIcon } from '../../lib/machineOs';
 import { MANAGED_UPDATE_ROW_LABEL, MANAGED_UPDATE_ROW_TITLE } from '../../lib/runnerCopy';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import { Spinner } from '../ui/Spinner';
-import { Tooltip } from '../ui/Tooltip';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../ui/Tooltip';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../../lib/providerAdmin';
 import { providerPoolsQuery } from '../../lib/providerPools';
@@ -583,12 +583,13 @@ function MachineRowState({
   return managedRow ? (
     <ManagedRowState row={managedRow} update={update} />
   ) : (
-    <span
-      className={`settings-dot settings-dot--${state}`}
-      role="img"
-      aria-label={MACHINE_STATE_LABEL[state]}
-      title={MACHINE_STATE_LABEL[state]}
-    />
+    <Tooltip content={MACHINE_STATE_LABEL[state]} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span
+        className={`settings-dot settings-dot--${state}`}
+        role="img"
+        aria-label={MACHINE_STATE_LABEL[state]}
+      />
+    </Tooltip>
   );
 }
 
@@ -673,21 +674,25 @@ export function ManagedRowState({ row, update }: { row: ManagedRunnerRow; update
   // A newer build waits (managed.status.update): the same update dot and word a self-managed machine's row gets.
   if (update && row.tone === 'ready') {
     return (
-      <span className="settings-managed-state" data-kind={row.kind} data-update title={MANAGED_UPDATE_ROW_TITLE}>
-        <span className="settings-dot settings-dot--update" aria-hidden />
-        <span className="settings-nav-meta settings-nav-meta--update">{MANAGED_UPDATE_ROW_LABEL}</span>
-      </span>
+      <Tooltip content={MANAGED_UPDATE_ROW_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="settings-managed-state" data-kind={row.kind} data-update>
+          <span className="settings-dot settings-dot--update" aria-hidden />
+          <span className="settings-nav-meta settings-nav-meta--update">{MANAGED_UPDATE_ROW_LABEL}</span>
+        </span>
+      </Tooltip>
     );
   }
   return (
-    <span className="settings-managed-state" data-kind={row.kind} title={row.detail ?? row.label}>
-      {row.tone === 'progress' ? (
-        <Spinner size="small" aria-hidden />
-      ) : (
-        <span className={`settings-dot settings-dot--${MANAGED_DOT[row.tone]}`} aria-hidden />
-      )}
-      <span className="settings-nav-meta">{row.label}</span>
-    </span>
+    <Tooltip content={row.detail ?? row.label} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="settings-managed-state" data-kind={row.kind}>
+        {row.tone === 'progress' ? (
+          <Spinner size="small" aria-hidden />
+        ) : (
+          <span className={`settings-dot settings-dot--${MANAGED_DOT[row.tone]}`} aria-hidden />
+        )}
+        <span className="settings-nav-meta">{row.label}</span>
+      </span>
+    </Tooltip>
   );
 }
 

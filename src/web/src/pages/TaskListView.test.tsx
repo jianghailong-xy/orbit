@@ -305,7 +305,6 @@ const NOTE_OPEN = '<span class="task-run-at-note">';
 function timeTags(html: string): {
   instant: string;
   label: string;
-  hover: string;
   visible: string;
   clipped: string;
   announced: string;
@@ -320,7 +319,6 @@ function timeTags(html: string): {
       // `aria-label` in full: a bare `label` would match the tail of `aria-label` too, and an
       // assertion that cannot tell the two apart proves nothing about what is on the element.
       label: attr('aria-label'),
-      hover: attr('title'),
       // What a sighted reader gets: the element's text with the clipped suffix taken back out.
       visible: strip(inner.replace(note, '')),
       clipped: note.exec(inner)?.[1] ?? '',
@@ -455,12 +453,7 @@ describe('a task that starts on a schedule, on its row in the list', () => {
     expect(html).toContain(NOTE_OPEN);
     expect(html).not.toMatch(/<span class="task-run-at-note"[^>]/i);
 
-    // The hover text stays, and stays useful: it is the one place the exact instant appears for a
-    // sighted reader, which a to-the-minute local rendering rounds off.
-    expect(shown.hover).toContain('once');
-    expect(shown.hover).toMatch(/your own time zone/i);
-    expect(shown.hover).toContain(localAt(SHANGHAI));
-    expect(shown.hover).toContain(AT);
+    // The hover text, with the exact instant, is in TaskListView.tips.test.tsx.
   });
 
   it('clips that suffix out of the pixels rather than out of the page', () => {

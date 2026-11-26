@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { attachmentsSummary, PendingTray, type PendingTrayRow } from './PendingTray';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /** The tray's own drawing (docs/mocks/steer-tray): one row per message nothing has read yet. */
 
@@ -41,8 +44,19 @@ describe('PendingTray', () => {
     expect(rows.map((r) => [...r.querySelectorAll('.pending-tray-btn')].map((b) => b.getAttribute('aria-label') ?? b.textContent))).toEqual([
       ['Withdraw'], ['Steer', 'Withdraw'], [],
     ]);
-    expect(rows[1].querySelector('.pending-tray-btn')?.getAttribute('title')).toBe('Send into the current turn now');
     expect(doc.querySelector('[aria-label="Withdraw"]')?.hasAttribute('title')).toBe(false);
+  });
+
+  it('says on hover what Steer does', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => root.render(<PendingTray rows={[row({ onSteer: () => {} })]} />));
+    expect(await hoverTooltip(host.querySelector('.pending-tray-btn')!)).toBe('Send into the current turn now');
+    await act(async () => root.unmount());
+    host.remove();
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
   it('offers nothing on a row whose press is out', () => {

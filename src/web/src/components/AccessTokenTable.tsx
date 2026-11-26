@@ -13,6 +13,7 @@ import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Popconfirm } from './ui/Popconfirm';
 import { TableScroll } from './ui/Table';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** Which workspaces a token reaches: all of them, or those it is confined to. */
 function workspacesLine(token: AccessToken): string {
@@ -54,7 +55,7 @@ export function AccessTokenTable({
         </>
       ),
     },
-    { title: 'Access', cell: (token) => <span title={token.scopes.join(', ')}>{scopeSummary(token.scopes)}</span> },
+    { title: 'Access', cell: (token) => <Tooltip content={token.scopes.join(', ')} delay={TEXT_TOOLTIP_DELAY_MS}><span>{scopeSummary(token.scopes)}</span></Tooltip> },
     { title: 'Workspaces', cell: workspacesLine },
     {
       title: 'Expires',
@@ -78,9 +79,11 @@ export function AccessTokenTable({
         token.lastUsedAt ? (
           <>
             <div>{ago(token.lastUsedAt, now)}</div>
-            <div className="access-token-sub" title={token.lastUsedUserAgent ?? undefined}>
-              {token.lastUsedIp ?? 'Address unknown'}
-            </div>
+            <Tooltip content={token.lastUsedUserAgent ?? undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+              <div className="access-token-sub">
+                {token.lastUsedIp ?? 'Address unknown'}
+              </div>
+            </Tooltip>
           </>
         ) : (
           <span className="access-token-sub">Never used</span>

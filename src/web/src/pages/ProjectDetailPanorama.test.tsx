@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import { ProjectDetailPage } from './ProjectsPage';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The panorama as one page, rather than as five cards.
@@ -517,10 +518,12 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     // Dispatch never writes IN_PROGRESS, so the panorama's live-session join is the only honest
     // reading of moving work. It appears once in the overview; OPEN/DONE header tags no longer
     // repeat a second, less useful account above it.
-    expect(shows('Running 1')).toBe(true);
+    // The overview meter's first lane, which names itself and its count on hover.
+    const running = container.querySelector('[role="img"] > span')!;
+    expect(await hoverTooltip(running)).toBe('Running 1');
     expect(shows('OPEN 2')).toBe(false);
     expect(shows('DONE 3')).toBe(false);
-    expect(at('Running 1')).toBeGreaterThan(at('Work overview'));
+    expect(at(running.parentElement!.outerHTML)).toBeGreaterThan(at('Work overview'));
     expect(countOf('>Running</div>')).toBe(1);
     // One overview reader, one request.
     expect(panoramaCalls().filter((path) => path === `${base}/panorama`)).toHaveLength(1);

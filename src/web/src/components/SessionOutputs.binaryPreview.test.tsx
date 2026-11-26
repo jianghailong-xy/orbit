@@ -132,7 +132,9 @@ async function press(el: Element | null | undefined): Promise<void> {
   await settle();
 }
 
-const row = (path: string) => document.querySelector(`.wt-diff-list button[title="View diff · ${path}"]`);
+const row = (path: string) =>
+  [...document.querySelectorAll('.wt-diff-list .session-file-btn')]
+    .find((b) => b.querySelector('.session-file-name')?.textContent === path.split('/').at(-1)) ?? null;
 const head = () => document.querySelector('.wt-diff-pane-head');
 const pane = () => document.querySelector('.wt-diff-pane');
 const buttonIn = (scope: Element | null, label: string) =>

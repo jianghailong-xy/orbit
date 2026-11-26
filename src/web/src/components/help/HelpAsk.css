@@ -15,16 +15,7 @@
   padding: 0 16px 12px;
 }
 
-/* Runs on */
-.help-ask-runs-on {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-3);
-  font-size: 12px;
-}
+/* The pill Your questions opens Ask with */
 .help-ask-pill {
   display: inline-flex;
   align-items: center;
@@ -42,9 +33,6 @@
   text-overflow: ellipsis;
 }
 .help-ask-pill .anticon { font-size: 9px; color: var(--text-3); }
-.help-ask-menu-row { display: flex; justify-content: space-between; gap: 16px; min-width: 180px; }
-.help-ask-menu-state { color: var(--text-3); font-size: 11px; }
-.help-ask-menu-note { padding: 6px 12px 8px; color: var(--text-3); font-size: 11px; border-top: 1px solid var(--border-subtle); }
 
 /* A new question */
 .help-ask-hero {
@@ -63,7 +51,6 @@
   border-radius: 8px;
   background: var(--brand);
 }
-.help-ask-mark.is-faint { opacity: 0.35; }
 .help-ask-suggestions { display: flex; flex-direction: column; gap: 8px; }
 .help-ask-suggestion {
   padding: 8px 10px;
@@ -88,32 +75,6 @@
   color: #fff;
   font-size: 13px;
   cursor: pointer;
-}
-.help-ask-start { padding: 8px 0; }
-.help-ask-start-heading { margin-bottom: 6px; color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-.help-ask-start-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 4px;
-  border: none;
-  background: none;
-  color: var(--text-1);
-  text-align: left;
-  font-size: 13px;
-  cursor: pointer;
-}
-.help-ask-start-row:hover { background: var(--bg-hover); }
-.help-ask-start-n {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 5px;
-  color: var(--text-3);
-  font-size: 11px;
 }
 
 /* The composer */
@@ -174,7 +135,6 @@
 .help-ask-back { padding: 2px 4px; border: none; background: none; color: var(--text-2); cursor: pointer; }
 .help-ask-head-text { min-width: 0; }
 .help-ask-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.help-ask-meta { color: var(--text-3); font-size: 11px; }
 .help-ask-thread { padding-top: 12px; }
 .help-ask-exchange { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .help-ask-question {
@@ -185,20 +145,6 @@
   background: var(--bg-hover);
   white-space: pre-wrap;
 }
-.help-ask-tool-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-3);
-  font-size: 12px;
-  cursor: pointer;
-}
-.help-ask-tool-line .anticon-right { font-size: 9px; transition: transform 0.15s; }
-.help-ask-tool-line .anticon-right.is-open { transform: rotate(90deg); }
-.help-ask-tool-list { margin: 4px 0 0; padding-left: 18px; color: var(--text-3); font-size: 11px; }
 .help-ask-answer-body { line-height: 1.55; }
 .help-ask-answer-body p { margin: 0 0 8px; }
 .help-ask-answer-body ol, .help-ask-answer-body ul { margin: 0 0 8px; padding-left: 20px; }

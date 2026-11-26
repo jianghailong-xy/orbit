@@ -10,8 +10,8 @@ import { api, getToken } from '../../api';
 export const sendHelpFeedback = (kind: HelpFeedbackKind, id: string, helpful: boolean) =>
   api<void>('/help/feedback', { method: 'POST', body: { kind, id, helpful } });
 
-/** An Ask answer's id: the Ask's session and the answer's turn. */
-export const askAnswerId = (sessionId: string, seq: number): string => `${sessionId}:${seq}`;
+/** An Ask answer's id: the Ask and the question's place in its messages. */
+export const askAnswerId = (askId: string, index: number): string => `${askId}:${index}`;
 
 /**
  * The Yes / No buttons' state: which one is pressed, and pressing one records it. Signed out (an article read from
