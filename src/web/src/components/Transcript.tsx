@@ -3730,8 +3730,9 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
       <div
         className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
         data-seq={queued ? undefined : node.seq}
-        // The turn it opened: where the task run sidebar's Output lands for an acceptance round's shell turn.
-        data-turn-id={queued ? undefined : node.turnId}
+        // The turn it opened: where the task run sidebar's Output lands for an acceptance round's shell turn. On the
+        // queued card too, which is drawn as the same card its echo becomes.
+        data-turn-id={node.turnId}
       >
         <TurnAttachments node={node} />
         {node.shell ? (

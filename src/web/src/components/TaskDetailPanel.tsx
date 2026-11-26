@@ -2642,7 +2642,7 @@ export function TaskDetailPanel({
         )}
       </section>
       <section className="tdp-section" data-block="activity" aria-label="Activity">
-        <button type="button" className="tdp-line-row tdp-line-button" aria-expanded={activityShown} onClick={() => setActivityShown(!activityShown)}>
+        <button type="button" className="tdp-line-row tdp-line-button" data-row-focus aria-expanded={activityShown} onClick={() => setActivityShown(!activityShown)}>
           <span className="tdp-muted">
             {`Activity · ${activity.length}`}
             {q.data?.creatorSession ? ` · Filed from ${q.data.creatorSession.title || 'Untitled session'}` : ''}
