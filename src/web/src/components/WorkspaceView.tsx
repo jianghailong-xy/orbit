@@ -11160,17 +11160,6 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
-            {selected?.taskId && !composing && (
-              <button
-                type="button"
-                className="workspace-header-task"
-                title={`Back to task · ${selected.taskTitle ?? ''}`}
-                onClick={() => openTaskOverPage(encodeId(selected.taskId))}
-              >
-                <ArrowLeftOutlined />
-                <span className="workspace-header-task-name">{selected.taskTitle ?? 'Back to task'}</span>
-              </button>
-            )}
             <div className="workspace-title-line">
               {selected && !selectedTrashed && !composing ? (
                 // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
@@ -11203,6 +11192,20 @@ export function WorkspaceView({
                   onClick={() => navigate(projectBack.path)}
                 >
                   Coordinator
+                  <RightOutlined aria-hidden />
+                </button>
+              )}
+              {/* As the Coordinator badge does for a project: a task's session is named after its task, so the way to
+                  the task is a Task badge beside the title, not a second line repeating it. */}
+              {!composing && selected?.taskId && (
+                <button
+                  type="button"
+                  className="coordinator-badge coordinator-badge-link"
+                  title={selected.taskTitle ? `Open task · ${selected.taskTitle}` : 'Open task'}
+                  aria-label={selected.taskTitle ? `Task · Open task ${selected.taskTitle}` : 'Task · Open task'}
+                  onClick={() => openTaskOverPage(encodeId(selected.taskId))}
+                >
+                  Task
                   <RightOutlined aria-hidden />
                 </button>
               )}
