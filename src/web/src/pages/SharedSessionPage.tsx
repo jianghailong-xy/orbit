@@ -63,10 +63,8 @@ const WAITING_POLL_MS = 30_000;
 /** How long until a followed conversation is asked again, after an answer that did or did not bring
  *  anything new (`moved`); null once it has stopped and gone quiet — over, or filed Completed. */
 export function followDelay(state: SessionStateSource, moved: boolean): number | null {
-  // A turn the engine started for itself streams like a dispatched one, so it is followed as closely. A released
-  // session reads RUNNING while an armed retry waits to re-send it, but nothing streams until the retry revives it,
-  // which can be hours out on a spent quota: it is not followed at the working pace.
-  if (moved || (isSessionLive(state) && isSessionWorking(state))) return WORKING_POLL_MS;
+  // A turn the engine started for itself streams like a dispatched one, so it is followed as closely.
+  if (moved || isSessionWorking(state)) return WORKING_POLL_MS;
   if (isSessionLive(state) && sessionLifecycleStateOf(state) !== 'COMPLETED') return WAITING_POLL_MS;
   return null;
 }
