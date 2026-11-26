@@ -119,6 +119,7 @@ public enum TranslationCopy {
     public static let unavailableTag = "unavailable, messages will wait"
     public static let retry = "Retry"
     public static let sendAsWritten = "Send as written"
+    public static let cancel = "Cancel"
     public static let replyPending = "Translates when the reply is done"
     public static let replyFailed = "Couldn't translate this reply"
     /// Why a held message (or a card answer, `answer: true`) was not sent: the B column of frame 7 of
@@ -888,6 +889,8 @@ public enum SessionTranslation {
 
     public enum FootAction: Equatable, Sendable {
         case flip, retryTurn, sendAsWritten, retryReply
+        /// Withdraw a held message that failed to translate (`offersCancel`).
+        case cancelTurn
         /// "Show both languages": hide this message's original, or bring it back.
         case hideOriginal
     }
@@ -896,13 +899,13 @@ public enum SessionTranslation {
     /// delivered, the press alone — it shares the copy/time line, and having an original already says
     /// it was translated (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and,
     /// held because the translation failed (1A), "Couldn't translate, so it wasn't sent · Retry ·
-    /// Send as written". Nothing for a message sent as written.
+    /// Send as written", then "· Cancel" where `cancellable` (`offersCancel`). Nothing for a message sent as written.
     /// With both languages on (`bilingual`) a delivered message's English is in the bubble, so its foot
     /// reads "Sent to the agent in English" (naming `agentLanguage`) and offers no flip (02-bilingual.png, mark C),
     /// but "Hide original" ↔ "Show both" for its English (`originalHidden`, docs/mocks/translation-hide-original).
     public static func userFoot(_ translation: TurnTranslation?, flipped: Bool, bilingual: Bool = false,
                                 agentLanguage: TranslationLanguage = .agentDefault,
-                                originalHidden: Bool = false) -> [FootPart] {
+                                originalHidden: Bool = false, cancellable: Bool = false) -> [FootPart] {
         guard let translation else { return [] }
         if bilingual, translation.state == .done {
             return [.text(TranslationCopy.sentToAgentLabel(agentLanguage)), hideOriginalAction(originalHidden)]
@@ -914,12 +917,19 @@ public enum SessionTranslation {
             return [.text(TranslationCopy.sendFailed(translation.failureReason, httpStatus: translation.httpStatus)),
                     .action(TranslationCopy.retry, .retryTurn),
                     .action(TranslationCopy.sendAsWritten, .sendAsWritten)]
+                + (cancellable ? [.action(TranslationCopy.cancel, .cancelTurn)] : [])
         case .done:
             return [flipped ? .action(TranslationCopy.showTranslation, .flip)
                             : .action(TranslationCopy.showOriginal, .flip)]
         case .sentAsWritten:
             return []
         }
+    }
+
+    /// Whether a held message's failed line offers Cancel: it has the turn id the DELETE keys on, and
+    /// is not the session's opening prompt, which the server keeps (web: `canCancelTurn`).
+    public static func offersCancel(_ bubble: UserBubble) -> Bool {
+        bubble.translation?.state == .failed && bubble.turnId != nil && !bubble.opening
     }
 
     /// The line under an agent reply: "Translated · Show original" ↔ "Original · Show translation";

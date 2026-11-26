@@ -306,9 +306,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// the English the engine got (or, while held, the same words). Nil on every message translation
     /// was not involved in.
     public var translation: TurnTranslation?
-    /// The session's opening prompt, while it is the accepted head no runner has echoed yet
-    /// (`QueuedTurnInfo.opening`). The server keeps it, so the held tag offers no Cancel under it
-    /// (`HeldCancel.offers`). False on every other message.
+    /// The session's opening prompt, while no runner has echoed it yet (`QueuedTurnInfo.opening`).
+    /// The server keeps it, so neither the held tag (`HeldCancel.offers`) nor a failed translation's
+    /// line (`SessionTranslation.offersCancel`) offers Cancel under it. False on every other message.
     public var opening: Bool = false
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,

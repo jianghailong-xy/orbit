@@ -967,7 +967,7 @@ public struct TranscriptReducer: Sendable, Codable {
     /// (`applyUserDelivery`); the console that asked calls it the moment the server confirms, ahead
     /// of that event, because the words have already gone back to its composer (web parity:
     /// `withdrawnSteers`). A turn drawn nowhere is a no-op, so the two arriving in either order
-    /// make one removal.
+    /// make one removal. A held message that failed to translate, cancelled, leaves the same way.
     public mutating func removeWithdrawnSteer(turnId: String) {
         state.queued.removeAll { $0.turnId == turnId }
         state.accepted.removeAll { $0.turnId == turnId }
@@ -1143,6 +1143,8 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.cards = turn.cards
                 bubble.translation = turn.turnTranslation
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
+                // A held opening is listed as queued: its failed line offers no Cancel.
+                bubble.opening = turn.opening == true
                 reconciled.append(bubble)
             } else {
                 var bubble = UserBubble(id: "server-\(turn.turnId)", text: turn.content,
@@ -1153,6 +1155,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                         shell: turn.kind == "shell")
                 bubble.cards = turn.cards
                 bubble.translation = turn.turnTranslation
+                bubble.opening = turn.opening == true
                 reconciled.append(bubble)
             }
         }

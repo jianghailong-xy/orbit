@@ -4244,6 +4244,42 @@ final class ConsoleModel {
         }
     }
 
+    /// Cancel on a held message that failed to translate (web parity: `cancelTurn`): the queued
+    /// Cancel's DELETE, and only on the server's yes the message leaves the conversation and what
+    /// the owner typed goes back under any draft, its files with it. The server deletes a withdrawn
+    /// turn's attachments, so their bytes are read first and staged as new uploads.
+    func cancelUntranslated(_ bubble: UserBubble) async {
+        guard SessionTranslation.offersCancel(bubble), let turnId = bubble.turnId,
+              !cancellingHeld.contains(turnId) else { return }
+        cancellingHeld.insert(turnId)
+        defer { cancellingHeld.remove(turnId) }
+        var files: [(ref: TurnAttachment, data: Data)] = []
+        for ref in bubble.attachments {
+            guard let data = await attachments.data(for: ref.id) else {
+                onToast(ToastRequest(message: "Couldn't cancel the message",
+                                     detail: "Its attachments couldn't be read.", tone: .error))
+                return
+            }
+            files.append((ref, data))
+        }
+        do {
+            try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
+        } catch {
+            onToast(ToastRequest(message: "Couldn't cancel the message",
+                                 detail: APIClient.failureReason(error), tone: .error))
+            return
+        }
+        reducer.removeWithdrawnSteer(turnId: turnId)
+        publishStateNow()
+        let words = ComposerLogic.withdrawnText(of: bubble).map { bubble.shell ? "!" + $0 : $0 }
+        composerText = HeldCancel.composer(composerText, restoring: words)
+        for (ref, data) in files {
+            let mime = ref.mime ?? "application/octet-stream"
+            let ext = UTType(mimeType: mime)?.preferredFilenameExtension
+            attach(filename: ref.name ?? "attachment" + (ext.map { "." + $0 } ?? ""), mimeType: mime, data: data)
+        }
+    }
+
     /// Retry a reply whose translation failed: it waits again until the live `translation` event.
     func retryReplyTranslation(_ seq: Int) async {
         do {
