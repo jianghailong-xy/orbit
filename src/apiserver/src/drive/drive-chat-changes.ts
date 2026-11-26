@@ -1,7 +1,6 @@
-import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, HttpException, HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
-  DRIVE_CHAT_QUESTION_CHOICES,
   type DriveChatChangeGroup,
   type DriveChatChangeItem,
   type DriveChatChangeKind,
@@ -9,7 +8,7 @@ import {
   type DriveChatQuestion,
   type DriveChatQuestionFile,
 } from '@orbit/shared';
-import { withTransactionRetry } from '../common/transaction-retry';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { DRIVE_CHAT_TURN_CHANGES_MAX, driveChatTurnIsFull, driveChatTurnOf, type DriveChatTurn } from './drive-chat-change-record';
 import { driveSizeLabel } from './drive-chat-notes';
@@ -96,6 +95,8 @@ function codeOf(error: unknown): string | null {
 
 @Injectable()
 export class DriveChatChanges {
+  private readonly logger = new Logger(DriveChatChanges.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly drive: DriveService,
@@ -134,7 +135,7 @@ export class DriveChatChanges {
       });
       await tx.driveChatChangeGroup.update({ where: { id: groupId }, data: { updatedAt: new Date() } });
       return { groupId, count: await tx.driveChatHeldChange.count({ where: { groupId } }) };
-    });
+    }, loggedRetry(this.logger, 'driveChat.hold'));
     throw refusal(HttpStatus.CONFLICT, DRIVE_CHAT_HELD,
       `Held for the owner, not done: this turn has already made ${DRIVE_CHAT_TURN_CHANGES_MAX} changes in their Drive, so from `
       + `the ${DRIVE_CHAT_TURN_CHANGES_MAX + 1}st on each change waits on one card in this chat until the owner presses Apply `
@@ -270,7 +271,7 @@ export class DriveChatChanges {
           const now = new Date();
           await tx.driveChatChangeGroup.update({ where: { id: groupId }, data: { status: 'DONE', appliedAt: now, updatedAt: now } });
           return true;
-        });
+        }, loggedRetry(this.logger, 'driveChat.apply'));
         if (finished) break;
         continue;
       }
@@ -302,12 +303,14 @@ export class DriveChatChanges {
    * under the first free numbered name; REPLACE moves it onto the file there, which keeps its id and its old content as a
    * version in Trash. A file that went meanwhile makes the question STALE, saying why.
    */
-  async answer(ownerId: string, sessionId: string, questionId: string, body: unknown, actingSessionId: string | null): Promise<DriveChatQuestion> {
+  async answer(
+    ownerId: string,
+    sessionId: string,
+    questionId: string,
+    choice: 'KEEP_BOTH' | 'REPLACE',
+    actingSessionId: string | null,
+  ): Promise<DriveChatQuestion> {
     refuseActingSession(actingSessionId);
-    const choice = (body !== null && typeof body === 'object' ? (body as { choice?: unknown }).choice : undefined);
-    if (typeof choice !== 'string' || !(DRIVE_CHAT_QUESTION_CHOICES as readonly string[]).includes(choice)) {
-      throw new BadRequestException('choice is KEEP_BOTH or REPLACE');
-    }
     await this.chat(ownerId, sessionId);
     const stale = new Date(Date.now() - PRESS_STALE_MS);
     const claimed = await this.prisma.driveChatQuestion.updateMany({
@@ -324,7 +327,7 @@ export class DriveChatChanges {
     const question = await this.prisma.driveChatQuestion.findFirstOrThrow({ where: { id: questionId } });
     let outcome: { entryId: string; path: string; name: string };
     try {
-      outcome = await this.answerOne(ownerId, question, choice as 'KEEP_BOTH' | 'REPLACE');
+      outcome = await this.answerOne(ownerId, question, choice);
     } catch (error) {
       if (!(error instanceof HttpException) || error.getStatus() >= 500) {
         await this.prisma.driveChatQuestion.update({ where: { id: questionId }, data: { status: 'OPEN', choice: null, updatedAt: new Date() } });

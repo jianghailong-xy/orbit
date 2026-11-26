@@ -7,6 +7,7 @@ import { actingSession } from '../wiki/wiki.controller';
 import { DriveChatChanges } from './drive-chat-changes';
 import { DRIVE_PAT } from './drive.controller';
 import { DRIVE_ROUTE_PREFIXES } from './drive-routes';
+import { AnswerDriveChatQuestionDto } from './dto';
 import { DriveEnabledGuard } from './drive-switch';
 
 type Headers = { headers: Record<string, string | string[] | undefined> };
@@ -75,9 +76,9 @@ export class DriveChatChangesController {
     @CurrentUser() user: AuthUser,
     @Param('sessionId', PublicIdPipe) sessionId: string,
     @Param('questionId', PublicIdPipe) questionId: string,
-    @Body() body: unknown,
+    @Body() dto: AnswerDriveChatQuestionDto,
     @Req() request: Headers,
   ) {
-    return this.changes.answer(user.userId, sessionId, questionId, body, actingSession(request.headers));
+    return this.changes.answer(user.userId, sessionId, questionId, dto.choice, actingSession(request.headers));
   }
 }

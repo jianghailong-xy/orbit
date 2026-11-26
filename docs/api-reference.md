@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 574 |
+| `user` | 586 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **909** |
+| **Total** | **921** |
 
 ## Public routes
 
@@ -175,6 +175,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/documents/changes` | query `since` | `DriveController.changes` |
 | `GET` | `/api/documents/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
 | `POST` | `/api/documents/chats` | body `Object` | `DriveChatController.create` |
+| `GET` | `/api/documents/chats/:sessionId/groups` | path `sessionId` | `DriveChatChangesController.groups` |
+| `GET` | `/api/documents/chats/:sessionId/groups/:groupId` | path `groupId`, `sessionId` | `DriveChatChangesController.group` |
+| `POST` | `/api/documents/chats/:sessionId/groups/:groupId/apply` | path `groupId`, `sessionId` | `DriveChatChangesController.apply` |
+| `POST` | `/api/documents/chats/:sessionId/groups/:groupId/undo` | path `groupId`, `sessionId` | `DriveChatChangesController.undo` |
+| `GET` | `/api/documents/chats/:sessionId/questions` | path `sessionId` | `DriveChatChangesController.questions` |
+| `POST` | `/api/documents/chats/:sessionId/questions/:questionId` | body `AnswerDriveChatQuestionDto`; path `questionId`, `sessionId` | `DriveChatChangesController.answer` |
 | `GET` | `/api/documents/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
 | `DELETE` | `/api/documents/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/documents/entries/:id` | path `id` | `DriveController.get` |
@@ -206,6 +212,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/drive/changes` | query `since` | `DriveController.changes` |
 | `GET` | `/api/drive/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
 | `POST` | `/api/drive/chats` | body `Object` | `DriveChatController.create` |
+| `GET` | `/api/drive/chats/:sessionId/groups` | path `sessionId` | `DriveChatChangesController.groups` |
+| `GET` | `/api/drive/chats/:sessionId/groups/:groupId` | path `groupId`, `sessionId` | `DriveChatChangesController.group` |
+| `POST` | `/api/drive/chats/:sessionId/groups/:groupId/apply` | path `groupId`, `sessionId` | `DriveChatChangesController.apply` |
+| `POST` | `/api/drive/chats/:sessionId/groups/:groupId/undo` | path `groupId`, `sessionId` | `DriveChatChangesController.undo` |
+| `GET` | `/api/drive/chats/:sessionId/questions` | path `sessionId` | `DriveChatChangesController.questions` |
+| `POST` | `/api/drive/chats/:sessionId/questions/:questionId` | body `AnswerDriveChatQuestionDto`; path `questionId`, `sessionId` | `DriveChatChangesController.answer` |
 | `GET` | `/api/drive/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
 | `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |

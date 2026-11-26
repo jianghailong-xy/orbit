@@ -297,5 +297,3 @@ export interface DriveChatQuestion {
   createdAt: string;
   answeredAt: string | null;
 }
-
-export const DRIVE_CHAT_QUESTION_CHOICES = ['KEEP_BOTH', 'REPLACE'] as const;
