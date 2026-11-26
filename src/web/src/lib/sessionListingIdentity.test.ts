@@ -104,6 +104,27 @@ describe('a listing re-read', () => {
     for (const id of ['a', 'b', 'p1', 'm', 'd']) expect(isRaw.get(id), id).toBe(wasRaw.get(id));
   });
 
+  it('keeps a row whose runner only sent a heartbeat, and takes the new stamp when the row changed', async () => {
+    const beat = (at: string, title: string): SessionListingEntry[] => {
+      const assignedRunner = { name: 'runner', lastHeartbeatAt: at };
+      const coordinated = project('p1', 'c') as Extract<SessionListingEntry, { kind: 'project' }>;
+      return [loose('a', { assignedRunner }), loose('b', { assignedRunner, title }),
+        { ...coordinated, coordinator: { ...coordinated.coordinator!, assignedRunner } }];
+    };
+    const options = sessionListingQuery({ runnerId: 'r', workspaceId: 'w1', view: 'open' });
+    const share = options.structuralSharing as (prev: unknown, next: unknown) => SessionListingData;
+    const data = (entries: SessionListingEntry[]) => ({ pages: [answer(entries, null)], pageParams: [null] });
+    const before = data(beat('2026-11-26T10:00:00.000Z', 'b'));
+    expect(share(before, data(beat('2026-11-26T10:00:30.000Z', 'b')))).toBe(before);
+    const after = share(before, data(beat('2026-11-26T10:00:30.000Z', 'b, renamed')));
+    const [was, is] = [rawEntries(before), rawEntries(after)];
+    expect(is.get('a')).toBe(was.get('a'));
+    expect(is.get('p1')).toBe(was.get('p1'));
+    expect(is.get('b')).toMatchObject({
+      session: { title: 'b, renamed', assignedRunner: { lastHeartbeatAt: '2026-11-26T10:00:30.000Z' } },
+    });
+  });
+
   it('draws a member entry anew when its project mark reads differently', async () => {
     const { before } = await reread([first(), second()]);
     const was = drawn(before).get('m');

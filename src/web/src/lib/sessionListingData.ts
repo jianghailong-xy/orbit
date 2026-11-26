@@ -79,6 +79,22 @@ const sameItems = (a: readonly unknown[], b: readonly unknown[]): boolean =>
   a.length === b.length && a.every((item, i) => item === b[i]);
 
 /**
+ * `entry` as a re-read leaves it: `before` itself where nothing a row draws changed. A runner's heartbeat
+ * re-stamps `assignedRunner.lastHeartbeatAt` on every row it hosts, every 30 seconds, and no row draws it, so
+ * that alone is no change (as the server's delta read counts it); an entry that changed carries the new stamp.
+ */
+function rereadEntry(before: SessionListingEntry, entry: SessionListingEntry): SessionListingEntry {
+  const shared = replaceEqualDeep(before, entry);
+  const held = entryRow(before)?.assignedRunner;
+  const row = entryRow(entry);
+  if (shared === before || !held || !row?.assignedRunner) return shared;
+  const unstamped = { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: held.lastHeartbeatAt } };
+  const quiet: SessionListingEntry = entry.kind === 'session'
+    ? { ...entry, session: unstamped } : { ...entry, coordinator: unstamped };
+  return replaceEqualDeep(before, quiet) === before ? before : shared;
+}
+
+/**
  * A re-read's pages, keeping the object of everything that reads as it did, so the rows drawn from it are not
  * redrawn (sessionListingQuery's `structuralSharing`). An entry is matched by what it is, not by where it sits:
  * React Query's own sharing matches by position, which hands every entry below a moved one a new object.
@@ -91,7 +107,7 @@ export function shareListingData(previous: unknown, next: unknown): unknown {
     const was = previous.pages[i];
     const entries = page.entries.map((entry) => {
       const before = held.get(entryKey(entry));
-      return before ? replaceEqualDeep(before, entry) : entry;
+      return before ? rereadEntry(before, entry) : entry;
     });
     if (!was) return { ...page, entries };
     const { entries: wasEntries, ...wasRest } = was;
