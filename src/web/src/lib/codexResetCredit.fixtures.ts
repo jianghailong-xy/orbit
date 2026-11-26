@@ -1,6 +1,7 @@
 import {
   AgentProvider,
   CODEX_RATE_LIMIT_RESET_CAPABILITY_V1,
+  CODEX_RATE_LIMIT_RESET_CAPABILITY_V2,
   type CodexRateLimitResetConsumeOutcome,
   type CodexRateLimitResetFailureCode,
   type CodexRateLimitResetOperationStatus,
@@ -76,6 +77,55 @@ export function resetRunner(
       },
     },
     ...overrides,
+  };
+}
+
+/** Two accounts the runner added beside Default, by slot id and the ChatGPT account signed in there. */
+export const WORK_SLOT = '3fa91c2e';
+export const SIDE_SLOT = '7b04d1e9';
+export const WORK_FINGERPRINT = 'cxa1_ba0f094a2ee93e11858a0c7e88850745';
+export const SIDE_FINGERPRINT = 'cxa1_5c1d0e9a7b3f42d68a90c4e1f2b7a613';
+
+/** `resetRunner` with Default and two added accounts, each with its own usage and reset block: 1, 2 and
+ *  3 credits, and a runner that declares reset v2 for the added ones. */
+export function resetAccountsRunner(
+  now: Date,
+  blocks: { work?: Partial<PlanUsageRateLimitReset>; side?: Partial<PlanUsageRateLimitReset> } = {},
+): CodexResetRunner & { id: string; name: string } {
+  const base = resetRunner(now, {
+    capabilities: [CODEX_RATE_LIMIT_RESET_CAPABILITY_V1, CODEX_RATE_LIMIT_RESET_CAPABILITY_V2],
+  });
+  const account = (fiveHour: number, weekly: number, accountFingerprint: string, credits: number, over = {}) => ({
+    provider: AgentProvider.CODEX,
+    primary: { utilization: fiveHour, windowDurationMins: 300 },
+    secondary: { utilization: weekly, windowDurationMins: 7 * 24 * 60 },
+    rateLimitReset: resetBlock(now, {
+      accountFingerprint,
+      rateLimitResetCredits: { availableCount: credits, credits: null },
+      ...over,
+    }),
+  });
+  return {
+    ...base,
+    engines: [
+      {
+        engine: 'codex',
+        accounts: [
+          { id: 'default', auth: 'yes' },
+          { id: WORK_SLOT, name: 'work@example.com', auth: 'yes' },
+          { id: SIDE_SLOT, name: 'side@example.com', auth: 'yes' },
+        ],
+      },
+    ],
+    planUsage: {
+      codex: {
+        ...base.planUsage!.codex!,
+        accounts: {
+          [WORK_SLOT]: account(38, 100, WORK_FINGERPRINT, 2, blocks.work),
+          [SIDE_SLOT]: account(6, 21, SIDE_FINGERPRINT, 3, blocks.side),
+        },
+      },
+    },
   };
 }
 
