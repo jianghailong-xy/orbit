@@ -2,11 +2,13 @@ import { test, expect } from '@playwright/test';
 import { uuidToBase62 } from '@orbit/shared';
 import { installFixtures, installFixedDate, FIXED_NOW } from './fixtures.mjs';
 import { RUNNER, WORKSPACE } from './session-fixtures.mjs';
+import { answerListing } from './session-listing-fixtures.mjs';
 
 // The session column windowed (docs/session-list-scale-design.md §4), on the production build with the
 // UI-migration fixtures answering every call and a seeded list answered here: 1,500 Open sessions in a
-// workspace with folders (read whole, as a workspace with folders is), and 1,500 in one without (read a
-// page at a time). What it shows: the column mounts about two screens of rows; ↑ / ↓ walk past the
+// workspace with folders (read from GET /sessions/listing a page of entries at a time, as a workspace with
+// folders is, answered by the server's own rules), and 1,500 in one without (read a page of GET /sessions
+// at a time). What it shows: the column mounts about two screens of rows; ↑ / ↓ walk past the
 // viewport; a row dragged from deep in the list reaches a folder; scrolling to the end reads the next
 // page; a watch or clone frame commits the one row it is about; and, on a phone, a row still swipes and
 // takes a held press, and the list is where it was after a conversation.
@@ -57,7 +59,7 @@ const watchOn = (observer, target) => ({
 async function seedList(page, { theme }) {
   await installFixedDate(page);
   await installFixtures(page, { theme });
-  const state = { rows: seededRows(), paged: pagedRows(), moves: [], listReads: [], watches: [] };
+  const state = { rows: seededRows(), paged: pagedRows(), moves: [], listReads: [], listingReads: [], watches: [] };
   const byId = () => new Map([...state.rows, ...state.paged].map((row) => [row.id, row]));
   // Registered after installFixtures, so these answer first.
   await page.route('**/api/**', async (route) => {
@@ -79,6 +81,11 @@ async function seedList(page, { theme }) {
       const rows = workspaceId === PAGED.id ? state.paged : workspaceId === WORKSPACE.id ? state.rows : [...state.rows, ...state.paged];
       const limit = Number(q.get('limit') || 0);
       return json(limit ? rows.slice(0, limit) : rows);
+    }
+    if (method === 'GET' && path === '/api/sessions/listing') {
+      const answer = answerListing([...state.rows, ...state.paged], FOLDERS, url.searchParams);
+      state.listingReads.push({ query: Object.fromEntries(url.searchParams), next: answer.next });
+      return json(answer);
     }
     const move = path.match(/^\/api\/sessions\/([^/]+)\/move$/);
     if (method === 'POST' && move) {
@@ -128,17 +135,32 @@ const inView = (page, locator) => locator.evaluate((el) => {
   return box.top >= view.top - 1 && box.bottom <= view.bottom + 1;
 });
 
+/** Scrolls the column to its end until the listing has read `pages` pages (all of them when omitted): it
+ *  reads the next one as the last rows come into view. */
+async function loadPages(page, state, pages = Infinity) {
+  const read = () => state.listingReads.filter((r) => r.query.workspaceId === WORKSPACE.id && !r.query.folderId);
+  await expect.poll(() => read().length).toBeGreaterThan(0);
+  while (read().length < pages && read().at(-1).next) {
+    const before = read().length;
+    await scrollListTo(page, 10_000_000);
+    await expect.poll(() => read().length).toBeGreaterThan(before);
+  }
+  await frames(page, 4);
+}
+
 const desktop = (testInfo) => test.skip(!testInfo.project.name.endsWith('-desktop'), 'a desktop case');
 const phone = (testInfo) => test.skip(!testInfo.project.name.endsWith('-phone'), 'a phone case');
 
 test('1,500 loaded Open sessions mount about two screens of rows, wherever the column is scrolled', async ({ page }, testInfo) => {
-  await seedList(page, { theme: testInfo.project.use.colorScheme });
+  const state = await seedList(page, { theme: testInfo.project.use.colorScheme });
   await page.goto(testInfo.project.name.endsWith('-phone') ? `/workspaces/${WORKSPACE.id}` : `/sessions/${seededRows()[20].id}`);
   await expect(row(page, title(21))).toBeVisible();
   await expect(folderRow(page, 'Release')).toBeVisible();
   // The folder row still reads the sessions filed in it: one of Release's waits on you.
   await expect(folderRow(page, 'Release').locator('.session-folder-needs')).toHaveText('1');
-  await frames(page, 4);
+  // Every page of the listing, read as the column is scrolled to its end, then back to the top.
+  await loadPages(page, state);
+  await scrollListTo(page, 0);
   const top = await mounted(page);
   await testInfo.attach('mounted at the top', { body: JSON.stringify(top), contentType: 'application/json' });
   // The column is as tall as 1,480 rows (the other 20 are in folders), and only a few are mounted.
@@ -192,6 +214,8 @@ test('a row dragged from deep in the list scrolls the column up and drops onto a
   const state = await seedList(page, { theme: testInfo.project.use.colorScheme });
   await page.goto(`/sessions/${seededRows()[20].id}`);
   await expect(folderRow(page, 'Release')).toBeVisible();
+  // Rows 21–140: the listing's first three pages.
+  await loadPages(page, state, 3);
   await scrollListTo(page, 64 * 60);
   await expect(folderRow(page, 'Release')).toHaveCount(0);
   const dragged = row(page, title(90));
@@ -336,9 +360,11 @@ function touch(page, target) {
 
 test('on a phone, a row deep in the list swipes and takes a held press, and the list comes back where it was', async ({ page }, testInfo) => {
   phone(testInfo);
-  await seedList(page, { theme: testInfo.project.use.colorScheme });
+  const state = await seedList(page, { theme: testInfo.project.use.colorScheme });
   await page.goto(`/workspaces/${WORKSPACE.id}`);
   await expect(row(page, title(21))).toBeVisible();
+  // Deep in the list: the listing's first six pages, rows 21–260.
+  await loadPages(page, state, 6);
   await scrollListTo(page, 64 * 200);
   const before = await mounted(page);
   expect(before.rows).toBeLessThanOrEqual(twoScreens(before.height));
