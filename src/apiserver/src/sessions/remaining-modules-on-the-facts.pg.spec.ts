@@ -34,6 +34,7 @@ import { WatchEvaluatorService } from '../watches/watch-evaluator.service';
 import { WatchesService } from '../watches/watches.service';
 import { loadDossierRecords } from '../wiki/wiki-dossier';
 import { wikiSessionsOfSpace } from '../wiki/wiki-maintenance';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -108,6 +109,7 @@ const notOwed = (rows: Row[]): string[] => rows.map((row) => row.id).filter((id)
 test('the remaining modules read the facts, and a row with no turn_state reads as today', { skip, timeout: 600_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
+  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   const prisma = db as unknown as PrismaService;
   t.after(() => db.$disconnect());
 

@@ -20,6 +20,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { runnerLinkCredential } from '../runner-api/runner-link-token';
 import { managedRunnerWorld } from '../test-support/managed-runner-world';
 import { managedPodName } from './managed-runner-resources';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -33,6 +34,7 @@ test('managed runner OOM recovery', { skip: !URL }, async (t) => {
     await sql.end();
   });
   await verifyCoordinatorPgIdentity(sql);
+  await sql.query(ALLOW_UNFILLED_SESSIONS);
 
   for (const maxAttempts of [3, 2]) {
     await t.test(`first OOM resumes, second OOM interrupts at the ${maxAttempts === 3 ? 'fast' : 'slow'} retry, and heartbeat caps concurrency until stoodUp`, async () => {

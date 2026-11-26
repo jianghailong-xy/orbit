@@ -54,9 +54,9 @@ const NAMING_STATUS: readonly string[] = [
   'trigger session_zz_phase',
   'function session_turn_state_from_status',
   'function session_turn_state_of_status',
-  // Deploy D2's own (T5, migration 1622; plan §4.1): a set turn_state held equal to the word while both exist. The task
-  // that follows the backfill puts the plan's strict session_turn_state_agrees_chk in its place; T15 drops that one.
-  'check session_turn_state_agrees_unless_null_chk',
+  // Deploy D2's own (migration 1651; plan §4.1): the word and turn_state held equal while both exist. T15 drops it
+  // before the column.
+  'check session_turn_state_agrees_chk',
   // Indexes and the release CHECK (go with the column, T15).
   'check session_release_fact_chk',
   'index session_assigned_runner_id_status_idx',

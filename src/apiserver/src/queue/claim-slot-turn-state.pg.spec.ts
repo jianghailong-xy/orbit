@@ -44,6 +44,7 @@ import { runningSessionCounts } from '../runners/runner-background-holders';
 import { turnStateFilter } from '../sessions/session-turn-state';
 import { DispatchPauseService } from './dispatch-pause.service';
 import { QueueService } from './queue.service';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -126,6 +127,7 @@ const titles = (rows: Row[], keep: (row: Row) => boolean): string[] => rows.filt
 test('claim, slots and dispatch read the turn state, and a row with no turn_state reads as today', { skip, timeout: 600_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
+  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   const prisma = db as unknown as PrismaService;
   t.after(() => db.$disconnect());
   const { ownerId, rows } = await everyShape(db);

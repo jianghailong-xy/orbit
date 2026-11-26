@@ -19,6 +19,7 @@ import {
   sessionWillWakeSql,
   type SessionWorkingRow,
 } from './session-working';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 /**
  * The three questions of common/session-working.ts answer alike in all three forms — TypeScript
@@ -65,6 +66,7 @@ const watchData = (ownerId: string, sessionId: string, action: string, state: st
 test('predicate, Prisma filter and SQL fragment agree on every status and fact combination', { skip }, async () => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
+  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   try {
     const ownerId = randomUUID();
     await db.user.create({

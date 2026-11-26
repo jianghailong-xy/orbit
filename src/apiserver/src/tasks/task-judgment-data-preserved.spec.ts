@@ -3520,7 +3520,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1641_session_triggers_read_facts',
       // 1643 adds one nullable column, idle_seen_at, to schedule_run; no row is written, and no preserved relation,
       // trigger, function or DONE fence changes.
-      '1643_schedule_run_idle_seen_at'],
+      '1643_schedule_run_idle_seen_at',
+      // 1651 refuses a database whose turn_state backfill has not run, then swaps session's NULL-tolerant turn_state
+      // CHECK for the strict one and adds a phase NOT NULL helper CHECK, NOT VALID; 1652-1654 validate the three; 1655
+      // sets session.phase NOT NULL and drops the helper. Constraints only: no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1651_session_turn_state_strict_checks',
+      '1652_session_turn_state_agrees_validate',
+      '1653_session_turn_state_released_validate',
+      '1654_session_phase_not_null_validate',
+      '1655_session_phase_set_not_null'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

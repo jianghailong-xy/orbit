@@ -24,6 +24,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { LEGACY_STATUS_SELECT, legacySessionStatus, statusWordFilter } from './session-legacy-words';
 import { withSessionState } from './session-state';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -44,6 +45,7 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
   t.after(() => db.$disconnect());
+  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
 
   await t.test('(1) session_legacy_status over every combination of the facts', async () => {
     const combos = FINISHED.flatMap((finishedAt) => TURN_STATES.flatMap((turnState) => END_REASONS.flatMap(
