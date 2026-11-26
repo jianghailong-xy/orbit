@@ -113,8 +113,8 @@ import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
-import { Tooltip } from './ui/Tooltip';
-import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
+import { HELP_PATH } from '../lib/helpDrawer';
 import { OPTIMIZE_LABELS } from '../lib/settingsChange';
 import { MODEL_ROUTING_PAGE } from '../pages/settings/settingsIndex';
 
@@ -389,7 +389,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const help = useHelpDrawer();
   // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
   // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
   // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
@@ -954,32 +953,34 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           workspaces themselves stay as monogram avatars below. Shown only when collapsed, on desktop. */}
       <div className="tp-rail">
         {topItems.map((t) => (
-          <div
-            key={t.key}
-            className={`tp-rail-item ${railSel === t.key ? 'active' : ''}`}
-            onClick={() => openTopNav(t.key, railSel)}
-            onKeyDown={(event) => handleNavActivation(event, () => openTopNav(t.key, railSel))}
-            role="link"
-            tabIndex={0}
-            aria-current={railSel === t.key ? 'page' : undefined}
-            title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
-          >
-            <span className="tp-ico">{t.icon}</span>
-            {t.key === 'scheduled' && scheduledNeeds > 0 && (
-              <span className="tp-rail-badge needs-you" data-scheduled-count="">
-                {scheduledNeeds}
-              </span>
-            )}
-            {t.key === 'wiki' && wikiWaitingCount > 0 && (
-              <span
-                className="tp-rail-badge needs-you"
-                title={wikiWaitingOnYou(wikiWaitingCount)}
-                aria-label={wikiWaitingOnYou(wikiWaitingCount)}
-              >
-                {wikiWaitingCount}
-              </span>
-            )}
-          </div>
+          <Tooltip key={t.key} content={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`} side="right">
+            <div
+              className={`tp-rail-item ${railSel === t.key ? 'active' : ''}`}
+              onClick={() => openTopNav(t.key, railSel)}
+              onKeyDown={(event) => handleNavActivation(event, () => openTopNav(t.key, railSel))}
+              role="link"
+              tabIndex={0}
+              aria-current={railSel === t.key ? 'page' : undefined}
+              aria-label={(t.key === 'scheduled' && scheduledNeeds > 0) || (t.key === 'wiki' && wikiWaitingCount > 0) ? undefined : `${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
+            >
+              <span className="tp-ico">{t.icon}</span>
+              {t.key === 'scheduled' && scheduledNeeds > 0 && (
+                <span className="tp-rail-badge needs-you" data-scheduled-count="">
+                  {scheduledNeeds}
+                </span>
+              )}
+              {t.key === 'wiki' && wikiWaitingCount > 0 && (
+                <Tooltip content={wikiWaitingOnYou(wikiWaitingCount)} delay={TEXT_TOOLTIP_DELAY_MS}>
+                  <span
+                    className="tp-rail-badge needs-you"
+                    aria-label={wikiWaitingOnYou(wikiWaitingCount)}
+                  >
+                    {wikiWaitingCount}
+                  </span>
+                </Tooltip>
+              )}
+            </div>
+          </Tooltip>
         ))}
         {/* The user's workspaces, kept reachable when collapsed: a monogram avatar each
             (workspaces have identity + exceptional/activity state + ⌘1‒9, so unlike the
@@ -993,26 +994,26 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
             'Shared';
           return (
-            <div
-              key={a.id}
-              className={`tp-rail-item ${a.id === litWorkspaceId ? 'active' : ''}`}
-              onClick={() => openWorkspace(a)}
-              title={`${a.name} · ${runnerLabel}${shortcutLabel ? `  ${shortcutLabel}` : ''}`}
-            >
-              <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
-              <WorkspaceStateMark
-                compact
-                managed={managedRowOf(accountManaged, runnerId)}
-                offline={
-                  !managedRowOf(accountManaged, runnerId) &&
-                  workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
-                }
-                running={(workspaceRunning.get(a.id) ?? 0) > 0}
-                jobs={workspaceJobs.get(a.id) ?? 0}
-                needsYou={workspaceNeedsYou.get(a.id) ?? 0}
-                runnerLabel={runnerLabel}
-              />
-            </div>
+            <Tooltip key={a.id} content={`${a.name} · ${runnerLabel}${shortcutLabel ? `  ${shortcutLabel}` : ''}`} side="right">
+              <div
+                className={`tp-rail-item ${a.id === litWorkspaceId ? 'active' : ''}`}
+                onClick={() => openWorkspace(a)}
+              >
+                <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
+                <WorkspaceStateMark
+                  compact
+                  managed={managedRowOf(accountManaged, runnerId)}
+                  offline={
+                    !managedRowOf(accountManaged, runnerId) &&
+                    workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
+                  }
+                  running={(workspaceRunning.get(a.id) ?? 0) > 0}
+                  jobs={workspaceJobs.get(a.id) ?? 0}
+                  needsYou={workspaceNeedsYou.get(a.id) ?? 0}
+                  runnerLabel={runnerLabel}
+                />
+              </div>
+            </Tooltip>
           );
         })}
       </div>
@@ -1036,21 +1037,23 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   {scheduledNeeds}
                 </span>
               ) : t.key === 'wiki' && wikiWaitingCount > 0 ? (
-                <span
-                  className="tp-count needs-you"
-                  title={wikiWaitingOnYou(wikiWaitingCount)}
-                  aria-label={wikiWaitingOnYou(wikiWaitingCount)}
-                >
-                  {wikiWaitingCount}
-                </span>
+                <Tooltip content={wikiWaitingOnYou(wikiWaitingCount)} delay={TEXT_TOOLTIP_DELAY_MS}>
+                  <span
+                    className="tp-count needs-you"
+                    aria-label={wikiWaitingOnYou(wikiWaitingCount)}
+                  >
+                    {wikiWaitingCount}
+                  </span>
+                </Tooltip>
               ) : (
                 t.shortcut && (
-                  <kbd
-                    className="tp-count tp-nav-shortcut"
-                    title={`Open ${t.label} with ${t.shortcut}`}
-                  >
-                    {t.shortcut}
-                  </kbd>
+                  <Tooltip content={`Open ${t.label} with ${t.shortcut}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+                    <kbd
+                      className="tp-count tp-nav-shortcut"
+                    >
+                      {t.shortcut}
+                    </kbd>
+                  </Tooltip>
                 )
               )}
             </div>
@@ -1393,18 +1396,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               ),
               onSelect: () => navigate(MODEL_ROUTING_PAGE.path),
             },
-            {
-              key: 'settings',
-              icon: <SettingOutlined />,
-              label: 'Settings',
-              onSelect: () => navigate('/settings'),
-            },
             // The full help center (board help-center 01 ⓪②), where a reader who looks in the account menu finds it.
             {
               key: 'help',
               icon: <QuestionCircleOutlined />,
               label: 'Help center',
               onSelect: () => navigate(HELP_PATH),
+            },
+            {
+              key: 'settings',
+              icon: <SettingOutlined />,
+              label: 'Settings',
+              onSelect: () => navigate('/settings'),
             },
             // User management, for admins only. It opens a settings page as the row above does, so
             // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
@@ -1446,25 +1449,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             </button>
           }
         />
-        {/* Help, beside the avatar (board help-center 01 ⓪①); above it on the collapsed rail. */}
-        <Tooltip
-          side="top"
-          content={
-            <>
-              Help<kbd className="tp-help-key">?</kbd>
-            </>
-          }
-        >
-          <button
-            type="button"
-            className={`tp-help${help.open ? ' is-open' : ''}`}
-            aria-label="Help"
-            aria-pressed={help.open}
-            onClick={help.toggleHelp}
-          >
-            <QuestionCircleOutlined />
-          </button>
-        </Tooltip>
       </div>
 
       <div
@@ -1500,13 +1484,17 @@ export function ProjectRow({
   return (
     <div className={`tp-item tp-project ${active ? 'active' : ''}`} onClick={() => onOpen(project)}>
       <span className="tp-ico tp-project-mark">
-        <span className={`tp-list-dot ${working ? 'running' : ''}`} title={working ? 'Work in flight' : undefined} />
+        <Tooltip content={working ? 'Work in flight' : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className={`tp-list-dot ${working ? 'running' : ''}`} aria-label={working ? 'Work in flight' : undefined} />
+        </Tooltip>
       </span>
       <span className="tp-label">{project.title}</span>
       {needsYou > 0 && (
-        <span className="tp-count needs-you" title={waiting} aria-label={waiting}>
-          {needsYou}
-        </span>
+        <Tooltip content={waiting} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="tp-count needs-you" aria-label={waiting}>
+            {needsYou}
+          </span>
+        </Tooltip>
       )}
     </div>
   );
@@ -1550,9 +1538,11 @@ export function WikiRow({
       </span>
       <span className="tp-label">{name}</span>
       {waiting > 0 && (
-        <span className="tp-count needs-you" title={waitingOnYou} aria-label={waitingOnYou}>
-          {waiting}
-        </span>
+        <Tooltip content={waitingOnYou} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="tp-count needs-you" aria-label={waitingOnYou}>
+            {waiting}
+          </span>
+        </Tooltip>
       )}
       {/* Inside the row's link: a press or an Enter on the menu is the menu's, and opens no wiki. */}
       <span className="tp-workspace-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
@@ -1607,13 +1597,14 @@ export function WorkspaceStateMark({
   if (needsYou > 0) {
     const title = `${needsYou} ${needsYou === 1 ? 'session needs' : 'sessions need'} your reply`;
     badge = (
-      <span
-        className={compact ? 'tp-rail-badge needs-you' : 'tp-count needs-you'}
-        title={title}
-        aria-label={title}
-      >
-        {needsYou}
-      </span>
+      <Tooltip content={title} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span
+          className={compact ? 'tp-rail-badge needs-you' : 'tp-count needs-you'}
+          aria-label={title}
+        >
+          {needsYou}
+        </span>
+      </Tooltip>
     );
   }
   if (!compact) return badge;
@@ -1741,12 +1732,13 @@ export function WorkspaceRow({
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const shortcut = shortcutLabel && (
-    <kbd
-      className="tp-count tp-workspace-shortcut"
-      title={`Open workspace with ${shortcutLabel}`}
-    >
-      {shortcutLabel}
-    </kbd>
+    <Tooltip content={`Open workspace with ${shortcutLabel}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <kbd
+        className="tp-count tp-workspace-shortcut"
+      >
+        {shortcutLabel}
+      </kbd>
+    </Tooltip>
   );
   // While the list is arranged, the handle takes the folder's column and the row opens nothing. Its
   // state marks step aside too, so every row shows the ⌘N it will have once dropped.
@@ -1795,20 +1787,22 @@ export function WorkspaceRow({
           </Tooltip>
         )}
         {showRunningDot && (
-          <span
-            className="tp-workspace-icon-running"
-            title="Running"
-            role="img"
-            aria-label="Workspace has a running session"
-          />
+          <Tooltip content="Running" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span
+              className="tp-workspace-icon-running"
+              role="img"
+              aria-label="Workspace has a running session"
+            />
+          </Tooltip>
         )}
         {showJobsDot && (
-          <span
-            className="tp-workspace-icon-jobs"
-            title={`${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`}
-            role="img"
-            aria-label="Workspace has a background job running"
-          />
+          <Tooltip content={`${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span
+              className="tp-workspace-icon-jobs"
+              role="img"
+              aria-label="Workspace has a background job running"
+            />
+          </Tooltip>
         )}
       </span>
       {label}

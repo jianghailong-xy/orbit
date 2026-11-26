@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubagentRunView } from "@orbit/shared";
 import { subagentSessionSummary } from "../lib/subagentRuns";
 import { SessionAgentsStrip } from "./SessionAgentsStrip";
+import { hoverTooltip } from "../test/tooltipHover";
 
 /**
  * The composer band's Agents line, as Apple's `AgentsBandRow` draws it (docs/mocks/agents-band-models): the
@@ -247,7 +248,7 @@ describe("SessionAgentsStrip", () => {
 
   const deepseek = { model: "deepseek-v4.1-flash", modelLabel: "DeepSeek V4.1 Flash 1017" };
 
-  it("at rest, says how many machines and each model with its runs, and no check when all succeeded", () => {
+  it("at rest, says how many machines and each model with its runs, and no check when all succeeded", async () => {
     draw([
       run({ toolUseId: "a", workspaceName: "orbit-prod-fcm" }),
       run({ toolUseId: "b", workspaceName: "orbit-prod-fcm" }),
@@ -259,7 +260,7 @@ describe("SessionAgentsStrip", () => {
     expect(line.querySelector(".ag-band")!.textContent).toBe("5");
     expect(line.textContent).not.toContain("Deploy to production");
     expect(line.querySelector(".ag-fact")!.textContent).toBe("3 machines");
-    expect(line.querySelector(".ag-fact")!.getAttribute("title")).toBe(
+    expect(await hoverTooltip(line.querySelector(".ag-fact")!)).toBe(
       "Ran on\norbit-macos · 2\norbit-prod-fcm · 2\norbit-op · 1",
     );
     expect([...line.querySelectorAll(".ag-chip")].map((c) => c.textContent)).toEqual([

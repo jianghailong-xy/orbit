@@ -141,6 +141,7 @@ import { ProviderTile } from './ProviderGallery';
 import { GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 import { useMachineName } from '../lib/managedRunner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** An engine this page has a row for: one a runner signs in with, or OpenCode — which it does not. */
 type RowEngine = LoginEngine | 'opencode';
@@ -487,30 +488,31 @@ function QuotaCell({ kind, quota, next, signIn = true }: { kind: RowKind; quota:
               <b>{quota.cursor.plan} plan</b>
             </div>
           )}
-          <span
-            className="re-quota-none"
-            title={`Cursor doesn’t report how much of ${
+          <Tooltip
+            content={`Cursor doesn’t report how much of ${
               quota.cursor.plan ? `the ${quota.cursor.plan} plan’s` : 'this account’s'
             } usage is left, so Orbit shows no number rather than 0%.`}
+            delay={TEXT_TOOLTIP_DELAY_MS}
           >
-            Usage unavailable
-          </span>
+            <span className="re-quota-none">
+              Usage unavailable
+            </span>
+          </Tooltip>
         </>
       ) : (
-        <span
-          className="re-quota-none"
-          title={kind === 'unknown' && signIn ? 'No quota reading — the sign-in check didn’t answer.' : undefined}
-        >
-          {kind === 'in'
-            ? quota.noLimit
-              ? RUNNER_ENGINE_NO_QUOTA_LIMIT
-              : 'No quota reported'
-            : kind === 'out'
-              ? 'Sign in to see quota'
-              : kind === 'unknown' && signIn
-                ? RUNNER_ENGINE_NO_READING
-                : '—'}
-        </span>
+        <Tooltip content={kind === 'unknown' && signIn ? 'No quota reading — the sign-in check didn’t answer.' : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="re-quota-none">
+            {kind === 'in'
+              ? quota.noLimit
+                ? RUNNER_ENGINE_NO_QUOTA_LIMIT
+                : 'No quota reported'
+              : kind === 'out'
+                ? 'Sign in to see quota'
+                : kind === 'unknown' && signIn
+                  ? RUNNER_ENGINE_NO_READING
+                  : '—'}
+          </span>
+        </Tooltip>
       )}
     </div>
   );
@@ -974,14 +976,15 @@ function EngineRow({
           owner, which error — is one pointer away instead of gone. Absent for a healthy
           engine, which has nothing further to say. */}
       {note && (
-        <span
-          className={`re-upd${warn ? ' warn' : ''}${note.text.endsWith(ENGINE_UPDATE_WARNING_DISMISSED) ? ' dismissed' : ''}`}
-          title={health?.update?.message}
-        >
-          {/* Folded, the head shares its width with a status and a quota, so the note takes a line
-              of its own (.re-grp.folded) rather than leave half of itself on the next. */}
-          {columns ? note.text : <>{' '}· {note.text}</>}
-        </span>
+        <Tooltip content={health?.update?.message} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span
+            className={`re-upd${warn ? ' warn' : ''}${note.text.endsWith(ENGINE_UPDATE_WARNING_DISMISSED) ? ' dismissed' : ''}`}
+          >
+            {/* Folded, the head shares its width with a status and a quota, so the note takes a line
+                of its own (.re-grp.folded) rather than leave half of itself on the next. */}
+            {columns ? note.text : <>{' '}· {note.text}</>}
+          </span>
+        </Tooltip>
       )}
     </>
   );
@@ -1382,9 +1385,11 @@ function AccountName({
       {renamedDefault && <span className="re-chip">DEFAULT</span>}
       {/* Where Automatic starts the next session — the account pools' mark for the same thing. */}
       {next && (
-        <span className="re-chip" title="Automatic starts new sessions here">
-          NEXT
-        </span>
+        <Tooltip content="Automatic starts new sessions here" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="re-chip">
+            NEXT
+          </span>
+        </Tooltip>
       )}
     </div>
   );

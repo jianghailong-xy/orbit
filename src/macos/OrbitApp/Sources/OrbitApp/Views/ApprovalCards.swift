@@ -4593,11 +4593,12 @@ private struct CoordinatorQuestionCardView: View {
 
     private var questionCard: some View {
         let standing = self.standing
-        // Orange while it waits on the owner, the colour of the `open question below` capsule
-        // that points at it; blue once it is no longer a question.
+        // The brand tone while it waits on the owner — the product's "somebody is being asked"
+        // colour, the same reason its icon and mark are blue — with the heavier edge carrying the
+        // emphasis. The answered card is the grey record (`CoordinatorQuestionRecordView`).
         let open = CoordinatorQuestions.isOpen(standing)
         return ApprovalReviewLayout(title: CoordinatorQuestions.heading,
-                             symbol: "questionmark.bubble.fill", tone: open ? .orange : .blue,
+                             symbol: "questionmark.bubble.fill", tone: .blue,
                              summary: previewSummary,
                              dimmed: !open, emphasized: open) {
             Text(CoordinatorQuestions.provenance)

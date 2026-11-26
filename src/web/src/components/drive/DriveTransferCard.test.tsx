@@ -129,6 +129,9 @@ describe('drive transfer pace', () => {
     const dom = new JSDOM('<!doctype html><div id="root"></div>');
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
+    // The rows' tips ask whether a node is an Element of the window they are drawn in.
+    vi.stubGlobal('Element', dom.window.Element);
+    vi.stubGlobal('Node', dom.window.Node);
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     vi.useFakeTimers({ now: Date.parse('2026-11-24T10:00:00Z') });
     const root = createRoot(dom.window.document.getElementById('root')!);

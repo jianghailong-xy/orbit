@@ -43,6 +43,7 @@ import { useToast } from '../lib/toast';
 import { compatibleUuid } from '../lib/uuid';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** Where a reset is confirmed from: the runner whose default Codex account it spends, and the
  *  workspace whose composer asked, which the create route checks for an account override. */
@@ -495,17 +496,20 @@ export function CodexResetCreditCard({ state }: { state: CodexResetCreditState }
             </div>
             <div className="cu-rc-count">{codexResetCountLabel(card.details)}</div>
             {expiry && (
-              <div className="cu-rc-meta" title={expiry.at ? fmtFull(expiry.at) : undefined}>
-                {expiry.label}
-              </div>
+              <Tooltip content={expiry.at ? fmtFull(expiry.at) : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+                <div className="cu-rc-meta">
+                  {expiry.label}
+                </div>
+              </Tooltip>
             )}
             {freshness && (
-              <div
-                className={`cu-rc-meta${freshness.stale ? ' cu-rc-stale' : ''}`}
-                title={fmtFull(card.block.fetchedAt)}
-              >
-                {freshness.label}
-              </div>
+              <Tooltip content={fmtFull(card.block.fetchedAt)} delay={TEXT_TOOLTIP_DELAY_MS}>
+                <div
+                  className={`cu-rc-meta${freshness.stale ? ' cu-rc-stale' : ''}`}
+                >
+                  {freshness.label}
+                </div>
+              </Tooltip>
             )}
           </div>
         </div>

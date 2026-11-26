@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode, type Ref, type UIEventHandler } from 'react';
 import { Link } from 'react-router-dom';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** One step of a public page's breadcrumb. `to` makes it a link: only to a page the same link shares. */
 export interface PublicCrumb {
@@ -81,10 +82,12 @@ export function PublicShell({
         <div className="share-right">
           {status}
           {live && (
-            <span className="share-live" title={PUBLIC_LIVE_NOTE}>
-              <i aria-hidden />
-              Live
-            </span>
+            <Tooltip content={PUBLIC_LIVE_NOTE} side="bottom" align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+              <span className="share-live">
+                <i aria-hidden />
+                Live
+              </span>
+            </Tooltip>
           )}
           <span className="share-badge">{badge}</span>
           {actions}

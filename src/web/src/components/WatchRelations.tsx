@@ -35,6 +35,7 @@ import { WatchEditorModal } from './WatchEditor';
 import { ObserverLink, WatchStatePill, useNow } from './WatchParts';
 import { Button } from './ui/Button';
 import { Popover } from './ui/Popover';
+import { Tooltip } from './ui/Tooltip';
 
 const rowsOf = (data: unknown): WatchView[] => (Array.isArray(data) ? (data as WatchView[]) : []);
 
@@ -161,14 +162,13 @@ export function SessionWatchBadges({ sessionId, follow = true }: { sessionId: st
         </Popover>
       )}
       {/* A wide session header offers Follow… in its ⋯ instead (docs/mocks/session-header-compact). */}
-      {follow && <button
+      {follow && <Tooltip content="Follow this session: be notified, or resume another session, when it reaches a condition" side="bottom" align="end"><button
         type="button"
         className="watch-chip is-action"
-        title="Follow this session: be notified, or resume another session, when it reaches a condition"
         onClick={() => setFollowing(true)}
       >
         Follow
-      </button>}
+      </button></Tooltip>}
       {following && (
         <WatchEditorModal
           mode={{ kind: 'create', targets: [{ kind: 'SESSION', id: sessionId }] }}

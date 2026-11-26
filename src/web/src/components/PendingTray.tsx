@@ -96,10 +96,12 @@ function Row({ row }: { row: PendingTrayRow }) {
       {!row.busy && (row.onSteer || row.onWithdraw) && (
         <span className="pending-tray-actions">
           {row.onSteer && (
-            <button type="button" className="pending-tray-btn" onClick={row.onSteer} title="Send into the current turn now">
-              {STEER_ICON}
-              Steer
-            </button>
+            <Tooltip content="Send into the current turn now" align="end">
+              <button type="button" className="pending-tray-btn" onClick={row.onSteer}>
+                {STEER_ICON}
+                Steer
+              </button>
+            </Tooltip>
           )}
           {row.onWithdraw && (
             <Tooltip align="end" content="Withdraw — back to the composer">

@@ -3540,7 +3540,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // session_phase_from_facts at it, re-creates session_zz_phase to fire on retry_at as well, and writes phase alone
       // on the released rows with retry_at set. Only `session` is touched; no preserved relation, trigger, function or
       // DONE fence changes.
-      '1667_session_phase_retry_running'],
+      '1667_session_phase_retry_running',
+      // 1668 creates `help_ask_conversation` only, with foreign keys to `user` and `task`; no existing table,
+      // trigger, function or DONE fence is touched.
+      '1668_help_ask_conversation'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

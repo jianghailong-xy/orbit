@@ -2,6 +2,7 @@ import type { JSX, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { LANDING_NO_PAGE, LANDING_OPEN } from './ProjectPanoramaHeader';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * "Open landing ›" — the explicit way into the landing session a piece of work belongs to (contract
@@ -27,10 +28,12 @@ export function LandingLink({
   title?: string;
 }): JSX.Element {
   return (
-    <Link className={className} to={`/sessions/${encodeURIComponent(encodeId(sessionId))}`}
-      onClick={onClick} title={title}>
-      {children ?? <>{`${LANDING_OPEN} ›`}</>}
-    </Link>
+    <Tooltip content={title}>
+      <Link className={className} to={`/sessions/${encodeURIComponent(encodeId(sessionId))}`}
+        onClick={onClick}>
+        {children ?? <>{`${LANDING_OPEN} ›`}</>}
+      </Link>
+    </Tooltip>
   );
 }
 

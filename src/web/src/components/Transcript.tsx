@@ -81,6 +81,7 @@ import {
 import { saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
 import { Diff, ExportCtx, KeyVals, Pre, relPath, safeJson, type ExportMode } from './ToolBlocks';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 // Re-exported for the modules that have always read them from the transcript.
 export { ExportCtx, Pre, relPath, type ExportMode };
 import { copyText } from '../lib/clipboard';
@@ -1129,6 +1130,10 @@ function legacyWithheldMessage(count: number): string {
     : `Orbit held back the diffs of ${count} files while it checked this runner for a removed secret. No secret was found in them.`;
 }
 
+/** The runner's key for a Claude workflow agent's call: `<Workflow call id>:workflow-agent:<agent id>`
+ *  (runner-go claude_workflow_transcript.go). */
+const WORKFLOW_AGENT_KEY = ':workflow-agent:';
+
 function buildTranscript(
   events: RunEvent[],
   turnImages?: Record<string, TurnImage[]>,
@@ -1143,14 +1148,35 @@ function buildTranscript(
   // result can't be matched by id. Fall back to the most recently opened tool that
   // still has no result — results arrive right after their call in those streams.
   let lastOpenTool: ToolNode | undefined;
-  // Sub-workspace events land inside their spawning Task's children; everything else
-  // (and any event whose parent we haven't seen) goes to the top level.
-  const into = (parentId?: string): Node[] => {
-    if (parentId) {
-      const t = byId.get(parentId);
-      if (t) return t.children;
-    }
-    return roots;
+  // The event being read: where a stand-in call is drawn (standInCall).
+  let seqNow = 0;
+  // Stand-in calls not yet met by their own tool_use, which takes the stand-in's place when it comes.
+  const standIns = new Set<ToolNode>();
+  // A sub-agent's events whose call is older than the loaded window (a tail page that starts in the
+  // middle of a long workflow or Agent run) nest under a stand-in for that call, drawn where the
+  // first of them is. Without it, the agent's replies and steps read as the session's own, and the
+  // result it handed back drew as a raw JSON dump. Loading the older page rebuilds the transcript
+  // with the real call. `childId` is the call being nested, if it is one: a Claude workflow agent's
+  // key is its Workflow call's id + WORKFLOW_AGENT_KEY, which says what the missing call was.
+  const standInCall = (id: string, childId?: string): ToolNode => {
+    const node: ToolNode = {
+      kind: 'tool',
+      seq: seqNow,
+      id,
+      name: childId?.startsWith(id + WORKFLOW_AGENT_KEY) ? 'Workflow' : 'Agent',
+      input: {},
+      children: [],
+    };
+    byId.set(id, node);
+    standIns.add(node);
+    const cut = id.indexOf(WORKFLOW_AGENT_KEY);
+    (cut > 0 ? into(id.slice(0, cut), id) : roots).push(node);
+    return node;
+  };
+  // Sub-workspace events land inside their spawning Task's children; top-level events go to the top level.
+  const into = (parentId?: string, childId?: string): Node[] => {
+    if (!parentId) return roots;
+    return (byId.get(parentId) ?? standInCall(parentId, childId)).children;
   };
   // A task retry re-sends the exact brief that opened the run, but its new user event has no
   // `taskStart` payload of its own. Keep the control-plane snapshot from that run only while a
@@ -1388,6 +1414,7 @@ function buildTranscript(
   // bg_run call, so neither half draws, and its result must not fall to whichever call is still open.
   const runnerJobLaunches = new Set<string>();
   for (const ev of events) {
+    seqNow = ev.seq;
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
     const legacy =
@@ -1630,28 +1657,45 @@ function buildTranscript(
           runnerJobLaunches.add(String(p.id));
           break;
         }
+        const id = String(p.id ?? '');
+        const standIn = byId.get(id);
         const node: ToolNode = {
           kind: 'tool',
           seq: ev.seq,
-          id: String(p.id ?? ''),
+          id,
           name: String(p.name ?? 'tool'),
           input: p.input,
           truncated: ev.truncated,
           children: [],
           ts: ev.ts,
         };
-        if (node.id) byId.set(node.id, node);
-        openTools.push({ node, parent });
         agentWorked();
-        into(parent).push(node);
+        if (standIn && standIns.has(standIn)) {
+          // A call its own events got here before: it is the stand-in, from now on with its name and input.
+          standIns.delete(standIn);
+          Object.assign(standIn, { name: node.name, input: node.input, truncated: node.truncated, ts: node.ts });
+          openTools.push({ node: standIn, parent });
+          lastOpenTool = standIn;
+          break;
+        }
+        if (id) byId.set(id, node);
+        openTools.push({ node, parent });
+        into(parent, id).push(node);
         lastOpenTool = node;
         break;
       }
       case 'tool_result': {
         if (p.toolUseId && runnerJobLaunches.has(String(p.toolUseId))) break;
-        const t =
-          (p.toolUseId ? byId.get(String(p.toolUseId)) : undefined) ??
-          (lastOpenTool && !lastOpenTool.result ? lastOpenTool : undefined);
+        const toolUseId = p.toolUseId ? String(p.toolUseId) : '';
+        // Only a result that names no call (a legacy stream) falls to the call still open: one that
+        // names a call older than the loaded window belongs to that call, not to whichever is open.
+        // A workflow agent's is drawn in a stand-in for its call, as the agent's other events are.
+        const t = toolUseId
+          ? byId.get(toolUseId) ??
+            (parent && toolUseId.startsWith(parent + WORKFLOW_AGENT_KEY) ? standInCall(toolUseId) : undefined)
+          : lastOpenTool && !lastOpenTool.result
+            ? lastOpenTool
+            : undefined;
         if (t) {
           t.result = { content: p.content, isError: !!p.isError, seq: ev.seq, truncated: ev.truncated, ts: ev.ts };
           removeOpenTool(t);
@@ -2635,7 +2679,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         );
       }
       if (isRunnerUpdateResume(node.text)) {
-        return <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>;
+        return <Tooltip content={node.text} delay={TEXT_TOOLTIP_DELAY_MS}><div className="chat-note runner-update-resume" data-seq={seq}>{RUNNER_UPDATE_RESUME_NOTE}</div></Tooltip>;
       }
       const ownerRequestEnding = resolutionTurnLabel(node.text);
       if (ownerRequestEnding) {
@@ -2967,13 +3011,15 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // is the runner's own account of why a turn failed and stays loud.
       const log = parseEngineLogLine(node.message);
       return (
-        <div className="chat-error" data-level={log?.level} data-seq={node.seq} title={log && node.message}>
-          <span className="chat-error-mark">
-            {!log || log.level === 'ERROR' ? '✖' : log.level === 'WARN' ? '⚠' : '·'}
-          </span>
-          <span className="chat-error-text">{log ? linkifyLogText(log.text) : node.message}</span>
-          {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
-        </div>
+        <Tooltip content={log ? node.message : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div className="chat-error" data-level={log?.level} data-seq={node.seq}>
+            <span className="chat-error-mark">
+              {!log || log.level === 'ERROR' ? '✖' : log.level === 'WARN' ? '⚠' : '·'}
+            </span>
+            <span className="chat-error-text">{log ? linkifyLogText(log.text) : node.message}</span>
+            {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
+          </div>
+        </Tooltip>
       );
     }
     case 'notice':
@@ -3657,18 +3703,20 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // says how far it got.
   const status =
     node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
-      <div className="chat-undelivered" title={node.deliveryReason}>
-        ⚠ {steerDeliveryState(node.delivery).label}
-        {node.delivery === 'failed' && putBack && typed && (
-          <button
-            type="button"
-            className="chat-undelivered-retry"
-            onClick={() => putBack(typed, node.attachmentRefs)}
-          >
-            Put back in the composer
-          </button>
-        )}
-      </div>
+      <Tooltip content={node.deliveryReason} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div className="chat-undelivered">
+          ⚠ {steerDeliveryState(node.delivery).label}
+          {node.delivery === 'failed' && putBack && typed && (
+            <button
+              type="button"
+              className="chat-undelivered-retry"
+              onClick={() => putBack(typed, node.attachmentRefs)}
+            >
+              Put back in the composer
+            </button>
+          )}
+        </div>
+      </Tooltip>
     ) : node.steer ? (
       <SteerState node={node} typed={typed} />
     ) : null;
@@ -3704,15 +3752,16 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
           {flipFoot && translationFoot}
           {flipFoot && typed && <span className="chat-meta-sep">·</span>}
           {typed && (
-            <button
-              type="button"
-              className="chat-copy"
-              onClick={copy}
-              title={copied ? 'Copied' : 'Copy message'}
-              aria-label={copied ? 'Copied' : 'Copy message'}
-            >
-              {copied ? <CheckOutlined /> : <CopyOutlined />}
-            </button>
+            <Tooltip content={copied ? 'Copied' : 'Copy message'}>
+              <button
+                type="button"
+                className="chat-copy"
+                onClick={copy}
+                aria-label={copied ? 'Copied' : 'Copy message'}
+              >
+                {copied ? <CheckOutlined /> : <CopyOutlined />}
+              </button>
+            </Tooltip>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
           {typed && node.ts && (status || held || (!flipFoot && translationFoot)) && (
@@ -3790,15 +3839,16 @@ function TurnFoot({ node }: { node: DividerNode }) {
   return (
     <div className="chat-turn-divider chat-turn-foot" data-seq={seq}>
       {reply && (
-        <button
-          type="button"
-          className="chat-copy"
-          onClick={copy}
-          title={copied ? 'Copied' : 'Copy reply'}
-          aria-label={copied ? 'Copied' : 'Copy reply'}
-        >
-          {copied ? <CheckOutlined /> : <CopyOutlined />}
-        </button>
+        <Tooltip content={copied ? 'Copied' : 'Copy reply'}>
+          <button
+            type="button"
+            className="chat-copy"
+            onClick={copy}
+            aria-label={copied ? 'Copied' : 'Copy reply'}
+          >
+            {copied ? <CheckOutlined /> : <CopyOutlined />}
+          </button>
+        </Tooltip>
       )}
       {ts && <span className="chat-time">{formatClock(new Date(ts))}</span>}
     </div>
@@ -3923,15 +3973,17 @@ function resolveFileObjectUrl(
 /** What a file whose bytes have gone leaves in a conversation: the grey a card's tile has, in the card's words. */
 function AttachmentExpiredTile({ at, name }: { at: string | null; name: string }) {
   return (
-    <span className="chat-expired" title={name}>
-      {EVIDENCE_FILE_EXPIRED}
-      {at === null ? null : (
-        <>
-          <br />
-          {evidenceExpiryDate(at)}
-        </>
-      )}
-    </span>
+    <Tooltip content={name} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="chat-expired">
+        {EVIDENCE_FILE_EXPIRED}
+        {at === null ? null : (
+          <>
+            <br />
+            {evidenceExpiryDate(at)}
+          </>
+        )}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -4032,17 +4084,18 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
     }
   };
   return (
-    <button
-      type="button"
-      className={`chat-file${failed ? ' is-error' : ''}`}
-      onClick={download}
-      title={failed ? `Retry download ${label}` : `Download ${label}`}
-      aria-label={failed ? `Retry download ${label}` : `Download ${label}`}
-      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
-    >
-      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
-      <span className="chat-file-name">{label}</span>
-    </button>
+    <Tooltip content={failed ? `Retry download ${label}` : `Download ${label}`}>
+      <button
+        type="button"
+        className={`chat-file${failed ? ' is-error' : ''}`}
+        onClick={download}
+        aria-label={failed ? `Retry download ${label}` : `Download ${label}`}
+        data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+      >
+        {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
+        <span className="chat-file-name">{label}</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -4139,15 +4192,16 @@ function CodeBlock({ children }: any) {
   };
   return (
     <div className="md-codeblock">
-      <button
-        type="button"
-        className="md-copy"
-        onClick={copy}
-        title={copied ? 'Copied' : 'Copy code'}
-        aria-label={copied ? 'Copied' : 'Copy code'}
-      >
-        {copied ? <CheckOutlined /> : <CopyOutlined />}
-      </button>
+      <Tooltip content={copied ? 'Copied' : 'Copy code'}>
+        <button
+          type="button"
+          className="md-copy"
+          onClick={copy}
+          aria-label={copied ? 'Copied' : 'Copy code'}
+        >
+          {copied ? <CheckOutlined /> : <CopyOutlined />}
+        </button>
+      </Tooltip>
       <pre ref={preRef}>{children}</pre>
     </div>
   );
@@ -4332,10 +4386,12 @@ function LocalArtifactFile({
   const filename = downloadName || fileLabel(artifactPath);
   if (!resolve || exp) {
     return (
-      <span className="md-image-unavailable" title={artifactPath}>
-        <PaperClipOutlined />
-        <code>{shown}</code>
-      </span>
+      <Tooltip content={artifactPath} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{shown}</code>
+        </span>
+      </Tooltip>
     );
   }
   const download = async (): Promise<void> => {
@@ -5313,22 +5369,24 @@ function SubagentWhy({ why, run }: { why: string; run: SubagentRunView | undefin
     : undefined;
   return (
     <>
-      <div className="chat-subagent-why" title={tooltip}>
-        <b>Why</b> · {why}
-        {more && (
-          <button
-            type="button"
-            className="chat-subagent-why-more"
-            aria-expanded={open}
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen((v) => !v);
-            }}
-          >
-            {open ? 'Hide' : 'Details'}
-          </button>
-        )}
-      </div>
+      <Tooltip content={tooltip} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div className="chat-subagent-why">
+          <b>Why</b> · {why}
+          {more && (
+            <button
+              type="button"
+              className="chat-subagent-why-more"
+              aria-expanded={open}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen((v) => !v);
+              }}
+            >
+              {open ? 'Hide' : 'Details'}
+            </button>
+          )}
+        </div>
+      </Tooltip>
       {open && (
         <ul className="chat-subagent-why-list">
           {reasons.map((line, i) => (

@@ -72,6 +72,7 @@ import { answerRefusedUntranslated, criterionTextIn } from '../lib/translation';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
 import { streamPoll } from '../lib/listBudget';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * WHY this project is not DONE — the projection, rendered.
@@ -536,9 +537,11 @@ export function ProjectSettlementCard({
         <span className="project-settlement-heading">
           {settled ? SETTLEMENT_SETTLED_TITLE : SETTLEMENT_HEADING}
         </span>
-        <span className="criteria-provenance" title={PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions project-settlement-body">
         {settled ? (
@@ -1292,7 +1295,9 @@ export function ProjectDoneCard({
     <div ref={ref} className="approval-card project-settlement project-done-card">
       <div className="approval-head project-settlement-head">
         <span className="project-settlement-heading">{DONE_CARD_HEADING}</span>
-        <span className="criteria-provenance" title={PROVENANCE_TITLE}>FROM ORBIT</span>
+        <Tooltip content={PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">FROM ORBIT</span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions project-settlement-body">
         <div className="project-settlement-meta">

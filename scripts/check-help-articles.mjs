@@ -1,5 +1,7 @@
 // Checks the in-product help articles in docs/help (design: docs/mocks/help-center, board 03).
 // Every article is docs/help/<category>/<slug>.md and opens with front matter in the board's format.
+// English is the source. A translated copy is docs/help/<language>/<category>/<slug>.md and carries only its title,
+// summary and body; the other fields are the English article's, so the two cannot disagree about them.
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +13,10 @@ export const CATEGORIES = [
 export const PLATFORMS = ['web', 'macos', 'ios', 'android'];
 export const FIELDS = ['title', 'summary', 'category', 'routes', 'errors', 'platforms', 'common', 'updated'];
 export const MIN_ARTICLES = 28;
+/** The languages that ship a translated copy of the library, as HELP_LANGUAGES names them (English is the source). */
+export const LANGUAGES = ['zh-Hans'];
+/** What a translated copy's front matter may hold: the words that change. */
+export const TRANSLATED_FIELDS = ['title', 'summary'];
 
 // The board's front matter is flat: `key: value`, where a value is a scalar or an inline `[a, b]` list.
 export function parseFrontMatter(source) {
@@ -70,6 +76,16 @@ export function checkArticle(file, source) {
       fail(`updated must be an ISO date (YYYY-MM-DD): ${date}`);
     }
   }
+  errors.push(...bodyErrors(file, body));
+  // Every word a person reads is English (CLAUDE.md §5); a translated copy is the one place another language lives.
+  if (/[㐀-鿿豈-﫿]/.test(source)) fail('contains Chinese text; articles are English');
+  return errors;
+}
+
+/** The checks a body passes whatever language it is written in: its blocks and its in-app links. */
+export function bodyErrors(file, body) {
+  const errors = [];
+  const fail = (message) => errors.push(`${file}: ${message}`);
   // Platform-only paragraphs: `::: platform ios` ... `:::`, not nested.
   let open = null;
   for (const [index, line] of body.split('\n').entries()) {
@@ -90,8 +106,47 @@ export function checkArticle(file, source) {
   for (const link of body.matchAll(/\]\((orbit:[^)\s]*)\)/g)) {
     if (!link[1].startsWith('orbit:/')) fail(`in-app link must be orbit:/path: ${link[1]}`);
   }
-  // Every word a person reads is English (CLAUDE.md §5).
-  if (/[㐀-鿿豈-﫿]/.test(source)) fail('contains Chinese text; articles are English');
+  return errors;
+}
+
+/**
+ * A translated copy: docs/help/<language>/<category>/<slug>.md. Its front matter holds only `title` and `summary`;
+ * its category and slug name an English article, whose routes, errors, platforms and date it inherits.
+ */
+export function checkTranslation(file, source, articles) {
+  const errors = [];
+  const fail = (message) => errors.push(`${file}: ${message}`);
+  let parsed;
+  try {
+    parsed = parseFrontMatter(source);
+  } catch (error) {
+    return [`${file}: ${error.message}`];
+  }
+  if (!parsed) return [`${file}: no front matter (the file must start with a --- block)`];
+  const { fields, body } = parsed;
+  for (const field of TRANSLATED_FIELDS) {
+    if (!(field in fields)) fail(`missing field: ${field}`);
+    else if (typeof fields[field] !== 'string' || !fields[field]) fail(`${field} must be non-empty text`);
+  }
+  for (const field of Object.keys(fields)) {
+    if (!TRANSLATED_FIELDS.includes(field)) {
+      fail(`${field} belongs to the English article; a translation carries only ${TRANSLATED_FIELDS.join(' and ')}`);
+    }
+  }
+  const parts = file.split('/');
+  if (parts.length !== 5) return [`${file}: translations live in docs/help/<language>/<category>/<slug>.md`];
+  const [, , , category, name] = parts;
+  if (!CATEGORIES.includes(category)) fail(`unknown category: ${category}`);
+  if (!body.trim()) fail('body must not be empty');
+  const slug = path.basename(name, '.md');
+  const english = articles.find((article) => article.file === `docs/help/${category}/${slug}.md`);
+  if (!english) fail(`no English article named ${category}/${slug}`);
+  errors.push(...bodyErrors(file, body));
+  for (const link of source.matchAll(/\]\(orbit:\/help\/([^)\s#]+)\)/g)) {
+    if (!articles.some((article) => article.file === `docs/help/${link[1]}.md`)) {
+      fail(`link to a missing article: orbit:/help/${link[1]}`);
+    }
+  }
   return errors;
 }
 
@@ -124,26 +179,47 @@ function main() {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const help = path.join(root, 'docs/help');
   const articles = [];
+  const translations = [];
+  const errors = [];
   for (const entry of readdirSync(help, { withFileTypes: true })) {
     if (!entry.isDirectory()) {
-      if (entry.name.endsWith('.md')) articles.push({ file: `docs/help/${entry.name}`, source: '' });
+      if (entry.name.endsWith('.md')) {
+        errors.push(`docs/help/${entry.name}: articles live in docs/help/<category>/<slug>.md`);
+      }
       continue;
     }
-    for (const name of readdirSync(path.join(help, entry.name))) {
-      if (!name.endsWith('.md')) continue;
-      const file = `docs/help/${entry.name}/${name}`;
-      articles.push({ file, source: readFileSync(path.join(root, file), 'utf8') });
+    if (LANGUAGES.includes(entry.name)) {
+      for (const sub of readdirSync(path.join(help, entry.name), { withFileTypes: true })) {
+        if (!sub.isDirectory()) {
+          if (sub.name.endsWith('.md')) {
+            errors.push(`docs/help/${entry.name}/${sub.name}: translations live in docs/help/<language>/<category>/<slug>.md`);
+          }
+          continue;
+        }
+        for (const name of readdirSync(path.join(help, entry.name, sub.name))) {
+          if (!name.endsWith('.md')) continue;
+          const file = `docs/help/${entry.name}/${sub.name}/${name}`;
+          translations.push({ file, source: readFileSync(path.join(root, file), 'utf8') });
+        }
+      }
+    } else if (CATEGORIES.includes(entry.name)) {
+      for (const name of readdirSync(path.join(help, entry.name))) {
+        if (!name.endsWith('.md')) continue;
+        const file = `docs/help/${entry.name}/${name}`;
+        articles.push({ file, source: readFileSync(path.join(root, file), 'utf8') });
+      }
+    } else {
+      errors.push(`docs/help/${entry.name}: not a help category or a language`);
     }
   }
-  const strays = articles.filter(({ file }) => file.split('/').length !== 4);
-  const errors = [
-    ...strays.map(({ file }) => `${file}: articles live in docs/help/<category>/<slug>.md`),
-    ...checkLibrary(articles.filter((article) => !strays.includes(article))),
-  ];
+  errors.push(...checkLibrary(articles));
+  errors.push(...translations.flatMap(({ file, source }) => checkTranslation(file, source, articles)));
   for (const error of errors) console.error(error);
-  const counted = articles.length - strays.length;
   const common = articles.filter(({ source }) => /^common:\s*true$/m.test(source)).length;
-  console.log(`Checked ${counted} help articles in ${CATEGORIES.length} categories (${common} common); ${errors.length} errors.`);
+  console.log(
+    `Checked ${articles.length} help articles in ${CATEGORIES.length} categories (${common} common) and ` +
+      `${translations.length} translations; ${errors.length} errors.`,
+  );
   process.exitCode = errors.length ? 1 : 0;
 }
 

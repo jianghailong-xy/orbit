@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { heartbeatAgo, reportBody, reportIssueUrl, reportTitle, scrubForReport, type ReportInput } from './stillStuck';
+import { reportBody, reportIssueUrl, reportTitle, scrubForReport, type ReportInput } from './stillStuck';
 
 /**
  * Still stuck → Report on GitHub (docs/mocks/help-center board 02 ② right frame, side note 5): the issue body is built by
- * reportBody alone. It carries Orbit's version and client, the machine's runner version, OS and last heartbeat, and the
+ * reportBody alone. It carries Orbit's version and client, and the
  * question and answer — and never a repository name, a file's contents or a key, wherever in the conversation they were.
  */
 
-const NOW = new Date('2026-11-16T12:00:00Z');
-const MACHINE = { name: 'build-box', runnerVersion: '0.1.255', os: 'linux', lastHeartbeatAt: '2026-11-16T09:56:00Z' };
 
 // Everything the person's conversation might hold that a report must not.
 const SECRETS = {
@@ -37,9 +35,7 @@ const FILE_PATH = '/home/mia/src/billing-worker/src/webhooks.ts';
 const leaky: ReportInput = {
   orbitVersion: '0.1.257',
   client: 'web',
-  machine: MACHINE,
   privateNames: ['payments-api', 'acme-corp/payments-api', 'billing-worker'],
-  now: NOW,
   exchanges: [
     {
       question: [
@@ -75,10 +71,9 @@ const leaky: ReportInput = {
 describe('reportBody', () => {
   const body = reportBody(leaky);
 
-  it('carries Orbit version and client, the runner version, OS and last heartbeat', () => {
+  it('carries Orbit version and client, and no machine: the server answered', () => {
     expect(body).toContain('Orbit 0.1.257 · web');
-    expect(body).toContain('Machine: runner 0.1.255 · Linux');
-    expect(body).toContain('Last heartbeat: 2h 4m ago');
+    expect(body).not.toContain('Machine:');
   });
 
   it('carries the question and the answer, without the answer\'s source list', () => {
@@ -120,14 +115,10 @@ describe('reportBody', () => {
     expect(body).toContain('[path removed]');
   });
 
-  it('a machine nobody knows says so, and a conversation without a machine still reports the version', () => {
-    const none = reportBody({ ...leaky, machine: null, exchanges: [{ question: 'Hi?', answer: '' }] });
+  it('a question that got no answer says so', () => {
+    const none = reportBody({ ...leaky, exchanges: [{ question: 'Hi?', answer: '' }] });
     expect(none).toContain('Orbit 0.1.257 · web');
-    expect(none).toContain('Machine: none');
     expect(none).toContain('(no answer)');
-    const silent = reportBody({ ...leaky, machine: { ...MACHINE, runnerVersion: null, os: null, lastHeartbeatAt: null } });
-    expect(silent).toContain('Machine: runner unknown · unknown OS');
-    expect(silent).toContain('Last heartbeat: never');
   });
 
   it('keeps ordinary words: help paths, routes and plain prose are not taken for keys or repositories', () => {
@@ -152,11 +143,5 @@ describe('the issue', () => {
     const long = 'word '.repeat(5000);
     const url = reportIssueUrl('jianghailong-xy/orbit', 'Help', reportBody({ ...leaky, exchanges: Array(5).fill({ question: long, answer: long }) }));
     expect(url.length).toBeLessThan(16_000);
-  });
-
-  it('heartbeat ages read as the board writes them', () => {
-    expect(heartbeatAgo('2026-11-16T11:59:40Z', NOW)).toBe('just now');
-    expect(heartbeatAgo('2026-11-16T11:15:00Z', NOW)).toBe('45m ago');
-    expect(heartbeatAgo('2026-11-12T12:00:00Z', NOW)).toBe('4d ago');
   });
 });
