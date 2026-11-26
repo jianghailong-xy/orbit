@@ -71,6 +71,7 @@ import {
   STEER_WITHDRAW_POLL_MS,
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
+import { deleteTurnsKeepingAttachments } from './withdrawn-turn-attachments';
 import {
   projectsMembershipCandidatesSql, readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql,
 } from './session-project-membership';
@@ -8806,13 +8807,12 @@ export class SessionsService {
       // executable count below already assumes), and leaving them behind ran a command
       // the user had just told to stop. A queued steer goes for the same reason and one
       // more: it would be written into the very turn being stopped.
-      await tx.conversationTurn.deleteMany({
-        where: {
-          sessionId: id,
-          kind: { in: ['message', 'shell', 'steer'] },
-          status: 'PENDING',
-          ...(protectedTargetIds.length > 0 ? { id: { notIn: protectedTargetIds } } : {}),
-        },
+      // Their files stay on the session: Stop folds the words and files back into the composer.
+      await deleteTurnsKeepingAttachments(tx, {
+        sessionId: id,
+        kind: { in: ['message', 'shell', 'steer'] },
+        status: 'PENDING',
+        ...(protectedTargetIds.length > 0 ? { id: { notIn: protectedTargetIds } } : {}),
       });
       if (turnStateOf(session) === 'IN_FLIGHT') {
         const executable = await tx.conversationTurn.count({
@@ -9296,9 +9296,10 @@ export class SessionsService {
       // And a request another session asked of this one, withdrawn unread: UNDELIVERED. A reply turn
       // withdrawn here leaves its outcomes held for this session's next turn (session-request.ts).
       await settleUnrunSessionRequests(tx, id, { code: 'TURN_WITHDRAWN', turnId });
-      const res = await tx.conversationTurn.deleteMany({
-        // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
-        where: {
+      // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled. Its files stay
+      // on the session: they go back to the composer with the words (withdrawn-turn-attachments.ts).
+      const res = {
+        count: await deleteTurnsKeepingAttachments(tx, {
           id: turnId,
           sessionId: id,
           kind: { in: ['message', 'shell'] },
@@ -9306,8 +9307,8 @@ export class SessionsService {
           clientTurnId: { not: SessionsService.initialTurnClientId(id) },
           // A wiki chat's opening turn is its prompt, as the seeded one is any other session's.
           ...(session.wikiChatSpaceId ? { seq: { gt: 1 } } : {}),
-        },
-      });
+        }),
+      };
       if (res.count === 0) {
         // A held message (Settings › Translation) is nobody's yet: withdrawn like a pending steer, with no
         // queue-slot bookkeeping, since it holds none. Never a held opening, which is the session's prompt.
@@ -9316,7 +9317,7 @@ export class SessionsService {
           select: { status: true, clientTurnId: true },
         });
         if (held?.status === HELD_TURN_STATUS && held.clientTurnId !== SessionsService.initialTurnClientId(id)) {
-          await tx.conversationTurn.deleteMany({ where: { id: turnId, sessionId: id, status: HELD_TURN_STATUS } });
+          await deleteTurnsKeepingAttachments(tx, { id: turnId, sessionId: id, status: HELD_TURN_STATUS });
           return null;
         }
         // A steer whose delivery already settled undelivered is the exception to that refusal.
@@ -9325,16 +9326,14 @@ export class SessionsService {
         // exit, which is how "Not delivered" ends up sitting under a conversation that moved on
         // days ago. Discarding one changes no executable count, so the queue-slot bookkeeping
         // below deliberately does not run.
-        const discarded = await tx.conversationTurn.deleteMany({
-          where: {
-            id: turnId,
-            sessionId: id,
-            kind: 'steer',
-            sendIntent: 'CURRENT_WORK',
-            deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
-          },
+        const discarded = await deleteTurnsKeepingAttachments(tx, {
+          id: turnId,
+          sessionId: id,
+          kind: 'steer',
+          sendIntent: 'CURRENT_WORK',
+          deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
         });
-        if (discarded.count > 0) return null;
+        if (discarded > 0) return null;
         const steer = await tx.conversationTurn.findFirst({
           where: { id: turnId, sessionId: id, kind: 'steer' },
           select: { status: true, deliveryStatus: true, clientTurnId: true, senderSessionId: true },
@@ -9352,9 +9351,7 @@ export class SessionsService {
         // message does. A steer occupies no executable slot, so none of the queue bookkeeping
         // below applies to it.
         if (steer.status === 'PENDING') {
-          await tx.conversationTurn.deleteMany({
-            where: { id: turnId, sessionId: id, kind: 'steer', status: 'PENDING' },
-          });
+          await deleteTurnsKeepingAttachments(tx, { id: turnId, sessionId: id, kind: 'steer', status: 'PENDING' });
           return null;
         }
         const engine = (await sessionEngine(tx, session)) ?? '';

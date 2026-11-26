@@ -279,3 +279,38 @@ test('a file of another session is still refused, and nothing is written',
       await db.$disconnect();
     }
   });
+
+test('a withdrawn message keeps its file on the session, so the put-back sends it again by the same id',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const { db, sessions } = connect();
+    try {
+      // The incident: a queued (or held, untranslated) message with a picture is cancelled; its words
+      // and its file go back to the composer by id; the resend named a file the cascade had deleted.
+      const f = await fixture(db, 'withdraw-keeps', RunStatus.AWAITING_INPUT);
+      await db.attachment.update({ where: { id: f.screenshot }, data: { turnId: null } });
+      const queued = await sessions.createTurn(f.ownerId, f.sessionId, {
+        clientTurnId: randomUUID(),
+        content: 'look at this',
+        attachmentIds: [f.screenshot],
+      });
+      assert.deepEqual((await filesOf(db, queued.turnId)).map((file) => file.id), [f.screenshot]);
+      // Still PENDING: nothing claimed it.
+      await db.session.update({ where: { id: f.sessionId }, data: { status: RunStatus.PENDING } });
+
+      await sessions.cancelQueuedTurn(f.ownerId, f.sessionId, queued.turnId);
+
+      assert.equal(await db.conversationTurn.count({ where: { id: queued.turnId } }), 0, 'the message is gone');
+      const kept = await db.attachment.findUnique({ where: { id: f.screenshot }, select: { sessionId: true, turnId: true } });
+      assert.deepEqual(kept, { sessionId: f.sessionId, turnId: null }, 'its file is staged on the session again');
+
+      const resent = await sessions.createTurn(f.ownerId, f.sessionId, {
+        clientTurnId: randomUUID(),
+        content: 'look at this',
+        attachmentIds: [f.screenshot],
+      });
+      assert.deepEqual((await filesOf(db, resent.turnId)).map((file) => file.id), [f.screenshot], 'sent again, the same file');
+    } finally {
+      await db.$disconnect();
+    }
+  });
