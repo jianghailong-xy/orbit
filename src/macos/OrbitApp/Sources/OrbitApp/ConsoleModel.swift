@@ -3687,6 +3687,13 @@ final class ConsoleModel {
     /// freshest word on what the session runs; the console's own provider is the fallback for a
     /// detail that has not loaded.
     var outageProvider: String { worktree.detail?.provider ?? provider }
+    /// The same provider as the auto-retry card names it — "Qwen (Model Studio)", "Claude Code", never the slug (web
+    /// `outageProviderName`).
+    var outageProviderName: String {
+        SessionProviderChoices.providerName(
+            on: engine, SessionProviderChoices.current(engine: engine, provider: outageProvider,
+                                                       in: engineProviders, sources: choiceSources))
+    }
 
     /// Re-read the armed retry. Called when an auto-retry card appears: the server arms the retry as
     /// the failing turn settles, and a session that just went terminal is exactly the one the

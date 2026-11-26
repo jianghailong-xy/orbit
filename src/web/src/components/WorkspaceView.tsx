@@ -8792,6 +8792,8 @@ export function WorkspaceView({
   // failed, so a card about claude's spent window read as deepseek's. `detailForSelected` first,
   // because a pick just made is the stale thing here, not the detail.
   const outageProvider = detailForSelected?.provider ?? selected?.provider ?? 'claude';
+  // The card names it as the composer does: "Qwen (Model Studio)", "Claude Code" — never the slug.
+  const outageProviderName = providerNameOn(shownEngine, shownProviderChoice(outageProvider));
   // A Cursor CLI session's quota card speaks of the account it ran on — or the key — by its name, with
   // the plan Cursor reported and when its usage comes back, and offers another signed-in account with
   // room for a new session: the conversation can't move there yet (D5).
@@ -8829,7 +8831,7 @@ export function WorkspaceView({
   })();
   const autoRetryHelp: AutoRetryHelp = useMemo(
     () => ({
-      provider: outageProvider,
+      provider: outageProviderName,
       cursor: cursorQuotaHelp,
       runnerName: runnerShownName,
       retryAt: detailForSelected?.retryAt ?? null,
@@ -8900,7 +8902,7 @@ export function WorkspaceView({
         : undefined,
     }),
     [
-      outageProvider,
+      outageProviderName,
       // Rebuilt each render, so compared by what it says; its press only opens a draft.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       JSON.stringify(cursorQuotaHelp),

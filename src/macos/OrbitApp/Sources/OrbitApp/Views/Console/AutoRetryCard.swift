@@ -52,7 +52,7 @@ struct AutoRetryCardView: View {
                                      live: !notice.stale,
                                      retryAt: console.armedRetryAt,
                                      attempts: console.retryAttempts,
-                                     provider: console.outageProvider,
+                                     provider: console.outageProviderName,
                                      runnerName: console.runnerName,
                                      hasRetryText: !retryText.isEmpty,
                                      nothingToResend: console.retryContinues,
