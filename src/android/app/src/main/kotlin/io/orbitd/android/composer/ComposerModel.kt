@@ -11,6 +11,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.reader.COULDNT_CANCEL_MESSAGE
 import io.orbitd.android.reader.SteerDelivery
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastTone
@@ -387,17 +388,24 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
      * have its engine drop it. Taken back, its [words] return to the box under any draft: an explicit press, so a draft keeps its place
      * above them. Its pictures and files are not staged again: the box holds only what this device staged. Too late is an answer, not a
      * failure — the agent on [engine] read it first, and it is part of the turn.
+     *
+     * [files] are staged again too, read before the DELETE since the server drops them with the turn; [refused] is the one line a
+     * failure is said with, in place of the tray's ([cancelHeld]).
      */
-    fun withdraw(turnId: String, words: String?, steer: Boolean, engine: String) {
+    fun withdraw(turnId: String, words: String?, steer: Boolean, engine: String, files: List<StagedAttachment> = emptyList(),
+        refused: String? = null) {
         val id = ObjectId.canonical(turnId) ?: turnId
         if (id in state.value.withdrawing || id in state.value.withdrawn) return
         mutable.update { it.copy(withdrawing = it.withdrawing + id) }
         launch {
             try {
-                try { api.mutation("turns/$turnId", method = HttpMethod.DELETE) }
+                val kept = try {
+                    files.map { it to api.attachment(it.id) }.also { api.mutation("turns/$turnId", method = HttpMethod.DELETE) }
+                }
                 catch (cancel: CancellationException) { throw cancel }
                 catch (e: Exception) {
                     when {
+                        refused != null -> OrbitToasts.show(refused, detail = failure(e), tone = ToastTone.ERROR)
                         e is ApiError && e.code == "STEER_ALREADY_READ" ->
                             OrbitToasts.show(PendingTray.TOO_LATE, detail = PendingTray.alreadyRead(engine), tone = ToastTone.INFO)
                         !steer -> OrbitToasts.show(PendingTray.ALREADY_PROCESSING, tone = ToastTone.INFO)
@@ -408,9 +416,18 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 val restores = !words.isNullOrBlank() && state.value.loaded
                 mutable.update { it.copy(withdrawn = it.withdrawn + id, draft = if (restores) it.draft.under(words!!) else it.draft) }
                 if (restores) persist()
+                kept.forEach { (file, bytes) ->
+                    val staged = file.copy(id = UUID.randomUUID().toString(), size = bytes.size)
+                    importAttachment(staged, { staged to bytes }, {})
+                }
                 refresh()
             } finally { mutable.update { it.copy(withdrawing = it.withdrawing - id) } }
         }
+    }
+
+    /** Cancel under a message whose translation failed: [withdraw], once the box is there to take it back. */
+    fun cancelHeld(turnId: String, words: String, files: List<StagedAttachment>) {
+        if (state.value.loaded) withdraw(turnId, words, steer = false, engine = "", files = files, refused = COULDNT_CANCEL_MESSAGE)
     }
 
     /** The tray's Steer (POST …/turns/:turnId/steer; web and iOS `steerQueued`): a message queued for the next turn sent into the one

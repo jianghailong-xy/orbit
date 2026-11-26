@@ -314,7 +314,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 UserTranslationFoot(turn, flipped, { shownOriginals?.toggle(translationKey) ?: Unit },
                     retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
                     sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null,
-                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = shownOriginals?.let { { it.toggle(hiddenKey) } })
+                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = shownOriginals?.let { { it.toggle(hiddenKey) } },
+                    cancel = cancelHeldMessage(doors, shown))
             } }
             // A delivered translation's press ends the copy/time line; any other state of it is a line of its own under it (iOS `meta`).
             val delivered = turnTranslation?.state == Translation.TurnState.DONE
@@ -478,7 +479,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 UserTranslationFoot(turn, flipped, toggle,
                     retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
                     sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null,
-                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = hide)
+                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = hide, cancel = cancelHeldMessage(doors, shown))
             }
             if (event.type == "assistant") ReplyTranslationFoot(replyTranslation, pendingReply, flipped, toggle,
                 retry = if (doors != null && event.seq > 0) ({ doors.translationAction("events/${event.seq}/translation/retry") }) else null,

@@ -14,7 +14,9 @@ import io.orbitd.android.cards.OwnerAnswerLineView
 import io.orbitd.android.cards.QueuedFoot
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.WatchWakeLine
+import io.orbitd.android.composer.ComposerModel
 import io.orbitd.android.composer.CoordinatorHandoff
+import io.orbitd.android.composer.StagedAttachment
 import io.orbitd.android.cards.dashedBorder
 import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.core.cards.objects
@@ -198,7 +200,27 @@ private fun echoPayload(row: JsonObject) = buildJsonObject {
     row["externalSender"]?.takeIf { it != JsonNull }?.let { put("externalSender", it) }
     // And a translated message's own words and state, as the runner's echo will carry them (Settings › Translation).
     row["translation"]?.takeIf { it != JsonNull }?.let { put("translation", it) }
+    // The session's opening prompt, which the server never lets be withdrawn ([cancelHeldMessage]).
+    row["opening"]?.let { put("opening", it) }
     if (row.text("kind") == "steer") put("steer", true)
+}
+
+/** Said when that Cancel's DELETE fails (web `cancelTurn`). */
+internal const val COULDNT_CANCEL_MESSAGE = "Couldn't cancel the message"
+
+/**
+ * Cancel on a message held because its translation failed (web `cancelTurn`): withdrawn as the tray's Withdraw does, and what the
+ * owner wrote — the translation's original, a `!cmd` as the command, with its files — back in the composer. Null without a composer
+ * or a turn to name, and for the session's opening prompt, which the server keeps.
+ */
+internal fun cancelHeldMessage(composer: ComposerModel?, event: RunEvent, shell: Boolean = false): (() -> Unit)? {
+    val turnId = event.turnId
+    if (composer == null || turnId == null || event.fields["opening"] == JsonPrimitive(true)) return null
+    val body = Translation.turn(event.fields["translation"])?.original?.takeIf { it.isNotBlank() } ?: event.fields.text("text").orEmpty()
+    val files = event.fields.objects("attachments").mapNotNull { file ->
+        file.text("id")?.let { StagedAttachment(it, file.text("name") ?: "Attachment", file.text("mime") ?: "application/octet-stream") }
+    }
+    return { composer.cancelHeld(turnId, if (shell && body.isNotBlank()) "!$body" else body, files) }
 }
 
 /** One queued turn at the transcript's end: its card (dashed while it can still be withdrawn), its reply cards, its wake's line, or its
@@ -255,7 +277,8 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
                     turn.translation.original.takeIf { it.isNotBlank() }?.let { UserWordsBubble(it, null, open) }
                     UserTranslationFoot(turn.translation, flipped = false, onFlip = {},
                         retry = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/retry") } },
-                        sendAsWritten = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/send-as-written") } })
+                        sendAsWritten = doors?.let { { it.translationAction("turns/${turn.turnId}/translation/send-as-written") } },
+                        cancel = cancelHeldMessage(doors, turn.event, turn.shell))
                 }
             }
             // The reader's own message, drawn as its sent turn will be (iOS `UserBubbleView`), the queue's line under it.
