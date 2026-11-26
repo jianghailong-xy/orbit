@@ -22,7 +22,9 @@ import {
   driveChatWorkspace,
 } from '../../lib/driveChat';
 import { meQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
-import { WIKI_CHAT_NO_ATTACHMENTS, wikiChatAttach, type WikiChatPage } from '../../lib/wikiChat';
+import { WIKI_CHAT_NO_ATTACHMENTS, wikiChatAttach, type WikiChatFiles, type WikiChatPage } from '../../lib/wikiChat';
+import { useDriveChanges } from '../../lib/useDriveChanges';
+import { DriveChatCards } from './DriveChangeCards';
 
 /**
  * Drive's chat (board docs/mocks/drive-chat/01-board.html ② ⑤, owner Q1 A, Q3 A): the Wiki's host, docked beside the
@@ -37,13 +39,17 @@ import { WIKI_CHAT_NO_ATTACHMENTS, wikiChatAttach, type WikiChatPage } from '../
 export function DriveChatHost({
   folderId,
   folderName,
+  selection,
   children,
 }: {
   /** The folder open: null for the drive's top level. */
   folderId: string | null;
   /** Its name, or null while the folder is still being read (no chip yet). */
   folderName: string | null;
-  children: ReactNode;
+  /** The rows selected in the list: they ride in the composer's attachment row as one chip. */
+  selection: WikiChatFiles | null;
+  /** The page, given whether the chat panel is open (file details overlay the list while it is). */
+  children: ReactNode | ((state: { chatOpen: boolean }) => ReactNode);
 }) {
   const me = useQuery(meQuery());
   const list = useQuery(driveChatsQuery());
@@ -52,7 +58,9 @@ export function DriveChatHost({
 
   const working = list.data?.fab.working ?? false;
   const [updated, setUpdated] = useState(false);
-  const fab = driveChatFab(list.data ? { ...list.data.fab, updated: updated ? 1 : 0 } : null);
+  // The chats read counts approvals; held groups and open overwrite questions wait on the owner too.
+  const changes = useDriveChanges();
+  const fab = driveChatFab(list.data ? { ...list.data.fab, needsYou: list.data.fab.needsYou + changes.needsYou, updated: updated ? 1 : 0 } : null);
   const host = useChatHost({
     scope: me.data?.id ?? null,
     store: DRIVE_CHAT_STORE,
@@ -77,6 +85,7 @@ export function DriveChatHost({
     [folderId, folderName],
   );
   useEffect(() => dispatch({ type: 'follow', page }), [page]);
+  useEffect(() => dispatch({ type: 'files', files: selection }), [selection]);
 
   // Where a new chat may run: the owner's workspaces, the server's default among them.
   const defaultWorkspace = list.data?.workspace ?? null;
@@ -109,9 +118,10 @@ export function DriveChatHost({
         return driveContext ? { driveContext } : undefined;
       },
       choices,
+      cards: (sessionId) => <DriveChatCards sessionId={sessionId} />,
     }),
     [choices],
   );
 
-  return host.render(children, { origin, attachments, dispatch });
+  return host.render(typeof children === 'function' ? children({ chatOpen: host.open }) : children, { origin, attachments, dispatch });
 }

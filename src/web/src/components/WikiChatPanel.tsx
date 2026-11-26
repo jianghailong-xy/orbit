@@ -17,6 +17,7 @@ import {
   CloseOutlined,
   DownOutlined,
   EllipsisOutlined,
+  FileOutlined,
   FolderOutlined,
   LoadingOutlined,
   PlusOutlined,
@@ -74,6 +75,7 @@ import { useMachineName } from '../lib/managedRunner';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
 import { driveChatHistoryQuery } from '../lib/driveChat';
+import { driveSelectionLabel } from '../lib/driveChanges';
 import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQuery, workspacesQuery, type Me } from '../lib/queries';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import { engineTitleFor } from '../lib/sessionProviderChoices';
@@ -123,6 +125,7 @@ import {
   wikiChatRunsIn,
   wikiChatSendError,
   wikiChatShown,
+  wikiChatShownFiles,
   wikiChatWorkspaceName,
   type ChatHostList,
   type WikiChatAttachAction,
@@ -186,6 +189,8 @@ export interface ChatOrigin {
   /** The Wiki's space: its chats' cards open its sections, entries and Review beside the chat, and the history is its
    *  chats. Absent, the history is the Drive chats. */
   space?: WikiSpaceRow;
+  /** Drive: the chat's change cards and overwrite questions, drawn under its conversation. */
+  cards?: (sessionId: string) => ReactNode;
 }
 
 /**
@@ -768,7 +773,8 @@ function useChatDraft(sessionId: string | null, canAttach: boolean) {
 /** The page (Drive: the folder) and the selection: the first chips of the composer's attachment row (board 43 ④), each with its cross. */
 function wikiChatChips(attachments: WikiChatAttachments, dispatch: Dispatch<WikiChatAttachAction>): ReactNode {
   const { page, quote } = wikiChatShown(attachments);
-  if (!page && !quote) return null;
+  const files = wikiChatShownFiles(attachments);
+  if (!page && !quote && !files) return null;
   return (
     <>
       {page && (
@@ -780,6 +786,7 @@ function wikiChatChips(attachments: WikiChatAttachments, dispatch: Dispatch<Wiki
           </button>
         </span>
       )}
+      {files && <FilesChip names={files.names} onCross={() => dispatch({ type: 'crossFiles' })} />}
       {quote && (
         <Tooltip content={quote.selected > quote.sentenceIds.length ? wikiChatCapped(quote.selected) : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
           <span
@@ -795,6 +802,30 @@ function wikiChatChips(attachments: WikiChatAttachments, dispatch: Dispatch<Wiki
         </Tooltip>
       )}
     </>
+  );
+}
+
+/** The rows selected in Drive's list as one chip, `12 files`, which opens to their names (board drive-chat 01 ③). */
+function FilesChip({ names, onCross }: { names: readonly string[]; onCross: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const label = driveSelectionLabel(names);
+  return (
+    <span className="composer-pill composer-file wk-chat-chip" data-kind="files">
+      <FileOutlined className="composer-file-icon ic" />
+      <button type="button" className="composer-file-name l wk-chat-files-toggle" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+        {label}
+      </button>
+      {expanded && (
+        <ul className="wk-chat-files-names" aria-label={label}>
+          {names.map((name, index) => (
+            <li key={`${name}-${index}`}>{name}</li>
+          ))}
+        </ul>
+      )}
+      <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(label)} onClick={onCross}>
+        <CloseOutlined />
+      </button>
+    </span>
   );
 }
 
@@ -1575,6 +1606,7 @@ function WikiChatSession({
           answeredQuestions={null}
           wikiChat={wikiCards}
         />
+        {origin.cards?.(sessionId)}
         {!session?.deletedAt &&
           approvals.map((approval) => (
             <ApprovalPanel

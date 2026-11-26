@@ -546,10 +546,22 @@ export interface WikiChatAttachments {
   /** The owner crossed the page out of this message. */
   pageCrossed: boolean;
   quote: WikiChatQuote | null;
+  /** Drive: the rows selected in the list, as one chip (board drive-chat 01 ③). They follow the selection. */
+  files?: WikiChatFiles | null;
+  /** The owner crossed the files out of this message. */
+  filesCrossed?: boolean;
+}
+
+/** The rows selected in Drive's list: their entry ids and names, in list order. */
+export interface WikiChatFiles {
+  ids: string[];
+  names: string[];
 }
 
 export type WikiChatAttachAction =
   | { type: 'follow'; page: WikiChatPage | null }
+  | { type: 'files'; files: WikiChatFiles | null }
+  | { type: 'crossFiles' }
   | { type: 'crossPage' }
   | { type: 'quote'; quote: WikiChatQuote }
   | { type: 'crossQuote' }
@@ -566,6 +578,11 @@ export function wikiChatAttach(state: WikiChatAttachments, action: WikiChatAttac
   switch (action.type) {
     case 'follow':
       return samePage(state.page, action.page) ? state : { ...state, page: action.page };
+    case 'files':
+      if (JSON.stringify(state.files ?? null) === JSON.stringify(action.files)) return state;
+      return { ...state, files: action.files, filesCrossed: false };
+    case 'crossFiles':
+      return { ...state, filesCrossed: true };
     case 'crossPage':
       return { ...state, pageCrossed: true };
     case 'quote':
@@ -573,7 +590,7 @@ export function wikiChatAttach(state: WikiChatAttachments, action: WikiChatAttac
     case 'crossQuote':
       return { ...state, quote: null };
     case 'sent':
-      return { page: state.page, pageCrossed: false, quote: null };
+      return { page: state.page, pageCrossed: false, quote: null, files: state.files ?? null, filesCrossed: false };
   }
 }
 
@@ -615,6 +632,11 @@ export function wikiChatReading(state: WikiChatReading, action: WikiChatReadingA
 export function wikiChatPageSection(state: WikiChatReading, slug: string, keys: readonly string[]): string | null {
   for (const at of [state.anchor, state.read]) if (at && at.slug === slug && keys.includes(at.key)) return at.key;
   return keys[0] ?? null;
+}
+
+/** The files chip the composer shows: the selection, unless crossed out. */
+export function wikiChatShownFiles(state: WikiChatAttachments): WikiChatFiles | null {
+  return state.filesCrossed || !state.files || state.files.ids.length === 0 ? null : state.files;
 }
 
 /** What the composer shows, which is exactly what the message sends. */

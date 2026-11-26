@@ -21,6 +21,7 @@ import {
   WIKI_CHAT_NEW_PARAM,
   wikiChatFab,
   wikiChatShown,
+  wikiChatShownFiles,
   type ChatHostList,
   type ChatHostStore,
   type WikiChatAttachments,
@@ -141,7 +142,10 @@ export function driveChatFab(counts: WikiChatFabCounts | null | undefined): Retu
 /** The folder a message carries (board ② note 3): the chip's, unless it was crossed out; what is not shown is not sent. */
 export function driveChatContext(attachments: WikiChatAttachments): { folderId: string | null; entryIds: string[] } | undefined {
   const { page } = wikiChatShown(attachments);
-  return page?.kind === 'folder' ? { folderId: page.folderId, entryIds: [] } : undefined;
+  const files = wikiChatShownFiles(attachments);
+  const folder = page?.kind === 'folder' ? page : null;
+  if (!folder && !files) return undefined;
+  return { folderId: folder ? folder.folderId : null, entryIds: files ? [...files.ids] : [] };
 }
 
 /**
@@ -159,7 +163,7 @@ export const createDriveChat = (
     text: body.content,
     clientTurnId,
     ...(body.workspaceId ? { workspaceId: body.workspaceId } : {}),
-    ...(context ? { folderId: context.folderId } : { noFolder: true }),
+    ...(context ? { folderId: context.folderId, ...(context.entryIds.length ? { entryIds: context.entryIds } : {}) } : { noFolder: true }),
     ...(body.attachmentIds?.length ? { attachmentIds: body.attachmentIds } : {}),
     ...(body.model !== undefined ? { model: body.model } : {}),
     ...(body.permissionMode !== undefined ? { permissionMode: body.permissionMode } : {}),

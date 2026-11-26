@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
@@ -15,6 +15,7 @@ import {
   FileTextOutlined,
   FolderAddOutlined,
   FolderFilled,
+  CloseOutlined,
   Html5Outlined,
   LinkOutlined,
   RightOutlined,
@@ -58,6 +59,8 @@ import {
   type DriveEntry,
   type DriveShareLink,
 } from '../lib/drive';
+import { driveDetailsOverlay, type DriveMark } from '../lib/driveChanges';
+import { useDriveChanges } from '../lib/useDriveChanges';
 import { useDriveSyncs } from '../lib/driveSyncs';
 import { addUploads, useDriveUploads, type UploadRequest } from '../lib/driveUploads';
 import { showToast } from '../lib/toastStore';
@@ -135,6 +138,7 @@ function TreeFolder({
   toggle,
   onOpen,
   onDropFiles,
+  markOf,
 }: {
   folder: { id: string; name: string; root?: boolean };
   depth: number;
@@ -143,7 +147,10 @@ function TreeFolder({
   toggle: (id: string) => void;
   onOpen: (id: string | null) => void;
   onDropFiles: (event: DragEvent, folder: { id: string; name: string }) => void;
+  /** The mark a Drive chat left on a folder, until it is opened. */
+  markOf: (entryId: string) => DriveMark | null;
 }) {
+  const mark = folder.root ? null : markOf(folder.id);
   const isOpen = open.has(folder.id);
   const listing = useQuery({ ...driveFolderQuery(folder.root ? null : folder.id), enabled: isOpen });
   const [over, setOver] = useState(false);
@@ -154,7 +161,7 @@ function TreeFolder({
         aria-selected={current === folder.id}
         aria-expanded={isOpen}
         tabIndex={0}
-        className={`files-tree-row${current === folder.id ? ' active' : ''}${over ? ' drop-over' : ''}`}
+        className={`files-tree-row${current === folder.id ? ' active' : ''}${over ? ' drop-over' : ''}${mark ? ' marked' : ''}`}
         data-row-focus=""
         style={{ paddingLeft: 6 + depth * 14 }}
         onClick={() => onOpen(folder.root ? null : folder.id)}
@@ -186,6 +193,7 @@ function TreeFolder({
         </button>
         <FolderFilled className="files-folder-icon" aria-hidden="true" />
         <span className="files-tree-name">{folder.name}</span>
+        {mark && <span className="files-mark">{mark}</span>}
       </div>
       {isOpen &&
         listing.data?.entries
@@ -200,6 +208,7 @@ function TreeFolder({
               toggle={toggle}
               onOpen={onOpen}
               onDropFiles={onDropFiles}
+              markOf={markOf}
             />
           ))}
     </>
@@ -402,18 +411,36 @@ function DetailsPane({
   menu,
   onShare,
   onOpenFolder,
+  overlay,
+  onClose,
 }: {
   entry: DriveEntry;
   link: DriveShareLink | null;
   menu: ReactNode;
   onShare: (moveToCurrent: boolean) => void;
   onOpenFolder: (id: string) => void;
+  /** Standing over the list's right (the chat is open in a window under 1760) rather than as a column. */
+  overlay: boolean;
+  onClose: () => void;
 }) {
   const toast = useToast();
+  useEffect(() => {
+    if (!overlay) return;
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !(event.target instanceof HTMLInputElement)) onClose();
+    };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
+  }, [overlay, onClose]);
   const detail = useQuery(driveEntryQuery(entry.id));
   const isFile = entry.kind === 'FILE';
   return (
-    <aside className="files-pane" aria-label={`${entry.name} details`}>
+    <aside className={`files-pane${overlay ? ' is-over' : ''}`} aria-label={`${entry.name} details`}>
+      {overlay && (
+        <button type="button" className="files-pane-close" aria-label="Close details" onClick={onClose}>
+          <CloseOutlined />
+        </button>
+      )}
       {isFile && <Preview file={entry} />}
       <h2 className="files-pane-name">{entry.name}</h2>
       <div className="files-pane-kind">{isFile ? formatSize(entry.sizeBytes) : 'Folder'}</div>
@@ -487,6 +514,18 @@ export function DrivePage({ view = 'files' }: { view?: 'files' | 'trash' }) {
   return <DriveBrowser />;
 }
 
+/** The window's width, kept as it is resized. */
+function useWindowWidth(): number {
+  const read = () => (typeof window === 'undefined' ? 1440 : window.innerWidth);
+  const [width, setWidth] = useState(read);
+  useEffect(() => {
+    const onResize = () => setWidth(read());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return width;
+}
+
 function DriveBrowser() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -503,6 +542,11 @@ function DriveBrowser() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [search, setSearch] = useState('');
   const [dropOver, setDropOver] = useState(false);
+  // The rows picked with ⌘/Ctrl and Shift (board drive-chat 01 ③), and where a Shift range starts.
+  const [picked, setPicked] = useState<readonly string[]>([]);
+  const anchor = useRef<string | null>(null);
+  useEffect(() => setPicked([]), [folderId]);
+  const changes = useDriveChanges();
   const picker = useRef<HTMLInputElement>(null);
   // Where a row menu puts focus when it closes: the name field after Rename, so the menu's own return to its ⋯ does
   // not blur the field away; otherwise (null) the ⋯ it opened from.
@@ -553,10 +597,12 @@ function DriveBrowser() {
     });
 
   const openFolder = (id: string | null) => {
+    if (id) changes.opened(id);
     if (id && folder) setOpen((was) => new Set([...was, folder.id]));
     setParams(id ? { folder: id } : {});
   };
   const select = (id: string | null) => {
+    if (id) changes.opened(id);
     const next = new URLSearchParams(params);
     if (id) next.set('file', id);
     else next.delete('file');
@@ -564,6 +610,42 @@ function DriveBrowser() {
   };
 
   const entries = listing.data?.entries ?? [];
+  // A file linked from the chat (?file=) is opened by the address: its mark clears like any opened row.
+  useEffect(() => {
+    if (selectedId) changes.opened(selectedId);
+  }, [selectedId, changes]);
+  // A press on a row: plain selects it and opens its details; ⌘/Ctrl toggles it; Shift takes the range from the last one.
+  const pressRow = (event: ReactMouseEvent, entry: DriveEntry) => {
+    if (event.shiftKey && anchor.current) {
+      const from = entries.findIndex((e) => e.id === anchor.current);
+      const to = entries.findIndex((e) => e.id === entry.id);
+      if (from >= 0 && to >= 0) {
+        const range = entries.slice(Math.min(from, to), Math.max(from, to) + 1).map((e) => e.id);
+        setPicked(range);
+        select(range.length === 1 ? range[0]! : null);
+        return;
+      }
+    }
+    anchor.current = entry.id;
+    if (event.metaKey || event.ctrlKey) {
+      const base = picked.length > 0 ? picked : selectedId ? [selectedId] : [];
+      const next = base.includes(entry.id) ? base.filter((id) => id !== entry.id) : [...base, entry.id];
+      setPicked(next);
+      select(next.length === 1 ? next[0]! : null);
+      return;
+    }
+    setPicked([entry.id]);
+    select(entry.id);
+  };
+  // What the composer's chip carries: the picked rows, or the one the address names.
+  const pickedIds = picked.length > 0 ? picked : selectedId ? [selectedId] : [];
+  const selection = useMemo(() => {
+    const here = new Map(entries.map((e) => [e.id, e.name]));
+    const ids = pickedIds.filter((id) => here.has(id));
+    return ids.length > 0 ? { ids, names: ids.map((id) => here.get(id)!) } : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedIds.join(','), listing.data]);
+  const windowWidth = useWindowWidth();
   // The search box looks through the whole drive; each result names the folder it is in.
   const searching = search.trim() !== '';
   const settled = useSettled(search.trim());
@@ -674,8 +756,11 @@ function DriveBrowser() {
   const crumbs = (here.data?.path ?? '').split('/').filter(Boolean);
 
   return (
-    <DriveChatHost folderId={folder?.parentId ? folder.id : null} folderName={folder ? folderName : null}>
-      <div className="files-page">
+    <DriveChatHost folderId={folder?.parentId ? folder.id : null} folderName={folder ? folderName : null} selection={selection}>
+      {({ chatOpen }) => {
+      const overlay = driveDetailsOverlay(chatOpen, windowWidth);
+      return (
+      <div className={`files-page${overlay ? ' details-over' : ''}`}>
         <header className="files-head">
           <h1>Drive</h1>
           <div className="files-head-actions">
@@ -723,6 +808,7 @@ function DriveBrowser() {
                 toggle={toggle}
                 onOpen={openFolder}
                 onDropFiles={(event, target) => dropInto(event, target)}
+                markOf={changes.markOf}
               />
             )}
           </nav>
@@ -821,9 +907,9 @@ function DriveBrowser() {
                     <tr
                       key={entry.id}
                       data-entry={entry.name}
-                      className={`files-row${entry.id === selectedId ? ' selected' : ''}`}
-                      aria-selected={entry.id === selectedId}
-                      onClick={() => select(entry.id)}
+                      className={`files-row${entry.id === selectedId || pickedIds.includes(entry.id) ? ' selected' : ''}${changes.markOf(entry.id) ? ' marked' : ''}`}
+                      aria-selected={entry.id === selectedId || pickedIds.includes(entry.id)}
+                      onClick={(event) => pressRow(event, entry)}
                       onDoubleClick={() => entry.kind === 'FOLDER' && openFolder(entry.id)}
                     >
                       <td className="files-col-name">
@@ -851,6 +937,7 @@ function DriveBrowser() {
                           <span className="files-name">{entry.name}</span>
                         )}
                         {linkOf(entry) && <LinkOutlined className="files-shared-mark" aria-label="Shared" />}
+                        {changes.markOf(entry.id) && <span className="files-mark">{changes.markOf(entry.id)}</span>}
                         </span>
                       </td>
                       <td className="files-col-writer">
@@ -904,6 +991,11 @@ function DriveBrowser() {
               menu={moreButton(selected, 'files-pane-more')}
               onShare={(moveToCurrent) => setDialog({ kind: 'share', entry: selected, moveToCurrent })}
               onOpenFolder={openFolder}
+              overlay={overlay}
+              onClose={() => {
+                setPicked([]);
+                select(null);
+              }}
             />
           )}
         </div>
@@ -919,6 +1011,8 @@ function DriveBrowser() {
           />
         )}
       </div>
+      );
+      }}
     </DriveChatHost>
   );
 }

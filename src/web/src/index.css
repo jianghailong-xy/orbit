@@ -31718,39 +31718,39 @@ td > .routing-report-tier + .model-routing-flag {
 
   /* Drive: with a file's details open, the head, folders and list are one panel and the details
      another. The body steps aside (display: contents) so the details can stand beside the head too. */
-  .app-shell .app-main > .app-view:has(.files-page .files-pane) {
+  .app-shell .app-main > .app-view:has(.files-page .files-pane:not(.is-over)) {
     background: none;
     border: 0;
     border-radius: 0;
     box-shadow: none;
   }
-  .app-shell .files-page:has(.files-pane) {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) {
     display: grid;
     grid-template-columns: 220px minmax(0, 1fr) auto;
     grid-template-rows: auto minmax(0, 1fr);
   }
-  .app-shell .files-page:has(.files-pane) > .files-body {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) > .files-body {
     display: contents;
   }
-  .app-shell .files-page:has(.files-pane) > .files-head {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) > .files-head {
     grid-column: 1 / 3;
     background: var(--bg-base);
     border: 1px solid var(--border-subtle);
     border-radius: var(--panel-radius) var(--panel-radius) 0 0;
   }
-  .app-shell .files-page:has(.files-pane) .files-tree {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) .files-tree {
     background: var(--bg-base);
     border-left: 1px solid var(--border-subtle);
     border-bottom: 1px solid var(--border-subtle);
     border-radius: 0 0 0 var(--panel-radius);
   }
-  .app-shell .files-page:has(.files-pane) .files-list-wrap {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) .files-list-wrap {
     background: var(--bg-base);
     border-right: 1px solid var(--border-subtle);
     border-bottom: 1px solid var(--border-subtle);
     border-radius: 0 0 var(--panel-radius) 0;
   }
-  .app-shell .files-page .files-pane {
+  .app-shell .files-page .files-pane:not(.is-over) {
     grid-column: 3;
     grid-row: 1 / 3;
     margin-left: var(--panel-gap);
@@ -31769,7 +31769,7 @@ td > .routing-report-tier + .model-routing-flag {
     border-radius: 0;
     box-shadow: none;
   }
-  .app-shell .wk-chat-frame.is-drive.is-columned > .wk-chat-host > .files-page:not(:has(.files-pane)) {
+  .app-shell .wk-chat-frame.is-drive.is-columned > .wk-chat-host > .files-page:not(:has(.files-pane:not(.is-over))) {
     box-sizing: border-box;
     overflow: hidden;
     background: var(--bg-base);
