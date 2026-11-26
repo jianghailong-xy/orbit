@@ -62,6 +62,14 @@ test('workspace counts separate queued activity from Session-list spinner work',
         // cannot see, since there need not be a live turn at all — the fourth is the spinner
         // population, and the fifth resolves the conversations an owner DECISION is waiting on
         // (`projects/owner-decision-signal.ts`) to the workspaces they run in.
+        if (args?.where?.lastTurnOutcome) {
+          // Failures nobody is retrying: one alone in its workspace, and one beside a blocked turn
+          // in `w-needs-you` — still one place to go, so it adds nothing there.
+          return [
+            { id: 's-failed', workspaceId: 'w-failed' },
+            { id: 's-needs-you', workspaceId: 'w-needs-you' },
+          ];
+        }
         if (args?.where?.runningBgJobs && !args?.where?.OR) {
           return sessionsWithJobs;
         }
@@ -241,6 +249,22 @@ test('workspace counts separate queued activity from Session-list spinner work',
     stalledJobs: 0,
     needsYou: 1,
   });
+  // A failed session with no retry armed sits in the Session list's Needs you section, so the rail
+  // counts it there too, by the failure facts (common/session-release.ts) over the same Open scope.
+  assert.deepEqual(byWorkspace.get('w-failed'), {
+    workspaceId: 'w-failed',
+    active: 0,
+    running: 0,
+    jobs: 0,
+    stalledJobs: 0,
+    needsYou: 1,
+  });
+  const failedQuery = findManyCalls.find((call) => call?.where?.lastTurnOutcome);
+  assert.deepEqual(failedQuery.where.finishedAt, { not: null });
+  assert.equal(failedQuery.where.endReason, null);
+  assert.equal(failedQuery.where.retryAt, null);
+  assert.equal(failedQuery.where.completedAt, null);
+  assert.equal(failedQuery.where.deletedAt, null);
   // And it is scoped to the Open list the same way the blocked query is, so a decision waiting on
   // a conversation the owner filed away does not light a workspace they are not looking at.
   const decisionQuery = findManyCalls.find(
@@ -248,6 +272,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
       !call?.where?.approvals &&
       !call?.where?.runningBgJobs &&
       !call?.where?.runningBgShells &&
+      !call?.where?.lastTurnOutcome &&
       !call?.where?.OR,
   );
   assert.equal(decisionQuery.where.completedAt, null);

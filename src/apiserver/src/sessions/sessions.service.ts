@@ -4100,7 +4100,8 @@ export class SessionsService {
    * workspace can be doing with nobody generating in it, and the one thing `running` deliberately
    * does not cover; a stalled job is still counted, as `stalledJobs`, so a surface can say "no output
    * for a while" rather than either hiding the work or vouching for a job that may be hung.
-   * `needsYou` is returned separately, and a session it counts is in none of `running`, `jobs` or
+   * `needsYou` (a person owes the session an answer, or it failed with no retry armed — the Session
+   * list's Needs you section) is returned separately, and a session it counts is in none of `running`, `jobs` or
    * `stalledJobs`:
    * the Session list draws that row with the waiting glyph, not the spinner or the breathing
    * terminal, and the expanded sidebar shows its activity dot beside the count — where a turn
@@ -4120,7 +4121,7 @@ export class SessionsService {
       // Nor does a scheduled task's run, which is in no list (docs/scheduled-tasks-design.md §7.4).
       runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] },
     } as const;
-    const [active, running, jobs, blocked, jobCards] = await Promise.all([
+    const [active, running, jobs, blocked, jobCards, failed] = await Promise.all([
       this.prisma.session.groupBy({
         by: ['workspaceId'],
         where: { ...open, ...turnStateFilter(['QUEUED', 'IN_FLIGHT']) },
@@ -4175,6 +4176,14 @@ export class SessionsService {
           },
         },
       }),
+      // A failure nobody is retrying: released by a failed turn, with no retry armed. Nothing runs
+      // there until somebody picks it up, so the Session list files it under Needs you
+      // (lib/sessionGrouping.ts `sessionNeedsOwner`, OrbitKit `SessionTimeGrouping.needsOwner`), and
+      // the rail counts it with the rest of that section.
+      this.prisma.session.findMany({
+        where: { ...open, ...releaseWasFailureFilter(), retryAt: null },
+        select: { id: true, workspaceId: true },
+      }),
     ]);
     // The other half of "needs you": decisions only the account owner can take, waiting on the
     // conversation they are asked on. Not an `Approval` row and deliberately never one — see
@@ -4218,7 +4227,7 @@ export class SessionsService {
     for (const session of blocked) {
       if (!session.taskId || (await visibleQuestions(this.prisma, session.approvals)).length) visibleBlocked.push(session);
     }
-    for (const session of [...visibleBlocked, ...awaitingDecision]) {
+    for (const session of [...visibleBlocked, ...awaitingDecision, ...failed]) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
