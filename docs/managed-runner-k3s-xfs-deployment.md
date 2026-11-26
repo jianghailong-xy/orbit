@@ -106,7 +106,9 @@ reports, and what lets the status offer Update Now), keeps the
 profile it replaces beside it, and replaces the apiserver, which reads the profile as it starts. The apiserver's manager
 then moves each runner whose Pod runs another image onto it once that runner is idle: the drain a sleep takes, then a
 wake at once, as the next generation on the same PVC (`rollPreviousImage`). Nothing in flight is cut short; a busy runner
-moves when it is next idle. No Pod is deleted by hand, and nothing is imported on the node.
+moves when it is next idle. No Pod is deleted by hand, and nothing is imported on the node. The release pulls the image
+onto the node as soon as it is published (`deploy/managed-runner/prepull-runner-image.sh`, run through workspace
+orbit-ws03), so that the first runner to start on it does not wait for a 1.5 GB pull: 116 s on 2026-11-25.
 
 The node pulls that image from the WireGuard registry, which serves plain HTTP. k3s reads its registries once, as it
 starts, from `/etc/rancher/k3s/registries.yaml`:
