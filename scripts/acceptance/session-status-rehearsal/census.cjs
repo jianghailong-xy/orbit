@@ -3,7 +3,7 @@
 // the wire's runState and sessionState from each (the unchanged derivers of @orbit/shared), the stored phase against
 // deriveSessionPhase and the stored turn_state against the word's. One line per (stored word, projected word, end
 // reason, last outcome, kind, import marker, filing) with its count. Every line whose words differ must be one of the
-// plan's §3.4 kinds (C1-C7), named by its facts below; any other one, or any held row whose word changes, or any
+// plan's §3.4 kinds (C1-C8), named by its facts below; any other one, or any held row whose word changes, or any
 // phase or turn-state disagreement, makes it exit 1: the plan says that stops deploy D2.
 //
 // Run inside the D2 apiserver image:
@@ -32,6 +32,8 @@ function kindOf(row, stored, projected) {
   if (stored === 'SUCCEEDED' && projected === 'CANCELLED' && reason == null) return 'C4/C5 (SUCCEEDED, no end)';
   if (stored === 'FAILED' && projected === 'CANCELLED' && reason == null) return 'C6 (cancel with no reason, not honoured)';
   if (stored === 'CANCELLED' && projected === 'SUCCEEDED' && reason === 'task_done' && row.started_at != null) return 'C7 (started, ended queued, task_done)';
+  if (stored === 'SUCCEEDED' && projected === 'CANCELLED' && reason === 'completed' && row.last_turn_outcome == null
+    && row.kind === 'CONVERSATION' && row.import_source_cwd == null) return 'C8 (SUCCEEDED, completed, no outcome)';
   return null;
 }
 
