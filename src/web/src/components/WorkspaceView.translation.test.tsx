@@ -25,8 +25,6 @@ vi.mock('../api', async (importOriginal) => {
     sendTurnAsWritten: vi.fn(),
     retryReplyTranslation: vi.fn(),
     cancelQueuedTurn: vi.fn(async () => undefined),
-    fetchAttachmentFile: vi.fn(async () => new File(['png'], 'attachment', { type: 'image/png' })),
-    uploadAttachment: vi.fn(async () => ({ id: 'att-new' })),
   };
 });
 vi.mock('../lib/transcriptStore', () => ({
@@ -34,7 +32,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage, listQueuedTurns, sendTurn, retryTurnTranslation, sendTurnAsWritten, cancelQueuedTurn, fetchAttachmentFile } = await import('../api');
+const { api, getSessionEventPage, listQueuedTurns, sendTurn, retryTurnTranslation, sendTurnAsWritten, cancelQueuedTurn } = await import('../api');
 const apiMock = vi.mocked(api);
 const seedMock = vi.mocked(getSessionEventPage);
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -497,27 +495,6 @@ describe('a message held for its translation', () => {
     await waitForUi(() => expect(vi.mocked(cancelQueuedTurn)).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-held'));
     await waitForUi(() => expect(mounted().querySelector('.chat-translate-foot.is-error')).toBeNull());
     await waitForUi(() => expect(box().value).toBe(HELD_TEXT));
-  });
-
-  it("failed with a file: Cancel reads the file's bytes before withdrawing, and withdraws nothing if it can't", async () => {
-    const withFile = { ...held('FAILED'), attachments: [{ id: 'att-old', mimeType: 'image/png' }] };
-    const cancelPress = () =>
-      act(async () =>
-        [...mounted().querySelectorAll<HTMLButtonElement>('.chat-translate-foot button')].find((b) => b.textContent === 'Cancel')!.click(),
-      );
-    vi.mocked(cancelQueuedTurn).mockClear();
-    vi.mocked(fetchAttachmentFile).mockRejectedValueOnce(new Error('attachment att-old: 404'));
-    queue = [withFile];
-    await mount();
-    await waitForUi(() => expect(mounted().querySelector('.chat-translate-foot.is-error')).toBeTruthy());
-    await cancelPress();
-    await waitForUi(() => expect(vi.mocked(fetchAttachmentFile)).toHaveBeenCalledWith('att-old', undefined, 'image/png'));
-    expect(vi.mocked(cancelQueuedTurn)).not.toHaveBeenCalled();
-    expect(mounted().querySelector('.chat-translate-foot.is-error')).toBeTruthy();
-
-    await cancelPress();
-    await waitForUi(() => expect(vi.mocked(cancelQueuedTurn)).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-held'));
-    expect(vi.mocked(fetchAttachmentFile)).toHaveBeenCalledTimes(2);
   });
 
   it('failed opening prompt: no Cancel, since the server keeps a session\'s opening', async () => {

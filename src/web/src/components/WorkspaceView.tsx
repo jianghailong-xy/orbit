@@ -332,7 +332,6 @@ import {
   completeSession,
   cancelAutoRetry,
   cancelQueuedTurn,
-  fetchAttachmentFile,
   runQueuedSessionNow,
   steerQueuedTurn,
   adoptSessionBranch,
@@ -5033,7 +5032,6 @@ export function WorkspaceView({
   const questionTranslations = useQuestionTranslations(selectedId ?? null, approvals, translationIsOn);
   // Declared further down (it needs the composer); the failed message's Cancel reads it when pressed.
   const restoreUndeliveredRef = useRef<typeof restoreUndelivered>(null);
-  const addImageRef = useRef<((file: File) => Promise<void>) | null>(null);
   const translationActions = useMemo<TranslationActions>(() => {
     const settle = (res: TranslationActionResponse) =>
       setQueued((current) =>
@@ -5055,23 +5053,14 @@ export function WorkspaceView({
           : Promise.resolve(),
       // Withdraw a message held because its translation failed: gone from the conversation, and what
       // the owner wrote (not a translation) goes back into the composer, as a withdrawn queued message does.
-      // The server deletes a withdrawn turn's attachments, so their bytes are read first and uploaded
-      // again as new chips; if they can't be read, nothing is withdrawn.
-      cancelTurn: async (turnId) => {
-        if (!selectedId) return;
+      cancelTurn: (turnId) => {
+        if (!selectedId) return Promise.resolve();
         const held = queued.find((turn) => turn.turnId === turnId);
-        try {
-          const files = await Promise.all(
-            (held?.attachments ?? []).map((ref) => fetchAttachmentFile(ref.id, undefined, ref.mimeType)),
-          );
-          await cancelQueuedTurn(selectedId, turnId);
+        return cancelQueuedTurn(selectedId, turnId).then(() => {
           setQueued((current) => current.filter((turn) => turn.turnId !== turnId));
           const body = held ? (held.translation?.original ?? held.content) : '';
-          restoreUndeliveredRef.current?.(held?.shell ? `!${body}` : body);
-          for (const file of files) void addImageRef.current?.(file);
-        } catch (e) {
-          failed("Couldn't cancel the message")(e);
-        }
+          restoreUndeliveredRef.current?.(held?.shell ? `!${body}` : body, held?.attachments);
+        }, failed("Couldn't cancel the message"));
       },
       canCancelTurn: (turnId) => queued.some((turn) => turn.turnId === turnId && !turn.opening),
       retryReply: (seq) =>
@@ -7734,7 +7723,6 @@ export function WorkspaceView({
     !sameSessionSendBlocked &&
     (selected ? live || resumable : composing);
   const { addImage, stageRestored, removeImage } = useComposerImages(canAttach, selected?.id, setImages);
-  addImageRef.current = addImage;
   // A send waits for every staged upload to finish (so all ids are known), and goes out
   // with whatever images are ready plus the text. Either text or an image is enough.
   const uploading = images.some((im) => im.status === 'uploading');
