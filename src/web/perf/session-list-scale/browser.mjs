@@ -234,7 +234,7 @@ function commitProbe() {
 /** Watch frames on the loaded list: a watch that will resume an idle session on screen is created, then
  *  cancelled, through the API. Each is one `watch.changed` frame on the page's stream, a read of /watches, and
  *  that session's row saying (or no longer saying) that it is watching. */
-export async function measureWatchFrames(browser, base, session, facts, { frames, profiling }) {
+export async function measureWatchFrames(browser, base, session, facts, { frames, profiling, beat }) {
   const { context, page, errors } = await openPage(browser, base, session);
   await context.addInitScript(frameProbe);
   if (profiling) await context.addInitScript(commitProbe);
@@ -308,6 +308,8 @@ export async function measureWatchFrames(browser, base, session, facts, { frames
     await frame(false);
     for (const watching of [true, false]) {
       await page.evaluate(() => { window.__frame.rowsRendered = []; });
+      // The runner's heartbeat lands before this frame, so the list read that follows re-stamps every row it hosts.
+      beat();
       const { rows, perCommit, reads, mounted: count } = await frame(watching);
       rowProbe.push({ watching, rowRenders: rows.length, distinctRows: new Set(rows).size, mounted: count, perCommit, reads });
     }

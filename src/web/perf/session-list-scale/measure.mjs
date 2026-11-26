@@ -225,7 +225,7 @@ try {
       for (const build of round ? [...builds].reverse() : builds) {
         await calm();
         const frames = await measureWatchFrames(browser, build[kind], await signIn(build[kind]), facts, {
-          frames: Math.ceil(Number(args.frames) / 2), profiling: kind === 'profiling',
+          frames: Math.ceil(Number(args.frames) / 2), profiling: kind === 'profiling', beat,
         });
         const held = (results.builds[build.label].frames[kind] ??= { observer: frames.observer, frames: [], rowProbe: [] });
         held.frames.push(...frames.frames.map((f) => ({ ...f, loadavg: loadavg()[0] })));
