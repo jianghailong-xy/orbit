@@ -3521,10 +3521,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1643 adds one nullable column, idle_seen_at, to schedule_run; no row is written, and no preserved relation,
       // trigger, function or DONE fence changes.
       '1643_schedule_run_idle_seen_at',
-      // 1651 refuses a database whose turn_state backfill has not run, then swaps session's NULL-tolerant turn_state
-      // CHECK for the strict one and adds a phase NOT NULL helper CHECK, NOT VALID; 1652-1654 validate the three; 1655
-      // sets session.phase NOT NULL and drops the helper. Constraints only: no row is written, and no preserved
-      // relation, trigger, function or DONE fence changes.
+      // 1651 fills session.turn_state and session.phase on the rows that have none (`session` is not a preserved
+      // relation), refuses a filled row that disagrees with its word, then swaps session's NULL-tolerant turn_state CHECK
+      // for the strict one and adds a phase NOT NULL helper CHECK, NOT VALID; 1652-1654 validate the three; 1655 sets
+      // session.phase NOT NULL and drops the helper. No preserved relation, trigger, function or DONE fence changes.
       '1651_session_turn_state_strict_checks',
       '1652_session_turn_state_agrees_validate',
       '1653_session_turn_state_released_validate',

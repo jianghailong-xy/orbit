@@ -5,8 +5,12 @@
 --
 -- WHAT IT DOES
 -- ------------
--- First it ASSERTS that no row disagrees with its derivation (scripts/session-turn-state-census.sql's two counts), and
--- refuses otherwise. Then, both NOT VALID (1652 and 1654 validate them, one file each):
+-- First it FILLS every row that was never filled: no phase, or no turn_state under a word that means one. The write is
+-- scripts/session-turn-state-backfill.sql's own (turn_state from session_turn_state_of_status, in a statement naming it,
+-- so 1611's session_zz_phase writes phase from session_phase_of). A turn_state that is null because the word means none,
+-- beside a phase, is filled already and is not written. Then it ASSERTS that no row disagrees with its derivation
+-- (scripts/session-turn-state-census.sql's two counts): what is left is filled and wrong, and it refuses. Then, both NOT
+-- VALID (1652 and 1654 validate them, one file each):
 --   session_turn_state_agrees_chk     turn_state is the stored word's: PENDING = QUEUED, RUNNING = IN_FLIGHT,
 --                                     INTERRUPTED = ABANDONED, every other word none. IS NOT DISTINCT FROM, so a null on
 --                                     either side is compared and not waved through. Transitional: D4 drops it.
@@ -14,14 +18,16 @@
 -- and it drops 1622's NULL-tolerant session_turn_state_agrees_unless_null_chk, in the same transaction.
 -- 1622's session_turn_state_released_chk stays; 1653 validates it.
 --
--- WHY THE ASSERTION
--- -----------------
--- A NOT VALID CHECK checks every row WRITTEN from now on. A row the backfill never reached (null turn_state under the
--- word PENDING) would refuse every later update of that session, whatever column it names. So a database whose backfill
--- (task T3, scripts/session-turn-state-backfill.sh; run on production 2026-11-26) has not finished stops here, before
--- any constraint changes. Run the backfill, then
+-- WHY IT FILLS, AND WHY IT STILL ASSERTS
+-- --------------------------------------
+-- The server runs prisma migrate deploy as it starts, and an upgrade needs no manual step: a self-hosted database that
+-- goes straight from before 1611 to this release has never run the backfill (1611 writes no row), so this file does it.
+-- On a database the batched backfill has filled (task T3, production, 2026-11-26) the UPDATE writes no row; the batches
+-- were that big table's path, since one UPDATE holds the lock of every row it writes until it commits.
+-- A NOT VALID CHECK checks every row WRITTEN from now on, so a filled row that disagrees would refuse every later update
+-- of that session. No release writes one; it stops here, before any constraint changes. Correct it, then
 --   prisma migrate resolve --rolled-back 1651_session_turn_state_strict_checks
--- and deploy again. A database with no session (a new install) passes at once.
+-- and deploy again.
 --
 -- WHAT A SERVER ONE RELEASE OLDER DOES
 -- ------------------------------------
@@ -31,15 +37,30 @@
 --
 -- LOCKS
 -- -----
+-- The UPDATE takes ROW EXCLUSIVE and the locks of the rows it writes, waiting as long as it must. The COMMIT after it
+-- releases them: held into the DO block, they would keep a server still writing those rows and the ALTER TABLE waiting on
+-- each other. prisma migrate deploy (7.10) sends a file with a DO block whole, so without the COMMIT the file is one
+-- transaction (0482). The fill stays if the rest fails, and running it again writes nothing.
 -- The assertion reads session (ACCESS SHARE; one scan, no lock that holds anybody up). ADD and DROP CONSTRAINT are
 -- catalog changes under ACCESS EXCLUSIVE, asked for 2 s at a time, 1 s apart, up to 45 tries (1261, 1401, 1611, 1622).
--- The file holds a DO block, so prisma migrate deploy (7.10) sends it whole, as one transaction.
+-- The DO block is one transaction: the assertion and the swap of the CHECKs happen together or not at all.
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
 -- 1651-1655: 1643 is the highest on main, every project/*, orbit/* and probe/* branch on 2026-11-26. No multiple of 10.
--- Can run twice: IF EXISTS drops before the CHECKs.
+-- Can run twice: the UPDATE finds nothing left, and IF EXISTS drops come before the CHECKs.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
+
+SET lock_timeout = 0;
+
+UPDATE "session" s
+   SET "turn_state" = session_turn_state_of_status(s."status")
+ WHERE s."phase" IS NULL
+    OR (s."turn_state" IS NULL AND session_turn_state_of_status(s."status") IS NOT NULL);
+
+COMMIT;
+
+RESET lock_timeout;
 
 DO $$
 DECLARE
@@ -53,9 +74,11 @@ BEGIN
       OR "phase" IS DISTINCT FROM session_phase_of("finished_at", session_turn_state_of_status("status"),
                                                   "engine_turn_active", "running_subagents", "running_bg_jobs");
   IF disagreeing > 0 THEN
-    RAISE EXCEPTION '% session rows have a turn_state or phase that is not derived from their status, for example %',
+    RAISE EXCEPTION '% session rows have a filled turn_state or phase that is not derived from their status, for example %',
       disagreeing, example
-      USING HINT = 'Run scripts/session-turn-state-backfill.sh until it reports 0, mark this migration rolled back '
+      USING HINT = 'Empty rows were filled just now, so something wrote these against the status: find what did. '
+                   'scripts/session-turn-state-census.sql counts them and scripts/session-turn-state-backfill.sh '
+                   'rewrites them from the status. Then mark this migration rolled back '
                    '(prisma migrate resolve --rolled-back 1651_session_turn_state_strict_checks) and deploy again.';
   END IF;
 

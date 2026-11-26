@@ -667,7 +667,8 @@ UPDATE "session" s
   (catalog, `open_list_bump_session`; the list is `OPEN_LIST_UNDRAWN_SESSION_COLUMNS`,
   `sessions/open-list-version.ts:223`), and the two new columns are not in it. So each owner with a row in the batch
   gets one list-changed hint: about 25 hints per owner in all, spread over the run.
-- The census (§7.2) runs after it; D2's first migration asserts that no row disagrees and refuses to run otherwise.
+- The census (§7.2) runs after it; D2's strict-CHECK migration (1651, §4.6) fills any row still empty and refuses to run
+  on a filled row that disagrees.
 
 ### 4.5 Partial indexes, and the query plans to re-measure
 
@@ -708,6 +709,10 @@ A plan that reads more buffers than today's stops T5 until an index answers it.
   a validating scan never runs under that lock, so each `VALIDATE CONSTRAINT` is in a file with no DO, which Prisma
   7.10 sends a statement at a time (header of `0479_wiki_chat_session_checks_index`), and so is each concurrent build.
 - `SET NOT NULL` on `phase` follows a validated `CHECK (phase IS NOT NULL)`, so it does not scan.
+- An upgrade needs no manual step: migration 1651 fills the rows that have no `turn_state` or `phase` (one UPDATE,
+  committed before it asks for the table lock), which is how a self-hosted database is filled. Production's batched
+  backfill (§4.4) was the path for a big table; there the UPDATE writes no row. 1651 still refuses a filled row that
+  disagrees with its word.
 - Migration numbers are chosen when each task is written, above everything on main, `project/*` and pushed `orbit/*`
   branches (main's highest today: 1600).
 - Every trigger added, restated or dropped (T2, T6, T14, T15) also changes its entry in `TRIGGER_WRITE_SOURCES`
