@@ -49,6 +49,8 @@ const skip = !URL;
 const API = join(__dirname, '..', '..');
 const SCRIPTS = join(API, '..', '..', 'scripts');
 const D1 = ['1611_session_turn_state_phase', '1612_session_turn_state_phase_validate'];
+/** What rewrites D1's phase function and trigger since (the armed-retry rule): taken away and put back with it. */
+const AFTER_D1 = ['1667_session_phase_retry_running'];
 
 /** The plan's §1.4: each word the slot and claim rules read is exactly one turn state; every other word has none. */
 const TURN_STATE_OF_WORD: Partial<Record<RunStatus, string>> = {
@@ -77,11 +79,11 @@ const SHAPES: readonly ReleaseShape[] = [...RELEASE_SHAPES, ...HELD];
 
 interface Stored {
   id: string; status: string; finished_at: Date | null; engine_turn_active: boolean; running_subagents: string[];
-  running_bg_jobs: string[]; turn_state: string | null; phase: string | null;
+  running_bg_jobs: string[]; retry_at: Date | null; turn_state: string | null; phase: string | null;
 }
 
 const READ = `SELECT "id", "status"::text AS status, "finished_at", "engine_turn_active", "running_subagents",
-                     "running_bg_jobs", "turn_state", "phase" FROM "session"`;
+                     "running_bg_jobs", "retry_at", "turn_state", "phase" FROM "session"`;
 
 /** What the stored row's two facts must be: the word's turn state, and deriveSessionPhase of the row. */
 function expected(row: Stored): { turn_state: string | null; phase: string } {
@@ -89,7 +91,7 @@ function expected(row: Stored): { turn_state: string | null; phase: string } {
     turn_state: turnStateOf(row.status),
     phase: deriveSessionPhase({
       status: row.status as RunStatus, finishedAt: row.finished_at, engineTurnActive: row.engine_turn_active,
-      runningSubagents: row.running_subagents, runningBgJobs: row.running_bg_jobs,
+      runningSubagents: row.running_subagents, runningBgJobs: row.running_bg_jobs, retryAt: row.retry_at,
     }),
   };
 }
@@ -210,7 +212,7 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
       + 'FOR EACH ROW EXECUTE FUNCTION session_turn_state_from_status()');
     assert.equal(def('session_zz_phase'),
       'CREATE TRIGGER session_zz_phase BEFORE INSERT OR UPDATE OF status, turn_state, finished_at, engine_turn_active, '
-      + 'running_subagents, running_bg_jobs ON public.session FOR EACH ROW EXECUTE FUNCTION session_phase_from_facts()');
+      + 'running_subagents, running_bg_jobs, retry_at ON public.session FOR EACH ROW EXECUTE FUNCTION session_phase_from_facts()');
     // PostgreSQL fires the BEFORE row triggers of one event in name order (C collation), which ORDER BY tgname gives.
     for (const event of ['on_insert', 'on_update'] as const) {
       const names = triggers.filter((tr) => tr[event]).map((tr) => tr.tgname).sort();
@@ -218,7 +220,7 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
       assert.equal(names.at(-1), 'session_zz_phase', `${event}: phase is written last, from what the others left`);
     }
     // No other BEFORE trigger assigns a column the two read or write, so none can change one behind their backs.
-    const watched = /NEW\."?(status|finished_at|engine_turn_active|running_subagents|running_bg_jobs|turn_state|phase)"?\s*:=/gi;
+    const watched = /NEW\."?(status|finished_at|engine_turn_active|running_subagents|running_bg_jobs|retry_at|turn_state|phase)"?\s*:=/gi;
     const assigning = triggers.flatMap((tr) => [...tr.body.matchAll(watched)].map((m) => `${tr.tgname}: ${m[1]}`));
     assert.deepEqual(assigning.sort(),
       ['session_aa_turn_state_from_status: turn_state', 'session_zz_phase: phase'],
@@ -253,6 +255,8 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
       ['engine_turn_active', 'true', 'false'],
       ['running_subagents', `ARRAY['agent-1']`, `ARRAY[]::text[]`],
       ['running_bg_jobs', `ARRAY['bgj_1']`, `ARRAY[]::text[]`],
+      // Migration 1667: an armed retry makes a released session RUNNING, and leaves a held one where it was.
+      ['retry_at', `now() + interval '30 seconds'`, 'NULL'],
     ];
     for (const shape of SHAPES) {
       const id = await insertShape(db, w, shape, none);
@@ -309,7 +313,7 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
     }
     // The down script: session as it was before 1611.
     await sql.query(readFileSync(join(SCRIPTS, 'session-turn-state-phase-down.sql'), 'utf8'));
-    await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [D1]);
+    await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [[...D1, ...AFTER_D1]]);
     const left = (await sql.query(
       `SELECT (SELECT count(*)::int FROM information_schema.columns
                 WHERE table_name = 'session' AND column_name IN ('turn_state', 'phase')) AS columns,
@@ -400,7 +404,7 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
 
     // Deployed again: re-runnable, and it writes no row.
     const steady = (await sql.query(`SELECT sum(xmin::text::bigint) AS x FROM "session"`)).rows[0];
-    await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [D1]);
+    await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [[...D1, ...AFTER_D1]]);
     migrateDeploy(url);
     assert.deepEqual((await sql.query(`SELECT sum(xmin::text::bigint) AS x FROM "session"`)).rows[0], steady);
     assert.equal(await backfillBatch(), 0, 'nothing to backfill after a second deploy');

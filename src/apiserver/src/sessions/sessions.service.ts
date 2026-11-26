@@ -4180,7 +4180,7 @@ export class SessionsService {
       // A failure nobody is retrying: released by a failed turn, with no retry armed. Nothing runs
       // there until somebody picks it up, so the Session list files it under Needs you
       // (lib/sessionGrouping.ts `sessionNeedsOwner`, OrbitKit `SessionTimeGrouping.needsOwner`), and
-      // the rail counts it with the rest of that section.
+      // the rail counts it with the rest of that section — as its own row only; see `foldedFailures`.
       this.prisma.session.findMany({
         where: { ...open, ...releaseWasFailureFilter(), retryAt: null },
         select: { id: true, workspaceId: true },
@@ -4228,7 +4228,14 @@ export class SessionsService {
     for (const session of blocked) {
       if (!session.taskId || (await visibleQuestions(this.prisma, session.approvals)).length) visibleBlocked.push(session);
     }
-    for (const session of [...visibleBlocked, ...awaitingDecision, ...failed]) {
+    // A failed member of a project is not a row of the list: it is folded into its project's row,
+    // which a failure does not light (web lib/sessionProjects.ts, `heldBy` and the row's `waiting`),
+    // so it is in no Needs you section and the rail leaves it out too. A task run the dispatcher
+    // started, failed and left for its coordinator is the common case, and a busy project has dozens.
+    // Folded is the list's rule: in a project, unless the project's coordinator runs in another
+    // workspace, where the member stays a row of its own.
+    const folded = await this.foldedFailures(failed.map((session) => session.id));
+    for (const session of [...visibleBlocked, ...awaitingDecision, ...failed.filter((f) => !folded.has(f.id))]) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
@@ -4285,6 +4292,22 @@ export class SessionsService {
       else row(session.workspaceId).jobs += 1;
     }
     return [...counts.values()];
+  }
+
+  /** Of these sessions, the ones the workspace list folds into a project row rather than listing
+   *  (`workspaceSessionCounts`): a member of a project whose coordinator is not known to run in another
+   *  workspace than the session's own. */
+  private async foldedFailures(ids: readonly string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT m.id FROM (
+        SELECT s.id, s.workspace_id, ${sessionProjectMembershipSql('s')} ->> 'projectId' AS project_id
+          FROM session s WHERE s.id = ANY(${[...ids]}::uuid[])
+      ) m
+      JOIN project p ON p.id = m.project_id::uuid
+      LEFT JOIN session c ON c.id = p.coordinator_session_id
+      WHERE c.workspace_id IS NULL OR c.workspace_id = m.workspace_id`);
+    return new Set(rows.map((row) => row.id));
   }
 
   /** The Open list's data version; see open-list-version.ts. Only the flat list reads it, for the

@@ -3532,7 +3532,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1655_session_phase_set_not_null',
       // 1656 adds one nullable column, web_keys, to device_token; no row is written, and no preserved relation,
       // trigger, function or DONE fence changes.
-      '1656_device_token_web_keys'],
+      '1656_device_token_web_keys',
+      // 1667 adds a six-argument session_phase_of (a released row with retry_at set reads RUNNING), points
+      // session_phase_from_facts at it, re-creates session_zz_phase to fire on retry_at as well, and writes phase alone
+      // on the released rows with retry_at set. Only `session` is touched; no preserved relation, trigger, function or
+      // DONE fence changes.
+      '1667_session_phase_retry_running'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

@@ -3212,7 +3212,8 @@ export interface CursorQuotaHelp {
 }
 
 export interface AutoRetryHelp {
-  /** Session's provider slug, for naming whose quota ran out / whose API failed. */
+  /** Session's provider by its display name ("Qwen (Model Studio)", "Claude Code"), for naming whose quota ran
+   *  out / whose API failed. */
   provider: string;
   /** Set for a session on Cursor CLI (CursorQuotaHelp). */
   cursor?: CursorQuotaHelp | null;

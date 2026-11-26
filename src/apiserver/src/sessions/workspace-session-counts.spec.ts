@@ -39,7 +39,14 @@ test('workspace counts separate queued activity from Session-list spinner work',
       runningBgJobActivity: { bgj_up: now - 5_000 },
     },
   ];
+  const rawCalls: any[] = [];
   const prisma = {
+    // The fold read: which failures the list folds into a project row. `s-failed-member` is a task run
+    // in a project whose coordinator shares its workspace.
+    $queryRaw: async (sql: any) => {
+      rawCalls.push(sql);
+      return [{ id: 's-failed-member' }];
+    },
     session: {
       groupBy: async (args: any) => {
         groupByCalls.push(args);
@@ -68,6 +75,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
           return [
             { id: 's-failed', workspaceId: 'w-failed' },
             { id: 's-needs-you', workspaceId: 'w-needs-you' },
+            { id: 's-failed-member', workspaceId: 'w-failed-member' },
           ];
         }
         if (args?.where?.runningBgJobs && !args?.where?.OR) {
@@ -259,6 +267,11 @@ test('workspace counts separate queued activity from Session-list spinner work',
     stalledJobs: 0,
     needsYou: 1,
   });
+  // A failed member of a project is folded into its project's row, which a failure does not light,
+  // so the list has no Needs you row for it and the rail counts nothing.
+  assert.equal(byWorkspace.get('w-failed-member'), undefined);
+  assert.equal(rawCalls.length, 1);
+  assert.deepEqual(rawCalls[0].values.find(Array.isArray), ['s-failed', 's-needs-you', 's-failed-member']);
   const failedQuery = findManyCalls.find((call) => call?.where?.lastTurnOutcome);
   assert.deepEqual(failedQuery.where.finishedAt, { not: null });
   assert.equal(failedQuery.where.endReason, null);

@@ -250,6 +250,7 @@ func isResumeCarrierResult(r ExecResult, streamedText string, compacted bool) bo
 var connectionFailureMarkers = [][]string{
 	{"attention required", "cloudflare"}, // Cloudflare's block page in front of the API
 	{"econnreset"},                       // the socket dropped mid-request
+	{"read: connection timed out"},       // a provider's gateway timed out on its upstream (DashScope 406)
 }
 
 // isConnectionFailure reports whether a runtime's text carries a failure of the connection to the
