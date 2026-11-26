@@ -4183,7 +4183,7 @@ button.toast--pill:focus-visible {
 .wt-rail-tab {
   flex: 1 1 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   background: none;
   padding: 3px 8px;
   font: inherit;
@@ -23788,7 +23788,7 @@ div.landing-jobs-open {
   gap: 2px;
   margin-bottom: 14px;
   padding: 2px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--fill-inset);
 }
 .following-tab {
@@ -23797,7 +23797,7 @@ div.landing-jobs-open {
   gap: 6px;
   padding: 5px 12px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-2);
   font: inherit;
@@ -23807,7 +23807,7 @@ div.landing-jobs-open {
   background: var(--bg-raised);
   color: var(--text-1);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
 }
 .following-count {
   color: var(--text-3);
@@ -27574,10 +27574,10 @@ button.project-open-item-action:disabled {
 .rv-head { display: flex; align-items: flex-end; gap: 16px; margin-top: 8px; }
 .rv-head .page-title { font-size: 20px; }
 .rv-sub { margin-top: 4px; font-size: 13px; color: var(--text-2); }
-.wk-seg { display: inline-flex; gap: 2px; margin-left: auto; padding: 2px; border-radius: 6px; background: var(--fill-muted); }
-.wk-seg button { padding: 3px 12px; border: 0; border-radius: 4px; background: transparent; font-size: 13px; line-height: 20px;
+.wk-seg { display: inline-flex; gap: 2px; margin-left: auto; padding: 2px; border-radius: 10px; background: var(--fill-muted); }
+.wk-seg button { padding: 3px 12px; border: 0; border-radius: 8px; background: transparent; font-size: 13px; line-height: 20px;
                  color: var(--text-2); white-space: nowrap; cursor: pointer; }
-.wk-seg button.on { background: var(--bg-raised); color: var(--text-1); font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+.wk-seg button.on { background: var(--bg-raised); color: var(--text-1); font-weight: 500; box-shadow: 0 1px 3px rgba(0, 0, 0, .1), 0 0 0 .5px rgba(0, 0, 0, .04); }
 .wk-seg button b { margin-left: 5px; font-weight: 600; color: var(--text-3); }
 /* The phone's card pager (mock 09): one proposal card at a time, with the position between two plain
    buttons. It is drawn only on a phone — a desktop shows the queue as a list. */
