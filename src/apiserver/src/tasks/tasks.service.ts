@@ -9821,7 +9821,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       readSessionBackgroundFields(this.prisma, runIds),
       readLandingSettlements(this.prisma, task.sessions ?? []),
       // The EXECUTABLE acceptance rounds each run ran, newest first (migration 1672, tasks/task-acceptance-round.ts).
-      readTaskAcceptanceRounds(this.prisma, ownerId, task.id),
+      readTaskAcceptanceRounds(this.prisma, ownerId, task.id, runIds),
     ]);
     return {
       ...task,

@@ -60,14 +60,16 @@ export async function recordTaskAcceptanceRound(
   await tx.taskAcceptanceRound.create({ data: taskAcceptanceRoundRow(input), select: { id: true } });
 }
 
-/** Every round of a task, by run session, newest first within each run. */
+/** The rounds of a task's runs `sessionIds`, by run session, newest first within each run. No runs, no rounds. */
 export async function readTaskAcceptanceRounds(
   prisma: Pick<PrismaClient, 'taskAcceptanceRound'>,
   ownerId: string,
   taskId: string,
+  sessionIds: readonly string[],
 ): Promise<Map<string, TaskAcceptanceRound[]>> {
+  if (sessionIds.length === 0) return new Map();
   const rows = await prisma.taskAcceptanceRound.findMany({
-    where: { taskId, ownerId },
+    where: { taskId, ownerId, sessionId: { in: [...sessionIds] } },
     orderBy: [{ finishedAt: 'desc' }, { id: 'desc' }],
     select: {
       id: true,
