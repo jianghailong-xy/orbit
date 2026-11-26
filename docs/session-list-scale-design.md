@@ -86,8 +86,8 @@ GET /sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limi
 | # | 内容 | 依赖 | 证据 |
 |---|---|---|---|
 | T1 | 服务端 `GET /sessions/listing`：顶层条目分页、项目条目、文件夹计数、版本 ETag；共享夹具；登记到路由/公开 id/写入等普查；`docs/api-reference.md` | — | 夹具驱动的 pg spec；1500 会话种子下首页构建耗时与字节数 |
-| T2 | Web 改读 `listing`：WorkspaceView 与 BootGate 的整读换成分页条目，文件夹行用服务端计数，项目行用项目条目 + placement；文件夹页同读带 `folderId` | T1 | 夹具驱动的单测；Vitest 全量；Playwright 文件夹/项目/拖动/方向键 |
-| T3 | Web 虚拟化 + 每帧只算挂载行（§4） | —（与 T1 并行；与 T2 改动不同区段） | Vitest 全量；Playwright 方向键、拖动、滑动、加载更多 |
+| T2 | Web 改读 `listing`：WorkspaceView 与 BootGate 的整读换成分页条目，文件夹行用服务端计数，项目行用项目条目 + placement；文件夹页同读带 `folderId` | T1、T3（与 T3 同改 WorkspaceView 的列表区段，排在它之后免冲突） | 夹具驱动的单测；Vitest 全量；Playwright 文件夹/项目/拖动/方向键 |
+| T3 | Web 虚拟化 + 每帧只算挂载行（§4） | —（与 T1 并行） | Vitest 全量；Playwright 方向键、拖动、滑动、加载更多 |
 | T4 | 端到端测量：1500 Open 会话（含文件夹和项目）的种子，改前/改后：首读字节、首屏可交互时间、一帧 watch 的提交耗时、DOM 行数 | T2、T3 | 测量脚本 + 数字表 |
 
 ## 6. 决定（owner 2026-11-26：D1 = A1，D2 = 只做 Web，D3 = @tanstack/react-virtual）
