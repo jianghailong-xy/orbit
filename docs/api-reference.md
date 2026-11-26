@@ -102,9 +102,9 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
 | `ALL` | `/api/gw/codex/{*path}` | — | `PoolGatewayController.forward` |
 | `GET` | `/api/health` | — | `HealthController.read` |
-| `GET` | `/api/help` | — | `HelpController.index` |
-| `GET` | `/api/help/articles/:slug` | path `slug` | `HelpController.article` |
-| `GET` | `/api/help/search` | query `q` | `HelpController.search` |
+| `GET` | `/api/help` | query `lang` | `HelpController.index` |
+| `GET` | `/api/help/articles/:slug` | path `slug`; query `lang` | `HelpController.article` |
+| `GET` | `/api/help/search` | query `lang`, `q` | `HelpController.search` |
 | `GET` | `/api/integrations/github/callback` | query `code`, `error`, `setup_action`, `state` | `GithubCallbackController.callback` |
 | `POST` | `/api/integrations/github/webhook` | — | `GithubWebhookController.receive` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
