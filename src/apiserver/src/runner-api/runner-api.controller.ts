@@ -2553,6 +2553,9 @@ export class RunnerApiController {
     if (managedSleepOn) {
       try {
         managedBeat = await managedRunnerHeartbeat(this.prisma, managedInstance!, managedWorkload, beatAt);
+        // This beat, recorded above, is what a STARTING mapping waits for to be READY: the manager looks now, not
+        // up to a poll interval later (lifecycle.pollIntervalSeconds). Another replica's manager finds it at its next pass.
+        if (managedBeat.starting && this.managedRuntime?.available) this.managedRuntime.worker.kick();
       } catch (error) {
         // Until the mapping can be read again, keep the safe startup concurrency.
         managedBeat.concurrencyCap = 1;

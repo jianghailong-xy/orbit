@@ -1159,7 +1159,6 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
       noticeKind: 'codex-sandbox-unavailable',
       provider: 'codex',
       sandboxUnavailable: true,
-      notice: "Codex's sandbox is unavailable on Orbit Cloud: commands run unconfined inside your Cloud runner.",
     });
     const standalone = await alone(door.linkPort, a, single.sessionId, [notice]);
     assert.equal(standalone.status, 202, JSON.stringify(standalone.body));
@@ -1172,7 +1171,7 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
     for (const { sessionId } of [single, grouped]) {
       const actual = await semantics(sessionId);
       assert.equal(actual?.sandbox, 'off');
-      assert.match(actual?.note ?? '', /commands run unconfined inside your Cloud runner/);
+      assert.match(actual?.note ?? '', /your Cloud runner's container isolates its commands/);
       assert.doesNotMatch(JSON.stringify(actual), /workspace-write/);
       await until('the session refresh notification', () => notesOf(sessionId).some((n) => n.u === 1));
     }

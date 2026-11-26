@@ -54,8 +54,8 @@ test('a Codex Auto session whose runner reported the sandbox unavailable is told
     approvalSupport: 'partial',
     honored: false,
     sandbox: 'off',
-    note: "Codex's sandbox is unavailable on Orbit Cloud: commands run unconfined inside your Cloud runner.",
-    shortNote: 'sandbox off on Orbit Cloud, commands run unconfined',
+    note: "Codex's own sandbox cannot start on Orbit Cloud, so it is off: your Cloud runner's container isolates its commands instead.",
+    shortNote: "Codex sandbox off, the Cloud runner's container isolates commands",
   });
   assert.doesNotMatch(JSON.stringify(semantics), /workspace-write/);
 });
@@ -89,7 +89,7 @@ test('the ingest reads the report off the runner’s sandbox notice, and nothing
     sandboxUnavailable: true,
     noticeKind: 'codex-sandbox-unavailable',
     provider: 'codex',
-    notice: "Codex's sandbox is unavailable on Orbit Cloud: commands run unconfined inside your Cloud runner.",
+    notice: "Codex's own sandbox cannot start on Orbit Cloud, so it is off: your Cloud runner's container isolates its commands instead.",
   };
   assert.equal(reportsCodexSandboxUnavailable([{ type: 'system', payload: notice }]), true);
   // The notice as a runner before this report sent it, any other system event, and a non-system event.

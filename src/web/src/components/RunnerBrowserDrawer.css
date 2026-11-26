@@ -11,6 +11,8 @@
 .rb-tab-loading { align-items: center; justify-content: center; }
 /* A sign-in request's banner above the bar (board 03-agent-tools frame ①, note ⑤). */
 .rb-sign-in { display: flex; align-items: center; gap: 12px; padding: 8px 14px; min-height: 52px; border-bottom: 1px solid var(--border-subtle); background: var(--brand-tint); }
+.rb-sign-in.is-failed { background: var(--warning-bg); }
+.rb-sign-in.is-failed .rb-sign-in-text { color: var(--warning); font-weight: 500; }
 .rb-sign-in-text { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--brand); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .rb-tab-bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; min-height: 48px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-raised); }
 .rb-tab.is-controlling .rb-tab-bar { background: var(--warning-bg); }

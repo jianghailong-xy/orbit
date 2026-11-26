@@ -53,10 +53,11 @@ class RunnerUpdateHeldShellTest : ComposerShellTest() {
         assertEquals("HOLD", listRow.getValue("waitingOn").jsonPrimitive.content)
         val row = Wire.json.decodeFromJsonElement<DirectorySession>(listRow)
         assertEquals(SessionLine("Runner updating", SessionLine.Tone.WARNING), SessionLine.make(row, live = true, machine = "studio-mac"))
-        assertEquals("Runner updating", SessionHeader.statusWord(row))
+        // The header's word is the phase's (three states, owner 2026-11-25), as web's statusLabel reads this fixture.
+        assertEquals("Queued", SessionHeader.statusWord(row))
         // The detail carries no gate of its own, and still does not read as running.
         val alone = Wire.json.decodeFromJsonElement<DirectorySession>(detail)
-        assertEquals("On hold", SessionHeader.statusWord(alone))
+        assertEquals("Queued", SessionHeader.statusWord(alone))
         assertTrue("a queued session with background work offers Stop", hasSomethingToStop(detail))
     }
 
