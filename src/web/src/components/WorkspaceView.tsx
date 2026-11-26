@@ -1139,10 +1139,10 @@ const WAITING_REVEAL_EXPIRES_MS = 10_000;
  *  so it is excluded by name: matching it sent the row to the oldest record loaded. */
 export const WAITING_CARD_SELECTOR =
   '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"]:not(.answered-question-inline), [data-open-item]';
-/** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
- *  floating "Jump to the beginning" pill (`.chat-older-top`), which any transcript scrolled off both
- *  its top and its tail offers — as a revealed card's is, unless it clamps at the top. */
-export const WAITING_CARD_GAP = 48;
+/** How far below the scroller's top edge a revealed waiting card's top comes to rest: a little air
+ *  above the card. It used to clear the "Jump to the beginning" pill floating over the transcript;
+ *  that pill is in the header now, outside the scroller. */
+export const WAITING_CARD_GAP = 16;
 /** How long a page of older messages may take before the top pill says "Loading earlier messages…":
  *  under a second, so a fast page shows nothing and a slow one is not a silent stall at the top. */
 const LOADING_OLDER_SHOW_AFTER_MS = 1000;
@@ -2931,8 +2931,8 @@ export function WorkspaceView({
     revealCard(card, 'start', false);
   };
   // The way back up while the reader is off the tail: the person's last message first, the way
-  // back to the beginning beside it as an icon; with no message of theirs, the way back alone. A
-  // wide window draws it in the header row, a phone over the top of the transcript.
+  // back to the beginning beside it as an icon; with no message of theirs, the way back alone. The
+  // header row draws it — centred in the row on a wide window, on a line of its own on a phone.
   const jumpUpPill = () => (lastMine && !atBottom ? (
     // The person's last message first, the way back to the beginning beside it as an icon.
     <span className="chat-older-pill chat-older-split">
@@ -4976,8 +4976,8 @@ export function WorkspaceView({
     detachedNow,
     backToLatest: streamBackToLatest,
   } = stream;
-  // The top pill: what is loading above, or the way back up once the reader has left the tail. A wide
-  // window draws it centred in the header row, a phone over the top of the transcript.
+  // The top pill: what is loading above, or the way back up once the reader has left the tail. It is
+  // drawn in the header row — centred in it on a wide window, on a line of its own on a phone.
   // A page that lands within LOADING_OLDER_SHOW_AFTER_MS says nothing: only a slow one is announced.
   // Once said, it stays for LOADING_OLDER_MIN_SHOWN_MS, so a page landing just after is no flash.
   const [loadingOlderShown, setLoadingOlderShown] = useState(false);
@@ -11297,12 +11297,6 @@ export function WorkspaceView({
               <div className="workspace-sub" data-fork-source="">{detailForSelected.forkSource}</div>
             )}
           </div>
-          {/* Off the live tail, a wide window draws the transcript's top pill here, centred in the
-              header row instead of floating over the messages. A phone keeps it over the transcript
-              (no room up here). */}
-          {!isMobile && capsuleMounted && (
-            <div className="workspace-header-jump" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
-          )}
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
           <RunnerUpdateIndicator runner={runner} machine={runnerShownName} />
           {selected && !composing && (
@@ -11552,6 +11546,17 @@ export function WorkspaceView({
               </div>
             </>
           )}
+          {/* Off the live tail, the transcript's top pill is drawn here instead of floating over the
+              messages: centred in the row on a wide window, and on a line of its own under it on a
+              phone, where a centred pill would leave the title no room. Being in the header, it
+              takes its place in the layout rather than covering the message the reader scrolled
+              to (`.workspace-header-jump.is-phone`). Last in the DOM, so a phone's
+              keyboard order reaches the header's own buttons first. */}
+          {capsuleMounted && (
+            <div className={`workspace-header-jump${isMobile ? ' is-phone' : ''}`} hidden={!topPillShown}>
+              {topPill(decisionStrip('line'))}
+            </div>
+          )}
         </div>}
 
         {followOpen && selectedId && (
@@ -11620,19 +11625,8 @@ export function WorkspaceView({
               <QuestionTranslationsCtx.Provider value={questionTranslations}>
               <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               <ExchangeTreeCtx.Provider value={exchangeTree}>
-              {/* A tail-first transcript always has more above it: while a page is in flight this
-                  says so, and otherwise it is the way to the first message, which scrolling alone
-                  never reaches (see jumpToStart). Pinned to the top of the viewport rather than
-                  left at the top of the content — content-top is only on screen for the instant
-                  before the page it triggers lands and re-anchors the view a page below it. Offered
-                  only once the reader has left the live tail, the mirror of the jump-to-bottom
-                  button: at the tail nobody is looking for the beginning, and the pill floats over
-                  the transcript, so there it is only something covering a message. With nothing
-                  older left on the server it still scrolls to the top: the reader scrolled up into
-                  a fully loaded session wants the same way back. */}
-              {isMobile && capsuleMounted && (
-                <div className="chat-older-top" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
-              )}
+              {/* The way back up and the way to the person's last message live in the header's
+                  capsule (`.workspace-header-jump`), not floating over the transcript. */}
               {/* This conversation made its workspace: its first line says what was made and where
                   (board rule 8). First means first, so not above a window that starts later. */}
               {detailForSelected?.createdWorkspace && detailForSelected.workspace?.name && !hasMoreOlder && (
@@ -13698,20 +13692,21 @@ export function SessionComposer({
         {/* Settings › Translation is on (6A): what is typed here is translated into the agent language when it
             is sent, never while it is typed. The tag opens the setting. */}
         {translationIsOn && (
-          <button
-            type="button"
-            className={`composer-translation-tag${translationUnavailable ? ' is-unavailable' : ''}`}
-            title={
-              translationUnavailable
-                ? `${unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}. The translator is failing, so a message sent now is held until you Retry or Send as written. Open Settings › Translation`
-                : 'Messages are translated before the agent gets them. Open Settings › Translation'
-            }
-            onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
-          >
-            {translationUnavailable
-              ? unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))
-              : translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
-          </button>
+          <Tooltip content={
+            translationUnavailable
+              ? `${unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}. The translator is failing, so a message sent now is held until you Retry or Send as written. Open Settings › Translation`
+              : 'Messages are translated before the agent gets them. Open Settings › Translation'
+          }>
+            <button
+              type="button"
+              className={`composer-translation-tag${translationUnavailable ? ' is-unavailable' : ''}`}
+              onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
+            >
+              {translationUnavailable
+                ? unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))
+                : translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
+            </button>
+          </Tooltip>
         )}
         {/* A 32px icon like `+` and Send, there whenever the optimizer is on and only disabled with
             nothing to optimize: a button that came and went with the draft moved every control to

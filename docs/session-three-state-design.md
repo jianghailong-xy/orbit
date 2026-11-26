@@ -109,10 +109,13 @@ runner tear the engine down (`runner-api.controller.ts:7810-7832`).
 | **Retry armed** | `retryAt`, unchanged, on a released session | `FAILED` + `retryAt` |
 | **Filed, trashed** | `completedAt`, `deletedAt`, unchanged | same |
 
-Invariant: a released session is always `IDLE`. *Amended 2026-11-26 by the owner, "waiting for retry counts as the
-running state":* a released session an armed retry (`retryAt`) will re-send is `RUNNING`, and its `waitingOn` stays
-`WAKE`; a held session's armed retry (a quota parked at `AWAITING_INPUT`) stays `IDLE`. Migration 1667 stores it. Sending to it clears `releasedAt` and makes it
-`PENDING` in one write, as the revive does today.
+Invariant: a released session is always `IDLE`. *Amended 2026-11-26 by the owner, twice.* First, "waiting for retry
+counts as the running state" (migration 1667: a released session with `retryAt` read `RUNNING`). Then, the same day,
+replacing it: waiting for a retry is `PENDING`, held or released, with `waitingOn` `WAKE` (migration 1670). A held
+session's armed retry (a quota parked at `AWAITING_INPUT`) is `PENDING` too, unless something still executes for it
+(then `RUNNING`). No turn is queued, and `waitingOn` `WAKE` is how a client tells it from a queued turn, whose
+`waitingOn` is `HOLD` or null; clients keep reading it as parked or failed, not as a queued turn. Sending to a
+released session clears `releasedAt` and makes it `PENDING` in one write, as the revive does today.
 
 > **Superseded 2026-11-21 by decision D9 (§12).** The owner decided that the session carries no failure fact:
 > `release_cause`, its failure line and `session_release_failure_chk` go. The table below describes the column as

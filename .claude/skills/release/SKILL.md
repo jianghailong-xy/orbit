@@ -140,8 +140,10 @@ production's k3s node, workspace **orbit-ws03** (`workstation`), in the backgrou
 `delegate({ description: "Pull Orbit Cloud runner <version> onto the node", size: "S", workspace: "orbit-ws03",
 background: true, prompt: <the pre-pull brief> })`. A runner's Pod pulls its image only as it starts, so without this
 the first runner to start after the deploy waits for the 1.5 GB pull first: 116 s on 2026-11-25, against about 9 s for
-the ones after it. It is idempotent, and a failed pull costs nothing but that wait: report it with the release's
-result, and do not hold the release for it.
+the ones after it. The pull is bounded by the registry link, not by the image: on 2026-11-26 it took 1773 s (~30 min
+at 0.2–1 MB/s) and outlasted a 30-minute job limit. It is idempotent, and containerd keeps a partial ingest, so a
+same-command re-run resumes where the first stopped; a failed or killed pull costs nothing but that wait: report it
+with the release's result, and do not hold the release for it.
 
 The pre-pull brief: fill in `<version>` and `<ref>`.
 
@@ -151,8 +153,10 @@ does not wait for the pull. Answer in English. Run as root. Change nothing else 
 no k3s setting. Stop and report at the first step that fails.
 
 1. `git -C /root/orbit fetch --quiet origin "refs/tags/v<version>:refs/tags/v<version>"`.
-2. `git -C /root/orbit show "v<version>:deploy/managed-runner/prepull-runner-image.sh" | bash -s -- <ref>`. It takes a
-   minute or two. It must end with a line starting `✓ <ref> is on this node`.
+2. `git -C /root/orbit show "v<version>:deploy/managed-runner/prepull-runner-image.sh" | bash -s -- <ref>`. It usually
+   takes a minute or two, but a slow registry link can make it far longer (1773 s on 2026-11-26). containerd keeps a
+   partial ingest, so if the command is interrupted or a host limit kills it, run the same command again to resume —
+   that is not a failure. It must end with a line starting `✓ <ref> is on this node`.
 3. Hand back its last lines.
 ```
 

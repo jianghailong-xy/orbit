@@ -256,6 +256,58 @@ class CrossingCardsTest {
         assertEquals(1, CrossingCards.merged(project, listOf(tail)).size)
     }
 
+    /** A move with no target, served by the session read, takes its tasks out of their project: its own question, route, buttons and
+     *  consequence while it asks, and what became of the tasks once answered. */
+    @Test fun aMoveOutSaysWhatItTakesOutAndThenWhatHappened() {
+        fun out(id: String, state: String = "PENDING") =
+            JsonObject(row(id, state = state, decidedAt = if (state == "PENDING") null else at(9)) + ("toProjectId" to JsonNull) + ("toProject" to JsonNull))
+        val one = CrossingCards.batch(read(out("a"), drawnAs = "TARGET_COORDINATOR"))!!
+        assertTrue(one.out)
+        assertEquals("Take this task out of the project?", CrossingCards.title(one))
+        assertEquals("1 task to take out of Runner v1", CrossingCards.summary(one))
+        assertEquals("No project", CrossingCards.toText(one))
+        assertEquals("Tasks to take out", CrossingCards.listHead(one))
+        assertEquals("Take it out", CrossingCards.approveLabel(one)); assertEquals("Keep it here", CrossingCards.refuseLabel(one))
+        assertEquals(ProjectCrossings.moveOutApproveConsequence, CrossingCards.consequence(one))
+        val two = CrossingCards.batch(read(out("a"), out("b"), drawnAs = "TARGET_COORDINATOR"))!!
+        assertEquals("Take these tasks out of the project?", CrossingCards.title(two))
+        assertEquals("Take them out", CrossingCards.approveLabel(two)); assertEquals("Keep them here", CrossingCards.refuseLabel(two))
+        assertEquals("Confirming takes the tasks out of this project as soon as you answer; no project's acceptance counts them any more.",
+            CrossingCards.consequence(two))
+
+        val taken = CrossingCards.batch(read(out("a", "APPLIED"), drawnAs = "TARGET_COORDINATOR"))!!
+        assertEquals("Task taken out of the project", CrossingCards.title(taken))
+        assertEquals("1 task taken out of Runner v1", CrossingCards.summary(taken))
+        assertEquals("taken out", CrossingCards.badge(taken))
+        assertFalse(CrossingCards.showsRowStates(taken))
+        assertEquals(emptyList<String>(), CrossingCards.rowNotes(taken.rows.single(), CrossingCards.showsRowStates(taken)))
+        val kept = CrossingCards.batch(read(out("a", "DENIED"), drawnAs = "TARGET_COORDINATOR"))!!
+        assertEquals("Task kept in the project", CrossingCards.title(kept))
+        assertEquals("1 task kept in Runner v1", CrossingCards.summary(kept))
+        // An ordinary move keeps its words.
+        assertFalse(CrossingCards.batch(read(row("a"), drawnAs = "TARGET_COORDINATOR"))!!.out)
+        assertEquals("Approve", CrossingCards.approveLabel(batch(row("a"))))
+    }
+
+    /** Answered, a card's heading says what happened instead of asking; a batch answered both ways says only that. */
+    @Test fun anAnsweredCardSaysWhatHappened() {
+        fun of(kind: String, n: Int, state: String) = CrossingBatch((1..n).map { row("$kind$it", kind = kind, state = state, decidedAt = at(9)) })
+        assertEquals("Tasks moved here", CrossingCards.title(of("MOVE_TASK", 2, "APPLIED")))
+        assertEquals("Move refused", CrossingCards.title(of("MOVE_TASK", 1, "DENIED")))
+        assertEquals("Task filed here", CrossingCards.title(of("FILE_TASK", 1, "APPROVED")))
+        assertEquals("Filings refused", CrossingCards.title(of("FILE_TASK", 2, "DENIED")))
+        assertEquals("Dependencies allowed", CrossingCards.title(of("DEPEND_ON_TASK", 2, "APPROVED")))
+        assertEquals("Dependency refused", CrossingCards.title(of("DEPEND_ON_TASK", 1, "DENIED")))
+        val mixed = batch(row("a", state = "APPLIED", decidedAt = at(9)), row("b", state = "DENIED", decidedAt = at(9)))
+        assertEquals("Requests answered", CrossingCards.title(mixed))
+        assertTrue(CrossingCards.showsRowStates(mixed))
+        val asker = CrossingCards.batch(read(asked(row("a", state = "APPLIED", decidedAt = at(9)), "S1")))!!
+        assertEquals("Task moved into Runner hardening", CrossingCards.title(asker))
+        assertEquals("Written by Orbit — not the requesting agent.", CrossingCards.fromOrbit)
+        assertEquals("Reason given by the requesting agent", CrossingCards.reasonsHead(1))
+        assertEquals("Reasons given by the requesting agent", CrossingCards.reasonsHead(2))
+    }
+
     /** A move batch's answer is ONE body: the decision and every waiting move with the crossing key the card read. */
     @Test fun aMoveBatchIsAnsweredWithOneBody() {
         val b = batch(row("a"), row("b", state = "APPLIED", decidedAt = at(3)), row("c"))

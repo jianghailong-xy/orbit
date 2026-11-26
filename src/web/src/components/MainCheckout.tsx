@@ -31,6 +31,7 @@ import {
   type MainCheckoutHost,
 } from '../lib/mainCheckout';
 import { Menu } from './ui/Menu';
+import { Tooltip } from './ui/Tooltip';
 
 const LEFT_KEY = 'mck-card-left:';
 
@@ -96,18 +97,21 @@ export function MainCheckoutCard({ notice, seq }: { notice: MainCheckoutChangedN
       </div>
       <div className="mck-card-files">
         {shown.map((f) => (
-          <button
-            key={f.path}
-            type="button"
-            className="mck-file"
-            disabled={!actions || !!handled}
-            onClick={() => host?.openReview(f.path)}
-            title={actions && !handled ? `Review ${f.path}` : f.path}
-          >
-            <span className={`mck-file-st st-${f.status.toLowerCase()}`}>{f.status}</span>
-            <span className="mck-file-path">{f.path}</span>
-            <FileStat file={f} />
-          </button>
+          // The span takes the pointer while the row is disabled, so its path still shows whole.
+          <Tooltip key={f.path} content={actions && !handled ? `Review ${f.path}` : f.path} mono align="start">
+            <span style={{ display: 'block' }}>
+              <button
+                type="button"
+                className="mck-file"
+                disabled={!actions || !!handled}
+                onClick={() => host?.openReview(f.path)}
+              >
+                <span className={`mck-file-st st-${f.status.toLowerCase()}`}>{f.status}</span>
+                <span className="mck-file-path">{f.path}</span>
+                <FileStat file={f} />
+              </button>
+            </span>
+          </Tooltip>
         ))}
         {hidden > 0 && <div className="mck-card-more">{mainCheckoutMoreFiles(hidden)}</div>}
         {notice.truncated && <div className="mck-card-more">{mainCheckoutTruncatedNote()}</div>}

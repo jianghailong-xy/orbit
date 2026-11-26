@@ -77,20 +77,20 @@ const WAKE_FACTS = [RESUME_WATCH, PENDING_WAKEUP, ARMED_RETRY] as const;
 
 /**
  * `phase`: RUNNING while anything executes for the session (a dispatched turn, the engine's own turn, a sub-agent or
- * a background job: `isSessionExecuting`'s facts), PENDING while a turn is queued and nothing executes, IDLE
- * otherwise. A released session is IDLE, except one an armed retry will re-send, which is RUNNING: the owner's ruling
- * of 2026-11-26, "waiting for retry counts as the running state" (design §4.2, amended). Read from the facts (turn
- * state, release, the execution columns, `retry_at`), the rule migration 1667's `session_zz_phase` stores (plan §1.2),
- * and the reference its PG spec holds the trigger to. A held session's armed retry (a quota parked at AWAITING_INPUT)
- * leaves it IDLE: RUNNING on a held row reads as a turn in flight to every client, which would steer the next message
- * into a turn that is not there.
+ * a background job: `isSessionExecuting`'s facts), PENDING while a turn is queued and nothing executes, or while an
+ * armed retry will re-send it, IDLE otherwise. The owner's ruling of 2026-11-26 (design §4.2, amended): waiting for
+ * a retry is PENDING, held or released. It replaces that day's earlier ruling, which read a released one RUNNING.
+ * Read from the facts (turn state, release, the execution columns, `retry_at`), the rule migration 1670's
+ * `session_zz_phase` stores (plan §1.2), and the reference its PG spec holds the trigger to. Executing outranks the
+ * retry: a held session whose background job still runs is RUNNING. A retry's PENDING waits on that WAKE
+ * (deriveSessionWaitingOn), which is how a client tells it from a queued turn.
  */
 export function deriveSessionPhase(row: SessionPhaseRow): SessionPhase {
-  if (isReleased(row)) return ARMED_RETRY.holds(row) ? 'RUNNING' : 'IDLE';
+  if (isReleased(row)) return ARMED_RETRY.holds(row) ? 'PENDING' : 'IDLE';
   const turn = turnStateOf(row);
   if (turn === 'IN_FLIGHT') return 'RUNNING';
   if (OUTSIDE_TURN_FACTS.some((fact) => fact.holds(row))) return 'RUNNING';
-  return turn === 'QUEUED' ? 'PENDING' : 'IDLE';
+  return turn === 'QUEUED' || ARMED_RETRY.holds(row) ? 'PENDING' : 'IDLE';
 }
 
 /**
@@ -138,12 +138,12 @@ export function sessionWakes(row: SessionPhaseRow): boolean {
  * `waitingOn`, in this order (the coordinator's ruling of 2026-11-22, task 5.1):
  *   1. PERSON — somebody owes the session an answer it asked for: `pendingApprovals` (live approval cards plus owner
  *      decisions, the count the list row and `session.updated` carry) is above zero. In any phase;
- *   2. a RUNNING session owes nothing else: null — except a released one, which is RUNNING only while an armed retry
- *      will re-send it, and so still waits on that WAKE;
- *   3. HOLD — a PENDING one held (`sessionIsHeld`);
+ *   2. a RUNNING session owes nothing else: null;
+ *   3. WAKE — a PENDING one with no turn queued: an armed retry will re-send it (the owner, 2026-11-26);
+ *      HOLD — a PENDING one whose queued turn is held (`sessionIsHeld`);
  *   4. WAKE — an IDLE one something will wake (`sessionWakes`: a RESUME_SESSION watch, a scheduled wake-up, an armed
- *      retry; on a released session only an armed retry, or a wake-up on a failure release still in Open). A PENDING one
- *      is waiting on its claim, not a wake;
+ *      retry; on a released session only a wake-up on a failure release still in Open, an armed retry being PENDING).
+ *      A PENDING one with a turn queued is waiting on its claim, not a wake;
  *   5. null — nothing. A parked conversation that asked for nothing, and a released one with no retry armed.
  * Not wake sources here, so null when they are all an IDLE session has: an open session request it sent, and a
  * question it asked the owner as coordinator (`ask_owner`) — both answered as a turn, but neither is one of
@@ -156,8 +156,12 @@ export function deriveSessionWaitingOn(
 ): SessionWaitingOn | null {
   if (pendingApprovals > 0) return 'PERSON';
   const phase = deriveSessionPhase(row);
-  if (phase === 'RUNNING') return isReleased(row) ? 'WAKE' : null;
-  if (phase === 'PENDING') return sessionIsHeld(row, hold) ? 'HOLD' : null;
+  if (phase === 'RUNNING') return null;
+  if (phase === 'PENDING') {
+    // No turn queued: the armed retry is what made it PENDING, and it will give the session its turn.
+    if (isReleased(row) || turnStateOf(row) !== 'QUEUED') return 'WAKE';
+    return sessionIsHeld(row, hold) ? 'HOLD' : null;
+  }
   return sessionWakes(row) ? 'WAKE' : null;
 }
 

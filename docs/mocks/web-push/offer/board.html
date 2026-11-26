@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web Push · 登录后一次性提示</title>
+<style>
+  body { margin:0; background:#e9e9ee; }
+  section.b-part { width:1400px; margin:0 auto 24px; padding:32px 40px; background:#fff; font:15px/1.6 Inter,"Noto Sans SC",sans-serif; color:#1d1d1f; box-sizing:border-box; }
+  h1 { font-size:26px; margin:0 0 4px; } h2 { font-size:20px; margin:0 0 6px; }
+  .b-sub { color:#6e6e73; margin:0 0 18px; }
+  .b-row { display:flex; gap:24px; align-items:flex-start; }
+  .b-col { flex:1; min-width:0; }
+  .b-col img, .b-ph img { width:100%; border:1px solid #d2d2d7; border-radius:8px; display:block; }
+  .b-ph { width:260px; flex:none; }
+  .b-cap { font-size:14px; margin:8px 0 0; }
+  .b-tag { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:6px; background:#eef4ff; color:#0a84ff; margin-bottom:8px; }
+  table.b-t { width:100%; border-collapse:collapse; font-size:14px; margin-top:6px; }
+  table.b-t th, table.b-t td { border-bottom:1px solid #e5e5ea; padding:9px 10px; text-align:left; vertical-align:top; }
+  table.b-t th { color:#6e6e73; font-weight:600; font-size:13px; }
+  .b-rec { color:#0b7a33; font-weight:600; }
+  ul { margin:6px 0 0; padding-left:20px; } li { margin:4px 0; }
+</style></head><body>
+<section class="b-part" id="part-1">
+  <h1>登录后一次性提示 · 两种位置（真实页面）</h1>
+  <p class="b-sub">当前分支构建的真实 Web，假数据，1280×760 @2x。文字：「Get Orbit alerts in this browser, even with no Orbit tab open.」一个 Turn on，一个 ✕（Not now）。</p>
+  <div class="b-row">
+    <div class="b-col"><span class="b-tag">方案 A · 顶部横条</span><img src="bar-light.png"><p class="b-cap">整页最上方一条 40px 蓝色浅底横条，位置和「Viewing as」那条一样，页面整体下移 40px，答完就收起。</p></div>
+    <div class="b-col"><span class="b-tag">方案 B · 侧栏底部卡片</span><img src="rail-light.png"><p class="b-cap">左侧栏账号上方一张小卡片，不挪动页面，安静一些。</p></div>
+  </div>
+</section>
+<section class="b-part" id="part-2">
+  <h2>深色、手机</h2>
+  <div class="b-row">
+    <div class="b-col"><span class="b-tag">A · 深色</span><img src="bar-dark.png"></div>
+    <div class="b-col"><span class="b-tag">B · 深色</span><img src="rail-dark.png"></div>
+  </div>
+  <div class="b-row" style="margin-top:20px">
+    <div class="b-ph"><span class="b-tag">A · 手机</span><img src="bar-phone.png"><p class="b-cap">手机上一行放不下，只留前半句「Get Orbit alerts in this browser」。</p></div>
+    <div class="b-ph"><span class="b-tag">B · 手机（打开菜单后）</span><img src="rail-phone.png"><p class="b-cap">手机上卡片在抽屉菜单里，要点 ☰ 才看得到。</p></div>
+    <div class="b-col">
+      <h2>行为（两种方案相同）</h2>
+      <ul>
+        <li><b>什么时候出现</b>：登录后的页面上，只要服务器配了 Web Push、浏览器支持、这个浏览器还<b>从没被问过</b>（权限是 default）、也没在这里关掉过。</li>
+        <li><b>Turn on</b>：直接弹出浏览器自己的「允许通知」。允许 → 开好，右下角提示「Notifications are on in this browser.」；拒绝 → 浏览器以后自己会挡，提示条也不再出现。</li>
+        <li><b>✕</b>：这个浏览器以后不再提示。随时可以去 Settings → Notifications 打开。</li>
+        <li><b>一次性</b>是按浏览器记的（localStorage）：换一台电脑或另一个浏览器，会再问一次；同一个浏览器换账号不会再问。</li>
+        <li>已经在设置里开过、或在浏览器里点过阻止的：不出现。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+<section class="b-part" id="part-3">
+  <h2>待定 · 要你拍板</h2>
+  <table class="b-t">
+    <tr><th style="width:14%"></th><th>方案 A · 顶部横条</th><th>方案 B · 侧栏底部卡片</th><th style="width:26%">建议</th></tr>
+    <tr><td><b>D4</b> 放哪</td><td>最显眼，手机上也直接看到；页面下移 40px，直到回答。</td><td>不挪页面、更安静；但容易被忽略，手机上藏在菜单里。</td><td class="b-rec">A：你要的是“横条”，只出现一次，手机也能看到。</td></tr>
+  </table>
+  <h2 style="margin-top:22px">落地</h2>
+  <ul>
+    <li>选定后删掉另一种（原型里两种都挂着，截图时各去掉一个）。</li>
+    <li>测试：出现条件的四种情况（已开、已拒绝、关过、服务器没配）不出现；Turn on 允许 / 拒绝 / 出错；✕ 记住。</li>
+    <li>合入 main，部署生产。</li>
+  </ul>
+</section>
+</body></html>

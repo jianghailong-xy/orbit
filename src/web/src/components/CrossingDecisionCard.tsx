@@ -21,6 +21,7 @@ import {
   CROSSING_TO_THIS_PROJECT,
   anotherEndLine,
   answeredBadge,
+  answeredTitle,
   approveConsequence,
   batchDecidedAt,
   batchReasons,
@@ -36,6 +37,7 @@ import {
   moveBatches,
   notRecordedNote,
   pendingRows,
+  reasonsHead,
   receiptVerdict,
   requestedCriterionLine,
   showMore,
@@ -74,7 +76,7 @@ function refusalText(error: Error): string {
   return typeof code === 'string' ? `${code} ${error.message}` : error.message;
 }
 
-function CrossingItem({ row, refusal }: { row: ProjectCrossingRow; refusal: Error | undefined }) {
+function CrossingItem({ row, refusal, showState }: { row: ProjectCrossingRow; refusal: Error | undefined; showState: boolean }) {
   const requested = requestedCriterionLine(row);
   const withdrawn = withdrawnCriterionLine(row);
   return (
@@ -82,7 +84,7 @@ function CrossingItem({ row, refusal }: { row: ProjectCrossingRow; refusal: Erro
       <span className="crossing-decision-item-title">{subjectTitle(row)}</span>
       {requested ? <span className="crossing-decision-item-crit">{requested}</span> : null}
       {withdrawn ? <span className="crossing-decision-item-crit">{withdrawn}</span> : null}
-      {row.state === 'PENDING' ? null : (
+      {!showState || row.state === 'PENDING' ? null : (
         <span className="crossing-decision-item-crit">{labelFor(CROSSING_STATE_LABEL, row.state)}</span>
       )}
       {refusal ? (
@@ -148,8 +150,14 @@ export function CrossingDecisionCard({
     }),
   };
   const live = isLive(batch);
-  const title = crossingTitle(batch.kind, batch.rows.length, batch.targetTitle, batch.out);
-  const badge = live ? crossingBadge(batch.kind) : answeredBadge(batch.kind, batchVerdict(batch), batch.out);
+  const verdict = batchVerdict(batch);
+  const title = live
+    ? crossingTitle(batch.kind, batch.rows.length, batch.targetTitle, batch.out)
+    : answeredTitle(batch.kind, batch.rows.length, verdict, batch.targetTitle, batch.out);
+  const badge = live ? crossingBadge(batch.kind) : answeredBadge(batch.kind, verdict, batch.out);
+  // Once every row went the same way the receipt says it; a row's own state only tells a mixed or
+  // still-open batch apart.
+  const rowStates = live || verdict === 'MIXED';
   const labels = decisionLabels(batch);
   const summary = crossingSummary(batch);
   const refused = batch.rows.filter((row) => refusals[row.id]).length;
@@ -192,7 +200,7 @@ export function CrossingDecisionCard({
             <p className="crossing-decision-label">{crossingListHead(batch.kind, batch.out)}</p>
             <ul className="crossing-decision-list">
               {shown.map((row) => (
-                <CrossingItem key={row.id} row={row} refusal={refusals[row.id]} />
+                <CrossingItem key={row.id} row={row} refusal={refusals[row.id]} showState={rowStates} />
               ))}
               {hidden > 0 ? (
                 <li className="crossing-decision-item">
@@ -202,11 +210,12 @@ export function CrossingDecisionCard({
                 </li>
               ) : null}
             </ul>
+            {reasons.length > 0 ? <p className="crossing-decision-label">{reasonsHead(reasons.length)}</p> : null}
             {reasons.map((reason) => (
               <p key={reason} className="crossing-decision-quote">{`“${reason}”`}</p>
             ))}
             {flip.foot}
-            <p className="crossing-decision-note">{approveConsequence(batch)}</p>
+            {live ? <p className="crossing-decision-note">{approveConsequence(batch)}</p> : null}
             {batchRefusal ? (
               <p className="crossing-decision-item-refused" role="alert">
                 <strong>{CROSSING_NOT_RECORDED}</strong> {refusalText(batchRefusal)}

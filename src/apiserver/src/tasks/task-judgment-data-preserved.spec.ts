@@ -3549,6 +3549,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // touched; no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another writer
       // of the DONE fence.
       '1669_codex_reset_operation_account_slot',
+      // 1670 restates 1667's six-argument session_phase_of (an armed retry reads PENDING, held or released) and writes
+      // phase alone on the rows with retry_at set that it reads differently. Only `session` is touched; no preserved
+      // relation, trigger, function of one or DONE fence changes.
+      '1670_session_phase_retry_pending',
       // 1671 (deploy D3) adds an eight-argument session_legacy_status and points the nine-argument one at it, drops the
       // stored-word fallback from session_held_turn_state, replaces session_aa_turn_state_from_status (and its function)
       // with session_aa_status_from_facts, which writes session.status from the facts, and re-creates nine session

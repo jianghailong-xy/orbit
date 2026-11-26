@@ -88,20 +88,21 @@ function combinations(): Case[] {
 }
 
 /** The rule as the design and the coordinator's ruling of 2026-11-22 state it, with the owner's of 2026-11-26: a
- *  released session an armed retry will re-send is RUNNING, and still waits on that wake. */
+ *  session an armed retry will re-send is PENDING, held or released, unless it executes, and waits on that wake. */
 function expected(c: Case): { phase: string; waitingOn: string | null } {
   const status = c.status;
   const executing = status === 'RUNNING' || (OPEN.has(status) && (c.facts.engine || c.facts.subagent || c.facts.job));
-  const retrying = RELEASED.has(status) && c.facts.retry;
-  const phase = executing || retrying ? 'RUNNING' : status === 'PENDING' ? 'PENDING' : 'IDLE';
+  const queued = status === 'PENDING';
+  const retrying = !executing && !queued && c.facts.retry;
+  const phase = executing ? 'RUNNING' : queued || retrying ? 'PENDING' : 'IDLE';
   let waitingOn: string | null = null;
   if (c.owed > 0) waitingOn = 'PERSON';
   else if (retrying) waitingOn = 'WAKE';
   else if (phase === 'PENDING') waitingOn = c.holdKind === 'notice' || c.holdKind === 'runnerUnavailable' || c.holdKind === 'dispatchPaused' ? 'HOLD' : null;
-  // A released row comes back only by an armed retry here: its outcome is null, so it is no failure release, and only a
-  // failure release in Open is revived by a wake-up; a watch never revives a released session.
-  else if (phase === 'IDLE' && RELEASED.has(status)) waitingOn = c.facts.retry ? 'WAKE' : null;
-  else if (phase === 'IDLE') waitingOn = c.facts.watch || c.facts.wakeup || c.facts.retry ? 'WAKE' : null;
+  // A released row comes back only by an armed retry here (PENDING, above): its outcome is null, so it is no failure
+  // release, and only a failure release in Open is revived by a wake-up; a watch never revives a released session.
+  else if (phase === 'IDLE' && RELEASED.has(status)) waitingOn = null;
+  else if (phase === 'IDLE') waitingOn = c.facts.watch || c.facts.wakeup ? 'WAKE' : null;
   return { phase, waitingOn };
 }
 
@@ -128,17 +129,17 @@ test('the invariants hold on every combination', () => {
     const fields = sessionPhaseFields(c.row, c.hold, c.owed);
     assert.ok((SESSION_PHASES as readonly string[]).includes(fields.phase), c.key);
     assert.ok(fields.waitingOn === null || (SESSION_WAITING_ON as readonly string[]).includes(fields.waitingOn), c.key);
-    // released is the release column; a released session is IDLE, or RUNNING while an armed retry will re-send it
+    // released is the release column; a released session is IDLE, or PENDING while an armed retry will re-send it
     // (design §4.2, amended 2026-11-26).
     assert.equal(fields.released, RELEASED.has(c.status), c.key);
-    if (fields.released) assert.equal(fields.phase, c.row.retryAt != null ? 'RUNNING' : 'IDLE', c.key);
-    // A held RUNNING session waits on a person or on nothing; a released one on a person or its retry's wake; a hold is
-    // a queued turn's; a wake is an idle session's, or a released one's that its retry will re-send.
-    if (fields.phase === 'RUNNING') {
-      assert.ok(fields.waitingOn === 'PERSON' || fields.waitingOn === (fields.released ? 'WAKE' : null), c.key);
-    }
+    if (fields.released) assert.equal(fields.phase, c.row.retryAt != null ? 'PENDING' : 'IDLE', c.key);
+    // A RUNNING session waits on a person or on nothing; a hold is a queued turn's; a wake is an idle session's, or a
+    // PENDING one's that an armed retry will re-send.
+    if (fields.phase === 'RUNNING') assert.ok(fields.waitingOn === 'PERSON' || fields.waitingOn === null, c.key);
     if (fields.waitingOn === 'HOLD') assert.equal(fields.phase, 'PENDING', c.key);
-    if (fields.waitingOn === 'WAKE') assert.equal(fields.phase, fields.released && c.row.retryAt != null ? 'RUNNING' : 'IDLE', c.key);
+    if (fields.waitingOn === 'WAKE') {
+      assert.ok(fields.phase === 'IDLE' || (fields.phase === 'PENDING' && c.row.retryAt != null), c.key);
+    }
   }
 });
 
@@ -150,10 +151,17 @@ test('the shapes the ruling names answer as it says', () => {
   const failed: SessionPhaseRow = { turnState: null, finishedAt: AT };
   assert.equal(deriveSessionWaitingOn(failed, NO_HOLD, 0), null);
   assert.equal(deriveSessionWaitingOn({ ...failed, retryAt: AT }, NO_HOLD, 0), 'WAKE');
-  // Waiting for that retry counts as running (the owner, 2026-11-26); a held session's armed retry does not.
+  // Waiting for that retry is PENDING (the owner, 2026-11-26), held or released, and waits on its wake; a held one
+  // that still runs a background job is RUNNING; a queued turn with a retry armed is a queued turn.
   assert.equal(deriveSessionPhase(failed), 'IDLE');
-  assert.equal(deriveSessionPhase({ ...failed, retryAt: AT }), 'RUNNING');
-  assert.equal(deriveSessionPhase({ ...base, retryAt: AT }), 'IDLE');
+  assert.equal(deriveSessionPhase({ ...failed, retryAt: AT }), 'PENDING');
+  assert.equal(deriveSessionPhase({ ...base, retryAt: AT }), 'PENDING');
+  assert.equal(deriveSessionWaitingOn({ ...base, retryAt: AT }, NO_HOLD, 0), 'WAKE');
+  assert.equal(deriveSessionPhase({ ...base, retryAt: AT, runningBgJobs: ['bgj_job'] }), 'RUNNING');
+  const queuedTurn: SessionPhaseRow = { turnState: 'QUEUED', finishedAt: null, retryAt: AT };
+  assert.equal(deriveSessionPhase(queuedTurn), 'PENDING');
+  assert.equal(deriveSessionWaitingOn(queuedTurn, NO_HOLD, 0), null);
+  assert.equal(deriveSessionWaitingOn(queuedTurn, { dispatchPaused: true, runnerUnavailable: false }, 0), 'HOLD');
   // A wake-up revives a release by a failure (released, no end asked, the turn FAILED) while it is filed in Open; a
   // watch never revives a released session; an end that was asked for is not revived by either.
   const crashed: SessionPhaseRow = { ...failed, lastTurnOutcome: 'FAILED', endReason: null };
