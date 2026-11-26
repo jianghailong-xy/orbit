@@ -143,6 +143,14 @@ A promotion into main, step by step. A session's Merge goes the same way from st
 
 1. As today, `CHECK_PROMOTION` checks the combination and the owner confirms it, or Automatic does. M7 is unchanged:
    Orbit's yes still comes before anything reaches main.
+   - **On a `MAIN` line that yes is always the owner's, with Automatic on or off.** Every merge into main waits for the
+     owner's `PROMOTION_APPROVAL` (`confirmedAutomatically = false`), and so does every fix generation of a landing
+     that failed. This is intended (owner decision 2026-09-23; the contract's M7 and M-T11): Automatic merges by itself
+     only a project's own integration branch, whose staging is what says the merge is clean, and a `MAIN` line has none.
+     `automaticAuthorizationRefusal` (`src/apiserver/src/projects/project-promotion.ts`) refuses anything but a
+     `PROJECT_BRANCH` source on a `PROJECT_BRANCH` line, and `project_promotion_automatic_chk` (migration
+     `0301_project_promotion_automatic_merge`) keeps a task branch's promotion from being recorded as confirmed by
+     Automatic. A catch-up under a pull request (§4.5) keeps the confirmation it already has and asks nothing again.
 2. A runner claims the `LAND_PROMOTION` with `landVia: PULL_REQUEST` and `landingRef: refs/heads/orbit/land/<id>`,
    where `<id>` is the landing session's id. Fetch, merge or rebase, and checks run exactly as today (M-S1 to M-S3).
 3. At M-S4 the runner pushes the tested commit to main as it does today, with today's credential order. If GitHub
@@ -574,7 +582,8 @@ every write.
 | `PUT /admin/integrations/github` | `webhookSecret`, write-only; left out, the saved one stays |
 | `POST /api/integrations/github/webhook` | GitHub's deliveries. No session; the signature is checked against the saved secret. Answers 202 at once; the re-read happens after |
 
-**Read models.** The landing view (`landing-view.ts:33`), `LandTaskIntegrationView` (`src/shared/src/project-progress.ts:868`),
+**Read models.** The landing view (`landing-view.ts:33`), `LandTaskIntegrationView` (`src/shared/src/project-progress.ts:868`;
+on a `MAIN` line, whose tasks have no `LAND_TASK`, it is the task branch's `LAND_PROMOTION` once that lands through a pull request),
 `ProjectIntegrationView.inFlight` and the session detail gain one optional block:
 
 ```ts
