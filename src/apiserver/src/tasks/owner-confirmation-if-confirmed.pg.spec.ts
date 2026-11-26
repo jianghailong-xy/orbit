@@ -45,11 +45,11 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 
 import { isReleasedStatus } from '../common/session-release';
@@ -66,6 +66,8 @@ import { readOwnerConfirmation } from './owner-confirmation-read';
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
 import { prerequisiteLandedSql } from './task-dependencies';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import type { SessionFixture } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -168,19 +170,19 @@ async function waitingRun(
     declared?: string;
     stopped: string;
     legacy?: boolean;
-    session?: Partial<Prisma.SessionUncheckedCreateInput>;
+    session?: SessionFixture;
   },
 ): Promise<{ sessionId: string; requestId: string }> {
   const sessionId = randomUUID();
-  const status = run.session?.status ?? RunStatus.AWAITING_INPUT;
+  const { status = RunStatus.AWAITING_INPUT, ...session } = run.session ?? {};
   await db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `run of ${taskId}`, prompt: 'do the work', provider: 'claude',
-      status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       startedAt: new Date(),
-      ...run.session,
-      ...(isReleasedStatus(status) ? { finishedAt: run.session?.finishedAt ?? new Date()} : {}),
+      ...session,
+      ...(isReleasedStatus(status) ? { finishedAt: session.finishedAt ?? new Date()} : {}),
     },
   });
   let seq = 1;
@@ -288,7 +290,7 @@ test('(1) the card names the dependents NOW / WHEN_SLOT_FREES / MANUAL exactly a
       data: {
         id: randomUUID(), ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: busy.workspaceId,
         assignedRunnerId: busy.runnerId, title: 'the run the busy runner is on', prompt: 'busy',
-        provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+        provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
       },
     });
@@ -302,7 +304,7 @@ test('(1) the card names the dependents NOW / WHEN_SLOT_FREES / MANUAL exactly a
     const occupying = await s.db.task.count({
       where: {
         projectId, status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
-        sessions: { some: { status: { in: [RunStatus.AWAITING_INPUT] } } },
+        sessions: { some: { finishedAt: null, turnState: null } },
       },
     });
     assert.equal(occupying, 1, 'CONTROL: the project is at its limit, held by the confirmed task\'s own run');
@@ -751,7 +753,7 @@ test('(8) DONE on a branch with no changes queues nothing while its work moves, 
       await s.db.$transaction(async (tx) => {
         const finished = await tx.session.update({
           where: { id: sessionId },
-          data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), branchSha: 'b'.repeat(40) },
+          data: { turnState: null, finishedAt: new Date(), branchSha: 'b'.repeat(40) },
           select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
         });
         await settleDeliveredIdentityAfterFinish(tx, finished);

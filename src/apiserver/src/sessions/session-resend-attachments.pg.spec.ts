@@ -3,7 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +13,7 @@ import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-tes
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * Retry re-sends a message with the ids of the files it went out with.
@@ -108,7 +110,7 @@ async function fixture(db: PrismaClient, label: string, status: RunStatus, store
       engineTurnActive: false,
       runtimeSessionId: randomUUID(),
       startedAt: new Date(),
-      status,
+      turnState: turnStateOfWord(status),
       ...(isReleasedStatus(status) ? {
         finishedAt: new Date(),
       } : {}),
@@ -191,7 +193,7 @@ test('Retry of a failed run carries its screenshot, as a copy on the new turn',
       // failed too, so the replay meets a terminal run as the first press did.
       await db.session.update({
         where: { id: f.sessionId },
-        data: { status: RunStatus.FAILED, finishedAt: new Date() },
+        data: { turnState: null, finishedAt: new Date() },
       });
       const replayed = await sessions.resume(f.ownerId, f.sessionId, retry) as { turnId: string };
       assert.equal(replayed.turnId, sent.turnId, 'the replay is answered with the turn it queued');
@@ -296,7 +298,7 @@ test('a withdrawn message keeps its file on the session, so the put-back sends i
       });
       assert.deepEqual((await filesOf(db, queued.turnId)).map((file) => file.id), [f.screenshot]);
       // Still PENDING: nothing claimed it.
-      await db.session.update({ where: { id: f.sessionId }, data: { status: RunStatus.PENDING } });
+      await db.session.update({ where: { id: f.sessionId }, data: { turnState: 'QUEUED' } });
 
       await sessions.cancelQueuedTurn(f.ownerId, f.sessionId, queued.turnId);
 

@@ -26,7 +26,8 @@ import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { JwtService } from '@nestjs/jwt';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -172,7 +173,7 @@ test('Feishu: the owner answers the agent\'s question on its card — single, mu
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: 'the work', provider: 'claude',
-        status: RunStatus.RUNNING, engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+        turnState: 'IN_FLIGHT', engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
         runtimeSessionId: randomUUID(),
       },
     });

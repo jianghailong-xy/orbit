@@ -18,7 +18,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -38,17 +39,22 @@ import {
   SESSION_SOURCE_SELECT,
   SESSION_SOURCE_TASK_SELECT,
 } from './session-source';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const SHA = (c: string) => c.repeat(40);
 
 /**
- * The historical repair runs here against the current schema, which also requires a release cause.
+ * The historical repair runs here against the current schema, which also requires a release cause, and since deploy
+ * D3 reads and writes the facts (migration 1671 stores the word from them): it releases with the failed turn that
+ * reads FAILED, and picks RUNNING rows by their turn state.
  */
 const REPAIR_SQL = readFileSync(
   path.resolve(__dirname, '../../prisma/migrations/0394_close_refused_running_shells/migration.sql'),
   'utf8',
-).replace(`SET "status" = 'FAILED',`, `SET "status" = 'FAILED',`);
+)
+  .replace(`SET "status" = 'FAILED',`, `SET "turn_state" = NULL, "last_turn_outcome" = 'FAILED',`)
+  .replaceAll(`s."status" = 'RUNNING'`, `s."finished_at" IS NULL AND s."turn_state" = 'IN_FLIGHT'`);
 
 interface World {
   ownerId: string;
@@ -136,7 +142,7 @@ async function createSession(
     data: {
       title: 'dispatch',
       prompt: 'do the thing',
-      status: RunStatus.PENDING,
+      turnState: 'QUEUED',
       ownerId: w.ownerId,
       creatorId: w.ownerId,
       workspaceId: w.workspaceId,
@@ -446,7 +452,7 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     await db.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         runClaimedAt: new Date(),
         inboxLeaseOwner: leaseOwner,
         inboxLeaseGeneration: generation,
@@ -474,11 +480,11 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     const row = await db.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: {
-        status: true, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
+        ...WORD_SELECT, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
         inboxLeaseGeneration: true, numTurns: true, sourceState: true, 
       },
     });
-    assert.equal(row.status, RunStatus.FAILED, 'a refused run was left running');
+    assert.equal(wordOf(row), RunStatus.FAILED, 'a refused run was left running');
     assert.equal(row.error, `BASE_REF_NOT_FOUND: ${stderr}`);
     assert.ok(row.finishedAt instanceof Date && row.finishedAt >= before && row.finishedAt <= after);
     assert.equal(row.numTurns, 0, 'the refused run reported turns');
@@ -532,7 +538,7 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
         sourceState: 'REFUSED',
         sourceRefusalCode: 'BASE_REF_NOT_FOUND',
         sourceRefusalDetail: refusalDetail,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         runClaimedAt: new Date(),
         inboxLeaseOwner: shellLeaseOwner,
         inboxLeaseGeneration: shellGeneration,
@@ -559,7 +565,7 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
         id: orphanShell, ownerId: w.ownerId, creatorId: w.ownerId, taskId: orphanTask.id,
         workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
         title: 'refused without a project', prompt: 'do the thing', provider: 'claude',
-        providerBuiltin: true, status: RunStatus.RUNNING,
+        providerBuiltin: true, turnState: 'IN_FLIGHT',
         sourceState: 'REFUSED', sourceKind: 'PROJECT_UPSTREAM',
         sourceCodebaseId: w.codebaseId, sourceRepoUrl: 'https://github.com/acme/widgets',
         sourceRef: ref, sourceRefAuthority: 'REMOTE', sourceConfigRevision: 0n,
@@ -576,11 +582,11 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     const closed = await db.session.findUniqueOrThrow({
       where: { id: shell },
       select: {
-        status: true, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
+        ...WORD_SELECT, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
         sourceState: true, updatedAt: true,
       },
     });
-    assert.equal(closed.status, RunStatus.FAILED);
+    assert.equal(wordOf(closed), RunStatus.FAILED);
     assert.equal(closed.error, `BASE_REF_NOT_FOUND: ${stderr}`);
     assert.ok(closed.finishedAt instanceof Date, 'the closed shell has no finished_at');
     assert.equal(closed.runClaimedAt, null, 'the closed shell still holds its claim clock');
@@ -591,9 +597,9 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     });
     assert.ok(tombstone.retiredAt instanceof Date, 'the closed shell left its lease generation open');
     const closedOrphan = await db.session.findUniqueOrThrow({
-      where: { id: orphanShell }, select: { status: true, error: true, runClaimedAt: true },
+      where: { id: orphanShell }, select: { ...WORD_SELECT, error: true, runClaimedAt: true },
     });
-    assert.equal(closedOrphan.status, RunStatus.FAILED);
+    assert.equal(wordOf(closedOrphan), RunStatus.FAILED);
     assert.equal(closedOrphan.error, `SOURCE_AUTHORITY_UNREACHABLE: ${stderr}`);
     assert.equal(closedOrphan.runClaimedAt, null);
 

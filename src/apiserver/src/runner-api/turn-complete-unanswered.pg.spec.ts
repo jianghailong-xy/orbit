@@ -50,7 +50,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, type RunInboxResponse } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -64,6 +65,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -150,7 +152,7 @@ async function fixture(
       title: `${label} 的会话`,
       prompt: '把这两张图里的报错讲清楚',
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
@@ -169,7 +171,7 @@ async function fixture(
         title: `${label}: the sender`,
         prompt: 'design the manual charge button',
         provider: 'codex',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
       },
@@ -513,9 +515,9 @@ test('a turn nothing answered goes back in the queue instead of being marked ANS
       'and it is not back in the queue for the engine to read a second time',
     );
     const settled = await db.session.findUniqueOrThrow({
-      where: { id: f.sessionId }, select: { status: true, error: true, retryAt: true },
+      where: { id: f.sessionId }, select: { ...WORD_SELECT, error: true, retryAt: true },
     });
-    assert.equal(settled.status, RunStatus.AWAITING_INPUT, 'the run parks, as after any answered turn');
+    assert.equal(wordOf(settled), RunStatus.AWAITING_INPUT, 'the run parks, as after any answered turn');
     assert.equal(settled.error, null, 'and no failure is reported for it');
     assert.equal(settled.retryAt, null, 'and nothing re-sends it later');
   });

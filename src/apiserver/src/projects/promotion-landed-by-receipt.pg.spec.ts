@@ -43,7 +43,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type {
   IntegrationCheckResult,
   IntegrationJobCommand,
@@ -231,7 +232,7 @@ test('a merge recorded outside the card ends the candidate offering the same bra
       data: {
         ownerId, creatorId: ownerId, taskId: task.id, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
         title: 'the work', prompt: 'do the work', branch,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, startsTaskWork: true,
+        isolationStatus: 'worktree', turnState: null, startsTaskWork: true,
         finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch,
         worktreeDirty: false, changedFiles: [{ path: 'src/the-work.ts' }] as never,
       },

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SESSION_CLAUDE_STEER_WITHDRAW_V1, STEER_WITHDRAW_ERRORS } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 import {

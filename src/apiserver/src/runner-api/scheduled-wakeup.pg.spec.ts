@@ -35,7 +35,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { type Prisma, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type Prisma, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -47,6 +48,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -224,7 +226,7 @@ test('a scheduled wakeup is held by the control plane and delivered as a turn wh
         title: 'a session waiting on CI',
         prompt: 'watch CI and fix what fails',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
         assignedRunnerId: runnerId,
@@ -262,7 +264,7 @@ test('a scheduled wakeup is held by the control plane and delivered as a turn wh
 
   /** What the runner's claim does to a queued session, then the inbox poll that follows it. */
   async function claimAndPoll(sessionId: string): Promise<Reply> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await prisma.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     return request(api, 'GET', `/api/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
   }
 
@@ -375,7 +377,7 @@ test('a scheduled wakeup is held by the control plane and delivered as a turn wh
 
     // The session ends while its wakeup waits.
     assert.equal((await schedule(on.ended, { delaySeconds: 60, reason: 'the session ends first' })).status, 200);
-    await prisma.session.update({ where: { id: on.ended }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), endReason: 'ended' } });
+    await prisma.session.update({ where: { id: on.ended }, data: { turnState: null, finishedAt: new Date(), endReason: 'ended' } });
 
     // A background job's wake turn nobody has been handed yet; a wakeup comes due while it waits.
     const job = 'bgj_0123456789ab';
@@ -424,7 +426,7 @@ test('a scheduled wakeup is held by the control plane and delivered as a turn wh
     assert.equal(settled.state, 'DELIVERED');
     assert.equal(settled.clientTurnId, turn.clientTurnId, 'the wakeup does not name the turn that delivers it');
     const queued = await prisma.session.findUniqueOrThrow({ where: { id: on.due } });
-    assert.equal(queued.status, RunStatus.PENDING, 'the wakeup did not ask for a runner slot');
+    assert.equal(wordOf(queued), RunStatus.PENDING, 'the wakeup did not ask for a runner slot');
     assert.equal(queued.lastUserText, null, "the session list would preview the wakeup as the person's message");
 
     // The first plan of `replaced` came due at the same moment, and nothing was filed for it.
@@ -456,7 +458,7 @@ test('a scheduled wakeup is held by the control plane and delivered as a turn wh
     assert.deepEqual((await wakeupsOf(on.ended)).map((row) => row.state), ['DROPPED']);
     assert.equal((await turnsOf(on.ended)).length, 0, 'a wakeup was queued on a session that has ended');
     const after = await prisma.session.findUniqueOrThrow({ where: { id: on.ended } });
-    assert.equal(after.status, RunStatus.CANCELLED, 'the wakeup revived the session');
+    assert.equal(wordOf(after), RunStatus.CANCELLED, 'the wakeup revived the session');
   });
 
   await t.test("a wakeup due while a job's wake turn is queued joins that turn", async () => {

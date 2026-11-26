@@ -4,8 +4,9 @@
  * session-status-column.spec.ts reads the server's source; what it cannot see are the objects the database holds. On a
  * database every migration has been applied to, this lists each one that names `session.status` or its type
  * `run_status`: the column and the type, trigger column lists and WHEN clauses, function bodies, indexes, CHECKs, views
- * and generated columns. Seeded from today's objects (task T1). The list may only shrink: T6 takes out what it
- * restates, and T15 turns this into the check that the column and the type are gone.
+ * and generated columns. Seeded from today's objects (task T1). The list may only shrink: T6 took out what it
+ * restated, T14 what read the stored word through the NULL fallback, and T15 turns this into the check that the column
+ * and the type are gone.
  *
  * A function body is told by what it says: `NEW.status` / `OLD.status` in a function a trigger on session runs,
  * `<x>.status` in a function that takes a session row, `<alias>.status` or a `SET status` of a statement on the
@@ -22,8 +23,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 
 const URL = process.env.COORDINATOR_PG_URL;
 
-/** Today's objects. Take a line out when a task removes or restates the object; never add one (the four of deploy D1
- *  below are the plan's own, §4.1, added with the migration that installs them, and T6's one function replaces nine
+/** Today's objects. Take a line out when a task removes or restates the object; never add one (the D1 and D3 objects
+ *  below are the plan's own, §4.1, added with the migration that installs them, and T6's one function replaced nine
  *  that read the word each on their own). */
 const NAMING_STATUS: readonly string[] = [
   // The column and the type (T15).
@@ -42,18 +43,17 @@ const NAMING_STATUS: readonly string[] = [
   'trigger session_request_recipient_ended',
   'trigger session_superseded_task_revive_guard',
   'trigger task_owner_confirmation_review_reviewer_ended',
-  // Function bodies: T6 (migration 1641) restated the nine that read it on the facts. They reach the stored word only
-  // through this one, the SQL twin of turnStateOf: a held row with no turn_state, as one not yet backfilled has, reads
-  // its stored word (the project's deploy-order rule, 2026-11-25). T14 takes that read out of it.
-  'function session_held_turn_state',
-  // Deploy D1's own (T2, migration 1611; plan §4.1): the facts follow the word until the readers and writers move.
-  // `session_aa_turn_state_from_status` and its function are replaced in D3 (T14) by the trigger that derives the
-  // word from the facts; `session_zz_phase` loses `status` from its list and `session_turn_state_of_status` (the
-  // backfill's) goes with the type in D4 (T15).
-  'trigger session_aa_turn_state_from_status',
+  // Function bodies: T6 (migration 1641) restated the nine that read it on the facts, and T14 (migration 1671) took the
+  // stored word out of session_held_turn_state, the one they reached it through. None names it now.
+  // Deploy D1's own (T2, migration 1611; plan §4.1): `session_zz_phase` loses `status` from its list and
+  // `session_turn_state_of_status` (the backfill's) goes with the type in D4 (T15). The trigger that kept the facts
+  // from the word went with D3 (T14).
   'trigger session_zz_phase',
-  'function session_turn_state_from_status',
   'function session_turn_state_of_status',
+  // Deploy D3's own (T14, migration 1671; plan §4.1): the word follows the facts, for a rollback to deploy-2 code only.
+  // T15 drops the trigger and its function before the column.
+  'trigger session_aa_status_from_facts',
+  'function session_status_from_facts',
   // Deploy D2's own (migration 1651; plan §4.1): the word and turn_state held equal while both exist. T15 drops it
   // before the column.
   'check session_turn_state_agrees_chk',

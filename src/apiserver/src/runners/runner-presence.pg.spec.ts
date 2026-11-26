@@ -51,7 +51,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -76,6 +77,8 @@ import {
   runnerOfflineSql,
 } from './runner-presence';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -272,14 +275,14 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       await db.session.create({
         data: {
           id, ownerId: on.ownerId, creatorId: on.ownerId, workspaceId: on.workspaceId, assignedRunnerId: on.runnerId, title, prompt: title,
-          provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, runtimeSessionId: randomUUID(),
+          provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', runtimeSessionId: randomUUID(),
           startedAt: new Date(now - 10 * MINUTE), runClaimedAt: new Date(now - 10 * MINUTE),
           dispatchOrigin: SessionDispatchOrigin.USER,
         },
       });
       return id;
     };
-    const stateOf = (id: string) => db.session.findUniqueOrThrow({ where: { id }, select: { status: true, error: true } });
+    const stateOf = async (id: string) => withWord(await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, error: true } }));
     // Thirty runners heard five seconds ago: one silent runner among them is a machine, not an outage. They beat again
     // before each reading below that wants them heard, as runners beating every 30 s would: none of them misses a beat.
     const crowd: string[] = [];
@@ -420,7 +423,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       await db.session.create({
         data: {
           id, ownerId: dana.id, creatorId: dana.id, workspaceId, assignedRunnerId: r.id, title: status, prompt: 'work',
-          provider: 'claude', providerBuiltin: true, status, dispatchOrigin: SessionDispatchOrigin.USER,
+          provider: 'claude', providerBuiltin: true, turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER,
         },
       });
       return id;
@@ -458,14 +461,14 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     await db.session.create({
       data: {
         id: queuedId, ownerId: carol.id, creatorId: carol.id, workspaceId, assignedRunnerId: r.id, title: 'queued',
-        prompt: 'queued', provider: 'claude', providerBuiltin: true, status: RunStatus.PENDING,
+        prompt: 'queued', provider: 'claude', providerBuiltin: true, turnState: 'QUEUED',
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
     await db.session.create({
       data: {
         id: endedId, ownerId: carol.id, creatorId: carol.id, workspaceId, assignedRunnerId: r.id, title: 'ended',
-        prompt: 'ended', provider: 'claude', providerBuiltin: true, status: RunStatus.SUCCEEDED, 
+        prompt: 'ended', provider: 'claude', providerBuiltin: true, turnState: null, 
         startedAt: new Date(Date.now() - 20 * MINUTE), finishedAt: new Date(Date.now() - 15 * MINUTE),
         numTurns: 1, runtimeSessionId: randomUUID(), dispatchOrigin: SessionDispatchOrigin.USER,
       },

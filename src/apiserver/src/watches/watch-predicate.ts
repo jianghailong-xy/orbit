@@ -138,7 +138,7 @@ export type WatchTargetFact =
       /** The word the session reads on the wire (session-legacy-words.ts): what an observation records. */
       status: string;
       /** Where a held session's turn stands (session-turn-state.ts); null when parked or released. */
-      turnState?: string | null;
+      turnState: string | null;
       /** `session.finished_at`: the release column. */
       finishedAt: Date | null;
       endReason: string | null;
@@ -166,7 +166,7 @@ type WatchSessionFact = Extract<WatchTargetFact, { kind: 'SESSION' }>;
 
 function workingRow(fact: WatchSessionFact): SessionWorkingRow {
   return {
-    status: fact.status as SessionWorkingRow['status'],
+    turnState: fact.turnState,
     finishedAt: fact.finishedAt,
     engineTurnActive: fact.engineTurnActive,
     runningSubagents: fact.runningSubagents,

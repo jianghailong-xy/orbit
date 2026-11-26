@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, mock, test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
@@ -20,6 +20,8 @@ import { ownerWordsForAgent } from './reply-translation';
 import { ConfigService } from '@nestjs/config';
 import { RealtimeService } from '../realtime/realtime.service';
 import { HELD_MESSAGE_PUSH_BODY, PushService } from '../push/push.service';
+import { turnStateOfWord } from './session-turn-state';
+import { writtenWord } from '../test-support/session-word';
 
 /**
  * Settings › Translation, the owner's messages (task A1, @orbit/shared translation.ts): with a stubbed
@@ -63,6 +65,7 @@ function harness(opts: { status?: RunStatus; preferences?: Row; session?: Row; r
     id: SESSION_ID,
     ownerId: OWNER_ID,
     status: opts.status ?? RunStatus.AWAITING_INPUT,
+    turnState: turnStateOfWord(opts.status ?? RunStatus.AWAITING_INPUT),
     deletedAt: null,
     cancelRequestedAt: null,
     prompt: 'opening prompt',
@@ -121,6 +124,8 @@ function harness(opts: { status?: RunStatus; preferences?: Row; session?: Row; r
       update: async ({ data }: { data: Row }) => {
         sessionWrites.push(data);
         Object.assign(session, data);
+        // The writer writes the facts; the double keeps the word they give (deploy D3).
+        session.status = writtenWord(data) ?? session.status;
         return { ...session };
       },
     },

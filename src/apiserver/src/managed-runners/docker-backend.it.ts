@@ -62,6 +62,7 @@ import { DockerChannelClient } from './docker-channel-client';
 import { ManagedRunnerManager } from './managed-runner-manager';
 import type { DockerRunnerProfile } from './managed-runner-profile';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -378,8 +379,8 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     const id = randomUUID();
     await sql.query(
       `INSERT INTO "session" (id, owner_id, creator_id, workspace_id, assigned_runner_id, title, prompt, provider, provider_builtin, engine,
-                              status, num_turns, runtime_session_id, started_at, updated_at)
-       VALUES ($1, $2, $2, $3, $4, 'earlier work', 'the opening prompt', 'codex', true, 'codex', 'AWAITING_INPUT', 1, $5, now(), now())`,
+                              turn_state, num_turns, runtime_session_id, started_at, updated_at)
+       VALUES ($1, $2, $2, $3, $4, 'earlier work', 'the opening prompt', 'codex', true, 'codex', NULL, 1, $5, now(), now())`,
       [id, m.ownerId, workspace.id, m.runnerId, randomUUID()],
     );
     return id;
@@ -388,16 +389,16 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
   async function claimedThenEnded(o: Owner, sessionId: string, since: Date): Promise<Record<string, unknown>> {
     const claimed = await until(`session ${sessionId} claimed`, async () => {
       const s = await db.session.findUnique({ where: { id: sessionId } });
-      return s && s.runClaimedAt && s.runClaimedAt > since && s.status !== 'PENDING' ? s : null;
+      return s && s.runClaimedAt && s.runClaimedAt > since && wordOf(s) !== 'PENDING' ? s : null;
     }, 180_000, 500);
     const ended = await api('POST', `/api/sessions/${sessionId}/end`, o.token);
     assert.ok(ended.status < 300 || ended.status === 409, `end: ${ended.status} ${ended.text}`);
     await until(`session ${sessionId} settled`, async () => {
       const s = await db.session.findUnique({ where: { id: sessionId } });
-      return s && !['PENDING', 'RUNNING'].includes(s.status);
+      return s && !['PENDING', 'RUNNING'].includes(wordOf(s));
     }, 180_000, 1_000);
     await sql.query(`UPDATE "session" SET retry_at = NULL WHERE id = $1`, [sessionId]);
-    return { sessionId, runClaimedAt: claimed.runClaimedAt?.toISOString(), statusAfterClaim: claimed.status, assignedRunnerId: claimed.assignedRunnerId };
+    return { sessionId, runClaimedAt: claimed.runClaimedAt?.toISOString(), statusAfterClaim: wordOf(claimed), assignedRunnerId: claimed.assignedRunnerId };
   }
 
   /** Codex signed in with a placeholder key, by an operator; the internal network reaches no model. */

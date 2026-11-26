@@ -32,11 +32,11 @@ import { test } from 'node:test';
 
 import {
   type PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   CONTINUE_MESSAGE,
   RunEventType,
@@ -59,6 +59,7 @@ import { AutoRetryService } from './auto-retry.service';
 import { SessionsService } from './sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -135,7 +136,7 @@ test('a transient failure of the turn a job\'s exit was steered into re-sends th
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       },
@@ -172,7 +173,7 @@ test('a transient failure of the turn a job\'s exit was steered into re-sends th
   async function claimSession(sessionId: string): Promise<void> {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
   }
 
@@ -230,7 +231,7 @@ test('a transient failure of the turn a job\'s exit was steered into re-sends th
       numTurns: 1, costUsd: 0, error: OVERLOADED,
     } as never);
     const failed = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'the overload armed no retry');
   }
 
@@ -365,7 +366,7 @@ test('a transient failure of the turn a job\'s exit was steered into re-sends th
         'the retry of a failed wake re-sent the message before it instead of continuing the session');
       const after = await prisma.session.findUniqueOrThrow({ where: { id } });
       assert.equal(after.retryAt, null, 'the claimed retry was not cleared');
-      assert.equal(after.status, RunStatus.PENDING, `the session was not picked back up: ${after.status}`);
+      assert.equal(wordOf(after), RunStatus.PENDING, `the session was not picked back up: ${wordOf(after)}`);
     });
   }
 });

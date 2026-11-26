@@ -16,7 +16,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
-import { type PrismaClient, type Runner, RunnerStatus, RunStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { type PrismaClient, type Runner, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   RunStatus as SharedRunStatus,
   SESSION_CLAUDE_STEER_WITHDRAW_V1,
@@ -36,6 +37,7 @@ import {
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -91,7 +93,7 @@ test('a steer is taken back through the runner, and only the engine\'s word remo
     await prisma.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title: 'fix the export', prompt: 'fix the export', provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title: 'fix the export', prompt: 'fix the export', provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       },
@@ -125,7 +127,7 @@ test('a steer is taken back through the runner, and only the engine\'s word remo
     } as never) as { turnId: string };
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: w.sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: w.sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
     const handed = await dequeue(w);
     assert.equal(handed?.turnId, sent.turnId, 'the running message was not the one handed out');
@@ -175,7 +177,7 @@ test('a steer is taken back through the runner, and only the engine\'s word remo
     // Nothing about the session or the running turn moved.
     const turn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: target } });
     assert.equal(turn.status, 'IN_FLIGHT');
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: w.sessionId } })).status, RunStatus.RUNNING);
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: w.sessionId } }))), RunStatus.RUNNING);
   });
 
   await t.test('a steer the engine had already read stays where it was, and the person is told so', async () => {

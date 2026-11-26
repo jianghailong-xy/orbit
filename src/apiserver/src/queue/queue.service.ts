@@ -495,9 +495,8 @@ export class QueueService {
           id: string; engine: string | null; provider: string; providerBuiltin: boolean; ownerId: string;
         }>>(Prisma.sql`
         UPDATE "session" SET
-          -- QUEUED to IN_FLIGHT, the word beside it (deploy 2 writes both; docs/session-status-retirement-plan.md §1.4).
-          -- The engine claim guards (migration 1641) test exactly this transition.
-          status = 'RUNNING',
+          -- QUEUED to IN_FLIGHT (docs/session-status-retirement-plan.md §1.4). The engine claim guards (migration 1641)
+          -- test exactly this transition; migration 1671's trigger keeps the stored word from it, for rollback only.
           "turn_state" = 'IN_FLIGHT',
           -- The pass is spent by whichever claim starts its turn. An overflow claim keeps it, so the RUNNING row says
           -- it runs over the limit until that turn ends (turnComplete clears it); an ordinary one started the turn in
@@ -822,7 +821,6 @@ export class QueueService {
         await this.prisma.session.updateMany({
           where: { id: rows[0].id, ...turnStateFilter(['IN_FLIGHT']) },
           data: {
-            status: 'PENDING',
             turnState: 'QUEUED',
             error: refusal.code === 'POOL_ACCOUNT_PAUSED' ? `Account paused until ${refusal.pausedUntil}` : refusal.message,
           },

@@ -185,8 +185,8 @@ test('a session whose project has settled can still write down what it noticed',
   );
   await sql.query(
     `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-       "provider","status","dispatch_origin","updated_at")
-     VALUES ($1,$2,$3,'settled-coordinator','fixture',$2,'claude','RUNNING'::"run_status",
+       "provider","turn_state","dispatch_origin","updated_at")
+     VALUES ($1,$2,$3,'settled-coordinator','fixture',$2,'claude','IN_FLIGHT',
        'USER'::"session_dispatch_origin",now())`,
     [coordinatorSessionId, ownerId, workspaceId],
   );

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AgentProvider, PermissionMode } from '@orbit/shared';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { CURSOR_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 import { MOVE_REFUSAL, sessionMoveVerdict } from './session-move';

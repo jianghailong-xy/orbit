@@ -38,7 +38,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import type { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -298,7 +298,7 @@ test('the project detail read costs the same number of statements at either size
             taskId: task.id,
             title: `ran ${task.id}`,
             prompt: 'do the work',
-            status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+            turnState: null, finishedAt: new Date(), 
             branch: `orbit/${label}-${position}-${index}`,
             isolationStatus: 'worktree',
           },

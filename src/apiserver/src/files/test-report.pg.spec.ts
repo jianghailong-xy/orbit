@@ -88,7 +88,7 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
   await db.session.create({
     data: {
       id: sessionId, title: 'a run', prompt: 'a run', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-      status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
+      turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
     },
   });
   const STANDARD = 'The report says the tests pass.';
@@ -103,7 +103,7 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
   await db.session.create({
     data: {
       id: runId, title: 'a run of the task', prompt: 'a run of the task', ownerId, creatorId: ownerId, workspaceId,
-      assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${runId}`,
+      assignedRunnerId: runnerId, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${runId}`,
       provider: 'claude', taskId, startsTaskWork: true,
     },
   });

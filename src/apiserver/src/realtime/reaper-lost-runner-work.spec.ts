@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RUNNER_SILENT_AFTER_MS, RunnerPresenceService, type CellLosses } from '../runners/runner-presence';

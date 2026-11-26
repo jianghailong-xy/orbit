@@ -159,7 +159,7 @@ test('the runner task door stores, clears and moves a scheduled start', { skip, 
     await prisma.session.create({
       data: {
         id, title: 'scheduling through the runner door', prompt: 'scheduling through the runner door',
-        ownerId: owner, creatorId: owner, assignedRunnerId: runnerId, status: 'AWAITING_INPUT',
+        ownerId: owner, creatorId: owner, assignedRunnerId: runnerId, turnState: null,
         startedAt: new Date(), runtimeSessionId: `runtime-${id}`, provider: 'claude',
       },
     });

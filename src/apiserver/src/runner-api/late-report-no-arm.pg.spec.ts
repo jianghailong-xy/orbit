@@ -17,7 +17,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -70,7 +71,7 @@ test('a report after complete arms no retry', { skip: !URL, concurrency: 1, time
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: label, prompt: 'p',
-        provider: 'claude', status: RunStatus.RUNNING, engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
+        provider: 'claude', turnState: 'IN_FLIGHT', engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(), runtimeSessionId: randomUUID(),
       },
     });

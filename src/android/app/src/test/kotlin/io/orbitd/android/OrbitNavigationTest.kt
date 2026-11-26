@@ -28,6 +28,18 @@ class OrbitNavigationTest {
         assertEquals(Destination.WORKSPACES, signedIn.back().current.destination)
     }
 
+    /** A filed session opened over another destination's page gets its workspace's list and its folder's page under it, in the
+     * session's view; the stack it leaves notes no folder page. */
+    @Test fun aFiledSessionLandsOverItsFoldersPage() {
+        val session = OrbitRoute(Destination.SESSION, "s1", origin = Origin.LINK)
+        val shown = OrbitNavigation().bindAccount("server|user").land("Tasks", OrbitRoute(Destination.TASKS)).push(session)
+        val landed = shown.underFolder("w1", "f1", "completed")
+        assertEquals("w1", landed.section)
+        assertEquals(listOf(OrbitRoute(Destination.WORKSPACE, "w1", "w1"), OrbitRoute(Destination.FOLDER, "f1", "w1", sessionView = "completed"), session),
+            landed.frames)
+        assertEquals(OrbitRoute(Destination.FOLDER, "f1", "w1", sessionView = "completed"), landed.back().current)
+    }
+
     /** A05-8 (iOS 3d50935b4, the coordinator's call to follow it): within a destination Back walks its return path —
      * a folder, a search, a session the search opened and the objects it links to — and a drawer row for another
      * destination lands on that destination's root, the stack it leaves going with it. This replaces

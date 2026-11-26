@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunnerStatus, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';

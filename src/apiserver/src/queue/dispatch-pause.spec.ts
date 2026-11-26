@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { GUARDS_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -23,6 +23,7 @@ import { DISPATCH_PAUSED, SESSION_CLAIM_LOCK } from './dispatch-pause';
 import { DispatchPauseController, SetDispatchPauseDto } from './dispatch-pause.controller';
 import { DispatchPauseService } from './dispatch-pause.service';
 import { QueueService } from './queue.service';
+import { writtenWord } from '../test-support/session-word';
 
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const RUNNER = '22222222-2222-4222-8222-222222222222';
@@ -81,7 +82,7 @@ function switchHarness(stored: boolean | null) {
       const { text } = renderRawQuery(args);
       if (/t\."status" = 'PENDING'/.test(text) && /'reload'/.test(text)) return [{ id: SESSION }];
       if (/j\."state" = 'QUEUED'/.test(text)) return [{ runnerId: RUNNER }];
-      if (/\(CASE WHEN s\."finished_at" IS NULL THEN COALESCE\(s\."turn_state", session_turn_state_of_status\(s\."status"\)\) END\) = 'QUEUED'/.test(text) && /SELECT DISTINCT s\."assigned_runner_id"/.test(text)) {
+      if (/\(CASE WHEN s\."finished_at" IS NULL THEN s\."turn_state" END\) = 'QUEUED'/.test(text) && /SELECT DISTINCT s\."assigned_runner_id"/.test(text)) {
         return [{ runnerId: QUEUED_RUNNER }];
       }
       return [];
@@ -182,7 +183,7 @@ function inboxHarness({ paused, waiting }: { paused?: boolean; waiting: boolean 
   let state = {
     id: SESSION, provider: 'claude', providerBuiltin: true, engine: 'claude', ownerId: OWNER, taskId: null,
     inboxLeaseGeneration: GENERATION as string | null, inboxLeaseOwner: OWNER as string | null,
-    status: RunStatus.RUNNING as RunStatus, engineTurnActive: true,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING as RunStatus, engineTurnActive: true,
     ...(paused === undefined ? {} : { dispatchPaused: paused }),
   };
   let retired = false;
@@ -242,7 +243,7 @@ test('while paused, a run with nothing in flight and its next turn queued goes b
     error instanceof ConflictException && /runner dispatch is paused/.test(error.message));
   const result = h.snapshot();
   assert.equal(result.committed, true, 'the 409 must not roll the requeue back');
-  assert.equal(result.state.status, RunStatus.PENDING);
+  assert.equal(writtenWord(result.state), RunStatus.PENDING);
   assert.equal(result.state.inboxLeaseOwner, null, 'the supervisor holding it lets go');
   assert.equal(result.state.inboxLeaseGeneration, GENERATION, 'the retired generation stays as the fence');
   assert.equal(result.state.engineTurnActive, false);
@@ -255,7 +256,7 @@ test('while paused, a run with a turn in flight keeps it, and the poll goes on t
   const h = inboxHarness({ paused: true, waiting: false });
   assert.equal(await h.dequeue(), null);
   const result = h.snapshot();
-  assert.equal(result.state.status, RunStatus.RUNNING);
+  assert.equal(writtenWord(result.state), RunStatus.RUNNING);
   assert.equal(result.retired, false);
   assert.notEqual(result.lease, '', 'control turns and steers are still asked for');
   assert.deepEqual(result.announcements, []);
@@ -267,7 +268,7 @@ test('with the pause off nothing is asked about it and the poll is the one it al
     assert.equal(await h.dequeue(), null);
     const result = h.snapshot();
     assert.equal(result.heldQueries, 0);
-    assert.equal(result.state.status, RunStatus.RUNNING);
+    assert.equal(writtenWord(result.state), RunStatus.RUNNING);
     assert.notEqual(result.lease, '');
   }
 });

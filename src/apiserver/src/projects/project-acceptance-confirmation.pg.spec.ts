@@ -69,11 +69,11 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { type ProjectStartedCard, RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -244,7 +244,7 @@ test('the owner confirms one version of a project’s acceptance standard set, a
         title,
         prompt: 'act on this project',
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: origin,
         startsTaskWork: false,
       },
@@ -563,7 +563,7 @@ test('the owner confirms one version of a project’s acceptance standard set, a
         title: `协调：${label}`,
         prompt: `协调：${label}`,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),

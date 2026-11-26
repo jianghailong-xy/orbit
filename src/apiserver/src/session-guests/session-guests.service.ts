@@ -281,7 +281,7 @@ export class SessionGuestsService {
           where: { sessionId, kind: { in: ['message', 'shell'] }, status: { in: ['PENDING', 'IN_FLIGHT'] } },
         });
         if (executable === 0) {
-          await tx.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT', turnState: null, lastTurnAt: new Date() } });
+          await tx.session.update({ where: { id: sessionId }, data: { turnState: null, lastTurnAt: new Date() } });
         }
       }
       return take.length;

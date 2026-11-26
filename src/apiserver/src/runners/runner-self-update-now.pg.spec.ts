@@ -25,7 +25,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { Client } from 'pg';
-import { RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   RUNNER_UPDATE_RESUME_NOTE,
   RunEventType,
@@ -99,7 +100,7 @@ test('Update Now: owner only, audited, old runner refused, handed to one heartbe
     const id = randomUUID();
     await db.session.create({ data: {
       id, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId, assignedRunnerId: f.runnerId, title,
-      prompt: 'a long turn', provider, status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+      prompt: 'a long turn', provider, turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(), runClaimedAt: new Date(Date.now() - 47 * 60_000), runtimeSessionId: randomUUID(),
     } });
     return id;

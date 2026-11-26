@@ -11,7 +11,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -82,7 +83,7 @@ test('the non-code mark is written and read back, and decides nothing about land
   await prisma.session.create({
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-      title: 'coordinator', prompt: 'coordinate', provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      title: 'coordinator', prompt: 'coordinate', provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(), runtimeSessionId: randomUUID(),
     },
   });

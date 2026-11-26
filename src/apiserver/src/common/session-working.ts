@@ -23,7 +23,7 @@ import { heldFilter, isHeld, sessionHeldSql } from './session-release';
  * "Has not ended" is held: `finished_at IS NULL`.
  *
  * The turn state is read through sessions/session-turn-state.ts (`turnStateOf`, `turnStateFilter`,
- * `sessionTurnStateSql`), which reads a held row's stored word only while its `turn_state` is not yet backfilled.
+ * `sessionTurnStateSql`).
  *
  * Each question, and each fact it is built from, comes in three forms that answer alike on the same
  * row (session-working.pg.spec.ts holds them to it): a TypeScript predicate over a fetched row, a

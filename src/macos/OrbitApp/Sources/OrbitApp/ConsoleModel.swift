@@ -5566,6 +5566,12 @@ final class ConsoleModel {
     /// That run and its schedule, once found; the detail for whether its finding was new and told.
     private(set) var scheduleRun: (schedule: ScheduleView, run: ScheduleRunView)?
     private(set) var scheduleRunDetail: ScheduleDetailResponse?
+    /// The card this session shows in place of its run's report and the composer, when the run did not get under way
+    /// here (board scheduled-run-not-started ②③④); nil for every other session.
+    var scheduleRunCard: ScheduleRunStatus.Kind? {
+        guard let run = scheduleCards?.run else { return nil }
+        return ScheduleRunStatus.kind(run: run, status: scheduleCards?.runStatus)
+    }
     private var loadingScheduleCards = false
     private var lastScheduleRead = Date.distantPast
 

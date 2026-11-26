@@ -24,7 +24,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { PrismaPg } from '@prisma/adapter-pg';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type {
   IntegrationCheckResult,
   IntegrationJobCommand,
@@ -172,7 +173,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<{ taskId
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId: created.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, branch, isolationStatus: 'worktree', baseSha: sha('e'),
-      status: RunStatus.SUCCEEDED, startsTaskWork: true, finishedAt: new Date(Date.now() - 60_000),
+      turnState: null, startsTaskWork: true, finishedAt: new Date(Date.now() - 60_000),
       worktreeBranch: branch, worktreeDirty: false, changedFiles: [{ path: 'src/the-work.ts' }] as never,
     },
     select: { id: true },

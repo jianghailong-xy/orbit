@@ -598,7 +598,7 @@ import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../li
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
 import { rememberSessionTag, setSessionTags } from '../lib/sessionTags';
-import { SessionTagChips, useSessionTagLevel } from './SessionTagPicker';
+import { useSessionTagLevel } from './SessionTagPicker';
 import {
   isSessionBusy,
   isSessionLive,
@@ -11201,7 +11201,14 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
-            <div className="workspace-title-line">
+            <div className={`workspace-title-line${isMobile && capsuleMounted && topPillShown ? ' shows-jump' : ''}`}>
+              {/* Off the tail, a phone's capsule takes this row — the iOS console's nav-bar principal —
+                  and the title and its badges step aside (`.shows-jump`), so the header is one row in
+                  both states. It stays mounted whether or not it shows: the strip's line inside it is
+                  what tells the capsule when something waits. */}
+              {isMobile && capsuleMounted && (
+                <div className="workspace-title-jump" hidden={!topPillShown}>{topPill(decisionStrip('line'))}</div>
+              )}
               {selected && !selectedTrashed && !composing ? (
                 // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
                 // it is renamed there, in the Name field.
@@ -11280,7 +11287,8 @@ export function WorkspaceView({
                 </Tooltip>
               )}
               {!composing && selectedId && !selectedTrashed && !selectedMissing && (
-                <SessionWatchBadges sessionId={selectedId} follow={isMobile} />
+                // Follow is a ⋯ item on every width now: the phone header has no line to carry the pill.
+                <SessionWatchBadges sessionId={selectedId} follow={false} />
               )}
               {/* The status line is gone from a wide header, so a handoff in flight says so beside the title. */}
               {!isMobile && !composing && handingOver && (
@@ -11300,22 +11308,11 @@ export function WorkspaceView({
                 </Tooltip>
               )}
             </div>
-            {/* docs/mocks/session-header-compact: a wide window's header is the title alone; the run word, the
-                lifecycle, the time and the tags stay on a phone's. */}
-            {/* A draft's phone header is its way back and its name: where it runs is said under the engine. */}
-            {(isMobile || !selected) && !(composing && !machineDraft) && <div className="workspace-sub">
+            {/* A session's header is the title's row alone (owner, 2026-11-26): the run word, the lifecycle,
+                the time and the tags that sat under it on a phone are in ⋯ and the session's settings now.
+                A header with no session row keeps its line — a machine draft says where it will run. */}
+            {!selected && !(composing && !machineDraft) && <div className="workspace-sub">
               {headSub}
-              {/* The session's tags, seen without opening anything; a press opens ⋯ at its Tags level. */}
-              {!composing && selected && !selectedTrashed && (
-                <SessionTagChips
-                  tags={(selected.tags ?? []) as SessionTagRef[]}
-                  compact={isMobile}
-                  onOpen={() => {
-                    setHeaderMenuOpen(true);
-                    setHeaderTagsOpen(true);
-                  }}
-                />
-              )}
             </div>}
             {/* A run of a task forked from a session says where its checkout came from, in the
                 server's own words (docs/task-fork-from-session-design.md §2.3). */}
@@ -11446,17 +11443,17 @@ export function WorkspaceView({
                           levelHeader: headerTagLevel.levelHeader,
                           levelFooter: headerTagLevel.levelFooter,
                         },
-                        ...(!isMobile
-                          ? [{
-                              key: 'follow',
-                              icon: <EyeOutlined />,
-                              label: 'Follow…',
-                              onSelect: () => {
-                                setHeaderMenuOpen(false);
-                                setFollowOpen(true);
-                              },
-                            }]
-                          : []),
+                        // Every width: the phone header has no second line, so the pill that used
+                        // to say Follow there is this item now.
+                        {
+                          key: 'follow',
+                          icon: <EyeOutlined />,
+                          label: 'Follow…',
+                          onSelect: () => {
+                            setHeaderMenuOpen(false);
+                            setFollowOpen(true);
+                          },
+                        },
                         { key: 'divider-share', type: 'separator' as const },
                         // Two words for two links (docs/share-links-design.md §8): Copy link is
                         // the signed-in address, for yourself; Share… is the public one. Keeping a
@@ -11572,14 +11569,11 @@ export function WorkspaceView({
               </div>
             </>
           )}
-          {/* Off the live tail, the transcript's top pill is drawn here instead of floating over the
-              messages: centred in the row on a wide window, and on a line of its own under it on a
-              phone, where a centred pill would leave the title no room. Being in the header, it
-              takes its place in the layout rather than covering the message the reader scrolled
-              to (`.workspace-header-jump.is-phone`). Last in the DOM, so a phone's
-              keyboard order reaches the header's own buttons first. */}
-          {capsuleMounted && (
-            <div className={`workspace-header-jump${isMobile ? ' is-phone' : ''}`} hidden={!topPillShown}>
+          {/* Off the live tail, a wide window draws the transcript's top pill here, centred in the
+              header row instead of floating over the messages; a phone draws it in the title's row
+              (`.workspace-title-jump`). */}
+          {!isMobile && capsuleMounted && (
+            <div className="workspace-header-jump" hidden={!topPillShown}>
               {topPill(decisionStrip('line'))}
             </div>
           )}

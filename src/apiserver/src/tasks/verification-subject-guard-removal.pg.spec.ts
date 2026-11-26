@@ -4,12 +4,12 @@ import test from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskCompletionCriterion,
   TaskCompletionPolicy,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { TRIGGER_WRITE_SOURCES } from '../common/db-write-inventory';
@@ -24,6 +24,8 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * The catalog half of the 0224 removal, against a real PostgreSQL that replayed every migration,
@@ -316,13 +318,13 @@ suite('(d) ordinary session creation, the status transitions and context attachm
     data: {
       id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, workspaceId,
       assignedRunnerId: runnerId, title: 'work', prompt: 'work', provider: 'claude',
-      status: RunStatus.PENDING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'QUEUED', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
   // ...and every transition the UPDATE guard fired on: status, and starts_task_work itself.
   for (const status of [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.RUNNING]) {
-    const moved = await db.session.update({ where: { id: sessionId }, data: { status } });
-    assert.equal(moved.status, status);
+    const moved = await db.session.update({ where: { id: sessionId }, data: { turnState: turnStateOfWord(status) } });
+    assert.equal(wordOf(moved), status);
   }
   const relinked = await db.session.update({
     where: { id: sessionId }, data: { startsTaskWork: false },
@@ -385,7 +387,7 @@ suite('(e) conversation turns still write, including the coordinator-context sta
     data: {
       id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, workspaceId,
       assignedRunnerId: runnerId, title: 'turns', prompt: 'turns', provider: 'claude',
-      status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
 
@@ -444,7 +446,7 @@ suite('(f) verification tasks are still created and dispatched, and the rule sti
     data: {
       id: liveId, ownerId, creatorId: ownerId, taskId: subject.id, workspaceId,
       assignedRunnerId: runnerId, title: 'live', prompt: 'live', provider: 'claude',
-      status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
   const becameSubject = await db.task.update({

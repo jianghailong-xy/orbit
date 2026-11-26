@@ -19,7 +19,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   SESSION_MERGE_RECOVERY_V1,
   mergeRecoveryContinuePrompt,
@@ -39,6 +40,8 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { type SessionFixture, WORD_SELECT, wordOf } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -140,7 +143,7 @@ async function parentSession(db: PrismaClient, w: World, label: string, rec: Mer
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
       title: `${label} parent`, prompt: 'ship the feature', provider: 'claude', providerBuiltin: true,
-      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.SUCCEEDED, startedAt: new Date(Date.now() - 2 * HOUR),
+      dispatchOrigin: SessionDispatchOrigin.USER, turnState: null, startedAt: new Date(Date.now() - 2 * HOUR),
       finishedAt: new Date(Date.now() - HOUR), runtimeSessionId: randomUUID(), numTurns: 1,
       branch: `orbit/${label}-${id.slice(0, 8)}`, isolationStatus: 'worktree',
       mergeRecovery: rec as never, mergeStatus: 'conflict', mergeRecoveryAction: 'preview',
@@ -158,16 +161,17 @@ async function repairSession(
   w: World,
   parentId: string,
   label: string,
-  row: Partial<Prisma.SessionUncheckedCreateInput> = {},
+  fixture: SessionFixture = {},
 ): Promise<string> {
   const id = randomUUID();
   const prompt = mergeRecoveryPrompt(recovery());
+  const { status: word = RunStatus.AWAITING_INPUT, ...row } = fixture;
   await db.session.create({
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
       title: `${label} repair`, prompt, provider: 'claude', providerBuiltin: true,
       dispatchOrigin: SessionDispatchOrigin.USER, source: 'merge-repair', parentSessionId: parentId,
-      status: RunStatus.AWAITING_INPUT, startedAt: new Date(Date.now() - HOUR), runtimeSessionId: randomUUID(),
+      turnState: turnStateOfWord(word), startedAt: new Date(Date.now() - HOUR), runtimeSessionId: randomUUID(),
       numTurns: 1, lastTurnAt: new Date(Date.now() - 30 * 60_000),
       ...row,
     },
@@ -175,9 +179,9 @@ async function repairSession(
   await db.conversationTurn.create({
     data: {
       sessionId: id, seq: 1, clientTurnId: `opening-${id}`, kind: 'message', content: prompt,
-      ...(row.status === RunStatus.RUNNING
+      ...(word === RunStatus.RUNNING
         ? { status: 'IN_FLIGHT', deliveredAt: new Date(), leaseDeadlineAt: new Date(Date.now() + 300_000), leaseGeneration: randomUUID() }
-        : row.status === RunStatus.PENDING
+        : word === RunStatus.PENDING
           ? { status: 'PENDING' }
           : { status: 'ANSWERED', deliveredAt: new Date(Date.now() - HOUR), answeredAt: new Date(Date.now() - 30 * 60_000) }),
     },
@@ -186,7 +190,7 @@ async function repairSession(
 }
 
 /** An ended repair session that can be resumed: its run finished, the runner that holds it online. */
-const ended = (extra: Partial<Prisma.SessionUncheckedCreateInput> = {}): Partial<Prisma.SessionUncheckedCreateInput> => ({
+const ended = (extra: SessionFixture = {}): SessionFixture => ({
   status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 20 * 60_000), ...extra,
 });
 
@@ -196,7 +200,7 @@ function repairsOf(db: PrismaClient, parentId: string) {
     where: { parentSessionId: parentId, source: 'merge-repair' },
     orderBy: { createdAt: 'asc' },
     select: {
-      id: true, status: true, prompt: true, workspaceId: true, assignedRunnerId: true, deletedAt: true,
+      id: true, ...WORD_SELECT, prompt: true, workspaceId: true, assignedRunnerId: true, deletedAt: true,
       finishedAt: true, completedAt: true, endReason: true, cancelRequestedAt: true, branch: true,
     },
   });
@@ -290,7 +294,7 @@ test('S2 the merge repair door hands the next step to the same repair session on
     assert.equal(answer.finishedAt, null, 'resumed: its run is on its way again');
     const [row] = await repairsOf(db, parent);
     assert.equal(row.id, repair, 'and no new repair session');
-    assert.equal(row.status, RunStatus.PENDING);
+    assert.equal(wordOf(row), RunStatus.PENDING);
     assert.equal(row.finishedAt, null);
     const turns = await turnsOf(db, repair);
     assert.equal(turns.length, 2);
@@ -328,12 +332,12 @@ test('S2 the merge repair door hands the next step to the same repair session on
       const answer = await sessions.startMergeRepair(w.ownerId, parent) as unknown as Record<string, unknown>;
       assertRepairShape(answer, repair, status);
       assert.deepEqual(await turnsOf(db, repair), before, `${status}: no message`);
-      assert.deepEqual((await repairsOf(db, parent)).map((r) => [r.id, r.status]), [[repair, status]], `${status}: nothing else`);
+      assert.deepEqual((await repairsOf(db, parent)).map((r) => [r.id, wordOf(r)]), [[repair, status]], `${status}: nothing else`);
     }
   });
 
   await t.test('S2 a new repair session is started when the latest one failed or was deleted, or there is none', async () => {
-    const cases: Array<[string, Partial<Prisma.SessionUncheckedCreateInput> | null]> = [
+    const cases: Array<[string, SessionFixture | null]> = [
       ['none', null],
       // Its run failed; it could still be resumed, but a failed repair is not continued.
       ['failed', ended({ status: RunStatus.FAILED, error: 'the engine exited', lastTurnOutcome: 'FAILED' })],
@@ -361,7 +365,7 @@ test('S2 the merge repair door hands the next step to the same repair session on
       assert.equal(opened.branch, null, `${label}: no branch of its own`);
       if (old) {
         assert.deepEqual(await turnsOf(db, old), oldTurns, `${label}: the old one is sent nothing`);
-        assert.equal(repairs[0].status, (row?.status ?? RunStatus.AWAITING_INPUT), `${label}: and left as it was`);
+        assert.equal(wordOf(repairs[0]), (row?.status ?? RunStatus.AWAITING_INPUT), `${label}: and left as it was`);
       }
       // The parent's detail now shows the new one.
       assert.equal(((await sessions.get(w.ownerId, parent)).mergeRepairSession as unknown as Record<string, unknown>).id, opened.id, label);
@@ -369,7 +373,7 @@ test('S2 the merge repair door hands the next step to the same repair session on
   });
 
   await t.test('S2 a repair session whose doors refuse the message is replaced by a new one', async () => {
-    const cases: Array<[string, Partial<Prisma.SessionUncheckedCreateInput>, boolean]> = [
+    const cases: Array<[string, SessionFixture, boolean]> = [
       // Ended before it ever started: resume refuses NOT_STARTED.
       ['never-started', ended({ status: RunStatus.CANCELLED, startedAt: null, numTurns: 0, endReason: 'cancelled' }), true],
       // Being ended: a message to it is refused, "the session has ended".

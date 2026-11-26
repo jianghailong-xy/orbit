@@ -51,7 +51,7 @@ test('only a committed derived OPEN → DONE transition pushes the owner', {
     await sql.query('UPDATE task SET status = \'DONE\' WHERE id = $1::uuid', [task.id]);
     const session = await prisma.session.create({ data: {
       ownerId, creatorId: ownerId, taskId: task.id, title: 'Delivery', prompt: 'Deliver',
-      status: 'SUCCEEDED', finishedAt: new Date(), branch: 'orbit/derived-push', isolationStatus: 'worktree',
+      turnState: null, finishedAt: new Date(), branch: 'orbit/derived-push', isolationStatus: 'worktree',
     } });
     const digest = (await acceptance.standardSetConfirmation(ownerId, project.id)).currentVersion.digest;
     await acceptance.confirmStandardSet(ownerId, project.id, { criteriaDigest: digest });

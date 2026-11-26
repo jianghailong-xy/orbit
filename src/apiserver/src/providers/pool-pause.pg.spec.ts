@@ -131,7 +131,7 @@ suite('manual pool pauses: permissions, membership scope, next turn, expiry and 
     const workspace = await db.workspace.create({ data: { ownerId: owner.id, runnerId: runner.id, name: 'pause-Claude', workDir: '/tmp/pause-Claude' } });
     const session = await db.session.create({ data: {
       ownerId: owner.id, creatorId: owner.id, workspaceId: workspace.id, assignedRunnerId: runner.id,
-      title: 'pause-Claude', prompt: 'hello', provider: first.slug, providerBuiltin: false, status: 'RUNNING',
+      title: 'pause-Claude', prompt: 'hello', provider: first.slug, providerBuiltin: false, turnState: 'IN_FLIGHT',
       poolMemberProviderId: provider.id, usesRuntimeDefaultModel: true,
     } });
     await db.conversationTurn.create({ data: { sessionId: session.id, seq: 1, clientTurnId: 'next-message', kind: 'message', content: 'continue', status: 'PENDING' } });
@@ -157,7 +157,7 @@ suite('manual pool pauses: permissions, membership scope, next turn, expiry and 
     const workspace = await db.workspace.create({ data: { ownerId: owner.id, runnerId: runner.id, name: 'pause-test', workDir: '/tmp/pause-test' } });
     const session = await db.session.create({ data: {
       ownerId: owner.id, creatorId: owner.id, workspaceId: workspace.id, assignedRunnerId: runner.id,
-      title: 'pause-test', prompt: 'hello', provider: pool.slug, providerBuiltin: false, model: 'gpt-5.5', status: 'RUNNING',
+      title: 'pause-test', prompt: 'hello', provider: pool.slug, providerBuiltin: false, model: 'gpt-5.5', turnState: 'IN_FLIGHT',
     } });
     const now = new Date();
     const pausedAt = new Date(now.getTime() - 1000);

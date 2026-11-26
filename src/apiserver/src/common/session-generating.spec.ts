@@ -5,15 +5,11 @@ import { turnStateOfWord } from '../sessions/session-turn-state';
 import { isSessionGenerating } from './session-generating';
 
 /**
- * Rows as the server stores them: a released word with its `finished_at`, a held one with the turn state the
- * trigger of migration 1611 gives it, or with none (a row not yet backfilled, task T3), which reads its stored word.
+ * Rows as the server stores them: a released word with its `finished_at`, a held one with its turn state.
  */
 const shapes = (status: RunStatus) => {
   const finishedAt = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED].includes(status) ? new Date() : null;
-  return [
-    { label: `${status}, turn_state filled`, row: { status, finishedAt, turnState: turnStateOfWord(status) } },
-    { label: `${status}, turn_state null`, row: { status, finishedAt, turnState: null } },
-  ];
+  return [{ label: status, row: { finishedAt, turnState: turnStateOfWord(status) } }];
 };
 
 test('a dispatched turn is generating', () => {

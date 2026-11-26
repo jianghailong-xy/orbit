@@ -5,7 +5,8 @@ import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -24,6 +25,7 @@ import { CreateWorkspaceDto, UpdateWorkspaceDto } from '../workspaces/dto';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { subagentCandidateRefusal } from './model-routing';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * P5 of model routing (docs/model-routing-design.md §6; contract §7.4 R1–R4): routing may move a
@@ -239,7 +241,7 @@ async function runNow(services: Services, target: Fixture, taskId: string): Prom
 /** The run ends as the runner's /finalize leaves it: a failure is on the turn it cut off (removal step R2). */
 async function end(db: PrismaClient, sessionId: string, status: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED, error: string | null = null) {
   await db.session.update({ where: { id: sessionId }, data: {
-    status, error, finishedAt: new Date(), ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
+    turnState: turnStateOfWord(status), error, finishedAt: new Date(), ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
   } });
 }
 
@@ -425,7 +427,7 @@ test('a run leaves the agent\'s engine when its account is at 90% or signed out,
 
       // The moved run was paused, and is asked to go on: it continues on codex, and is not routed again —
       // a run never changes engine, only a fresh one starts on another (R4).
-      await db.session.update({ where: { id: moved }, data: { status: RunStatus.AWAITING_INPUT, numTurns: 1 } });
+      await db.session.update({ where: { id: moved }, data: { turnState: null, numTurns: 1 } });
       assert.equal(await runNow(services, target, movedTask), moved, 'the paused run is continued');
       assert.deepEqual(await sessionOf(db, moved), { provider: 'codex', model: CODEX, effort: 'medium' });
       assert.equal(await db.taskRouteDecision.count({ where: { taskId: movedTask } }), 1, 'only the fresh run was decided');

@@ -142,7 +142,7 @@ test('the runner task door stores, clears and reads back a task priority', { ski
   await prisma.session.create({
     data: {
       id: sessionId, title: 'runner task priority', prompt: 'runner task priority', ownerId: owner,
-      creatorId: owner, assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(),
+      creatorId: owner, assignedRunnerId: runnerId, turnState: null, startedAt: new Date(),
       runtimeSessionId: `runtime-${sessionId}`, provider: 'claude',
     },
   });

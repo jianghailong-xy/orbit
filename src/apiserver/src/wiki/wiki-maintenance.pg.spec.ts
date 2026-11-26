@@ -276,8 +276,8 @@ async function session(
   const id = randomUUID();
   await h.sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id",
-                            "task_id","status","last_turn_at","dispatch_origin","created_at","updated_at", "finished_at")
-     VALUES ($1,'a session','p',$2,$2,$3,$4,$5,$6::run_status,$7,'USER',$8,now(),
+                            "task_id","turn_state","last_turn_at","dispatch_origin","created_at","updated_at", "finished_at")
+     VALUES ($1,'a session','p',$2,$2,$3,$4,$5,(CASE ($6)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$7,'USER',$8,now(),
              CASE WHEN $6::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN $7::timestamp END)`,
     [id, ownerId, shape.workspaceId, shape.runnerId ?? null, shape.taskId ?? null, shape.status ?? 'SUCCEEDED',
       utc(shape.lastTurnAt ?? minutesAgo(30)), utc(minutesAgo(24 * 60 * 3))],
@@ -936,7 +936,7 @@ test('a failed run\'s waiting ops are the next run\'s to verify: none goes live 
   expectStatus(web, 200, 'the agent proposes');
   const tainted = web.body.ops[0] as { opId: string; entryId: string };
   assert.equal((await opRow(tainted.opId)).tainted, true);
-  await h.sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "completed_at" = now() WHERE "id" = $1`, [reader]);
+  await h.sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()), "completed_at" = now() WHERE "id" = $1`, [reader]);
 
   // And a session still running has an op waiting: the server's verification of that session's ops is its own, and
   // nobody adopts it.

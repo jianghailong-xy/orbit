@@ -27,7 +27,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { BadRequestException, ForbiddenException, NotFoundException, ValidationPipe } from '@nestjs/common';
-import { type PrismaClient, type Runner, RunStatus, RunnerStatus } from '@prisma/client';
+import { type PrismaClient, type Runner, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { type ModelQuality, type ProviderModelTier, type SubagentTiersResponse, toUuid } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -55,6 +56,7 @@ import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerSubagentsController } from './runner-subagents.controller';
 import { SubagentRunCreateDto } from './subagent-run';
 import { planSubagentRoute, subagentBlockedProviders } from './subagent-route';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -243,7 +245,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId: agent.id, assignedRunnerId: runnerId,
         title: 'split the parser work', prompt: 'split the parser work', provider: 'claude', engine: 'claude',
-        model: 'claude-opus-5-5', effort: 'high', status: 'AWAITING_INPUT', numTurns: 1,
+        model: 'claude-opus-5-5', effort: 'high', turnState: null, numTurns: 1,
         dispatchOrigin: 'USER', startsTaskWork: false,
       },
     });
@@ -450,7 +452,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
         data: {
           ownerId: owner, creatorId: owner, workspaceId: workflowsAgent.id, assignedRunnerId: hostId,
           title: 'review the scheduler diff', prompt: 'review the scheduler diff', provider: 'claude', providerBuiltin: true,
-          engine: 'claude', model: 'claude-opus-5-5', effort: 'high', status,
+          engine: 'claude', model: 'claude-opus-5-5', effort: 'high', turnState: turnStateOfWord(status),
           numTurns: status === RunStatus.PENDING ? 0 : 1, dispatchOrigin: 'USER', startsTaskWork: false,
           ...decision.columns,
         },

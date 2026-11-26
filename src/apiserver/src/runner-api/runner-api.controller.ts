@@ -5771,10 +5771,10 @@ export class RunnerApiController {
         where: { sessionId, kind: { in: ['message', 'shell'] }, status },
       });
       if (await executable('IN_FLIGHT') > 0) return { status: RunStatus.RUNNING, returned: false };
-      // Back in the queue behind the update, or parked; both spellings, as deploy 2 writes them.
+      // Back in the queue behind the update, or parked.
       const turnState = await executable('PENDING') > 0 ? 'QUEUED' as const : null;
       const status = turnState === 'QUEUED' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT;
-      await tx.session.update({ where: { id: sessionId }, data: { status, turnState, engineTurnActive: false } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState, engineTurnActive: false } });
       return { status, returned: true };
     }, loggedRetry(this.logger, 'runnerApi.returnSlot'));
     await this.recordRunnerDraining(runner.id);
@@ -6233,7 +6233,6 @@ export class RunnerApiController {
             await tx.session.update({
               where: { id: sessionId },
               data: {
-                status: RunStatus.PENDING,
                 turnState: 'QUEUED',
                 ...(until || pooledUntil ? { error: `Account paused until ${(until ?? pooledUntil)!.toISOString()}` } : {}),
                 inboxLeaseGeneration: fence,
@@ -6280,7 +6279,6 @@ export class RunnerApiController {
             await tx.session.update({
               where: { id: sessionId },
               data: {
-                status: RunStatus.PENDING,
                 turnState: 'QUEUED',
                 inboxLeaseGeneration: fence,
                 inboxLeaseOwner: null,
@@ -7787,7 +7785,7 @@ export class RunnerApiController {
           // is the same transition an ordinary send makes.
           await tx.session.updateMany({
             where: { id: sessionId, ...turnStateFilter([null]), cancelRequestedAt: null },
-            data: { status: RunStatus.PENDING, turnState: 'QUEUED', lastTurnAt: new Date() },
+            data: { turnState: 'QUEUED', lastTurnAt: new Date() },
           });
           // A background job's exit the engine never read is a wake turn of its own again, and a
           // wake already queued for the next turn joins it rather than opening a second one.
@@ -7866,7 +7864,6 @@ export class RunnerApiController {
           ? await tx.session.updateMany({
               where: { id: sessionId, cancelRequestedAt: null, ...turnStateFilter(['IN_FLIGHT']) },
               data: {
-                status: RunStatus.PENDING,
                 turnState: 'QUEUED',
                 engineTurnActive: false,
                 error: dto.error || dto.result || null,
@@ -8511,7 +8508,6 @@ export class RunnerApiController {
           ...turnStateFilter(['IN_FLIGHT']),
         },
         data: {
-          status: nextStatus,
           turnState: turnStateOfWord(nextStatus),
           engineTurnActive: false,
           // On a failed turn claude is still alive (the turn errored, the process didn't
@@ -10676,7 +10672,6 @@ export class RunnerApiController {
       const res = await tx.session.updateMany({
         where: { id: sessionId, ...turnStateFilter(['IN_FLIGHT', 'ABANDONED', null]) },
         data: {
-          status: effectiveStatus,
           // Released: no turn, slot or claim (session_turn_state_released_chk).
           turnState: null,
           result: dto.result,
@@ -11040,7 +11035,6 @@ export class RunnerApiController {
     const rested = await tx.session.updateMany({
       where: { id: sessionId, ...turnStateFilter(['IN_FLIGHT', 'ABANDONED', null]) },
       data: {
-        status,
         turnState: turnStateOfWord(status),
         error: dto.error || dto.result || null,
         engineTurnActive: false,
@@ -11139,7 +11133,6 @@ export class RunnerApiController {
             // The runner read a real title out of the transcript; it wins over the placeholder.
             ...(dto.title ? { title: dto.title } : {}),
             ...(fork ? { runtimeSessionId: fork } : {}),
-            status: pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
             turnState: pendingExecutable > 0 ? 'QUEUED' : null,
           },
         });
@@ -11159,7 +11152,6 @@ export class RunnerApiController {
       await tx.session.update({
         where: { id: sessionId },
         data: {
-          status: RunStatus.FAILED,
           turnState: null,
           error: dto.error ?? 'import failed',
           deletedAt: new Date(),

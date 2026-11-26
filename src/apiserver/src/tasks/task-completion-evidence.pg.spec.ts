@@ -15,11 +15,11 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -28,6 +28,7 @@ import {
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -84,7 +85,7 @@ async function fixture(db: PrismaClient) {
       title: 'awaiting but resumable',
       prompt: 'run the task',
       provider: 'codex',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },
@@ -200,7 +201,7 @@ suite('AWAITING_INPUT submits versioned evidence without changing either lifecyc
   // 2026-09-02 the ledger's whole job is to record what a run produced.
   const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
   const task = await db.task.findUniqueOrThrow({ where: { id: f.taskId } });
-  assert.equal(session.status, RunStatus.AWAITING_INPUT);
+  assert.equal(wordOf(session), RunStatus.AWAITING_INPUT);
   assert.equal(task.status, TaskStatus.IN_PROGRESS);
   assert.equal(
     await db.projectBlocker.count({ where: { projectId: f.projectId, resolvedAt: null } }),
@@ -275,7 +276,7 @@ suite('verifier evidence is recorded for its own verdict and files no second che
         title: 'verifier evidence source',
         prompt: 'check the subject',
         provider: 'codex',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },

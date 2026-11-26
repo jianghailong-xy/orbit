@@ -24,7 +24,8 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunnerStatus, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -137,7 +138,7 @@ test('the message of a commit result is read back from the session it settled', 
         title: 'a live session with uncommitted work',
         prompt: 'change the tree',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
         assignedRunnerId: runnerId,
