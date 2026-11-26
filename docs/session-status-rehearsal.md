@@ -219,3 +219,70 @@ accepted (ruling `353V98YS1zSj3ugrGpclE`); no other walked row's word changed.
 5. **The web.** The stack served an earlier web image (the walk reads no page); the web was not walked.
 6. **The post-backfill gate** is T5's history (`1daa60562d` 1622–1626), the shape the later task restates, not that
    task's own files.
+
+## The census on a restored production backup (task T16b, 2026-11-26): stopped
+
+On the owner's go of 2026-11-26 ("restore on orbit-prod, census and plans only"), SubAgent run
+`353zqwTnsHMxAXr5JI1Ge` on orbit-prod restored the newest base backup plus WAL into a throwaway PostgreSQL 16, then ran
+the census. **It stopped there: the census found a changed word outside §3.4's kinds.** The backfill, the later
+censuses and the plans did not run. Only the counts below left the host (the sanitized bundle is
+`1g8tT3nOeoAWe5ycyzGHAS`).
+
+**The copy.** The newest base backup is `20261125T063344Z` (base.tar.gz 18.8 GB). 404 WAL segments (3.7 GB) were copied
+out of the archive by `cp`, and the base was streamed in by `cat`, so the archive was never mounted. It was restored onto
+a Compose volume of the project `t16b-restore`, in a container with `network_mode: none` (mounts: that volume, and the WAL
+copy read-only) and `archive_mode=off`. Extraction took 803 s and redo 228 s. The copy was promoted on timeline 3; its
+last transaction was at 2026-11-26 00:44:36Z. It holds **13,156 sessions**. The census ran in the D2 apiserver image,
+built from a `git archive` of `232b6252b1`, sharing the copy's empty network namespace.
+
+**Production was already at D2.** Production was redeployed to `eef31bea27` at 00:35:47Z, during the restore. That
+deploy applied every D1 and D2 session migration to the live database, so the copy already had them all:
+
+| Migration | ms on production (`_prisma_migrations`) |
+|---|---|
+| 1601 / 1611 / 1612 | 23 / 135 / 105 |
+| 1621 / 1622 | 17 / 86 |
+| 1627 / 1628 / 1629 / 1631 / 1632 / 1633 / 1634 (concurrent index builds) | 437 / 895 / 111 / 187 / 164 / 832 / 212 |
+| 1641 / 1643 | 43 / 19 |
+
+The backfill has not run there. `phase` is NULL on 13,148 of 13,156 rows and is nullable. `session_turn_state_agrees_unless_null_chk`
+and `session_turn_state_released_chk` are not validated. So nothing was applied to the copy, and its census is the
+"before the backfill" one.
+
+**The census, before the backfill** (census.cjs exit 1, 2,086 ms; `scripts/session-turn-state-census.sql` beside it):
+
+| rows | word changed | not a §3.4 kind | held rows changed | phase off | turn_state off | phase NULL |
+|---|---|---|---|---|---|---|
+| 13,156 | 335 | **4** | 0 | 0 | 3 (INTERRUPTED rows with no turn_state) | 13,148 |
+
+The SQL census agrees: turn_state_disagrees 3, phase_null 13,148, phase_disagrees 13,148 (its own count includes the
+NULLs), parked_rows 0, released_with_turn 0.
+
+| stored → sent | runState | sessionState | end reason | outcome | kind | filed | §3.4 kind | rows |
+|---|---|---|---|---|---|---|---|---|
+| SUCCEEDED → CANCELLED | SUCCEEDED → ENDED | COMPLETED → DORMANT | | | CONVERSATION | open | C4/C5 | 291 |
+| SUCCEEDED → CANCELLED | SUCCEEDED → ENDED | COMPLETED | | | CONVERSATION | completed | C4/C5 | 27 |
+| FAILED → CANCELLED | FAILED → ENDED | FAILED → COMPLETED | `completed` | FAILED | CONVERSATION | completed | C1/C2/C3 | 13 |
+| **SUCCEEDED → CANCELLED** | SUCCEEDED → ENDED | COMPLETED | **`completed`** | | CONVERSATION | completed | **not in §3.4** | **4** |
+
+- C4's 318 is the 2026-11-21 count, and C3's 13 `completed` rows are the fixture note's.
+- **The four unlisted rows** are SUCCEEDED with end reason `completed` and no last outcome, filed in Completed, not
+  imported, not trashed. Their word would read CANCELLED and their runState ENDED. Their sessionState stays COMPLETED,
+  because they are filed. §3.4's C4/C5 is SUCCEEDED with no end reason, so this kind is not on the list. The plan says it
+  stops D2 until the owner rules on it.
+- The other 41 lines (12,821 rows) keep all three words. By stored word: SUCCEEDED 7,543, CANCELLED 3,532, FAILED 991,
+  AWAITING_INPUT 751, INTERRUPTED 3, RUNNING 1. Kinds: CONVERSATION and LANDING.
+
+**What was not touched.** No command connected to the live database or mounted the archive. `orbit-postgres` and
+`orbit-pgbackup` kept the same container Id, StartedAt and restart count (0) before and after. The newest base backup's
+files kept their sizes and mtimes. `wal/` grew 1,040 → 1,047 segments on its own.
+
+**Teardown.** `docker compose -p t16b-restore down -v` removed the container and the volume, and the image and the scratch
+dir were removed too. `docker ps -a` and `docker volume ls` filtered on the project's label list nothing, and
+`grep t16b` finds no container, volume or image.
+
+**Not run, and why.** These were all skipped under the stop rule: the backfill, the post-backfill and after-D2 censuses,
+the plans of §4.5 (word against facts) at D1 and at D2, and the write measurement. No migration was applied to the copy,
+because production's deploy had already applied them. bg_run was not available on orbit-prod (`BG_TRANSPORT_UNAVAILABLE`),
+so the steps ran as host processes, with no `bgj_` ids. A 4.7 GB docker build cache from the image build is still on
+orbit-prod.
