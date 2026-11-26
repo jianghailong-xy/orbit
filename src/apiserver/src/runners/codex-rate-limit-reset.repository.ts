@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, type CodexRateLimitResetOperation } from '@prisma/client';
 import {
-  CODEX_DEFAULT_ACCOUNT_SLOT,
   codexResetTransitionViolations,
   type CodexRateLimitResetConsumeOutcome,
   type CodexRateLimitResetConsumeState,
@@ -16,7 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Where `codex_rate_limit_reset_operation` rows become the contract's operation state and back
- * (docs/codex-rate-limit-reset-contract.md §7, §9.3; migration 0255).
+ * (docs/codex-rate-limit-reset-contract.md §7, §9.3, §12.4; migrations 0255 and 1668).
  *
  * Two writes and no more. `insertIfAbsent` adds the row a confirmation built with
  * `newCodexResetOperation`; `transition` is the only way an existing row changes, and it changes one
@@ -136,14 +135,19 @@ export class CodexRateLimitResetRepository {
     return row && stateOf(row);
   }
 
-  /** The ids of one runner's active operations, oldest first: what a heartbeat of that runner dispatches. */
-  async activeIdsOfRunner(runnerId: string): Promise<string[]> {
+  /**
+   * The ids of one runner's active operations, oldest first: what a heartbeat of that runner dispatches.
+   * Given `heldBy`, the ones that process holds the claim of come first, so a heartbeat that can hand
+   * out one command renews the step its process is running before it claims another.
+   */
+  async activeIdsOfRunner(runnerId: string, heldBy?: string | null): Promise<string[]> {
     const rows = await this.prisma.codexRateLimitResetOperation.findMany({
       where: { runnerId, ...ACTIVE },
-      select: { id: true },
+      select: { id: true, claimLeaseOwner: true },
       orderBy: OLDEST_FIRST,
     });
-    return rows.map((row) => row.id);
+    const held = (row: { claimLeaseOwner: string | null }) => heldBy != null && row.claimLeaseOwner === heldBy;
+    return [...rows.filter(held), ...rows.filter((row) => !held(row))].map((row) => row.id);
   }
 
   /**
@@ -184,8 +188,8 @@ function stateOf(row: CodexRateLimitResetOperation): CodexRateLimitResetOperatio
     ownerId: row.ownerId,
     runnerId: row.runnerId,
     accountFingerprint: row.accountFingerprint,
-    // No column yet (contract v2 §12): every stored operation is Default's, and rowOf refuses any other.
-    accountSlot: CODEX_DEFAULT_ACCOUNT_SLOT,
+    // 1668's CHECK admits `default` and an 8-hex slot id only.
+    accountSlot: row.accountSlot,
     clientRequestId: row.clientRequestId,
     providerIdempotencyKey: row.providerIdempotencyKey,
     // The column CHECKs of 0255 admit exactly these unions' members.
@@ -206,12 +210,12 @@ function stateOf(row: CodexRateLimitResetOperation): CodexRateLimitResetOperatio
 }
 
 function rowOf(operation: CodexRateLimitResetOperationState): Prisma.CodexRateLimitResetOperationCreateManyInput {
-  if (operation.accountSlot !== CODEX_DEFAULT_ACCOUNT_SLOT) throw new Error('an added account slot has no column to be stored in yet');
   return {
     id: operation.id,
     ownerId: operation.ownerId,
     runnerId: operation.runnerId,
     accountFingerprint: operation.accountFingerprint,
+    accountSlot: operation.accountSlot,
     clientRequestId: operation.clientRequestId,
     providerIdempotencyKey: operation.providerIdempotencyKey,
     createdAt: new Date(operation.createdAt),

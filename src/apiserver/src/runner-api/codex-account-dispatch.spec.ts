@@ -348,28 +348,40 @@ test('only a session that runs the built-in Codex runtime is moved onto the acco
   assert.deepEqual((await reclaim(configured)).env, env);
 });
 
-test('the create route resets Default only, so a workspace on another account is still refused', async () => {
+test('a workspace on another account resets in that account, and is no account override', async () => {
   // The shared rules the create route and the web both read: under contract v2 the workspace's account
-  // is no override but the slot its reset is for. This route does not reset in an added slot yet.
+  // is no override but the slot its reset is for.
   assert.equal(codexResetAccountOverride({ provider: 'codex', env: null }), false);
   assert.equal(codexResetContextSlot({ codexAccount: WORK }), WORK);
   assert.equal(codexResetContextSlot({ codexAccount: 'default' }), 'default');
   assert.equal(codexResetContextSlot({ codexAccount: null }), 'default');
 
-  // And the create route itself, confirming from that workspace. Two confirmations that differ only
-  // in the workspace's account: the one on Work is refused ACCOUNT_OVERRIDE before anything else is
-  // asked, the one on Default gets past it and stops at the next rule (this runner declares no
-  // reset capability), so the account is what refused the first.
-  const refusal = async (codexAccount: string | null): Promise<string> => {
+  // And the create route itself, confirming from that workspace on a runner that declares only reset v1.
+  // On Work the reset is for Work's slot, which a v1 runner cannot take (CAPABILITY_MISSING, never
+  // ACCOUNT_OVERRIDE); on Default it gets past that and stops at Default's missing block. Declaring v2,
+  // Work's confirmation is created for Work's slot.
+  const fingerprint = `cxa1_${'9f3a41c7'.repeat(4)}`;
+  const block = {
+    protocolVersion: 1,
+    support: 'SUPPORTED',
+    accountFingerprint: fingerprint,
+    rateLimitResetCredits: { availableCount: 1, credits: null },
+    fetchedAt: new Date().toISOString(),
+    generation: LEASE_OWNER,
+    sequence: 1,
+  };
+  const create = async (codexAccount: string | null, capabilities: string[]) => {
+    const inserted: Array<{ accountSlot: string }> = [];
     const tx = {
       runner: {
         findFirst: async () => ({
           status: 'ONLINE',
           lastHeartbeatAt: new Date(),
-          capabilities: [],
+          capabilities,
           heartbeatLeaseOwner: LEASE_OWNER,
           heartbeatDraining: false,
-          planUsage: null,
+          // Work's block only: Default reports none.
+          planUsage: { codex: { provider: 'codex', primary: { utilization: 1 }, accounts: { [WORK]: { provider: 'codex', rateLimitReset: block } } } },
         }),
       },
       workspace: {
@@ -385,26 +397,32 @@ test('the create route resets Default only, so a workspace on another account is
       byClientRequest: async () => null,
       activeFor: async () => null,
       unrefreshedSpendSettledAt: async () => null,
-      insertIfAbsent: async () => true,
+      insertIfAbsent: async (_tx: unknown, operation: { accountSlot: string }) => (inserted.push(operation), true),
     };
     const service = new CodexRateLimitResetService(
       { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never,
       operations as never,
     );
     try {
-      await service.create(OWNER, RUNNER_ID, {
+      const created = await service.create(OWNER, RUNNER_ID, {
         clientRequestId: '66666666-6666-4666-8666-666666666666',
-        accountFingerprint: `cxa1_${'9f3a41c7'.repeat(4)}`,
+        accountFingerprint: fingerprint,
         workspaceId: WORKSPACE_ID,
       });
+      assert.equal(inserted.length, 1);
+      return `created in ${inserted[0].accountSlot}, view slot ${created.operation.accountSlot ?? 'absent'}`;
     } catch (error) {
       assert.ok(error instanceof ConflictException, String(error));
       return (error.getResponse() as { code: string }).code;
     }
-    return 'created';
   };
-  assert.equal(await refusal(WORK), 'ACCOUNT_OVERRIDE');
-  assert.equal(await refusal(null), 'CAPABILITY_MISSING');
+  const V1 = ['codex-rate-limit-reset-v1'];
+  const V2 = [...V1, 'codex-rate-limit-reset-v2'];
+  assert.equal(await create(WORK, V1), 'CAPABILITY_MISSING');
+  assert.equal(await create('default', V1), 'SNAPSHOT_MISSING');
+  assert.equal(await create(WORK, V2), `created in ${WORK}, view slot ${WORK}`);
+  // Automatic (no pick): the slot is the one whose block is of the confirmed account.
+  assert.equal(await create(null, V2), `created in ${WORK}, view slot ${WORK}`);
 });
 
 test('a workspace stores the slot id or Default, never a path', async () => {
