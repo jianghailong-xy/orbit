@@ -222,7 +222,8 @@ describe('the landing of a DONE task, apart from its status (§2.7a)', () => {
     expect(block).toContain('<span class="land-task-task-state">Task DONE</span>');
     expect(block).toContain(`<span class="tdp-badge ${tone}">${label}</span>`);
     expect(block).toContain('generation 19');
-    expect(block).toContain('<code title="refs/heads/project/landing-visibility">project/landing-visibility</code>');
+    // The full ref is the app tooltip's now (ProjectIntegrationLine.test asserts it); the markup shows the branch.
+    expect(block).toMatch(/<code[^>]*>project\/landing-visibility<\/code>/);
     expect(block).toContain('<dt>Queue wait</dt><dd>2m</dd>');
     expect(block).toContain(`dateTime="${QUEUED_AT}"`);
     expect(block).not.toMatch(/<button|<a /);

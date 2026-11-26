@@ -482,18 +482,22 @@ export function SessionOutputs({
                 <li>
                   <span className="wt-merge-step-n" aria-hidden="true">1</span>
                   <span className="wt-merge-where">In the session’s worktree</span>
-                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd, 'command')}>
-                    {manualRebaseCmd}
-                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
-                  </code>
+                  <Tooltip content="Copy">
+                    <code className="wt-merge-cmd" onClick={() => copy(manualRebaseCmd, 'command')}>
+                      {manualRebaseCmd}
+                      <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                    </code>
+                  </Tooltip>
                 </li>
                 <li>
                   <span className="wt-merge-step-n" aria-hidden="true">2</span>
                   <span className="wt-merge-where">Then in the repo</span>
-                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd, 'command')}>
-                    {manualFfCmd}
-                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
-                  </code>
+                  <Tooltip content="Copy">
+                    <code className="wt-merge-cmd" onClick={() => copy(manualFfCmd, 'command')}>
+                      {manualFfCmd}
+                      <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                    </code>
+                  </Tooltip>
                 </li>
               </ol>
             </div>
@@ -501,17 +505,19 @@ export function SessionOutputs({
             // A precondition failure, not a conflict: no git command run here would help, and the
             // old copyable rebase actively misled (it can't run against a checkout it can't have).
             // The runner's message names what is in the way — that IS the next step.
-            <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
-              {detail.mergeError || 'Merge failed — nothing was changed.'}
-              {mainCheckout?.actionsSupported && isFfClash(detail.mergeError) && (
-                <>
-                  {' '}
-                  <button type="button" className="mck-link" onClick={() => mainCheckout.openReview()}>
-                    {MAIN_CHECKOUT_COPY.reviewMainCheckout}
-                  </button>
-                </>
-              )}
-            </span>
+            <Tooltip content={detail.mergeError ?? undefined} truncatedOnly>
+              <span className="wt-merge-err">
+                {detail.mergeError || 'Merge failed — nothing was changed.'}
+                {mainCheckout?.actionsSupported && isFfClash(detail.mergeError) && (
+                  <>
+                    {' '}
+                    <button type="button" className="mck-link" onClick={() => mainCheckout.openReview()}>
+                      {MAIN_CHECKOUT_COPY.reviewMainCheckout}
+                    </button>
+                  </>
+                )}
+              </span>
+            </Tooltip>
           )}
         </div>
       )}
@@ -1255,27 +1261,28 @@ function TreeNodes({
           />
         ) : (
           <div key={node.path} className="wt-tree-dir">
-            <button
-              type="button"
-              className="wt-diff-group-head"
-              style={{ paddingLeft: 8 + depth * 16 }}
-              onClick={() => toggle(node)}
-              title={node.path}
-            >
-              <span className="wt-diff-group-caret">{collapsed(node) ? '▸' : '▾'}</span>
-              <span className="wt-diff-group-dir">{node.name}/</span>
-              <span className="wt-diff-group-meta">
-                <span className="wt-diff-group-n">{node.fileCount}</span>
-                {node.binaryOnly ? (
-                  <span className="session-file-bin">binary</span>
-                ) : (
-                  <>
-                    <span className="add">+{node.add}</span>
-                    <span className="del">−{node.del}</span>
-                  </>
-                )}
-              </span>
-            </button>
+            <Tooltip content={node.path} truncatedOnly mono>
+              <button
+                type="button"
+                className="wt-diff-group-head"
+                style={{ paddingLeft: 8 + depth * 16 }}
+                onClick={() => toggle(node)}
+              >
+                <span className="wt-diff-group-caret">{collapsed(node) ? '▸' : '▾'}</span>
+                <span className="wt-diff-group-dir">{node.name}/</span>
+                <span className="wt-diff-group-meta">
+                  <span className="wt-diff-group-n">{node.fileCount}</span>
+                  {node.binaryOnly ? (
+                    <span className="session-file-bin">binary</span>
+                  ) : (
+                    <>
+                      <span className="add">+{node.add}</span>
+                      <span className="del">−{node.del}</span>
+                    </>
+                  )}
+                </span>
+              </button>
+            </Tooltip>
             {!collapsed(node) && (
               <TreeNodes
                 nodes={node.children}
@@ -1320,9 +1327,11 @@ function FileRow({
         style={indent != null ? { paddingLeft: 8 + indent * 16 } : undefined}
         onClick={onClick}
       >
-        <span className={`session-file-status st-${status.toLowerCase()}`} title={status}>
-          {status}
-        </span>
+        <Tooltip content={status} truncatedOnly>
+          <span className={`session-file-status st-${status.toLowerCase()}`}>
+            {status}
+          </span>
+        </Tooltip>
         <span className="session-file-path">
           {display === 'full' && dir && <span className="session-file-dir">{dir}</span>}
           <span className="session-file-name">{name}</span>

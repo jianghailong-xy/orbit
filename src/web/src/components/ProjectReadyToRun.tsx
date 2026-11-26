@@ -23,6 +23,7 @@ import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Popconfirm } from './ui/Popconfirm';
 import { Spinner } from './ui/Spinner';
+import { Tooltip } from './ui/Tooltip';
 import './ui/Typography.css';
 
 type RunToast = Pick<ReturnType<typeof useToast>, 'success' | 'error'>;
@@ -138,14 +139,15 @@ export function ProjectReadyToRun({
       >
         <span className="project-ready-heading-label">Run queue</span>
         {summary ? (
-          <span
-            className="project-ready-summary orbit-typography orbit-typography-secondary"
-            style={{ fontSize: 12, fontWeight: 400 }}
-            title={summary}
-          >
-            {' '}
-            {summary}
-          </span>
+          <Tooltip content={summary} truncatedOnly>
+            <span
+              className="project-ready-summary orbit-typography orbit-typography-secondary"
+              style={{ fontSize: 12, fontWeight: 400 }}
+            >
+              {' '}
+              {summary}
+            </span>
+          </Tooltip>
         ) : null}
       </h4>
 
@@ -290,18 +292,19 @@ function ReadyTaskRow({
       }}
     >
       <div style={{ minWidth: 0 }}>
-        <div
-          title={item.title}
-          style={{
-            color: 'var(--text-1)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            marginBottom: 4,
-          }}
-        >
-          {item.title}
-        </div>
+        <Tooltip content={item.title} truncatedOnly>
+          <div
+            style={{
+              color: 'var(--text-1)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              marginBottom: 4,
+            }}
+          >
+            {item.title}
+          </div>
+        </Tooltip>
         <span
           className="orbit-typography orbit-typography-secondary"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}

@@ -3,11 +3,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Menu, type MenuItem } from './Menu';
+import { hoverTooltip } from '../../test/tooltipHover';
 
 /**
  * Two things the session workspace's menus need (P5.3). A trigger that is not a `<button>` — the session list's
  * scope label and a folder's ⋯ are spans the page draws — is made a button by the menu (`nativeButton={false}`): the
- * button role, a Tab stop, Enter and Space. And an item can carry the native tip the replaced item's `title` gave it,
+ * button role, a Tab stop, Enter and Space. And an item can carry the tip the replaced item's `title` gave it, now the app tooltip,
  * on an item that can run and on one that cannot (a session row's Complete that is unavailable says why).
  */
 
@@ -94,14 +95,18 @@ describe('a menu on a trigger that is not a button', () => {
   });
 });
 
-describe('an item’s native tip', () => {
-  it('is on the item that runs and on the one that cannot', async () => {
+describe('an item’s tip', () => {
+  it('is the app tooltip, on the item that runs and on the one that cannot', async () => {
     const trigger = await render();
     await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
     await settle();
-    expect(item('Complete')?.getAttribute('title')).toBe('Complete unavailable right now');
+    expect(item('Complete')?.hasAttribute('title')).toBe(false);
     expect(item('Complete')?.getAttribute('aria-disabled')).toBe('true');
-    expect(item('Pin')?.getAttribute('title')).toBe('Keep it at the top');
+    expect(await hoverTooltip(item('Complete')!, 200)).toBe('Complete unavailable right now');
+    await act(async () => item('Complete')!.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' })));
+    await act(async () => item('Complete')!.dispatchEvent(new MouseEvent('mouseleave')));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    expect(await hoverTooltip(item('Pin')!, 200)).toBe('Keep it at the top');
     expect(item('Rename…')?.hasAttribute('title')).toBe(false);
     await act(async () => item('Pin')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
     expect(ran).toEqual(['Pin']);

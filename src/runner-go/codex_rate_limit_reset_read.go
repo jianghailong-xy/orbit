@@ -14,18 +14,17 @@ import (
 	"time"
 )
 
-// The Codex usage probe's half of docs/codex-rate-limit-reset-contract.md: each read of the
-// runner's default Codex account also yields the PlanUsageRateLimitReset block (§2) the heartbeat
-// carries — the provider's authoritative credit count, the account fingerprint (§3), when the read
-// started and which read of which runner process it was. Nothing here consumes a credit; the reset
-// steps (codex_rate_limit_reset_consume.go) make their reads through the same reader.
+// The Codex usage probe's half of docs/codex-rate-limit-reset-contract.md: each read of a Codex
+// account slot also yields the PlanUsageRateLimitReset block (§2) the heartbeat carries for that slot
+// — the provider's authoritative credit count, the account fingerprint (§3), when the read started and
+// which read of which runner process it was. Nothing here consumes a credit; the reset steps
+// (codex_rate_limit_reset_consume.go) make their reads through the reader of the slot they run on.
 //
-// The default account is the one the runner's own environment selects, exactly as for the usage
-// windows: a runner started with OPENAI_API_KEY or OPENAI_BASE_URL reads no Codex usage at all
-// (codexPlanUsageStateForEnv), so it reports no block and offers no reset. A session whose env
-// overrides the account (CODEX_HOME, CODEX_API_KEY, OPENAI_*) never reaches the probe
-// (codexSessionAccountSlot): another slot's session refreshes that slot's own snapshot, which carries
-// no block (codex_account_usage.go). A default-account session's rolling rate-limit notifications
+// Every slot has a reader of its own (contract v2 §12): Default's probe reads the account the runner's
+// own environment selects, and each added slot's probe reads that slot's CODEX_HOME
+// (codex_account_usage.go). A runner started with OPENAI_API_KEY or OPENAI_BASE_URL reads no Codex
+// usage at all (codexPlanUsageStateForEnv), so it reports no block and offers no reset. A session's
+// rolling rate-limit notifications refresh the windows of its own slot (codexSessionAccountSlot), and
 // never create or change a block.
 
 const codexResetFetchedAtLayout = "2006-01-02T15:04:05.000Z"
@@ -45,24 +44,30 @@ type codexResetReader struct {
 // auth mode, then account/rateLimits/read — without excludeResetCreditDetails — for the windows,
 // the reset credits and the account id. A failed account/read costs only the block: the windows
 // still arrive, and the cached block from the last good read ages as §2 says.
-func (r *codexResetReader) readCodexPlanUsage(ctx context.Context, app *codexAppServer) (*PlanUsage, error) {
+//
+// The account id the read named comes back beside the usage, whatever the block came to, for an added
+// slot's probe to label the slot with (codexSlotUsage.fingerprint). It is the provider's own id: the
+// caller turns it into a fingerprint at once and keeps, reports and logs nothing else of it (§3).
+func (r *codexResetReader) readCodexPlanUsage(ctx context.Context, app *codexAppServer) (*PlanUsage, string, error) {
 	started := time.Now()
 	sequence := r.sequence.Add(1)
 	account, accountErr := app.request(ctx, codexAccountReadMethod, map[string]interface{}{"refreshToken": false})
 	rateLimits, err := app.request(ctx, codexRateLimitsReadMethod, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	usage, err := parseCodexPlanUsage(rateLimits)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	accountID, _ := rateLimits["accountId"].(string)
+	accountID = strings.TrimSpace(accountID)
 	if accountErr != nil {
 		r.note(codexAccountReadMethod + " failed")
-		return usage, nil
+		return usage, accountID, nil
 	}
 	usage.RateLimitReset = r.block(account, rateLimits, started, sequence)
-	return usage, nil
+	return usage, accountID, nil
 }
 
 // block is the reset block of one read. The account id only feeds the fingerprint: nothing else

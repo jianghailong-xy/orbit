@@ -1,0 +1,101 @@
+/* Mock only. Everything the card wears is src/web/src/index.css (.approval-card,
+   .coordinator-question-*, .md, .md-image); .cqa-* / .cra-* is board chrome. */
+html, body { height: auto; overflow: visible; }
+body.cra { margin: 0; background: #f5f6f8; font: 14px/1.5715 Inter, "Noto Sans", "Noto Sans CJK SC", "WenQuanYi Zen Hei", sans-serif; color: var(--text-1); }
+.cra-part { width: 1180px; padding: 24px 28px 30px; background: #f5f6f8; }
+.cra-part h2 { font-size: 20px; margin: 0 0 4px; color: #1f2329; }
+.cra-part p.cra-lede { margin: 0 0 18px; color: #646a73; max-width: 960px; }
+.cra-row { display: flex; gap: 28px; align-items: flex-start; }
+.cra-cap { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: #1f2329; }
+.cra-note { font-size: 12.5px; color: #646a73; margin: 12px 0 0; max-width: 460px; }
+.cra-note b { color: #1f2329; }
+.cra-dark { background: #141416; border-radius: 14px; padding: 16px; width: max-content; }
+
+/* The card as the app draws it; width set per frame. */
+.cqa-card { margin: 0; }
+.cqa-card .coordinator-question-free.orbit-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13.5px;
+  resize: vertical;
+}
+.cqa-card .coordinator-question-free.orbit-textarea::placeholder { color: var(--text-3); }
+.cqa-card .card-actions.coordinator-question-actions { padding: 10px 14px; border-top: 1px solid var(--brand-border); background: var(--bg-raised); }
+
+/* ── proposal: the attachments drawn ─────────────────────────────────────────────────────── */
+
+/* The gallery: thumbnails in a grid, each opening the picture full size (the transcript's
+   viewer). The card keeps its shape; what is long to look at is what the owner opens. */
+.cqa-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 4px; }
+.cqa-gallery.is-single { grid-template-columns: 1fr; }
+.cqa-gallery .chat-image-btn { display: block; width: 100%; }
+.cqa-gallery .chat-image-btn .md-image {
+  width: 100%;
+  height: 184px;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--bg-base);
+}
+.cqa-gallery.is-single .chat-image-btn .md-image { height: auto; max-height: 340px; }
+.cqa-phone-gallery .cqa-gallery { grid-template-columns: 1fr; }
+.cqa-phone-gallery .cqa-gallery .chat-image-btn .md-image { height: 150px; }
+.cqa-caption { margin: 0 0 6px; font-size: 12px; color: var(--text-3); }
+
+/* The alternative: every image at the card's full width, as the transcript draws it. */
+.cqa-stack .chat-image-btn { display: block; width: fit-content; max-width: 100%; margin: 10px 0; }
+.cqa-stack .chat-image-btn .md-image { width: 100%; height: auto; }
+
+/* Phone shell, as the board's other frames draw one. */
+.cqa-phone { box-sizing: content-box; width: 350px; height: 760px; border-radius: 40px; border: 10px solid #2a2a2c; background: var(--bg-base, #fff); position: relative; overflow: hidden; }
+.cqa-phone > .cqa-card { position: absolute; left: 8px; right: 8px; top: 8px; }
+
+/* The shipped dark tokens (src/web/src/index.css :root[data-theme=dark]), scoped to one frame. */
+.cra-dark {
+  color-scheme: dark;
+  --bg-base: #202023;
+  --bg-raised: #2b2b2e;
+  --bg-subtle: #252528;
+  --bg-sunken: #17171a;
+  --bg-hover: #343437;
+  --bg-hover-strong: #424246;
+  --fill-muted: #38383c;
+  --fill-inset: rgba(0, 0, 0, 0.25);
+  --border: #424246;
+  --border-subtle: #343437;
+  --scrollbar-hover: #565a62;
+  --text-1: #c9ced5;
+  --text-2: #a7adb6;
+  --text-3: #9a9fa8;
+  --text-4: #858a93;
+  --dot-idle: #4a4e56;
+  --brand: #5b8cff;
+  --brand-strong: #7aa2ff;
+  --brand-tint: rgba(91, 140, 255, 0.16);
+  --brand-tint-hover: rgba(91, 140, 255, 0.24);
+  --brand-border: rgba(91, 140, 255, 0.32);
+  --success: #4ac26b;
+  --success-solid: #3fb45b;
+  --success-bg: rgba(46, 161, 33, 0.18);
+  --success-border: rgba(46, 161, 33, 0.35);
+  --error: #f0837b;
+  --error-solid: #e5613c;
+  --error-bg: rgba(245, 74, 69, 0.16);
+  --error-border: rgba(245, 74, 69, 0.38);
+  --warning: #e0a23b;
+  --warning-solid: #e0902b;
+  --warning-bg: rgba(250, 140, 22, 0.15);
+  --warning-border: rgba(250, 140, 22, 0.38);
+  --invert-surface: #e6e8eb;
+  --invert-text: #16171a;
+  color: var(--text-1);
+}
+.cra-dark .approval-card.coordinator-question { background: var(--bg-raised); }

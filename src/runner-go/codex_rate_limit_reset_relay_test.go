@@ -238,12 +238,12 @@ func TestCodexResetRelayRefusesAConsumeOfAnotherProtocol(t *testing.T) {
 		steps.Add(1)
 	})
 	newer := codexResetDelivered(t, "consume", relay.leaseOwner)
-	newer.ProtocolVersion = 2
+	newer.ProtocolVersion, newer.AccountSlot = 3, accountSlotDefaultID
 	relay.handle(&newer, clock.now(), false)
 	ops.Wait()
 	bodies := cp.received()
 	if steps.Load() != 0 || len(bodies) != 1 {
-		t.Fatalf("a consume of protocol 2 started %d steps and sent %d results; want 0 and 1", steps.Load(), len(bodies))
+		t.Fatalf("a consume of protocol 3 started %d steps and sent %d results; want 0 and 1", steps.Load(), len(bodies))
 	}
 	want := CodexRateLimitResetResultRequest{
 		ProtocolVersion: 1, OperationID: newer.OperationID, LeaseOwner: relay.leaseOwner,

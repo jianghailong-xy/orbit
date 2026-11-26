@@ -242,7 +242,9 @@ function ReportLine({ report, quiet }: { report: EvidenceTestReport; quiet: bool
         {` · ${evidenceReportCounts(report)}`}
       </span>
       {names.map((name, k) => (
-        <span key={k} className="evidence-report-name" title={name}>{name}</span>
+        <Tooltip key={k} content={name} truncatedOnly>
+          <span className="evidence-report-name">{name}</span>
+        </Tooltip>
       ))}
       {names.length > 0 && rest > 0 ? (
         <span className="evidence-report-name">{evidenceReportNamesMore(rest)}</span>

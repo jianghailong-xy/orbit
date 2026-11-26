@@ -50,6 +50,7 @@ import { TaskStatusPill } from './TaskStatusPill';
 import { sessionDisplayState, sessionMarks } from '../lib/sessionDisplay';
 import { SessionMarkChips } from './SessionStateDisplay';
 import { relTime } from './Transcript';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * What an Orbit link card says, from the preview the server sent for it.
@@ -321,9 +322,11 @@ export function OrbitLinkCard({
     if (shown) {
       headRight = (
         <span className="olc-state-group">
-          <span className={`olc-state is-${shown.phase === 'RUNNING' ? 'live' : 'idle'}`} title={shown.word}>
-            {shown.word}
-          </span>
+          <Tooltip content={shown.word} truncatedOnly>
+            <span className={`olc-state is-${shown.phase === 'RUNNING' ? 'live' : 'idle'}`}>
+              {shown.word}
+            </span>
+          </Tooltip>
           <SessionMarkChips marks={sessionMarks(session)} />
         </span>
       );
@@ -332,9 +335,11 @@ export function OrbitLinkCard({
       // A failure's word is its whole error, so the pill truncates where the row runs out (index.css)
       // and keeps the rest for the hover.
       headRight = (
-        <span className={`olc-state is-${stateTone(sessionRunStateOf(session))}`} title={word}>
-          {word}
-        </span>
+        <Tooltip content={word} truncatedOnly>
+          <span className={`olc-state is-${stateTone(sessionRunStateOf(session))}`}>
+            {word}
+          </span>
+        </Tooltip>
       );
     }
     title = cardTitle(session.title, link);

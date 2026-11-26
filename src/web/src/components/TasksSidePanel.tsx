@@ -1725,9 +1725,11 @@ export function WorkspaceRow({
       <span className="tp-workspace-separator" aria-hidden="true">
         ·
       </span>
-      <span className="tp-workspace-runner" title={runnerLabel}>
-        {runnerLabel}
-      </span>
+      <Tooltip content={runnerLabel} truncatedOnly>
+        <span className="tp-workspace-runner">
+          {runnerLabel}
+        </span>
+      </Tooltip>
     </span>
   );
   const [menuOpen, setMenuOpen] = useState(false);
