@@ -626,7 +626,7 @@ bash scripts/test-codex-reset-fault-injection.sh # 加固：真实控制面 + Go
   operation 能派发，发 v1 command；新增槽的 operation 对只有 v1 的 runner → `NONE / CAPABILITY_MISSING`，绝不以 v1 command 发出
   （v1 runner 会在 Default 的登录里执行）。`decideCodexResetDispatch` 的 `rateLimitReset` 传 operation 那个槽的存储块。
 - v1 runner 收到 v2 command：CONSUME 回 `CONSUME_NOT_CALLED / PROTOCOL_UNSUPPORTED`（§4 已有规则），REFRESH 忽略。两者都不会在
-  Default 的登录里动手。现在的 Go runner 正是如此（`codexRateLimitResetProtocolVersion` 仍为 1），直到 runner 任务改它。
+  Default 的登录里动手。Go runner 在 runner 任务之前正是如此；runner 任务起它声明 v2，执行 v1 与 v2 两种 command（§12.6）。
 - 示例：fixtures `heartbeatResponses.consumeAddedSlot`、`refreshAddedSlot`，`commands.valid` 的 `v2-*`，`commands.invalid` 的
   `v2-without-account-slot`、`v1-naming-an-account-slot`、`account-slot-*`、`protocol-version-3`。
 
@@ -659,3 +659,17 @@ bash scripts/test-codex-reset-fault-injection.sh # 加固：真实控制面 + Go
 | v2 apiserver → v2 runner | 全部 v2 command，Default 写明 `accountSlot: "default"` |
 | 旧 Web / 原生客户端 | Default 的 view 不变；新增槽的 view 多一个 `accountSlot`，Codable 忽略未知键 |
 | 回滚 runner 到 v1 | v2 能力消失：新增槽的在途 operation 不再派发，按 §7.5 到期；Default 的改发 v1 command |
+
+### 12.6 runner 的逐槽执行（runner 任务，2026-11-26）
+
+- 读取：每个新增槽的 probe（`src/runner-go/codex_account_usage.go` 的 `newCodexSlotUsage`）在该槽的 `CODEX_HOME` 里做与 Default
+  相同的 `account/read` + `account/rateLimits/read`（`fetchCodexAccountPlanUsage`），每槽一个 `codexResetReader`：`generation`
+  是本进程的 `leaseOwner`，`sequence` 每槽从 1 递增，`fetchedAt` 是读取开始时刻。heartbeat 把它放在 `accounts[X].rateLimitReset`；
+  会话的滚动通知只刷新窗口，保留该槽已有的块。
+- 执行：`codexResetConsumer` 按 command 的 `accountSlot`（v1 即 Default）在每次 attempt 时重新解析目标槽
+  （`codexAccountUsage.resetTarget`），在该槽的 `CODEX_HOME` 里起 app-server、读取、比对指纹、consume、权威刷新，块写入该槽的 probe。
+  回执的 `protocolVersion` 与 command 相同。
+- 槽已不存在（目录已删，或本机从未有过）：不起 app-server、不读取、不回落到 Default，也不为它建目录或 probe。
+  CONSUME → `CONSUME_NOT_CALLED / ACCOUNT_MISMATCH`（不带 `observedAccountFingerprint`），REFRESH → `REFRESH_FAILED / ACCOUNT_MISMATCH`；
+  日志 `account: slot_gone`。槽目录存在但解析失败（非“不存在”）→ `CONSUME_RETRYING / READ_FAILED`、`REFRESH_FAILED / READ_FAILED`。
+- 验证：`src/runner-go/codex_rate_limit_reset_slot_test.go`（每个 `CODEX_HOME` 一个 fake app-server）。

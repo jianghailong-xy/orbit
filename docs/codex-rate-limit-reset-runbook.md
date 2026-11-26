@@ -50,7 +50,7 @@ runner relay 与 consume、Plan usage 快照）。本文件是任务「加固 re
 | `process` | 进程 leaseOwner 的前 8 位十六进制 | 两侧 |
 | `phase` / `kind` / `outcome` / `code` / `status` / `from` / `next` / `disposition` / `order` | 契约枚举原值 | 两侧（`from`、`order` 仅 apiserver） |
 | `claimGeneration` `attempt` `ageMs` `delayMs` | 非负整数 | 两侧（后三个仅 runner） |
-| `account` | `match` `mismatch` `unidentified` `unsupported` | runner |
+| `account` | `match` `mismatch` `unidentified` `unsupported` `slot_gone`（command 指名的新增槽已不存在，什么都没读） | runner |
 | `reason` | 小写单词 | 两侧 |
 | `error` | apiserver：错误 code 或类名；runner：`refused` `invalid_receipt` `stopped` `timeout` `http_<status>` `transport` | 两侧 |
 | `replayed` | 布尔 | apiserver |
