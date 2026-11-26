@@ -351,7 +351,9 @@ export class SessionsController {
   /**
    * One page of a workspace's session list as top-level entries (docs/session-list-scale-design.md §3.2,
    * SessionsService.sessionListing): `{ folders, entries, next }`, `folders` on the first page of the
-   * workspace's own list only. Pass `next` back as `after` for the page that follows.
+   * workspace's own list only. Pass `next` back as `after` for the page that follows. When the list's order
+   * switched since `after` was written (the Completed view's does, on whether anything is held), the answer is
+   * the first page again, with `restarted: true` and the first page's `folders`.
    *
    * Conditional on the Open list's data version (open-list-version.ts), scoped by every parameter and by
    * which folders the workspace has: a read that names the ETag it holds is answered 304 before anything

@@ -238,7 +238,8 @@ export function decodeListingCursor(after: string): EntryKey {
 /** The page after `after` (from the top without one): the entries strictly after its key, so a page
  *  neither skips nor repeats an entry however many share a place, and `next` when more follow. A cursor
  *  written under the other order (the list's order switched between two pages) starts again from the
- *  top: its key places nothing in this order, and a page never mixes the two. */
+ *  top: its key places nothing in this order, and a page never mixes the two. SessionsService.sessionListing
+ *  answers that page `restarted: true`. */
 export function listingPage<T extends EntryKey>(
   entries: readonly T[],
   after: EntryKey | null,

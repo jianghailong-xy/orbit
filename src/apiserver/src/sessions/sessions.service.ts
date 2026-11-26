@@ -5004,7 +5004,6 @@ export class SessionsService {
     },
   ) {
     const { query } = this.listShape(ownerId, { workspaceId: opts.workspaceId, view: opts.view, confinedTo: opts.confinedTo });
-    const withFolders = !opts.after && !opts.folderId;
     const [sessions, folders] = await Promise.all([
       this.prisma.$queryRaw<ListingSession[]>(Prisma.sql`
         SELECT s.id, s.folder_id AS "folderId", s.pinned_at AS "pinnedAt", s.listed_at AS "listedAt",
@@ -5024,7 +5023,17 @@ export class SessionsService {
       : Prisma.empty;
     // Each project's coordinator as `projectPlacement` finds it: in either lifecycle, never in Trash, and
     // only while its own membership still names this project (one that coordinates another first is that one's).
-    const [found, activity] = await Promise.all([
+    const tallies = () => this.sessionTallies(ownerId, {
+      ownerId,
+      workspaceId: opts.workspaceId,
+      deletedAt: null,
+      ...(opts.view === 'open'
+        ? { completedAt: null, archivedAt: null }
+        : { NOT: { completedAt: null, archivedAt: null } }),
+      sessionKind: SESSION_KIND_CONVERSATION,
+      runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] },
+    });
+    const [found, firstTallies] = await Promise.all([
       projectIds.length === 0 ? [] : this.prisma.$queryRaw<Array<{ projectId: string } & Partial<ListingCoordinator>>>(Prisma.sql`
         SELECT p.id AS "projectId", c.id, c.workspace_id AS "workspaceId", c.folder_id AS "folderId",
                c.pinned_at AS "pinnedAt", c.created_at AS "createdAt"
@@ -5034,21 +5043,10 @@ export class SessionsService {
            AND c.deleted_at IS NULL AND c.kind = 'CONVERSATION' AND c.help_ask IS NULL ${confined}
            AND (${sessionProjectMembershipSql('c')} ->> 'projectId')::uuid = p.id
          WHERE p.owner_id = ${ownerId}::uuid AND p.id = ANY(${projectIds}::uuid[])`),
-      withFolders && folders.length > 0
-        ? this.sessionTallies(ownerId, {
-            ownerId,
-            workspaceId: opts.workspaceId,
-            deletedAt: null,
-            ...(opts.view === 'open'
-              ? { completedAt: null, archivedAt: null }
-              : { NOT: { completedAt: null, archivedAt: null } }),
-            sessionKind: SESSION_KIND_CONVERSATION,
-            runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] },
-          })
-        : null,
+      !opts.after && !opts.folderId && folders.length > 0 ? tallies() : null,
     ]);
     const coordinators = new Map(found.map((row) => [row.projectId, row.id ? row as ListingCoordinator : null]));
-    const built = buildSessionListing({
+    const listing = (activity: Awaited<ReturnType<typeof tallies>> | null) => buildSessionListing({
       view: opts.view,
       workspaceId: opts.workspaceId,
       folderId: opts.folderId,
@@ -5061,7 +5059,14 @@ export class SessionsService {
         jobs: new Set(activity.jobs.flatMap((session) => session.stalled ? [] : [session.id])),
       },
     });
-    const { page, next } = listingPage(built.entries, opts.after, opts.limit, built.order);
+    let built = listing(firstTallies);
+    // A cursor written under the other order (the Completed view's switches on whether anything is held;
+    // session-listing.ts) places nothing in this one: the list starts again, and says so with `restarted`,
+    // carrying what a first page carries, so a client replaces the pages it holds rather than appending.
+    const restarted = !!opts.after && opts.after.order !== built.order;
+    const withFolders = !opts.folderId && (!opts.after || restarted);
+    if (restarted && withFolders && folders.length > 0) built = listing(await tallies());
+    const { page, next } = listingPage(built.entries, restarted ? null : opts.after, opts.limit, built.order);
     const shown = page.flatMap((entry) => entry.kind === 'session' ? [entry.id] : entry.coordinatorId ? [entry.coordinatorId] : []);
     const rowConfined = opts.confinedTo
       ? Prisma.sql`AND s.workspace_id = ANY(${[...opts.confinedTo]}::uuid[])`
@@ -5092,7 +5097,7 @@ export class SessionsService {
         coordinator: entry.coordinatorId ? byId.get(entry.coordinatorId) ?? null : null,
       }];
     });
-    return { ...(withFolders ? { folders: built.folders } : {}), entries, next };
+    return { ...(withFolders ? { folders: built.folders } : {}), entries, next, ...(restarted ? { restarted: true } : {}) };
   }
 
   /**

@@ -230,7 +230,7 @@
     },
     {
       "name": "completed view, nothing held: GET /sessions?view=completed's order, even where listedAt moved after Complete, and an archived-only row",
-      "folders": [],
+      "folders": [{ "id": "F10", "name": "Kept" }],
       "foreignFolders": [],
       "projects": [],
       "sessions": [
@@ -239,6 +239,7 @@
         { "id": "kc", "lifecycle": "completed", "archivedAt": "2026-11-20T12:00:00.000Z", "listedAt": "2026-11-20T08:00:00.000Z" },
         { "id": "kd", "lifecycle": "completed", "pinnedAt": "2026-11-20T05:00:00.000Z", "completedAt": "2026-11-20T09:00:00.000Z", "listedAt": "2026-11-20T09:00:00.000Z", "createdAt": "2026-11-18T00:00:00.000Z" },
         { "id": "kf", "lifecycle": "completed", "completedAt": "2026-11-20T09:00:00.000Z", "listedAt": "2026-11-20T07:00:00.000Z" },
+        { "id": "kg", "lifecycle": "completed", "folder": "F10", "completedAt": "2026-11-20T13:00:00.000Z", "listedAt": "2026-11-20T13:00:00.000Z" },
         { "id": "ko", "listedAt": "2026-11-20T16:00:00.000Z" }
       ],
       "reads": [
@@ -246,7 +247,9 @@
           "view": "completed",
           "folderId": null,
           "expected": {
-            "folders": [],
+            "folders": [
+              { "folderId": "F10", "rowCount": 1, "needsYou": 0, "running": false, "jobs": false }
+            ],
             "entries": [
               { "kind": "session", "id": "kc" },
               { "kind": "session", "id": "kb" },

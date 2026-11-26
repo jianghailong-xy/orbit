@@ -227,6 +227,7 @@ interface Page {
     | { kind: 'project'; projectId: string; placedAt: string; spokeAt: string; memberCount: number; coordinator: { id: string } | null }
   >;
   next: string | null;
+  restarted?: boolean;
 }
 
 async function get(s: Seeded, query: Record<string, string | undefined>, headers: Record<string, string> = {}) {
@@ -285,6 +286,7 @@ for (const c of FIXTURE.cases) {
         const page = await read(s, { ...query, limit: '2', after });
         pages += 1;
         assert.ok(page.entries.length <= 2, `${label}: page ${pages} holds at most 2`);
+        assert.equal(page.restarted, undefined, `${label}: page ${pages} is no restart`);
         if (pages === 1 && r.expected.folders !== null) assert.deepEqual(named(s, page).folders, r.expected.folders);
         else assert.equal(page.folders, undefined, `${label}: page ${pages} has no folder rows`);
         paged.push(...named(s, page).entries);
@@ -349,6 +351,10 @@ test('a cursor from before the Completed order switched starts again from the fi
   const first = await read(s, { ...query, limit: '2' });
   assert.deepEqual(named(s, first).entries, c.reads[0].expected.entries.slice(0, 2), 'nothing held: the Completed order');
   assert.ok(first.next?.startsWith('c.'), `a cursor of the Completed order: ${first.next}`);
+  assert.equal(first.restarted, undefined);
+  const next = await read(s, { ...query, limit: '2', after: first.next! });
+  assert.equal(next.restarted, undefined, 'a next page in the same order is no restart');
+  assert.equal(next.folders, undefined, 'and carries no folder rows');
 
   // One of them becomes a project's coordinator: something is held now, and the list sorts by listedAt.
   const project = await s.h.db.project.create({ data: { ownerId: s.ownerId, title: 'held after the first page' } });
@@ -357,6 +363,14 @@ test('a cursor from before the Completed order switched starts again from the fi
   const whole = named(s, await read(s, query)).entries;
   assert.equal(whole[0].id, 'ka', 'now by listedAt: ka was listed last');
   const second = await read(s, { ...query, limit: '2', after: first.next! });
-  assert.deepEqual(named(s, second).entries, whole.slice(0, 2), 'the old cursor reads the new order from the top');
+  assert.equal(second.restarted, true, 'the old cursor is answered as a restart');
+  const fresh = await read(s, { ...query, limit: '2' });
+  assert.equal(fresh.restarted, undefined);
+  assert.deepEqual(named(s, second).entries, named(s, fresh).entries, "a restart's entries are a fresh first page's");
+  assert.deepEqual(named(s, second).entries, whole.slice(0, 2), 'the new order from the top');
+  assert.deepEqual(named(s, second).folders, [{ folderId: 'F10', rowCount: 1, needsYou: 0, running: false, jobs: false }],
+    'a restart carries the folder rows a first page does');
+  assert.deepEqual(named(s, second).folders, named(s, fresh).folders);
+  assert.equal(second.next, fresh.next);
   assert.ok(second.next?.startsWith('p.'));
 });
