@@ -293,6 +293,14 @@ describe('crossingBatches — a task asked to be taken out of every project', ()
     expect(into.out).toBe(false);
     expect(decisionLabels(into)).toEqual({ approve: 'Approve', refuse: 'Refuse' });
   });
+  it('summarises an answered take-out by what happened to the tasks', () => {
+    n = 0;
+    const [taken] = crossingBatches([out({ state: 'APPLIED', decidedAt: '2026-11-09T09:00:00.000Z' })], SOURCE);
+    expect(crossingSummary(taken)).toBe('1 task taken out of Runner link v1');
+    const [kept] = crossingBatches([out({ state: 'DENIED', decidedAt: '2026-11-09T09:00:00.000Z' })], SOURCE);
+    expect(crossingSummary(kept)).toBe('1 task kept in Runner link v1');
+  });
+
 });
 
 describe('moveBatches — a move out of every project, from the session read', () => {

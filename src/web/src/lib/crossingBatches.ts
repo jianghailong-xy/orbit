@@ -292,7 +292,14 @@ export function criterionName(criterion: NamedCriterion): string | null {
 
 export function crossingSummary(batch: CrossingBatch): string {
   const count = batch.rows.length;
-  if (batch.out) return `${count} ${crossingNoun(batch.kind, count)} to take out of ${batch.sourceTitle}`;
+  if (batch.out) {
+    const noun = crossingNoun(batch.kind, count);
+    if (isLive(batch)) return `${count} ${noun} to take out of ${batch.sourceTitle}`;
+    const verdict = batchVerdict(batch);
+    if (verdict === 'APPROVED') return `${count} ${noun} taken out of ${batch.sourceTitle}`;
+    if (verdict === 'REFUSED') return `${count} ${noun} kept in ${batch.sourceTitle}`;
+    return `${count} ${noun} from ${batch.sourceTitle}`;
+  }
   const head = `${count} ${crossingNoun(batch.kind, count)} from ${batch.sourceTitle}`;
   const distinct = new Map<string, NamedCriterion>();
   for (const row of batch.rows) {
