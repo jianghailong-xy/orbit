@@ -159,11 +159,10 @@ func TestCodexRateLimitResetV2CommandNamesItsSlot(t *testing.T) {
 		if response.CodexRateLimitResetRequest == nil || *response.CodexRateLimitResetRequest != command {
 			t.Fatalf("%s: the heartbeat response decodes to %+v", name, response.CodexRateLimitResetRequest)
 		}
-		// This binary still speaks protocol 1 only: it refuses a v2 consume without calling anything,
-		// and ignores a v2 refresh, rather than acting on Default's login for an added slot.
-		wantDisposition := codexResetCommandIgnore
+		// This binary speaks protocol 2: it acts on both, in the slot the command names
+		// (codex_rate_limit_reset_slot_test.go shows where).
+		wantDisposition := codexResetCommandAct
 		if phase == codexResetPhaseConsume {
-			wantDisposition = codexResetCommandRefuseProtocol
 			params, err := codexResetConsumeParams(command)
 			if err != nil || !reflect.DeepEqual(params, map[string]interface{}{"idempotencyKey": command.ProviderIdempotencyKey}) {
 				t.Fatalf("%s: consume params %v / %v", name, params, err)

@@ -20,12 +20,11 @@ import (
 // mirrors are tested against contracts/codex-rate-limit-reset.contract.json and its fixtures.
 // The heartbeat relay (codex_rate_limit_reset_relay.go) takes the command and reports results, the
 // consume (codex_rate_limit_reset_consume.go) carries it out, and runnerCapabilitiesV1 declares
-// codexRateLimitResetCapabilityV1 for the two together.
+// codexRateLimitResetCapabilityV1 and codexRateLimitResetCapabilityV2 for the two together.
 
 const (
-	// The version this binary's relay speaks and writes blocks and results in. It refuses a version 2
-	// consume (PROTOCOL_UNSUPPORTED) until it reads and consumes in added slots and declares
-	// codexRateLimitResetCapabilityV2.
+	// The block format, and the version of a command that names no account slot (Default's). The relay
+	// carries out version 1 and version 2 commands, and answers each in its own version (§12.3).
 	codexRateLimitResetProtocolVersion = 1
 	// Contract v2 (§12): every Codex account slot has its own block, and a version 2 command names the
 	// slot it runs in. Block format stays version 1 (codexRateLimitResetProtocolVersions).
@@ -403,12 +402,12 @@ func codexResetConsumeParams(cmd CodexRateLimitResetCommand) (map[string]interfa
 // codexResetCommandDisposition decides what the process `leaseOwner` does with a command from the
 // heartbeat it sent at `sent`: act on it; ignore it (another process's claim, a heartbeat older than
 // the freshness window, or a malformed command — nothing is reported, and the control plane redelivers
-// or reassigns); or refuse a consume of a protocol it does not speak.
+// or reassigns); or refuse a consume of a protocol it does not speak (neither 1 nor 2).
 func codexResetCommandDisposition(cmd CodexRateLimitResetCommand, leaseOwner string, sent, now time.Time) string {
 	if cmd.LeaseOwner != leaseOwner || now.Sub(sent) > codexRateLimitResetCommandFreshness {
 		return codexResetCommandIgnore
 	}
-	if cmd.ProtocolVersion != codexRateLimitResetProtocolVersion {
+	if !codexResetVersionIn("command", cmd.ProtocolVersion) {
 		if cmd.Phase == codexResetPhaseConsume && codexResetUUIDPattern.MatchString(cmd.OperationID) && cmd.ClaimGeneration >= 1 {
 			return codexResetCommandRefuseProtocol
 		}
