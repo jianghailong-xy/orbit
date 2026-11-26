@@ -71,6 +71,11 @@ async function routes(page, unhandled) {
     const json = (body, status = 200) => route.fulfill({ status, json: body });
     if (request.method() !== 'GET') return route.fallback();
     if (p === '/api/runners') return json([R.hpc]);
+    if (/^\/api\/wiki\/spaces\/[^/]+\/chats$/.test(p)) {
+      const ws = { id: W.test.id, name: 'landing-test', runner: 'HPC', online: true };
+      return json({ spaceId: p.split('/')[4], workspace: { ...ws, eligible: true }, choices: [ws],
+        fab: { working: 0, needsYou: 0, drafts: 0 }, chats: [] });
+    }
     if (p === '/api/workspaces') return json([W.test]);
     if (p === '/api/sessions/counts') {
       const open = rows.filter((r) => r.lifecycleState === 'OPEN');
@@ -212,6 +217,11 @@ const SCENES = {
   'built-tasks': { vp: WIDE, path: '/tasks' },
   'built-settings': { vp: WIDE, path: '/settings' },
   'built-task-detail': { vp: WIDE, path: '/tasks', clickText: 'Review the visual baseline' },
+  'built-wiki': { vp: WIDE, path: '/wiki/orbit' },
+  'built-wiki-narrow': { vp: NARROW, path: '/wiki/orbit' },
+  'built-wiki-entry': { vp: WIDE, path: '/wiki/orbit', clickText: 'Preserve visible behavior' },
+  'built-project': { vp: WIDE, path: '/projects' },
+  'built-help': { vp: WIDE, path: '/tasks', clickLabel: 'Help' },
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, ignoreDefaultArgs: ['--hide-scrollbars'] });
@@ -243,6 +253,7 @@ for (const [name, scene] of Object.entries(SCENES)) {
       await page.goto(`${origin}${scene.path}`);
       await page.waitForFunction(() => !document.getElementById('boot'), null, { timeout: 30_000 });
       await page.waitForTimeout(2_000);
+      if (scene.clickLabel) { await page.getByRole('button', { name: scene.clickLabel }).first().click(); await page.waitForTimeout(1_500); }
       if (scene.clickText) { await page.getByText(scene.clickText).first().click(); await page.waitForTimeout(1_500); }
     }
     if (scene.css) await page.addStyleTag({ content: scene.css });
