@@ -180,6 +180,11 @@ describe('open items and the left column', () => {
     expect(openItemFixLine(row({}), NOW)).toBe('The task’s session is on it · 4m · round 1 of 2 · nothing was pushed');
   });
 
+  it('says a required check on a pull request left it unmerged, not that nothing was pushed', () => {
+    const facts = { ...row({}).facts!, check: { name: 'GITHUB_CHECK' } as never };
+    expect(openItemFixLine(row({ facts }), NOW)).toBe('The task’s session is on it · 4m · round 1 of 2 · pull request not merged');
+  });
+
   it('draws a Fixing card per held item not already landing again, then a Not landed card per hand-back', () => {
     const cards = landingFixColumnCards({
       withWorkSession: [row({}), row({ itemId: 'i2', handling: { jobId: 'j2' } as never })],

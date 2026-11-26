@@ -235,6 +235,13 @@ class LandingSessionModelTest {
         assertFalse(LandingSessionModel.gates(view(timeline = timeline), now, now, false).stop)
     }
 
+    /** A required check GitHub ran is one on a pull request: the commit was pushed to its branch, so nothing says otherwise. */
+    @Test fun anAttemptOnAPullRequestDoesNotSayNothingWasPushed() {
+        val failed = view(state = "CHECK_FAILED", check = null, phase = "PUSH",
+            checks = """[{"name":"GITHUB_CHECK","command":"check","expectedExitCode":0,"exitCode":1,"timedOut":false,"durationMs":0}]""")
+        assertEquals("Check failed: check · pull request not merged", card(failed)!!.failure)
+    }
+
     @Test fun aFinishedAttemptSaysWhatStoppedIt() {
         val failed = view(state = "CHECK_FAILED", check = null, phase = "CHECK",
             checks = """[{"name":"TASK_ACCEPTANCE","command":"npm test","expectedExitCode":0,"exitCode":1,"timedOut":false,"durationMs":232000}]""")

@@ -85,6 +85,8 @@ export const LANDING_PAGE_COPY = {
   AFTER: 'after',
   ON_THE_COMBINED_TREE: 'on the combined tree',
   NOTHING_PUSHED_CLAUSE: 'nothing was pushed',
+  /** The same place for a landing that has a pull request: its commit was pushed there, and it did not merge. */
+  PULL_REQUEST_NOT_MERGED_CLAUSE: 'pull request not merged',
   STOPPED_WITH_AN_ERROR: 'Stopped with an error',
   COULD_NOT_MERGE: 'Could not merge',
   CONFLICT: 'conflict',
@@ -569,12 +571,15 @@ function terminalCard(
           : LANDING_PAGE_COPY.STOPPED_NOT_LANDED;
   // Held on its pull request: nothing stopped it, and the pull request block under the card says where it stands.
   const onPullRequest = attempt.state === 'PULL_REQUEST';
+  // With a pull request, the landing's commit is on its branch: what is true is that it has not merged.
+  const left = githubCheck || landing.pullRequest
+    ? LANDING_PAGE_COPY.PULL_REQUEST_NOT_MERGED_CLAUSE : LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE;
   const failure = onPullRequest ? null : githubCheck
-    ? `${label} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
+    ? `${label} · ${left}`
     : failed
-    ? `${failed.timedOut ? `${label} timed out ${LANDING_PAGE_COPY.ON_THE_COMBINED_TREE}` : LANDING_PAGE_COPY.TASK_ACCEPTANCE_EXITED(String(failed.exitCode ?? '—'), String(failed.expectedExitCode ?? 0))} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
+    ? `${failed.timedOut ? `${label} timed out ${LANDING_PAGE_COPY.ON_THE_COMBINED_TREE}` : LANDING_PAGE_COPY.TASK_ACCEPTANCE_EXITED(String(failed.exitCode ?? '—'), String(failed.expectedExitCode ?? 0))} · ${left}`
     : attempt.state === 'CONFLICT' ? `${LANDING_PAGE_COPY.COULD_NOT_MERGE} · ${LANDING_PAGE_COPY.CONFLICT}`
-      : attempt.state === 'ERROR' ? `${LANDING_PAGE_COPY.STOPPED_WITH_AN_ERROR} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
+      : attempt.state === 'ERROR' ? `${LANDING_PAGE_COPY.STOPPED_WITH_AN_ERROR} · ${left}`
         // A merge check that ended READY passed and waits for the owner: nothing stopped it.
         : attempt.kind === 'CHECK_PROMOTION' && attempt.state === 'READY' ? null
           : LANDING_PAGE_COPY.STOPPED_NOT_LANDED;

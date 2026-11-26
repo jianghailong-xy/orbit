@@ -69,6 +69,7 @@ object LandingFixWindowCopy {
     const val BEING_FIXED_BY_ITS_SESSION = "Being fixed by its session"
     const val IS_ON_IT = "The task's session is on it"
     const val NOTHING_WAS_PUSHED = "nothing was pushed"
+    const val PULL_REQUEST_NOT_MERGED = "pull request not merged"
     const val OPEN_SESSION_LINK = "Open session ›"
     const val LANDING_FIXING = "Landing · fixing"
     /** The sheet's line when every open item is being fixed by its session (board ④ d: `2 · none waiting on you`). */
@@ -127,7 +128,9 @@ object LandingFix {
     fun beingFixedLine(row: JsonObject, now: Instant): String {
         val work = workSession(row) ?: return LandingFixWindowCopy.IS_ON_IT
         return listOf(LandingFixWindowCopy.IS_ON_IT, age(work.offeredAt, now), LandingFixWindowCopy.round(work.round),
-            LandingFixWindowCopy.NOTHING_WAS_PUSHED).joinToString(" · ")
+            // A required check GitHub ran is one on a pull request: the commit was pushed there.
+            if (row.obj("facts")?.obj("check")?.text("name") == "GITHUB_CHECK") LandingFixWindowCopy.PULL_REQUEST_NOT_MERGED
+            else LandingFixWindowCopy.NOTHING_WAS_PUSHED).joinToString(" · ")
     }
 
     /** What stopped the newest attempt, as its own record says it: the server's sentence on its result line. */

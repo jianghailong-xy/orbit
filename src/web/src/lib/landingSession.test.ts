@@ -288,6 +288,27 @@ describe('the status card: five livenesses, three job kinds', () => {
   });
 });
 
+describe('an attempt of a landing that has a pull request pushed its commit there', () => {
+  const pullRequest = {
+    number: 2, url: 'https://github.com/o/r/pull/2', state: 'OPEN', condition: 'CHECK_FAILED',
+    checks: { passed: 0, required: 1, failed: [] }, mergeMethod: null, mergedSha: null, refusal: null,
+  } as unknown as SessionLandingView['pullRequest'];
+  const stopped = (over: Partial<SessionLandingAttempt>, view: Partial<SessionLandingView>) =>
+    landingAttemptCard(
+      landing({ ...view, currentAttempt: attempt({ phase: null, check: null, liveness: null, ...over }) }),
+      NOW,
+      { updatedAt: NOW },
+    )!.failure;
+
+  it('never says nothing was pushed', () => {
+    const github = { name: 'GITHUB_CHECK', command: 'check', exitCode: 1, expectedExitCode: 0, timedOut: false, durationMs: 0 };
+    expect(stopped({ state: 'CHECK_FAILED' }, { checks: [github], pullRequest }))
+      .toBe('Check failed: check · pull request not merged');
+    expect(stopped({ state: 'ERROR' }, { pullRequest })).toBe('Stopped with an error · pull request not merged');
+    expect(stopped({ state: 'ERROR' }, {})).toBe('Stopped with an error · nothing was pushed');
+  });
+});
+
 describe('the card of an attempt that has ended: only a stopped one says it stopped', () => {
   const ended = (over: Partial<SessionLandingAttempt>, view: Partial<SessionLandingView> = {}) =>
     landingAttemptCard(

@@ -101,6 +101,7 @@ const TIMELINE_JOB_COLUMNS = {
   round: true,
   promotionId: true,
   taskId: true,
+  pullRequestId: true,
 } as const;
 
 type TimelineJob = Prisma.ProjectIntegrationJobGetPayload<{ select: typeof TIMELINE_JOB_COLUMNS }>;
@@ -380,6 +381,7 @@ export async function readLandingTimeline(
           // 0410: the runner's measurement, read off the row — a fully applied branch said so.
           sourceFullyApplied: job.sourceFullyApplied,
           errorCode: job.errorCode,
+          onPullRequest: job.pullRequestId != null,
         }),
       }));
     }

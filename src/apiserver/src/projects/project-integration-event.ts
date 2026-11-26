@@ -327,6 +327,8 @@ export function resultText(input: {
   targetShaBefore?: string | null;
   sourceFullyApplied?: boolean | null;
   errorCode?: string | null;
+  /** The attempt pushed its landing branch and waited on a pull request (J-T14), so something was pushed. */
+  onPullRequest?: boolean;
 }): string {
   const state = input.effectiveState ?? input.state;
   const target = branchNameOf(input.targetRef);
@@ -347,7 +349,7 @@ export function resultText(input: {
       }
       return 'Could not merge · conflict';
     case 'CHECK_FAILED':
-      return 'Check failed · nothing was pushed';
+      return input.onPullRequest ? 'Check failed · pull request not merged' : 'Check failed · nothing was pushed';
     case 'ERROR':
       return `Stopped with an error${input.errorCode ? ` · ${input.errorCode}` : ''}`;
     case 'CANCELLED':

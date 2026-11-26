@@ -299,6 +299,11 @@ export function landingFixFailureWord(kind: string): string {
   return kind === 'INTEGRATION_CHECK_FAILED' ? 'checks failed' : 'conflict';
 }
 
+/** What the failure left behind. A required check GitHub ran is one on a pull request: the commit was pushed there. */
+function leftBehind(row: Pick<ProjectOpenItemRow, 'facts'>): string {
+  return row.facts?.check?.name === 'GITHUB_CHECK' ? 'pull request not merged' : 'nothing was pushed';
+}
+
 /** The row's title (web d ①): `Landing conflict · <task>`. */
 export function openItemFixTitle(row: Pick<ProjectOpenItemRow, 'kind' | 'facts' | 'title'>): string {
   const what = row.kind === 'INTEGRATION_CHECK_FAILED' ? 'Landing checks failed' : 'Landing conflict';
@@ -311,7 +316,7 @@ export function openItemFixLine(row: Pick<ProjectOpenItemRow, 'workSession' | 'f
     `${LANDING_FIX_COPY.THE_TASKS_SESSION} ${LANDING_FIX_COPY.IS_ON_IT}`,
     landingFixSince(row.workSession?.offeredAt, now),
     LANDING_FIX_COPY.ROUND(openItemFixRound(row)),
-    row.facts?.nothingLanded === false ? null : 'nothing was pushed',
+    row.facts?.nothingLanded === false ? null : leftBehind(row),
   ].filter(Boolean).join(' · ');
 }
 
@@ -361,7 +366,7 @@ export function landingFixColumnCards(
     .map((row): LandingFixColumnCard => ({
       state: 'RETURNED',
       itemId: row.itemId,
-      detail: `${landingFixFailureWord(row.kind)} · nothing was pushed`,
+      detail: `${landingFixFailureWord(row.kind)} · ${leftBehind(row)}`,
       task: row.facts?.task?.title ?? row.title,
       target: shortRef(row.facts?.targetRef),
       line: `${LANDING_FIX_COPY.COORDINATOR} ${LANDING_FIX_COPY.HAS_IT} · ${landingFixSince(row.workSession!.returnedAt, now)}`,

@@ -3602,6 +3602,8 @@ async function appendResultEvents(
       landedSha: input.body.landedSha ?? null,
       targetShaBefore: input.body.targetShaBefore ?? null,
       sourceFullyApplied: input.body.sourceFullyApplied ?? null,
+      // J-T16's end is the one the pull request door writes: the attempt's commit is on its landing branch.
+      onPullRequest: input.pullRequestEnd != null,
       errorCode: input.body.errorCode ?? null,
     }),
     at: input.finishedAt,

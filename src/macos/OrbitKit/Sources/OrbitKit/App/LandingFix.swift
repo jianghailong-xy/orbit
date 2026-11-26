@@ -67,6 +67,7 @@ public enum LandingFixCopy {
     public static let beingFixedByItsSession = "Being fixed by its session"
     public static let isOnIt = "is on it"
     public static let nothingWasPushedClause = "nothing was pushed"
+    public static let pullRequestNotMergedClause = "pull request not merged"
     public static let openSessionLink = "Open session"
     /// The task row's integration segment while its session has the failure.
     public static let landingFixing = "Landing · fixing"
@@ -348,7 +349,9 @@ public enum LandingFix {
         case "CHECK_FAILED":
             let failed = landing?.checks.first { !$0.passed }
             let name = failed.map { LandingPageCopy.checkLabel($0.name) } ?? "A check"
-            return "\(name) failed on the combined tree · \(LandingFixCopy.nothingWasPushedClause)"
+            let left = failed?.name == "GITHUB_CHECK" || landing?.pullRequest != nil
+                ? LandingFixCopy.pullRequestNotMergedClause : LandingFixCopy.nothingWasPushedClause
+            return "\(name) failed on the combined tree · \(left)"
         default:
             return nil
         }
@@ -486,7 +489,9 @@ public enum LandingFix {
             "\(LandingFixCopy.theTasksSession) \(LandingFixCopy.isOnIt)",
             RelativeTime.elapsed(held.offeredAt, now: now),
             LandingFixCopy.round(held.round),
-            LandingFixCopy.nothingWasPushedClause,
+            // A required check GitHub ran is one on a pull request: the commit was pushed there.
+            row.facts?.check?.name == "GITHUB_CHECK"
+                ? LandingFixCopy.pullRequestNotMergedClause : LandingFixCopy.nothingWasPushedClause,
         ].compactMap { $0 }.joined(separator: " · ")
     }
 

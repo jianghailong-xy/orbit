@@ -78,6 +78,7 @@ object LandingSessionCopy {
     const val AFTER = "after"
     const val ON_THE_COMBINED_TREE = "on the combined tree"
     const val NOTHING_PUSHED_CLAUSE = "nothing was pushed"
+    const val PULL_REQUEST_NOT_MERGED_CLAUSE = "pull request not merged"
     const val STOPPED_WITH_AN_ERROR = "Stopped with an error"
     const val COULD_NOT_MERGE = "Could not merge"
     const val CONFLICT = "conflict"
@@ -602,15 +603,18 @@ object LandingSessionModel {
             attempt.state == "ERROR" -> LandingSessionCopy.STOPPED_WITH_AN_ERROR
             else -> LandingSessionCopy.STOPPED_NOT_LANDED
         }
+        // With a pull request, the landing's commit is on its branch: what is true is that it has not merged.
+        val left = if (githubCheck != null || view.pullRequest != null) LandingSessionCopy.PULL_REQUEST_NOT_MERGED_CLAUSE
+            else LandingSessionCopy.NOTHING_PUSHED_CLAUSE
         val failure = when {
             // Held on its pull request: nothing stopped it, and the pull request block under the card says where it stands.
             onPullRequest -> null
-            githubCheck != null -> "$githubCheck · ${LandingSessionCopy.NOTHING_PUSHED_CLAUSE}"
+            githubCheck != null -> "$githubCheck · $left"
             failed != null -> (if (failed.timedOut) "$label ${LandingSessionCopy.TIMED_OUT.replaceFirstChar { it.lowercase() }} ${LandingSessionCopy.ON_THE_COMBINED_TREE}"
                 else LandingSessionCopy.taskAcceptanceExited(failed.exitCode?.toString() ?: "—", (failed.expectedExitCode ?: 0).toString())) +
-                " · ${LandingSessionCopy.NOTHING_PUSHED_CLAUSE}"
+                " · $left"
             attempt.state == "CONFLICT" -> "${LandingSessionCopy.COULD_NOT_MERGE} · ${LandingSessionCopy.CONFLICT}"
-            attempt.state == "ERROR" -> "${LandingSessionCopy.STOPPED_WITH_AN_ERROR} · ${LandingSessionCopy.NOTHING_PUSHED_CLAUSE}"
+            attempt.state == "ERROR" -> "${LandingSessionCopy.STOPPED_WITH_AN_ERROR} · $left"
             // A merge check that ended READY passed and waits for the owner: nothing stopped it.
             attempt.kind == "CHECK_PROMOTION" && attempt.state == "READY" -> null
             else -> LandingSessionCopy.STOPPED_NOT_LANDED

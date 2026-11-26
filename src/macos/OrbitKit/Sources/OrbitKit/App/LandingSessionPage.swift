@@ -65,6 +65,7 @@ public enum LandingPageCopy {
     public static let after = "after"
     public static let onTheCombinedTree = "on the combined tree"
     public static let nothingPushedClause = "nothing was pushed"
+    public static let pullRequestNotMergedClause = "pull request not merged"
     public static let stoppedWithAnError = "Stopped with an error"
     public static let couldNotMerge = "Could not merge"
     public static let conflict = "conflict"
@@ -564,6 +565,9 @@ public extension LandingPageCopy {
         }
         // Held on its pull request: nothing stopped it, and the pull request block under the card says where it stands.
         let onPullRequest = attempt.state == "PULL_REQUEST"
+        // With a pull request, the landing's commit is on its branch: what is true is that it has not merged.
+        let left = failed?.name == "GITHUB_CHECK" || landing.pullRequest != nil
+            ? LandingPageCopy.pullRequestNotMergedClause : LandingPageCopy.nothingPushedClause
         let failure: String?
         if onPullRequest {
             failure = nil
@@ -572,11 +576,11 @@ public extension LandingPageCopy {
                 ? "\(label) \(LandingPageCopy.timedOut.lowercasedFirst()) \(LandingPageCopy.onTheCombinedTree)"
                 : taskAcceptanceExited(failed.exitCode.map(String.init) ?? "—",
                                        expected: String(failed.expectedExitCode ?? 0))
-            failure = "\(head) · \(LandingPageCopy.nothingPushedClause)"
+            failure = "\(head) · \(left)"
         } else if attempt.state == "CONFLICT" {
             failure = "\(LandingPageCopy.couldNotMerge) · \(LandingPageCopy.conflict)"
         } else if attempt.state == "ERROR" {
-            failure = "\(LandingPageCopy.stoppedWithAnError) · \(LandingPageCopy.nothingPushedClause)"
+            failure = "\(LandingPageCopy.stoppedWithAnError) · \(left)"
         } else if attempt.kind == "CHECK_PROMOTION" && attempt.state == "READY" {
             // A merge check that ended READY passed and waits for the owner: nothing stopped it.
             failure = nil

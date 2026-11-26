@@ -1448,6 +1448,9 @@ test('J-T16 and W4–W6: a failing required check goes back to the task\'s sessi
   assert.equal(pr.condition, 'CHECK_FAILED');
   const line = await h.prisma.projectIntegrationJobEvent.findFirst({ where: { jobId: w.command.jobId, kind: 'PULL_REQUEST', text: { startsWith: 'Required check' } } });
   assert.equal(line?.text, `Required check "PostgreSQL specs" failed on pull request #${w.number}`);
+  // The attempt's result line says what is true of it: its commit was pushed, and the pull request is not merged.
+  const result = await h.prisma.projectIntegrationJobEvent.findFirst({ where: { jobId: w.command.jobId, kind: 'RESULT' } });
+  assert.equal(result?.text, 'Check failed · pull request not merged');
 
   // W4/W5: the item is the task's own work session's.
   const item = await h.prisma.projectOpenItem.findFirstOrThrow({ where: { integrationJobId: w.command.jobId } });

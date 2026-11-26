@@ -85,6 +85,7 @@ final class LandingCopyParityTests: XCTestCase {
             ("AFTER", LandingPageCopy.after),
             ("ON_THE_COMBINED_TREE", LandingPageCopy.onTheCombinedTree),
             ("NOTHING_PUSHED_CLAUSE", LandingPageCopy.nothingPushedClause),
+            ("PULL_REQUEST_NOT_MERGED_CLAUSE", LandingPageCopy.pullRequestNotMergedClause),
             ("STOPPED_WITH_AN_ERROR", LandingPageCopy.stoppedWithAnError),
             ("COULD_NOT_MERGE", LandingPageCopy.couldNotMerge),
             ("CONFLICT", LandingPageCopy.conflict),
