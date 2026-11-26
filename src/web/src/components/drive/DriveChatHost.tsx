@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useChatHost } from '../ChatHost';
-import type { ChatHistoryOptions, ChatOrigin } from '../WikiChatPanel';
+import type { ChatOrigin } from '../WikiChatPanel';
 import {
   DRIVE_CHAT_CHOOSE_WORKSPACE,
   DRIVE_CHAT_EMPTY_HINT,
@@ -17,7 +17,6 @@ import {
   driveChatContext,
   driveChatFab,
   driveChatFolderLabel,
-  driveChatHistoryQuery,
   driveChatsQuery,
   driveChatToOpen,
   driveChatWorkspace,
@@ -104,7 +103,6 @@ export function DriveChatHost({
         examples: DRIVE_CHAT_EXAMPLES,
       },
       listKey: driveChatsQuery().queryKey,
-      history: (q) => driveChatHistoryQuery(q) as unknown as ChatHistoryOptions,
       create: (body, sent) => createDriveChat(body, sent),
       turnContext: (sent) => {
         const driveContext = driveChatContext(sent);

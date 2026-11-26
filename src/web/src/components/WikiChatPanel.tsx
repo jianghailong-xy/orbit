@@ -9,15 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type InfiniteData,
-  type QueryKey,
-  type UseInfiniteQueryOptions,
-} from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import {
   ArrowRightOutlined,
   CaretDownOutlined,
@@ -81,7 +73,8 @@ import { encodeId, routeId } from '../lib/idCodec';
 import { useMachineName } from '../lib/managedRunner';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
-import { meQuery, providersQuery, runnersQuery, sessionQuery, workspacesQuery, type Me } from '../lib/queries';
+import { driveChatHistoryQuery } from '../lib/driveChat';
+import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQuery, workspacesQuery, type Me } from '../lib/queries';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import { engineTitleFor } from '../lib/sessionProviderChoices';
 import { outlivingSessionWork } from '../lib/sessionActivity';
@@ -161,9 +154,6 @@ import { wikiDocSectionPath } from '../lib/wikiDocs';
 import { wikiPlanDocPath, wikiPlanPath } from '../lib/wikiPlan';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
 
-/** One page of a chats history, as the panel's history reads it. */
-export type ChatHistoryOptions = UseInfiniteQueryOptions<ChatHostList | null, Error, InfiniteData<ChatHostList | null>, QueryKey, number>;
-
 /**
  * What a page that docks the chat makes it (board drive-chat 01, owner Q1 A): its words, where its chats are read and
  * made, what a message carries beside the words from the composer's chips, and where a new chat may run. The panel,
@@ -188,13 +178,13 @@ export interface ChatOrigin {
   };
   /** The chats read, made fresh after a chat is made or a row's action. */
   listKey: QueryKey;
-  history: (q: string) => ChatHistoryOptions;
   create: (body: Omit<WikiChatCreate, 'wikiContext'>, attachments: WikiChatAttachments) => Promise<{ sessionId: string }>;
   /** What a message carries beside its words from what the composer's chips show: `{ wikiContext }`, `{ driveContext }`. */
   turnContext: (attachments: WikiChatAttachments) => Record<string, unknown> | undefined;
   /** Where a new chat may run when the chats read does not list them (Drive: the owner's workspaces). */
   choices?: WikiChatWorkspace[];
-  /** The Wiki's space: its chats' cards open its sections, entries and Review beside the chat. */
+  /** The Wiki's space: its chats' cards open its sections, entries and Review beside the chat, and the history is its
+   *  chats. Absent, the history is the Drive chats. */
   space?: WikiSpaceRow;
 }
 
@@ -405,7 +395,10 @@ function WikiChatHistory({
   const [q, setQ] = useState('');
   const [completedOpen, setCompletedOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
-  const pages = useInfiniteQuery(origin.history(q.trim()));
+  // The space's chats on the Wiki, the Drive chats on Drive: each read only where it is the history.
+  const wikiPages = useInfiniteQuery({ ...wikiChatHistoryQuery(origin.space?.id ?? '', q.trim()), enabled: !!origin.space });
+  const drivePages = useInfiniteQuery({ ...driveChatHistoryQuery(q.trim()), enabled: !origin.space });
+  const pages = origin.space ? wikiPages : drivePages;
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();

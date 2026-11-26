@@ -14,17 +14,9 @@ import { useQuery } from '@tanstack/react-query';
 import { CommentOutlined } from '@ant-design/icons';
 import { useChatHost } from './ChatHost';
 import { WIKI_DOC_SECTION_EVENT } from './WikiDirectory';
-import type { ChatHistoryOptions, ChatOrigin } from './WikiChatPanel';
+import type { ChatOrigin } from './WikiChatPanel';
 import { routeId } from '../lib/idCodec';
-import {
-  wikiChatDraftsQuery,
-  wikiChatHistoryQuery,
-  wikiChatsQuery,
-  wikiDocQuery,
-  wikiDocsQuery,
-  wikiEntryQuery,
-  wikiPlanQuery,
-} from '../lib/queries';
+import { wikiChatDraftsQuery, wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery, wikiPlanQuery } from '../lib/queries';
 import {
   WIKI_CHAT_ASK,
   WIKI_CHAT_CHOOSE_WORKSPACE,
@@ -136,7 +128,6 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
         chooseWorkspace: WIKI_CHAT_CHOOSE_WORKSPACE,
       },
       listKey: wikiChatsQuery(space.id).queryKey,
-      history: (q) => wikiChatHistoryQuery(space.id, q) as unknown as ChatHistoryOptions,
       create: (body, sent) => createWikiChat(space.id, { ...body, wikiContext: wikiChatContext(sent) }),
       turnContext: (sent) => {
         const wikiContext = wikiChatContext(sent);
