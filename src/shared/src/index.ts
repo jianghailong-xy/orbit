@@ -58,6 +58,7 @@ export * from './wikiJobs';
 export * from './wikiRepoOps';
 export * from './wikiSystemModel';
 export * from './wikiChat';
+export * from './driveChat';
 export * from './feishu';
 export * from './github';
 export * from './pull-request-landing';

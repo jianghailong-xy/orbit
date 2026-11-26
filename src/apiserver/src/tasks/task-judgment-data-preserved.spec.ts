@@ -3558,7 +3558,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // with session_aa_status_from_facts, which writes session.status from the facts, and re-creates nine session
       // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
-      '1671_session_status_from_facts'],
+      '1671_session_status_from_facts',
+      // 1680 adds a nullable session.drive_chat_prompt_digest and conversation_turn.drive_context (catalog-only) and
+      // widens session_opened_by_check by 'DRIVE_CHAT' NOT VALID; 1681 validates it and builds a partial index
+      // CONCURRENTLY. No row is written, and no preserved relation's trigger, function or DONE fence changes.
+      '1680_drive_chat_session',
+      '1681_drive_chat_session_index'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

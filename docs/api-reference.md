@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 570 |
+| `user` | 574 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **905** |
+| **Total** | **909** |
 
 ## Public routes
 
@@ -173,6 +173,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
 | `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
 | `GET` | `/api/documents/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/documents/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
+| `POST` | `/api/documents/chats` | body `Object` | `DriveChatController.create` |
 | `GET` | `/api/documents/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
 | `DELETE` | `/api/documents/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/documents/entries/:id` | path `id` | `DriveController.get` |
@@ -202,6 +204,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/documents/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
 | `POST` | `/api/documents/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
 | `GET` | `/api/drive/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/drive/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
+| `POST` | `/api/drive/chats` | body `Object` | `DriveChatController.create` |
 | `GET` | `/api/drive/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
 | `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |

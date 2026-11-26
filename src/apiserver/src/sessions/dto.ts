@@ -1,6 +1,6 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import type { NewWorkspaceRequest, SessionKind, SessionLandingView, SessionTurnIntent, WikiChatContext } from '@orbit/shared';
+import type { NewWorkspaceRequest, SessionKind, SessionLandingView, SessionTurnIntent, WikiChatContext, DriveChatContext } from '@orbit/shared';
 import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
 
 const MERGE_RECEIPT_RESULT_VALUES = [...MERGE_RECEIPT_RESULTS];
@@ -144,6 +144,10 @@ export interface SessionTurnDto {
    *  delivery reads and appends as the control plane's note, so `content` stays the words alone. Taken
    *  only by a chat; a message to any other session that carries one is a 400. */
   wikiContext?: WikiChatContext | null;
+  /** A Drive chat's folder and selection (`{ folderId?, entryIds? }`, drive/drive-chat-context.ts): ids that delivery
+   *  reads and appends as `<orbit_drive_chat>`, so `content` stays the words alone. Taken only by a Drive chat; a
+   *  message to any other session that carries one is a 400. */
+  driveContext?: DriveChatContext | null;
   /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the text is the optimizer's English, sent as
    *  inserted, so Settings › Translation does not hold or translate it. The turn carries no `translation`. */
   skipTranslation?: boolean;
