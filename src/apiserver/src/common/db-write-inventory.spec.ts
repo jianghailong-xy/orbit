@@ -490,14 +490,17 @@ function liveTriggers(): Map<string, { table: string; event: string; kind: strin
       }
     }
     const created =
-      /CREATE\s+(?:OR\s+REPLACE\s+)?(CONSTRAINT\s+)?TRIGGER\s+"?([a-z_0-9]+)"?\s+((?:BEFORE|AFTER|INSTEAD\s+OF)[\s\S]*?)\s+ON\s+"?([a-z_]+)"?[\s\S]*?EXECUTE\s+(?:PROCEDURE|FUNCTION)\s+"?([a-z_0-9]+)"?/gi;
+      /CREATE\s+(OR\s+REPLACE\s+)?(CONSTRAINT\s+)?TRIGGER\s+"?([a-z_0-9]+)"?\s+((?:BEFORE|AFTER|INSTEAD\s+OF)[\s\S]*?)\s+ON\s+"?([a-z_]+)"?[\s\S]*?EXECUTE\s+(?:PROCEDURE|FUNCTION)\s+"?([a-z_0-9]+)"?/gi;
+    // CREATE OR REPLACE TRIGGER restates a live trigger in place (its column list, its function): the trigger is
+    // the one installed before, so it keeps that migration as its `since`, and takes the new event and function.
     for (const match of sql.matchAll(created)) {
-      live.set(match[2], {
-        table: match[4],
-        event: match[3].split(/\s+/).join(' '),
-        kind: match[1] ? 'CONSTRAINT' : 'ROW/STATEMENT',
-        since: dir,
-        fn: match[5],
+      const restated = match[1] ? live.get(match[3]) : undefined;
+      live.set(match[3], {
+        table: match[5],
+        event: match[4].split(/\s+/).join(' '),
+        kind: match[2] ? 'CONSTRAINT' : 'ROW/STATEMENT',
+        since: restated?.since ?? dir,
+        fn: match[6],
       });
     }
   }
