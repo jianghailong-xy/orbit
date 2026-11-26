@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import type { MenuItem } from './ui/Menu';
+import { Tooltip } from './ui/Tooltip';
 import type { SessionTagRef } from '../lib/sessionGrouping';
 import { createSessionTag, recentSessionTagIds } from '../lib/sessionTags';
 
@@ -143,17 +144,17 @@ export function useSessionTagLevel({ library, selectedIds, saving, onToggle, onC
         <div className="session-tags-colours" role="group" aria-label="Colors">
           <span className="session-tags-colours-label">Colors</span>
           {colours.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className="session-tags-swatch"
-              style={{ background: t.color }}
-              aria-label={t.name}
-              title={t.name}
-              aria-pressed={selected.has(t.id)}
-              disabled={saving}
-              onClick={() => onToggle(t.id)}
-            />
+            <Tooltip key={t.id} content={t.name}>
+              <button
+                type="button"
+                className="session-tags-swatch"
+                style={{ background: t.color }}
+                aria-label={t.name}
+                aria-pressed={selected.has(t.id)}
+                disabled={saving}
+                onClick={() => onToggle(t.id)}
+              />
+            </Tooltip>
           ))}
         </div>
       )}

@@ -59,6 +59,7 @@ import { PasswordInput } from '../ui/PasswordInput';
 import { Spinner } from '../ui/Spinner';
 import { Switch } from '../ui/Switch';
 import { Textarea } from '../ui/Textarea';
+import { Tooltip } from '../ui/Tooltip';
 import { SubagentSettings } from '../SubagentSettings';
 import {
   WorktreeIsolationDialog,
@@ -396,6 +397,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
         action={
           <Menu
             align="end"
+            tooltip="Actions"
             items={[
               {
                 key: 'console',
@@ -410,7 +412,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
                 onSelect: () => duplicateMut.mutate(workspace),
               },
             ]}
-            trigger={<Button icon={<MoreOutlined />} title="Actions" aria-label="Actions" />}
+            trigger={<Button icon={<MoreOutlined />} aria-label="Actions" />}
           />
         }
       />
@@ -865,13 +867,14 @@ function EnvDrawer({
               onChange={(e) => setRows(rows.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
               placeholder="value"
             />
-            <Button
-              variant="text"
-              title="Remove"
-              aria-label="Remove"
-              icon={<DeleteOutlined />}
-              onClick={() => setRows(rows.filter((_, j) => j !== i))}
-            />
+            <Tooltip content="Remove" align="end">
+              <Button
+                variant="text"
+                aria-label="Remove"
+                icon={<DeleteOutlined />}
+                onClick={() => setRows(rows.filter((_, j) => j !== i))}
+              />
+            </Tooltip>
           </div>
         ))}
         <Button
@@ -1037,14 +1040,15 @@ function WorkspacePermissionRules({ workspaceId }: { workspaceId: string }) {
               <code className="rd-rule-token">
                 {rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName}
               </code>
-              <Button
-                variant="text"
-                title="Ask about this again"
-                aria-label="Ask about this again"
-                icon={<DeleteOutlined />}
-                loading={revokeMut.isPending && revokeMut.variables === rule.id}
-                onClick={() => revokeMut.mutate(rule.id)}
-              />
+              <Tooltip content="Ask about this again" align="end">
+                <Button
+                  variant="text"
+                  aria-label="Ask about this again"
+                  icon={<DeleteOutlined />}
+                  loading={revokeMut.isPending && revokeMut.variables === rule.id}
+                  onClick={() => revokeMut.mutate(rule.id)}
+                />
+              </Tooltip>
             </div>
           ))}
           {/* The two mechanisms differ in WHEN they take effect: Claude is handed the rules when it

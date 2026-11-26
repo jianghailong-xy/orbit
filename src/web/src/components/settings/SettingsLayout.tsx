@@ -48,6 +48,7 @@ import { MachineOsIcon } from '../../lib/machineOs';
 import { MANAGED_UPDATE_ROW_LABEL, MANAGED_UPDATE_ROW_TITLE } from '../../lib/runnerCopy';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import { Spinner } from '../ui/Spinner';
+import { Tooltip } from '../ui/Tooltip';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../../lib/providerAdmin';
 import { providerPoolsQuery } from '../../lib/providerPools';
@@ -649,18 +650,19 @@ function MachineRow({
         label={name}
         trailing={<MachineRowState state={state} managedRow={managedRow} />}
       />
-      <button
-        ref={setActivatorNodeRef}
-        type="button"
-        className="settings-nav-grip"
-        title="Drag to reorder"
-        disabled={dragDisabled}
-        {...attributes}
-        aria-label={`Reorder ${name}`}
-        onKeyDown={(event) => listeners?.onKeyDown?.(event)}
-      >
-        <HolderOutlined />
-      </button>
+      <Tooltip content="Drag to reorder" disabled={isDragging}>
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          className="settings-nav-grip"
+          disabled={dragDisabled}
+          {...attributes}
+          aria-label={`Reorder ${name}`}
+          onKeyDown={(event) => listeners?.onKeyDown?.(event)}
+        >
+          <HolderOutlined />
+        </button>
+      </Tooltip>
     </div>
   );
 }
@@ -741,9 +743,11 @@ export function NavGroup({
       <div className="settings-nav-heading">
         <span>{title}</span>
         {add && (
-          <button type="button" className="settings-nav-add" aria-label={add.label} title={add.label} onClick={add.onClick}>
-            <PlusOutlined />
-          </button>
+          <Tooltip content={add.label} align="end">
+            <button type="button" className="settings-nav-add" aria-label={add.label} onClick={add.onClick}>
+              <PlusOutlined />
+            </button>
+          </Tooltip>
         )}
       </div>
       {children}

@@ -42,7 +42,7 @@ describe('PendingTray', () => {
       ['Withdraw'], ['Steer', 'Withdraw'], [],
     ]);
     expect(rows[1].querySelector('.pending-tray-btn')?.getAttribute('title')).toBe('Send into the current turn now');
-    expect(doc.querySelector('[aria-label="Withdraw"]')?.getAttribute('title')).toBe('Withdraw — back to the composer');
+    expect(doc.querySelector('[aria-label="Withdraw"]')?.hasAttribute('title')).toBe(false);
   });
 
   it('offers nothing on a row whose press is out', () => {

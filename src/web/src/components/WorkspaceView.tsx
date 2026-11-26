@@ -2932,17 +2932,18 @@ export function WorkspaceView({
       >
         {lastMine.text}
       </button>
-      <button
-        type="button"
-        className="chat-jump-start chat-older-start"
-        title="Jump to the beginning"
-        aria-label="Jump to the beginning"
-        onClick={() => void jumpToStart()}
-      >
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
-        </svg>
-      </button>
+      <Tooltip side="bottom" content="Jump to the beginning">
+        <button
+          type="button"
+          className="chat-jump-start chat-older-start"
+          aria-label="Jump to the beginning"
+          onClick={() => void jumpToStart()}
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
+          </svg>
+        </button>
+      </Tooltip>
     </span>
   ) : (
     <button type="button" className="chat-older-pill chat-jump-start" onClick={() => void jumpToStart()}>
@@ -4993,17 +4994,18 @@ export function WorkspaceView({
   const [decisionWaiting, setDecisionWaiting] = useState(false);
   const topPillShown = decisionWaiting || loadingOlderShown || jumpUpOffered;
   const jumpStartIcon = (
-    <button
-      type="button"
-      className="chat-jump-start chat-older-start"
-      title="Jump to the beginning"
-      aria-label="Jump to the beginning"
-      onClick={() => void jumpToStart()}
-    >
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
-      </svg>
-    </button>
+    <Tooltip side="bottom" content="Jump to the beginning">
+      <button
+        type="button"
+        className="chat-jump-start chat-older-start"
+        aria-label="Jump to the beginning"
+        onClick={() => void jumpToStart()}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
+        </svg>
+      </button>
+    </Tooltip>
   );
   // The top capsule. The strip's line is always its first child, mounted whether or not anything
   // waits, so it can say when something does: a pill of its own then, and otherwise a wrapper that
@@ -10380,9 +10382,11 @@ export function WorkspaceView({
   // conversation's right edge (owner 2026-11-11), where its back chevron is a ✕ that closes the column.
   const projectPageHead = (onClose: () => void, closeLabel: string, closeIcon: ReactNode): ReactNode => openProjectId && (
     <div className="session-col-head session-folder-head session-project-page-header">
-      <button type="button" className="session-folder-back" aria-label={closeLabel} title={closeLabel} onClick={onClose}>
-        {closeIcon}
-      </button>
+      <Tooltip side="bottom" align="start" content={closeLabel}>
+        <button type="button" className="session-folder-back" aria-label={closeLabel} onClick={onClose}>
+          {closeIcon}
+        </button>
+      </Tooltip>
       <span className="session-folder-titles">
         <span className="session-folder-title">{pageProjectTitle}</span>
         <span className="session-folder-workspace">
@@ -10393,11 +10397,13 @@ export function WorkspaceView({
       </span>
       {/* The page's one action, as iOS's toolbar has it: the project's own page. The
           coordinator is the first row below, so it needs no entry of its own up here. */}
-      <button type="button" className="session-kebab session-folder-head-more session-project-page-open"
-        aria-label={SESSION_PROJECT_COPY.openProject} title={SESSION_PROJECT_COPY.openProject}
-        onClick={() => navigate(`/projects/${encodeId(openProjectId)}`)}>
-        <AppstoreOutlined />
-      </button>
+      <Tooltip side="bottom" align="end" content={SESSION_PROJECT_COPY.openProject}>
+        <button type="button" className="session-kebab session-folder-head-more session-project-page-open"
+          aria-label={SESSION_PROJECT_COPY.openProject}
+          onClick={() => navigate(`/projects/${encodeId(openProjectId)}`)}>
+          <AppstoreOutlined />
+        </button>
+      </Tooltip>
     </div>
   );
   // The project's first card and its merge into main lead the list and scroll with it, as on iOS
@@ -10903,15 +10909,16 @@ export function WorkspaceView({
             className={`session-col-head session-folder-head${dropHover === null ? ' drop-target' : ''}`}
             {...folderDropProps(null)}
           >
-            <button
-              type="button"
-              className="session-folder-back"
-              aria-label={FOLDER_COPY.back(headWorkspaceName)}
-              title={FOLDER_COPY.back(headWorkspaceName)}
-              onClick={() => leaveFolder()}
-            >
-              <LeftOutlined />
-            </button>
+            <Tooltip side="bottom" align="start" content={FOLDER_COPY.back(headWorkspaceName)}>
+              <button
+                type="button"
+                className="session-folder-back"
+                aria-label={FOLDER_COPY.back(headWorkspaceName)}
+                onClick={() => leaveFolder()}
+              >
+                <LeftOutlined />
+              </button>
+            </Tooltip>
             <span className="session-folder-titles">
               {folderEdit?.id === openFolder.id ? (
                 <input
@@ -10948,15 +10955,16 @@ export function WorkspaceView({
           // The Scheduled runs folder's page: back to the workspace's list, and the folder's name. It lists the view
           // it was opened from, as a folder's page does.
           <div className="session-col-head session-folder-head">
-            <button
-              type="button"
-              className="session-folder-back"
-              aria-label={FOLDER_COPY.back(headWorkspaceName)}
-              title={FOLDER_COPY.back(headWorkspaceName)}
-              onClick={() => leaveFolder()}
-            >
-              <LeftOutlined />
-            </button>
+            <Tooltip side="bottom" align="start" content={FOLDER_COPY.back(headWorkspaceName)}>
+              <button
+                type="button"
+                className="session-folder-back"
+                aria-label={FOLDER_COPY.back(headWorkspaceName)}
+                onClick={() => leaveFolder()}
+              >
+                <LeftOutlined />
+              </button>
+            </Tooltip>
             <span className="session-folder-titles">
               <span className="session-folder-title">{SCHEDULED_RUNS_COPY.title}</span>
               <span className="session-folder-workspace">{headWorkspaceName}</span>
@@ -13386,16 +13394,17 @@ export function SessionComposer({
             shell mode, instead of opening the attachment menu. Nothing in that menu applies to a
             raw command anyway — and a mode you can enter needs a visible way out. */}
         {shellMode ? (
-          <Button
-            className="composer-attach-btn composer-shell-btn"
-            variant="text"
-            onClick={exitShell}
-            disabled={composerDisabled}
-            aria-label="Leave shell mode"
-            title="Leave shell mode"
-          >
-            ❯
-          </Button>
+          <Tooltip content="Leave shell mode">
+            <Button
+              className="composer-attach-btn composer-shell-btn"
+              variant="text"
+              onClick={exitShell}
+              disabled={composerDisabled}
+              aria-label="Leave shell mode"
+            >
+              ❯
+            </Button>
+          </Tooltip>
         ) : (
         <Menu
           side="top"
@@ -13666,20 +13675,21 @@ export function SessionComposer({
             nothing to optimize: a button that came and went with the draft moved every control to
             its left. Busy, the spinner takes the same slot. */}
         {optimizer.buttonShown && (
-          <button
-            type="button"
-            className="composer-optimize"
-            onClick={optimizer.press}
-            disabled={!optimizer.buttonEnabled}
-            aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
-            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · Tab · ${OPTIMIZE_SHORTCUT}`}
-          >
-            {optimizer.busy ? (
-              <span className="composer-optimize-spin" aria-hidden="true" />
-            ) : (
-              <span aria-hidden="true">✦</span>
-            )}
-          </button>
+          <Tooltip content={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · Tab · ${OPTIMIZE_SHORTCUT}`}>
+            <button
+              type="button"
+              className="composer-optimize"
+              onClick={optimizer.press}
+              disabled={!optimizer.buttonEnabled}
+              aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
+            >
+              {optimizer.busy ? (
+                <span className="composer-optimize-spin" aria-hidden="true" />
+              ) : (
+                <span aria-hidden="true">✦</span>
+              )}
+            </button>
+          </Tooltip>
         )}
         {showStop ? (
           <Button
@@ -13691,45 +13701,42 @@ export function SessionComposer({
           />
         ) : (
           <span className="composer-send-hold">
-            <Button
-              className="composer-send"
-              variant="primary"
-              icon={<ArrowUpOutlined />}
-              disabled={!canSend}
-              loading={sending}
-              onClick={() => {
-                // The press that opened the offer is not a send as well.
-                if (sendHold.current?.fired) {
+            <Tooltip content={queueOffered ? `Send into the current turn · ${IS_MAC ? '⌥' : 'Alt+'}Enter, or hold, to queue it for the next turn` : undefined}>
+              <Button
+                className="composer-send"
+                variant="primary"
+                icon={<ArrowUpOutlined />}
+                disabled={!canSend}
+                loading={sending}
+                onClick={() => {
+                  // The press that opened the offer is not a send as well.
+                  if (sendHold.current?.fired) {
+                    sendHold.current = null;
+                    return;
+                  }
+                  onSend();
+                }}
+                onPointerDown={() => {
                   sendHold.current = null;
-                  return;
-                }
-                onSend();
-              }}
-              onPointerDown={() => {
-                sendHold.current = null;
-                if (!queueOffered || !canSend) return;
-                const hold = {
-                  fired: false,
-                  timer: setTimeout(() => {
-                    hold.fired = true;
-                    setQueueOffer(true);
-                  }, QUEUE_OFFER_HOLD_MS),
-                };
-                sendHold.current = hold;
-              }}
-              onPointerUp={releaseSendHold}
-              onPointerLeave={releaseSendHold}
-              onPointerCancel={releaseSendHold}
-              onContextMenu={(e) => {
-                if (queueOffered) e.preventDefault();
-              }}
-              aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
-              title={
-                queueOffered
-                  ? `Send into the current turn · ${IS_MAC ? '⌥' : 'Alt+'}Enter, or hold, to queue it for the next turn`
-                  : undefined
-              }
-            />
+                  if (!queueOffered || !canSend) return;
+                  const hold = {
+                    fired: false,
+                    timer: setTimeout(() => {
+                      hold.fired = true;
+                      setQueueOffer(true);
+                    }, QUEUE_OFFER_HOLD_MS),
+                  };
+                  sendHold.current = hold;
+                }}
+                onPointerUp={releaseSendHold}
+                onPointerLeave={releaseSendHold}
+                onPointerCancel={releaseSendHold}
+                onContextMenu={(e) => {
+                  if (queueOffered) e.preventDefault();
+                }}
+                aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+              />
+            </Tooltip>
             {queueOffer && (
               <div ref={queueOfferRef} className="composer-queue-offer" role="menu" aria-label="Send">
                 <button
