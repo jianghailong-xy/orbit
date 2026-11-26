@@ -55,7 +55,8 @@ public struct LandingPullRequestCard: Equatable, Sendable {
         let segments: [Segment] = (0..<max(required, 0)).map { i in
             i < passed ? .passed : i < passed + failed.count ? .failed : .pending
         }
-        let count = "\(passed) of \(required)"
+        // No required check reported yet (a read made before CI registered one) is no count, never "0 of 0".
+        let count: String? = required > 0 ? "\(passed) of \(required)" : nil
         let url = pr.url.flatMap { $0.isEmpty ? nil : $0 }
 
         if pr.state == "MERGED" {
@@ -94,8 +95,8 @@ public struct LandingPullRequestCard: Equatable, Sendable {
         }
         if ["REVIEW_REQUIRED", "CHANGES_REQUESTED", "MERGEABLE"].contains(pr.condition ?? "") {
             return LandingPullRequestCard(
-                stage: .waitingForReview, head: "Waiting for review", right: "\(count) ✓",
-                detail: "Checks passed. \(main) requires an approving review.",
+                stage: .waitingForReview, head: "Waiting for review", right: count.map { "\($0) ✓" },
+                detail: (count == nil ? "" : "Checks passed. ") + "\(main) requires an approving review.",
                 tone: .blue, segments: segments,
                 actions: url.map { [Action(label: LandingPullRequestWords.review, destination: .web($0))] } ?? [])
         }

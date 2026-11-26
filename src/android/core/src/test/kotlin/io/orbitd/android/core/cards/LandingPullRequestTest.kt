@@ -27,6 +27,13 @@ class LandingPullRequestTest {
         assertEquals(listOf("Review on GitHub ↗"), m.actions.map { it.label })
     }
 
+    @Test fun aReviewWaitReadBeforeAnyRequiredCheckWasReportedCountsNothing() {
+        val unread = JsonObject(pr("b") + ("checks" to Json.parseToJsonElement("""{"passed":0,"required":0,"failed":[]}""")))
+        val card = LandingPullRequest.card(unread, "main")
+        assertNull(card.right)
+        assertEquals("main requires an approving review.", card.detail)
+    }
+
     @Test fun aRequiredCheckFailed() {
         val m = card("c")
         assertEquals("Check failed: PostgreSQL specs", m.head)

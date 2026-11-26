@@ -224,7 +224,11 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
     const [last] = await this.prisma.$queryRaw<Array<{ at: Date | null }>>(Prisma.sql`
       SELECT max("received_at") AS "at" FROM "github_webhook_delivery"`);
     const quiet = !last?.at || now.getTime() - last.at.getTime() > DELIVERIES_QUIET_AFTER_MS;
-    const before = new Date(now.getTime() - (quiet ? REREAD_WITHOUT_DELIVERIES_MS : REREAD_WITH_DELIVERIES_MS));
+    // A row's read is stamped a moment after the tick that made it, so the tick nearest the floor takes it. Measured
+    // against the floor exactly, the one-minute re-read skipped every other tick and the clients read counts two
+    // minutes old — "0 of 0" long after CI had registered its checks.
+    const floor = quiet ? REREAD_WITHOUT_DELIVERIES_MS : REREAD_WITH_DELIVERIES_MS;
+    const before = new Date(now.getTime() - (floor - REREAD_TICK_MS / 2));
     const due = await this.prisma.githubPullRequest.findMany({
       where: { state: { in: ['OPENING', 'OPEN'] }, OR: [{ observedAt: null }, { observedAt: { lt: before } }] },
       select: { id: true },

@@ -57,7 +57,8 @@ object LandingPullRequest {
         val segments = List(maxOf(required, 0)) { i ->
             if (i < passed) PullRequestSegment.PASSED else if (i < passed + failed.size) PullRequestSegment.FAILED else PullRequestSegment.PENDING
         }
-        val count = "$passed of $required"
+        // No required check reported yet (a read made before CI registered one) is no count, never "0 of 0".
+        val count = if (required > 0) "$passed of $required" else null
         val state = pr.text("state")
         val condition = pr.text("condition")
         val refusal = pr.obj("refusal")
@@ -87,8 +88,8 @@ object LandingPullRequest {
                 "$main moved since the pull request opened. Orbit is checking the branch again on the new $main.", PullRequestTone.BLUE, segments, view)
         }
         if (condition == "REVIEW_REQUIRED" || condition == "CHANGES_REQUESTED" || condition == "MERGEABLE") {
-            return PullRequestCardModel(PullRequestStage.WAITING_FOR_REVIEW, "Waiting for review", "$count ✓",
-                "Checks passed. $main requires an approving review.", PullRequestTone.BLUE, segments,
+            return PullRequestCardModel(PullRequestStage.WAITING_FOR_REVIEW, "Waiting for review", count?.let { "$it ✓" },
+                (if (count != null) "Checks passed. " else "") + "$main requires an approving review.", PullRequestTone.BLUE, segments,
                 url?.let { listOf(PullRequestAction(PullRequestWords.REVIEW, it)) }.orEmpty())
         }
         return PullRequestCardModel(PullRequestStage.OPENED, "Pull request open", count,

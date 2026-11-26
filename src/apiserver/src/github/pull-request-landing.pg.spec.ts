@@ -869,6 +869,16 @@ test('§4.7: the webhook is checked, de-duplicated and read again; the re-read k
   const quiet = reads();
   await h.door.tick(now);
   assert.equal(reads(), quiet + 1);
+  // The next tick is a minute after the one before, and that one's read was stamped a moment after it started: still
+  // read, so a check that registered after the first read is counted within the minute.
+  await h.prisma.githubPullRequest.update({ where: { id: pr.id }, data: { observedAt: new Date(now.getTime() - REREAD_WITHOUT_DELIVERIES_MS + 2000) } });
+  h.github.scenario(cloud.fullName).checks = [{ name: 'check', required: true, status: 'COMPLETED', conclusion: 'SUCCESS' }];
+  h.github.scenario(cloud.fullName).reviewDecision = 'REVIEW_REQUIRED';
+  await h.door.tick(now);
+  assert.equal(reads(), quiet + 2);
+  const [waiting] = await readInFlightJobs(h.prisma as never, (await h.job(command.jobId)).projectId, command.jobId);
+  assert.equal(waiting?.pullRequest?.condition, 'REVIEW_REQUIRED');
+  assert.deepEqual(waiting?.pullRequest?.checks, { passed: 1, required: 1, failed: [] }, 'the pull request\'s check counts during the review wait');
 });
 
 // ── Push as me (docs/design/protected-branch-landing.md §3 rule 4, §5) ─────────────────────────────────────────────

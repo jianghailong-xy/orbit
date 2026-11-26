@@ -33,6 +33,11 @@ describe('pullRequestCard, from the server\'s own pull request blocks (board 02)
     expect([m.stage, m.head, m.right]).toEqual(['WAITING_FOR_REVIEW', 'Waiting for review', '6 of 6 ✓']);
     expect(m.actions[0].label).toBe('Review on GitHub ↗');
   });
+  it('a review wait read before any required check was reported counts nothing, and claims no pass', () => {
+    const m = pullRequestCard({ ...pr('b'), checks: { passed: 0, required: 0, failed: [] } }, 'main');
+    expect([m.head, m.right, m.detail]).toEqual(['Waiting for review', null, 'main requires an approving review.']);
+    expect(m.segments).toEqual([]);
+  });
   it('c: a required check failed, with the log link and GitHub\'s check name', () => {
     const m = pullRequestCard(pr('c'), 'main');
     expect(m.head).toBe('Check failed: PostgreSQL specs');

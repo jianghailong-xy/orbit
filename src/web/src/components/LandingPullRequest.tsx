@@ -42,7 +42,8 @@ export function pullRequestCard(pr: LandingPullRequestView, main: string, worksp
   const { passed, required, failed } = pr.checks;
   const segments: PullRequestCardModel['segments'] = Array.from({ length: Math.max(required, 0) }, (_, i) =>
     i < passed ? 'passed' : i < passed + failed.length ? 'failed' : 'pending');
-  const count = `${passed} of ${required}`;
+  // No required check reported yet (a read made before CI registered one) is no count, never "0 of 0".
+  const count = required > 0 ? `${passed} of ${required}` : null;
   const base = { segments, actions: view };
 
   if (pr.state === 'MERGED') {
@@ -81,8 +82,8 @@ export function pullRequestCard(pr: LandingPullRequestView, main: string, worksp
   }
   if (pr.condition === 'REVIEW_REQUIRED' || pr.condition === 'CHANGES_REQUESTED' || pr.condition === 'MERGEABLE') {
     return {
-      stage: 'WAITING_FOR_REVIEW', tone: 'blue', segments, head: 'Waiting for review', right: `${count} ✓`,
-      detail: `Checks passed. ${main} requires an approving review.`,
+      stage: 'WAITING_FOR_REVIEW', tone: 'blue', segments, head: 'Waiting for review', right: count && `${count} ✓`,
+      detail: count ? `Checks passed. ${main} requires an approving review.` : `${main} requires an approving review.`,
       actions: url ? [{ label: PULL_REQUEST_WORDS.REVIEW, href: url }] : [],
     };
   }
