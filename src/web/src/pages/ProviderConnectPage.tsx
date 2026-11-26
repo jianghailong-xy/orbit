@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from '../api';
@@ -287,9 +287,24 @@ function ProviderForm({
         ? suggestProviderName(vendorName(preset.slug), siblings.map((s) => s.label))
         : '',
   );
-  const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? preset?.baseUrl ?? '');
+  // A key-type switch between a vendor's two presets carries the platform chosen on the first.
+  const carried = (useLocation().state as { region?: string } | null)?.region;
+  const [baseUrl, setBaseUrl] = useState(
+    editing?.baseUrl ?? preset?.regions?.find((r) => r.id === carried)?.baseUrl ?? preset?.baseUrl ?? '',
+  );
   // Which of the vendor's platforms the endpoint is, for a vendor with more than one.
   const region = presetRegionOf(preset, baseUrl);
+  // The vendor's coding plan, as a second key type when connecting: its own preset (Qwen), or its engine's
+  // sign-in on a machine (Kimi Code), which takes no key here at all.
+  const plan = preset?.codingPlan ?? (preset?.planOf ? providerPreset(preset.planOf)?.codingPlan : undefined);
+  const [signInPlan, setSignInPlan] = useState(false);
+  const onPlan = !!preset?.planOf || signInPlan;
+  const chooseKeyType = (wantPlan: boolean) => {
+    if (!preset || !plan || wantPlan === onPlan) return;
+    if ('signIn' in plan) return setSignInPlan(wantPlan);
+    const to = wantPlan ? plan.preset : preset.planOf!;
+    navigate(`/settings/providers/new/${to}`, { replace: true, state: { region: region?.id } });
+  };
   const [apiKey, setApiKey] = useState('');
   // The stored key once it's been read back, so a revealed-but-untouched field still counts as
   // "keep the current key" — showing what you configured shouldn't turn Save into a re-write.
@@ -429,7 +444,7 @@ function ProviderForm({
   });
 
   // Create needs a key; edit keeps the stored one when left blank. label/baseUrl always required.
-  const canSave = label.trim() !== '' && baseUrl.trim() !== '' && (editing ? true : newKey !== '');
+  const canSave = !signInPlan && label.trim() !== '' && baseUrl.trim() !== '' && (editing ? true : newKey !== '');
   // The model the probe pings with: the one a session would get by default.
   const probeModel = (
     presetDefault ||
@@ -664,8 +679,9 @@ function ProviderForm({
 
       <Step
         num={isCustom ? 3 : 1}
-        title={preset ? `Paste your ${vendor} API key` : 'API key'}
+        title={signInPlan ? `Use your ${plan?.label} plan` : preset ? `Paste your ${vendor} API key` : 'API key'}
         link={
+          !signInPlan &&
           (region?.keyUrl ?? preset?.keyUrl) && (
             <a href={region?.keyUrl ?? preset?.keyUrl} target="_blank" rel="noreferrer">
               Get your API key ↗
@@ -677,6 +693,28 @@ function ProviderForm({
         {/* A vendor with separate international and China platforms: a key works only on the one it was
             made on, so which one is asked here rather than left to the endpoint under Advanced. A URL
             typed by hand is neither, and is left to Advanced. */}
+        {plan && !editing && (
+          <div className="provider-region">
+            <span className="provider-region-label">Key type</span>
+            <Segmented
+              aria-label="Key type"
+              value={onPlan ? 'plan' : 'payg'}
+              onValueChange={(v) => chooseKeyType(v === 'plan')}
+              options={[
+                { value: 'payg', label: 'Pay as you go' },
+                { value: 'plan', label: plan.label },
+              ]}
+            />
+          </div>
+        )}
+        {signInPlan ? (
+          <div className="provider-plan-signin">
+            <b>{plan?.label} signs in on a machine, not with a key.</b> Sign in to Kimi Code with Kimi CLI on one of
+            your machines, on kimi.com or kimi.ai, and its sessions use your plan.{' '}
+            <Link to="/settings/machines">Open Machines</Link>
+          </div>
+        ) : (
+          <>
         {region && preset?.regions && (
           <div className="provider-region">
             <span className="provider-region-label">Your account is on</span>
@@ -727,6 +765,9 @@ function ProviderForm({
               : ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.`
             : ''}
         </div>
+        {preset?.terms && <div className="ps-hint">{preset.terms}</div>}
+          </>
+        )}
         {/* What agy does with the key, which the owner should know before handing it over
             (docs/antigravity-runtime-contract.md §3.2 and §7; docs/provider-engine-contract.md §4.6). */}
         {runtime === 'antigravity' && (
@@ -830,6 +871,7 @@ function ProviderForm({
         </section>
       )}
 
+      {!signInPlan && (
       <div className="provider-adv" style={{ marginTop: 20 }}>
         <div className={`provider-adv-head${advOpen ? ' open' : ''}`} onClick={() => setAdvOpen((v) => !v)}>
           <span className="pa-chev">▸</span>
@@ -990,6 +1032,7 @@ function ProviderForm({
           </div>
         )}
       </div>
+      )}
 
       {/* Nobody adds a provider they want switched off, so this is an edit-time control. Off is the
           key's, not an engine's: every engine it works with stops on it. */}
@@ -1020,6 +1063,10 @@ function ProviderForm({
           )}
           <span style={{ color: 'var(--error)', fontSize: 12, lineHeight: 1.4 }}>
             {probing ? <span style={{ color: 'var(--text-3)' }}>Testing the connection…</span> : probeError}
+            {/* A plan's key is refused on the pay-as-you-go endpoint with the same 401 as a wrong one. */}
+            {!probing && probeError && !probeRegion && plan && !onPlan && (
+              <span style={{ color: 'var(--text-3)' }}> · A {plan.label} key needs Key type: {plan.label}.</span>
+            )}
           </span>
         </span>
         <span className="prov-actions" style={{ gap: 8 }}>
@@ -1042,14 +1089,16 @@ function ProviderForm({
             )
           )}
           <Button onClick={() => navigate(editing ? vendorPage : '/settings/providers')}>Cancel</Button>
-          <Button
-            variant="primary"
-            disabled={!canSave}
-            loading={probing || saveMut.isPending}
-            onClick={() => canSave && void save()}
-          >
-            {editing ? 'Save' : 'Connect'}
-          </Button>
+          {!signInPlan && (
+            <Button
+              variant="primary"
+              disabled={!canSave}
+              loading={probing || saveMut.isPending}
+              onClick={() => canSave && void save()}
+            >
+              {editing ? 'Save' : 'Connect'}
+            </Button>
+          )}
         </span>
       </div>
       {confirmHolder}

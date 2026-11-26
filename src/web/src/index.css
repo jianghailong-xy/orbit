@@ -20360,6 +20360,18 @@ button.chat-jump-start:hover {
   gap: 10px;
   margin-bottom: 8px;
 }
+.provider-step .provider-plan-signin {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--fill-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.provider-step .provider-plan-signin b {
+  color: var(--text-1);
+}
 .provider-step .provider-region-label {
   font-size: 12px;
   color: var(--text-2);

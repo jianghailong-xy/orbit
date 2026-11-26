@@ -178,6 +178,56 @@ describe('a vendor with an international and a China platform', { timeout: 30_00
     expect(probes()).toEqual(['https://dashscope-intl.aliyuncs.com/apps/anthropic']);
   });
 
+  it('connects a Qwen Coding Plan key on the plan\'s own endpoint, keeping the platform chosen, and says Alibaba\'s rule', async () => {
+    await mount('/settings/providers/new/qwen');
+    await click(option('International · alibabacloud.com'));
+    await click(option('Coding Plan'));
+    expect(container.querySelector('h1')?.textContent).toBe('Connect Qwen Coding Plan');
+    expect(option('International · alibabacloud.com')?.getAttribute('aria-checked')).toBe('true');
+    expect(text()).toContain('Alibaba allows Coding Plan keys in interactive coding tools only');
+    await type(container.querySelector<HTMLInputElement>('input[type="password"]'), 'sk-sp-test');
+    await click(button('Connect'));
+    expect(probes()).toEqual(['https://coding-intl.dashscope.aliyuncs.com/apps/anthropic']);
+    expect(sent.find((s) => s.path === PROVIDERS_BASE)?.body).toMatchObject({ presetSlug: 'qwen-coding-plan' });
+
+    await act(async () => root.unmount());
+    container.remove();
+    await mount('/settings/providers/new/qwen-coding-plan');
+    await click(option('Pay as you go'));
+    expect(container.querySelector('h1')?.textContent).toBe('Connect Qwen');
+  });
+
+  it('points a refused pay-as-you-go key at the plan', async () => {
+    answers = [{ ok: false, message: 'Invalid API key — refused on both aliyun.com and alibabacloud.com' }];
+    await mount('/settings/providers/new/qwen');
+    await type(container.querySelector<HTMLInputElement>('input[type="password"]'), 'sk-sp-test');
+    await click(button('Connect'));
+    expect(text()).toContain('A Coding Plan key needs Key type: Coding Plan.');
+  });
+
+  it('sends a Kimi Code plan to Kimi CLI\'s sign-in on a machine, with no key to paste', async () => {
+    await mount('/settings/providers/new/moonshot');
+    await click(option('Kimi Code'));
+    expect(text()).toContain('Kimi Code signs in on a machine, not with a key.');
+    expect(container.querySelector('input[type="password"]')).toBeNull();
+    expect(button('Connect')).toBeNull();
+    expect(container.querySelector<HTMLAnchorElement>('a[href="/settings/machines"]')).not.toBeNull();
+    await click(option('Pay as you go'));
+    expect(container.querySelector('input[type="password"]')).not.toBeNull();
+  });
+
+  it('asks for no key type when editing a saved key', async () => {
+    rows = [
+      {
+        id: 'p-q', slug: 'qwen', label: 'Qwen', runtime: 'claude', engines: ['claude', 'opencode'] as ProviderRow['engines'],
+        baseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic', models: [], defaultModel: null, presetSlug: 'qwen',
+        followsPreset: true, enabled: true, hasApiKey: true,
+      },
+    ];
+    await mount('/settings/providers/keys/p-q');
+    expect(text()).not.toContain('Key type');
+  });
+
   it('shows a saved China key as China, and has no switch for a vendor with one platform', async () => {
     rows = [
       {
