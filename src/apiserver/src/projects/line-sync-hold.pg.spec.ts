@@ -21,7 +21,6 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
@@ -38,6 +37,7 @@ import { HttpException } from '@nestjs/common';
 
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from './coordinator-pg-test-safety';
 import { prismaClientFor } from '../prisma/prisma-client';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
 import { QueueService } from '../queue/queue.service';
@@ -221,7 +221,7 @@ async function world(stack: Stack, label: string, automatic = true): Promise<Wor
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -324,7 +324,7 @@ async function doneTask(
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -378,8 +378,8 @@ async function doneTask(
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: worktree
-        ? { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
-        : { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        ? { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
+        : { turnState: null, finishedAt: new Date() },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -571,9 +571,10 @@ async function doneShape(db: PrismaClient, taskId: string, sessionId: string) {
       attemptGeneration: true, completionFenceRevision: true,
     },
   });
-  const session = await db.session.findUniqueOrThrow({
-    where: { id: sessionId }, select: { status: true, finishedAt: true, endReason: true },
-  });
+  // The session's word is the projector's over its facts (deploy D3, task T14).
+  const session = withWord(await db.session.findUniqueOrThrow({
+    where: { id: sessionId }, select: { ...WORD_SELECT, finishedAt: true, endReason: true },
+  }), 'finishedAt', 'endReason');
   const reopened = await db.taskReopenIntent.count({ where: { taskId } });
   const sessions = await db.session.count({ where: { taskId } });
   return { task, session, reopened, sessions };
