@@ -31177,3 +31177,101 @@ td > .routing-report-tier + .model-routing-flag {
 .landing-pr-tip { display: flex; justify-content: space-between; gap: 8px; margin: 0; padding: 8px 10px; font-size: 12px; border-radius: 8px; background: var(--brand-tint); border: 1px solid var(--brand-border); }
 .landing-pr-tip button { border: 0; background: none; cursor: pointer; color: var(--text-secondary); }
 .landings-window-entry > .landing-pr { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-subtle); }
+
+/* ---- Panels on a canvas (owner 2026-11-26, docs/mocks/right-column-window board 02, C) ----
+   Above the phone/drawer breakpoint the window is a grey canvas that is always there; the nav sits on
+   it with no surface of its own, and what you work in is a white panel rounded on all four corners. A
+   right-hand column (project column, session settings, task detail) is a second panel of the same kind
+   beside it: one radius, one gap, one elevation, so opening it adds a panel and moves nothing else.
+   Prefixed with .app-shell so these win over the per-component rules above and in component CSS. */
+@media (min-width: 961px) {
+  .app-shell {
+    --canvas: color-mix(in srgb, var(--text-1) 5%, var(--bg-base));
+    --panel-gap: 8px;
+    --panel-radius: 12px;
+    --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    background: var(--canvas);
+  }
+  /* Dark: the canvas goes below the panels rather than a lighter mix. */
+  :root[data-theme='dark'] .app-shell {
+    --canvas: var(--bg-sunken);
+  }
+  .app-shell .app-nav {
+    background: transparent;
+    border-right: 0;
+  }
+  .app-shell .tp-lists .tp-group-head {
+    background: var(--canvas);
+  }
+  .app-shell .app-main {
+    padding: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+  }
+  /* Every page's content is one panel... */
+  .app-shell .app-main > .app-view {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  /* ...except the session console, whose list + conversation is the panel and whose right column is
+     a second one, so the view itself stays bare. */
+  .app-shell .app-main > .app-view:has(> .workspace-split) {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .workspace-split > .session-col:not(.session-project-column, .ss-column) {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-right: 0;
+    border-radius: var(--panel-radius) 0 0 var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  .app-shell .workspace-split > .workspace-view {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-left: 0;
+    border-radius: 0 var(--panel-radius) var(--panel-radius) 0;
+    box-shadow: var(--panel-shadow);
+  }
+  /* A machine with no workspace shows the conversation pane alone. */
+  .app-shell .workspace-split > .workspace-view:first-child {
+    border-left: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+  }
+  .app-shell :is(.session-project-column, .ss-column),
+  .app-shell .app-main + .task-detail-panel {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  .app-shell :is(.session-project-column, .ss-column) {
+    overflow: hidden;
+  }
+  /* The task detail panel is the shell's own column, beside .app-main rather than inside it; its
+     resize handle stays on its left edge (not clipped, so its grab area reaches into the gap). */
+  .app-shell .app-main + .task-detail-panel {
+    height: auto;
+    margin: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+  }
+  .app-shell .app-main:has(+ .task-detail-panel) {
+    padding-right: var(--panel-gap);
+  }
+  /* The divider before a right column is the canvas gap between two panels: still a drag handle, no
+     line until it is hovered or dragged. */
+  .app-shell .session-resizer:has(+ :is(.session-project-column, .ss-column)) {
+    width: var(--panel-gap);
+    background: transparent;
+  }
+  .app-shell .session-resizer:has(+ :is(.session-project-column, .ss-column)):is(:hover, .resizing) {
+    background: linear-gradient(var(--brand), var(--brand)) center / 1px 100% no-repeat;
+  }
+  /* In a window too narrow for it beside the conversation the column lies over it: the same panel,
+     floating one level up. */
+  .app-shell :is(.session-project-column-over, .ss-column-over) {
+    border-left: 1px solid var(--border-subtle);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 16px 40px rgba(0, 0, 0, 0.14);
+  }
+}
