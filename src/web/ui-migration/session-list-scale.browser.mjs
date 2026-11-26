@@ -56,10 +56,10 @@ const watchOn = (observer, target) => ({
 
 /** Answers the seeded lists, their sessions, the folders, a move and the watches; everything else falls to
  *  the UI-migration fixtures. */
-async function seedList(page, { theme }) {
+async function seedList(page, { theme, rows = seededRows() }) {
   await installFixedDate(page);
   await installFixtures(page, { theme });
-  const state = { rows: seededRows(), paged: pagedRows(), moves: [], listReads: [], listingReads: [], watches: [] };
+  const state = { rows, paged: pagedRows(), moves: [], listReads: [], listingReads: [], watches: [] };
   const byId = () => new Map([...state.rows, ...state.paged].map((row) => [row.id, row]));
   // Registered after installFixtures, so these answer first.
   await page.route('**/api/**', async (route) => {
@@ -181,6 +181,30 @@ test('1,500 loaded Open sessions mount about two screens of rows, wherever the c
   }
   // The last row is drawn at the end.
   await expect(row(page, title(SEEDED))).toBeVisible();
+});
+
+test('the first page draws every Working and Needs you row at the top, however deep it was listed', async ({ page }, testInfo) => {
+  // Four rows deep in the list, each on what was the listing's 23rd page or later when it paged by listedAt alone:
+  // a question waiting (Needs you), a failure nobody retries (Needs you), a turn running and a job in flight (Working).
+  const deep = { 900: { status: 'RUNNING', runState: 'RUNNING', phase: 'RUNNING', released: false },
+    1200: { pendingApprovals: 1, phase: 'RUNNING', released: false, status: 'RUNNING', runState: 'RUNNING' },
+    1400: { phase: 'RUNNING', released: false, runningBgCount: 1, runningBgJobCount: 1 },
+    1450: { status: 'FAILED', runState: 'FAILED', phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED', endReason: null } };
+  const rows = seededRows().map((r, i) => (deep[i + 1] ? { ...r, ...deep[i + 1] } : r));
+  const state = await seedList(page, { theme: testInfo.project.use.colorScheme, rows });
+  await page.goto(`/workspaces/${WORKSPACE.id}`);
+  await expect(row(page, title(21))).toBeVisible();
+  await frames(page, 4);
+  const reads = state.listingReads.filter((r) => r.query.workspaceId === WORKSPACE.id && !r.query.folderId);
+  expect(reads.map((r) => r.query.after ?? null), 'one page read').toEqual([null]);
+  // The column from its top: the sections' headings and the rows under them, in order.
+  const drawn = await list(page).locator('.session-section-head, .session-row .session-title').allTextContents();
+  await testInfo.attach('the column from its top', { body: JSON.stringify(drawn.slice(0, 12)), contentType: 'application/json' });
+  expect(drawn.slice(0, 6).map((text) => text.trim())).toEqual([
+    'Needs you', title(1200), title(1450), 'Working', title(900), title(1400),
+  ]);
+  // Then the days, from the newest row of its own.
+  expect(drawn.slice(7, 8)).toEqual([title(21)]);
 });
 
 test('↓ and ↑ walk the open session past the viewport, the row scrolled in and focused', async ({ page }, testInfo) => {

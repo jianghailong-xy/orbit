@@ -132,7 +132,12 @@ describe('the list drawn from GET /sessions/listing (contracts/session-listing.f
           const folderRows = (rows: typeof whole.folders) =>
             rows.map((f) => ({ id: f.folder.id, count: f.sessionCount, needsYou: f.needsYou, running: f.running, jobs: f.jobs }));
           expect(folderRows(paged.folders)).toEqual(folderRows(whole.folders));
-          expect(shape(paged.entries)).toEqual(shape(whole.entries));
+          // In Open the column draws the sections below, each sorted as compareListed sorts it, so the flat order is
+          // the drawn one only in Completed; in Open it is the same entries, and the sections are compared next.
+          const flat = (entries: readonly SessionProjectEntry<Row>[]) => read.view === 'open'
+            ? shape(entries).sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
+            : shape(entries);
+          expect(flat(paged.entries)).toEqual(flat(whole.entries));
           const sections = (entries: readonly SessionProjectEntry<Row>[]) =>
             sessionTimeSections(entries, { pinnedFirst: read.view === 'open', attention: read.view === 'open' })
               .map((s) => ({ title: s.title, ids: s.sessions.map((entry) => entry.id) }));

@@ -18,6 +18,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionTagsService } from '../session-tags/session-tags.service';
 import { AutoRetryService } from './auto-retry.service';
+import { listingRowIsWorking, listingRowNeedsOwner, type ListingRowFacts } from './session-listing';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
@@ -27,7 +28,9 @@ import { SessionsService } from './sessions.service';
  * §5 T1): one workspace with 1,500 Open sessions, ten folders and thirty projects, read both ways over HTTP on
  * the same seed. Each read follows a write, so the Open list's version moves and neither read is answered from
  * a build another read made (`sharedOpenList` keeps one for 5 s). It prints the medians and asserts the page
- * is what it should be: forty entries, the folder rows, and a small fraction of the whole list's bytes.
+ * is what it should be: forty entries, the folder rows, and a small fraction of the whole list's bytes. Then, with a
+ * failed session and a retrying one deep in the list, that the first page holds every row the web draws above the
+ * days (Pinned, Needs you, Working), however long ago it was listed.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-listing-scale.pg.spec.ts
  */
@@ -207,4 +210,40 @@ test(`first page of the listing vs the whole Open list on ${SESSIONS} Open sessi
   assert.equal(page!.folders.length, FOLDERS);
   assert.ok(page!.next, 'more pages follow');
   assert.ok(listing[0].bytes * 10 < full[0].bytes, `the first page (${listing[0].bytes} B) is under a tenth of the whole list (${full[0].bytes} B)`);
+
+  // Deep in the list, among the oldest rows of their own: a failure nobody retries (Needs you) and one a retry is
+  // armed for (Working).
+  const deep = rows.filter((r, i) => i >= PROJECTS * (MEMBERS + 1) && !r.folderId && !r.pinnedAt && r.status === 'AWAITING_INPUT'
+    && !(r.runningBgJobs as string[]).length).slice(0, 2);
+  await h.db.session.update({
+    where: { id: deep[0].id! },
+    data: { status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
+  });
+  await h.db.session.update({
+    where: { id: deep[1].id! },
+    data: { status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED', retryAt: new Date(Date.now() + 60_000) },
+  });
+  // A settled status stamps listed_at (migration 1490): put them back where they were listed.
+  for (const r of deep) await h.sql.query('UPDATE session SET listed_at = $2 WHERE id = $1', [r.id, r.listedAt]);
+  type Row = ListingRowFacts & { id: string; pinnedAt: string | null; folderId: string | null; projectMembership: unknown };
+  const whole = JSON.parse((await timed(fullUrl)).body) as Row[];
+  // The rows of their own in no folder that the web's sessionTimeSections draws above the days.
+  const attention = whole.filter((r) => !r.folderId && !r.projectMembership
+    && (r.pinnedAt || listingRowNeedsOwner(r) || listingRowIsWorking(r)));
+  const firstPage = JSON.parse((await timed(listingUrl)).body) as { entries: Array<{ kind: string; session?: { id: string } }> };
+  const onFirst = new Set(firstPage.entries.flatMap((e) => e.session ? [e.session.id] : []));
+  const sections = {
+    needsYou: attention.filter((r) => !r.pinnedAt && listingRowNeedsOwner(r)).length,
+    working: attention.filter((r) => !r.pinnedAt && !listingRowNeedsOwner(r) && listingRowIsWorking(r)).length,
+    pinned: attention.filter((r) => r.pinnedAt).length,
+  };
+  t.diagnostic(`attention rows: ${JSON.stringify(sections)}`);
+  console.log(`SESSION_LISTING_ATTENTION ${JSON.stringify(sections)}`);
+  assert.ok(attention.some((r) => r.id === uuidToBase62(deep[0].id!) && listingRowNeedsOwner(r)), 'the failure needs you');
+  assert.ok(attention.some((r) => r.id === uuidToBase62(deep[1].id!) && listingRowIsWorking(r)), 'the retry is working');
+  assert.ok(attention.length > 10 && attention.length < 40, `${attention.length} attention rows fit one page`);
+  assert.deepEqual(attention.filter((r) => !onFirst.has(r.id)).map((r) => r.id), [], 'every attention row is on the first page');
+  // And they lead it: the first page's session entries open with them.
+  const leading = firstPage.entries.slice(0, attention.length + 2).flatMap((e) => e.session ? [e.session.id] : []);
+  for (const r of attention) assert.ok(leading.includes(r.id), `${r.id} leads the first page`);
 });

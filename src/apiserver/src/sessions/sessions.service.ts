@@ -57,7 +57,7 @@ import {
   heldWordOf, isParked, sessionTurnStateSql, type TurnState, type TurnStateFacts, TURN_STATE_SELECT, turnStateAfterTurnEnqueued,
   turnStateFilter, turnStateOf,
 } from './session-turn-state';
-import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
+import { deriveSessionPhase, readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
@@ -73,7 +73,8 @@ import {
 } from './steer-withdraw';
 import { deleteTurnsKeepingAttachments } from './withdrawn-turn-attachments';
 import {
-  buildSessionListing, listingPage, type ListingCoordinator, type ListingFolder, type ListingSession, type ListingView,
+  buildSessionListing, listingPage, type ListingCoordinator, type ListingFolder, type ListingRowFacts, type ListingSession,
+  type ListingView,
 } from './session-listing';
 import {
   projectsMembershipCandidatesSql, readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql,
@@ -509,6 +510,16 @@ type ListOverlayInput = TurnStateFacts & {
   taskId: string | null;
   runningBgShells: string[];
   runningSubagentCount: number;
+};
+
+/** A session of `GET /sessions/listing`'s scope as `SessionsService.sessionListing` reads it: what the listing's rules
+ *  place it by, and the columns its list row's attention section is read from (`listingRowFacts`). */
+type ListingScoped = Omit<ListingSession, 'row'> & ListOverlayInput & {
+  retryAt: Date | null;
+  lastTurnOutcome: string | null;
+  endReason: string | null;
+  runningSubagents: string[];
+  runningBgJobs: string[];
 };
 
 /** One project's answer in `SessionsService.projectPlacement`. */
@@ -4990,7 +5001,10 @@ export class SessionsService {
    * session-listing.ts; this reads what they take — the scope's sessions, narrowly, each with the project
    * its membership names, those projects' coordinators, the live folders, and for the folder rows and the
    * project entries the tallies `workspaceSessionCounts` counts — and builds full rows only for the sessions
-   * and coordinators the page shows.
+   * and coordinators the page shows. In Open it also reads, for every session of the scope, what its list row says
+   * that places it in the web's attention sections (`ListingRowFacts`): the row query's status word, turn state and
+   * execution columns for its phase (`deriveSessionPhase`), and the approval cards and owner decisions its
+   * `pendingApprovals` counts (`listOverlay`'s).
    */
   async sessionListing(
     ownerId: string,
@@ -5004,12 +5018,19 @@ export class SessionsService {
     },
   ) {
     const { query } = this.listShape(ownerId, { workspaceId: opts.workspaceId, view: opts.view, confinedTo: opts.confinedTo });
-    const [sessions, folders] = await Promise.all([
-      this.prisma.$queryRaw<ListingSession[]>(Prisma.sql`
+    const [scoped, folders] = await Promise.all([
+      this.prisma.$queryRaw<ListingScoped[]>(Prisma.sql`
         SELECT s.id, s.folder_id AS "folderId", s.pinned_at AS "pinnedAt", s.listed_at AS "listedAt",
                s.created_at AS "createdAt", s.last_turn_at AS "lastTurnAt",
                COALESCE(s.completed_at, s.archived_at) AS "completedAt",
-               (${sessionProjectMembershipSql('s')} ->> 'projectId') AS "projectId"
+               (${sessionProjectMembershipSql('s')} ->> 'projectId') AS "projectId",
+               -- What the row's attention section reads (Open only): the words and facts readSessionPhaseFields
+               -- and listOverlay read.
+               ${legacySessionStatusSql('s')} AS status, ${sessionTurnStateSql('s')} AS "turnState",
+               s.finished_at AS "finishedAt", s.engine_turn_active AS "engineTurnActive", s.task_id AS "taskId",
+               s.running_bg_shells AS "runningBgShells", cardinality(s.running_subagents)::int AS "runningSubagentCount",
+               s.running_subagents AS "runningSubagents", s.running_bg_jobs AS "runningBgJobs",
+               s.retry_at AS "retryAt", s.last_turn_outcome AS "lastTurnOutcome", s.end_reason AS "endReason"
           FROM session s
          WHERE s.owner_id = ${ownerId}::uuid
            ${query.scope}
@@ -5017,6 +5038,7 @@ export class SessionsService {
          ORDER BY (s.pinned_at IS NOT NULL) DESC, COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC, s.id`),
       this.listingFolders(ownerId, opts.workspaceId, opts.confinedTo),
     ]);
+    const sessions: ListingSession[] = await this.listingRowFacts(ownerId, opts.view, scoped);
     const projectIds = [...new Set(sessions.flatMap((session) => session.projectId ? [session.projectId] : []))];
     const confined = opts.confinedTo
       ? Prisma.sql`AND c.workspace_id = ANY(${[...opts.confinedTo]}::uuid[])`
@@ -5102,6 +5124,33 @@ export class SessionsService {
       }];
     });
     return { ...(withFolders ? { folders: built.folders } : {}), entries, next, ...(restarted ? { restarted: true } : {}) };
+  }
+
+  /** The scope's sessions for `buildSessionListing`, in Open each with what its list row says (`ListingRowFacts`). */
+  private async listingRowFacts(
+    ownerId: string,
+    view: ListingView,
+    scoped: readonly ListingScoped[],
+  ): Promise<ListingSession[]> {
+    const place = (s: ListingScoped, row: ListingRowFacts | null): ListingSession => ({
+      id: s.id, folderId: s.folderId, pinnedAt: s.pinnedAt, listedAt: s.listedAt, createdAt: s.createdAt,
+      lastTurnAt: s.lastTurnAt, completedAt: s.completedAt, projectId: s.projectId, row,
+    });
+    if (view !== 'open' || scoped.length === 0) return scoped.map((s) => place(s, null));
+    const [cards, decisions] = await Promise.all([
+      this.liveCardCounts(scoped),
+      readOwnerDecisionsBySession(this.prisma, ownerId, { sessionIds: scoped.map((s) => s.id) }),
+    ]);
+    return scoped.map((s) => place(s, {
+      // listOverlay's count: the cards held open for a person, plus the owner decisions on the row.
+      pendingApprovals: (cards.get(s.id) ?? 0) + (decisions.get(s.id)?.count ?? 0),
+      status: s.status,
+      retryAt: s.retryAt,
+      phase: deriveSessionPhase(s),
+      released: s.finishedAt != null,
+      lastTurnOutcome: s.lastTurnOutcome,
+      endReason: s.endReason,
+    }));
   }
 
   /**
@@ -5637,12 +5686,10 @@ export class SessionsService {
   }
 
   /**
-   * The part of each list row that is not read from the row query: the approval cards and owner
-   * decisions waiting on it, the confirmation under review, and who it waits on for a reply. Every
-   * one of them is read by session id, so `listOpenSince` reads them for a whole list while building
-   * only the rows that moved, and compares them row by row.
+   * The approval cards each of these rows is holding open for a person, by session (`listOverlay`'s
+   * `pendingApprovals` before the owner decisions are added): see the comments inside.
    */
-  private async listOverlay(ownerId: string, inputs: ListOverlayInput[]): Promise<Map<string, ListOverlay>> {
+  private async liveCardCounts(inputs: readonly ListOverlayInput[]): Promise<Map<string, number>> {
     // A turn blocked on a permission prompt keeps the session generating, so the list can't tell
     // "running" from "waiting for approval" without this count. A conversation can be holding a
     // card in two ways, and it has to be one of them to have one: its turn is live — a generating
@@ -5684,7 +5731,6 @@ export class SessionsService {
         .filter((card) => !asked.some((a) => a.id === card.id))
         .map((card) => ({ ...card, backgroundJobId: null })),
     ];
-    const heldQuestions = await questionsWithCoordinator(this.prisma, inputs.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
     for (const card of await visibleQuestions(this.prisma, cards)) {
       // A job's card is read by its job, not the turn: it counts while the job is up, as the card
@@ -5695,6 +5741,18 @@ export class SessionsService {
       }
       byId.set(card.sessionId, (byId.get(card.sessionId) ?? 0) + 1);
     }
+    return byId;
+  }
+
+  /**
+   * The part of each list row that is not read from the row query: the approval cards and owner
+   * decisions waiting on it, the confirmation under review, and who it waits on for a reply. Every
+   * one of them is read by session id, so `listOpenSince` reads them for a whole list while building
+   * only the rows that moved, and compares them row by row.
+   */
+  private async listOverlay(ownerId: string, inputs: ListOverlayInput[]): Promise<Map<string, ListOverlay>> {
+    const byId = await this.liveCardCounts(inputs);
+    const heldQuestions = await questionsWithCoordinator(this.prisma, inputs.filter(s => s.taskId).map(s => s.id));
     // Plus the owner decisions each row is the surface for. A blocked tool call and an unanswered
     // criteria decision are one question to the reader of this list — "is somebody waiting on me
     // here" — so they are one number, and the row's own `projectId` is where the second kind leads.
