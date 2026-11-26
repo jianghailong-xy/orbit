@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -215,7 +215,7 @@ async function world(stack: Stack, label: string, automatic = true): Promise<Wor
         title: title!,
         prompt: title!,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         titleManagedByProject: id === coordinatorSessionId,
         numTurns: 1,
@@ -313,7 +313,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -366,7 +366,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<Attempt>
     // (§10.5 O-L4 3, §12.15 P-M1).
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      data: { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);

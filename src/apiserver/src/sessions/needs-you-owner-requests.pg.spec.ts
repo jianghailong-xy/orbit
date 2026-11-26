@@ -158,8 +158,8 @@ test('the needs-you signal counts owner requests and waiting task moves', {
     for (const [id, name] of [[coordA, 'coordinator of A'], [coordB, 'coordinator of B'], [asker, 'a session']]) {
       await admin.query(
         `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-           "provider","status","dispatch_origin","updated_at")
-         VALUES ($1,$2,$3,$4,'fixture',$2,'claude','AWAITING_INPUT'::"run_status",
+           "provider","turn_state","dispatch_origin","updated_at")
+         VALUES ($1,$2,$3,$4,'fixture',$2,'claude',NULL,
            'USER'::"session_dispatch_origin",now())`,
         [id, ownerId, workspaceId, `${label}: ${name}`],
       );
@@ -184,8 +184,8 @@ test('the needs-you signal counts owner requests and waiting task moves', {
     const id = randomUUID();
     await admin.query(
       `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-         "provider","status","dispatch_origin","updated_at")
-       VALUES ($1,$2,$3,$4,'fixture',$2,'claude','AWAITING_INPUT'::"run_status",
+         "provider","turn_state","dispatch_origin","updated_at")
+       VALUES ($1,$2,$3,$4,'fixture',$2,'claude',NULL,
          'USER'::"session_dispatch_origin",now())`,
       [id, w.ownerId, w.workspaceId, title],
     );

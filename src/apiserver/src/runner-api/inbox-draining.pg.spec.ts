@@ -22,7 +22,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SESSION_CLAUDE_STEER_WITHDRAW_V1, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -31,6 +32,7 @@ import { hashPassword, sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -90,7 +92,7 @@ test('a draining inbox fetch hands out control turns and running work, and no ne
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: `inbox draining ${status.toLowerCase()}`, prompt: 'the work', provider: 'claude', engine: 'claude',
-        status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+        turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
         inboxLeaseOwner: lease.owner, inboxLeaseGeneration: lease.generation,
         ...extra,
       },

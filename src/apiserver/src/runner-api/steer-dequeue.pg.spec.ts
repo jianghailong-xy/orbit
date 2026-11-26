@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { before, after, beforeEach, test } from 'node:test';
 import { Client } from 'pg';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   AgentProvider,
   SESSION_CLAUDE_STEER_WITHDRAW_V1,
@@ -70,10 +70,10 @@ before(async () => {
   // `finished_at` is the release column (migrations 1261, 1401): the lock reads it to refuse a released session,
   // NULL on every case here, as on every session still held.
   // `turn_state` is where the session's turn stands for the runner (migration 1611): the lock and the inbox predicate
-  // read it in place of `status` (task T8). NULL on every case here, as on a row the backfill has not reached, which
-  // reads its stored word's (sessions/session-turn-state.ts). The lock reads the word through the projector's SQL twin
-  // (session_legacy_status, migration 1621, from the migrated public schema), so the row carries the facts it reads,
-  // with the application's types: `status` is a `run_status`, the times are timestamps without a time zone.
+  // read it in place of `status` (task T8), IN_FLIGHT on every case here. The lock reads the word through the
+  // projector's SQL twin (session_legacy_status, migration 1671, from the migrated public schema), so the row carries
+  // the facts it reads, with the application's types: the times are timestamps without a time zone. It has no
+  // `status`: since deploy D3 nothing here reads or writes it (task T14).
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."inbox_lease_generation";
@@ -90,7 +90,6 @@ before(async () => {
       provider_builtin boolean NOT NULL DEFAULT true,
       engine text,
       task_id uuid,
-      status run_status NOT NULL,
       turn_state text,
       cancel_requested_at timestamptz,
       finished_at timestamp(3),
@@ -151,8 +150,8 @@ beforeEach(async () => {
 async function session(provider: string) {
   await client.query(`DELETE FROM "session"`);
   await client.query(
-    `INSERT INTO "session"(id, owner_id, assigned_runner_id, provider, status)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)`,
+    `INSERT INTO "session"(id, owner_id, assigned_runner_id, provider, turn_state)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, (CASE ($5)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END))`,
     [SESSION_ID, OWNER_ID, RUNNER_ID, provider, RunStatus.RUNNING],
   );
 }

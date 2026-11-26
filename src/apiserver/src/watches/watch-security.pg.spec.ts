@@ -270,9 +270,9 @@ async function insertTask(owner: string, status: string): Promise<string> {
 async function insertSession(owner: string, status: string, runnerId: string): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id")
-     VALUES ($1,'watch security','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5)`,
+     VALUES ($1,'watch security','the opening prompt',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,'claude',TRUE,1,now(),$5)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;
@@ -667,7 +667,7 @@ security('S-06', 'a watch that would close a wake loop, of one, two or three ses
   assert.equal((await waitOn(await running(), s1)).state, 'ACTIVE', 'waiting on the end of a chain closes nothing');
 
   // Re-arming a wait that already holds is refused too: that is how two sessions ping-pong, one immediate wake at a time.
-  await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1`, [s1]);
+  await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1`, [s1]);
   await refusedWith('WAKE_LOOP', waitOn(s2, s1), 'an already-true wait back on the session that waits on this one');
   await watches.pause(owner, s1WaitsOnS2.id);
   await refusedWith('WAKE_LOOP', waitOn(s2, s1), 'a paused wait still closes the loop once it resumes');

@@ -105,8 +105,8 @@ test('a batch of task moves is answered at once; a waiting question brings its s
     const id = randomUUID();
     await admin.query(
       `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-         "provider","status","dispatch_origin","updated_at")
-       VALUES ($1,$2,$3,$4,'fixture',$2,'claude','AWAITING_INPUT'::"run_status",
+         "provider","turn_state","dispatch_origin","updated_at")
+       VALUES ($1,$2,$3,$4,'fixture',$2,'claude',NULL,
          'USER'::"session_dispatch_origin",now())`,
       [id, ownerId, workspaceId, title],
     );

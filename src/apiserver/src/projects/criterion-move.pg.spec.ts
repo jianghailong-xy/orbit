@@ -22,7 +22,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { HttpException } from '@nestjs/common';
-import { RunStatus, type PrismaClient } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -297,7 +298,7 @@ test('an unmet criterion and its open tasks move to a follow-up project; each re
       await refused('CRITERION_MOVE_CRITERION_MET', async () => undefined, 'c1');
       await refused('CRITERION_MOVE_TASK_RUNNING', (s) => prisma.session.create({
         data: {
-          ownerId, creatorId: ownerId, taskId: s.open, title: 'a run', prompt: 'work', status: RunStatus.RUNNING,
+          ownerId, creatorId: ownerId, taskId: s.open, title: 'a run', prompt: 'work', turnState: 'IN_FLIGHT',
         },
       }));
       // CRITERION_MOVE_TASK_LANDING needs a line and a queued landing job; the unit spec holds it.

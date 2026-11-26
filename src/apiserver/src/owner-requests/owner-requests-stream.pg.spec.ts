@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { MessageEvent } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { ControlEventType, type ControlEvent } from '@orbit/shared';
 import { EventsController } from '../events/events.controller';
@@ -62,7 +63,7 @@ test('an owner request change reaches a stream that declared owner_requests, and
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: 'orst', prompt: 'orst',
-      provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, startedAt: new Date(),
+      provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', startedAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

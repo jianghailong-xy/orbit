@@ -6,11 +6,11 @@ import { ConflictException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { uuidToBase62 } from '@orbit/shared';
@@ -42,6 +42,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * THE SERVER BINDS THE STANDARD A REVISION IS JUDGED AGAINST.
@@ -190,7 +191,7 @@ async function conversation(
       title,
       prompt: title,
       provider: 'claude',
-      status: taskId === undefined ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING,
+      turnState: turnStateOfWord(taskId === undefined ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(taskId === undefined ? { titleManagedByProject: true } : {}),
     },

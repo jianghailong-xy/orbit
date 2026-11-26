@@ -758,6 +758,25 @@ public struct SessionFolderAddress: Hashable, Sendable {
         return scheduledRuns(agentID: agentID, view: view)
     }
 
+    /// The folder page a session opened by its id from outside its folder's page — a link, a
+    /// notification, a search result — should show, because that is where its row is: the
+    /// workspace's top level lists no filed session, so the open conversation would have none and
+    /// nothing would point to its folder. Nil when the session is in no folder, its folder is not
+    /// one of `folders` for its own workspace, the list is not drawing folders at all
+    /// (`listShowsFolders`: the view's tag filter, Group by Tag or search on top of the scope's
+    /// own rule — Trash draws none), or a folder's page is already showing (`alreadyShowing`), which
+    /// an address that names one keeps rather than moves.
+    public static func forOpening(_ session: Session, folders: [SessionFolder],
+                                  listShowsFolders: Bool, alreadyShowing: Bool) -> Self? {
+        guard listShowsFolders, !alreadyShowing,
+              let folderID = session.folderId,
+              let agentID = session.agent?.id ?? session.agentId,
+              folders.contains(where: { $0.id == folderID && $0.workspaceId == agentID }) else { return nil }
+        let view = SessionView.allCases.first { $0.lifecycleState == session.effectiveLifecycleState } ?? .open
+        guard SessionFolderGrouping.listShowsFolders(view: view, byTag: false) else { return nil }
+        return Self(folderID: folderID, agentID: agentID, view: view)
+    }
+
     public init(folderID: String, agentID: String, view: SessionView) {
         self.folderID = folderID
         self.agentID = agentID

@@ -9,7 +9,7 @@ import {
   SessionLifecycleState,
   SessionRunState,
 } from '@orbit/shared';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { isHeld } from '../common/session-release';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';

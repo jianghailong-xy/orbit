@@ -20,7 +20,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { HttpException } from '@nestjs/common';
-import { Prisma, SessionDispatchOrigin, RunStatus, type PrismaClient, type Runner } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient, type Runner } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { CLAUDE_REGION_V1 } from '@orbit/shared';
@@ -102,7 +103,7 @@ test('provider_list with workspace: what that workspace runner can run, judged a
     data: {
       id: randomUUID(), ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runner.id,
       title: 'a conversation', prompt: 'hello', provider: 'claude', providerBuiltin: true, engine: 'claude',
-      model: 'claude-opus-5-5', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+      model: 'claude-opus-5-5', turnState: null, numTurns: 1,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, costUsd: 0,
     },
   });

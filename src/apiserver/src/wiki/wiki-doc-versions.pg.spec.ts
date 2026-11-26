@@ -241,8 +241,8 @@ async function scene(h: Harness, title = 'A space whose sections are rewritten')
   assert.equal(drafting.rowCount, 1, 'the space\'s first draft is made on the server');
   const session = randomUUID();
   await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'a session','p',$2,$2,$3,$4,'RUNNING'::run_status,'USER',now())`,
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","turn_state","dispatch_origin","updated_at")
+     VALUES ($1,'a session','p',$2,$2,$3,$4,'IN_FLIGHT','USER',now())`,
     [session, owner.id, ws, runner],
   );
   return {

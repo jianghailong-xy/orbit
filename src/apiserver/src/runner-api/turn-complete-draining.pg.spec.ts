@@ -33,7 +33,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SELF_UPDATE_NOW_V1, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -41,6 +42,7 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -115,7 +117,7 @@ test('a turn ending on a draining runner returns its slot, and Stop on the sessi
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: m.workspaceId, assignedRunnerId: m.id,
         title: `draining ${status.toLowerCase()} ${RUN}`, prompt: 'the work', provider: 'claude', providerBuiltin: true,
-        engine: 'claude', status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+        engine: 'claude', turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
         startedAt: new Date(Date.now() - 10 * 60_000), runtimeSessionId: randomUUID(), numTurns: 1,
         inboxLeaseOwner: lease.owner, inboxLeaseGeneration: lease.generation,
         ...extra,

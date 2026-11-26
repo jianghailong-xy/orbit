@@ -65,7 +65,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobResultRequest } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -248,9 +249,9 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
         branch,
         isolationStatus: 'worktree',
         ...(finish === 'NOT_FINISHED'
-          ? { status: RunStatus.RUNNING }
+          ? { turnState: 'IN_FLIGHT' }
           : {
-            status: RunStatus.SUCCEEDED, 
+            turnState: null, 
             finishedAt: new Date(Date.now() - 60_000),
             worktreeBranch: finish.worktreeBranch ?? branch,
             worktreeDirty: finish.worktreeDirty ?? false,
@@ -389,7 +390,7 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
       workspaceId,
       title: 'ran again without a worktree',
       prompt: 'do the work once more',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+      turnState: null, finishedAt: new Date(), 
       // Stated, so which session is newest is this fixture's fact and not two inserts' timing.
       createdAt: new Date(Date.now() + 1_000),
     },
@@ -423,7 +424,7 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
   await prisma.session.update({
     where: { id: tooSoonSession },
     data: {
-      status: RunStatus.SUCCEEDED, 
+      turnState: null, 
       finishedAt: new Date(tooSoonAnswer.lookedAt.getTime() + 15_000),
       worktreeBranch: 'orbit/looked-at-too-soon',
       worktreeDirty: false,

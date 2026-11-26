@@ -5131,30 +5131,6 @@ button.toast--pill:focus-visible {
 .workspace-header-jump[hidden] {
   display: none;
 }
-/* A phone's header has no room for the capsule beside the title, and floating it over the
-   transcript covers the message the reader scrolled up to. Docked here instead: the header wraps,
-   the capsule takes a line of its own below the title's (last in the header, so it wraps under
-   the actions rather than pushing them down), and the conversation starts under the header's
-   rule where nothing covers it. */
-@media (max-width: 960px) {
-  .workspace-header:has(> .workspace-header-jump.is-phone) {
-    flex-wrap: wrap;
-  }
-  .workspace-header-jump.is-phone {
-    position: static;
-    /* The base rule centres itself over the row; docked, it is a row of its own. */
-    transform: none;
-    flex: 1 1 100%;
-    max-width: 100%;
-  }
-  .workspace-header-jump.is-phone .chat-older-pill.chat-older-split {
-    max-width: 100%;
-  }
-  /* Docked, it is part of the header rather than a chip floating over content. */
-  .workspace-header-jump.is-phone .chat-older-pill {
-    box-shadow: none;
-  }
-}
 /* Centred over the whole row, so the title stops short of the pill's half instead of running under it. */
 .workspace-header.has-jump {
   position: relative;
@@ -17390,11 +17366,9 @@ button.chat-jump-start:hover {
   .workspace-split.show-conversation .workspace-header {
     padding-bottom: 10px;
   }
-  /* Beside ←, the Project sessions button and ⋯, a title sharing its row with the Coordinator badge
-     and the watch chips is left a few letters. Here the title takes the row to itself and the badges
-     and chips drop onto the status line under it: the title line's box steps aside (display:
-     contents) so its children wrap in the header column, the title a full row. The status text
-     follows the badges while it fits beside them and takes the next line when it does not. */
+  /* One row: ←, the title (or the capsule naming the reader's last question), its badges, ⋯. The
+     status line that used to sit under it is gone (owner, 2026-11-26) — its Follow, the tags, the run
+     state and the time live in ⋯ and the session's settings sheet now. */
   .workspace-header-main {
     display: flex;
     flex-wrap: wrap;
@@ -17403,10 +17377,15 @@ button.chat-jump-start:hover {
     row-gap: 2px;
   }
   .workspace-header-main > .workspace-title-line {
-    display: contents;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    min-width: 0;
+    flex: 1 1 auto;
   }
   .workspace-title-line > .workspace-name {
-    flex: 0 0 100%;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .workspace-header-main > .workspace-sub {
     flex: 1 1 auto;
@@ -17415,6 +17394,30 @@ button.chat-jump-start:hover {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* Off the tail the capsule takes the title's place in that row — the iOS console's nav-bar
+     principal — so the header is one row in both states and never grows as the reader scrolls. It
+     stays mounted while hidden (its strip's line is what says something waits), and `.shows-jump`
+     steps the title and its badges aside while it shows. */
+  .workspace-title-jump {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .workspace-title-jump[hidden] {
+    display: none;
+  }
+  .workspace-title-jump .chat-older-pill.chat-older-split {
+    flex: 1 1 auto;
+    max-width: 100%;
+    min-width: 0;
+  }
+  /* In the row, it is part of the header rather than a chip floating over content. */
+  .workspace-title-jump .chat-older-pill {
+    box-shadow: none;
+  }
+  .workspace-title-line.shows-jump > :not(.workspace-title-jump) {
+    display: none;
   }
   /* In-pane back button: leaves the open conversation for the session list. */
   .workspace-back-mobile {

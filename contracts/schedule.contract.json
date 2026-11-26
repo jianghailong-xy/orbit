@@ -1052,5 +1052,38 @@
         "board": "iOS 01 ⑧ Weekday issue summary"
       }
     ]
+  },
+  "runStatusCopy": {
+    "strip": "Scheduled run · planned {planned} · access {access}",
+    "didntRun": {
+      "title": "Didn't run",
+      "notPickedUp": "{runner} didn't pick it up on any of {tries} tries, so the run never started.",
+      "notPickedUpOnce": "{runner} didn't pick it up, so the run never started.",
+      "full": "{runner} was full the whole time, so the run never started.",
+      "engineFailed": "{runner} couldn't start the engine on any of {tries} tries, so the run never started.",
+      "engineFailedOnce": "{runner} couldn't start the engine, so the run never started.",
+      "quota": "The engine's usage limit was reached, so the run never started.",
+      "cancelled": "You cancelled the run before it started.",
+      "nothingChanged": "Nothing was changed.",
+      "gaveUp": "gave up {time}",
+      "nextRun": "Next run: {when}"
+    },
+    "queued": {
+      "title": "Queued · {tag}",
+      "waited": "{waited} · gives up at {deadline}",
+      "givesUp": "Gives up at {deadline}"
+    },
+    "startedOn": {
+      "title": "Started on try {try}",
+      "body": "This try stopped before its engine started ({why}). Try {try} started at {time}.",
+      "engineExited": "{engine} exited",
+      "notPickedUp": "{runner} didn't pick it up"
+    },
+    "actions": {
+      "runNow": "Run now",
+      "openSchedule": "Open schedule",
+      "cancelRun": "Cancel run",
+      "openRun": "Open the run →"
+    }
   }
 }

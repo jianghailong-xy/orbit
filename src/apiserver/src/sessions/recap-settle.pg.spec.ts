@@ -33,7 +33,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -49,6 +50,7 @@ import {
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RECAP_MIN_INTERVAL_MS } from './recap';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -147,7 +149,7 @@ async function fixture(
       title: `${label}`,
       prompt: 'fix the login flow',
       provider: 'claude',
-      status: opts.parked ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING,
+      turnState: turnStateOfWord(opts.parked ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING),
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),

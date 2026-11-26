@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -64,7 +65,7 @@ test('the mention check reads the session\'s own events, literally',
         await db.session.create({
           data: {
             id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-            status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+            turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           },
         });
         return id;

@@ -99,8 +99,8 @@ test('P1 cursor engine migration on PostgreSQL', { concurrency: 1, timeout: 300_
   ) => {
     const id = randomUUID();
     await sql.query(
-      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, engine, model, status, updated_at)
-       VALUES ($1, 'cursor', 'cursor', $2, $2, $3, $4, $5, $6::run_status, now())`,
+      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, engine, model, turn_state, updated_at)
+       VALUES ($1, 'cursor', 'cursor', $2, $2, $3, $4, $5, (CASE ($6)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), now())`,
       [id, ownerId, provider, opts.engine ?? null, opts.model ?? null, opts.status ?? 'AWAITING_INPUT'],
     );
     return id;

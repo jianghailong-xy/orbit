@@ -265,7 +265,7 @@ function storeCases(leg: Leg, filesDir: string, scratch: string) {
     await db.session.create({
       data: {
         id: sessionId, title: 'left early', prompt: 'left early', ownerId, creatorId: ownerId, workspaceId,
-        assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
+        assignedRunnerId: runnerId, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
       },
     });
     const taskId = randomUUID();

@@ -18,7 +18,6 @@ import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-tu
 import { heldFilter } from '../common/session-release';
 import { isSessionExecuting } from '../common/session-working';
 import { LEGACY_STATUS_SELECT, legacySessionStatus } from '../sessions/session-legacy-words';
-import type { LegacyStatusWord } from '../sessions/session-state';
 import { TURN_STATE_SELECT, turnStateFilter, turnStateOf, type TurnState } from '../sessions/session-turn-state';
 import { wasOutOfMemoryStop } from '../managed-runners/managed-runner-fencing';
 import { fileSubagentWake, fileWorkflowWake } from '../runner-api/subagent-wake';
@@ -1083,8 +1082,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // Set cancelRequestedAt too so the heartbeat cancel-drain tells a runner
         // recovering from a partition to stop (the session is already finalized here).
         data: {
-          status: status as LegacyStatusWord,
-          // A released session holds no turn (plan §2.2: written beside the word).
+          // A released session holds no turn (plan §2.2).
           turnState: null,
           ...(failed && !opts.keepError ? { error: reason } : {}),
           // Due immediately: AutoRetryService's own sweep is what waits for the runner to

@@ -4,11 +4,11 @@ import test from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -225,7 +225,7 @@ async function workSession(stack: Stack, ids: World, taskId: string, label: stri
       provider: 'claude',
       // SUCCEEDED, so the run is over: a live session would hold the dependent back through a
       // clause that has nothing to do with landing.
-      status: RunStatus.SUCCEEDED, 
+      turnState: null, 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',

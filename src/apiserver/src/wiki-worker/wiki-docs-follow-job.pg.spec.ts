@@ -583,8 +583,8 @@ async function built(h: Harness, name: string): Promise<{ s: Scene; keys: Keys; 
 async function mergingSession(h: Harness, s: Scene, title: string, settledAt = new Date()): Promise<string> {
   const id = randomUUID();
   await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","status","dispatch_origin","branch","last_turn_at","updated_at","finished_at")
-     VALUES ($1,$2,'p',$3,$3,$4,$5,'SUCCEEDED'::run_status,'USER',$6,$7,now(),$7)`,
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","turn_state","dispatch_origin","branch","last_turn_at","updated_at","finished_at")
+     VALUES ($1,$2,'p',$3,$3,$4,$5,NULL,'USER',$6,$7,now(),$7)`,
     [id, title, s.owner.id, s.workspaceId, s.runnerId, `orbit/${id.slice(0, 8)}`, settledAt],
   );
   return id;

@@ -24,7 +24,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -207,7 +208,7 @@ async function project(stack: Stack, w: World, line: 'MAIN' | 'PROJECT_BRANCH', 
   await db.session.create({
     data: {
       id: coordinatorSessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
-      title: `coordinator: ${w.label}`, prompt: `coordinator: ${w.label}`, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      title: `coordinator: ${w.label}`, prompt: `coordinator: ${w.label}`, provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER, titleManagedByProject: true, numTurns: 1, startedAt: new Date(),
       runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -245,7 +246,7 @@ async function doneCodeTask(stack: Stack, w: World, projectId: string, label: st
   await db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id, workspaceId: w.workspaceId,
-      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.RUNNING,
+      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt: new Date(),
       branch, isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
@@ -275,7 +276,7 @@ async function doneCodeTask(stack: Stack, w: World, projectId: string, label: st
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000), 
+        turnState: null, finishedAt: new Date(Date.now() - 60_000), 
         branchSha: TASK_BRANCH_TIP, worktreeBranch: branch, worktreeDirty: false,
       },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
@@ -338,7 +339,7 @@ test('(a) a runner\'s merge result that lands a session on main makes the space\
       await stack.db.session.create({
         data: {
           id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
-          title: 'Shorten the offline window', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: 'orbit/offline-window',
+          title: 'Shorten the offline window', prompt: 'p', turnState: null, finishedAt: new Date(), branch: 'orbit/offline-window',
           isolationStatus: 'worktree',
         },
       });
@@ -377,7 +378,7 @@ test('(a) a wiki chat\'s merge into main is the owner\'s work: its follow job is
       await stack.db.session.create({
         data: {
           id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
-          title: 'Chat: the lease is two minutes', prompt: 'p', status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: 'orbit/chat-lease',
+          title: 'Chat: the lease is two minutes', prompt: 'p', turnState: null, finishedAt: new Date(), branch: 'orbit/chat-lease',
           isolationStatus: 'worktree', wikiChatSpaceId: w.spaceId,
         },
       });

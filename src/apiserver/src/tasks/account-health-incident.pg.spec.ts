@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { CreatorType, Prisma, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunFailureKind, RunStatus as SharedRunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +19,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { MAX_AUTO_RUN_FAILURES } from './task-retry-policy';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TasksService } from './tasks.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * The incident of docs/routing-account-health-design.md §1, replayed against a real PostgreSQL (§10, phase 1): from
@@ -121,7 +123,7 @@ async function fixture(db: PrismaClient, label: string, { cursorOnly = false, st
     data: {
       ownerId: f.ownerId, creatorId: f.ownerId, prompt: 'hello', workspaceId: f.agentId, title: 'a conversation on Cursor',
       provider: 'cursor', providerBuiltin: true,
-      engine: 'cursor', status: RunStatus.AWAITING_INPUT, createdAt: new Date(Date.now() - 3_600_000),
+      engine: 'cursor', turnState: null, createdAt: new Date(Date.now() - 3_600_000),
     },
   });
   return f;
@@ -154,7 +156,7 @@ async function claimed(s: Services, f: Fixture, sessionId: string): Promise<stri
     await tx.$executeRaw`SELECT set_config('orbit.runner_supports_cursor', '1', true)`;
     await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.RUNNING, assignedRunnerId: f.runnerId, startedAt: new Date(), engineTurnActive: true, runtimeSessionId: randomUUID() },
+      data: { turnState: 'IN_FLIGHT', assignedRunnerId: f.runnerId, startedAt: new Date(), engineTurnActive: true, runtimeSessionId: randomUUID() },
     });
   });
   await s.db.conversationTurn.deleteMany({ where: { sessionId } });
@@ -190,7 +192,7 @@ async function refusedByCursor(s: Services, f: Fixture, sessionId: string, { old
   } else {
     await s.api.finalize({ id: f.runnerId }, sessionId, { status: SharedRunStatus.FAILED, ...body } as never);
   }
-  assert.equal((await s.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true } })).status, RunStatus.FAILED);
+  assert.equal(wordOf((await s.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: WORD_SELECT }))), RunStatus.FAILED);
 }
 
 const runOf = (db: PrismaClient, id: string) => db.session.findUniqueOrThrow({
@@ -295,7 +297,7 @@ test('five refusals on one account, the incident\'s count, spend none of the ret
             ownerId: f.ownerId, creatorId: f.ownerId, prompt: 'the brief', workspaceId: f.agentId, taskId, startsTaskWork: true,
             title: 'Task: the incident task',
             provider: 'cursor', providerBuiltin: true, engine: 'cursor', model: OPUS, assignedRunnerId: f.runnerId,
-            status: RunStatus.RUNNING, createdAt: new Date(Date.now() - (10 - i) * 60_000),
+            turnState: 'IN_FLIGHT', createdAt: new Date(Date.now() - (10 - i) * 60_000),
             // Refused at once: an older runner's admission is derived from a start this close to the end (§5.2).
             startedAt: new Date(Date.now() - 1_000),
           },

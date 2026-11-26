@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import type { Client } from 'pg';
 
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import type { ScenarioSpec } from './pg-barrier';
 
 /**
@@ -92,12 +91,12 @@ export function newFixtureIds(label: string): FixtureIds {
 }
 
 /** The telemetry-only Session write, as Prisma emits it for the events transaction's
- *  `session.updateMany({ where: { id, cancelRequestedAt: null, status: { in: OPEN } }, … })`. */
+ *  `session.updateMany({ where: { id, cancelRequestedAt: null, finishedAt: null }, … })`. */
 const TELEMETRY_SESSION_UPDATE = `
   UPDATE "session" SET "last_turn_at" = $2, "updated_at" = $2
    WHERE "id" = $1::uuid
      AND "cancel_requested_at" IS NULL
-     AND "status" = ANY($3::run_status[])`;
+     AND "finished_at" IS NULL`;
 
 const INSERT_TASK = `
   INSERT INTO "task" ("id", "title", "owner_id", "creator_type", "creator_id",
@@ -155,9 +154,9 @@ async function seed(client: Client, ids: FixtureIds): Promise<void> {
   ] as Array<[string, string | null]>) {
     await client.query(
       `INSERT INTO "session" ("id", "title", "prompt", "owner_id", "creator_id", "assigned_runner_id",
-                              "workspace_id", "task_id", "status", "dispatch_origin", "updated_at")
+                              "workspace_id", "task_id", "turn_state", "dispatch_origin", "updated_at")
        VALUES ($1::uuid, $2, 'fixture', $3::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid,
-               'RUNNING'::run_status, 'USER'::session_dispatch_origin, CURRENT_TIMESTAMP)`,
+               'IN_FLIGHT', 'USER'::session_dispatch_origin, CURRENT_TIMESTAMP)`,
       [id, `${ids.label}-session`, ids.ownerId, ids.runnerId, ids.workspaceId, taskId],
     );
   }
@@ -173,7 +172,7 @@ async function seed(client: Client, ids: FixtureIds): Promise<void> {
  * first. Production's victim was Task creation, so `task-create` is the party that detects.
  */
 export function twoPartyDeadlockScenario(ids: FixtureIds): ScenarioSpec {
-  const telemetryArgs = (turnAt: Date) => [ids.telemetrySessionId, turnAt, OPEN_SESSION_STATUSES];
+  const telemetryArgs = (turnAt: Date) => [ids.telemetrySessionId, turnAt];
   return {
     name: 'two-party/task-create-vs-runner-events',
     parties: [
@@ -364,7 +363,7 @@ export async function seedThreePartyFixture(client: Client, ids: FixtureIds): Pr
  * check, finds the cycle and is aborted. Production's victim was the dependency write.
  */
 export function threePartyDeadlockScenario(ids: FixtureIds): ScenarioSpec {
-  const telemetryArgs = (turnAt: Date) => [ids.telemetrySessionId, turnAt, OPEN_SESSION_STATUSES];
+  const telemetryArgs = (turnAt: Date) => [ids.telemetrySessionId, turnAt];
   return {
     name: 'three-party/dependency-vs-runner-inbox-vs-telemetry',
     parties: [

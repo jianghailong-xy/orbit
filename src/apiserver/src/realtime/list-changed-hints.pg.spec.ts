@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { MessageEvent } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import type { Subscription } from 'rxjs';
 import { ControlEventType, type ControlEvent } from '@orbit/shared';
@@ -98,7 +99,7 @@ async function fixture(
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: 'lch',
-      prompt: 'lch', provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, startedAt: new Date(),
+      prompt: 'lch', provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', startedAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -347,7 +348,7 @@ test('f: heartbeats and runner-row writes outside steady send no hint; going off
   await f.db.session.create({
     data: {
       id: holder, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: queued.workspaceId, assignedRunnerId: f.runnerId,
-      title: 'lch queued', prompt: 'lch', provider: 'claude', providerBuiltin: true, status: RunStatus.PENDING,
+      title: 'lch queued', prompt: 'lch', provider: 'claude', providerBuiltin: true, turnState: 'QUEUED',
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

@@ -5,11 +5,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -277,7 +277,7 @@ async function world(
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -344,7 +344,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<stri
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -393,7 +393,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<stri
   await db.$transaction(async (tx) => {
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt},
+      data: { turnState: null, finishedAt},
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -661,7 +661,7 @@ test('(2) the refile path: a candidate retired because its check looked at a bra
             branch,
             isolationStatus: 'worktree',
             createdAt,
-            status: RunStatus.SUCCEEDED, 
+            turnState: null, 
             finishedAt,
             worktreeBranch: branch,
             worktreeDirty: false,

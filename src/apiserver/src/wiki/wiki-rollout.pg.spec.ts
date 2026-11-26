@@ -26,7 +26,8 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -45,6 +46,7 @@ import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiController } from './wiki.controller';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -221,7 +223,7 @@ test('the wiki rollout flag, over both doors and the runner\'s claim', { skip, c
       data: {
         title: 'a session',
         prompt: 'pick this up',
-        status,
+        turnState: turnStateOfWord(status),
         ownerId: who.id,
         creatorId: who.id,
         workspaceId: who.workspaceId,

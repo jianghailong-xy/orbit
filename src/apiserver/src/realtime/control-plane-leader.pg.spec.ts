@@ -34,7 +34,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -65,6 +66,7 @@ import {
   ReaperService,
   STARTUP_GRACE_MS,
 } from './reaper.service';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -167,14 +169,14 @@ test('several apiserver processes over one database: one runs the singleton swee
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: title,
-        provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, runtimeSessionId: randomUUID(),
+        provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', runtimeSessionId: randomUUID(),
         startedAt: new Date(Date.now() - 10 * MINUTE), runClaimedAt: new Date(Date.now() - 10 * MINUTE),
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
     return id;
   };
-  const stateOf = (id: string) => db.session.findUniqueOrThrow({ where: { id }, select: { status: true, error: true } });
+  const stateOf = async (id: string) => withWord(await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, error: true } }));
   const REAPED = { status: RunStatus.FAILED, error: 'runner offline' };
   /** A reaper over `presence`, sweeping through `client`, its log kept. Its timers are never started. */
   const reaperOf = (presence: RunnerPresenceService | undefined, leader?: ControlPlaneLeader, client: PrismaClient = db) => {

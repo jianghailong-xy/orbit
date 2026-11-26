@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { CreatorType, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { CreatorType, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -107,7 +107,7 @@ test('every EXECUTABLE acceptance round is recorded, and the task detail lists t
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, taskId, workspaceId, assignedRunnerId: runnerId, title: `${label} ${RUN}`,
-        prompt: 'do the task', provider: 'claude', providerBuiltin: true, engine: 'claude', status: RunStatus.RUNNING,
+        prompt: 'do the task', provider: 'claude', providerBuiltin: true, engine: 'claude', turnState: 'IN_FLIGHT',
         engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt,
         createdAt: startedAt, runtimeSessionId: randomUUID(), numTurns: 1,
         inboxLeaseOwner: lease.owner, inboxLeaseGeneration: lease.generation,

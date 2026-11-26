@@ -39,7 +39,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { HttpException } from '@nestjs/common';
-import { CreatorType, RunStatus, type PrismaClient } from '@prisma/client';
+import { CreatorType, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import type { CompletionInputRouter } from '../projects/completion-input-router.service';
 import {
@@ -138,8 +139,8 @@ test('a task none of a settled project\'s criteria count leaves it by a confirme
     const id = randomUUID();
     await admin.query(
       `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-         "provider","status","dispatch_origin","updated_at")
-       VALUES ($1,$2,$3,$4,'fixture',$2,'claude',$5::"run_status",'USER'::"session_dispatch_origin",now())`,
+         "provider","turn_state","dispatch_origin","updated_at")
+       VALUES ($1,$2,$3,$4,'fixture',$2,'claude',(CASE ($5)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),'USER'::"session_dispatch_origin",now())`,
       [id, ownerId, workspaceId, title, status],
     );
     return id;
@@ -209,7 +210,7 @@ test('a task none of a settled project\'s criteria count leaves it by a confirme
     await prisma.session.create({
       data: {
         id: ran, ownerId, creatorId: ownerId, taskId, title: `ran ${title}`, prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: `orbit/${nibble}`, isolationStatus: 'worktree',
+        turnState: null, finishedAt: new Date(), branch: `orbit/${nibble}`, isolationStatus: 'worktree',
       },
     });
     await receipts.record(ownerId, ran, {

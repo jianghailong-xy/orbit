@@ -58,7 +58,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
 import { isReleasedStatus } from '../common/session-release';
 import {
   AgentProvider,
@@ -86,6 +86,9 @@ import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { RunnersService } from '../runners/runners.service';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from './session-turn-state';
+import { type SessionFixture, WORD_SELECT, wordOf, withWord } from '../test-support/session-word';
+import { RunStatus } from '@orbit/shared';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -190,10 +193,10 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     m: { ownerId: string; runnerId: string; workspaceId: string },
     provider: 'codex' | 'claude',
     status: RunStatus,
-    extra: Partial<Prisma.SessionUncheckedCreateInput> = {},
+    extra: SessionFixture = {},
   ) {
     const id = randomUUID();
-    const fixtureStatus = extra.status ?? status;
+    const { status: fixtureStatus = status, ...extraFacts } = extra;
     await db.session.create({
       data: {
         id,
@@ -206,12 +209,12 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
         provider,
         providerBuiltin: true,
         ...(provider === 'codex' ? { codexAccount: 'default' } : { claudeAccount: 'default' }),
-        status,
+        turnState: turnStateOfWord(fixtureStatus),
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
         numTurns: 2,
-        ...extra,
+        ...extraFacts,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
         } : {}),
@@ -647,8 +650,8 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     const at = new Date(armed.retry_ms! + 1_000);
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
-    const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAttempts: true } });
-    assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 }, 'not re-sent while Default is still spent');
+    const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, retryAttempts: true } });
+    assert.deepEqual(withWord(revived), { status: RunStatus.PENDING, retryAttempts: 1 }, 'not re-sent while Default is still spent');
 
     // The claim that picks it up starts it on Work, and the transcript says why.
     const claims = new RealQueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
@@ -749,8 +752,8 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     const at = new Date(armed.retry_ms! + 1_000);
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
-    const revived = await db.session.findUniqueOrThrow({ where: { id: refused }, select: { status: true, retryAttempts: true } });
-    assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 });
+    const revived = await db.session.findUniqueOrThrow({ where: { id: refused }, select: { ...WORD_SELECT, retryAttempts: true } });
+    assert.deepEqual(withWord(revived), { status: RunStatus.PENDING, retryAttempts: 1 });
     assert.deepEqual(await pending(refused), [{ kind: 'message', content: 'can it be a card instead?' }]);
     // ...and the claim that picks it up starts it on Default.
     const resumed = await claims.claimSessionForRunner({ id: m.runnerId });
@@ -843,7 +846,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     }
     // A message somebody sends to one of them is not held back: an account with room beats the limit it
     // would meet here. (The rest let go of the runner's slots first, or nothing is claimed at all.)
-    await db.session.updateMany({ where: { id: { in: herd.slice(0, 7) } }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await db.session.updateMany({ where: { id: { in: herd.slice(0, 7) } }, data: { turnState: null, finishedAt: null} });
     await messageMovesIt(m, herd[7], turns[7]);
   });
 
@@ -968,8 +971,8 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     for (let i = 0; i < 4; i += 1) full.push(await sessionOn(m, 'claude', RunStatus.RUNNING, { claudeAccount: WORK }));
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(new Date(at.getTime() + 1_000));
-    const held = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAt: true } });
-    assert.equal(held.status, RunStatus.FAILED, 'Work is past its share: nothing is re-sent');
+    const held = await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, retryAt: true } });
+    assert.equal(wordOf(held), RunStatus.FAILED, 'Work is past its share: nothing is re-sent');
     assert.ok(held.retryAt && held.retryAt.getTime() >= Date.parse(back), `re-armed for ${held.retryAt?.toISOString()}`);
   });
 
@@ -994,7 +997,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     assert.deepEqual(await Promise.all([first, second, near, pinned].map(armedAt)), before);
 
     // They finish, and Work has room. The furthest reset goes first, and one a pass.
-    await db.session.updateMany({ where: { id: { in: full } }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()} });
+    await db.session.updateMany({ where: { id: { in: full } }, data: { turnState: null, finishedAt: new Date()} });
     const now = new Date();
     await retries.releaseHeldRetries(now);
     const after = await Promise.all([first, second, near, pinned].map(armedAt));

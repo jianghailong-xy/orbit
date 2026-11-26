@@ -52,6 +52,6 @@ test('claims go to the tree holding the fewest active turns first', async () => 
   const order = sql.slice(sql.indexOf('ORDER BY'));
   assert.match(order, /busy\."root_session_id" = s\."root_session_id"/);
   // In flight: the turn state, the explicit slot fact (sessions/session-turn-state.ts), never `phase`.
-  assert.match(order, /\(CASE WHEN busy\."finished_at" IS NULL THEN COALESCE\(busy\."turn_state", session_turn_state_of_status\(busy\."status"\)\) END\) = 'IN_FLIGHT'/);
+  assert.match(order, /\(CASE WHEN busy\."finished_at" IS NULL THEN busy\."turn_state" END\) = 'IN_FLIGHT'/);
   assert.match(order, /\)\s*ASC,\s*s\."created_at" ASC/, 'least-loaded tree first, then oldest');
 });
