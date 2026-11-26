@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -53,9 +54,42 @@ export class RunnerDriveMkdirDto extends WithWriter {
   @IsOptional() @IsBoolean() parents?: boolean;
 }
 
-/** `POST /runner/drive/stagings`: a staging for the write of one handle or one tool call. */
+/**
+ * `POST /runner/drive/stagings`: a staging for the write of one handle or one tool call, or with no entry a batch's, whose
+ * chunks one `POST /runner/drive/batch` commits into several files.
+ */
 export class RunnerDriveStagingDto {
-  @IsPublicId() entryId!: string;
+  @IsOptional() @IsPublicId() entryId?: string;
+}
+
+/** A chunk by its content: what `chunks/held` is asked about. */
+export class RunnerDriveChunkRefDto {
+  @Matches(/^[0-9a-f]{64}$/, { message: 'sha256 is 64 lowercase hex characters' }) sha256!: string;
+  @IsInt() @Min(1) size!: number;
+}
+
+/** `POST /runner/drive/chunks/held`: which of these chunks this account already holds. */
+export class RunnerDriveHeldDto {
+  @IsArray() @ArrayMaxSize(1000) @ValidateNested({ each: true }) @Type(() => RunnerDriveChunkRefDto)
+  chunks!: RunnerDriveChunkRefDto[];
+}
+
+/** One file of a batch: its path, its whole content as held chunks, and its modification time. */
+export class RunnerDriveBatchItemDto {
+  @IsString() @MaxLength(4096) path!: string;
+  @IsString() @MaxLength(200) commitId!: string;
+  @IsArray() chunks!: Array<{ idx: number; sha256: string; size: number }>;
+  @IsOptional() @IsDateString() mtime?: string;
+}
+
+/**
+ * `POST /runner/drive/batch`: several files written in one request, each made or overwritten with content the account
+ * holds (sent to `stagingId`, or already in Drive). Each file is its own commit, answered on its own.
+ */
+export class RunnerDriveBatchDto extends WithWriter {
+  @IsOptional() @IsPublicId() stagingId?: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => RunnerDriveBatchItemDto)
+  items!: RunnerDriveBatchItemDto[];
 }
 
 /** `POST /runner/drive/stagings/:id/keepalive`: the handle still holds bytes no commit has taken (§8.1). */

@@ -811,6 +811,24 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
    *
    * A commit lands on its entry wherever it is now, in Trash included (§3.1).
    */
+  /**
+   * Which of these chunks the account already holds (docs/drive-directory-sync-design.md, "Sending what is not there
+   * yet"): the content a commit would accept without the bytes being sent again, by the very rule a commit checks
+   * (assertChunksHeld): bytes still kept, of the same size, named by a staging or a version of this account's. Another
+   * account's content is never counted, so the answer says nothing about what anyone else keeps.
+   */
+  async heldChunks(ownerId: string, chunks: Array<{ sha256: string; size: number }>): Promise<string[]> {
+    const wanted = [...new Set(chunks.map((c) => c.sha256).filter((sha) => /^[0-9a-f]{64}$/.test(sha)))];
+    if (!wanted.length) return [];
+    const held = await this.prisma.$queryRaw<Array<{ sha256: string; size_bytes: number | bigint }>>`
+      SELECT b."sha256", b."size_bytes" FROM "file_blob" b
+       WHERE b."sha256" = ANY(${wanted}::text[]) AND b."bytes_deleted_at" IS NULL
+         AND (EXISTS (SELECT 1 FROM "drive_staging_chunk" s WHERE s."sha256" = b."sha256" AND s."owner_id" = ${ownerId}::uuid)
+           OR EXISTS (SELECT 1 FROM "drive_version_chunk" v WHERE v."sha256" = b."sha256" AND v."owner_id" = ${ownerId}::uuid))`;
+    const sizes = new Map(held.map((h) => [h.sha256, Number(h.size_bytes)]));
+    return [...new Set(chunks.filter((c) => sizes.get(c.sha256) === c.size).map((c) => c.sha256))];
+  }
+
   async commit(
     ownerId: string,
     input: DriveCommitInput,

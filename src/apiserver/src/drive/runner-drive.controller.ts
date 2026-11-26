@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   Body,
   Controller,
@@ -32,7 +33,9 @@ import { RUNNER_DRIVE_ROUTE_PREFIXES } from './drive-routes';
 import { DriveEnabledGuard } from './drive-switch';
 import { drivePathSegments, DriveService, type DriveEntryRow, type DriveWriter } from './drive.service';
 import {
+  RunnerDriveBatchDto,
   RunnerDriveCommitDto,
+  RunnerDriveHeldDto,
   RunnerDriveCreateDto,
   RunnerDriveDeleteDto,
   RunnerDriveKeepaliveDto,
@@ -54,8 +57,8 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
 export const DRIVE_PATH_OR_ID = 'DRIVE_PATH_OR_ID';
 export const DRIVE_CHUNK_GONE = 'DRIVE_CHUNK_GONE';
 
-function refusal(status: HttpStatus, code: string, message: string): HttpException {
-  return new HttpException({ code, message }, status);
+function refusal(status: HttpStatus, code: string, message: string, extra: Record<string, unknown> = {}): HttpException {
+  return new HttpException({ code, message, ...extra }, status);
 }
 
 /** A drive path's parent path and last name: `/Proj/r.md` is `/Proj` and `r.md`. The root has neither. */
@@ -180,15 +183,25 @@ export class RunnerDriveController {
     @Body() dto: RunnerDriveStagingDto,
     @CurrentManagedRunnerInstance() instance?: ManagedRunnerInstance,
   ) {
-    let entryId: string | null = dto.entryId;
-    await this.drive.liveById(runner.ownerId, dto.entryId).catch(async (error) => {
+    // A batch's staging is bound to no entry: its chunks go to the files one batch makes (`batch`).
+    if (!dto.entryId) {
+      return this.chunks.openStaging(runner.ownerId, {
+        source: mount ? 'MOUNT' : 'TOOL',
+        entryId: null,
+        runnerId: runner.id,
+        generation: instance?.generation ?? null,
+      });
+    }
+    const named = dto.entryId;
+    let entryId: string | null = named;
+    await this.drive.liveById(runner.ownerId, named).catch(async (error) => {
       // A handle bound to an entry in Trash still commits there (§3.1), so its staging opens too.
-      const inTrash = await this.prisma.driveEntry.findFirst({ where: { id: dto.entryId, ownerId: runner.ownerId }, select: { id: true } });
+      const inTrash = await this.prisma.driveEntry.findFirst({ where: { id: named, ownerId: runner.ownerId }, select: { id: true } });
       if (inTrash) return;
       // So does one bound to a file a replacing rename removed (§3.2): its commit makes a new file in Trash, so the
       // staging is bound to no entry.
       const removed = await this.prisma.driveRemovedEntry.findUnique({
-        where: { ownerId_entryId: { ownerId: runner.ownerId, entryId: dto.entryId } }, select: { entryId: true },
+        where: { ownerId_entryId: { ownerId: runner.ownerId, entryId: named } }, select: { entryId: true },
       });
       if (!removed) throw error;
       entryId = null;
@@ -316,6 +329,84 @@ export class RunnerDriveController {
   }
 
   /** `utimens`: a live entry's mtime. */
+  /**
+   * Which of these chunks this account already holds (docs/drive-directory-sync-design.md, "Sending what is not there
+   * yet"): a writer sends only the others, and its commit names them all.
+   */
+  @Post('chunks/held')
+  @HttpCode(HttpStatus.OK)
+  async held(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveHeldDto) {
+    return { held: await this.drive.heldChunks(runner.ownerId, dto.chunks) };
+  }
+
+  /**
+   * Several files in one request (docs/drive-directory-sync-design.md, "Many small files"): each is made, or
+   * overwritten keeping its previous version, from content the account holds, with its folders made first and its
+   * modification time set. Each file is its own commit, idempotent by its commitId, and answered on its own: a file that
+   * fails says why, and the others still land.
+   */
+  @Post('batch')
+  @HttpCode(HttpStatus.OK)
+  async batch(
+    @CurrentRunner() runner: Runner,
+    @Body() dto: RunnerDriveBatchDto,
+    @CurrentManagedRunnerInstance() instance?: ManagedRunnerInstance,
+  ) {
+    if (dto.stagingId) await this.staging(runner, dto.stagingId);
+    const writer = this.writer(runner, dto.writer);
+    const results = [];
+    for (const item of dto.items) {
+      try {
+        const { parent, name } = splitDrivePath(item.path);
+        // Content the account does not hold fails this file before anything of it is made: no empty file, no folder.
+        const holds = new Set(await this.drive.heldChunks(runner.ownerId, item.chunks));
+        const missing = item.chunks.find((c) => !holds.has(c.sha256));
+        if (missing) {
+          throw refusal(HttpStatus.CONFLICT, 'DRIVE_CHUNK_NOT_HELD', `Chunk ${missing.idx} names content this account has not sent; send the chunk first.`, { idx: missing.idx });
+        }
+        if (parent !== '/') await this.drive.mkdirPath(runner.ownerId, parent, { parents: true, writer });
+        let entry = await this.drive.liveAt(runner.ownerId, item.path).catch((error) => {
+          if (error instanceof HttpException && error.getStatus() === HttpStatus.NOT_FOUND) return null;
+          throw error;
+        });
+        let mode: 'OVERWRITE' | 'CONTINUE' = 'OVERWRITE';
+        let handleId: string | null = null;
+        if (!entry) {
+          handleId = randomUUID();
+          const folder = await this.drive.liveAt(runner.ownerId, parent);
+          const created = await this.drive.createFile(runner.ownerId, { parentId: folder.id, name, handleId, writer, onClash: 'REFUSE' });
+          entry = await this.drive.liveById(runner.ownerId, created.id);
+          mode = 'CONTINUE';
+        } else if (entry.kind !== 'FILE') {
+          throw refusal(HttpStatus.CONFLICT, 'DRIVE_NOT_A_FILE', `${item.path} is a folder in Drive.`);
+        }
+        const committed = await this.drive.commit(
+          runner.ownerId,
+          {
+            commitId: item.commitId,
+            entryId: entry.id,
+            handleId,
+            mode,
+            baseVersionId: mode === 'CONTINUE' ? entry.currentVersionId : null,
+            baseSize: null,
+            chunks: item.chunks,
+            replaceTail: null,
+            stagingId: null,
+            writer,
+          },
+          instance ? { fence: (tx) => fenceManagedInstance(tx, instance) } : {},
+        );
+        if (item.mtime) await this.drive.setMtime(runner.ownerId, committed.entryId, new Date(item.mtime), writer);
+        results.push({ path: item.path, ok: true, entryId: committed.entryId, versionId: committed.versionId, newVersion: committed.newVersion, sizeBytes: committed.sizeBytes });
+      } catch (error) {
+        if (!(error instanceof HttpException)) throw error;
+        const body = error.getResponse() as { code?: string; message?: string; idx?: number };
+        results.push({ path: item.path, ok: false, status: error.getStatus(), code: body.code ?? null, message: body.message ?? error.message, idx: body.idx ?? null });
+      }
+    }
+    return { results };
+  }
+
   @Post('utimens')
   @HttpCode(HttpStatus.OK)
   async utimens(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveUtimensDto) {

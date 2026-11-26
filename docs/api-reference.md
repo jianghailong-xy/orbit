@@ -75,10 +75,10 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `public` | 41 |
 | `user` | 568 |
 | `admin` | 31 |
-| `runner` | 255 |
+| `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **899** |
+| **Total** | **903** |
 
 ## Public routes
 
@@ -757,8 +757,10 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/cursor-key-check-result` | body `CursorKeyCheckResultDto` | `RunnerApiController.cursorKeyCheckResult` |
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |
 | `POST` | `/api/runner/dir-probe-result` | body `Object` | `RunnerApiController.dirProbeResult` |
+| `POST` | `/api/runner/documents/batch` | body `RunnerDriveBatchDto` | `RunnerDriveController.batch` |
 | `GET` | `/api/runner/documents/changes` | query `since`, `wait` | `RunnerDriveController.changes` |
 | `GET` | `/api/runner/documents/chunks/:sha256` | path `sha256` | `RunnerDriveController.chunk` |
+| `POST` | `/api/runner/documents/chunks/held` | body `RunnerDriveHeldDto` | `RunnerDriveController.held` |
 | `POST` | `/api/runner/documents/commit` | body `RunnerDriveCommitDto` | `RunnerDriveController.commit` |
 | `GET` | `/api/runner/documents/commits/:commitId` | path `commitId` | `RunnerDriveController.commitStatus` |
 | `POST` | `/api/runner/documents/create` | body `RunnerDriveCreateDto` | `RunnerDriveController.create` |
@@ -776,8 +778,10 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PATCH` | `/api/runner/documents/syncs/:id` | body `RunnerDriveSyncReportDto`; path `id` | `RunnerDriveSyncsController.report` |
 | `GET` | `/api/runner/documents/usage` | — | `RunnerDriveController.usage` |
 | `POST` | `/api/runner/documents/utimens` | body `RunnerDriveUtimensDto` | `RunnerDriveController.utimens` |
+| `POST` | `/api/runner/drive/batch` | body `RunnerDriveBatchDto` | `RunnerDriveController.batch` |
 | `GET` | `/api/runner/drive/changes` | query `since`, `wait` | `RunnerDriveController.changes` |
 | `GET` | `/api/runner/drive/chunks/:sha256` | path `sha256` | `RunnerDriveController.chunk` |
+| `POST` | `/api/runner/drive/chunks/held` | body `RunnerDriveHeldDto` | `RunnerDriveController.held` |
 | `POST` | `/api/runner/drive/commit` | body `RunnerDriveCommitDto` | `RunnerDriveController.commit` |
 | `GET` | `/api/runner/drive/commits/:commitId` | path `commitId` | `RunnerDriveController.commitStatus` |
 | `POST` | `/api/runner/drive/create` | body `RunnerDriveCreateDto` | `RunnerDriveController.create` |
