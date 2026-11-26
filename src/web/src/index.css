@@ -4986,8 +4986,9 @@ button.toast--pill:focus-visible {
     padding-bottom: 4px;
     border-bottom: 0;
   }
+  /* 17px: a heading above the 14px conversation, not its first line (docs/mocks/session-title-size B). */
   .workspace-name {
-    font-size: 15px;
+    font-size: 17px;
   }
   .workspace-scroll-wrap > .workspace-sessions {
     padding-top: 16px;
