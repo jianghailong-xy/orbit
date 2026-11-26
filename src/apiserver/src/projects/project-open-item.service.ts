@@ -180,6 +180,8 @@ import {
   supersedeStaleStartRequest,
 } from './project-start-request';
 import { doorsForOpenItem, openItemDoorMessageNames, sourceJobForOpenItem } from './open-item-doors';
+import { lineSyncDedupeKey } from './line-sync-hold';
+import { uuidToBase62 } from '@orbit/shared';
 import {
   DONE_REQUEST_COORDINATOR_ONLY,
   DONE_REQUEST_DECLINE_NOTE_REQUIRED,
@@ -2689,8 +2691,17 @@ export class ProjectOpenItemService {
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true, generation: true, state: true, checks: true, baselineRed: true, phase: true, sourceSha: true,
+          serialKey: true,
         },
       });
+      // docs/design/project-line-upstream-sync.md §4.2: a queued landing held behind the line-sync item goes ahead by
+      // itself once the sync lands, and the refusal names that item.
+      const lineSyncHold = newestLanding?.state === 'QUEUED'
+        ? await tx.projectOpenItem.findFirst({
+          where: { projectId, dedupeKey: lineSyncDedupeKey(newestLanding.serialKey), state: 'OPEN' },
+          select: { id: true },
+        })
+        : null;
       if (expectJobId && newestLanding?.id !== expectJobId) {
         throw new ConflictException({
           code: INTEGRATION_RETRY_NOT_APPLICABLE,
@@ -2728,6 +2739,7 @@ export class ProjectOpenItemService {
         newestLanding: baselineFailure ?? (newestLanding && { ...newestLanding, timedOut: silent?.timedOut === true }),
         openItems,
         ownerBlockers,
+        heldByLineSync: lineSyncHold ? { itemId: uuidToBase62(lineSyncHold.id) } : null,
         // §3.1 M3: only a MAIN_SYNC conflict reads the branch tips, and only facts already on record.
         ...(newestLanding?.state === 'CONFLICT' && newestLanding.phase === 'MAIN_SYNC'
           ? {
