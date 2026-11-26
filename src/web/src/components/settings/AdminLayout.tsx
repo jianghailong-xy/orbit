@@ -5,6 +5,7 @@ import { ApiOutlined, GithubOutlined, LeftOutlined, LoginOutlined, MailOutlined,
 import { api } from '../../api';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useMediaQuery } from '../../lib/useMediaQuery';
+import { sidebarWidthStyle } from '../../lib/sidebarWidth';
 import { feishuAdminQuery } from '../../pages/AdminIntegrationsPage';
 import { githubAppOn, githubAppQuery } from '../../pages/AdminGithubPage';
 import { googleSignInSettingsQuery } from '../../pages/AdminSignInPage';
@@ -89,7 +90,7 @@ function AdminNav() {
     ? google.data.enabled && google.data.clientId !== '' && google.data.hasSecret && !google.data.secretUnreadable
     : undefined;
   return (
-    <nav className="settings-nav autohide-scrollbar" aria-label="Admin">
+    <nav className="settings-nav autohide-scrollbar" aria-label="Admin" style={sidebarWidthStyle()}>
       <button type="button" className="settings-back" onClick={() => navigate(settingsReturnPath())}>
         <LeftOutlined />
         <span>Back to Orbit</span>

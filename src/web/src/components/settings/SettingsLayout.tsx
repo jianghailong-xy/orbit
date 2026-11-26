@@ -71,6 +71,7 @@ import type { Runner } from '../TasksSidePanel';
 import { SettingChangedLine, SettingChangedLineSlot } from './SettingChangedLine';
 import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
+import { sidebarWidthStyle } from '../../lib/sidebarWidth';
 
 /** Personal's rows' icons; the rows themselves, in the board's order, are the Settings index's pages. */
 const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode> = {
@@ -276,7 +277,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/settings/machines/new');
 
   return (
-    <nav className="settings-nav autohide-scrollbar" aria-label="Settings">
+    <nav className="settings-nav autohide-scrollbar" aria-label="Settings" style={sidebarWidthStyle()}>
       <button type="button" className="settings-back" onClick={() => navigate(settingsReturnPath())}>
         <LeftOutlined />
         <span>Back to Orbit</span>
