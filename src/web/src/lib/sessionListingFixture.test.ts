@@ -38,7 +38,9 @@ interface Case {
   reads: Read[];
 }
 
-type Row = SessionProjectSession & { activity?: string; completedAt?: string | null; archivedAt?: string | null };
+type Row = SessionProjectSession & {
+  activity?: string; pendingApprovals?: number; completedAt?: string | null; archivedAt?: string | null;
+};
 
 const row = (s: FixtureSession): Row => ({
   id: s.id,
@@ -53,6 +55,7 @@ const row = (s: FixtureSession): Row => ({
     ? { projectId: s.project, projectTitle: s.project, projectStatus: 'IN_PROGRESS', role: s.role ?? 'TASK' } as Row['projectMembership']
     : null,
   activity: s.activity,
+  pendingApprovals: s.activity === 'needsYou' ? 1 : 0,
   completedAt: s.lifecycle === 'completed' && !s.archivedAt ? (s.completedAt ?? s.listedAt ?? null) : null,
   archivedAt: s.archivedAt ?? null,
 });
@@ -86,7 +89,7 @@ describe('session listing fixture (contracts/session-listing.fixtures.json)', ()
           folderId: read.folderId,
           coordinators,
           workspaceId: 'here',
-          needsYou: (s) => s.activity === 'needsYou',
+          needsYou: (s) => (s.pendingApprovals ?? 0) > 0,
           motion: (s) => s.activity === 'running' ? 'spinner' : s.activity === 'jobs' ? 'pulse' : null,
           line: () => ({ text: '', tone: 'preview' }),
         });
