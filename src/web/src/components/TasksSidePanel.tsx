@@ -1103,21 +1103,15 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
                       (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
                       'Shared';
-                    // The row's machine at a glance, as the Machines menu draws it: Orbit Cloud's cloud, else the OS
-                    // the machine reported. A workspace on no machine keeps its folder.
-                    const runner = runnerId ? runners.data?.find((r) => routeId(r.id) === routeId(runnerId)) : undefined;
-                    const machineIcon =
-                      runnerId && managedRunnerId && routeId(runnerId) === routeId(managedRunnerId) ? (
-                        <CloudOutlined aria-hidden="true" data-machine="cloud" />
-                      ) : runner ? (
-                        <MachineOsIcon runner={runner} />
-                      ) : undefined;
+                    // Orbit Cloud is hosted, apart from your own machines' tools and keys: its workspaces wear its
+                    // cloud, and every other workspace keeps the folder (docs/mocks/workspace-machine-icon, B).
+                    const onCloud = !!runnerId && !!managedRunnerId && routeId(runnerId) === routeId(managedRunnerId);
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
                         key={a.id}
                         workspace={a}
                         runnerLabel={runnerLabel}
-                        machineIcon={machineIcon}
+                        cloud={onCloud}
                         active={a.id === litWorkspaceId}
                         managed={managedRowOf(accountManaged, runnerId)}
                         offline={
@@ -1703,13 +1697,13 @@ export function ManagedRunnerMark({ row, className }: { row: ManagedRunnerRow; c
   );
 }
 
-// A compact, permanently visible workspace row. Its icon (the machine's, else a folder) occupies the
-// same icon column as the fixed first-level destinations above, so Workspace names share their label
-// alignment. Runner is descriptive metadata on the same line, not a disclosure parent the user has to remember.
+// A compact, permanently visible workspace row. Its folder (Orbit Cloud's cloud, for a workspace there)
+// occupies the same icon column as the fixed first-level destinations above, so Workspace names share their
+// label alignment. Runner is descriptive metadata on the same line, not a disclosure parent the user has to remember.
 export function WorkspaceRow({
   workspace,
   runnerLabel,
-  machineIcon,
+  cloud = false,
   active,
   offline,
   managed = null,
@@ -1723,8 +1717,8 @@ export function WorkspaceRow({
 }: {
   workspace: Workspace;
   runnerLabel: string;
-  /** The workspace's machine: Orbit Cloud's cloud or the machine's OS icon. A folder when absent. */
-  machineIcon?: ReactNode;
+  /** On Orbit Cloud: its cloud stands in the folder's place. */
+  cloud?: boolean;
   active: boolean;
   offline: boolean;
   /** The account's managed runner, when it is this workspace's: Asleep or Waking up…, never Offline. */
@@ -1793,7 +1787,7 @@ export function WorkspaceRow({
         role={offline ? 'img' : undefined}
         aria-label={offline ? offlineTitle : undefined}
       >
-        {machineIcon ?? <FolderOutlined aria-hidden="true" />}
+        {cloud ? <CloudOutlined aria-hidden="true" data-machine="cloud" /> : <FolderOutlined aria-hidden="true" />}
         {managedRest(managed) && !showRunningDot && !showJobsDot && (
           <ManagedRunnerMark row={managed!} className="tp-workspace-icon-managed" />
         )}

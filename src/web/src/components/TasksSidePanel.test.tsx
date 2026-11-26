@@ -273,25 +273,27 @@ describe('TasksSidePanel workspace rows', () => {
     expect(block).toMatch(/\.tp-workspace-runner \{\n {4}flex: none;\n {4}max-width: 60%;/);
   });
 
-  it("draws the workspace's machine in the icon column in place of the folder", () => {
-    const html = renderToStaticMarkup(
-      <WorkspaceRow
-        workspace={workspace}
-        runnerLabel="Orbit Cloud"
-        machineIcon={<span data-machine="cloud" />}
-        active={false}
-        offline={false}
-        running={false}
-        jobs={0}
-        needsYou={0}
-        onOpen={() => undefined}
-      />,
-    );
-    expect(html).toMatch(/tp-workspace-icon"[^>]*><span data-machine="cloud">/);
-    expect(html).not.toContain('anticon-folder');
-    // The list picks the cloud for Orbit Cloud and the reported OS for any other machine.
-    expect(source).toContain('<CloudOutlined aria-hidden="true" data-machine="cloud" />');
-    expect(source).toContain('<MachineOsIcon runner={runner} />\n                      ) : undefined;');
+  // Board docs/mocks/workspace-machine-icon, B: Orbit Cloud's cloud, every other machine the folder.
+  it('draws Orbit Cloud workspaces with its cloud and keeps the folder for your own machines', () => {
+    const render = (cloud: boolean) =>
+      renderToStaticMarkup(
+        <WorkspaceRow
+          workspace={workspace}
+          runnerLabel={cloud ? 'Orbit Cloud' : 'hpc-01'}
+          cloud={cloud}
+          active={false}
+          offline={false}
+          running={false}
+          jobs={0}
+          needsYou={0}
+          onOpen={() => undefined}
+        />,
+      );
+    expect(render(true)).toContain('anticon-cloud');
+    expect(render(true)).not.toContain('anticon-folder');
+    expect(render(false)).toContain('anticon-folder');
+    expect(render(false)).not.toContain('anticon-cloud');
+    expect(source).toContain('cloud={onCloud}');
   });
 
   it('puts a folder in the shared first-level icon column and keeps the collapsed rail unchanged', () => {
