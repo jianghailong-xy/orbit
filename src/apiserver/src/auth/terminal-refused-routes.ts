@@ -382,6 +382,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /providers/shared-pools/:id/leave',
   'POST /providers/shared-pools/:id/people',
   'POST /providers/test',
+  'GET /push/web-config',
   'POST /push/register',
   'POST /push/unregister',
   'POST /runners/:id/accounts/:engine/:account/pause',

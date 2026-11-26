@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 568 |
+| `user` | 569 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **903** |
+| **Total** | **904** |
 
 ## Public routes
 
@@ -397,6 +397,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/providers/test` | body `TestModelProviderDto` | `ProvidersController.test` |
 | `POST` | `/api/push/register` | body `RegisterDeviceTokenDto` | `PushController.register` |
 | `POST` | `/api/push/unregister` | body `UnregisterDeviceTokenDto` | `PushController.unregister` |
+| `GET` | `/api/push/web-config` | — | `PushController.webConfig` |
 | `GET` | `/api/runners` | — | `RunnersController.list` |
 | `DELETE` | `/api/runners/:id` | path `id` | `RunnersController.remove` |
 | `GET` | `/api/runners/:id` | path `id` | `RunnersController.get` |

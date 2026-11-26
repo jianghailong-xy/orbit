@@ -38,10 +38,12 @@ they are.
   is the push service's URL the server will POST to, so it is checked against the known push services
   (`*.googleapis.com`, `*.push.services.mozilla.com`, `*.notify.windows.com`, `web.push.apple.com`) so a client
   cannot point the server at an arbitrary host.
-- **Migration.** `device_tokens.web_keys jsonb NULL`. Only web rows use it.
-- **`WebPushTransport`** (`src/apiserver/src/push/web-push-transport.ts`), next to `FcmTransport`, using the
-  `web-push` npm library (RFC 8291 encryption and VAPID). `webPushData(body, type, collapseId)` turns the APNs body
-  into `{ title, body, tag, url, badge, clearSessions }`:
+- **Migration.** `device_token.web_keys jsonb NULL` (1656). Only web rows use it.
+- **`WebPushTransport`** (`src/apiserver/src/push/web-push-transport.ts`), next to `FcmTransport`. RFC 8291
+  encryption (aes128gcm) and the VAPID JWT (RFC 8292) are written on `node:crypto`, with no new dependency; a spec
+  reproduces RFC 8291 Appendix A byte for byte. `webPushMessage(body, type, collapseId)` turns the APNs body into the
+  shared `WebPushMessage` (`src/shared/src/push.ts`): an `alert` `{ title, body, tag, url }`, or a `sync`
+  `{ clearSessions }`:
   - `url` from the routing keys (`sessionID` → `/sessions/<id>`, `projectID` → `/projects/<id>`, `taskID` →
     `/tasks/<id>`, a notify's own `url`), the same routes as Feishu's `orbitUrl()`.
   - `tag` = the collapse id (or `approval-<session>` for an approval), so a newer alert replaces an older one in
@@ -78,7 +80,7 @@ they are.
 - Safari on iPhone and iPad: only for Orbit added to the Home Screen (iOS 16.4+).
 - A browser that is fully closed gets nothing until it is opened again; the push service keeps alerts for the TTL.
 
-## Decisions (board part ④)
+## Decisions (answered by the owner 2026-11-26: A, A, A)
 
 - **D1, where it is turned on.** A: only the switch in Settings (recommended). B: also a one-time prompt strip
   after sign-in.

@@ -277,6 +277,11 @@ services:
       FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
+      # Web Push to browsers (docs/web-push-design.md): a VAPID key pair, base64url as `npx web-push generate-vapid-keys`
+      # prints it. Empty disables browser notifications. Keep the pair: a new one makes every browser subscribe again.
+      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
+      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"
+      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-}"
       # The runner link (docs/self-hosting.md, "Runner link"): the connection tokens a runner trades its runner token for,
       # to reach the link gateway. A fresh install and /upgrade generate them. This build serves runners only over the link,
       # so the signing key is required: without it Compose renders nothing, and says what to run, rather than start an

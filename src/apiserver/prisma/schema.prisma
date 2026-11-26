@@ -916,6 +916,8 @@ model DeviceToken {
   // The login session that registered it; nothing is pushed once that session has ended. NULL: no
   // session was named (registered before 0425), pushed to as before (docs/push-login-session-design.md).
   loginSessionId String? @map("login_session_id") @db.Uuid
+  // A browser's (platform 'web') subscription keys { p256dh, auth }: its pushes are encrypted to them (docs/web-push-design.md).
+  webKeys     Json?    @map("web_keys")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
