@@ -1,5 +1,5 @@
 {
-  "metadataVerifiedOn": "2026-11-26",
+  "metadataVerifiedOn": "2026-11-27",
   "supportedPlatforms": [
     "linux/amd64",
     "linux/arm64"
@@ -12,17 +12,17 @@
   "claudeCodePackage": "@anthropic-ai/claude-code@2.1.332",
   "openCodePackage": "opencode-linux-x64-baseline@1.19.6 (amd64), opencode-linux-arm64@1.19.6 (arm64)",
   "kimiCode": {
-    "version": "2.8.0",
+    "version": "2.8.1",
     "sha256": {
-      "linux/amd64": "a8855467385e823209e1f45014f3fa9ade81260b648bcba33fbe461963dae9e2",
-      "linux/arm64": "ee6d96407dd17c4123ae3bf1d2d021be26dce7c358cd81771b6cad2d740dc323"
+      "linux/amd64": "88a9a7788fa4a6d6959b253de118446ec55ce9f106093a318a61bd369d242ad4",
+      "linux/arm64": "7a467c3d7c765eda2d3277f7d156ca801fe35c0d44ea07b1f7d0e6f576145f16"
     }
   },
   "antigravityCli": {
-    "version": "1.5.17",
+    "version": "1.5.18",
     "sha512": {
-      "linux/amd64": "71a967aa16e0ab5d87196bcd6772130bdab55b2fd768cd24d21b1da401ff9f60280b976cad3dc14a2d646233b0eaf8caf87c490eed73044d54550cbb3d8d67d2",
-      "linux/arm64": "e4f086d0730b325cfd438ea90396ee78eb23a3110ef7f792824c8817b8d0432462b7b5f91b3d933fc1932a6f4ba73de505e2e96f44448c9fb2427292ead716f7"
+      "linux/amd64": "ef379ec869719112f696e8c7cfddf776618712e58fc38e53df80801d6528abb4677782c7c8778f9c09c9123fa44c2c32675d228c06f2a8f7a8f4214e75f5bb26",
+      "linux/arm64": "6c59cbce5a7632083dd4ef594296e52ce0abdc12f8b4ecb55523e093748cf178f8f8383d7e51e9ed7859ea6e46c83a43a7b46364b0e033dd13afb24d6bfbe4c8"
     }
   },
   "cursorCli": {
@@ -64,7 +64,7 @@
     "debianSecurity": "https://snapshot.debian.org/archive/debian-security/20260928T000000Z/dists/trixie-security/Release",
     "playwrightMcp": "https://registry.npmjs.org/@playwright/mcp/0.0.85",
     "openCode": "https://registry.npmjs.org/opencode-ai/1.19.6",
-    "kimiCode": "https://code.kimi.com/kimi-code/binaries/2.8.0/manifest.json",
+    "kimiCode": "https://code.kimi.com/kimi-code/binaries/2.8.1/manifest.json",
     "antigravityCli": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json",
     "cursorCli": "https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz"
   }
