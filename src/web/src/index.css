@@ -5029,12 +5029,13 @@ button.toast--pill:focus-visible {
   max-width: calc(50% - 210px - 12px);
   margin-right: auto;
 }
-/* The header's ⋯ and Share (docs/mocks/session-header-share-more, A): ⋯ then Share, 28px buttons
-   2px apart with 16px glyphs in the title's colour, nudged 6px right so the last glyph sits near the
-   transcript's edge. Share takes the live link's green, with a dot, while the session is shared. */
+/* The header's ⋯ and Share (docs/mocks/session-header-share-more, A): ⋯ then Share, 30px buttons
+   2px apart with 18px glyphs in the title's colour (docs/mocks/session-header-icon-size B, beside the
+   17px title), nudged 6px right so the last glyph sits near the transcript's edge. Share takes the
+   live link's green, with a dot, while the session is shared. */
 .workspace-header .workspace-header-more,
-.workspace-header .workspace-header-share { flex: none; width: 28px; height: 28px; color: var(--text-1); font-size: 16px; }
-.workspace-header .workspace-header-more + .workspace-header-share { margin-left: -10px; }
+.workspace-header .workspace-header-share { flex: none; width: 30px; height: 30px; color: var(--text-1); font-size: 18px; }
+.workspace-header .workspace-header-more + .workspace-header-share { margin-left: -8px; }
 .workspace-header .workspace-header-more:last-child,
 .workspace-header .workspace-header-share { margin-right: -6px; }
 .workspace-header .workspace-header-share.is-live,
