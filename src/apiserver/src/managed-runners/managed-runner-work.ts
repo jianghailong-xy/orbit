@@ -1,6 +1,8 @@
 import { Prisma, type ManagedRunner } from '@prisma/client';
 
+import { sessionHeldSql } from '../common/session-release';
 import { sessionExecutingOutsideTurnSql } from '../common/session-working';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import { autoRetryEligibleSql } from '../sessions/auto-retry-eligibility';
 import type { PrismaService } from '../prisma/prisma.service';
 
@@ -57,9 +59,12 @@ const BACKGROUND_SHELL_SQL = `cardinality(s."running_bg_shells") > 0`;
  */
 function workSql(runner: Prisma.Sql) {
   const onRunner = Prisma.sql`s."assigned_runner_id" = ${runner}`;
+  // A turn in flight (RUNNING) or queued (PENDING), on the runner's held rows (session_runner_held_idx).
+  const turn = (state: 'IN_FLIGHT' | 'QUEUED') =>
+    Prisma.sql`${sessionHeldSql('s')} AND ${sessionTurnStateSql('s')} = ${Prisma.raw(`'${state}'`)}`;
   return {
-    ACTIVE_TURN: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner} AND s."status" = 'RUNNING')`,
-    QUEUED_TURN: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner} AND s."status" = 'PENDING' AND s."cancel_requested_at" IS NULL)`,
+    ACTIVE_TURN: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner} AND ${turn('IN_FLIGHT')})`,
+    QUEUED_TURN: Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE ${onRunner} AND ${turn('QUEUED')} AND s."cancel_requested_at" IS NULL)`,
     // What a session that is still open executes outside a dispatched turn (the engine's own turn, a
     // subagent, a background job: common/session-working.ts), plus this reader's own addition, any
     // background shell — services included, since a process left up still runs on this machine: what

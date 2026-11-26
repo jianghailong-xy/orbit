@@ -25,6 +25,7 @@ import { openListTickStatement } from './open-list-hints';
 import { endIdleWorkOfDoneTask } from './parked-session-end';
 import { ReaperService } from './reaper.service';
 import { RealtimeService } from './realtime.service';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -135,6 +136,7 @@ async function sweep(db: PrismaClient, ownerId: string, published: Map<string, R
 test('the reaper and realtime read the facts, and a row with no turn_state reads as today', { skip, timeout: 600_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
+  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   const prisma = db as unknown as PrismaService;
   t.after(() => db.$disconnect());
 

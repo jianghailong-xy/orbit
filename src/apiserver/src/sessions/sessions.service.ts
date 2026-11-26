@@ -498,7 +498,7 @@ const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
 const OPEN_LIST_BUILD_KEEP_MS = 5_000;
 
 /** What `listOverlay` reads a row's overlay from: the row's own columns, as the row query or the probe reads them. */
-type ListOverlayInput = {
+type ListOverlayInput = TurnStateFacts & {
   id: string;
   status: RunStatus;
   engineTurnActive: boolean | null;
@@ -4690,6 +4690,8 @@ export class SessionsService {
     const rows = await this.prisma.$queryRaw<Probed[]>(Prisma.sql`${Prisma.raw(PREPARED_STATEMENT)}
       SELECT
         s.id, ${legacySessionStatusSql('s')} AS status,
+        -- The turn state's columns, which isSessionGenerating reads (session-turn-state.ts).
+        s.finished_at AS "finishedAt", s.turn_state AS "turnState",
         s.engine_turn_active AS "engineTurnActive",
         s.task_id AS "taskId",
         s.running_bg_shells AS "runningBgShells",
@@ -4799,6 +4801,8 @@ export class SessionsService {
       return {
         id: row.id,
         status: row.status,
+        finishedAt: row.finishedAt,
+        turnState: row.turnState,
         engineTurnActive: row.engineTurnActive,
         taskId: row.taskId,
         runningBgShells: row.runningBgShells,
@@ -4861,7 +4865,7 @@ export class SessionsService {
     // Ask, no scheduled run, and a confined token's workspaces.
     const { query } = this.listShape(ownerId, { view: opts.view, confinedTo: opts.confinedTo });
     const members = await this.prisma.$queryRaw<Array<ListOverlayInput & { projectId: string }>>(Prisma.sql`
-      SELECT s.id, ${legacySessionStatusSql('s')} AS status,
+      SELECT s.id, ${legacySessionStatusSql('s')} AS status, s.finished_at AS "finishedAt", s.turn_state AS "turnState",
              s.engine_turn_active AS "engineTurnActive",
              s.task_id AS "taskId",
              s.running_bg_shells AS "runningBgShells",
@@ -10926,9 +10930,8 @@ export class SessionsService {
   private async stillBeingAsked<
     T extends { id: string; toolUseId: string | null; backgroundJobId: string | null; subagentRunId?: string | null },
   >(
-    session: {
+    session: TurnStateFacts & {
       id: string;
-      status: RunStatus;
       engineTurnActive: boolean;
       runningBgShells: string[];
     },

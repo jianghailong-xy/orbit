@@ -113,7 +113,7 @@ test('a search page costs the same statements for 50 hits as for 5, and each hit
     // The batch the page is counted with says, session by session, what the one-session count says.
     const readers = await db.session.findMany({
       where: { id: { in: large.ids } },
-      select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+      select: { id: true, taskId: true, status: true, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
     });
     const batched = await countLiveApprovalsBySession(db as never, readers);
     for (const reader of readers) {

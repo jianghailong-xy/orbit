@@ -419,13 +419,18 @@ test('Fix with an agent on PostgreSQL', { skip, concurrency: 1, timeout: 300_000
     await assert.rejects(controller.fix(m.user, m.runnerId, 'sandboxMissing', { engine: 'codex' }), refusedWith('AGENT_FIX_RUNNING'));
 
     // Once it is over, the transcript's history row reads what was done with it instead of a second agent.
-    // Ended as the server ends one: a terminal status with its release column (session_release_fact_chk, 1401).
+    // Ended as the server ends one when its person ends it: the end asked (reason `ended`), the word gracefulEndStatus
+    // gives it, and the release column (session_release_fact_chk, 1401). The handled row reads the projector's word
+    // (sessions/session-legacy-words.ts), the same one every session payload carries.
     const over = new Date();
-    await db.session.update({ where: { id: started.sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: over, completedAt: over } });
+    await db.session.update({
+      where: { id: started.sessionId },
+      data: { status: RunStatus.CANCELLED, endReason: 'ended', cancelRequestedAt: over, finishedAt: over, completedAt: over },
+    });
     const after = await runners.getRunner(m.ownerId, m.runnerId);
     assert.deepEqual(after.agentFix?.fixing, []);
     assert.deepEqual(after.agentFix?.handled, [
-      { kind: 'sandboxMissing', engine: 'codex', sessionId: started.sessionId, workspaceId: dev, workspaceName: 'orbit-develop', status: 'SUCCEEDED' },
+      { kind: 'sandboxMissing', engine: 'codex', sessionId: started.sessionId, workspaceId: dev, workspaceName: 'orbit-develop', status: 'CANCELLED' },
     ]);
   });
 });
