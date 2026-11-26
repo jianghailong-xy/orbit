@@ -10,8 +10,10 @@ import {
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
+  CODEX_DEFAULT_ACCOUNT_SLOT,
   codexRateLimitResetOf,
   codexResetAccountOverride,
+  codexResetContextSlot,
   codexResetCreateReplay,
   codexResetOperationStatus,
   codexResetOperationView,
@@ -212,8 +214,9 @@ export class CodexRateLimitResetService {
  * Whether the workspace a confirmation came from runs on something other than the runner's default
  * Codex account (§3). A workspace holds no provider, so its provider is the derived default a new
  * session there starts on; a configured provider is never the runner's own login, whatever its slug.
- * A Codex account the workspace picked other than Default is the other account, which reset v1 does
- * not read: confirming here would spend Default's credit for it.
+ * A Codex account the workspace picked other than Default is no override under contract v2 (§12.4)
+ * but the slot its reset is for; until this route resets in that slot, it still refuses one here,
+ * since what it would spend is Default's credit.
  */
 async function accountOverride(
   tx: Prisma.TransactionClient,
@@ -229,11 +232,8 @@ async function accountOverride(
   const seed = (await lastProviderByWorkspace(tx, [workspaceId])).get(workspaceId) ?? DEFAULT_AGENT_PROVIDER;
   return (
     !seed.providerBuiltin ||
-    codexResetAccountOverride({
-      provider: seed.provider,
-      codexAccount: workspace.codexAccount,
-      env: workspace.env as Record<string, string> | null,
-    })
+    codexResetAccountOverride({ provider: seed.provider, env: workspace.env as Record<string, string> | null }) ||
+    codexResetContextSlot({ codexAccount: workspace.codexAccount }) !== CODEX_DEFAULT_ACCOUNT_SLOT
   );
 }
 

@@ -18,9 +18,18 @@ import (
 // provider schema it was defined against. No test here starts a Codex process or touches a credit.
 
 type codexResetContractFile struct {
-	ProtocolVersion int    `json:"protocolVersion"`
-	Capability      string `json:"capability"`
-	Provider        struct {
+	ProtocolVersion  int              `json:"protocolVersion"`
+	ProtocolVersions map[string][]int `json:"protocolVersions"`
+	Capability       string           `json:"capability"`
+	CapabilityV2     string           `json:"capabilityV2"`
+	AccountSlot      struct {
+		Default                        string `json:"default"`
+		Pattern                        string `json:"pattern"`
+		SnapshotAccountsField          string `json:"snapshotAccountsField"`
+		CommandSlotFromProtocolVersion int    `json:"commandSlotFromProtocolVersion"`
+		AddedSlotCapability            string `json:"addedSlotCapability"`
+	} `json:"accountSlot"`
+	Provider struct {
 		AccountReadMethod string   `json:"accountReadMethod"`
 		ReadMethod        string   `json:"readMethod"`
 		ConsumeMethod     string   `json:"consumeMethod"`
@@ -149,9 +158,9 @@ func codexResetSameJSON(t *testing.T, what string, got interface{}, want []byte)
 
 func TestCodexResetRunnerConstantsMatchTheContract(t *testing.T) {
 	contract := loadCodexResetContract(t)
-	if contract.ProtocolVersion != codexRateLimitResetProtocolVersion || contract.Capability != codexRateLimitResetCapabilityV1 {
+	if contract.ProtocolVersion != codexRateLimitResetProtocolVersionV2 || contract.Capability != codexRateLimitResetCapabilityV1 {
 		t.Fatalf("contract %d/%q, runner %d/%q", contract.ProtocolVersion, contract.Capability,
-			codexRateLimitResetProtocolVersion, codexRateLimitResetCapabilityV1)
+			codexRateLimitResetProtocolVersionV2, codexRateLimitResetCapabilityV1)
 	}
 	provider := contract.Provider
 	if provider.AccountReadMethod != codexAccountReadMethod || provider.ReadMethod != codexRateLimitsReadMethod ||

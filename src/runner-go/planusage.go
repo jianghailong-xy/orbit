@@ -143,12 +143,14 @@ type PlanUsage struct {
 	RateLimitReachedType string               `json:"rateLimitReachedType,omitempty"`
 	Credits              *CreditsSnapshot     `json:"credits,omitempty"`
 	RateLimits           []PlanUsageRateLimit `json:"rateLimits,omitempty"`
-	// Earned rate-limit reset state of the default Codex account
-	// (docs/codex-rate-limit-reset-contract.md). Nil until a reader fills it; omitted on the wire.
+	// Earned rate-limit reset state of the Codex account this snapshot is about
+	// (docs/codex-rate-limit-reset-contract.md): Default's here, an added slot's in its Accounts entry
+	// (contract v2 §12). Nil until a reader fills it; omitted on the wire.
 	RateLimitReset *PlanUsageRateLimitReset `json:"rateLimitReset,omitempty"`
 	// Every other account slot's own snapshot, by slot id (codex_account_usage.go,
 	// claude_account_usage.go, kimi_account_usage.go, cursor_usage.go). The windows beside it are
-	// Default's. Omitted while no other account has been read.
+	// Default's. A Codex entry may carry its own RateLimitReset, ordered on its own; no other engine's
+	// does. Omitted while no other account has been read.
 	Accounts map[string]*PlanUsage `json:"accounts,omitempty"`
 
 	// Nested snapshots when more than one provider is available, and Kimi Code's and Cursor CLI's always.

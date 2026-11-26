@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, type CodexRateLimitResetOperation } from '@prisma/client';
 import {
+  CODEX_DEFAULT_ACCOUNT_SLOT,
   codexResetTransitionViolations,
   type CodexRateLimitResetConsumeOutcome,
   type CodexRateLimitResetConsumeState,
@@ -183,6 +184,8 @@ function stateOf(row: CodexRateLimitResetOperation): CodexRateLimitResetOperatio
     ownerId: row.ownerId,
     runnerId: row.runnerId,
     accountFingerprint: row.accountFingerprint,
+    // No column yet (contract v2 §12): every stored operation is Default's, and rowOf refuses any other.
+    accountSlot: CODEX_DEFAULT_ACCOUNT_SLOT,
     clientRequestId: row.clientRequestId,
     providerIdempotencyKey: row.providerIdempotencyKey,
     // The column CHECKs of 0255 admit exactly these unions' members.
@@ -203,6 +206,7 @@ function stateOf(row: CodexRateLimitResetOperation): CodexRateLimitResetOperatio
 }
 
 function rowOf(operation: CodexRateLimitResetOperationState): Prisma.CodexRateLimitResetOperationCreateManyInput {
+  if (operation.accountSlot !== CODEX_DEFAULT_ACCOUNT_SLOT) throw new Error('an added account slot has no column to be stored in yet');
   return {
     id: operation.id,
     ownerId: operation.ownerId,

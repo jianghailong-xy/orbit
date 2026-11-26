@@ -6,6 +6,7 @@ import {
   AgentProvider,
   PermissionMode,
   codexResetAccountOverride,
+  codexResetContextSlot,
   type AgentExecConfig,
   type ClaimedSession,
   type RunnerEngineHealth,
@@ -347,11 +348,13 @@ test('only a session that runs the built-in Codex runtime is moved onto the acco
   assert.deepEqual((await reclaim(configured)).env, env);
 });
 
-test('reset v1 reads Default only, so a workspace on another account is an account override', async () => {
-  // The shared rule the create route and the web both read.
-  assert.equal(codexResetAccountOverride({ provider: 'codex', codexAccount: WORK, env: null }), true);
-  assert.equal(codexResetAccountOverride({ provider: 'codex', codexAccount: 'default', env: null }), false);
-  assert.equal(codexResetAccountOverride({ provider: 'codex', codexAccount: null, env: null }), false);
+test('the create route resets Default only, so a workspace on another account is still refused', async () => {
+  // The shared rules the create route and the web both read: under contract v2 the workspace's account
+  // is no override but the slot its reset is for. This route does not reset in an added slot yet.
+  assert.equal(codexResetAccountOverride({ provider: 'codex', env: null }), false);
+  assert.equal(codexResetContextSlot({ codexAccount: WORK }), WORK);
+  assert.equal(codexResetContextSlot({ codexAccount: 'default' }), 'default');
+  assert.equal(codexResetContextSlot({ codexAccount: null }), 'default');
 
   // And the create route itself, confirming from that workspace. Two confirmations that differ only
   // in the workspace's account: the one on Work is refused ACCOUNT_OVERRIDE before anything else is
