@@ -1,6 +1,7 @@
 import { CODEX_RATE_LIMIT_RESET_CAPABILITY_V1, uuidToBase62 } from '@orbit/shared';
 import { FIXED_NOW, FIXTURE_IDS } from './fixtures.mjs';
 import { RUNNER, SESSION, SESSION_TIME, WORKSPACE } from './session-fixtures.mjs';
+import { answerListing } from './session-listing-fixtures.mjs';
 
 // P5.1 data, on top of installFixtures (later routes win, so every path not modeled here falls through to the P0
 // handler and its unhandled-request check): an admin account, with or without a photo; three workspaces in the
@@ -232,6 +233,7 @@ export async function installP51Fixtures(page, { theme = 'light', ...initial } =
 
     // ── sessions
     if (method === 'GET' && path === '/api/sessions') return json([SESSION, codexRow(), notesRow()]);
+    if (method === 'GET' && path === '/api/sessions/listing') return json(answerListing([SESSION, codexRow(), notesRow()], FOLDERS, searchParams));
     if (method === 'GET' && path === '/api/session-folders') return json(FOLDERS);
     if (method === 'GET' && path === `/api/sessions/${P51_IDS.codexSession}`) return json(codexDetail(state));
     if (method === 'GET' && path === `/api/sessions/${P51_IDS.codexSession}/events/page`) return json({ events: [], hasMore: false });

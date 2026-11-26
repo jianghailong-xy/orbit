@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useMatch } from 'react-router-dom';
 import { getToken } from '../api';
@@ -11,10 +11,12 @@ import {
   runnersQuery,
   SESSION_PAGE_SIZE,
   sessionFoldersQuery,
+  sessionListingQuery,
   sessionQuery,
   sessionsQuery,
   setupStatusQuery,
 } from '../lib/queries';
+import { SCHEDULED_RUNS_FOLDER } from '../lib/sessionFolders';
 import { workspaceRunnerId, firstOpenableWorkspace } from '../lib/workspaceOrder';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Button } from './ui/Button';
@@ -121,9 +123,9 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   // Business pre-warm is for the signed-in app only; firing these while signed out would
   // 401 (and bounce to /login), so they gate on `warm`, not `gated`. It ends with the splash: the
   // page's own reads take over, and a pre-warm read left on would be refreshed by the control-plane
-  // stream on every event. The scoped Open list below is the page's only while the workspace shows
-  // neither projects nor folders (WorkspaceView reads the whole list then), so on a large account it
-  // was a second full Open-list read per event, each one computing the account's list version.
+  // stream on every event. The scoped list below is the page's own read (one page of the Open list, or of
+  // its listing), so left on it would be a second read of it per event, each one computing the account's
+  // list version.
   const warm = gated && hasToken && !booted;
 
   // Every query below reuses the shared factory keys (lib/queries) so the data the splash
@@ -163,18 +165,29 @@ export function BootGate({ children }: { children: React.ReactNode }) {
         : (homeFirst?.id ?? null);
   // The scoped Open list WorkspaceView reads on load — same factory, so it lands in cache under the
   // same key and the console paints in one shot instead of flashing "Starting…". Its shape is the
-  // console's: one page, or the whole list for a workspace that shows folders or projects. Those two
-  // reads are the console's own, so they decide it first; warming one page while the console then
-  // read the whole list was a second Open-list read on every page load (docs/list-freshness-design.md
-  // W5).
+  // console's: one page of the Open list, or, for a workspace that shows folders or projects or for a
+  // folder's page (`?folder=`), the first page of its listing (docs/session-list-scale-design.md §3).
+  // The folders and projects are the console's own reads, so they decide it first; warming one read while
+  // the console then made the other was a second list read on every page load
+  // (docs/list-freshness-design.md W5).
   const folders = useQuery({ ...sessionFoldersQuery(), enabled: warm });
   const projects = useQuery({ ...openProjectsQuery(), enabled: warm });
-  const wholeList = !!workspaceId &&
-    ((folders.data ?? []).some((folder) => folder.workspaceId === workspaceId) || (projects.data?.length ?? 0) > 0);
-  const scopedSessions = useQuery({
-    ...sessionsQuery({ runnerId, workspaceId, view: 'open', limit: wholeList ? null : SESSION_PAGE_SIZE }),
-    enabled: warm && !!runnerId && folders.isFetched && projects.isFetched,
+  const [folderPage] = useState(() => {
+    const folder = new URLSearchParams(loc.search).get('folder');
+    return folder && folder !== SCHEDULED_RUNS_FOLDER ? (routeId(folder) ?? null) : null;
   });
+  const listing = !!workspaceId && (folderPage !== null ||
+    (folders.data ?? []).some((folder) => folder.workspaceId === workspaceId) || (projects.data?.length ?? 0) > 0);
+  const listDecided = warm && !!runnerId && folders.isFetched && projects.isFetched;
+  const scopedPage = useQuery({
+    ...sessionsQuery({ runnerId, workspaceId, view: 'open', limit: SESSION_PAGE_SIZE }),
+    enabled: listDecided && !listing,
+  });
+  const scopedListing = useInfiniteQuery({
+    ...sessionListingQuery({ runnerId, workspaceId, view: 'open', folderId: folderPage }),
+    enabled: listDecided && listing,
+  });
+  const scopedSessions = listing ? scopedListing : scopedPage;
 
   // Per-route readiness milestones (besides the mounted app). The signed-out setup check
   // waits on a single query. For a deep link the third milestone waits on the scoped list
