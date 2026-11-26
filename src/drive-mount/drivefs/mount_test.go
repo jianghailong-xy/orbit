@@ -795,3 +795,84 @@ func TestRefusalsSayWhy(t *testing.T) {
 		}
 	}
 }
+
+// oneSession attributes every caller to one session, as the privileged parent does for a Drive chat's engine (§5.8).
+type oneSession string
+
+func (s oneSession) Session(uint32) (string, string) { return string(s), "" }
+
+// A Drive chat's writes through the mount name its session on every organising call, and what the door refuses by the
+// chat's rules fails the call at once with an errno that says it, the door's words in errors.log: a rename onto a live
+// file EEXIST (the owner is asked; the daemon does not wait for the answer), a change past the turn's 200th EDQUOT.
+func TestADriveChatsRefusalsFailTheCallAndSayWhy(t *testing.T) {
+	f, mnt, rep := mountFake(t, Options{Attributor: oneSession("s-chat")})
+	for _, name := range []string{"a.txt", "b.txt"} {
+		if err := os.WriteFile(filepath.Join(mnt, name), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const noOverwrite = `Not moved: /b.txt is already there, and a Drive chat never replaces a file. Moving: /a.txt (5 B). Already there: /b.txt (5 B).`
+	const held = `Held for the owner, not done: this turn has already made 200 changes in their Drive.`
+	writers := map[string][]string{}
+	f.refuseWrite = func(route string, body map[string]interface{}) (int, string, string) {
+		session := ""
+		if w, ok := body["writer"].(map[string]interface{}); ok {
+			session, _ = w["sessionId"].(string)
+		}
+		writers[route] = append(writers[route], session)
+		switch {
+		case route == "/rename" && f.at(fmt.Sprint(body["to"])) != nil && session == "s-chat":
+			return 409, door.CodeDriveChatNoOverwrite, noOverwrite
+		case route == "/mkdir" && strings.HasSuffix(fmt.Sprint(body["path"]), "/f201"):
+			return 409, door.CodeDriveChatHeld, held
+		}
+		return 0, "", ""
+	}
+	if err := os.Rename(filepath.Join(mnt, "a.txt"), filepath.Join(mnt, "b.txt")); !errors.Is(err, syscall.EEXIST) {
+		t.Fatalf("mv onto a live file: %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(mnt, "b.txt")); string(got) != "b.txt" {
+		t.Fatalf("b.txt reads %q", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(mnt, "a.txt")); string(got) != "a.txt" {
+		t.Fatalf("a.txt reads %q", got)
+	}
+	if err := os.Mkdir(filepath.Join(mnt, "f201"), 0o755); !errors.Is(err, syscall.EDQUOT) {
+		t.Fatalf("mkdir past the turn's 200th: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(mnt, "f201")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the held folder is there: %v", err)
+	}
+	// What the door makes, it makes as the chat's: mkdir, a move into it, a rename, rmdir and unlink all name the session.
+	if err := os.Mkdir(filepath.Join(mnt, "sorted"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(mnt, "a.txt"), filepath.Join(mnt, "sorted", "a.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(mnt, "sorted", "a.txt"), filepath.Join(mnt, "sorted", "c.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(mnt, "sorted", "c.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(mnt, "sorted")); err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []string{"/mkdir", "/rename", "/delete"} {
+		if len(writers[route]) == 0 {
+			t.Fatalf("no %s", route)
+		}
+		for _, s := range writers[route] {
+			if s != "s-chat" {
+				t.Fatalf("%s named session %q: %v", route, s, writers)
+			}
+		}
+	}
+	log := strings.Join(rep.Lines(), "\n")
+	for _, want := range []string{"EEXIST rename /home/orbit/Drive/a.txt: " + noOverwrite, "EDQUOT mkdir /home/orbit/Drive/f201: " + held} {
+		if !strings.Contains(log, want) {
+			t.Fatalf("errors.log lacks %q:\n%s", want, log)
+		}
+	}
+}
