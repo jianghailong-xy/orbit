@@ -204,6 +204,14 @@ const SCENES = {
   'c-narrow': { vp: NARROW, pressButton: true, css: CANVAS },
   // Dark: the canvas goes below the panels (the theme's sunken surface), not a lighter mix.
   'c-dark': { vp: WIDE, theme: 'dark', css: CANVAS + `.app-shell { --canvas: var(--bg-sunken); }` },
+  // The built change (BUILT=1, DIST = a build of the branch): no CSS injected.
+  'built-wide': { vp: WIDE },
+  'built-closed': { vp: WIDE, folded: '1' },
+  'built-narrow': { vp: NARROW, pressButton: true },
+  'built-dark': { vp: WIDE, theme: 'dark' },
+  'built-tasks': { vp: WIDE, path: '/tasks' },
+  'built-settings': { vp: WIDE, path: '/settings' },
+  'built-task-detail': { vp: WIDE, path: '/tasks', clickText: 'Review the visual baseline' },
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, ignoreDefaultArgs: ['--hide-scrollbars'] });
@@ -229,8 +237,14 @@ for (const [name, scene] of Object.entries(SCENES)) {
     await page.waitForSelector('.session-row', { timeout: 20_000 });
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(1_000);
-    await page.locator('.session-row, .session-project-row').filter({ hasText: 'Approve merge' }).first().click();
+    if (!scene.path) await page.locator('.session-row, .session-project-row').filter({ hasText: 'Approve merge' }).first().click();
     await page.waitForTimeout(2_000);
+    if (scene.path) {
+      await page.goto(`${origin}${scene.path}`);
+      await page.waitForFunction(() => !document.getElementById('boot'), null, { timeout: 30_000 });
+      await page.waitForTimeout(2_000);
+      if (scene.clickText) { await page.getByText(scene.clickText).first().click(); await page.waitForTimeout(1_500); }
+    }
     if (scene.css) await page.addStyleTag({ content: scene.css });
     if (scene.pressButton) {
       await page.locator('.workspace-header-project').click();
