@@ -126,7 +126,7 @@
 
 <!-- ① ─────────────────────────────────────────────────────────────────────────────── -->
 <section class="panel">
-  <div class="panel-head"><span class="num rec">1</span><h2>Scheme 1 — brand blue, solid heavier edge <span style="color:var(--success);font-size:13px;font-weight:650">Recommended</span></h2></div>
+  <div class="panel-head"><span class="num rec">1</span><h2>Scheme 1 — brand blue, solid heavier edge <span style="color:var(--success);font-size:13px;font-weight:650">Chosen · 2026-11-26</span></h2></div>
   <p class="cap">The card keeps the tone it already has everywhere; only the edge is emphasised while the question is open.</p>
   <div class="panel-body">
     <div class="stage scheme-blue" id="stage-one"></div>
@@ -204,7 +204,9 @@
   <b>Evidence:</b> approval chrome <code>src/web/src/index.css:14149</code>; question mark comment <code>:14726</code>;
   blue attention dot <code>:10129</code>; amber owner-item card <code>:26545</code>; amber warning tokens <code>:44-48</code>;
   the 2026-11-13 board <code>docs/mocks/decision-receipt-fold/02-question-border.html</code> (Q1 recommended, Q2 picked).<br>
-  <b>No product code is changed by this board.</b> Pick 1, 2 or 3 and the web card takes that scheme.
+  <b>Chosen 2026-11-26: Scheme 1, web and Apple.</b> Web is <code>src/web/src/index.css</code>; Apple is
+  <code>ApprovalCards.swift</code>'s <code>tone: .blue</code> with <code>emphasized: open</code>. Android already reads the question in
+  the brand tone (<code>CardPreviews</code> BLUE; the card surface is neutral, with no amber chrome to remove).
 </p>
 
 <template id="card-tpl">

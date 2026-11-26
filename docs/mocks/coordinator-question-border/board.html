@@ -17,6 +17,12 @@
   h1 { margin: 0 0 6px; font-size: 25px; letter-spacing: -0.01em; }
   .sub { margin: 0 0 22px; max-width: 1120px; color: var(--text-2); font-size: 14px; line-height: 1.55; }
 
+  .superseded { margin: 0 0 22px; padding: 10px 14px; max-width: 1120px; border: 1px solid var(--border);
+    border-radius: 8px; background: #fff; color: var(--text-2); font-size: 13px; line-height: 1.55; }
+  .superseded b { color: var(--text-1); }
+  .superseded .token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    padding: 1px 5px; border-radius: 4px; background: var(--fill-muted); color: var(--text-1); }
+
   .facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 30px; }
   .fact { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 8px;
     background: #fff; border: 1px solid var(--border-subtle); font-size: 12.5px; }
@@ -101,6 +107,10 @@
   GPT-account reset-quota one this card was last seen asking.
 </p>
 
+<p class="superseded"><b>Superseded 2026-11-26.</b> The owner picked the brand-blue scheme
+  (<span class="token">02-schemes.html</span>, Scheme 1). The amber card below is not what shipped; the facts and the card
+  were measured before the change, and this board stays as the conformance check that led there.</p>
+
 <div class="facts">
   <span class="fact"><span class="sw" style="background:#fa8c16"></span><span class="k">edge</span><span class="v">1.5px solid #fa8c16</span><span class="k">--warning-solid</span></span>
   <span class="fact"><span class="sw" style="background:#eaf1ff"></span><span class="k">surface</span><span class="v">#eaf1ff</span><span class="k">--brand-tint</span></span>
@@ -130,7 +140,7 @@
 
 <!-- ② ─────────────────────────────────────────────────────────────────────────────── -->
 <section class="panel">
-  <div class="panel-head"><span class="num rec">A</span><h2>Redesign A — the whole card is amber <span style="color:var(--success);font-size:13px;font-weight:650">Recommended</span></h2></div>
+  <div class="panel-head"><span class="num">A</span><h2>Redesign A — the whole card is amber <span style="color:var(--text-3);font-size:13px;font-weight:650">Not taken</span></h2></div>
   <p class="cap">Keep the owner's heavier edge; give it a card that agrees with it. This is the same chrome the owner's open-item card already wears.</p>
   <div class="panel-body">
     <div class="stage is-amber" id="stage-amber"></div>
