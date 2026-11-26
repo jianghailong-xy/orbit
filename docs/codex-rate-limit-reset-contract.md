@@ -221,7 +221,7 @@ heartbeat 的发出时刻）：
 | 路由 | 请求 | 成功 | 失败 |
 | --- | --- | --- | --- |
 | `POST /runners/:id/codex-rate-limit-reset` | `CreateCodexRateLimitResetRequest` | 201 新建 / 200 重放：`CreateCodexRateLimitResetResponse { operation, replayed }` | 400 请求体非法（`createCodexResetRequestViolations`）；404 runner 不存在或不属于当前用户；409 `CodexRateLimitResetRefusal { code, operationId? }` |
-| `GET /runners/:id/codex-rate-limit-reset` | — | `CodexRateLimitResetOperations { active, latest }` | 404 |
+| `GET /runners/:id/codex-rate-limit-reset` | 查询参数 `accountFingerprint`（可选） | `CodexRateLimitResetOperations { active, latest }`：带参数时只看该账户的 operation，不带时看整个 runner 的 | 400 指纹格式非法；404 |
 | `GET /runners/:id/codex-rate-limit-reset/:operationId` | — | `CodexRateLimitResetOperationView` | 404（含不属于该 runner） |
 
 创建流程（一个事务内）：
@@ -254,7 +254,7 @@ Web 在 `active` 非空时每 2–3 秒 GET 一次；v1 不加实时推送帧。
 | `CREDITS_UNAVAILABLE` / `NO_CREDIT_AVAILABLE` | 上游暂不可用 / 数量为 0 | 禁用 |
 
 资格检查按 `CODEX_RATE_LIMIT_RESET_ELIGIBILITY_ORDER` 依次进行，Web 禁用入口与 API 拒绝用的是同一个函数、同一个答案。
-Web 的 `readRequiredAfter` 从 `GET /runners/:id/codex-rate-limit-reset` 的 `latest` 推出（runbook §2.4）；只看 `latest` 的例外见 runbook §8 R3。
+Web 按账户读（`?accountFingerprint=`），每张卡片的 `readRequiredAfter` 从该账户的 `latest` 推出（runbook §2.4、§8 R3）。
 
 ### 6.2 API → Runner：heartbeat 响应 `codexRateLimitResetRequest`
 
