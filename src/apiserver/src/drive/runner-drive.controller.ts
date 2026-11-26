@@ -28,10 +28,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentManagedRunnerInstance, CurrentRunner } from '../runner-api/current-runner.decorator';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { DriveChunksService } from './drive-chunks.service';
+import { DriveChatTurnFull, type DriveChatTurn } from './drive-chat-change-record';
+import { DriveChatChanges, type DriveChatHeldOp } from './drive-chat-changes';
 import { AcceptsDriveMountCredential, CurrentDriveMount, fenceManagedInstance, type DriveMount } from './drive-mount-credential';
 import { RUNNER_DRIVE_ROUTE_PREFIXES } from './drive-routes';
 import { DriveEnabledGuard } from './drive-switch';
-import { drivePathSegments, DriveService, type DriveEntryRow, type DriveWriter } from './drive.service';
+import { DRIVE_NAME_TAKEN, drivePathSegments, DriveService, type DriveEntryRow, type DriveWriter } from './drive.service';
 import {
   RunnerDriveBatchDto,
   RunnerDriveCommitDto,
@@ -98,6 +100,9 @@ function rangeOf(header: string | undefined, size: number): { start: number; end
  *   - It has no Trash route and no share route: agents cannot see Trash (D11) and only the owner shares (D18). A delete
  *     moves an entry to the owner's Trash, where only the owner's routes reach it.
  *   - A staging is the runner's that opened it. A managed runner's commit is fenced in its own transaction (§8.2).
+ *   - A Drive chat's writes (drive-chat-changes.ts) are recorded into its turn's change group; past the turn's 200th
+ *     change a new folder, a move, a rename or a move to Trash is held for the owner's Apply, and a move or rename onto a
+ *     live file is refused with both files named, the owner asked Keep both or Replace.
  *
  * Every rule of a write is the name layer's (DriveService); this door only names entries by path and says who writes.
  * It answers at /runner/drive, and at /runner/documents for runners and mount daemons already deployed (drive-routes.ts).
@@ -111,6 +116,7 @@ export class RunnerDriveController {
     private readonly drive: DriveService,
     private readonly chunks: DriveChunksService,
     private readonly files: FilesService,
+    private readonly chatChanges: DriveChatChanges,
   ) {}
 
   /** One live entry's attributes, `seq` and current version id. */
@@ -171,8 +177,12 @@ export class RunnerDriveController {
   /** `mkdir`, or with `parents` `mkdir -p`. */
   @Post('mkdir')
   async mkdir(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveMkdirDto) {
-    const made = await this.drive.mkdirPath(runner.ownerId, dto.path, { parents: dto.parents === true, writer: this.writer(runner, dto.writer) });
-    return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, made.id));
+    const writer = this.writer(runner, dto.writer);
+    const turn = await this.chatChanges.turnOf(runner.ownerId, writer);
+    return this.chatWrite(turn, { op: 'MKDIR', path: dto.path, parents: dto.parents === true }, async () => {
+      const made = await this.drive.mkdirPath(runner.ownerId, dto.path, { parents: dto.parents === true, writer });
+      return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, made.id));
+    });
   }
 
   /** A staging for one handle's or one tool call's write, held by this runner. */
@@ -295,17 +305,33 @@ export class RunnerDriveController {
   /**
    * Rename and/or move. Onto a live file it replaces it unless `noReplace` (§3.2): the target keeps its id and takes the
    * source's content as a new version, its previous one going to Trash; the answer is the target. The source is gone.
+   * A Drive chat never replaces: onto a live file it is refused 409 DRIVE_CHAT_NO_OVERWRITE naming both files, and the
+   * owner is asked Keep both or Replace (drive-chat-changes.ts).
    */
   @Post('rename')
   @HttpCode(HttpStatus.OK)
   async rename(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveRenameDto) {
     const source = await this.named(runner.ownerId, dto.from, dto.id);
     const { parent, name } = splitDrivePath(dto.to);
-    const folder = await this.drive.liveAt(runner.ownerId, parent);
-    const view = await this.drive.rename(runner.ownerId, source.id, {
-      name, parentId: folder.id, writer: this.writer(runner, dto.writer), replace: dto.noReplace !== true,
+    const writer = this.writer(runner, dto.writer);
+    const turn = await this.chatChanges.turnOf(runner.ownerId, writer);
+    return this.chatWrite(turn, { op: 'RENAME', entryId: source.id, to: dto.to }, async () => {
+      const folder = await this.drive.liveAt(runner.ownerId, parent);
+      let view;
+      try {
+        view = await this.drive.rename(runner.ownerId, source.id, {
+          name, parentId: folder.id, writer, replace: turn === null && dto.noReplace !== true,
+        });
+      } catch (error) {
+        const code = error instanceof HttpException ? (error.getResponse() as { code?: string }).code : undefined;
+        if (turn && code === DRIVE_NAME_TAKEN) {
+          const asked = await this.chatChanges.overwriteRefusal(turn, source, folder, name);
+          if (asked) throw asked;
+        }
+        throw error;
+      }
+      return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, view.id));
     });
-    return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, view.id));
   }
 
   /**
@@ -321,11 +347,15 @@ export class RunnerDriveController {
   ) {
     const entry = await this.named(runner.ownerId, dto.path, dto.id);
     const own = dto.writer?.burstKey?.trim();
-    await this.drive.moveToTrash(runner.ownerId, entry.id, {
-      writer: this.writer(runner, dto.writer),
-      ...(own ? { burstKey: own } : mount ? { burstKey: `mount:${mount.credentialId}`, burstWindowMs: DRIVE_MOUNT_BURST_WINDOW_MS } : {}),
+    const writer = this.writer(runner, dto.writer);
+    const turn = await this.chatChanges.turnOf(runner.ownerId, writer);
+    return this.chatWrite(turn, { op: 'TRASH', entryId: entry.id }, async () => {
+      await this.drive.moveToTrash(runner.ownerId, entry.id, {
+        writer,
+        ...(own ? { burstKey: own } : mount ? { burstKey: `mount:${mount.credentialId}`, burstWindowMs: DRIVE_MOUNT_BURST_WINDOW_MS } : {}),
+      });
+      return { deleted: true, id: entry.id };
     });
-    return { deleted: true, id: entry.id };
   }
 
   /** `utimens`: a live entry's mtime. */
@@ -435,6 +465,22 @@ export class RunnerDriveController {
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * A write of a Drive chat's turn (`turn`; null runs it as it is): once the turn takes no more changes — it made 200, or
+   * already holds some — the write is held for the owner's Apply (`held`) and refused DRIVE_CHAT_HELD, nothing changed.
+   * One the recorder finds over the limit inside its own transaction, rolled back, is held the same way.
+   */
+  private async chatWrite<T>(turn: DriveChatTurn | null, held: DriveChatHeldOp, write: () => Promise<T>): Promise<T> {
+    if (!turn) return write();
+    if (await this.chatChanges.isFull(turn)) return this.chatChanges.hold(turn, held);
+    try {
+      return await write();
+    } catch (error) {
+      if (error instanceof DriveChatTurnFull) return this.chatChanges.hold(turn, held);
+      throw error;
+    }
+  }
 
   /** The live entry a request names by path or by id, exactly one of them. */
   private async named(ownerId: string, path: string | undefined, id: string | undefined): Promise<DriveEntryRow> {
