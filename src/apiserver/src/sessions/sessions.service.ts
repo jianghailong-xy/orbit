@@ -56,7 +56,7 @@ import {
   isParked, sessionTurnStateSql, type TurnState, type TurnStateFacts, TURN_STATE_SELECT, turnStateAfterTurnEnqueued,
   turnStateFilter, turnStateOf,
 } from './session-turn-state';
-import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
+import { deriveSessionPhase, readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
@@ -71,6 +71,10 @@ import {
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
 import { deleteTurnsKeepingAttachments } from './withdrawn-turn-attachments';
+import {
+  buildSessionListing, listingPage, type ListingCoordinator, type ListingFolder, type ListingRowFacts, type ListingSession,
+  type ListingView,
+} from './session-listing';
 import {
   projectsMembershipCandidatesSql, readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql,
 } from './session-project-membership';
@@ -507,6 +511,16 @@ type ListOverlayInput = TurnStateFacts & {
   taskId: string | null;
   runningBgShells: string[];
   runningSubagentCount: number;
+};
+
+/** A session of `GET /sessions/listing`'s scope as `SessionsService.sessionListing` reads it: what the listing's rules
+ *  place it by, and the columns its list row's attention section is read from (`listingRowFacts`). */
+type ListingScoped = Omit<ListingSession, 'row'> & ListOverlayInput & {
+  retryAt: Date | null;
+  lastTurnOutcome: string | null;
+  endReason: string | null;
+  runningSubagents: string[];
+  runningBgJobs: string[];
 };
 
 /** One project's answer in `SessionsService.projectPlacement`. */
@@ -4121,12 +4135,45 @@ export class SessionsService {
       // Nor does a scheduled task's run, which is in no list (docs/scheduled-tasks-design.md §7.4).
       runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] },
     } as const;
-    const [active, running, jobs, blocked, jobCards, failed] = await Promise.all([
+    const [active, tallies] = await Promise.all([
       this.prisma.session.groupBy({
         by: ['workspaceId'],
         where: { ...open, ...turnStateFilter(['QUEUED', 'IN_FLIGHT']) },
         _count: { _all: true },
       }),
+      this.sessionTallies(ownerId, open),
+    ]);
+    const counts = new Map<
+      string,
+      { workspaceId: string; active: number; running: number; jobs: number; stalledJobs: number; needsYou: number }
+    >();
+    const row = (workspaceId: string) => {
+      const existing = counts.get(workspaceId);
+      if (existing) return existing;
+      const fresh = { workspaceId, active: 0, running: 0, jobs: 0, stalledJobs: 0, needsYou: 0 };
+      counts.set(workspaceId, fresh);
+      return fresh;
+    };
+    for (const session of active) {
+      if (session.workspaceId) row(session.workspaceId).active = session._count._all;
+    }
+    for (const workspaceId of tallies.needsYou.values()) row(workspaceId).needsYou += 1;
+    for (const session of tallies.running) row(session.workspaceId).running += 1;
+    for (const session of tallies.jobs) {
+      if (session.stalled) row(session.workspaceId).stalledJobs += 1;
+      else row(session.workspaceId).jobs += 1;
+    }
+    return [...counts.values()];
+  }
+
+  /**
+   * Which of the sessions `open` selects `workspaceSessionCounts` counts, and as what: `needsYou` (by id,
+   * with its workspace), `running`, and `jobs` (with whether every job has gone quiet). A session counted
+   * as needing you is in neither of the others. `GET /sessions/listing` groups the same sets by folder, so
+   * a folder row, the sidebar's workspace row and the row glyphs cannot say two things.
+   */
+  private async sessionTallies(ownerId: string, open: Prisma.SessionWhereInput) {
+    const [running, jobs, blocked, jobCards, failed] = await Promise.all([
       // Rows rather than a `groupBy`, so a session that needs you can be taken back out by id.
       // These are the sessions in flight right now — a handful even for a busy account.
       this.prisma.session.findMany({
@@ -4205,24 +4252,10 @@ export class SessionsService {
             where: { ...open, id: { in: decisions.map((signal) => signal.sessionId) } },
             select: { id: true, workspaceId: true },
           });
-    const counts = new Map<
-      string,
-      { workspaceId: string; active: number; running: number; jobs: number; stalledJobs: number; needsYou: number }
-    >();
-    const row = (workspaceId: string) => {
-      const existing = counts.get(workspaceId);
-      if (existing) return existing;
-      const fresh = { workspaceId, active: 0, running: 0, jobs: 0, stalledJobs: 0, needsYou: 0 };
-      counts.set(workspaceId, fresh);
-      return fresh;
-    };
-    for (const session of active) {
-      if (session.workspaceId) row(session.workspaceId).active = session._count._all;
-    }
     // One conversation is one row of this tally however many things are waiting on it: the number
     // is "sessions that need you", and a coordinator blocked on a tool call while a proposal is
     // also unanswered is still one place to go.
-    const needsYou = new Set<string>();
+    const needsYou = new Map<string, string>();
     const visibleBlocked = [];
     for (const session of blocked) {
       if (!session.taskId || (await visibleQuestions(this.prisma, session.approvals)).length) visibleBlocked.push(session);
@@ -4236,16 +4269,14 @@ export class SessionsService {
     const folded = await this.foldedFailures(failed.map((session) => session.id));
     for (const session of [...visibleBlocked, ...awaitingDecision, ...failed.filter((f) => !folded.has(f.id))]) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
-      needsYou.add(session.id);
-      row(session.workspaceId).needsYou += 1;
+      needsYou.set(session.id, session.workspaceId);
     }
     // The job cards from the query above, on the same one-row-per-conversation rule: a session
     // already lit by a blocked turn is not lit twice by the card a job filed beside it.
     for (const session of jobCards) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
       if (!(await visibleQuestions(this.prisma, session.approvals)).some((a) => readByLiveBackgroundJob(a, session.runningBgShells))) continue;
-      needsYou.add(session.id);
-      row(session.workspaceId).needsYou += 1;
+      needsYou.set(session.id, session.workspaceId);
     }
     // And the cards a running SubAgent asked (docs/subagent-design.md §5.3): its child engine reads them
     // while the parent sits idle, so a background SubAgent waiting on a person lights its row the same way.
@@ -4270,14 +4301,14 @@ export class SessionsService {
     for (const session of withSubagents) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
       if (!subagentCards.some((card) => card.sessionId === session.id)) continue;
-      needsYou.add(session.id);
-      row(session.workspaceId).needsYou += 1;
+      needsYou.set(session.id, session.workspaceId);
     }
     // The activity tallies, after `needsYou` because a session counted there is counted only there
     // (see the doc above).
+    const runningHere: Array<{ id: string; workspaceId: string }> = [];
     for (const session of running) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
-      row(session.workspaceId).running += 1;
+      runningHere.push({ id: session.id, workspaceId: session.workspaceId });
     }
     // One session is one row of these tallies however many jobs it has in flight, as it has always
     // been. A session whose jobs have ALL gone quiet is still executing and is counted, as
@@ -4285,12 +4316,12 @@ export class SessionsService {
     // disappearing. `undefined` for a job nobody has reported progress on is not quiet — see
     // BgJobActivity.
     const nowMs = Date.now();
+    const jobsHere: Array<{ id: string; workspaceId: string; stalled: boolean }> = [];
     for (const session of jobs) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
-      if (bgJobsStalled(session, nowMs)) row(session.workspaceId).stalledJobs += 1;
-      else row(session.workspaceId).jobs += 1;
+      jobsHere.push({ id: session.id, workspaceId: session.workspaceId, stalled: bgJobsStalled(session, nowMs) });
     }
-    return [...counts.values()];
+    return { needsYou, running: runningHere, jobs: jobsHere };
   }
 
   /** Of these sessions, the ones the workspace list folds into a project row rather than listing
@@ -4945,6 +4976,182 @@ export class SessionsService {
     });
   }
 
+  /** A workspace's live folders, the ones its list files sessions in (a confined token's only in its workspaces). */
+  private listingFolders(ownerId: string, workspaceId: string, confinedTo?: readonly string[]): Promise<ListingFolder[]> {
+    const confined = confinedTo ? Prisma.sql`AND f.workspace_id = ANY(${[...confinedTo]}::uuid[])` : Prisma.empty;
+    return this.prisma.$queryRaw<ListingFolder[]>(Prisma.sql`
+      SELECT f.id, f.name FROM session_folder f
+       WHERE f.owner_id = ${ownerId}::uuid AND f.workspace_id = ${workspaceId}::uuid ${confined}
+       ORDER BY f.id`);
+  }
+
+  /**
+   * What `GET /sessions/listing`'s ETag stands for besides the Open list's data version: which folders the
+   * workspace has. A folder is no source of that version (nothing of a list row reads it), yet a new, empty
+   * one is a folder row of its own here.
+   */
+  async sessionListingFolderMark(ownerId: string, workspaceId: string, confinedTo?: readonly string[]): Promise<string> {
+    return shortHash((await this.listingFolders(ownerId, workspaceId, confinedTo)).map((folder) => folder.id));
+  }
+
+  /**
+   * `GET /sessions/listing` (docs/session-list-scale-design.md §3.2): one page of a workspace's list as
+   * top-level entries, and on the first page of the workspace's own list its folder rows. The rules are in
+   * session-listing.ts; this reads what they take — the scope's sessions, narrowly, each with the project
+   * its membership names, those projects' coordinators, the live folders, and for the folder rows and the
+   * project entries the tallies `workspaceSessionCounts` counts — and builds full rows only for the sessions
+   * and coordinators the page shows. In Open it also reads, for every session of the scope, what its list row says
+   * that places it in the web's attention sections (`ListingRowFacts`): the row query's status word, turn state and
+   * execution columns for its phase (`deriveSessionPhase`), and the approval cards and owner decisions its
+   * `pendingApprovals` counts (`listOverlay`'s).
+   */
+  async sessionListing(
+    ownerId: string,
+    opts: {
+      workspaceId: string;
+      view: ListingView;
+      folderId: string | null;
+      limit: number;
+      after: Parameters<typeof listingPage>[1];
+      confinedTo?: readonly string[];
+    },
+  ) {
+    const { query } = this.listShape(ownerId, { workspaceId: opts.workspaceId, view: opts.view, confinedTo: opts.confinedTo });
+    const [scoped, folders] = await Promise.all([
+      this.prisma.$queryRaw<ListingScoped[]>(Prisma.sql`
+        SELECT s.id, s.folder_id AS "folderId", s.pinned_at AS "pinnedAt", s.listed_at AS "listedAt",
+               s.created_at AS "createdAt", s.last_turn_at AS "lastTurnAt",
+               COALESCE(s.completed_at, s.archived_at) AS "completedAt",
+               (${sessionProjectMembershipSql('s')} ->> 'projectId') AS "projectId",
+               -- What the row's attention section reads (Open only): the words and facts readSessionPhaseFields
+               -- and listOverlay read.
+               ${legacySessionStatusSql('s')} AS status, ${sessionTurnStateSql('s')} AS "turnState",
+               s.finished_at AS "finishedAt", s.engine_turn_active AS "engineTurnActive", s.task_id AS "taskId",
+               s.running_bg_shells AS "runningBgShells", cardinality(s.running_subagents)::int AS "runningSubagentCount",
+               s.running_subagents AS "runningSubagents", s.running_bg_jobs AS "runningBgJobs",
+               s.retry_at AS "retryAt", s.last_turn_outcome AS "lastTurnOutcome", s.end_reason AS "endReason"
+          FROM session s
+         WHERE s.owner_id = ${ownerId}::uuid
+           ${query.scope}
+           AND (${query.visibility})
+         ORDER BY (s.pinned_at IS NOT NULL) DESC, COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC, s.id`),
+      this.listingFolders(ownerId, opts.workspaceId, opts.confinedTo),
+    ]);
+    const sessions: ListingSession[] = await this.listingRowFacts(ownerId, opts.view, scoped);
+    const projectIds = [...new Set(sessions.flatMap((session) => session.projectId ? [session.projectId] : []))];
+    const confined = opts.confinedTo
+      ? Prisma.sql`AND c.workspace_id = ANY(${[...opts.confinedTo]}::uuid[])`
+      : Prisma.empty;
+    // Each project's coordinator as `projectPlacement` finds it: in either lifecycle, never in Trash, and
+    // only while its own membership still names this project (one that coordinates another first is that one's).
+    const tallies = () => this.sessionTallies(ownerId, {
+      ownerId,
+      workspaceId: opts.workspaceId,
+      deletedAt: null,
+      ...(opts.view === 'open'
+        ? { completedAt: null, archivedAt: null }
+        : { NOT: { completedAt: null, archivedAt: null } }),
+      sessionKind: SESSION_KIND_CONVERSATION,
+      runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] },
+    });
+    const [found, tallied] = await Promise.all([
+      projectIds.length === 0 ? [] : this.prisma.$queryRaw<Array<{ projectId: string } & Partial<ListingCoordinator>>>(Prisma.sql`
+        SELECT p.id AS "projectId", c.id, c.workspace_id AS "workspaceId", c.folder_id AS "folderId",
+               c.pinned_at AS "pinnedAt", c.created_at AS "createdAt"
+          FROM project p
+          LEFT JOIN session c
+            ON c.id = p.coordinator_session_id
+           AND c.deleted_at IS NULL AND c.kind = 'CONVERSATION' AND c.help_ask IS NULL ${confined}
+           AND (${sessionProjectMembershipSql('c')} ->> 'projectId')::uuid = p.id
+         WHERE p.owner_id = ${ownerId}::uuid AND p.id = ANY(${projectIds}::uuid[])`),
+      // A project entry reads them too: whether a member it holds runs, or has a job moving.
+      (!opts.after && !opts.folderId && folders.length > 0) || projectIds.length > 0 ? tallies() : null,
+    ]);
+    const coordinators = new Map(found.map((row) => [row.projectId, row.id ? row as ListingCoordinator : null]));
+    const listing = (activity: Awaited<ReturnType<typeof tallies>> | null) => buildSessionListing({
+      view: opts.view,
+      workspaceId: opts.workspaceId,
+      folderId: opts.folderId,
+      sessions,
+      coordinators,
+      folders,
+      activity: activity && {
+        needsYou: new Set(activity.needsYou.keys()),
+        running: new Set(activity.running.map((session) => session.id)),
+        jobs: new Set(activity.jobs.flatMap((session) => session.stalled ? [] : [session.id])),
+      },
+    });
+    let built = listing(tallied);
+    // A cursor written under the other order (the Completed view's switches on whether anything is held;
+    // session-listing.ts) places nothing in this one: the list starts again, and says so with `restarted`,
+    // carrying what a first page carries, so a client replaces the pages it holds rather than appending.
+    const restarted = !!opts.after && opts.after.order !== built.order;
+    const withFolders = !opts.folderId && (!opts.after || restarted);
+    if (restarted && withFolders && folders.length > 0 && !tallied) built = listing(await tallies());
+    const { page, next } = listingPage(built.entries, restarted ? null : opts.after, opts.limit, built.order);
+    const shown = page.flatMap((entry) => entry.kind === 'session' ? [entry.id] : entry.coordinatorId ? [entry.coordinatorId] : []);
+    const rowConfined = opts.confinedTo
+      ? Prisma.sql`AND s.workspace_id = ANY(${[...opts.confinedTo]}::uuid[])`
+      : Prisma.empty;
+    const rows = shown.length === 0 ? [] : await this.listRows(ownerId, {
+      scope: Prisma.sql`AND s.help_ask IS NULL ${rowConfined} AND s.id = ANY(${shown}::uuid[])`,
+      visibility: Prisma.sql`s.deleted_at IS NULL AND s.kind = 'CONVERSATION'`,
+      orderBy: Prisma.sql`s.id`,
+      pageLimit: Prisma.empty,
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    type Row = (typeof rows)[number];
+    type Entry =
+      | { kind: 'session'; session: Row }
+      | { kind: 'project'; projectId: string; placedAt: Date; spokeAt: Date; memberCount: number; running: boolean; jobs: boolean;
+          coordinator: Row | null };
+    const entries = page.flatMap((entry): Entry[] => {
+      if (entry.kind === 'session') {
+        // Gone between the read that placed it and the one that built it (trashed, say): not listed.
+        const session = byId.get(entry.id);
+        return session ? [{ kind: 'session' as const, session }] : [];
+      }
+      return [{
+        kind: 'project' as const,
+        projectId: entry.id,
+        placedAt: entry.placedAtDate,
+        spokeAt: entry.spokeAtDate,
+        memberCount: entry.memberCount,
+        running: entry.running,
+        jobs: entry.jobs,
+        coordinator: entry.coordinatorId ? byId.get(entry.coordinatorId) ?? null : null,
+      }];
+    });
+    return { ...(withFolders ? { folders: built.folders } : {}), entries, next, ...(restarted ? { restarted: true } : {}) };
+  }
+
+  /** The scope's sessions for `buildSessionListing`, in Open each with what its list row says (`ListingRowFacts`). */
+  private async listingRowFacts(
+    ownerId: string,
+    view: ListingView,
+    scoped: readonly ListingScoped[],
+  ): Promise<ListingSession[]> {
+    const place = (s: ListingScoped, row: ListingRowFacts | null): ListingSession => ({
+      id: s.id, folderId: s.folderId, pinnedAt: s.pinnedAt, listedAt: s.listedAt, createdAt: s.createdAt,
+      lastTurnAt: s.lastTurnAt, completedAt: s.completedAt, projectId: s.projectId, row,
+    });
+    if (view !== 'open' || scoped.length === 0) return scoped.map((s) => place(s, null));
+    const [cards, decisions] = await Promise.all([
+      this.liveCardCounts(scoped),
+      readOwnerDecisionsBySession(this.prisma, ownerId, { sessionIds: scoped.map((s) => s.id) }),
+    ]);
+    return scoped.map((s) => place(s, {
+      // listOverlay's count: the cards held open for a person, plus the owner decisions on the row.
+      pendingApprovals: (cards.get(s.id) ?? 0) + (decisions.get(s.id)?.count ?? 0),
+      status: s.status,
+      retryAt: s.retryAt,
+      phase: deriveSessionPhase(s),
+      released: s.finishedAt != null,
+      lastTurnOutcome: s.lastTurnOutcome,
+      endReason: s.endReason,
+    }));
+  }
+
   /**
    * The row query and its mapping, shared by `list` and `listRowsByIds`.
    *
@@ -5478,12 +5685,10 @@ export class SessionsService {
   }
 
   /**
-   * The part of each list row that is not read from the row query: the approval cards and owner
-   * decisions waiting on it, the confirmation under review, and who it waits on for a reply. Every
-   * one of them is read by session id, so `listOpenSince` reads them for a whole list while building
-   * only the rows that moved, and compares them row by row.
+   * The approval cards each of these rows is holding open for a person, by session (`listOverlay`'s
+   * `pendingApprovals` before the owner decisions are added): see the comments inside.
    */
-  private async listOverlay(ownerId: string, inputs: ListOverlayInput[]): Promise<Map<string, ListOverlay>> {
+  private async liveCardCounts(inputs: readonly ListOverlayInput[]): Promise<Map<string, number>> {
     // A turn blocked on a permission prompt keeps the session generating, so the list can't tell
     // "running" from "waiting for approval" without this count. A conversation can be holding a
     // card in two ways, and it has to be one of them to have one: its turn is live — a generating
@@ -5525,7 +5730,6 @@ export class SessionsService {
         .filter((card) => !asked.some((a) => a.id === card.id))
         .map((card) => ({ ...card, backgroundJobId: null })),
     ];
-    const heldQuestions = await questionsWithCoordinator(this.prisma, inputs.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
     for (const card of await visibleQuestions(this.prisma, cards)) {
       // A job's card is read by its job, not the turn: it counts while the job is up, as the card
@@ -5536,6 +5740,18 @@ export class SessionsService {
       }
       byId.set(card.sessionId, (byId.get(card.sessionId) ?? 0) + 1);
     }
+    return byId;
+  }
+
+  /**
+   * The part of each list row that is not read from the row query: the approval cards and owner
+   * decisions waiting on it, the confirmation under review, and who it waits on for a reply. Every
+   * one of them is read by session id, so `listOpenSince` reads them for a whole list while building
+   * only the rows that moved, and compares them row by row.
+   */
+  private async listOverlay(ownerId: string, inputs: ListOverlayInput[]): Promise<Map<string, ListOverlay>> {
+    const byId = await this.liveCardCounts(inputs);
+    const heldQuestions = await questionsWithCoordinator(this.prisma, inputs.filter(s => s.taskId).map(s => s.id));
     // Plus the owner decisions each row is the surface for. A blocked tool call and an unanswered
     // criteria decision are one question to the reader of this list — "is somebody waiting on me
     // here" — so they are one number, and the row's own `projectId` is where the second kind leads.

@@ -60,7 +60,7 @@ import {
   UndoOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
 import {
   applyReferencePick,
@@ -111,6 +111,7 @@ import {
   type RefObject,
   type SetStateAction,
   type TouchEvent as ReactTouchEvent,
+  memo,
   useCallback,
   useEffect,
   useId,
@@ -119,7 +120,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { copyText } from '../lib/clipboard';
 import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
 import { routeId, encodeId } from '../lib/idCodec';
@@ -140,6 +141,15 @@ import {
 import { useControlPlaneLive, useRefreshSessionLists } from '../lib/useControlPlane';
 import { listPollMs, pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { useSessionProjectData } from '../lib/useSessionProjectData';
+import { listingFolderRows, listingProjectRows, sessionListingView } from '../lib/sessionListing';
+import {
+  dropProjectFromListings,
+  listingEntryCount,
+  listingRows,
+  patchListingRows,
+  patchListings,
+  type SessionListingPage,
+} from '../lib/sessionListingData';
 import {
   workspacesQuery,
   type Me,
@@ -149,6 +159,7 @@ import {
   sessionQuery,
   sessionFoldersQuery,
   type SessionListView,
+  sessionListingQuery,
   sessionsQuery,
   sessionTagsQuery,
   ownerConfirmationQuery,
@@ -202,6 +213,7 @@ import {
   sessionProjectListing,
   sourceLandingLabel,
   type ProjectRowPause,
+  type ProjectStateAction,
   type SessionProjectRow,
   type SessionProjectEntry,
 } from '../lib/sessionProjects';
@@ -544,7 +556,15 @@ import { ProjectSessionsSheet } from './ProjectSessionsSheet';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Image } from './ui/Image';
 import { Menu, type MenuItem } from './ui/Menu';
-import { SessionListRow, type SessionRowController, type SessionRowSwipe, type SessionRowSwipeButton } from './SessionListRow';
+import {
+  SessionListRow,
+  type SessionRowController,
+  type SessionRowPress,
+  type SessionRowSwipe,
+  type SessionRowSwipeButton,
+  type SessionRowSwipeState,
+} from './SessionListRow';
+import { SessionListWindow, type SessionListWindowHandle } from './SessionListWindow';
 import { Popover } from './ui/Popover';
 import { RunnerUpdateIndicator } from './RunnerUpdateIndicator';
 import { RunnerUpdateLaterMenu } from './RunnerUpdateLater';
@@ -592,7 +612,7 @@ import {
   CLONE_RETRY_FAILED,
   composerPlaceholderFor,
 } from '../lib/machineSetupCopy';
-import { cloneHeardOf, githubRepositoryOf, hearClone, retryClone, useCloneHeardVersion } from '../lib/workspaceClone';
+import { cloneHeardOf, githubRepositoryOf, hearClone, retryClone, useCloneHeard, useCloneHeardVersion } from '../lib/workspaceClone';
 import { CloneWaitNotice, useCloneWait } from './CloneWaitNotice';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
@@ -1064,9 +1084,9 @@ const SESSION_VIEWS: { value: SessionView; label: string }[] = [
 ];
 
 // How close to the end of the loaded session list the scroll has to get before the next
-// page is asked for — roughly a couple of rows, so the list is already widened by the time
-// the user reaches the bottom.
-const SESSION_LOAD_MORE_PX = 240;
+// page is asked for — the last row in view this many items from the end, so the list is already
+// widened by the time the user reaches the bottom.
+const SESSION_LOAD_MORE_ROWS = 4;
 /** How long a finger rests on a phone's session row before its menu opens, as iOS's context menu. */
 const LONG_PRESS_MS = 500;
 
@@ -1836,6 +1856,420 @@ function SessionProjectOrphanRow({
   );
 }
 
+/** What a list row asks the list to do — open, rename, move, pause… — as the list's current functions.
+ *  The list hands every row the same ref, so a row is not redrawn because the list was (SessionEntryRow). */
+interface SessionListActions {
+  swipe: (action: SwipeAction, s: any, returnFocus?: RefObject<HTMLElement | null>) => void;
+  /** Rename… from a row's menu: its field opens once the menu has let go of focus. */
+  rename: (id: string, kebab: HTMLElement | null | undefined) => void;
+  /** The row's Rename… field closed, with the title to save or null. */
+  renamed: (id: string, title: string | null) => void;
+  /** A session row's click, Enter or Space; `page` for a row of a project's page. */
+  openSession: (session: any, page: boolean) => void;
+  projectSessions: (projectId: string, openId?: string | null) => void;
+  openProject: (projectId: string) => void;
+  /** A project row's menu's Open Session: the session its line is about. */
+  openTarget: (row: SessionProjectRow<any>) => void;
+  /** A project row's click: its coordinator, or the member its line says waits on you. */
+  openProjectRow: (row: SessionProjectRow<any>, coordinatorId: string) => void;
+  completeProject: (row: SessionProjectRow<any>) => void;
+  /** A project row's first swipe slot or state item: pause, resume or complete. */
+  projectState: (row: SessionProjectRow<any>, action: ProjectStateAction) => void;
+}
+
+/** Two readings of one project row that draw the same: every field the same, or the same one level down
+ *  (its line, its target, its pause, its members). */
+function sameProjectRow(left: object, right: object): boolean {
+  const a = left as Record<string, unknown>;
+  const b = right as Record<string, unknown>;
+  const keys = Object.keys(b);
+  if (keys.length !== Object.keys(a).length) return false;
+  return keys.every((key) => {
+    const x = a[key];
+    const y = b[key];
+    if (x === y) return true;
+    if (Array.isArray(x) && Array.isArray(y)) return x.length === y.length && x.every((item, i) => item === y[i]);
+    if (x && y && typeof x === 'object' && typeof y === 'object') {
+      const inner = Object.keys(y);
+      return inner.length === Object.keys(x).length &&
+        inner.every((k) => (x as Record<string, unknown>)[k] === (y as Record<string, unknown>)[k]);
+    }
+    return false;
+  });
+}
+
+/**
+ * One session's row in the list (or a project's page). Everything it says — its line, its glyph, its swipe
+ * and its menu — is worked out here, when the row is drawn, from props that stay the same object while
+ * the row reads the same: a watch frame, a clone frame or the open conversation's fresher detail redraws
+ * the row it is about and no other (docs/session-list-scale-design.md §4).
+ */
+const SessionEntryRow = memo(function SessionEntryRow({
+  entry: s,
+  detail,
+  listView,
+  page,
+  fixing,
+  watchingWord,
+  watchingLine,
+  active,
+  renaming,
+  menuOpen,
+  pressAt,
+  swipeAt,
+  dragging,
+  dropTargets,
+  recaps,
+  machine,
+  hoverTipOpen,
+  rows,
+  actions,
+}: {
+  entry: SessionProjectEntry<SessionListItem> & { kind: 'session' };
+  /** The open conversation's detail when this is its row, fresher than the list's; else null. */
+  detail: any | null;
+  /** The view the list shows; a project's page reads each row's own lifecycle instead. */
+  listView: SessionView;
+  page: boolean;
+  /** A task session fixing its own failed landing, on the project's page. */
+  fixing: boolean;
+  watchingWord: string | null;
+  watchingLine: string | null;
+  active: boolean;
+  renaming: boolean;
+  menuOpen: boolean;
+  pressAt: SessionRowPress | null;
+  swipeAt: SessionRowSwipeState | null;
+  dragging: boolean;
+  dropTargets: boolean;
+  recaps: boolean;
+  machine: string | null;
+  hoverTipOpen: boolean | undefined;
+  rows: SessionRowController;
+  actions: RefObject<SessionListActions>;
+}) {
+  const actionSession = detail ?? s;
+  // A clone frame moves the percentage on the row of a session held by its clone (sessionLine): that row
+  // listens for it, and no other.
+  useCloneHeard(actionSession.queuedReason === 'WORKSPACE_CLONING' ? actionSession.workspace?.id : null);
+  const memberView: SessionView = page ? sessionLifecycleStateOf(actionSession).toLowerCase() as SessionView : listView;
+  // A member whose project has no row here is a row of its own, filed by its own folder
+  // (owner 2026-11-07).
+  const mark = s.projectMark;
+  const movable = sessionMovable(s) || !!mark;
+  const swipeActions = sessionSwipeActions(memberView, movable);
+  const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
+  const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
+  // Open and Completed rows open their transcript; only
+  // Trash rows stay closed.
+  const openable = memberView !== 'trash';
+  // The selected row may have a fresher detail payload than the list poll. Use the
+  // merged row for both status surfaces so the banner and its list warning point at
+  // the same canonical obligation during that refresh gap.
+  const watching: SessionWatching | null = watchingWord != null ? { word: watchingWord, line: watchingLine ?? '' } : null;
+  const ownLine = sessionLine(actionSession, openable, watching, recaps, machine);
+  // A task session fixing its own failed landing says so on the project's page (web a ③).
+  const line = fixing
+    ? { ...ownLine, text: LANDING_FIX_COPY.SESSION_ROW_LINE, tone: 'preview' as const, hint: LANDING_FIX_COPY.SESSION_ROW_LINE }
+    : ownLine;
+  // As on iOS, a full swipe runs the leading edge's first action only when it can run.
+  const canFullSwipe = memberView === 'open' ? canCompleteRow : canRestoreRow;
+  const swipeButtons = {
+    complete: { label: 'Complete', icon: <CheckOutlined />, disabled: !canCompleteRow },
+    restore: { label: 'Move to Open', icon: <UndoOutlined />, disabled: !canRestoreRow },
+    pin: s.pinnedAt
+      ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
+      : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
+    share: { label: 'Share', icon: <ExportOutlined />, disabled: false },
+    move: { label: 'Move', icon: <FolderOutlined />, disabled: false },
+    delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
+    purge: { label: 'Delete Permanently', icon: <DeleteOutlined />, disabled: false },
+  };
+  const swipeButton = (action: SwipeAction): SessionRowSwipeButton => ({
+    action, ...swipeButtons[action], run: () => actions.current.swipe(action, s),
+  });
+  // `close` closes the menu the item is in: the row's ⋯ menu or the one a held press opens;
+  // `kebab` reads that ⋯ when the item is picked.
+  const menuItem = (action: SwipeAction, close: () => void, kebab?: () => HTMLElement | null): MenuItem => ({
+    key: action,
+    icon: swipeButtons[action].icon,
+    disabled: swipeButtons[action].disabled,
+    danger: action === 'delete' || action === 'purge',
+    label: action === 'complete' ? (
+      <div className="session-menu-label">
+        <span>Complete</span>
+        <kbd>{COMPLETE_SESSION_HINT}</kbd>
+      </div>
+    ) : action === 'move' ? MOVE_COPY.action
+      : action === 'share' ? 'Share…'
+        : action === 'purge' ? 'Delete Permanently…'
+          : swipeButtons[action].label,
+    title: action === 'complete'
+      ? !canCompleteRow ? 'Complete unavailable right now'
+        : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
+      : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
+    // The menu stops its own clicks before they reach the row, which would open it.
+    onSelect: () => {
+      close();
+      actions.current.swipe(action, s, kebab && { current: kebab() });
+    },
+  });
+  // Rename… opens a field rather than acting, so it is no swipe action (as on iOS) and
+  // sits with the other … items. A trashed session's title isn't edited (the header's
+  // isn't either). Built only when a menu opens (SessionListRow).
+  const menuItems = (close: () => void, kebab?: () => HTMLElement | null): MenuItem[] =>
+    memberView === 'trash'
+      ? [menuItem('restore', close), { key: 'divider', type: 'separator' }, menuItem('purge', close, kebab)]
+      : [
+          ...swipeActions.leading.map((action) => menuItem(action, close, kebab)),
+          { key: 'divider', type: 'separator' },
+          { key: 'rename', icon: <EditOutlined />, label: 'Rename…', onSelect: () => {
+            close();
+            actions.current.rename(s.id, kebab?.());
+          } },
+          menuItem('share', close),
+          ...(movable ? [menuItem('move', close)] : []),
+          { key: 'divider-delete', type: 'separator' },
+          menuItem('delete', close, kebab),
+        ];
+  return (
+    <SessionListRow
+      rows={rows}
+      id={s.id}
+      subject={actionSession}
+      title={s.title || 'Untitled session'}
+      className={[!openable && 'no-open', renaming && 'renaming'].filter(Boolean).join(' ') || undefined}
+      active={active}
+      editing={renaming}
+      draggable={!page && sessionRowDraggable(s, {
+        view: memberView, dropTargets, touch: rows.touch, renaming,
+      })}
+      swipe={{
+        leading: swipeActions.leading.map(swipeButton),
+        trailing: swipeActions.trailing.map(swipeButton),
+        fullSwipe: canFullSwipe,
+      }}
+      menu={menuItems}
+      menuOpen={menuOpen}
+      pressAt={pressAt}
+      swipeAt={swipeAt}
+      dragging={dragging}
+      onOpen={() => {
+        if (!openable) return;
+        actions.current.openSession(actionSession, page);
+      }}
+    >
+      <span className="session-icon">
+        <StatusIcon session={actionSession} watching={watching?.word} machine={machine} />
+      </span>
+      <div className="session-main">
+        {renaming ? (
+          // Rename… on a session row: the title in a field where the row's two lines were.
+          <RenameField
+            label="Session title"
+            title={s.title ?? ''}
+            onDone={(title) => actions.current.renamed(s.id, title || null)}
+          />
+        ) : (
+          <>
+            <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
+            {/* One line under the title, and all of it is what the session is doing
+                or waiting on, else its recap (sessionLine). Tags are filed and
+                filtered by, not drawn on the row (the owner, 2026-10-22). */}
+            <div className="session-sub">
+              {/* A member whose project has no row in this workspace: the project's
+                  progress, which opens its sessions page (owner 2026-11-07). */}
+              {mark && (
+                <Tooltip content={SESSION_PROJECT_COPY.markHint(mark.title)} align="start">
+                  <button
+                    type="button"
+                    className={`session-project-progress${mark.status === 'DONE' ? ' done' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (rows.takeClick()) actions.current.projectSessions(mark.projectId, s.id);
+                    }}
+                  >
+                    {mark.taskCounts ? (
+                      <>
+                        <SessionProjectProgressBar counts={mark.taskCounts} runningCount={mark.runningCount} />
+                        {SESSION_PROJECT_COPY.progress(mark.taskCounts.done, mark.taskCounts.total)}
+                      </>
+                    ) : mark.status}
+                  </button>
+                </Tooltip>
+              )}
+              <Tooltip content={line.hint} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+                <div
+                  className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                >
+                  {line.text}
+                </div>
+              </Tooltip>
+              <SessionMarkChips marks={sessionMarks(actionSession)} />
+            </div>
+          </>
+        )}
+      </div>
+    </SessionListRow>
+  );
+});
+
+/** A project's row in the list: its coordinator's session row with the project's content and actions, or,
+ *  with no coordinator, an entry of its own (SessionProjectOrphanRow). Drawn as SessionEntryRow is. */
+const ProjectEntryRow = memo(function ProjectEntryRow({
+  entry: s,
+  active,
+  page,
+  view,
+  dropTargets,
+  menuOpen,
+  pressAt,
+  swipeAt,
+  dragging,
+  rows,
+  actions,
+}: {
+  entry: SessionProjectRow<any>;
+  active: boolean;
+  page: boolean;
+  view: SessionView;
+  dropTargets: boolean;
+  menuOpen: boolean;
+  pressAt: SessionRowPress | null;
+  swipeAt: SessionRowSwipeState | null;
+  dragging: boolean;
+  rows: SessionRowController;
+  actions: RefObject<SessionListActions>;
+}) {
+  const coordinator = s.coordinator;
+  const stateAction = projectStateAction(s, view);
+  const runStateAction = (): void => {
+    if (stateAction) actions.current.projectState(s, stateAction);
+  };
+  const projectMenu = (close: () => void): MenuItem[] => [
+    // A finished project's row can leave Open: Complete moves its coordinator and
+    // the members still open to Completed (§4.3; board 2026-11-07, part ④).
+    ...(view === 'open' && (s.status === 'DONE' || s.status === 'CANCELLED') ? [
+      { key: 'complete', icon: <CheckOutlined />, label: SESSION_PROJECT_COPY.complete,
+        onSelect: () => {
+          close();
+          actions.current.completeProject(s);
+        } },
+      { key: 'divider-complete', type: 'separator' as const },
+    ] : []),
+    { key: 'session', label: SESSION_PROJECT_COPY.openSession, icon: <MessageOutlined />, disabled: s.target.kind !== 'session',
+      onSelect: () => { close(); actions.current.openTarget(s); } },
+    { key: 'sessions', label: SESSION_PROJECT_COPY.sessions, icon: <UnorderedListOutlined />,
+      onSelect: () => { close(); actions.current.projectSessions(s.projectId, coordinator?.id); } },
+    { key: 'project', label: SESSION_PROJECT_COPY.openProject, icon: <ProjectOutlined />,
+      onSelect: () => { close(); actions.current.openProject(s.projectId); } },
+    { key: 'divider', type: 'separator' },
+    ...(stateAction === 'pause' || stateAction === 'resume' ? [{
+      key: stateAction, label: SESSION_PROJECT_COPY[stateAction],
+      icon: stateAction === 'pause' ? <PauseCircleOutlined /> : <PlayCircleOutlined />,
+      onSelect: () => { close(); runStateAction(); },
+    }] : []),
+    // These two act on the coordinator; with none they are shown and unavailable.
+    { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
+      icon: coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
+      onSelect: () => { close(); if (coordinator) actions.current.swipe('pin', coordinator); } },
+    { key: 'move', label: SESSION_PROJECT_COPY.move, icon: <FolderOutlined />, disabled: !coordinator,
+      onSelect: () => { close(); if (coordinator) actions.current.swipe('move', coordinator); } },
+  ];
+  // The orphan row's menu, built when it opens; the last one built stays while it closes.
+  const orphanMenu = useRef<MenuItem[]>([]);
+  // A project with no coordinator has no session behind it: an entry of its own, opening the
+  // project's sessions page as a folder row opens its folder (§4.3–§4.4).
+  if (!coordinator) {
+    if (menuOpen) orphanMenu.current = projectMenu(rows.closeMenu);
+    return (
+      <SessionProjectOrphanRow
+        project={s}
+        onOpen={() => { rows.closeMenu(); actions.current.projectSessions(s.projectId); }}
+        menu={orphanMenu.current}
+        menuOpen={menuOpen}
+        onMenuOpenChange={(open) => rows.onMenuOpenChange(s.id, open)}
+      />
+    );
+  }
+  // The project's row is its coordinator's: Pin and Move act on it, and the members follow.
+  return (
+    <SessionListRow
+      rows={rows}
+      id={s.id}
+      subject={coordinator}
+      title={s.title}
+      className="session-project-row"
+      data={{ 'data-project-id': s.projectId }}
+      active={active}
+      draggable={!page && sessionRowDraggable(coordinator, {
+        view, dropTargets, touch: rows.touch, renaming: false,
+      })}
+      swipe={{
+        leading: [
+          ...(stateAction ? [{
+            action: stateAction, label: SESSION_PROJECT_COPY[stateAction], disabled: false,
+            icon: stateAction === 'pause' ? <PauseCircleOutlined />
+              : stateAction === 'resume' ? <PlayCircleOutlined /> : <CheckOutlined />,
+            run: runStateAction,
+          }] : []),
+          {
+            action: 'pin', label: coordinator.pinnedAt ? 'Unpin' : 'Pin', disabled: false,
+            icon: coordinator.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
+            run: () => actions.current.swipe('pin', coordinator),
+          },
+        ],
+        trailing: [{ action: 'move', label: 'Move', icon: <FolderOutlined />, disabled: false,
+          run: () => actions.current.swipe('move', coordinator) }],
+        fullSwipe: PROJECT_ROW_FULL_SWIPE,
+      }}
+      menu={projectMenu}
+      menuLabel="Project actions"
+      menuOpen={menuOpen}
+      pressAt={pressAt}
+      swipeAt={swipeAt}
+      dragging={dragging}
+      onOpen={() => actions.current.openProjectRow(s, coordinator.id)}
+    >
+      <SessionProjectRowContent project={s} />
+    </SessionListRow>
+  );
+});
+
+/** One item of the session column (docs/session-list-scale-design.md §4): what the column draws, in its
+ *  order, as one list the window mounts a part of. */
+type ColumnItem =
+  | { kind: 'top'; key: string }
+  | { kind: 'scheduled'; key: string }
+  | { kind: 'folder-edit'; key: string; folderId: string | null }
+  | { kind: 'folder'; key: string; row: SessionFolderRow }
+  | { kind: 'head'; key: string; section: ListSection }
+  | { kind: 'landings'; key: string }
+  /** A project page's Coordinator section, its heading and its row as one item. */
+  | { kind: 'coordinator'; key: string; section: ListSection }
+  | { kind: 'entry'; key: string; entry: SessionProjectEntry<SessionListItem> };
+
+/** The column's sections as items: each heading, then its rows. On a project's page (`page`) its
+ *  Coordinator section is one item, and its Landings row is one. */
+function sectionItems(sections: readonly ListSection[], page: boolean, landings: boolean): ColumnItem[] {
+  const items: ColumnItem[] = [];
+  for (const sec of sections) {
+    if (page && sec.key === 'Landings' && landings) {
+      items.push({ kind: 'landings', key: 'landings' });
+      continue;
+    }
+    if (page && sec.key === 'Coordinator') {
+      items.push({ kind: 'coordinator', key: `coordinator:${sec.sessions[0]?.id ?? ''}`, section: sec });
+      continue;
+    }
+    items.push({ kind: 'head', key: `head:${sec.key}`, section: sec });
+    for (const entry of sec.sessions) {
+      items.push({ kind: 'entry', key: `${entry.kind === 'project' ? 'project' : 'session'}:${entry.id}`, entry });
+    }
+  }
+  return items;
+}
+
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
 // wording) so the glyph and the header label always agree.
 //
@@ -2533,6 +2967,9 @@ export function lastUserEventSeq(
   }
   return null;
 }
+
+/** A listing not read yet: no pages, one object, so the list's memos hold still meanwhile. */
+const NO_LISTING_PAGES: readonly SessionListingPage[] = [];
 
 // Remembers the session the user last had open per workspace (workspace id → session id). Switching
 // away to another workspace and back reopens that conversation instead of the workspace's most-recent
@@ -3233,10 +3670,9 @@ export function WorkspaceView({
     () => (foldersQ.data ?? []).filter((f) => f.workspaceId === scopeWorkspaceId),
     [foldersQ.data, scopeWorkspaceId],
   );
-  // Folders split the list on the client, as on iOS, so a workspace that has any loads its whole
-  // list for the view rather than one page: a folder's count, its marks and its page all need every
-  // session filed in it. That is the request every native client makes for every list; a workspace
-  // without folders keeps paging as before.
+  // A list that shows folders or projects reads the server's listing a page at a time (`listingRead` below),
+  // which groups it there: a folder's count and marks are the server's, and a folder's page is the same read
+  // with the folder named. Narrowed to or grouped by a tag, the list is flat and keeps paging GET /sessions.
   const listByTag = !!tagFilter || groupByTag;
   // The page the list is on: an encoded folder id, `scheduled` for Scheduled runs, or null for the
   // workspace's own list. A list's own address keeps it as `?folder=`, so a reload and Back keep the
@@ -3276,8 +3712,8 @@ export function WorkspaceView({
   // The workspace's Scheduled runs folder is open (`?folder=scheduled`): the list is its runs' sessions alone, which
   // every other list leaves out, with no folder or project rows of its own.
   const onScheduledRuns = !listProjectId && folderParam === SCHEDULED_RUNS_FOLDER;
-  // A folder's page, by its page alone: it reads the workspace's whole list as the folder rows do, and
-  // keeps doing so while a tag narrows it, which takes the folder rows off the workspace's own list.
+  // A folder's page, by its page alone: it reads the listing with the folder named, as long as no tag narrows
+  // it; under a tag it pages the tag's list and shows the sessions filed in the folder.
   const onFolderPage = !listProjectId && !onScheduledRuns && !!folderParam;
   const foldersShown = !onScheduledRuns && listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
   const projectScope = `${runner.id}:${scopeWorkspaceId}:${effectiveView}:${tagFilter ?? ''}`;
@@ -3288,6 +3724,13 @@ export function WorkspaceView({
   });
   const projectsShown = !onScheduledRuns && listShowsProjects(effectiveView, listByTag) &&
     ((projectsQ.data?.length ?? 0) > 0 || membershipScope === projectScope);
+  // A workspace's list that shows folders or projects, and a folder's page, read `GET /sessions/listing` a
+  // page at a time (docs/session-list-scale-design.md §3): the server groups it, so no read is the whole
+  // Open list. Trash, a tag's list and Scheduled runs keep the flat `GET /sessions` read.
+  const listingRead = !!scopeWorkspaceId && !listProjectId && !onScheduledRuns && !listByTag &&
+    effectiveView !== 'trash' && (foldersShown || projectsShown || onFolderPage);
+  const listingView: 'open' | 'completed' = effectiveView === 'completed' ? 'completed' : 'open';
+  const listingFolderId = onFolderPage ? (routeId(folderParam) ?? null) : null;
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({
@@ -3295,8 +3738,11 @@ export function WorkspaceView({
     workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
-    limit: scopeWorkspaceId && (foldersShown || projectsShown || onScheduledRuns || onFolderPage) ? null : sessionLimit,
+    limit: scopeWorkspaceId && onScheduledRuns ? null : sessionLimit,
     scheduled: onScheduledRuns,
+  });
+  const listingOpts = sessionListingQuery({
+    runnerId: runner.id, workspaceId: scopeWorkspaceId, view: listingView, folderId: listingFolderId,
   });
   const sessionsKey = sessionsOpts.queryKey;
   // While the control-plane stream is connected it re-reads the list on every event that touches
@@ -3314,9 +3760,9 @@ export function WorkspaceView({
       return qc.invalidateQueries({ queryKey: ['session', id], exact: true });
     },
   });
-  const sessionsQ = useQuery({
+  const flatSessionsQ = useQuery({
     ...sessionsOpts,
-    enabled: !listProjectId,
+    enabled: !listProjectId && !listingRead,
     refetchInterval: listProjectId ? false : (query) => listPollMs(controlLive, query),
     // Widening the window re-keys the query, so hold the rows already on screen while the
     // larger page loads instead of blanking the list. Only within one scope (every key part
@@ -3328,6 +3774,25 @@ export function WorkspaceView({
       return prev;
     },
   });
+  // The listing's pages, read as the flat list is: on the stream's hint for its workspace or the list
+  // budget's safety read (queries.ts sessionListingQuery); the next page as the column nears its end.
+  const listingQ = useInfiniteQuery({
+    ...listingOpts,
+    enabled: listingRead,
+    refetchInterval: (query) => listPollMs(controlLive, query),
+  });
+  const listingSessions = useMemo(() => (listingQ.data ? listingRows(listingQ.data) : undefined), [listingQ.data]);
+  // The rows the list holds, from whichever read it is: a listing's are its session entries and its projects'
+  // coordinators.
+  const sessionsQ = listingRead
+    ? {
+        data: listingSessions,
+        isSuccess: listingQ.isSuccess,
+        isPending: listingQ.isPending,
+        isPlaceholderData: listingQ.isPlaceholderData,
+        isFetching: listingQ.isFetching,
+      }
+    : flatSessionsQ;
   useEffect(() => {
     if (sessionsQ.data?.some((s) => s.projectMembership)) setMembershipScope(projectScope);
   }, [sessionsQ.data, projectScope]);
@@ -3474,6 +3939,10 @@ export function WorkspaceView({
             : undefined,
       }
     : null;
+  // The same merged row for the session list, one object while neither its list row nor its detail changes:
+  // the list redraws the open conversation's row when that row changed, not on every render of this view.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedSession is made of these two alone
+  const listedSelection = useMemo(() => selectedSession, [selected, detailForSelected]);
   // What this conversation is waiting on, when a watch is what will bring it back: the same read the
   // Watching strip above the composer makes (one cache entry between them), so the header's word and
   // the strip under it cannot disagree about the same wait.
@@ -3724,9 +4193,20 @@ export function WorkspaceView({
   // Other workspaces may contain only workers. Read the project's words across workspaces,
   // keeping this view's activity and folder count scoped to its own members. From the list's first
   // frame, not a render later when `projectsShown` catches up: the landing waits on these reads.
+  // The listing's pages, as long as they are the workspace's the route names: in the frame before the scope
+  // catches up with a switch, the last workspace's must not stand in for this one's (the filter above, for a
+  // flat list).
+  const listingPages = listingRead
+    ? (!resolvedWorkspaceId || resolvedWorkspaceId === scopeWorkspaceId ? listingQ.data?.pages ?? NO_LISTING_PAGES : NO_LISTING_PAGES)
+    : null;
+  // A listing's project entries are placed by this read too, a project with no coordinator included, which no
+  // row of the list names.
+  const listingProjectIds = useMemo(() => (listingPages ?? []).flatMap((page) =>
+    page.entries.flatMap((entry) => entry.kind === 'project' ? [entry.projectId] : [])), [listingPages]);
   const projectData = useSessionProjectData({
     sessions: visibleSessions, view: effectiveView, enabled: listShowsProjects(effectiveView, listByTag) && !listProjectId,
     controlLive,
+    projectIds: listingProjectIds,
   });
   // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
   // read ever sees one (§2.9 LS6). `priority`: the page is waiting on these two, so they do not
@@ -3892,10 +4372,24 @@ export function WorkspaceView({
   useEffect(() => {
     if (resolvedWorkspaceId && !listProjectId) rememberListFolder(resolvedWorkspaceId, folderParam);
   }, [resolvedWorkspaceId, listProjectId, folderParam]);
-  // A clone frame moves a held row's percentage (sessionLine), which the listing below has to redraw for.
-  const cloneHeardVersion = useCloneHeardVersion();
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
+  // This is the list's shape: which rows there are and where. It reads no watch, no clone frame and
+  // not the open conversation's fresher detail, so a frame of any of them leaves it as it is; what a
+  // row says about them is the row's own to work out when it is drawn (SessionEntryRow), and the
+  // folder and project rows' live readings are `liveListing`'s below.
+  const listingOptions = useMemo(() => ({
+    view: effectiveView,
+    byTag: listByTag,
+    folderId: openFolder?.id,
+    coordinators: projectData.coordinators,
+    workspaceId: resolvedWorkspaceId,
+    contentSessions: projectData.contentSessions,
+    sessionCounts: projectData.sessionCounts,
+    runnerOffline: runner.online === false,
+    needsYou: sessionNeedsYou,
+  }), [effectiveView, listByTag, openFolder?.id, projectData.coordinators, resolvedWorkspaceId, projectData.contentSessions,
+    projectData.sessionCounts, runner.online]);
   const folderListing = useMemo(
     () => openFolder && listByTag
       // Narrowed or grouped by a tag, a folder's page is its sessions flat, as the workspace's list is
@@ -3905,24 +4399,66 @@ export function WorkspaceView({
           return { folders: [], projects: [], sessions: inside,
             entries: inside.map((session): SessionProjectEntry<SessionListItem> => ({ ...session, kind: 'session' })) };
         })()
+      // Read a page at a time, the list is the server's entries and folder tallies (lib/sessionListing).
+      : listingPages
+        ? sessionListingView(listingPages, workspaceFolders, projectsQ.data ?? [], {
+            ...listingOptions,
+            view: listingView,
+            folderId: listingFolderId,
+            motion: (s) => statusGlyphMotion(s),
+            line: (s) => sessionLine(s, effectiveView !== 'trash', null, recapsEnabled, runnerShownName),
+          })
       : sessionProjectListing(visibleSessions, workspaceFolders, projectsQ.data ?? [], {
-      view: effectiveView,
-      byTag: listByTag,
-      folderId: openFolder?.id,
-      coordinators: projectData.coordinators,
-      workspaceId: resolvedWorkspaceId,
-      contentSessions: projectData.contentSessions,
-      sessionCounts: projectData.sessionCounts,
-      runnerOffline: runner.online === false,
-      needsYou: sessionNeedsYou,
-      motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
-      line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
-        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, runnerShownName),
+      ...listingOptions,
+      motion: (s) => statusGlyphMotion(s),
+      line: (s) => sessionLine(s, effectiveView !== 'trash', null, recapsEnabled, runnerShownName),
     }),
-    [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      projectData.sessionCounts, effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
-      resolvedWorkspaceId, cloneHeardVersion],
+    [openFolder, listByTag, listingPages, listingView, listingFolderId, visibleSessions, workspaceFolders, projectsQ.data,
+      listingOptions, effectiveView, recapsEnabled, runnerShownName],
   );
+  // The folder rows and project rows as they read now. A folder row's dots and a project row's line
+  // speak for the sessions in them, watches, clone frames and the open conversation's detail included,
+  // so these are worked out again on each of those — over the sessions filed in a folder or held by a
+  // project alone, which are all these rows read. A row that reads as it did keeps its object, so a
+  // frame redraws only the rows it changed.
+  const cloneHeardVersion = useCloneHeardVersion();
+  const filedSessions = useMemo(() => {
+    const folders = new Set(workspaceFolders.map((f) => f.id));
+    return visibleSessions.filter((s) => !!s.projectMembership || (!!s.folderId && folders.has(s.folderId)));
+  }, [visibleSessions, workspaceFolders]);
+  const liveRows = useRef<{ folders: Map<string, SessionFolderRow>; projects: Map<string, SessionProjectEntry<SessionListItem>> }>(
+    { folders: new Map(), projects: new Map() });
+  const liveListing = useMemo(() => {
+    if (openFolder && listByTag) return { folders: [] as SessionFolderRow[], projects: new Map<string, SessionProjectEntry<SessionListItem>>() };
+    const liveReadings = {
+      motion: (s: SessionListItem) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
+      line: (s: SessionListItem) => sessionLine(listedSelection?.id === s.id ? listedSelection : s,
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, runnerShownName),
+    };
+    // Read a page at a time, a folder row reads the server's tallies, and a project row the members the list
+    // knows of (lib/sessionListing).
+    const listingLive = listingPages && { ...listingOptions, ...liveReadings, view: listingView, folderId: listingFolderId };
+    const live = listingLive
+      ? {
+          folders: listingFolderRows(listingPages, workspaceFolders, listingLive),
+          projects: listingProjectRows(listingPages, projectsQ.data ?? [], listingLive),
+        }
+      : sessionProjectListing(filedSessions, workspaceFolders, projectsQ.data ?? [], { ...listingOptions, ...liveReadings });
+    const before = liveRows.current;
+    const folders = live.folders.map((row) => {
+      const prev = before.folders.get(row.folder.id);
+      return prev && prev.folder === row.folder && prev.sessionCount === row.sessionCount && prev.needsYou === row.needsYou &&
+        prev.running === row.running && prev.jobs === row.jobs ? prev : row;
+    });
+    const projects = new Map(live.projects.map((row) => {
+      const prev = before.projects.get(row.projectId);
+      const next = { ...row, kind: 'project' as const };
+      return [row.projectId, prev && sameProjectRow(prev, next) ? prev : next] as const;
+    }));
+    liveRows.current = { folders: new Map(folders.map((row) => [row.folder.id, row])), projects };
+    return { folders, projects };
+  }, [openFolder, listByTag, listingPages, listingView, listingFolderId, filedSessions, workspaceFolders, projectsQ.data,
+    listingOptions, watchingBySession, listedSelection, effectiveView, recapsEnabled, runnerShownName, cloneHeardVersion]);
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
   // for the coordinator; one with no coordinator is passed over, as a folder row is.
   const listedSessions = useMemo(
@@ -3994,18 +4530,25 @@ export function WorkspaceView({
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
-  const hasMoreSessions = !listProjectId && !foldersShown && !projectsShown && !onFolderPage &&
-    (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  // Nothing to list: no session, or, read a page at a time, no entry and no session in a folder either.
+  const listEmpty = listingRead
+    ? folderListing.entries.length === 0 && folderListing.folders.every((row) => row.sessionCount === 0)
+    : visibleSessions.length === 0;
+  // A listing says so itself: its last page's `next`.
+  const hasMoreSessions = listingRead ? listingQ.hasNextPage
+    : !listProjectId && (sessionsQ.data?.length ?? 0) >= sessionLimit;
   // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
   // flash anything over rows that are already correct.
   const loadingProjectSessions = projectSessionsQ.isPending || completedProjectSessionsQ.isPending;
   const loadingSessions = listProjectId ? loadingProjectSessions : sessionsQ.isPending || sessionsQ.isPlaceholderData;
+  const fetchNextListingPage = listingQ.fetchNextPage;
   const loadMoreSessions = useCallback(() => {
     if (!hasMoreSessions || sessionsQ.isFetching) return;
-    setSessionLimit((n) => n + SESSION_PAGE_SIZE);
-  }, [hasMoreSessions, sessionsQ.isFetching]);
+    if (listingRead) void fetchNextListingPage();
+    else setSessionLimit((n) => n + SESSION_PAGE_SIZE);
+  }, [hasMoreSessions, sessionsQ.isFetching, listingRead, fetchNextListingPage]);
   // A new scope starts at one page again: a window grown by scrolling deep into one workspace's
   // history must not make the next workspace (or view, or tag) fetch just as deep.
   useEffect(() => {
@@ -4014,19 +4557,29 @@ export function WorkspaceView({
   // The server pages what the column shows, but a frame where the client narrows further (an
   // workspace that hasn't resolved into the query yet) can hold too few visible rows to be
   // scrollable — and without a scroll there is nothing to trigger the next page. Top it up here.
+  // A listing counts its entries (a project is one), and a folder's page under a tag the sessions filed in it,
+  // which a page of the tag's list may hold few of.
+  const shownCount = listingRead ? listingEntryCount(listingQ.data)
+    : openFolder && listByTag ? folderListing.entries.length : visibleSessions.length;
   useEffect(() => {
-    if (visibleSessions.length >= SESSION_PAGE_SIZE) return;
+    if (shownCount >= SESSION_PAGE_SIZE) return;
     loadMoreSessions();
-  }, [visibleSessions.length, loadMoreSessions]);
-  // Widen the window as the list nears its end, so scrolling reads as one continuous list.
-  const onSessionListScroll = useCallback(
-    (e: React.UIEvent<HTMLDivElement>) => {
-      const el = e.currentTarget;
-      if (el.scrollHeight - el.scrollTop - el.clientHeight > SESSION_LOAD_MORE_PX) return;
-      loadMoreSessions();
-    },
-    [loadMoreSessions],
-  );
+  }, [shownCount, loadMoreSessions]);
+  // Widen the window as the list nears its end, so scrolling reads as one continuous list. The column
+  // mounts only the rows near the viewport (SessionListWindow), so it is the last row in view that says
+  // how near the end the scroll is.
+  const listWindowRef = useRef<SessionListWindowHandle>(null);
+  const listItemCount = useRef(0);
+  const onSessionListScroll = useCallback((last: number) => {
+    if (listItemCount.current - 1 - last > SESSION_LOAD_MORE_ROWS) return;
+    loadMoreSessions();
+  }, [loadMoreSessions]);
+  // Another workspace, view, page or tag starts at the top of its list: the column is the same element,
+  // which would otherwise keep the last list's scroll.
+  const listScope = `${scopeWorkspaceId}|${effectiveView}|${folderParam}|${listProjectId}|${tagFilter}|${groupByTag}`;
+  useEffect(() => {
+    listWindowRef.current?.scrollToOffset(0);
+  }, [listScope]);
 
   // The list's sections. Recency by default (Pinned / Today / Yesterday / …), or one section per
   // tag when the user switches grouping — both from the pure groupers shared in shape with
@@ -4074,6 +4627,24 @@ export function WorkspaceView({
     [openProjectId, pageCoordinator, projectMembers, landingsSummary],
   );
   const sections = listProjectId ? projectSections : workspaceSections;
+  // What the session column draws, in its order, as one list the window mounts a part of
+  // (SessionListWindow): the top block (a terminal's Needs you row, a project page's cards, the empty
+  // note), the Scheduled runs row, the folder rows with an open name field in its place, then each
+  // section's heading and rows.
+  const hasScheduledRuns = scheduledRuns.length > 0;
+  const folderEditId = folderEdit ? folderEdit.id : undefined;
+  const listItems = useMemo<ColumnItem[]>(() => [
+    { kind: 'top', key: 'top' },
+    ...(!listProjectId && !openFolder && !onScheduledRuns && hasScheduledRuns
+      ? [{ kind: 'scheduled' as const, key: 'scheduled-runs' }] : []),
+    ...(!listProjectId && !openFolder && folderEditId === null
+      ? [{ kind: 'folder-edit' as const, key: 'new-folder', folderId: null }] : []),
+    ...(!listProjectId && !onScheduledRuns ? liveListing.folders.map((row): ColumnItem => folderEditId === row.folder.id
+      ? { kind: 'folder-edit', key: `folder:${row.folder.id}`, folderId: row.folder.id }
+      : { kind: 'folder', key: `folder:${row.folder.id}`, row }) : []),
+    ...sectionItems(sections, !!listProjectId, !!landingsSummary),
+  ], [listProjectId, openFolder, onScheduledRuns, hasScheduledRuns, folderEditId, liveListing.folders, sections, landingsSummary]);
+  listItemCount.current = listItems.length;
   // Beside a conversation of the project, or its Landings window; never over a new session's draft.
   const showProjectColumn = !!columnProjectId && (!!selectedId || !!landingsProjectId);
   // Folded by hand, the column hides and its project page stays, so the title bar's button brings it back.
@@ -4234,15 +4805,28 @@ export function WorkspaceView({
     sessionItemPath,
   ]);
 
+  // The session ↑ / ↓ step from: the one a navigation's commit drew as open, then each one a key chose after
+  // it. <BrowserRouter> commits a navigation in a transition, so a repeating key arrives before the render of
+  // the step before it — and a commit can still be drawing an entry the browser has already left, which is not
+  // read back. Nor is any render but a navigation's: it still draws the row the key left.
+  const locationKey = useLocation().key;
+  const stepFrom = useRef(selectedId);
+  useLayoutEffect(() => {
+    const entry = (window.history.state as { key?: string } | null)?.key;
+    if (entry && entry !== locationKey) return;
+    stepFrom.current = selectedId;
+  }, [selectedId, locationKey]);
+
   // Step the open session up/down the visible list, for the window-level Up/Down handler
   // below. Returns false (a no-op) at the list ends, on an empty list, or on the trash
   // view with nothing open. With nothing selected, Down enters from the top, Up from
   // the bottom.
   const stepSession = useCallback(
     (dir: 1 | -1): boolean => {
-      if (!selectedId && view === 'trash') return false;
+      const from = stepFrom.current;
+      if (!from && view === 'trash') return false;
       if (orderedSessions.length === 0) return false;
-      const cur = orderedSessions.findIndex((s) => s.id === selectedId);
+      const cur = orderedSessions.findIndex((s) => s.id === from);
       let next: number;
       if (cur === -1) next = dir === 1 ? 0 : orderedSessions.length - 1;
       else {
@@ -4254,17 +4838,20 @@ export function WorkspaceView({
       // the row's click does, even with none open (owner 2026-11-14).
       const rowProjectId = isMobile ? undefined : listedCoordinatorProjects.get(target.id);
       if (rowProjectId) carryProjectPage(rowProjectId);
+      stepFrom.current = target.id;
       navigate(sessionItemPath(target));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects],
+    [orderedSessions, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
   // session like tabs. Skipped while typing in an input/textarea (so the composer and
-  // Ant dropdowns keep their own arrows).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
+  // Ant dropdowns keep their own arrows). The window listener is added once and calls
+  // the handler of the last commit.
+  const onArrowKey = useRef<(e: KeyboardEvent) => void>(() => {});
+  useLayoutEffect(() => {
+    onArrowKey.current = (e) => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       if (menuOpenId || e.defaultPrevented) return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -4276,18 +4863,55 @@ export function WorkspaceView({
         return;
       if (stepSession(e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault();
     };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => onArrowKey.current(e);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpenId, stepSession]);
+  }, []);
 
   // Keep the highlighted row in view when arrowing through a long list, and keyboard focus on it when
-  // focus was on a row: ↑ / ↓ from a focused row carry the focus with the selection.
+  // focus was on a row: ↑ / ↓ from a focused row carry the focus with the selection. The column mounts
+  // only the rows near the viewport, so a row further off is scrolled to by its item first, and found
+  // once the window has drawn it.
+  const listItemsNow = useRef(listItems);
+  listItemsNow.current = listItems;
+  // A row's focus still on its way to the open one: a key repeating faster than the window draws takes the
+  // next step after the row the focus was on has gone, and before the one it was headed for has it.
+  const focusOwed = useRef(false);
   useEffect(() => {
-    const active = listRef.current?.querySelector<HTMLElement>('.session-row.active');
-    active?.scrollIntoView({ block: 'nearest' });
+    const list = listRef.current;
+    if (!list) return;
     const focused = document.activeElement;
-    if (active && focused !== active && focused instanceof HTMLElement && focused.classList.contains('session-row') &&
-      listRef.current?.contains(focused)) active.focus({ preventScroll: true });
+    const rowFocused = (focused instanceof HTMLElement && focused.classList.contains('session-row') && list.contains(focused))
+      || (focusOwed.current && focused === document.body);
+    focusOwed.current = false;
+    const reveal = (): boolean => {
+      const active = list.querySelector<HTMLElement>('.session-row.active');
+      if (!active) return false;
+      active.scrollIntoView({ block: 'nearest' });
+      if (rowFocused && document.activeElement !== active) active.focus({ preventScroll: true });
+      return true;
+    };
+    if (reveal() || !selectedId) return;
+    const holds = (entry: SessionProjectEntry<SessionListItem>): boolean => entry.id === selectedId ||
+      (entry.kind === 'project' && (entry.coordinator?.id === selectedId || entry.members.some((m) => m.id === selectedId)));
+    const index = listItemsNow.current.findIndex((item) => item.kind === 'entry' ? holds(item.entry)
+      : item.kind === 'coordinator' && item.section.sessions.some(holds));
+    if (index < 0) return;
+    focusOwed.current = rowFocused;
+    listWindowRef.current?.scrollToIndex(index);
+    let frame = 0;
+    let tries = 0;
+    const retry = (): void => {
+      if (reveal() || (tries += 1) > 10) {
+        focusOwed.current = false;
+        return;
+      }
+      frame = requestAnimationFrame(retry);
+    };
+    frame = requestAnimationFrame(retry);
+    return () => cancelAnimationFrame(frame);
   }, [selectedId]);
 
   // Workspaces belonging to this machine runner — each is a project dir + coding tool.
@@ -6999,6 +7623,7 @@ export function WorkspaceView({
     qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
     );
+    patchListings(qc, (row) => (row.id === id ? null : row));
     void qc.cancelQueries({ queryKey: ['sessions'], fetchStatus: 'fetching' });
     qc.setQueriesData<any[]>({ queryKey: ['project-sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
@@ -7030,6 +7655,7 @@ export function WorkspaceView({
     onSuccess: (_d, { projectId, memberIds }) => {
       if (selectedId && memberIds.includes(selectedId)) leaveIfOpen(selectedId);
       memberIds.forEach((id) => dropFromLists(id, projectId));
+      dropProjectFromListings(qc, projectId);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: (e: Error) => message.error("Couldn't complete the project's sessions", e.message),
@@ -7280,6 +7906,7 @@ export function WorkspaceView({
         Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, title } : s)) : old;
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, patch);
       qc.setQueriesData<any[]>({ queryKey: ['project-sessions'] }, patch);
+      patchListings(qc, (row) => (row.id === id ? { ...row, title } : row));
     },
     onError: (e: Error) => message.error("Couldn't rename the session", e.message),
     onSettled: () => {
@@ -7301,6 +7928,7 @@ export function WorkspaceView({
           : old;
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, patch);
       if (projectId) qc.setQueriesData<any[]>({ queryKey: ['project-sessions', projectId] }, patch);
+      patchListings(qc, (row) => (row.id === id ? { ...row, pinnedAt: pin ? new Date().toISOString() : null } : row));
     },
     onError: (e: Error, { pin }) =>
       message.error(pin ? "Couldn't pin the session" : "Couldn't unpin the session", e.message),
@@ -7333,6 +7961,7 @@ export function WorkspaceView({
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
         Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, tags } : s)) : old,
       );
+      patchListings(qc, (row) => (row.id === id ? { ...row, tags } : row));
       qc.setQueryData<any>(['session', id], (old: any) => (old ? { ...old, tags } : old));
       return { previousLists, previousDetail };
     },
@@ -7340,6 +7969,7 @@ export function WorkspaceView({
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
         Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, tags } : s)) : old,
       );
+      patchListings(qc, (row) => (row.id === id ? { ...row, tags } : row));
       qc.setQueryData<any>(['session', id], (old: any) => (old ? { ...old, tags } : old));
     },
     onError: (e: Error, { id }, context) => {
@@ -7693,10 +8323,19 @@ export function WorkspaceView({
       qc.setQueryData<any[]>(sessionsKey, (old) =>
         (old ?? []).map((s) => (s.id === selected!.id ? { ...s, ...cfg } : s)),
       );
-      return { prev };
+      // The listing the column reads, when it is read a page at a time.
+      const listingKey = listingOpts.queryKey;
+      const prevListing = qc.getQueryData(listingKey);
+      if (prevListing) {
+        await qc.cancelQueries({ queryKey: listingKey });
+        qc.setQueryData(listingKey, patchListingRows(prevListing, (row) =>
+          (row.id === selected!.id ? { ...row, ...cfg } as typeof row : row)) as typeof prevListing);
+      }
+      return { prev, prevListing, listingKey };
     },
     onError: (e: Error, cfg, ctx) => {
       if (ctx?.prev) qc.setQueryData(sessionsKey, ctx.prev);
+      if (ctx?.prevListing) qc.setQueryData(ctx.listingKey, ctx.prevListing);
       // Named by what was picked: a provider switch carries the model, mode and effort that follow
       // it, and a model switch its mode and effort.
       message.error(
@@ -9201,6 +9840,7 @@ export function WorkspaceView({
         qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
           Array.isArray(old) ? old.map((s) => (s.folderId === folder.id ? { ...s, folderId: null } : s)) : old,
         );
+        patchListings(qc, (row) => (row.folderId === folder.id ? { ...row, folderId: null } : row));
         void qc.invalidateQueries({ queryKey: ['session-folders'] });
         refreshSessionLists();
         if (openFolder?.id === folder.id) leaveFolder(true);
@@ -10499,26 +11139,19 @@ export function WorkspaceView({
       </div>
     )
   );
-  // The list's state and gestures as every row reads them (SessionListRow): a session's row and a
-  // project's alike.
-  const rowController: SessionRowController = {
-    touch: isMobile,
-    menuOpenId,
-    onMenuOpenChange: (id, open) => {
-      setMenuOpenId((current) => open ? id : current === id ? null : current);
-      if (open) setSwipeOpen(null);
-    },
-    closeMenu: () => setMenuOpenId(null),
-    pressMenu,
-    closePressMenu: () => setPressMenu(null),
-    swipeState: (id, widths) => {
-      const drag = swipeDrag?.id === id ? swipeDrag : null;
-      return {
-        offset: drag ? drag.dx : restingOffset(swipeOpen?.id === id ? swipeOpen.side : null, widths),
-        dragging: !!drag,
-        armed: !!drag?.armed,
-      };
-    },
+  // The list's gestures as every row reads them (SessionListRow): a session's row and a project's alike.
+  // One object for the list's life, whose functions are this render's, so handing it to a row never
+  // redraws the row; what of the list's state is a row's own goes to that row as props.
+  const rowFns = useRef({
+    takeClick: (): boolean => true,
+    touchStart: onRowTouchStart,
+    touchMove: onRowTouchMove,
+    touchEnd: onRowTouchEnd,
+    touchCancel: onRowTouchCancel,
+    startDrag: startSessionDrag,
+    endDrag: endSessionDrag,
+  });
+  rowFns.current = {
     takeClick: () => {
       if (swipeClickGuard.current) {
         swipeClickGuard.current = false;
@@ -10535,336 +11168,215 @@ export function WorkspaceView({
     touchMove: onRowTouchMove,
     touchEnd: onRowTouchEnd,
     touchCancel: onRowTouchCancel,
+    startDrag: startSessionDrag,
+    endDrag: endSessionDrag,
+  };
+  const rowController = useMemo<SessionRowController>(() => ({
+    touch: isMobile,
+    onMenuOpenChange: (id, open) => {
+      setMenuOpenId((current) => open ? id : current === id ? null : current);
+      if (open) setSwipeOpen(null);
+    },
+    closeMenu: () => setMenuOpenId(null),
+    closePressMenu: () => setPressMenu(null),
+    takeClick: () => rowFns.current.takeClick(),
+    touchStart: (e, id, swipe) => rowFns.current.touchStart(e, id, swipe),
+    touchMove: (e) => rowFns.current.touchMove(e),
+    touchEnd: (e) => rowFns.current.touchEnd(e),
+    touchCancel: () => rowFns.current.touchCancel(),
     kebabRef: (id) => (node) => {
       if (node) rowKebabs.current.set(id, node);
       else rowKebabs.current.delete(id);
     },
     kebab: (id) => rowKebabs.current.get(id) ?? null,
-    draggingId: draggedSession?.id ?? null,
-    startDrag: startSessionDrag,
-    endDrag: endSessionDrag,
+    startDrag: (e, subject) => rowFns.current.startDrag(e, subject),
+    endDrag: () => rowFns.current.endDrag(),
+  }), [isMobile]);
+  // What a row asks the list to do, as this render's functions (SessionListActions).
+  const listActions = useRef<SessionListActions>(null!);
+  listActions.current = {
+    swipe: runSwipeAction,
+    rename: (id, kebab) => afterMenu(kebab, () => setRenamingId(id)),
+    renamed: (id, title) => {
+      setRenamingId(null);
+      if (title) renameMut.mutate({ id, title });
+    },
+    openSession: (session, page) => {
+      // Picked in the phone's sheet: the sheet closes and the conversation turns into the member,
+      // in the open conversation's place, so ← still returns to the list behind it (board 5).
+      if (page && sheetProjectId) {
+        setSheetProjectId(null);
+        navigate(sessionItemPath(session), { replace: true, state: window.history.state?.usr });
+        return;
+      }
+      navigateWithPaneSlide('push', () =>
+        navigate(sessionItemPath(session), { state: stampFromList() }),
+      );
+    },
+    projectSessions: enterProjectSessions,
+    openProject: (projectId) => navigate(`/projects/${encodeId(projectId)}`),
+    // The menu's Open Session: the session the row's second line is about (§4.3).
+    openTarget: (row) => {
+      if (row.target.kind === 'project') enterProjectSessions(row.target.id);
+      else navigateWithPaneSlide('push', () =>
+        navigate(sessionItemPath(row.target), { state: stampFromList() }));
+    },
+    openProjectRow: (row, coordinatorId) => {
+      // A phone opens the coordinator's conversation itself, with no push into the project's
+      // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
+      // A row whose line says a member is waiting on you opens that member instead, at its
+      // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting) — and the
+      // coordinator itself, waiting on you with a question, opens at that card too
+      // (owner 2026-11-16, docs/mocks/coordinator-question-jump).
+      const waiting = row.line.tone === 'approval' && row.target.kind === 'session'
+        ? row.target.id : null;
+      const opens = waiting ?? coordinatorId;
+      setWaitingReveal(waiting);
+      if (isMobile) navigateWithPaneSlide('push', () =>
+        navigate(sessionPath(opens), { state: stampFromList() }));
+      else enterProjectSessions(row.projectId, opens);
+    },
+    completeProject: (row) => completeProjectMut.mutate({ projectId: row.projectId, memberIds: row.members.map((m: any) => m.id) }),
+    projectState: (row, action) => {
+      if (action === 'complete') completeProjectMut.mutate({ projectId: row.projectId, memberIds: row.members.map((m: any) => m.id) });
+      else projectPauseMut.mutate({ projectId: row.projectId, door: action, pause: row.pause, running: row.runningCount });
+    },
   };
-  // One section of the list, or of the project's page (`pageProjectId`), whose rows open with the page
-  // kept in the address.
-  const renderSection = (sec: ListSection, pageProjectId: string | null): ReactNode => (
-    sec.key === 'Landings' && landingsSummary && pageProjectId ? (
-      <SessionProjectLandings key={sec.key} summary={landingsSummary}
-        onOpen={() => navigateWithPaneSlide('push', () => navigate(
-          `/projects/${encodeId(pageProjectId)}/landings`, { state: stampFromList() },
-        ))} />
+  // Each row's swipe as the list holds it, one object per row while it stays as it is.
+  const swipeStates = useMemo(() => {
+    const states = new Map<string, SessionRowSwipeState>();
+    if (swipeOpen) states.set(swipeOpen.id, { drag: null, open: swipeOpen.side });
+    if (swipeDrag) states.set(swipeDrag.id, { drag: { dx: swipeDrag.dx, armed: swipeDrag.armed }, open: states.get(swipeDrag.id)?.open ?? null });
+    return states;
+  }, [swipeOpen, swipeDrag]);
+  // The items the column keeps mounted wherever it is scrolled: its top block, and a row being dragged
+  // (its drag ends on it) or with its menu, its swipe or its Rename… field open.
+  const listKeepMounted = useMemo(() => {
+    const ids = new Set([draggedSession?.id, menuOpenId, pressMenu?.id, renamingId, swipeOpen?.id, swipeDrag?.id]
+      .filter((id): id is string => !!id));
+    const keep = [0];
+    if (ids.size) listItems.forEach((item, i) => {
+      if (item.kind !== 'entry') return;
+      const { entry } = item;
+      if (ids.has(entry.id) || (entry.kind === 'project' && !!entry.coordinator && ids.has(entry.coordinator.id))) keep.push(i);
+    });
+    return keep;
+  }, [listItems, draggedSession?.id, menuOpenId, pressMenu?.id, renamingId, swipeOpen?.id, swipeDrag?.id]);
+  // One row of the list or of a project's page (`pageProjectId`), whose rows open with the page kept in
+  // the address: everything the row reads, each as the same value while it reads the same.
+  const entryRow = (entry: SessionProjectEntry<SessionListItem>, pageProjectId: string | null): ReactNode => {
+    if (entry.kind === 'project') {
+      // The project row as it reads now (`liveListing`), placed where the list's shape put it.
+      const s = (liveListing.projects.get(entry.projectId) ?? entry) as SessionProjectRow<any> & { kind: 'project' };
+      return (
+        <ProjectEntryRow
+          key={s.id}
+          entry={s}
+          active={s.members.some((member) => member.id === selectedId) ||
+            selectedSession?.projectMembership?.projectId === s.projectId}
+          page={!!pageProjectId}
+          view={effectiveView}
+          dropTargets={dropTargetsShown}
+          menuOpen={menuOpenId === s.id}
+          pressAt={pressMenu?.id === s.id ? pressMenu : null}
+          swipeAt={swipeStates.get(s.id) ?? null}
+          dragging={!!s.coordinator && draggedSession?.id === s.coordinator.id}
+          rows={rowController}
+          actions={listActions}
+        />
+      );
+    }
+    const watching = sessionWatching(watchingBySession, entry.id);
+    return (
+      <SessionEntryRow
+        key={entry.id}
+        entry={entry}
+        detail={listedSelection?.id === entry.id ? listedSelection : null}
+        listView={rowView}
+        page={!!pageProjectId}
+        fixing={!!pageProjectId && pageFixingSessions.has(entry.id)}
+        watchingWord={watching?.word ?? null}
+        watchingLine={watching?.line ?? null}
+        active={entry.id === selectedId}
+        renaming={renamingId === entry.id}
+        menuOpen={menuOpenId === entry.id}
+        pressAt={pressMenu?.id === entry.id ? pressMenu : null}
+        swipeAt={swipeStates.get(entry.id) ?? null}
+        dragging={draggedSession?.id === entry.id}
+        dropTargets={dropTargetsShown}
+        recaps={recapsEnabled}
+        machine={runnerShownName}
+        hoverTipOpen={hoverTipOpen}
+        rows={rowController}
+        actions={listActions}
+      />
+    );
+  };
+  // A section's heading: the Pinned and Needs you headings fold their rows on the workspace's list.
+  const sectionHead = (sec: ListSection, pageProjectId: string | null): ReactNode =>
+    !pageProjectId && sec.key in FOLD_KEYS ? (
+      <button
+        type="button"
+        className="session-section-head session-section-fold"
+        aria-expanded={!foldedSections.has(sec.key)}
+        onClick={() => toggleFold(sec.key)}
+      >
+        {sec.title}
+        <RightOutlined
+          className={`session-section-chev${foldedSections.has(sec.key) ? '' : ' open'}`}
+          aria-hidden
+        />
+      </button>
     ) : (
-    <section key={sec.key} className={pageProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
-      {!pageProjectId && sec.key in FOLD_KEYS ? (
-        <button
-          type="button"
-          className="session-section-head session-section-fold"
-          aria-expanded={!foldedSections.has(sec.key)}
-          onClick={() => toggleFold(sec.key)}
-        >
-          {sec.title}
-          <RightOutlined
-            className={`session-section-chev${foldedSections.has(sec.key) ? '' : ' open'}`}
-            aria-hidden
-          />
-        </button>
-      ) : (
-        <div className="session-section-head">
-          {sec.tag && (
-            <span className="session-section-dot" style={{ background: sec.tag.color }} />
-          )}
-          {sec.title}
-        </div>
-      )}
-      {sec.sessions.map((s) => {
-        if (s.kind === 'project') {
-          const coordinator = s.coordinator;
-          // The menu's Open Session: the session the row's second line is about (§4.3).
-          const openTarget = () => {
-            if (s.target.kind === 'project') enterProjectSessions(s.target.id);
-            else navigateWithPaneSlide('push', () =>
-              navigate(sessionItemPath(s.target), { state: stampFromList() }));
-          };
-          const stateAction = projectStateAction(s, effectiveView);
-          const completeProject = () => completeProjectMut.mutate({ projectId: s.projectId, memberIds: s.members.map((m: any) => m.id) });
-          const runStateAction = () => {
-            if (stateAction === 'complete') completeProject();
-            else if (stateAction) projectPauseMut.mutate({
-              projectId: s.projectId, door: stateAction, pause: s.pause, running: s.runningCount });
-          };
-          const projectMenu = (close: () => void): MenuItem[] => [
-            // A finished project's row can leave Open: Complete moves its coordinator and
-            // the members still open to Completed (§4.3; board 2026-11-07, part ④).
-            ...(effectiveView === 'open' && (s.status === 'DONE' || s.status === 'CANCELLED') ? [
-              { key: 'complete', icon: <CheckOutlined />, label: SESSION_PROJECT_COPY.complete,
-                onSelect: () => {
-                  close();
-                  completeProjectMut.mutate({ projectId: s.projectId, memberIds: s.members.map((m: any) => m.id) });
-                } },
-              { key: 'divider-complete', type: 'separator' as const },
-            ] : []),
-            { key: 'session', label: SESSION_PROJECT_COPY.openSession, icon: <MessageOutlined />, disabled: s.target.kind !== 'session',
-              onSelect: () => { close(); openTarget(); } },
-            { key: 'sessions', label: SESSION_PROJECT_COPY.sessions, icon: <UnorderedListOutlined />,
-              onSelect: () => { close(); enterProjectSessions(s.projectId, coordinator?.id); } },
-            { key: 'project', label: SESSION_PROJECT_COPY.openProject, icon: <ProjectOutlined />,
-              onSelect: () => { close(); navigate(`/projects/${encodeId(s.projectId)}`); } },
-            { key: 'divider', type: 'separator' },
-            ...(stateAction === 'pause' || stateAction === 'resume' ? [{
-              key: stateAction, label: SESSION_PROJECT_COPY[stateAction],
-              icon: stateAction === 'pause' ? <PauseCircleOutlined /> : <PlayCircleOutlined />,
-              onSelect: () => { close(); runStateAction(); },
-            }] : []),
-            // These two act on the coordinator; with none they are shown and unavailable.
-            { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
-              icon: coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
-              onSelect: () => { close(); if (coordinator) runSwipeAction('pin', coordinator); } },
-            { key: 'move', label: SESSION_PROJECT_COPY.move, icon: <FolderOutlined />, disabled: !coordinator,
-              onSelect: () => { close(); if (coordinator) runSwipeAction('move', coordinator); } },
-          ];
-          // A project with no coordinator has no session behind it: an entry of its own, opening the
-          // project's sessions page as a folder row opens its folder (§4.3–§4.4).
-          if (!coordinator) {
-            return (
-              <SessionProjectOrphanRow
-                key={s.id}
-                project={s}
-                onOpen={() => { setMenuOpenId(null); enterProjectSessions(s.projectId); }}
-                menu={projectMenu(() => setMenuOpenId(null))}
-                menuOpen={menuOpenId === s.id}
-                onMenuOpenChange={(open) => rowController.onMenuOpenChange(s.id, open)}
-              />
-            );
-          }
-          // The project's row is its coordinator's: Pin and Move act on it, and the members follow.
-          return (
-            <SessionListRow
-              key={s.id}
-              rows={rowController}
-              id={s.id}
-              subject={coordinator}
-              title={s.title}
-              className="session-project-row"
-              data={{ 'data-project-id': s.projectId }}
-              active={s.members.some((member) => member.id === selectedId) ||
-                selectedSession?.projectMembership?.projectId === s.projectId}
-              draggable={!pageProjectId && sessionRowDraggable(coordinator, {
-                view: effectiveView, dropTargets: dropTargetsShown, touch: isMobile, renaming: false,
-              })}
-              swipe={{
-                leading: [
-                  ...(stateAction ? [{
-                    action: stateAction, label: SESSION_PROJECT_COPY[stateAction], disabled: false,
-                    icon: stateAction === 'pause' ? <PauseCircleOutlined />
-                      : stateAction === 'resume' ? <PlayCircleOutlined /> : <CheckOutlined />,
-                    run: runStateAction,
-                  }] : []),
-                  {
-                    action: 'pin', label: coordinator.pinnedAt ? 'Unpin' : 'Pin', disabled: false,
-                    icon: coordinator.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />,
-                    run: () => runSwipeAction('pin', coordinator),
-                  },
-                ],
-                trailing: [{ action: 'move', label: 'Move', icon: <FolderOutlined />, disabled: false,
-                  run: () => runSwipeAction('move', coordinator) }],
-                fullSwipe: PROJECT_ROW_FULL_SWIPE,
-              }}
-              menu={projectMenu}
-              menuLabel="Project actions"
-              onOpen={() => {
-                // A phone opens the coordinator's conversation itself, with no push into the project's
-                // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
-                // A row whose line says a member is waiting on you opens that member instead, at its
-                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting) — and the
-                // coordinator itself, waiting on you with a question, opens at that card too
-                // (owner 2026-11-16, docs/mocks/coordinator-question-jump).
-                const waiting = s.line.tone === 'approval' && s.target.kind === 'session'
-                  ? s.target.id : null;
-                const opens = waiting ?? coordinator.id;
-                setWaitingReveal(waiting);
-                if (isMobile) navigateWithPaneSlide('push', () =>
-                  navigate(sessionPath(opens), { state: stampFromList() }));
-                else enterProjectSessions(s.projectId, opens);
-              }}
-            >
-              <SessionProjectRowContent project={s} />
-            </SessionListRow>
-          );
-        }
-        const actionSession = selectedSession?.id === s.id ? selectedSession : s;
-        const memberView = sessionRowView(actionSession, !!pageProjectId);
-        // A member whose project has no row here is a row of its own, filed by its own folder
-        // (owner 2026-11-07).
-        const mark = s.projectMark;
-        const movable = sessionMovable(s) || !!mark;
-        const swipeActions = sessionSwipeActions(memberView, movable);
-        const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
-        const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
-        // Open and Completed rows open their transcript; only
-        // Trash rows stay closed.
-        const openable = memberView !== 'trash';
-        // The selected row may have a fresher detail payload than the list poll. Use the
-        // merged row for both status surfaces so the banner and its list warning point at
-        // the same canonical obligation during that refresh gap.
-        const watching = sessionWatching(watchingBySession, s.id);
-        const ownLine = sessionLine(actionSession, openable, watching, recapsEnabled, runnerShownName);
-        // A task session fixing its own failed landing says so on the project's page (web a ③).
-        const line = pageProjectId && pageFixingSessions.has(s.id)
-          ? { ...ownLine, text: LANDING_FIX_COPY.SESSION_ROW_LINE, tone: 'preview' as const, hint: LANDING_FIX_COPY.SESSION_ROW_LINE }
-          : ownLine;
-        // As on iOS, a full swipe runs the leading edge's first action only when it can run.
-        const canFullSwipe = memberView === 'open' ? canCompleteRow : canRestoreRow;
-        const swipeButtons = {
-          complete: { label: 'Complete', icon: <CheckOutlined />, disabled: !canCompleteRow },
-          restore: { label: 'Move to Open', icon: <UndoOutlined />, disabled: !canRestoreRow },
-          pin: s.pinnedAt
-            ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
-            : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
-          share: { label: 'Share', icon: <ExportOutlined />, disabled: false },
-          move: { label: 'Move', icon: <FolderOutlined />, disabled: false },
-          delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
-          purge: { label: 'Delete Permanently', icon: <DeleteOutlined />, disabled: false },
-        };
-        const swipeButton = (action: SwipeAction): SessionRowSwipeButton => ({
-          action, ...swipeButtons[action], run: () => runSwipeAction(action, s),
-        });
-        // `close` closes the menu the item is in: the row's ⋯ menu or the one a held press opens;
-        // `kebab` reads that ⋯ when the item is picked.
-        const menuItem = (action: SwipeAction, close: () => void, kebab?: () => HTMLElement | null): MenuItem => ({
-          key: action,
-          icon: swipeButtons[action].icon,
-          disabled: swipeButtons[action].disabled,
-          danger: action === 'delete' || action === 'purge',
-          label: action === 'complete' ? (
-            <div className="session-menu-label">
-              <span>Complete</span>
-              <kbd>{COMPLETE_SESSION_HINT}</kbd>
-            </div>
-          ) : action === 'move' ? MOVE_COPY.action
-            : action === 'share' ? 'Share…'
-              : action === 'purge' ? 'Delete Permanently…'
-                : swipeButtons[action].label,
-          title: action === 'complete'
-            ? !canCompleteRow ? 'Complete unavailable right now'
-              : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
-            : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
-          // The menu stops its own clicks before they reach the row, which would open it.
-          onSelect: () => {
-            close();
-            runSwipeAction(action, s, kebab && { current: kebab() });
-          },
-        });
-        // Rename… opens a field rather than acting, so it is no swipe action (as on iOS) and
-        // sits with the other … items. A trashed session's title isn't edited (the header's
-        // isn't either).
-        const menuItems = (close: () => void, kebab?: () => HTMLElement | null): MenuItem[] =>
-          memberView === 'trash'
-            ? [menuItem('restore', close), { key: 'divider', type: 'separator' }, menuItem('purge', close, kebab)]
-            : [
-                ...swipeActions.leading.map((action) => menuItem(action, close, kebab)),
-                { key: 'divider', type: 'separator' },
-                { key: 'rename', icon: <EditOutlined />, label: 'Rename…', onSelect: () => {
-                  close();
-                  afterMenu(kebab?.(), () => setRenamingId(s.id));
-                } },
-                menuItem('share', close),
-                ...(movable ? [menuItem('move', close)] : []),
-                { key: 'divider-delete', type: 'separator' },
-                menuItem('delete', close, kebab),
-              ];
-        const renaming = renamingId === s.id;
+      <div className="session-section-head">
+        {sec.tag && (
+          <span className="session-section-dot" style={{ background: sec.tag.color }} />
+        )}
+        {sec.title}
+      </div>
+    );
+  // One item of the column (ColumnItem), or of a project's page (`pageProjectId`); `top` is the column's
+  // top block.
+  const columnItem = (item: ColumnItem, pageProjectId: string | null, top: () => ReactNode): ReactNode => {
+    switch (item.kind) {
+      case 'top':
+        return <div className="session-list-top">{top()}</div>;
+      case 'scheduled':
+        return scheduledRunsRowView();
+      case 'folder-edit':
+        return folderEditRow(item.folderId);
+      case 'folder':
+        return folderRowView(item.row);
+      case 'head':
+        return sectionHead(item.section, pageProjectId);
+      case 'landings':
+        return landingsSummary && pageProjectId ? (
+          <SessionProjectLandings summary={landingsSummary}
+            onOpen={() => navigateWithPaneSlide('push', () => navigate(
+              `/projects/${encodeId(pageProjectId)}/landings`, { state: stampFromList() },
+            ))} />
+        ) : null;
+      case 'coordinator':
         return (
-          <SessionListRow
-            key={s.id}
-            rows={rowController}
-            id={s.id}
-            subject={actionSession}
-            title={s.title || 'Untitled session'}
-            className={[!openable && 'no-open', renaming && 'renaming'].filter(Boolean).join(' ') || undefined}
-            active={s.id === selectedId}
-            editing={renaming}
-            draggable={!pageProjectId && sessionRowDraggable(s, {
-              view: memberView, dropTargets: dropTargetsShown, touch: isMobile, renaming,
-            })}
-            swipe={{
-              leading: swipeActions.leading.map(swipeButton),
-              trailing: swipeActions.trailing.map(swipeButton),
-              fullSwipe: canFullSwipe,
-            }}
-            menu={menuItems}
-            onOpen={() => {
-              if (!openable) return;
-              // Picked in the phone's sheet: the sheet closes and the conversation turns into the member,
-              // in the open conversation's place, so ← still returns to the list behind it (board 5).
-              if (pageProjectId && sheetProjectId) {
-                setSheetProjectId(null);
-                navigate(sessionItemPath(actionSession), { replace: true, state: window.history.state?.usr });
-                return;
-              }
-              navigateWithPaneSlide('push', () =>
-                navigate(sessionItemPath(actionSession), { state: stampFromList() }),
-              );
-            }}
-          >
-            <span className="session-icon">
-              <StatusIcon session={actionSession} watching={watching?.word} machine={runnerShownName} />
-            </span>
-            <div className="session-main">
-              {renaming ? (
-                // Rename… on a session row: the title in a field where the row's two lines were.
-                <RenameField
-                  label="Session title"
-                  title={s.title ?? ''}
-                  onDone={(title) => {
-                    setRenamingId(null);
-                    if (title) renameMut.mutate({ id: s.id, title });
-                  }}
-                />
-              ) : (
-                <>
-                  <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
-                  {/* One line under the title, and all of it is what the session is doing
-                      or waiting on, else its recap (sessionLine). Tags are filed and
-                      filtered by, not drawn on the row (the owner, 2026-10-22). */}
-                  <div className="session-sub">
-                    {/* A member whose project has no row in this workspace: the project's
-                        progress, which opens its sessions page (owner 2026-11-07). */}
-                    {mark && (
-                      <Tooltip content={SESSION_PROJECT_COPY.markHint(mark.title)} align="start">
-                        <button
-                          type="button"
-                          className={`session-project-progress${mark.status === 'DONE' ? ' done' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (rowController.takeClick()) enterProjectSessions(mark.projectId, s.id);
-                          }}
-                        >
-                          {mark.taskCounts ? (
-                            <>
-                              <SessionProjectProgressBar counts={mark.taskCounts} runningCount={mark.runningCount} />
-                              {SESSION_PROJECT_COPY.progress(mark.taskCounts.done, mark.taskCounts.total)}
-                            </>
-                          ) : mark.status}
-                        </button>
-                      </Tooltip>
-                    )}
-                    <Tooltip content={line.hint} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
-                      <div
-                        className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
-                      >
-                        {line.text}
-                      </div>
-                    </Tooltip>
-                    <SessionMarkChips marks={sessionMarks(actionSession)} />
-                  </div>
-                </>
-              )}
-            </div>
-          </SessionListRow>
+          <section className="session-project-coordinator">
+            {sectionHead(item.section, pageProjectId)}
+            {item.section.sessions.map((entry) => entryRow(entry, pageProjectId))}
+          </section>
         );
-      })}
-    </section>
-    )
-  );
+      case 'entry':
+        return entryRow(item.entry, pageProjectId);
+    }
+  };
+  // A project's page beside the conversation (its column, or a phone's sheet): the same items, all of
+  // them drawn — a project's page is its own sessions, a few rows.
+  const projectPageItems = (pageProjectId: string): ReactNode => [
+    { kind: 'top' as const, key: 'top' },
+    ...sectionItems(projectSections, true, !!landingsSummary),
+  ].map((item) => (
+    <div key={item.key} className="session-list-item">
+      {columnItem(item, pageProjectId, () => <>{projectPageTop(pageProjectId)}{projectPageEmpty}</>)}
+    </div>
+  ));
 
   // The pinned strip, in the half asked for: its line goes to the cards that wait on the reader,
   // drawn as the top capsule's first segment; its fold is a bar under the header (DecisionStrip).
@@ -11076,50 +11588,58 @@ export function WorkspaceView({
         <div
           className={`workspace-sessions session-col-list autohide-scrollbar${draggedSession ? ' dragging-session' : ''}`}
           ref={listRef}
-          onScroll={onSessionListScroll}
           {...listDragProps}
         >
-          {/* A terminal asking to be approved: one Needs you row over the list, to its machine's page (board 02 ③). */}
-          {!listProjectId && <TerminalsNeedsYouRow />}
-          {listProjectId && projectPageTop(listProjectId)}
-          {listProjectId
-            ? projectPageEmpty
-            : openFolder || onScheduledRuns
-            ? listedSessions.length === 0 &&
-              !loadingSessions && (
-                <div className="chat-note">
-                  {openFolder
-                    ? folderPageEmpty(effectiveView, activeTag?.name ?? null)
-                    : activeTag ? folderPageEmpty(effectiveView, activeTag.name, SCHEDULED_RUNS_COPY.title)
-                      : SCHEDULED_RUNS_COPY.empty}
-                  {activeTag && (
-                    <button type="button" className="chat-note-action" onClick={() => setTagFilter(null)}>
-                      {FOLDER_COPY.clearFilter}
-                    </button>
-                  )}
-                </div>
-              )
-            : visibleSessions.length === 0 &&
-              !loadingSessions && (
-                <div className="chat-note">
-                  {tagFilter
-                    ? 'No sessions with this tag.'
-                    : view === 'open'
-                      ? 'No sessions yet.'
-                      : view === 'completed'
-                        ? 'No completed sessions.'
-                        : 'Trash is empty.'}
-                </div>
-              )}
-          {/* The workspace's folders on top (§3.3), New Folder…'s field above them while it is
-              open. A folder row reports for the sessions filed in it, which the time sections
+          {/* Everything the column draws, windowed: the rows near the viewport are mounted, the rest are
+              measured space (SessionListWindow). The top block holds a terminal asking to be approved — one
+              Needs you row over the list, to its machine's page (board 02 ③) — a project page's cards, and
+              the empty list's note. The workspace's folders come next (§3.3), New Folder…'s field above them
+              while it is open: a folder row reports for the sessions filed in it, which the time sections
               below leave out. */}
-          {!listProjectId && !openFolder && !onScheduledRuns && scheduledRuns.length > 0 && scheduledRunsRowView()}
-          {!listProjectId && !openFolder && folderEdit?.id === null && folderEditRow(null)}
-          {!listProjectId && !onScheduledRuns && folderListing?.folders.map((row) =>
-            folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
-          )}
-          {sections.map((sec) => renderSection(sec, listProjectId))}
+          <SessionListWindow
+            handle={listWindowRef}
+            scrollRef={listRef}
+            items={listItems}
+            // A phone shows the list or a conversation, not both.
+            hidden={isMobile && (!!selectedId || !!composingRoute || !!landingsProjectId)}
+            keepMounted={listKeepMounted}
+            onScrolled={onSessionListScroll}
+            renderItem={(item) => columnItem(item, listProjectId, () => (
+              <>
+                {!listProjectId && <TerminalsNeedsYouRow />}
+                {listProjectId && projectPageTop(listProjectId)}
+                {listProjectId
+                  ? projectPageEmpty
+                  : openFolder || onScheduledRuns
+                  ? listedSessions.length === 0 &&
+                    !loadingSessions && (
+                      <div className="chat-note">
+                        {openFolder
+                          ? folderPageEmpty(effectiveView, activeTag?.name ?? null)
+                          : activeTag ? folderPageEmpty(effectiveView, activeTag.name, SCHEDULED_RUNS_COPY.title)
+                            : SCHEDULED_RUNS_COPY.empty}
+                        {activeTag && (
+                          <button type="button" className="chat-note-action" onClick={() => setTagFilter(null)}>
+                            {FOLDER_COPY.clearFilter}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  : listEmpty &&
+                    !loadingSessions && (
+                      <div className="chat-note">
+                        {tagFilter
+                          ? 'No sessions with this tag.'
+                          : view === 'open'
+                            ? 'No sessions yet.'
+                            : view === 'completed'
+                              ? 'No completed sessions.'
+                              : 'Trash is empty.'}
+                      </div>
+                    )}
+              </>
+            ))}
+          />
           {/* Foot of the loaded window while a page is in flight, so a scroll that outruns the
               fetch (or a switch to a workspace not yet cached) shows progress rather than an
               abrupt end of list. */}
@@ -12517,9 +13037,7 @@ export function WorkspaceView({
             aria-label={PROJECT_COLUMN_COPY.label}>
             {projectPageHead(() => foldProjectColumn(true), PROJECT_COLUMN_COPY.close, <CloseOutlined />)}
             <div className="workspace-sessions session-col-list autohide-scrollbar">
-              {projectPageTop(columnProjectId)}
-              {projectPageEmpty}
-              {projectSections.map((sec) => renderSection(sec, columnProjectId))}
+              {projectPageItems(columnProjectId)}
               {loadingProjectSessions && (
                 <div className="session-list-more">
                   <Spinner size="small" />
@@ -12536,9 +13054,7 @@ export function WorkspaceView({
             <div className="session-col project-sessions-sheet-page">
               {projectPageHead(() => setSheetProjectId(null), PROJECT_COLUMN_COPY.close, <CloseOutlined />)}
               <div className="workspace-sessions session-col-list autohide-scrollbar">
-                {projectPageTop(sheetProjectId)}
-                {projectPageEmpty}
-                {projectSections.map((sec) => renderSection(sec, sheetProjectId))}
+                {projectPageItems(sheetProjectId)}
                 {loadingProjectSessions && (
                   <div className="session-list-more">
                     <Spinner size="small" />

@@ -1,6 +1,7 @@
 import { uuidToBase62 } from '@orbit/shared';
 import { FIXED_NOW, FIXTURE_IDS } from './fixtures.mjs';
 import { RUNNER, SESSION, SESSION_EVENTS, SESSION_TIME, WORKSPACE } from './session-fixtures.mjs';
+import { answerListing } from './session-listing-fixtures.mjs';
 
 // P5.3 data, on top of installFixtures (later routes win, so every path not modeled here falls through to the P0
 // handler and its unhandled-request check): the P0 conversation with a context reading on its last turn, in a list
@@ -133,6 +134,13 @@ export async function installP53Fixtures(page, initial = {}) {
         .filter((s) => !tag || s.tags?.some((t) => t?.id === tag))
         .map((s) => ({ ...s, title: state.titles[s.id] ?? s.title, pinnedAt: state.pinned.includes(s.id) ? at(-HOUR) : s.pinnedAt }));
       return json(shown);
+    }
+    // The same rows a page at a time, as a workspace with folders reads them.
+    if (method === 'GET' && path === '/api/sessions/listing') {
+      const list = rows(state);
+      const all = [...list.open, ...list.completed, ...list.trash]
+        .map((s) => ({ ...s, title: state.titles[s.id] ?? s.title, pinnedAt: state.pinned.includes(s.id) ? at(-HOUR) : s.pinnedAt }));
+      return json(answerListing(all, state.folders, searchParams));
     }
     // A session link that leads nowhere: the console's not-found state (held, to show its spinner first).
     if (method === 'GET' && path === `/api/sessions/${P53_IDS.missing}`) {
