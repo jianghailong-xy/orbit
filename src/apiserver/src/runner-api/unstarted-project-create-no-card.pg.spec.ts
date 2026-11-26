@@ -679,4 +679,37 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
       });
     }
   });
+
+  // ── 13 ───────────────────────────────────────────────────────────────────────────────────────
+  await t.test('what a coordinator files before its project starts takes nothing from its 8, then or after the start', async () => {
+    const coordinator = await conversation('a coordinator with a plan of nine', { fresh: true });
+    const unstarted = await project('a plan of nine', { coordinator, started: false });
+
+    const plan = Array.from({ length: 9 }, (_, i) => taskBody(`plan step ${i + 1}`, unstarted));
+    const planCard = await askBatch(coordinator, plan);
+    assert.equal(planCard.status, 'ALLOWED');
+    assert.equal((await approvalRow(planCard.id)).message, START_CARD_REVIEWS_MESSAGE);
+    await write(coordinator, '/runner/tasks/batch-create', { tasks: plan });
+
+    // Nine filed into the unstarted project, and the session's own 8 are untouched. A create that names no
+    // project is still a card the allowance answers; the write files it under the coordinator's project.
+    const unnamed = taskBody('an unnamed create', null);
+    const card = await ask(coordinator, 'orbit_task_create', unnamed);
+    assert.equal(card.status, 'ALLOWED');
+    assert.equal((await approvalRow(card.id)).message, SESSION_CREATE_ALLOWANCE_MESSAGE);
+    await write(coordinator, '/runner/tasks', unnamed);
+    assert.equal((await tasksIn(unstarted)).length, 10);
+
+    // The start does not bring the ten filed before it into the count: all 8 are left after it.
+    await prisma.project.update({ where: { id: unstarted }, data: { startedAt: new Date() } });
+    const eight = Array.from({ length: 8 }, (_, i) => taskBody(`after the start ${i + 1}`, null));
+    const eightCard = await askBatch(coordinator, eight);
+    assert.equal(eightCard.status, 'ALLOWED');
+    assert.equal((await approvalRow(eightCard.id)).message, SESSION_CREATE_ALLOWANCE_MESSAGE);
+    await write(coordinator, '/runner/tasks/batch-create', { tasks: eight });
+    assert.deepEqual(await raised(coordinator), { cards: 0, pushes: 0, pending: 0 });
+
+    // The next one is the ninth that counts: asked.
+    await assertAsked(coordinator, await ask(coordinator, 'orbit_task_create', taskBody('one past 8', null)));
+  });
 });
