@@ -275,6 +275,14 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
     suspend fun pause(id: String) = control(id) { api.pause(id) }
     suspend fun resume(id: String) = control(id) { api.resume(id) }
     suspend fun undo(id: String, revision: Int) = control(id) { api.undo(id, revision) }
+    /** Rename (§8.4) what the dialog holds, over the name it opened with: nothing is sent while that is empty or unchanged. */
+    suspend fun rename(id: String, draft: String, from: String): String? {
+        val title = ScheduleDisplay.renameTitle(draft, from) ?: return null
+        return control(id) { api.rename(id, title) }
+    }
+    /** The dialogs' presses, on the store's scope: a dialog is gone once pressed. */
+    fun renameNow(id: String, draft: String, from: String) { scope.launch { rename(id, draft, from) } }
+    fun deleteNow(id: String) { scope.launch { delete(id) } }
     suspend fun delete(id: String): String? {
         val said = control(id) { api.delete(id) }
         if (said == null && ObjectId.same(mutable.value.inspectedId, id)) inspect(null)

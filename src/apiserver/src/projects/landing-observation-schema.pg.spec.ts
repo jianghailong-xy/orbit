@@ -768,6 +768,10 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
         await sql.query(readFileSync(path.join(MIGRATIONS, '1310_project_landing_check_set_by', 'migration.sql'), 'utf8'));
         await sql.query(readFileSync(path.join(MIGRATIONS, '1350_task_landing_check_exempt', 'migration.sql'), 'utf8'));
         await sql.query(readFileSync(path.join(MIGRATIONS, '1390_project_setting_change', 'migration.sql'), 'utf8'));
+        // 1501 adds the open item's work-session columns and their CHECKs, and widens the job's retry failure class
+        // CHECK (§12.4, over 0513's). Catalog-only, so it is replayed like 1110, without its own BEGIN/COMMIT.
+        await sql.query(readFileSync(path.join(MIGRATIONS, '1501_open_item_work_session', 'migration.sql'), 'utf8')
+          .replace(/^(BEGIN|COMMIT);$/gm, ''));
         // 1527 gives the job its pull request columns and CHECKs, rewrites the state CHECK and J2, and recreates J3's
         // index (docs/design/protected-branch-landing.md §4.2). Its other sections alter tables 0453 predates (0820's
         // `github_app_config`), so only its `project_integration_job` section is replayed, as it ships.

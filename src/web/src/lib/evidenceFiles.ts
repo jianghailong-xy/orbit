@@ -3,7 +3,7 @@ import { isRasterImage } from './userFile';
 import { formatFileSize } from './worktreeFile';
 
 /**
- * What an evidence card says about the files a version of evidence cites (docs/documents-design.md
+ * What an evidence card says about the files a version of evidence cites (docs/drive-design.md
  * §2.5, §2.6): the words, and the reading of the rows those words come from. The components in
  * `EvidenceFiles.tsx` draw this and decide nothing about it.
  *

@@ -126,8 +126,8 @@ func resetCodexCloudSandboxCache(t *testing.T) {
 
 // On an Orbit Cloud runner whose Codex sandbox cannot start, Auto runs with the sandbox off and says so:
 // thread/start and turn/start ask for danger-full-access, the approval policy and reviewer stay Auto's,
-// the bubblewrap line carries the Cloud diagnostic rather than "install bubblewrap", and the transcript
-// gets one notice whose permission semantics mark the sandbox off.
+// the bubblewrap line carries the Cloud diagnostic rather than "install bubblewrap", and the server gets
+// one report whose permission semantics mark the sandbox off, with nothing for the transcript to draw.
 func TestCodexAutoOnCloudWithAFailedSandboxProbeRunsWithTheSandboxOff(t *testing.T) {
 	c := launchCodexAuto(t, true, "1")
 	if !c.job.codexCloudSandboxUnavailable {
@@ -160,8 +160,14 @@ func TestCodexAutoOnCloudWithAFailedSandboxProbeRunsWithTheSandboxOff(t *testing
 		t.Fatalf("got %d sandbox notices, want 1: %#v", len(notices), c.events.snapshot())
 	}
 	notice := notices[0]
-	if got := notice["notice"]; got != "Codex's sandbox is unavailable on Orbit Cloud: commands run unconfined inside your Cloud runner." {
-		t.Errorf("notice = %q", got)
+	if notice["sandboxUnavailable"] != true {
+		t.Errorf("report = %#v, want sandboxUnavailable", notice)
+	}
+	if _, ok := notice["notice"]; ok {
+		t.Errorf("report carries transcript text %q, want none", notice["notice"])
+	}
+	if _, ok := notice["diagnostic"]; ok {
+		t.Errorf("report carries a diagnostic %#v, want none", notice["diagnostic"])
 	}
 	semantics, _ := notice["permissionSemantics"].(map[string]interface{})
 	if semantics["sandbox"] != "off" || semantics["honored"] != false || semantics["mode"] != "auto" || semantics["unapproved"] != "allow" {

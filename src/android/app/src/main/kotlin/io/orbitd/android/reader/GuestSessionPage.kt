@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -36,13 +37,20 @@ import io.orbitd.android.core.guests.guestStream
 import io.orbitd.android.core.guests.GuestCopy
 import io.orbitd.android.core.guests.GuestImage
 import io.orbitd.android.core.guests.GuestSession
+import io.orbitd.android.core.guests.GuestState
 import io.orbitd.android.core.guests.GuestTone
 import io.orbitd.android.core.guests.SharedWithMe
+import io.orbitd.android.core.guests.completed
+import io.orbitd.android.core.guests.displayFacts
 import io.orbitd.android.core.guests.hint
+import io.orbitd.android.core.guests.marks
 import io.orbitd.android.core.guests.tone
 import io.orbitd.android.core.guests.waiting
 import io.orbitd.android.core.guests.word
 import io.orbitd.android.directory.LoadingMessage
+import io.orbitd.android.directory.SessionDisplay
+import io.orbitd.android.directory.SessionMarkChips
+import io.orbitd.android.directory.SessionStateGlyph
 import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.text.LocalReaderResources
@@ -117,7 +125,7 @@ private fun GuestConversationView(model: GuestConversation) {
     LaunchedEffect(rows.lastOrNull()?.key, tail, view.textDrafts, view.thinkingDrafts) { if (pinned && tail > 0) list.scrollToItem(tail) }
     val full = remember(model) { FullEvents { model.full(it) } }
     Column(Modifier.fillMaxSize()) {
-        GuestHead(view.state.word, view.state.tone)
+        GuestHead(view.state)
         CompositionLocalProvider(LocalOwnerHeading provides owner) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("guest-transcript"), state = list,
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -137,30 +145,46 @@ private fun GuestConversationView(model: GuestConversation) {
     }
 }
 
-/** The status pill (web `status-pill`, toned as the public page tones it) and the Guest badge. */
+/** The status pill (web `status-pill`, toned as the public page tones it), the marks and, for a filed session whose state is the
+ * facts', Completed (web `SharedSessionStatus`), then the Guest badge. From an older server the pill alone says how it stands. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun GuestHead(word: String, tone: GuestTone) {
+internal fun GuestHead(state: GuestState) {
     val colors = LocalOrbitColors.current
+    val shown = SessionDisplay.state(state.displayFacts)
+    val tone = state.tone
     val color = when (tone) {
         GuestTone.RUNNING -> colors.running
         GuestTone.AWAITING -> colors.needsYou
         GuestTone.DONE -> colors.success
         GuestTone.FAILED -> MaterialTheme.colorScheme.error
-        GuestTone.QUEUED, GuestTone.CANCELLED -> MaterialTheme.colorScheme.onSurfaceVariant
+        GuestTone.QUEUED, GuestTone.IDLE, GuestTone.CANCELLED -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("guest-head"),
-        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("guest-head"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
+        itemVerticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.background(color.copy(alpha = 0.12f), RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 4.dp)
             .testTag("guest-status"), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (tone == GuestTone.RUNNING) CircularProgressIndicator(Modifier.size(10.dp), color = color, strokeWidth = 1.5.dp)
+            if (shown != null) SessionStateGlyph(shown)
+            else if (tone == GuestTone.RUNNING) CircularProgressIndicator(Modifier.size(10.dp), color = color, strokeWidth = 1.5.dp)
             else Box(Modifier.size(7.dp).background(color, CircleShape))
-            Text(word, color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+            Text(state.word, color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
         }
-        Text(GuestCopy.GUEST_BADGE, Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp).testTag("guest-badge"),
-            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // The chips say nothing themselves (a row's value says them), so the head says them here for a screen reader.
+        state.marks?.takeIf { it.isNotEmpty() }?.let { marks ->
+            SessionMarkChips(marks, Modifier.semantics { contentDescription = marks.joinToString(", ") { it.word } })
+        }
+        if (shown != null && state.completed) GuestBadge(GuestCopy.COMPLETED, "guest-completed")
+        GuestBadge(GuestCopy.GUEST_BADGE, "guest-badge")
     }
     HorizontalDivider()
+}
+
+@Composable
+private fun GuestBadge(word: String, tag: String) {
+    Text(word, Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
+        .padding(horizontal = 6.dp, vertical = 2.dp).testTag(tag),
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 /** The staged images, the box with its + (Image, Paste image) and Send, and the line under it — where a message runs, that it waits

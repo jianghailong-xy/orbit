@@ -105,6 +105,7 @@ function CommitRow({
     <button
       type="button"
       className={`wt-commit-row${active ? ' active' : ''}`}
+      data-row-focus=""
       onClick={(e) => {
         e.stopPropagation();
         onOpen();
@@ -140,6 +141,7 @@ function PendingRow({ active, onOpen }: { active?: boolean; onOpen: () => void }
     <button
       type="button"
       className={`wt-commit-row${active ? ' active' : ''}`}
+      data-row-focus=""
       onClick={(e) => {
         e.stopPropagation();
         onOpen();

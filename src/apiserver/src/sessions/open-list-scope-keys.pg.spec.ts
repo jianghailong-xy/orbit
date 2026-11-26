@@ -169,6 +169,8 @@ const CLASS: Record<string, 'scope' | 'peers' | 'account'> = {
   confirmation_review: 'account',
   confirmation_review_record: 'account',
   session_tag: 'account',
+  owner_request: 'account',
+  handoff_approval: 'account',
 };
 
 test('1. every source in the trigger catalogue is classed, and its bump function keys it as its class says', { skip }, async (t) => {

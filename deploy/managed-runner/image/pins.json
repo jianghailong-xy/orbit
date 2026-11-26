@@ -1,5 +1,5 @@
 {
-  "metadataVerifiedOn": "2026-11-23",
+  "metadataVerifiedOn": "2026-11-26",
   "supportedPlatforms": [
     "linux/amd64",
     "linux/arm64"
@@ -8,21 +8,21 @@
   "goImage": "golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5",
   "nodeImage": "node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1",
   "debianSnapshot": "20260928T000000Z",
-  "codexPackage": "@openai/codex@0.171.0",
-  "claudeCodePackage": "@anthropic-ai/claude-code@2.1.330",
+  "codexPackage": "@openai/codex@0.172.0",
+  "claudeCodePackage": "@anthropic-ai/claude-code@2.1.332",
   "openCodePackage": "opencode-linux-x64-baseline@1.19.6 (amd64), opencode-linux-arm64@1.19.6 (arm64)",
   "kimiCode": {
-    "version": "2.7.2",
+    "version": "2.8.0",
     "sha256": {
-      "linux/amd64": "7f82148d26467874400d19ee8d23ead13cece9cd0c17648a5622cae480a5a596",
-      "linux/arm64": "1b13bc1f04781f7e6767162177c3081053b5ba68a2e4fdfeb8ed1d6286dbf6e3"
+      "linux/amd64": "a8855467385e823209e1f45014f3fa9ade81260b648bcba33fbe461963dae9e2",
+      "linux/arm64": "ee6d96407dd17c4123ae3bf1d2d021be26dce7c358cd81771b6cad2d740dc323"
     }
   },
   "antigravityCli": {
-    "version": "1.5.14",
+    "version": "1.5.17",
     "sha512": {
-      "linux/amd64": "83311d3f354567612dc16c1ae2ea9b503d6f6833aa4e138d39aa229da3f3bb99b0e4d7cca0bce4796b0060d6a51d8113eb7449ed5dc0e7900bf217107ea5bff9",
-      "linux/arm64": "c9b29bba475f63a1a80161ae93ba72b221c7a586d9851e4d0061546704bab66d6b2760b25d716d191724fc7564f3246456ee151e28aa37af48dbcd72bdc6c463"
+      "linux/amd64": "71a967aa16e0ab5d87196bcd6772130bdab55b2fd768cd24d21b1da401ff9f60280b976cad3dc14a2d646233b0eaf8caf87c490eed73044d54550cbb3d8d67d2",
+      "linux/arm64": "e4f086d0730b325cfd438ea90396ee78eb23a3110ef7f792824c8817b8d0432462b7b5f91b3d933fc1932a6f4ba73de505e2e96f44448c9fb2427292ead716f7"
     }
   },
   "cursorCli": {
@@ -57,14 +57,14 @@
     "go": "https://hub.docker.com/v2/repositories/library/golang/tags/1.27.1-trixie",
     "node": "https://hub.docker.com/v2/repositories/library/node/tags/26.10.0-trixie-slim",
     "dockerfileFrontend": "https://hub.docker.com/v2/repositories/docker/dockerfile/tags/1.7.1",
-    "codex": "https://registry.npmjs.org/@openai/codex/0.171.0",
-    "claudeCode": "https://registry.npmjs.org/@anthropic-ai/claude-code/2.1.330",
-    "codexLayout": "https://github.com/openai/codex/blob/rust-v0.171.0/scripts/codex_package/README.md",
+    "codex": "https://registry.npmjs.org/@openai/codex/0.172.0",
+    "claudeCode": "https://registry.npmjs.org/@anthropic-ai/claude-code/2.1.332",
+    "codexLayout": "https://github.com/openai/codex/blob/rust-v0.172.0/scripts/codex_package/README.md",
     "debian": "https://snapshot.debian.org/archive/debian/20260928T000000Z/dists/trixie/Release",
     "debianSecurity": "https://snapshot.debian.org/archive/debian-security/20260928T000000Z/dists/trixie-security/Release",
     "playwrightMcp": "https://registry.npmjs.org/@playwright/mcp/0.0.85",
     "openCode": "https://registry.npmjs.org/opencode-ai/1.19.6",
-    "kimiCode": "https://code.kimi.com/kimi-code/binaries/2.7.2/manifest.json",
+    "kimiCode": "https://code.kimi.com/kimi-code/binaries/2.8.0/manifest.json",
     "antigravityCli": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json",
     "cursorCli": "https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz"
   }

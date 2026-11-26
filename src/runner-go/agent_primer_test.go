@@ -56,6 +56,31 @@ var agentPrimerHashes = map[string]string{
 	// 1.4.6 is 1.4.5 with the first line naming Agent Contract 1.13.0 (the drive tools are documents_*, the CLI
 	// `orbit documents`, the link orbit-document:, the old names still served); no rule changed.
 	"1.4.6": "e0ec22b359cb36138e91b08ba216b9455a3d3a957df002d197e2f5722d883a60",
+	// 1.4.7 is 1.4.6 with the first line naming Agent Contract 1.14.0 (the drive tools are drive_* again, the CLI
+	// `orbit drive`, the link orbit-drive:, the documents_* names still served); no rule changed.
+	"1.4.7": "c36f8a00f568741b4c34a1390d82fc4b1f4b93885f8205717506a50bd5359032",
+	// 1.5.0 (instruction-units step 4): what a card's answer and a receipt's error mean moved into the receipt's notes,
+	// and a receipt carries its entity's link. The cards paragraph keeps one sentence that a refusal is final on every
+	// surface and points at the receipt; the receipts paragraph names the link and the notes. No rule changed.
+	"1.5.0": "bd5101be18ab11b7070a2f97dff2415b881cceb133daff2382fcc6dcf6e71fcb",
+	// 1.6.0 (instruction-units step 5a): the orchestration paragraph's hand-off half (task_start what task_list shows
+	// recorded, else record it) moved into the handoff unit, which merges it with the sub-agents and delegate
+	// paragraphs; the paragraph keeps the switch, `orbit session` and no claimed delegation. No rule changed.
+	"1.6.0": "815100a9b5f2ca99c0f71aa4c5954d386ee22202a8a4c1a910c78a1ed3b7a2c0",
+	// 1.7.0 (instruction-units step 5b): the CLI paragraph left the primer for the CLI unit, which merges it with the
+	// paragraph that closed the instructions and names the CLI by its path. No rule changed.
+	"1.7.0": "b04a890e4acdbed6cce17edeafd442882fed64f0cbef87ad246f40a4414af1db",
+	// 1.7.1 is 1.7.0 with the first line naming Agent Contract 1.14.0 (main's drive_* rename, primer 1.4.7 there); no
+	// rule changed.
+	"1.7.1": "fbb1b671dd76a2b34518fb2d2cb14c0ef63a1a0e65d94443101994050e3871d3",
+	// 1.8.0 (instruction-units step 6, D3 and D4): autoRunWhenReady is required by task_create and task_create_batch
+	// (the runner refuses a create without it), and `orbit mcp` derives an idempotency key for a create that has none, so
+	// the lead lost its "Create is not start, but autoRunWhenReady defaults to true" sentence and the receipts paragraph its
+	// "Key task_create ..." sentence.
+	"1.8.0": "6a1f80d73ff927be738c996e943279dbb4c220f428a557ddc1e017f8fd328733",
+	// 1.8.1 is 1.8.0 with the first line naming Agent Contract 1.15.0 (§2.6 describes the composed instructions as
+	// built); no rule changed.
+	"1.8.1": "ca11204551170378fc5fd69693b66e2c49176c94bdb2ee6c7314f230f04cce39",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
@@ -158,7 +183,6 @@ func TestAgentPrimerLeadStandsAlone(t *testing.T) {
 		"durable record", "private scratch",
 		"task_create", "task_create_batch", "project_create", "the smaller wins",
 		"MCP tools first", "never the CLI to get around a card or a refusal",
-		"Create is not start", "autoRunWhenReady defaults to true", "pass false",
 		"No returned id, no claim.",
 	} {
 		if !strings.Contains(head, phrase) {
@@ -193,14 +217,34 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 		"1":  {"durable record", "private scratch", "No returned id, no claim."},
 		"2":  {"Pick the object by the question it answers", "Task list:", "Session:", "Agent:", "the smaller wins"},
 		"3":  {"Use Orbit's MCP tools first", "The Orbit CLI is for pipes, scripts, bulk input"},
-		"4":  {"Create is not start", "autoRunWhenReady defaults to true", "pass autoRunWhenReady: false", "startNow: true", "runAt"},
-		"5":  {"confirmation card", "writes nothing until they confirm it", "A declined card (APPROVAL_DECLINED) is a refusal", "A chat is not a no", "owner-only decision"},
-		"6":  {"Only a structured receipt counts", "ok: true and outcome: written, with the entity's id and status", "`[Fix login redirect](orbit-task:<id>)`"},
-		"7":  {"follow its error.retry", "idempotencyKey derived from the work"},
+		"4":  {"Start is its own decision", "pass autoRunWhenReady: false", "startNow: true", "runAt"},
+		"5":  {"confirmation card", "writes nothing until they confirm it", "A refusal or a declined card is final on every surface", "a chat or a card still waiting is not a no", "its receipt says what to do next"},
+		"6":  {"Only a structured receipt counts", "ok: true and outcome: written", "by its receipt's link, never a bare id", "`[Fix login redirect](orbit-task:<id>)`"},
+		"7":  {"follow its error.retry"},
 		"8":  {"the same server under the same approvals"},
 		"9":  {"Session orchestration switch", "Without session_* tools", "never claim a delegation"},
 		"10": {"After compaction or a resume", "never rebuild an id, a status or an approval"},
 	}
+	// Since primer 1.5.0 (design step 4) part of rules 5 and 6 is said where the answer is read, in the receipt, and
+	// the primer points there (receipt_recovery_notes_test.go holds each note to the receipt that carries it).
+	notes := strings.Join([]string{declinedNote, chatNote, pendingCardNote, ownerAnswersNote}, " ")
+	for _, phrase := range []string{"final on every surface", "Not a no", "still waiting is not a no", "never answer it yourself"} {
+		if !strings.Contains(notes, phrase) {
+			t.Errorf("§0 rule 5: no receipt note says %q", phrase)
+		}
+	}
+	for _, kind := range []string{string(objectTask), string(objectSession), string(objectProject), string(objectTaskList)} {
+		if receiptLinkSchemes[kind] == "" {
+			t.Errorf("§0 rule 6: a %s's receipt carries no link", kind)
+		}
+	}
+	// Since primer 1.7.0 (design step 5b) the CLI's rules (3, 8) are said by the CLI unit, which carries the CLI's path
+	// and so is not part of the primer: a rule is held to the primer and the units composed after it.
+	cores := []string{agentPrimer}
+	for _, unit := range instructionUnits {
+		cores = append(cores, unit.core)
+	}
+	alwaysOn := strings.Join(cores, "\n\n")
 	if len(rules) != len(said) {
 		t.Fatalf("§0 has %d rules and the primer is checked against %d: say the new rule in the primer, then here", len(rules), len(said))
 	}
@@ -210,8 +254,8 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 			t.Errorf("§0 rule %s (%s) has no phrase the primer is held to", rule[1], rule[2])
 		}
 		for _, phrase := range phrases {
-			if !strings.Contains(agentPrimer, phrase) {
-				t.Errorf("§0 rule %s (%s): the primer does not say %q", rule[1], rule[2], phrase)
+			if !strings.Contains(alwaysOn, phrase) {
+				t.Errorf("§0 rule %s (%s): neither the primer nor an always-on unit says %q", rule[1], rule[2], phrase)
 			}
 		}
 	}
@@ -401,7 +445,7 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 		return strings.Join(values, "\n\n")
 	}
 	developerMessage := func() string {
-		items := codexInjectedAgentItems(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
+		items := codexInjectedAgentItems(job.instructionAgent(), job.sessionShape(exe))
 		return items[0]["content"].([]map[string]interface{})[0]["text"].(string)
 	}
 	turnInput := func() string {
@@ -428,13 +472,29 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 		"codex >= 0.135, after compaction":    codexContext(job, 1),
 		"codex 0.125-0.134 developer message": developerMessage(),
 		"codex < 0.125 turn input":            turnInput(),
-		"kimi":                                fmt.Sprint(prepareKimiPrompt(context.Background(), nil, job, &RunInboxResponse{Content: "hi"}, nil).blocks),
+		"kimi":                                fmt.Sprint(prepareKimiPrompt(context.Background(), nil, job, &RunInboxResponse{Content: "hi"}, nil, nil).blocks),
 		"cursor":                              cursorAgentInstructions(job),
 		"antigravity":                         antigravityInstructions(job, exe),
 		"deepseek harness":                    dshSessionAgentOverlay(job).AppendSystemPrompt,
 		"opencode":                            string(openCode),
-		"orbit mcp initialize (every engine)": mcpInitializeInstructions(t),
+		"orbit mcp initialize (every other engine)": mcpInitializeInstructions(t),
+		"orbit mcp initialize, claude":              claudeSessionInitializeInstructions(t, job),
 	}
+}
+
+// primerFor is the primer as a carrier is given it: Claude Code is not told the re-read-after-compaction
+// paragraph up front (its next message after a reset carries the note, context_reset_note.go), so it is missing
+// from their own instructions, and Codex and every other carrier, and `orbit mcp` initialize, keeps it. Inside a
+// Claude Code session initialize answers with the lead paragraph and the re-read paragraph: the appended prompt has
+// the rest, and not that one.
+func primerFor(carrier string) string {
+	if carrier == "orbit mcp initialize, claude" {
+		return agentPrimerLead + "\n\n" + agentPrimerRederive
+	}
+	if strings.HasPrefix(carrier, "claude") {
+		return strings.Replace(agentPrimer, "\n\n"+agentPrimerRederive, "", 1)
+	}
+	return agentPrimer
 }
 
 func mcpInitializeInstructions(t *testing.T) string {
@@ -455,10 +515,10 @@ func TestEveryEngineIsGivenTheSamePrimer(t *testing.T) {
 			job.TaskID = "task-1"
 		}
 		for carrier, text := range primerCarriers(t, job) {
-			if !strings.Contains(text, agentPrimer) {
+			if !strings.Contains(text, primerFor(carrier)) {
 				t.Errorf("%s (inside recorded work: %v) is not given the primer:\n%s", carrier, inside, text)
 			}
-			if carrier != "orbit mcp initialize (every engine)" && !strings.Contains(text, "Owner instructions.") {
+			if !strings.HasPrefix(carrier, "orbit mcp initialize") && !strings.Contains(text, "Owner instructions.") {
 				t.Errorf("%s lost the agent's own prompt beside the primer", carrier)
 			}
 		}
@@ -480,7 +540,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 	if after == before {
 		t.Fatalf("a compaction left the context generation at %d, so Codex keeps the keys it already dropped", after)
 	}
-	for key := range codexAgentAdditionalContext(AgentExecConfig{}, exe, after, false, true, true) {
+	for key := range codexAgentAdditionalContextOf(AgentExecConfig{}, exe, after, false, true, true) {
 		if strings.HasPrefix(key, fmt.Sprintf("orbit_%08d_", before)) {
 			t.Errorf("key %s survives the compaction unchanged", key)
 		}
@@ -490,7 +550,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 	items := &codexAppServer{instructionMode: codexInstructionsInjectItems}
 	items.markInstructionContextForRefresh()
 	items.prepareInstructionContext(func() error {
-		for _, item := range codexInjectedAgentItems(AgentExecConfig{}, exe, false, true, true) {
+		for _, item := range codexInjectedAgentItemsOf(AgentExecConfig{}, exe, false, true, true) {
 			injected = append(injected, item["content"].([]map[string]interface{})[0]["text"].(string))
 		}
 		return nil
@@ -532,7 +592,7 @@ func TestThePrimerDoesNotComeFromTheRepository(t *testing.T) {
 		if text != without[carrier] {
 			t.Errorf("%s changed when the checkout gained a CLAUDE.md and an AGENTS.md", carrier)
 		}
-		if !strings.Contains(text, agentPrimer) {
+		if !strings.Contains(text, primerFor(carrier)) {
 			t.Errorf("%s is not given the primer", carrier)
 		}
 	}

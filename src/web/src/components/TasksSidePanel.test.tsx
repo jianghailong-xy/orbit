@@ -113,8 +113,8 @@ describe('TasksSidePanel nav', () => {
     // models, moved to Settings and the account menu (docs/mocks/machines-and-models, 02). Waiting on
     // you left (docs/mocks/waiting-on-you-removal): a request lights the row of the session that filed it.
     // Scheduled keeps its own entry and count. Files, the account's drive, went in directly under the
-    // Wiki (docs/mocks/documents/02-web, frame 1).
-    expect(keys).toEqual(['projects', 'tasks', 'scheduled', 'wiki', 'documents']);
+    // Wiki (docs/mocks/drive/02-web, frame 1).
+    expect(keys).toEqual(['projects', 'tasks', 'scheduled', 'wiki', 'drive']);
     // The rows' own group head (WorkspacesHead) names them the way Projects names its rows; it is
     // no destination, so it is no TOP entry either.
     expect(source).not.toContain('tp-workspaces-head');
@@ -126,7 +126,7 @@ describe('TasksSidePanel nav', () => {
     // either render site needing its own list. Nothing is appended for admins: Admin is a row of the
     // account menu (TasksSidePanel.admin.test.tsx).
     expect(source).toContain(
-      "const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'documents' || documents.enabled));",
+      "const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'drive' || drive.enabled));",
     );
     expect(source.match(/\{topItems\.map\(\(t\) => \(/g)).toHaveLength(2);
   });
@@ -271,6 +271,29 @@ describe('TasksSidePanel workspace rows', () => {
         '  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-runner {\n    display: none;',
     );
     expect(block).toMatch(/\.tp-workspace-runner \{\n {4}flex: none;\n {4}max-width: 60%;/);
+  });
+
+  // Board docs/mocks/workspace-machine-icon, B: Orbit Cloud's cloud, every other machine the folder.
+  it('draws Orbit Cloud workspaces with its cloud and keeps the folder for your own machines', () => {
+    const render = (cloud: boolean) =>
+      renderToStaticMarkup(
+        <WorkspaceRow
+          workspace={workspace}
+          runnerLabel={cloud ? 'Orbit Cloud' : 'hpc-01'}
+          cloud={cloud}
+          active={false}
+          offline={false}
+          running={false}
+          jobs={0}
+          needsYou={0}
+          onOpen={() => undefined}
+        />,
+      );
+    expect(render(true)).toContain('anticon-cloud');
+    expect(render(true)).not.toContain('anticon-folder');
+    expect(render(false)).toContain('anticon-folder');
+    expect(render(false)).not.toContain('anticon-cloud');
+    expect(source).toContain('cloud={onCloud}');
   });
 
   it('puts a folder in the shared first-level icon column and keeps the collapsed rail unchanged', () => {

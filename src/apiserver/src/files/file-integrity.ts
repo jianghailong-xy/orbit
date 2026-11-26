@@ -11,7 +11,7 @@ const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * The most recent weekly scrub slot at or before `now`: Sunday 03:00 UTC (docs/documents-drive-technical-design.md §10.3
+ * The most recent weekly scrub slot at or before `now`: Sunday 03:00 UTC (docs/drive-technical-design.md §10.3
  * item 5). Computed from the clock alone, so a restart neither causes a scrub nor delays one.
  */
 export function scrubSlotAtOrBefore(now: Date): Date {
@@ -58,7 +58,7 @@ export interface VerifyReport {
 }
 
 /**
- * `files orphans`, `files verify` and the weekly scrub (docs/documents-drive-technical-design.md §10.3, §2.4). The retention
+ * `files orphans`, `files verify` and the weekly scrub (docs/drive-technical-design.md §10.3, §2.4). The retention
  * sweep works from `file_blob` rows only, so an object a restored database no longer names is invisible to it; and it trusts
  * that the bytes a row names are in the store, which a lost disk or bucket makes untrue.
  */
@@ -213,7 +213,7 @@ export class FileIntegrity implements OnApplicationBootstrap, OnModuleDestroy {
           sha256,
           storage,
           problem,
-          driveVersions: (await this.prisma.documentVersionChunk.findMany({ where: { sha256 }, distinct: ['versionId'], select: { versionId: true } })).length,
+          driveVersions: (await this.prisma.driveVersionChunk.findMany({ where: { sha256 }, distinct: ['versionId'], select: { versionId: true } })).length,
           attachments: await this.prisma.attachment.count({ where: { sha256 } }),
         });
       }

@@ -3,6 +3,7 @@ import { isGenerating, statusLabel } from '../components/WorkspaceView';
 import { sessionStatusMeta } from '../components/TaskDetailPanel';
 import { followDelay } from '../pages/SharedSessionPage';
 import { outlivingSessionWork } from './sessionActivity';
+import { sessionMarks } from './sessionDisplay';
 import { carriesServerActivity, olderServer, serverActivity, SITUATIONS } from './sessionPhaseFields.fixture';
 import { isSessionLive, isSessionWorking, sessionRunStateOf, type SessionStateSource } from './sessionState';
 
@@ -15,22 +16,25 @@ import { isSessionLive, isSessionWorking, sessionRunStateOf, type SessionStateSo
 const stopOffered = (s: SessionStateSource & Record<string, unknown>) =>
   isGenerating(s, sessionRunStateOf(s)) || outlivingSessionWork(s as never) !== null;
 
-// [situation, run state, header word, Stop, approval answerable, polls at the working pace]
-const TABLE: [string, string, string, boolean, boolean, boolean][] = [
-  ['a queued turn', 'QUEUED', 'Waiting for slot', false, false, true],
-  ['on hold', 'QUEUED', 'On hold', false, false, true],
-  ['a running turn', 'RUNNING', 'Running', true, true, true],
-  ['waiting on an approval', 'RUNNING', 'Waiting for approval', true, true, true],
-  ["parked with the engine's own turn", 'AWAITING_INPUT', 'Running', true, true, true],
-  ['parked with a sub-agent running', 'AWAITING_INPUT', 'Running Agent', true, false, true],
-  ['running a job with no turn', 'AWAITING_INPUT', 'Background process running', true, false, true],
-  ['will wake', 'AWAITING_INPUT', 'Waiting to resume', false, false, false],
-  ['held idle', 'AWAITING_INPUT', 'Waiting for your reply', false, false, false],
-  ['interrupted', 'INTERRUPTED', 'Interrupted', false, false, false],
-  ['released by a failed turn', 'FAILED', 'Failed', false, false, false],
-  ['released by End', 'ENDED', 'Ended', false, false, false],
-  ['a task run that finished', 'SUCCEEDED', 'Finished', false, false, false],
-  ['released with a retry armed', 'FAILED', 'Retrying', false, false, false],
+// [situation, run state, header word (`phase` alone, lib/sessionDisplay), its marks, Stop, approval answerable, polls
+// at the working pace]. The run state, Stop, approval and pace columns are the behaviour the display change must keep.
+const TABLE: [string, string, string, string[], boolean, boolean, boolean][] = [
+  ['a queued turn', 'QUEUED', 'Queued', [], false, false, true],
+  ['on hold', 'QUEUED', 'Queued', ['ON_HOLD'], false, false, true],
+  ['a running turn', 'RUNNING', 'Running', [], true, true, true],
+  ['waiting on an approval', 'RUNNING', 'Running', ['NEEDS_YOU'], true, true, true],
+  ["parked with the engine's own turn", 'AWAITING_INPUT', 'Running', [], true, true, true],
+  ['parked with a sub-agent running', 'AWAITING_INPUT', 'Running', [], true, false, true],
+  ['running a job with no turn', 'AWAITING_INPUT', 'Running', ['BACKGROUND'], true, false, true],
+  ['will wake', 'AWAITING_INPUT', 'Idle', ['WILL_RESUME'], false, false, false],
+  ['held idle', 'AWAITING_INPUT', 'Idle', [], false, false, false],
+  ['interrupted', 'INTERRUPTED', 'Idle', ['INTERRUPTED'], false, false, false],
+  ['released by a failed turn', 'FAILED', 'Idle', ['FAILED'], false, false, false],
+  ['released by End', 'ENDED', 'Idle', ['ENDED'], false, false, false],
+  ['a task run that finished', 'SUCCEEDED', 'Idle', ['FINISHED'], false, false, false],
+  // Waiting for retry counts as running (the owner, 2026-11-26): the word is Running; the run is still the failed
+  // release, with no Stop and the waiting pace.
+  ['released with a retry armed', 'FAILED', 'Running', ['RETRYING'], false, false, false],
 ];
 
 describe('the fixtures are the server shape', () => {
@@ -51,11 +55,12 @@ describe('the fixtures are the server shape', () => {
 });
 
 describe('run state, word, Stop, approval and poll pace of every shape', () => {
-  for (const [name, state, word, stop, answerable, fast] of TABLE) {
-    it(`${name}: ${state}, "${word}"`, () => {
+  for (const [name, state, word, marks, stop, answerable, fast] of TABLE) {
+    it(`${name}: ${state}, "${word}"${marks.length ? ` + ${marks.join(', ')}` : ''}`, () => {
       const s = SITUATIONS[name] as SessionStateSource & Record<string, unknown>;
       expect(sessionRunStateOf(s)).toBe(state);
       expect(statusLabel(s)).toBe(word);
+      expect(sessionMarks(s)).toEqual(marks);
       expect(stopOffered(s)).toBe(stop);
       // WorkspaceView's turnStillGenerating decides whether an approval card is answerable.
       expect(isGenerating(s, sessionRunStateOf(s))).toBe(answerable);
@@ -80,11 +85,12 @@ describe('run state, word, Stop, approval and poll pace of every shape', () => {
 
 describe('the task panel run badge reads the same run state', () => {
   const badge = (s: SessionStateSource) => sessionStatusMeta(s).label;
-  it('says Running for a running turn and Finished for a finished run', () => {
+  it('says Running for a running turn and Idle (its mark: Finished) for a finished run', () => {
     expect(badge(SITUATIONS['a running turn'])).toBe('Running');
-    expect(badge(SITUATIONS['a task run that finished'])).toBe('Finished');
+    expect(badge(SITUATIONS['a task run that finished'])).toBe('Idle');
   });
-  it('says On hold for a held queued run', () => {
-    expect(badge(SITUATIONS['on hold'])).toBe('On hold');
+  it('says Queued for a held queued run, whose hold is its On hold mark', () => {
+    expect(badge(SITUATIONS['on hold'])).toBe('Queued');
+    expect(sessionMarks(SITUATIONS['on hold'])).toEqual(['ON_HOLD']);
   });
 });

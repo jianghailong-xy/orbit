@@ -155,6 +155,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 	setTurn("")
 	var pendingShellCtx []string
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCtx, stopInbox := contextUntilEither(ctx, shutdownCtx)
 	defer stopInbox()
@@ -457,7 +458,7 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // Codex session started by another session waits as long as a root one, and can outlast the wait above it.
 // ORBIT_RUNNER_CHILD is the runner's mark on the processes it starts (runnerChildEnv): it is how Orbit's Plan gate
 // tells a session process with no socket, whose writes it refuses, from a terminal the runner did not start.
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_DOCUMENTS","ORBIT_BROWSER","ORBIT_WORKFLOWS","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID","ORBIT_SUBAGENT_REMOTE_MODE"]`
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_DOCUMENTS","ORBIT_BROWSER","ORBIT_WORKFLOWS","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID","ORBIT_SUBAGENT_REMOTE_MODE","ORBIT_TOOL_OOM_BASELINE"]`
 
 // codexOrbitSessionEnv is the session context both Codex spawn paths export, for `orbit mcp` to read: which
 // session, agent and task it acts for, what it may orchestrate, which optional tools it serves, that Claude's
@@ -629,7 +630,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 		emit(evError, map[string]interface{}{"message": "failed to prepare codex stderr: " + err.Error()})
 		return result
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		result.Status = stFailed
 		result.Subtype = "spawn_failed"
 		result.Error = err.Error()

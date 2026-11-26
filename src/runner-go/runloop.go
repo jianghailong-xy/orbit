@@ -413,7 +413,8 @@ func (g *selfUpdateGate) notePostponedLocked() {
 // the control plane does not take a scoped claim (serverScopes false: an older one would ignore the
 // scope and hand over any session), so the pool claims nothing, as before.
 func drainClaimScope(pool *sessionPool, serverScopes bool) []string {
-	if !serverScopes || !pool.isDrainingForUpdate() {
+	// Below the data volume's free-space reserve nothing new is claimed, a drain's message included.
+	if !serverScopes || !pool.isDrainingForUpdate() || pool.admissionHoldReason() != "" {
 		return nil
 	}
 	return pool.liveEngineTurnSessionIDs()
@@ -1556,11 +1557,33 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// the control plane returns on each heartbeat — so editing a runner's max-concurrent
 	// in the UI takes effect within one heartbeat, no restart. The local config value is
 	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
-	pool := newSessionPool(cfg.MaxConcurrent)
+	startupConcurrency := cfg.MaxConcurrent
+	if currentManagedInstance() != nil {
+		// Startup reclaim can start a turn before the first heartbeat supplies the
+		// mapping's cap. Until then, admit at most one turn.
+		startupConcurrency = 1
+	}
+	pool := newSessionPool(startupConcurrency)
+	t.draining = pool.isDrainingForUpdate // every inbox fetch says whether the pool drains for an update
+	// A slot with nothing running under it is given back while the pool drains (§7.3). Its callers run it on a
+	// goroutine of its own: it waits for the control plane's answer.
+	t.returnHeldSlot = func(sessionID string) {
+		pool.returnHeldSlot(sessionID, func() (string, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			return t.returnSlot(ctx, sessionID)
+		})
+	}
+	// A managed instance claims nothing, and starts no reclaimed RUNNING session, while its container has less than one
+	// more turn's memory left (memory_reserve.go). Nil anywhere else: it admits.
+	turnMemory := newTurnMemoryGate(currentManagedInstance() != nil)
 	// Before this image does anything else — spawns a probe, reclaims a session, sweeps a checkout. A
 	// job the image before handed on as it re-executed is still this process's child, and until the
 	// pool holds it again the sweep takes its checkout for one nobody is using.
 	pool.adoptRecordedJobs()
+	// A managed runner's /tmp is a directory of its data volume and outlives the container: what the container
+	// before left in it goes now, before anything here writes there (managed_tmp.go).
+	sweepManagedTmpAtStart(pool)
 	// Remote SubAgents a previous process was hosting when it ended unreported: worktrees removed, runs INTERRUPTED.
 	go recoverRemoteSubagents(t)
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
@@ -1600,6 +1623,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
+	defer startMemoryWatchdog(loopCtx, currentManagedInstance() != nil)()
+	// A managed runner takes no new work while its data volume is below its free-space reserve
+	// (managed_disk_reserve.go). Checked once now, before the reclaim and the first claim.
+	if currentManagedInstance() != nil {
+		watchDataVolumeReserve(loopCtx, pool, func() string { return measureDataVolumeHold(&storage) }, dataVolumeCheckInterval)
+	}
 	// The other half of what a finished session's checkout can hold: one that still has
 	// uncommitted work is never reclaimed, so the control plane is told which ones those are
 	// (abandoned_checkout.go). Its own goroutine and its own clock — it reads every checkout,
@@ -2817,6 +2846,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				forgetMergeTarget(j.SessionID)
 				pool.finish(live)
+				// A session's end: what the work left in a managed runner's /tmp goes once nothing else runs.
+				sweepManagedTmpWhenIdle(pool)
 			}()
 
 			// An OPEN reclaim can contain many idle sessions. Keep those supervisors
@@ -2850,6 +2881,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Retried with backoff: on a joint restart the apiserver is often still down when
 	// we come up, and a single failed attempt would orphan every resumable session for
 	// the rest of this process — their queued turns then sit PENDING forever.
+	// A RUNNING session a reclaim after the startup one hands back (the deferred retry, the late claim check, a failed
+	// claim's reconciliation) takes its turn permit as the startup reclaim's do: once a slot and the memory reserve are
+	// free (sessionPool.waitReclaimPermit). Those reclaims start their sessions one after another, so one at a time.
+	admitReclaimed := func(pending reclaimedStart) {
+		if pending.initiallyActive {
+			pool.waitReclaimPermit(loopCtx, turnMemory)
+		}
+	}
 	reclaimed := false
 	// When a reclaim sets conflicted sessions aside, retry at this time so they do
 	// not stay unsupervised; zero means nothing is waiting.
@@ -2911,6 +2950,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// prepared locally first as the single takeover above prepares one.
 		startupStarts.batchSize = t.takeoverBatchSize
 		startupStarts.takeoverMany = batchIdleTakeover(loopCtx, t, prepareTakeover)
+		// A RUNNING session takes its turn permit as a claim does, one at a time: a free slot, and the memory reserve.
+		startupStarts.admit = func() { pool.waitReclaimPermit(loopCtx, turnMemory) }
 		startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }
 		startupStarts.run(reclaimStartWorkers, func() {
 			idleHanded, idleTook := startupStarts.idlePhase()
@@ -3029,6 +3070,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
@@ -3060,6 +3102,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("reclaiming session %s — %s (late claim check)", pending.job.SessionID, pending.job.Title))
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
@@ -3086,6 +3129,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		//
 		// Draining for an update, the pool admits nothing, with one exception (drainClaimScope): a session
 		// whose engine is running a turn here and whose queued message moved its row to PENDING.
+		//
+		// And no claim while memory has no room for one more turn (turnMemoryReserveBytes): the session waits queued.
+		if !turnMemory.admits() {
+			select {
+			case <-loopCtx.Done():
+			case <-time.After(500 * time.Millisecond):
+			}
+			continue
+		}
 		var scope []string
 		if !pool.canClaim() {
 			if scope = drainClaimScope(pool, drainScopedClaims.Load()); len(scope) == 0 {
@@ -3136,6 +3188,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				for _, pending := range recovered {
 					logln(fmt.Sprintf("recovering ambiguously claimed session %s — %s", pending.job.SessionID, pending.job.Title))
+					admitReclaimed(pending)
 					startSession(pending.job, pending.initiallyActive)
 					pending.endTakeover()
 				}
@@ -3222,6 +3275,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
 			}
 			for _, pending := range recovered {
+				admitReclaimed(pending)
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}

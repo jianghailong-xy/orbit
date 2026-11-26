@@ -225,6 +225,8 @@ test('the index is owner-scoped and newest first, and narrows only when asked', 
     coordinatorSession: {
       select: {
         status: true,
+        finishedAt: true,
+        turnState: true,
         engineTurnActive: true,
         runningSubagents: true,
         lastTurnAt: true,
@@ -533,7 +535,8 @@ test('the index asks the cheap prerequisite guard before it walks a dependency c
   const rollup = statements.find((sql) => sql.includes('AS "workState"'));
   assert.ok(rollup, 'the task rollup was read');
   const end = rollup.indexOf("THEN 'READY'");
-  const ready = rollup.slice(rollup.lastIndexOf('WHEN ', end), end);
+  // From the WHEN after the arm before it: the arm's own predicates may hold a CASE WHEN (the turn state's).
+  const ready = rollup.slice(rollup.indexOf('WHEN ', rollup.lastIndexOf("THEN '", end - 1)), end);
   const guard = ready.indexOf(everyPrerequisiteDoneOrRetiredSql('t'));
   const walk = ready.indexOf('task_dependency_tail_id');
   assert.notEqual(guard, -1, 'the READY lane is narrowed by the guard');
@@ -566,6 +569,7 @@ test('the detail read reports progress without loading the project’s tasks', a
     // project's tasks. A read that went back to the groupBy would find no delegate here.
     projectRuling: { findMany: async () => [] },
     projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     projectTaskStatusCount: {
       findMany: async (args: any) => {
         tallyArgs = args;
@@ -642,6 +646,7 @@ test('the detail read serves the authored criteria and no second representation 
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
     projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
@@ -695,6 +700,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     projectTaskStatusCount: { findMany: async () => [] },
     projectRuling: { findMany: async () => [] },
     projectSettingChange: { findMany: async () => [] },
+    projectTextTranslation: { findUnique: async () => null },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
     },

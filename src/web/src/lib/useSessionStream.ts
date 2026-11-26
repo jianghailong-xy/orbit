@@ -93,6 +93,8 @@ export interface QueuedTurn extends TurnCards {
   authoredByOrbit?: true;
   /** Settings › Translation: the owner's message as typed and how far its translation got. */
   translation?: TurnTranslation;
+  /** The session's opening prompt (`ActiveSessionTurn.opening`), which the server never lets be withdrawn. */
+  opening?: true;
 }
 
 /** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is

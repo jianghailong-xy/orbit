@@ -172,7 +172,7 @@
 ## 5. 项目会话页
 
 - **入口**：点条目（10-05 起）、菜单里的 `Sessions`。
-- **Web**：会话栏原地换页，地址带 `?project=<id>`，浏览器后退、刷新都对；在这一页里打开会话时参数跟着走。做法照文件夹页（`?folder=`）。
+- **Web**：会话栏原地换页。列表自己的地址带 `?project=<id>`，浏览器后退、刷新都对。会话的地址不带它（owner 2026-11-25）：会话开着时项目页记在控制台里（`lib/conversationProjectPage`，按标签页存，刷新还在），复制出去的 `/sessions/<id>` 不带项目页；旧链接带的 `?project=` 读一次后从地址上去掉。做法照文件夹页。
 - **iOS**：iPhone 推进导航栈（`NavNode` 加一种页面）；iPad 中间栏原地换页。和文件夹页走同一套。
 - **页头**：‹ 回到 Workspace 的列表；标题是项目名，下面一行小字 `Project · <n> sessions`；右上角一个按钮（iOS 用 `square.grid.2x2`）直接进项目页，不再是 ⋯ 菜单（owner 10-06 的决定）。这里没有 New session：项目的会话由 coordinator 派发。
 - **进度条**：页头下面一条，迷你进度条 + `<done>/<total> done · <m> running`，不进项目页：Web 用 ↗，iOS 走页头右上角那个按钮（owner 10-06 的决定）。

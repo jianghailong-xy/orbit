@@ -82,7 +82,9 @@ public enum SessionListTime {
             guard let started = session.currentTurnStartedAt else { return nil }
             return RelativeTime.elapsed(started, now: now)
         }
-        guard let timestamp = session.listedAt ?? session.createdAt else { return nil }
+        // The last message, not `listedAt`: a wake or session-to-session turn leaves the row where it
+        // is but still says when it last spoke (owner 2026-11-25).
+        guard let timestamp = session.lastTurnAt ?? session.createdAt else { return nil }
         return RelativeTime.format(timestamp, now: now)
     }
 }

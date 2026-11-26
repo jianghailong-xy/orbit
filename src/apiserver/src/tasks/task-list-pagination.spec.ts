@@ -7,10 +7,15 @@ import { TasksService } from './tasks.service';
 import { recordingQueryRaw } from './query-raw-test-helper';
 import { everyPrerequisiteDoneOrRetiredSql } from './task-dependencies';
 import { taskCarriedSql } from '../sessions/task-work-carrier';
+import { isDeepStrictEqual } from 'node:util';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 /** One row of the carrier read behind `running` / `queued` (sessions/task-work-carrier.ts). */
 const carrier = (taskId: string, status: RunStatus) => ({
-  taskId, sessionId: `session-${taskId}`, status, runReason: 'TURN',
+  taskId, sessionId: `session-${taskId}`, finishedAt: null,
+  // The carrier read answers the resolved turn state (sessionTurnStateSql), not the stored word.
+  turnState: ({ PENDING: 'QUEUED', RUNNING: 'IN_FLIGHT' } as Record<string, string | undefined>)[status] ?? null,
+  runReason: 'TURN',
   runningBgJobs: [], runningBgJobActivity: {}, startedAt: null,
 });
 
@@ -71,8 +76,9 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
       },
       count: async (args: any) => {
         countWheres.push(args.where);
-        if (args.where.sessions?.some?.status === RunStatus.RUNNING) return 1;
-        if (args.where.sessions?.some?.status === RunStatus.PENDING) return 2;
+        // A turn in flight, and one queued (sessions/session-turn-state.ts).
+        if (isDeepStrictEqual(args.where.sessions?.some, turnStateFilter(['IN_FLIGHT']))) return 1;
+        if (isDeepStrictEqual(args.where.sessions?.some, turnStateFilter(['QUEUED']))) return 2;
         return 17;
       },
       groupBy: async () => [
@@ -295,7 +301,7 @@ test('running filter is applied before pagination from live session state', asyn
 
   assert.deepEqual(findManyWhere, {
     ownerId: OWNER_ID,
-    sessions: { some: { status: RunStatus.RUNNING } },
+    sessions: { some: turnStateFilter(['IN_FLIGHT']) },
   });
 });
 

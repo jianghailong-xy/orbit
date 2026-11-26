@@ -33,7 +33,8 @@ const SCANS: readonly KindFilteredScan[] = [
   {
     file: 'src/queue/queue.service.ts',
     name: 'the claim statement (the PENDING pick the runner is handed)',
-    anchor: "WHERE s.status = 'PENDING'",
+    // The claim's candidate: held and queued (the turn state QUEUED, what PENDING said; task T7).
+    anchor: "WHERE ${sessionHeldSql('s')}\n            AND ${sessionTurnStateSql('s')} = 'QUEUED'",
     filter: `AND s."kind" = 'CONVERSATION'`,
     within: 700,
   },
@@ -90,7 +91,7 @@ const SCANS: readonly KindFilteredScan[] = [
   {
     file: 'src/runner-api/runner-api.controller.ts',
     name: 'markProviderUpgradeRequired (the PENDING pick and its mark)',
-    anchor: 'await this.prisma.session.findMany({\n        where: {\n          assignedRunnerId: runnerId,\n          status: RunStatus.PENDING,',
+    anchor: 'await this.prisma.session.findMany({\n        where: {\n          assignedRunnerId: runnerId,\n          AND: [turnStateFilter([\'QUEUED\'])],',
     filter: "sessionKind: 'CONVERSATION',",
     within: 220,
   },

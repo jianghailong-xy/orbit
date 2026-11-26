@@ -181,6 +181,14 @@ test('managed runners wake on demand and sleep through the real application', {
   server = { port: Number(new globalThis.URL((await app.getUrl()).replace('[::1]', '127.0.0.1')).port) } as Apiserver;
   const runtime = app.get<ManagedRunnerRuntime | null>(MANAGED_RUNNER_RUNTIME);
   assert.equal(runtime?.available, true, 'the managed runtime is up');
+  if (!runtime?.available) return;
+  // The reconcile loop's kicks, counted: a STARTING instance's beat kicks it rather than leave READY to the next poll.
+  let kicks = 0;
+  const kick = runtime.worker.kick.bind(runtime.worker);
+  runtime.worker.kick = () => {
+    kicks += 1;
+    kick();
+  };
 
   // ── the test's side: the owner, the runner and the kubelet ──────────────────────────────────
   const bearer = (userId: string) => jwt.signAsync({ sub: userId, email: `${userId}@example.invalid` });
@@ -225,7 +233,9 @@ test('managed runners wake on demand and sleep through the real application', {
       const m = await mappingOf(ownerId);
       return m?.podUid && m.generation === generation && m.managementState === 'STARTING' ? m : null;
     });
+    const kicked = kicks;
     await heartbeat(starting.runnerId);
+    assert.ok(kicks > kicked, 'the STARTING instance\'s beat kicked the reconcile loop');
     return until('READY', async () => {
       const m = await mappingOf(ownerId);
       return m.managementState === 'READY' && m.generation === generation ? m : null;

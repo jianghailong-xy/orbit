@@ -20,10 +20,18 @@ import {
 const REFUSAL = "Cursor CLI can't carry a conversation to another account or key yet. Start a new session to use a different one.";
 
 type Facts = Parameters<typeof cursorConversationStarted>[0];
-/** A Cursor CLI session waiting for its first claim, unless `over` says otherwise. */
-const session = (over: Partial<Facts> = {}): Facts => ({
-  numTurns: 0, runtimeSessionId: null, status: RunStatus.PENDING, engineTurnActive: false, ...over,
-});
+const RELEASED: readonly string[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+/**
+ * A Cursor CLI session waiting for its first claim, unless `over` says otherwise. Stored as the server stores it: a
+ * released word with its release column, a held one with no turn state yet (it reads its word, as before the backfill).
+ */
+const session = (over: Partial<Facts> = {}): Facts => {
+  const status = over.status ?? RunStatus.PENDING;
+  return {
+    numTurns: 0, runtimeSessionId: null, engineTurnActive: false,
+    finishedAt: RELEASED.includes(status) ? new Date() : null, turnState: null, ...over, status,
+  };
+};
 
 test('P6b a Cursor CLI session has talked once a turn settled, once Cursor opened its conversation, or while a turn runs', () => {
   const talked: Array<[string, Facts]> = [

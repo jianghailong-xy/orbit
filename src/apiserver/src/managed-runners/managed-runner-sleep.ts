@@ -119,8 +119,12 @@ export interface ManagedHeartbeatAnswer {
   /** The mapping drains: this heartbeat hands its instance no new work (landings, repository
    *  operations, merges, commits, rate-limit resets). */
   draining: boolean;
+  concurrencyCap?: number;
   /** The sleep request to answer with, confirmed once the instance's acceptance is recorded. */
   sleep?: ManagedRunnerSleepRequest;
+  /** The mapping is STARTING and this beat may be the one READY waits for: the route kicks the manager rather than
+   *  leave it to the next poll. */
+  starting?: boolean;
 }
 
 /**
@@ -137,18 +141,21 @@ export async function managedRunnerHeartbeat(
   const mapping = await prisma.managedRunner.findUnique({
     where: { id: instance.mappingId },
     select: {
-      id: true, runnerId: true, generation: true, podUid: true, managementState: true, desiredState: true,
+      id: true, runnerId: true, generation: true, podUid: true, managementState: true, desiredState: true, concurrencyCap: true,
       demandRevision: true, drainDemandRevision: true, stopRequestedAt: true, stopAcknowledgedAt: true,
       imageRollTo: true, updateRequestedAt: true, updateCompletedAt: true,
     },
   });
-  if (!mapping || mapping.managementState !== 'DRAINING') return { draining: false };
+  if (!mapping) return { draining: false };
+  const cap = mapping.concurrencyCap == null ? {} : { concurrencyCap: mapping.concurrencyCap };
+  if (mapping.managementState === 'STARTING') return { draining: false, ...cap, starting: true };
+  if (mapping.managementState !== 'DRAINING') return { draining: false, ...cap };
   // Only the instance being drained is asked anything.
   if (mapping.generation !== instance.generation || mapping.podUid !== instance.podUid || !mapping.stopRequestedAt) {
-    return { draining: true };
+    return { draining: true, ...cap };
   }
   const requestedAt = mapping.stopRequestedAt.toISOString();
-  if (mapping.stopAcknowledgedAt) return { draining: true, sleep: { requestedAt, confirmed: true } };
+  if (mapping.stopAcknowledgedAt) return { draining: true, ...cap, sleep: { requestedAt, confirmed: true } };
   if (workload?.sleepReady === requestedAt && workloadIdle(workload) && mapping.drainDemandRevision !== null) {
     const owners = ownerUpdateDrain(mapping);
     const work = owners ? [] : await managedRunnerWork(prisma, mapping.runnerId);
@@ -167,8 +174,8 @@ export async function managedRunnerHeartbeat(
         },
         data: { stopAcknowledgedAt: now },
       });
-      if (accepted === 1) return { draining: true, sleep: { requestedAt, confirmed: true } };
+      if (accepted === 1) return { draining: true, ...cap, sleep: { requestedAt, confirmed: true } };
     }
   }
-  return { draining: true, sleep: { requestedAt } };
+  return { draining: true, ...cap, sleep: { requestedAt } };
 }

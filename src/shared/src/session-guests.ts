@@ -49,6 +49,9 @@ export interface GuestSessionSummary {
   waitingOn?: SessionWaitingOn | null;
   endReason?: string | null;
   workFinished?: boolean;
+  /** Runner-hosted jobs and shells still running, the other input of the Background mark (SessionBackgroundFields);
+   *  absent from an older server. */
+  runningBgCount?: number;
   addedAt: string;
   lastTurnAt: string | null;
 }

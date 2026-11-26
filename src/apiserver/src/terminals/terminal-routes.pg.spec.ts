@@ -99,7 +99,7 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
   // Uploads land in a folder of this run's, on the local backend, as the file specs keep them.
   const filesDir = mkdtempSync(path.join(os.tmpdir(), 'terminal-routes-files-'));
   t.after(() => rmSync(filesDir, { recursive: true, force: true }));
-  server = await startApiserver(url, jwtSecret, { ORBIT_DOCUMENTS_BACKEND: 'local', ORBIT_DOCUMENTS_DIR: filesDir });
+  server = await startApiserver(url, jwtSecret, { ORBIT_DRIVE_BACKEND: 'local', ORBIT_DRIVE_DIR: filesDir });
 
   const api = (method: string, path: string, bearer?: string, body?: unknown): Promise<Reply> =>
     call(server!, method, `/api${path}`, bearer, body);

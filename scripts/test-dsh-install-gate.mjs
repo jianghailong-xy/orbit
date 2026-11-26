@@ -22,6 +22,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import { Fatal, RunnerMachine, callApi, eventually, fileLog, freePort, lookPath, migrate, startApiserver, startPostgres } from './codex-reset-e2e/harness.mjs';
+import { sessionWordSql } from './lib/session-word.mjs';
 
 export const SCENARIOS = [
   'IG-S1 an upgraded runner without the pinned dsh keeps declaring it and reports it not installed',
@@ -218,7 +219,7 @@ exit 97
     const createSession = (workspaceId, providerSlug, prompt) =>
       call('POST', '/sessions', { workspaceId, provider: providerSlug, ...(providerSlug === harness ? { engine: 'dsh' } : {}), prompt, permissionMode: 'dontAsk' });
     const publicIdOf = (created) => created.json?.publicId ?? created.json?.id;
-    const sessionRow = (uuid) => one(`SELECT id::text AS id, status::text AS status, num_turns, error, runtime_session_id,
+    const sessionRow = (uuid) => one(`SELECT id::text AS id, ${sessionWordSql('session')} AS status, num_turns, error, runtime_session_id,
       assigned_runner_id::text AS runner, finished_at, end_reason::text AS end_reason,
       extract(epoch FROM run_claimed_at)::float8 * 1000 AS claimed_ms FROM session WHERE id = $1`, [uuid]);
     const uuidOf = async (prompt) => (await one('SELECT id::text AS id FROM session WHERE prompt = $1', [prompt]))?.id;

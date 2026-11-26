@@ -416,6 +416,48 @@ final class TranslationTests: XCTestCase {
         XCTAssertEqual(SessionTranslation.userFoot(nil, flipped: false), [])
     }
 
+    /// A failed held message's line also offers Cancel, but never on the session's opening prompt
+    /// (the server refuses to withdraw it), without a turn id, or while still translating.
+    func testCancelIsOfferedOnAFailedMessageAndNotOnTheOpening() {
+        let failed = TurnTranslation(state: .failed, from: .zhHans, original: "x")
+        XCTAssertEqual(SessionTranslation.userFoot(failed, flipped: false, cancellable: true).last,
+                       .action("Cancel", .cancelTurn))
+        XCTAssertFalse(SessionTranslation.userFoot(failed, flipped: false).contains(.action("Cancel", .cancelTurn)))
+        let translating = TurnTranslation(state: .translating, from: .zhHans, original: "x")
+        XCTAssertEqual(SessionTranslation.userFoot(translating, flipped: false, cancellable: true),
+                       [.chip("Translating…")])
+
+        func bubble(_ translation: TurnTranslation, turnId: String? = "t1") -> UserBubble {
+            var b = UserBubble(id: "b", text: "x", turnId: turnId, pending: true, queued: true)
+            b.translation = translation
+            return b
+        }
+        XCTAssertTrue(SessionTranslation.offersCancel(bubble(failed)))
+        XCTAssertFalse(SessionTranslation.offersCancel(bubble(failed, turnId: nil)))
+        XCTAssertFalse(SessionTranslation.offersCancel(bubble(translating)))
+        var opening = bubble(failed)
+        opening.opening = true
+        XCTAssertFalse(SessionTranslation.offersCancel(opening))
+    }
+
+    /// A held opening is listed as queued, and keeps its `opening` mark there.
+    func testAQueuedOpeningKeepsItsMarkSoItOffersNoCancel() throws {
+        let rows = try JSONDecoder().decode([QueuedTurnInfo].self, from: Data("""
+        [{"turnId":"t1","kind":"message","placement":"queued","content":"x","opening":true,
+          "translation":{"state":"FAILED","from":"zh-Hans","original":"x"}},
+         {"turnId":"t2","kind":"message","placement":"queued","content":"y",
+          "translation":{"state":"FAILED","from":"zh-Hans","original":"y"}}]
+        """.utf8))
+        var reducer = TranscriptReducer()
+        // First seen in a listing, then reconciled in place by the next one.
+        for _ in 0..<2 {
+            reducer.reconcileQueuedTurns(rows, knownBefore: [])
+            XCTAssertEqual(reducer.state.queued.map(SessionTranslation.offersCancel), [false, true])
+        }
+        reducer.removeWithdrawnSteer(turnId: "t2")
+        XCTAssertEqual(reducer.state.queued.map(\.turnId), ["t1"])
+    }
+
     func testTheReplyFoot() {
         let done = ReplyTranslation(lang: .zhHans, text: "找到了")
         XCTAssertEqual(SessionTranslation.replyFoot(done, pending: false, flipped: false),

@@ -44,7 +44,7 @@ func attachLocalReplyFiles(ctx context.Context, t *Transport, sessionID string, 
 	}
 	upload := memo.uploader(t, sessionID)
 	resolveDrive := func(ctx context.Context, p string) (string, error) {
-		entry, err := documentsStat(ctx, t, p)
+		entry, err := driveStat(ctx, t, p)
 		return entry.ID, err
 	}
 	for i := range events {
@@ -59,6 +59,7 @@ func attachLocalReplyFiles(ctx context.Context, t *Transport, sessionID string, 
 			continue
 		}
 		rewritten, outside, missing := rewriteLocalMarkdownLinks(ctx, text, roots, upload, resolveDrive)
+		memo.remember(roots, outside, missing)
 		// A failed flush restores the batch it already rewrote, so a retry sees the note it added.
 		if note := outsideReplyFilesNote(outside) + missingReplyFilesNote(missing); note != "" && !strings.HasSuffix(rewritten, note) {
 			rewritten += note
@@ -110,6 +111,88 @@ func missingReplyFilesNote(paths []string) string {
 type replyAttachmentIDs struct {
 	mu  sync.Mutex
 	ids map[string]string
+	// What replies linked that could not be attached since the agent's last turn, and the directories that work.
+	roots, outside, missing []string
+}
+
+// remember keeps the links a reply made that could not be attached, for replyFileCorrection.
+func (a *replyAttachmentIDs) remember(roots, outside, missing []string) {
+	if len(outside) == 0 && len(missing) == 0 {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.roots = roots
+	a.outside = appendMissingStrings(a.outside, outside)
+	a.missing = appendMissingStrings(a.missing, missing)
+}
+
+func appendMissingStrings(have, add []string) []string {
+	for _, s := range add {
+		found := false
+		for _, h := range have {
+			found = found || h == s
+		}
+		if !found {
+			have = append(have, s)
+		}
+	}
+	return have
+}
+
+// takeCorrection is the note for the agent's next turn (replyFileCorrection), once: "" when its replies since the
+// last turn linked nothing that could not be attached.
+func (a *replyAttachmentIDs) takeCorrection() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	note := replyFileCorrection(a.roots, a.outside, a.missing)
+	a.outside, a.missing = nil, nil
+	return note
+}
+
+// replyFileCorrection is what the agent is told at the start of its next turn when a reply linked a file the runner
+// could not attach (design D5): the reply-files paragraph is one sentence, and this says the rest where it applies,
+// naming the path and the directories that work. "" when there is nothing to correct.
+func replyFileCorrection(roots, outside, missing []string) string {
+	if len(outside) == 0 && len(missing) == 0 {
+		return ""
+	}
+	quote := func(paths []string) string {
+		names := make([]string, len(paths))
+		for i, p := range paths {
+			names[i] = "`" + p + "`"
+		}
+		return strings.Join(names, ", ")
+	}
+	var parts []string
+	if len(outside) > 0 {
+		parts = append(parts, quote(outside)+" is outside the directories a reply can link from")
+	}
+	if len(missing) > 0 {
+		parts = append(parts, quote(missing)+" does not exist")
+	}
+	return "[Orbit: your last reply linked a file the user cannot open: " + strings.Join(parts, "; ") + ". Only a file inside " +
+		quote(roots) + " is attached: copy it into one of them and link the copy.]"
+}
+
+// withReplyFileCorrection is text as the engine is to read it: led by the correction, when there is one.
+func withReplyFileCorrection(text, note string) string {
+	switch {
+	case note == "":
+		return text
+	case text == "":
+		return note
+	}
+	return note + "\n\n" + text
+}
+
+// replyFileMemos is each running session's replyAttachmentIDs: the flush that attaches a reply's files and the loop
+// that feeds the agent its next message are different functions of one session, and share this.
+var replyFileMemos sync.Map
+
+func replyFilesOf(sessionID string) *replyAttachmentIDs {
+	memo, _ := replyFileMemos.LoadOrStore(sessionID, newReplyAttachmentIDs())
+	return memo.(*replyAttachmentIDs)
 }
 
 func newReplyAttachmentIDs() *replyAttachmentIDs {

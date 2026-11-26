@@ -201,7 +201,7 @@ class EvidenceFilesApplication : OrbitApplication() {
 }
 
 /**
- * The evidence card's files as a reader meets them (docs/documents-design.md §2.6, the web's EvidenceFiles.test.tsx): the production
+ * The evidence card's files as a reader meets them (docs/drive-design.md §2.6, the web's EvidenceFiles.test.tsx): the production
  * Activity, AuthSession and reader over T6's route. The area under the criterion, the page it opens, the viewer a thumbnail opens,
  * what is left once the bytes have gone, and a version that cites no file. Each state's semantics tree and picture are written under
  * `src/android/build/evidence/evidence-files-t8/`.

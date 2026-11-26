@@ -49,5 +49,5 @@ func runnerChildEnv(env []string) []string {
 	if hasPath {
 		kept = envWithValue(kept, "PATH", pathWithManagedRgLast(envValue(kept, "PATH")))
 	}
-	return append(kept, envRunnerChild+"=1")
+	return memoryWatchdogChildEnv(append(kept, envRunnerChild+"=1"))
 }

@@ -442,8 +442,8 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     expect(mounted().querySelector('.session-folder-workspace')?.textContent).toBe('orbit');
     expect(sessionTitles()).toEqual(['Release notes', 'Tag the build']);
     expect(folderRows()).toHaveLength(0);
-    // The conversation on the right stays; the page rides along in the address.
-    expect(location).toBe(`/sessions/${LOOSE.id}?folder=${RELEASE.id}`);
+    // The conversation on the right stays, and its address names no list page (owner 2026-11-25).
+    expect(location).toBe(`/sessions/${LOOSE.id}`);
 
     await click(mounted().querySelector('.session-folder-back'), 'the back button');
     await until(() => expect(folderNames()).toEqual(['Release', 'Wiki']));
@@ -457,8 +457,21 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     await until(() => expect(sessionTitles()).toEqual(['Wiki cursor']));
 
     await click(listRow('Wiki cursor'), 'the Wiki cursor row');
-    await until(() => expect(location).toBe(`/sessions/${CURSOR.id}?folder=${WIKI.id}`));
+    await until(() => expect(location).toBe(`/sessions/${CURSOR.id}`));
     expect(mounted().querySelector('.session-folder-title')?.textContent).toBe('Wiki');
+  });
+
+  it('opens a conversation’s own address on the folder it is filed in', async () => {
+    await mount(`/sessions/${CURSOR.id}`, () =>
+      expect(mounted().querySelector('.session-folder-title')?.textContent).toBe('Wiki'));
+    expect(sessionTitles()).toEqual(['Wiki cursor']);
+    expect(location).toBe(`/sessions/${CURSOR.id}`);
+  });
+
+  it('drops the page an older conversation link names, and opens where the conversation is', async () => {
+    await mount(`/sessions/${LOOSE.id}?folder=${RELEASE.id}`, () => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(folderNames()).toEqual(['Release', 'Wiki']));
+    expect(sessionTitles()).toEqual(['Loose one']);
   });
 
   it('starts a session composed on a folder’s page in that folder', async () => {
@@ -501,7 +514,7 @@ describe('scoping a folder’s page', { timeout: 60_000 }, () => {
     // Still the folder's page, narrowed to its tagged session.
     await until(() => expect(sessionTitles()).toEqual(['Release notes']));
     expect(mounted().querySelector('.session-folder-title')?.textContent).toBe('Release');
-    expect(location).toBe(`/sessions/${LOOSE.id}?folder=${RELEASE.id}`);
+    expect(location).toBe(`/sessions/${LOOSE.id}`);
     const chip = mounted().querySelector('.session-tag-chip');
     expect(chip?.textContent).toContain('frontend');
 
@@ -653,7 +666,7 @@ describe('Move', { timeout: 60_000 }, () => {
 
   it('moves the open session to another workspace with End and Move, after saying what stays behind', async () => {
     await mountOnLoose();
-    await click(mounted().querySelector('.workspace-header button[title="More actions"]'), 'the header ⋯');
+    await click(mounted().querySelector('.workspace-header button[aria-label="More actions"]'), 'the header ⋯');
     await until(() => expect(menuItem('Move…')).toBeTruthy());
     await click(menuItem('Move…'), 'Move…');
     await until(() => expect(option('wikova-develop')).toBeTruthy());
@@ -929,7 +942,7 @@ describe('a folder across a workspace switch', { timeout: 60_000 }, () => {
     await mount(`/sessions/${LOOSE.id}`, () => expect(folderNames()).toEqual(['Release', 'Wiki']), true);
     await click(folderRow('Release'), 'the Release folder row');
     await click(listRow('Release notes'), 'the Release notes row');
-    await until(() => expect(location).toBe(`/sessions/${NOTES.id}?folder=${RELEASE.id}`));
+    await until(() => expect(location).toBe(`/sessions/${NOTES.id}`));
 
     await click(workspaceRow('wikova-develop'), 'the wikova-develop row');
     await until(() => expect(folderNames()).toEqual(['Elsewhere']));
@@ -939,14 +952,14 @@ describe('a folder across a workspace switch', { timeout: 60_000 }, () => {
 
     // Back in orbit: its folder's page, and the conversation the page was left on.
     await click(workspaceRow('orbit'), 'the orbit row');
-    await until(() => expect(location).toBe(`/sessions/${NOTES.id}?folder=${RELEASE.id}`));
-    expect(folderTitle()).toBe('Release');
+    await until(() => expect(location).toBe(`/sessions/${NOTES.id}`));
+    await until(() => expect(folderTitle()).toBe('Release'));
     expect(sessionTitles()).toEqual(['Release notes', 'Tag the build']);
 
     // And wikova-develop keeps its own.
     await click(workspaceRow('wikova-develop'), 'the wikova-develop row');
-    await until(() => expect(location).toBe(`/sessions/${ELSEWHERE_ROW.id}?folder=${ELSEWHERE.id}`));
-    expect(folderTitle()).toBe('Elsewhere');
+    await until(() => expect(location).toBe(`/sessions/${ELSEWHERE_ROW.id}`));
+    await until(() => expect(folderTitle()).toBe('Elsewhere'));
     expect(sessionTitles()).toEqual(['Elsewhere notes']);
   });
 
@@ -967,7 +980,7 @@ describe('a folder across a workspace switch', { timeout: 60_000 }, () => {
   it('comes back to the list when the folder was deleted while away', async () => {
     await mount(`/sessions/${LOOSE.id}`, () => expect(folderNames()).toEqual(['Release', 'Wiki']), true);
     await click(folderRow('Release'), 'the Release folder row');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?folder=${RELEASE.id}`));
+    await until(() => expect(folderTitle()).toBe('Release'));
 
     await click(workspaceRow('wikova-develop'), 'the wikova-develop row');
     await until(() => expect(folderNames()).toEqual(['Elsewhere']));

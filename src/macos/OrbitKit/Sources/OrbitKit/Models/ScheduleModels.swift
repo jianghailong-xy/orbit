@@ -935,7 +935,7 @@ public struct ScheduleControlAnswer: Decodable, Sendable {
     public let record: ScheduleChangeRecord?
 }
 
-/// `POST /schedules/:id/undo`: APPLIED, UNCHANGED or PENDING (a card, when undoing would widen).
+/// `POST /schedules/:id/undo` and `…/rename`: APPLIED, UNCHANGED or PENDING (a card, when undoing would widen).
 public struct ScheduleUpdateAnswer: Decodable, Sendable {
     public let outcome: String
     public let schedule: ScheduleView?
@@ -945,6 +945,11 @@ public struct ScheduleUpdateAnswer: Decodable, Sendable {
 public struct ScheduleUndoBody: Encodable, Sendable {
     public let revision: Int
     public init(revision: Int) { self.revision = revision }
+}
+
+public struct ScheduleRenameBody: Encodable, Sendable {
+    public let title: String
+    public init(title: String) { self.title = title }
 }
 
 public struct ScheduleRequestsResponse: Decodable, Sendable {

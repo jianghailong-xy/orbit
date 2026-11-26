@@ -404,6 +404,8 @@ struct ProjectDetailView: View {
     @State private var goalExpanded = false
     @State private var instructionsExpanded = false
     @State private var criteriaExpanded = false
+    /// Settings › Translation: the criteria list flipped back to the words they were written in.
+    @State private var criteriaShowOriginal = false
     /// Criteria whose "How it's checked" is open.
     @State private var openMethods: Set<String> = []
     /// Folds of the task graph the reader opened.
@@ -2207,6 +2209,7 @@ struct ProjectDetailView: View {
         let criteria = document.acceptanceCriteriaItems
         let shown = criteriaExpanded ? criteria : Array(criteria.prefix(criteriaLimit))
         let confirmed = criteria.filter { $0.satisfiedBy == .confirmation }.count
+        let owner = OwnerCardTranslations.ownerLanguage(model.user)
         return Section {
             if criteria.isEmpty {
                 Text(ProjectPage.noCriteria).font(.orbitLabel).foregroundStyle(.secondary)
@@ -2217,8 +2220,14 @@ struct ProjectDetailView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(shown) { criterion in
-                    criterionRow(store, criterion, ref: document.integration?.ref,
+                    criterionRow(store, criterion,
+                                 text: document.criterionText(criterion, owner: owner, showOriginal: criteriaShowOriginal),
+                                 ref: document.integration?.ref,
                                  main: RunSettings.mainBranchName(document.integration?.upstreamRef))
+                }
+                TranslationFootView(parts: document.criteriaTranslationFoot(owner: owner,
+                                                                            showOriginal: criteriaShowOriginal)) { _ in
+                    criteriaShowOriginal.toggle()
                 }
                 if let disclosure = ProjectPage.criteriaDisclosure(total: criteria.count, limit: criteriaLimit,
                                                                    expanded: criteriaExpanded, compact: compact) {
@@ -2251,13 +2260,14 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// `main` is the project's main branch by name, which where met work landed says.
-    private func criterionRow(_ store: ProjectDetailModel, _ criterion: ProjectCriterion, ref: String?,
+    /// `main` is the project's main branch by name, which where met work landed says. `text` is the
+    /// criterion's words as drawn (`ProjectDocument.criterionText`); everything pressed reads `criterion`.
+    private func criterionRow(_ store: ProjectDetailModel, _ criterion: ProjectCriterion, text: String, ref: String?,
                               main: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             ordinalMark(criterion)
             VStack(alignment: .leading, spacing: 4) {
-                Text(criterion.text).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
+                Text(text).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
                 if let moved = criterion.movedFrom {
                     // Board 02 I: where it came from.
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -2953,7 +2963,8 @@ private struct ProjectDoneSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var record: ProjectDoneRecord?
     @State private var error: String?
-    /// Settings › Translation: the coordinator's judgment and gaps flip back to its own words.
+    /// Settings › Translation: the project's title and criteria, and the coordinator's judgment and
+    /// gaps, flip back to the words they were written in.
     @State private var showOriginal = false
 
     var body: some View {
@@ -2984,8 +2995,8 @@ private struct ProjectDoneSheet: View {
             let digest = store.confirmation?.currentVersion.digest
             let owner = OwnerCardTranslations.ownerLanguage(model.user)
             ProjectDoneCard(
-                subject: subject,
                 // Drawn translated; Record as done sends `row`'s own request, as written.
+                subject: subject.shown(owner: owner, showOriginal: showOriginal),
                 request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),
                 askedAt: row?.waitingSince,
                 confirmedAt: store.confirmation?.confirmation?.confirmedAt,
@@ -3007,7 +3018,8 @@ private struct ProjectDoneSheet: View {
                     upload: { data, name, mime in
                         try await store.uploadConfirmationShot(data, filename: name, mimeType: mime)
                     }),
-                translationFoot: row?.translationFoot(owner: owner, showOriginal: showOriginal) ?? [],
+                translationFoot: OwnerCardTranslations.doneCardFoot(subject: subject, request: row, owner: owner,
+                                                                    showOriginal: showOriginal),
                 onFlipTranslation: { showOriginal.toggle() },
                 notYetRefused: store.doneDeclineRefusedUntranslated,
                 onNotYetAsWritten: notYet(row, sendAsWritten: true))

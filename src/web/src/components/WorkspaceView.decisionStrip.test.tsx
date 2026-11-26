@@ -39,14 +39,7 @@ describe('the pending strip is pinned above the conversation', () => {
   });
 
   it('puts the strip under the header rather than in the conversation column', () => {
-    // Above the sticky question too, which is the other thing pinned there. On the screenshot this
-    // came from, the strip sat below it — between `↑ Your question` and the next reply, with no
-    // boundary of its own, which is what made it read as a message nobody sent.
-    const strip = SOURCE.indexOf('<SessionDecisionStrip');
-    const stickyQuestion = SOURCE.indexOf('chat-sticky-label');
-    expect(stickyQuestion).toBeGreaterThan(-1);
-    expect(strip).toBeLessThan(stickyQuestion);
-    // And it is not a child of the message list: the scroller opens after it and closes after the
+    // It is not a child of the message list: the scroller opens after it and closes after the
     // transcript, so nothing between those two points can be the strip.
     const insideScroller = SOURCE.slice(SOURCE.indexOf(SCROLL_WRAP));
     expect(insideScroller).not.toContain('<SessionDecisionStrip');

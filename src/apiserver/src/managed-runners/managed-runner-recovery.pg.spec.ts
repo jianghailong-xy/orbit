@@ -526,7 +526,7 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
     const status = await r.service.status(ownerId);
     const display = managedRunnerDisplay(status)!;
     assert.deepEqual({ kind: display.kind, retry: display.retry, canRetry: status.actions.canRetry }, { kind: 'failed', retry: true, canRetry: true });
-    assert.equal(display.detail, 'The runner instance stopped too often to be started again automatically. A retry starts it again and keeps the data volume.');
+    assert.equal(display.detail, 'The runner instance stopped too often to be started again at once. It is started again by itself later while work is waiting for it, and a retry starts it now; the data volume is kept.');
 
     // The owner's retry: a fresh budget, the same volume.
     await r.service.retry(ownerId, 'retry-loop', failed.revision);
@@ -573,7 +573,7 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
     assert.deepEqual([codeOf(failed), (failed.lastError as { retryable: boolean }).retryable], ['POD_OUT_OF_MEMORY', true]);
     const display = managedRunnerDisplay(await r.service.status(ownerId))!;
     assert.deepEqual({ kind: display.kind, retry: display.retry }, { kind: 'failed', retry: true });
-    assert.equal(display.detail, 'The runner kept running out of memory, so it is not started again automatically. A retry starts it again and keeps the data volume; if it keeps happening, an operator can give runners more memory.');
+    assert.equal(display.detail, 'The runner kept running out of memory, so it is not started again at once. It is started again by itself later while work is waiting for it, and a retry starts it now; the data volume is kept. If it keeps happening, an operator can give runners more memory.');
     assert.match(stops(r).at(-1)!, /exit code 137, out of memory; FAILED: attempt 3 of 3/);
 
     // The host's OOM flag on a runner that was not killed (exit 255 after a restart, a child process killed earlier) is not out of memory.

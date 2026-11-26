@@ -65,6 +65,7 @@ const EXEMPT: Record<string, string> = {
   'src/components/ProjectShareControls.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/RunnerRegisterGuide.tsx#1': "runner state is polled; no control-plane event announces a runner change",
   'src/components/RunnerSignIn.tsx#2': "a runner's login state is polled; no control-plane event announces it",
+  'src/pages/RunnerBrowserPage.tsx#1': "a runner's login state is polled; no control-plane event announces it",
   'src/components/SessionSettingsDrawer.tsx#3': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/ShareModal.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/TaskDetailPanel.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",
@@ -107,6 +108,8 @@ const EXEMPT: Record<string, string> = {
   'src/pages/AdminUsersPage.tsx#4': "access tokens are written from this tab; no control-plane event announces them",
   'src/pages/FeishuConnectGroupPage.tsx#1': "Feishu chat routing is integration configuration; no control-plane event announces it",
   'src/pages/FeishuIntegrationPage.tsx#1': "Feishu integration settings are written from this tab; no control-plane event announces them",
+  'src/pages/settings/NotificationsPage.tsx#1': "the server's web push key, set in its environment; no control-plane event announces it",
+  'src/components/settings/SettingsLayout.tsx#2': "the server's web push key, which only decides whether search lists This browser's row; no control-plane event announces it",
 };
 
 /** Calls whose first argument is a query options object (useQueries names its queries property). */

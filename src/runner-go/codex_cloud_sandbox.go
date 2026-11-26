@@ -16,15 +16,15 @@ import (
 // unshare(CLONE_NEWUSER) is refused and Codex's bundled bwrap cannot build its sandbox: every
 // command Auto sends under workspace-write fails before it runs, and Codex 0.170 has no working
 // fallback (legacy Landlock panics). The model then leaves the sandbox anyway, through an escalation
-// Codex's own reviewer allows or through bg_run. The owner chose to say so rather than pretend: on a
-// managed runner whose sandbox probe fails, Auto runs with the sandbox off (danger-full-access) and
-// the transcript says commands run unconfined inside the Cloud runner. The approval policy and
-// reviewer stay as Auto has them. A self-registered runner never probes and keeps today's behaviour.
+// Codex's own reviewer allows or through bg_run. So on a managed runner whose sandbox probe fails,
+// Auto runs with the sandbox off (danger-full-access) and the session's permission semantics say so.
+// The Cloud runner's own container is the boundary there, so the transcript gets no warning about it
+// (owner, 2026-11-26). The approval policy and reviewer stay as Auto has them. A self-registered runner never probes and keeps today's behaviour.
 
 const (
 	codexCloudSandboxNoticeKind = "codex-sandbox-unavailable"
 	codexCloudSandboxCode       = "sandbox_unavailable_cloud"
-	codexCloudSandboxNotice     = "Codex's sandbox is unavailable on Orbit Cloud: commands run unconfined inside your Cloud runner."
+	codexCloudSandboxNote       = "Codex's own sandbox cannot start on Orbit Cloud, so it is off: your Cloud runner's container isolates its commands instead."
 	codexCloudSandboxProbeLimit = 30 * time.Second
 )
 
@@ -108,22 +108,20 @@ func codexCloudSandboxPermissionSemantics() map[string]interface{} {
 		"approvalSupport": "partial",
 		"honored":         false,
 		"sandbox":         "off",
-		"note":            codexCloudSandboxNotice,
-		"shortNote":       "sandbox off on Orbit Cloud, commands run unconfined",
+		"note":            codexCloudSandboxNote,
+		"shortNote":       "Codex sandbox off, the Cloud runner's container isolates commands",
 	}
 }
 
-// codexCloudSandboxNoticePayload is the system event that tells the transcript the sandbox is off. It is
-// also the runner's report of the probe's outcome to the server: `sandboxUnavailable` marks the session
-// so its server-derived permission semantics say the sandbox is off (apiserver codex-sandbox-report.ts).
-// A runner whose probe passed sends no such event, which leaves the session as it is.
+// codexCloudSandboxNoticePayload is the runner's report of the probe's outcome to the server:
+// `sandboxUnavailable` marks the session so its server-derived permission semantics say the sandbox is
+// off (apiserver codex-sandbox-report.ts). It carries no `notice` or `diagnostic`, so the transcript
+// draws nothing for it. A runner whose probe passed sends no such event, which leaves the session as it is.
 func codexCloudSandboxNoticePayload() map[string]interface{} {
 	return map[string]interface{}{
 		"sandboxUnavailable":  true,
 		"noticeKind":          codexCloudSandboxNoticeKind,
 		"provider":            providerCodex,
-		"notice":              codexCloudSandboxNotice,
-		"diagnostic":          codexCloudSandboxDiagnostic(),
 		"permissionSemantics": codexCloudSandboxPermissionSemantics(),
 	}
 }

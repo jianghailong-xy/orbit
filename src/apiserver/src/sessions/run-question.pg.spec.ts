@@ -12,7 +12,7 @@ import { RunnerSessionsController } from '../runner-api/runner-sessions.controll
 import { SessionRequestService } from './session-request.service';
 import { SessionsService } from './sessions.service';
 import { appendRunQuestionContext, questionAnswers, questionHolds } from './run-question';
-import { countLiveApprovals } from './abandoned-approvals';
+import { countLiveApprovals, countLiveApprovalsBySession } from './abandoned-approvals';
 
 const url = process.env.COORDINATOR_PG_URL;
 const input = { questions: [{ question: 'Which port?', options: [{ label: '3000' }, { label: '4000' }] }] };
@@ -63,6 +63,7 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
     assert.equal(frames.some(args => (args[1] as { type?: string })?.type === 'approval_request'), false);
     assert.deepEqual(await badges.needsYouSessions(ownerId), []);
     assert.equal(await countLiveApprovals(db, run), 0);
+    assert.equal((await countLiveApprovalsBySession(db, [run])).get(run.id), 0, 'the batched count agrees');
     assert.deepEqual(await sessions.listApprovals(ownerId, run.id, 'PENDING'), []);
 
     const permission = await api.createApproval(caller, run.id, { toolName: 'Bash', input: { command: 'pwd' }, toolUseId: randomUUID() });
@@ -70,6 +71,7 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
     assert.equal(pushes[0][1], permission.id);
     assert.deepEqual(await badges.needsYouSessions(ownerId), [run.id]);
     assert.equal(await countLiveApprovals(db, run), 1);
+    assert.equal((await countLiveApprovalsBySession(db, [run])).get(run.id), 1, 'the batched count agrees');
     assert.equal(await (badges as unknown as { claimApprovalAlert(s: string, a: string): Promise<boolean> }).claimApprovalAlert(run.id, permission.id), true,
       'a held question cannot swallow the security approval alert edge');
     await assert.rejects(requests.reply(ownerId, run.id, request.id, { option: 0 }), /only the session/);

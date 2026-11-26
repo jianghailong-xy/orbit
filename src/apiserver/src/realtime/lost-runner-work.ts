@@ -1,8 +1,8 @@
-import type { Prisma, RunStatus } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 
-import { isSessionExecuting, sessionHoldsSlot } from '../common/session-working';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isHeld } from '../common/session-release';
+import { isSessionExecuting, type SessionExecutionRow } from '../common/session-working';
 import {
   BACKGROUND_WAKE_TURN_PREFIX,
   type BackgroundWakeDto,
@@ -13,13 +13,15 @@ import {
 import { interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from '../runner-api/subagent-wake';
 import { RUNNER_BEATS, type RunnerBeats } from '../runners/runner-presence';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
+import { legacySessionStatusSql } from '../sessions/session-legacy-words';
+import { sessionTurnStateSql, turnStateOf, type TurnState } from '../sessions/session-turn-state';
 import { SessionNotSendable, type SessionsService } from '../sessions/sessions.service';
 
 /**
  * What the reaper does with an idle-looking session whose runner it has judged lost while something was still executing
  * in it (plan step 1.7; docs/session-three-state-design.md §11.3 item 4).
  *
- * A RUNNING session is a dispatched turn, and losing its runner fails it (`runnerOfflineIsFatal`). Any other open
+ * A turn in flight is a dispatched turn, and losing its runner fails the session (the reaper's sweep). Any other held
  * session holds no slot and stays resumable, so the reaper left it alone — and with it whatever its sets said was
  * executing on the lost machine: an engine turn the engine started itself, a SubAgent, a runner-hosted job. A runner that
  * comes back clears those at its takeover; one that never comes back left them set for good, and the session's task
@@ -67,7 +69,10 @@ export interface LostRunnerWork {
 
 interface LockedRow {
   ownerId: string;
-  status: RunStatus;
+  /** The word the session answers with now (sessions/session-legacy-words.ts), which `isSessionExecuting` reads. */
+  status: SessionExecutionRow['status'];
+  turnState: TurnState | null;
+  finishedAt: Date | null;
   assignedRunnerId: string | null;
   cancelRequestedAt: Date | null;
   runClaimedAt: Date | null;
@@ -83,18 +88,29 @@ interface LockedRow {
  * `claimedBefore` is the line a claim must be older than to be the lost runner's (the reaper's reap window), and
  * `looksOffline` the reaper's own verdict on a runner row, re-asked here as forceFinalize re-asks it.
  */
+/**
+ * What the reaper reads of a runner to say whether it is lost (ReaperService `runnerLooksOffline`): its status, both
+ * records of its heartbeat, and whether it is a managed runner, whose OFFLINE its manager writes on a proven stop and
+ * is no sign-off.
+ */
+export const RUNNER_LIVENESS = { status: true, ...RUNNER_BEATS, managedRunner: { select: { id: true } } } as const;
+
+export type RunnerLiveness = RunnerBeats & { status: string; managedRunner?: { id: string } | null };
+
 export async function settleLostRunnerWork(
   tx: Prisma.TransactionClient,
   sessionId: string,
   runnerId: string,
   claimedBefore: Date,
-  looksOffline: (runner: (RunnerBeats & { status: string }) | null) => boolean,
+  looksOffline: (runner: RunnerLiveness | null) => boolean,
 ): Promise<LostRunnerWork | null> {
   // The verdict came from the sweep's one snapshot; re-asked here.
-  const runner = await tx.runner.findUnique({ where: { id: runnerId }, select: { status: true, ...RUNNER_BEATS } });
+  const runner = await tx.runner.findUnique({ where: { id: runnerId }, select: RUNNER_LIVENESS });
   if (!looksOffline(runner)) return null;
   const rows = await tx.$queryRaw<LockedRow[]>`
-    SELECT "owner_id" AS "ownerId", "status", "assigned_runner_id" AS "assignedRunnerId",
+    SELECT "owner_id" AS "ownerId", ${legacySessionStatusSql('"session"')} AS "status",
+           ${sessionTurnStateSql('"session"')} AS "turnState", "finished_at" AS "finishedAt",
+           "assigned_runner_id" AS "assignedRunnerId",
            "cancel_requested_at" AS "cancelRequestedAt", "run_claimed_at" AS "runClaimedAt",
            "engine_turn_active" AS "engineTurnActive", "running_subagents" AS "runningSubagents",
            "running_bg_jobs" AS "runningBgJobs"
@@ -105,8 +121,8 @@ export async function settleLostRunnerWork(
   if (
     !row ||
     row.assignedRunnerId !== runnerId ||
-    !OPEN_SESSION_STATUSES.includes(row.status) ||
-    sessionHoldsSlot(row) ||
+    !isHeld(row) ||
+    turnStateOf(row) === 'IN_FLIGHT' ||
     row.cancelRequestedAt !== null ||
     (row.runClaimedAt !== null && row.runClaimedAt >= claimedBefore) ||
     !isSessionExecuting(row)

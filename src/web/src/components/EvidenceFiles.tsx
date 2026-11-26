@@ -79,10 +79,11 @@ import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Drawer } from './ui/Drawer';
 import { ImagePreview } from './ui/ImagePreview';
+import { Tooltip } from './ui/Tooltip';
 import './EvidenceFiles.css';
 
 /**
- * What a version of evidence cites, on its card (docs/documents-design.md §2.6): the file area under
+ * What a version of evidence cites, on its card (docs/drive-design.md §2.6): the file area under
  * the standard, the Evidence files page it opens, and the viewer a thumbnail opens.
  *
  * ONLY A RASTER IMAGE IS EVER DRAWN
@@ -396,17 +397,18 @@ function PinButton({ file, pins }: { file: EvidenceFile; pins: FilePins }): JSX.
   const pinned = evidenceFileIsPinned(file);
   const label = pinned ? EVIDENCE_FILE_UNPIN : EVIDENCE_FILE_PIN;
   return (
-    <button
-      type="button"
-      className={`evidence-tile-pin${pinned ? ' is-pinned' : ''}`}
-      aria-label={label}
-      aria-pressed={pinned}
-      title={label}
-      disabled={pins.pinning.has(file.id)}
-      onClick={() => pins.press(file)}
-    >
-      {pinned ? <PushpinFilled aria-hidden /> : <PushpinOutlined aria-hidden />}
-    </button>
+    <Tooltip content={label}>
+      <button
+        type="button"
+        className={`evidence-tile-pin${pinned ? ' is-pinned' : ''}`}
+        aria-label={label}
+        aria-pressed={pinned}
+        disabled={pins.pinning.has(file.id)}
+        onClick={() => pins.press(file)}
+      >
+        {pinned ? <PushpinFilled aria-hidden /> : <PushpinOutlined aria-hidden />}
+      </button>
+    </Tooltip>
   );
 }
 

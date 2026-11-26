@@ -87,6 +87,8 @@ import {
   type SessionRunState,
 } from '../lib/sessionState';
 import { QUEUED_LABEL } from '../lib/runnerSlots';
+import { sessionDisplayState, sessionDisplayText, sessionMarks } from '../lib/sessionDisplay';
+import { SessionMarkChips } from './SessionStateDisplay';
 import { refreshTaskScheduleViews, scheduledStart } from '../lib/taskSchedule';
 import { MD } from './Transcript';
 import { LandingLink } from './LandingLink';
@@ -140,6 +142,10 @@ export const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: 
 // The run's badge reads the same run state as the session header; a queued run the server says is on hold
 // (`waitingOn` HOLD) wears the header's word for it.
 export const sessionStatusMeta = (session: any) => {
+  // With the facts, the badge says the state from `phase` alone (lib/sessionDisplay): blue while it runs, muted
+  // otherwise. The run's marks are drawn beside it. What follows is the reading for an older control plane.
+  const shown = sessionDisplayState(session);
+  if (shown) return { label: shown.word, tone: shown.phase === 'RUNNING' ? 'blue' : 'muted' };
   const state = sessionRunStateOf(session);
   if (state === 'QUEUED' && sessionWaitingOnOf(session) === 'HOLD' && !session.queuedReason) {
     return { label: 'On hold', tone: SESSION_STATE_META.QUEUED.tone };
@@ -278,7 +284,9 @@ export function taskMarkdown(task: any, link: string): string {
   if (runs.length === 0) out.push('No runs yet');
   else out.push(`${runs.length} run${runs.length === 1 ? '' : 's'}`, '');
   for (const s of runs.slice(0, MARKDOWN_RUNS)) {
-    out.push(`- ${sessionStatusMeta(s).label} · ${fmt(s.createdAt)}${s.workspace?.name ? ` · ${s.workspace.name}` : ''}`);
+    // With the facts, the state word and the run's marks, " · " between them (lib/sessionDisplay).
+    const runLabel = sessionDisplayText(s) ?? sessionStatusMeta(s).label;
+    out.push(`- ${runLabel} · ${fmt(s.createdAt)}${s.workspace?.name ? ` · ${s.workspace.name}` : ''}`);
   }
   if (runs.length > MARKDOWN_RUNS) out.push(`- …and ${runs.length - MARKDOWN_RUNS} earlier`);
   return `${out.join('\n')}\n`;
@@ -1508,7 +1516,10 @@ export function TaskDetailPanel({
 
   // The run going now, if any, and what it last reported (task_progress_report).
   const liveRun: any = sessions.find((s: any) => isSessionBusy(s)) ?? null;
-  const liveRunning = liveRun != null && sessionRunStateOf(liveRun) === 'RUNNING';
+  // With the facts, the run going now is Running or Queued by `phase` alone (lib/sessionDisplay), and its marks are
+  // drawn beside the Now card's line; from an older control plane, the run state as before.
+  const liveShown = liveRun != null ? sessionDisplayState(liveRun) : null;
+  const liveRunning = liveRun != null && (liveShown ? liveShown.phase === 'RUNNING' : sessionRunStateOf(liveRun) === 'RUNNING');
   const progress = q.data?.progress?.revision > 0 ? q.data.progress : null;
   const progressStep = progress?.current != null
     ? progress.total != null ? `Step ${progress.current} of ${progress.total}` : `Step ${progress.current}`
@@ -1592,7 +1603,12 @@ export function TaskDetailPanel({
   };
 
   const runRow = (s: any) => {
-    const state = sessionRunStateOf(s);
+    // With the facts, the row's dot is the state (`phase`) and a failure is its red mark (lib/sessionDisplay); from
+    // an older control plane, the run state as before.
+    const shown = sessionDisplayState(s);
+    const marks = sessionMarks(s);
+    const dot = shown ? shown.phase : sessionRunStateOf(s);
+    const failed = marks ? marks.includes('FAILED') : sessionRunStateOf(s) === 'FAILED';
     const meta = sessionStatusMeta(s);
     // The decision behind this run, when it named a tier (model routing §9). Applied,
     // the run is on its pick; not, the run kept the Agent's own model and the pick is
@@ -1613,9 +1629,9 @@ export function TaskDetailPanel({
       <Fragment key={s.id}>
         <Link
           to={`/sessions/${encodeId(s.id)}`}
-          className={`tdp-session${state === 'FAILED' ? ' is-failed' : ''}`}
+          className={`tdp-session${failed ? ' is-failed' : ''}`}
         >
-          <span className={`tdp-dot ${state}`} />
+          <span className={`tdp-dot ${dot}`} />
           <div className="tdp-session-main">
             {/* Workspace leads — it's what tells two runs of the same task apart; the
                 system-generated title just repeats the task name. */}
@@ -1649,6 +1665,7 @@ export function TaskDetailPanel({
             )}
           </div>
           <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
+          <SessionMarkChips marks={marks} />
         </Link>
         {s.route?.relaxedRun && <RelaxedRunNote sentence={s.route.relaxedRun} />}
         {route && whyShown && (
@@ -2040,9 +2057,12 @@ export function TaskDetailPanel({
                     <div className="tdp-now-title">
                       {liveRunning
                         ? `${liveRun.workspace?.name ?? task?.assignee?.name ?? 'The agent'} is working`
-                        : sessionRunStateOf(liveRun) === 'QUEUED'
-                          ? sessionStatusMeta(liveRun).label
-                          : QUEUED_LABEL}
+                        : liveShown
+                          ? liveShown.word
+                          : sessionRunStateOf(liveRun) === 'QUEUED'
+                            ? sessionStatusMeta(liveRun).label
+                            : QUEUED_LABEL}
+                      <SessionMarkChips marks={sessionMarks(liveRun)} />
                     </div>
                     <div className="tdp-now-sub">
                       {[

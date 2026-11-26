@@ -133,5 +133,8 @@ export function scheduledRunTurn(input: RunBlockInput): string {
       + 'Orbit lands it on main after your turn ends and you report CHANGED or NO_CHANGE, using the normal merge check.');
   }
   lines.push('When you are done, call mcp__orbit__schedule_run_report exactly once.');
+  // §7.1: the run ends when the session settles idle, so the deadline is the end of a turn, not the run limit.
+  lines.push('Ending your turn without it fails this run (NO_REPORT) unless something is set to wake you: a bg_run '
+    + 'job, a SubAgent, schedule_wakeup, task_await or session_await. Your run limit counts the wait.');
   return ['<scheduled-run>', ...lines.map((l) => `  ${l}`), '</scheduled-run>', input.prompt].join('\n');
 }

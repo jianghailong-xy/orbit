@@ -80,7 +80,7 @@ Usage:
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit file <command>              Keep files in Orbit instead of in the repository
-  orbit documents <command>         Work with the owner's Documents
+  orbit drive <command>             Work with the owner's Drive
   orbit subagent <command>          Rate a SubAgent run this session started
   orbit secret exec NAME -- CMD     Run CMD with a secret the owner delivered to this runner
   orbit notify --message TEXT       Alert this account's devices with a line you write
@@ -242,8 +242,8 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"watch":         watchHelp,
 	"wiki":          wikiHelp,
 	"file":          fileHelp,
-	"documents":     documentsHelp,
-	"drive":         documentsHelp, // the command's name before the Documents rename
+	"drive":         driveHelp,
+	"documents":     driveHelp, // the command's name while Drive was called Documents
 	"subagent":      subagentHelp,
 	"settings":      settingsHelp,
 	"token":         tokenHelp,
@@ -332,8 +332,8 @@ var leafHelpFamilies = map[string]bool{
 	"watch":     true,
 	"wiki":      true,
 	"file":      true,
-	"documents": true,
 	"drive":     true,
+	"documents": true,
 	"subagent":  true,
 	"settings":  true,
 	"session":   true,
@@ -360,6 +360,14 @@ func helpFor(cmd string) string {
 }
 
 func main() {
+	restoreOrbitOOMScore()
+	if len(os.Args) > 1 && os.Args[1] == memoryToolShellComm {
+		os.Exit(runMemoryToolShell(os.Args[2:]))
+	}
+	// A managed runner's emergency memory reserve (memory_oom_reserve_linux.go), a child of the daemon.
+	if len(os.Args) > 1 && os.Args[1] == memoryReserveCommand {
+		os.Exit(runMemoryReserve())
+	}
 	// A session process's keeper (session_scope.go), ahead of everything below: the environment it was
 	// started with is the session process's, and goes to it untouched.
 	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
@@ -482,9 +490,9 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		return runCLICommand("orbit wiki", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWikiCLI(args[1:], in, out) })
 	case "file":
 		return runCLICommand("orbit file", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdFileCLI(args[1:], out) })
-	case "documents", "drive":
-		// `orbit drive` is the command's name before the Documents rename, still served and no longer listed.
-		return runCLICommand("orbit "+args[0], args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdDocumentsCLI(args[1:], out) })
+	case "drive", "documents":
+		// `orbit documents` is the command's name while Drive was called Drive, still served and not listed.
+		return runCLICommand("orbit "+args[0], args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdDriveCLI(args[1:], out) })
 	case "subagent":
 		return runCLICommand("orbit subagent", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSubagentCLI(args[1:], out) })
 	case "settings":
@@ -974,8 +982,8 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
 		os.Exit(1)
 	}
-	// A runner that receives the Documents drive shows it to its agents as ~/Documents (documents_link.go).
-	ensureDocumentsLink(func(format string, args ...interface{}) { fmt.Fprintf(os.Stderr, format+"\n", args...) })
+	// A runner that receives the drive shows it to its agents as ~/Drive (drive_link.go).
+	ensureDriveLink(func(format string, args ...interface{}) { fmt.Fprintf(os.Stderr, format+"\n", args...) })
 	// A managed runner's volume has to survive its node's power loss (volume_durability.go): before
 	// anything runs Git there, it looks at what the last stop left.
 	recoverManagedRepositories()

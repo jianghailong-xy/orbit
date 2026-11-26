@@ -2144,6 +2144,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 		return err
 	}
+	if err := requireRunnerTaskAutoRunDeclaration(body); err != nil {
+		return err
+	}
 	if err := requireHandoffNamesItsDestination(body); err != nil {
 		return err
 	}
@@ -2563,6 +2566,9 @@ func parseTaskBatchItems(raw string) ([]map[string]interface{}, error) {
 			}
 		}
 		if err := requireRunnerTaskCompletionDeclaration(item); err != nil {
+			return nil, fmt.Errorf("tasks[%d]: %w", i, err)
+		}
+		if err := requireRunnerTaskAutoRunDeclaration(item); err != nil {
 			return nil, fmt.Errorf("tasks[%d]: %w", i, err)
 		}
 		if err := requireHandoffNamesItsDestination(item); err != nil {
@@ -3662,9 +3668,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
-	// Not listed in a session spawned with Documents off (documents_switch.go).
+	// Not listed in a session spawned with Drive off (drive_switch.go).
 	if documentsEnabledFromEnv() {
-		specs = append(specs, documentsCLICapabilities...)
+		specs = append(specs, driveCLICapabilities...)
 	}
 	specs = append(specs, subagentCLICapabilities...)
 	// Ungated too, and SessionOnly: a proposal is a card in the session's conversation (settings_tools.go).

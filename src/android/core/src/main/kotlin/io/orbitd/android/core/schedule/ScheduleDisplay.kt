@@ -727,6 +727,17 @@ object ScheduleDisplay {
         listOf("title", "prompt", "intent", "rule", "timezone", "endAt", "accessLevel", "runLimitMinutes", "workspaceId")
             .firstOrNull { it in fields } ?: fields.firstOrNull()
 
+    /** A person's rename as the history says it (§8.4 *Rename*): "Renamed from “Codex check”". Null for any other record,
+     * an agent's new title included (OrbitKit `renamedText`). */
+    fun renamedText(record: ScheduleChangeRecord): String? {
+        if (record.changedBy != "USER" || record.after.keys != setOf("title")) return null
+        val before = record.before ?: return null
+        return fill(C.History.renamed, mapOf("title" to (asString(before["title"]) ?: "")))
+    }
+
+    /** The title a rename field would save: trimmed, and null when that is empty or the name it opened with. */
+    fun renameTitle(draft: String, from: String): String? = draft.trim().takeIf { it.isNotEmpty() && it != from.trim() }
+
     fun recordText(record: ScheduleChangeRecord, names: Map<String, String> = emptyMap()): String =
         recordParts(record.revision, record.before, record.after, names).text
 

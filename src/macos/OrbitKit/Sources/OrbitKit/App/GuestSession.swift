@@ -54,6 +54,21 @@ public enum GuestTone: String, Sendable, Equatable {
 }
 
 extension GuestSessionState {
+    public var displayFacts: SessionDisplayFacts {
+        SessionDisplayFacts(phase: phase, released: released, lastTurnOutcome: lastTurnOutcome,
+                            waitingOn: waitingOn, endReason: endReason, workFinished: workFinished,
+                            activity: activity, pendingApprovals: pendingApprovals,
+                            runningBgCount: runningBgCount)
+    }
+
+    /// The state and its marks as Shared with me writes them (web `sharedWithMeStateText`): "Idle · Finished",
+    /// then Completed for a filed session. From an older server, `word`.
+    public var line: String {
+        guard let state = SessionDisplay.state(displayFacts) else { return word }
+        let shown = SessionDisplay.written(state, SessionDisplay.marks(displayFacts) ?? [])
+        return completed ? "\(shown) \u{00B7} Completed" : shown
+    }
+
     /// The run state, resolved the way every other surface resolves it: the new field first, then the
     /// raw run status, then the legacy mixed state. Nothing at all reads as Ended.
     public var resolvedRunState: SessionRunState {
@@ -92,8 +107,11 @@ extension GuestSessionState {
         return resolvedRunState
     }
 
-    /// The status word (web `sessionStateWord`): `Completed` once filed, else the run's own word.
+    /// The status word (web `sessionStateWord`): with the session facts, the state word from `phase`
+    /// (`SessionDisplay`), a filed session's Completed drawn after it by the caller; from an older server,
+    /// `Completed` once filed, else the run's own word.
     public var word: String {
+        if let state = SessionDisplay.state(displayFacts) { return state.word }
         if completed { return "Completed" }
         if releasedRunState == .succeeded { return "Finished" }
         if displayRunState == .queued && waitingOn == .hold { return "On hold" }
@@ -240,7 +258,7 @@ public enum SharedWithMe {
 
     /// The row's second line: who shared it and how it stands, `Ana · Running`.
     public static func subtitle(_ session: GuestSessionSummary) -> String {
-        "\(session.ownerName) \u{00B7} \(session.state.word)"
+        "\(session.ownerName) \u{00B7} \(session.state.line)"
     }
 
     /// The row's title: the first non-blank line of the session's title (web `titleFirstLine`).

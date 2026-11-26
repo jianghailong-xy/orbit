@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Inject, Optional, Post, UseGuards } from '@nestjs/common';
 import { MANAGED_RUNNER_CONTRACT_VERSION, type ServerCapabilities } from '@orbit/shared';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { documentsEnabled } from '../documents/documents-switch';
+import { documentsEnabled } from '../drive/drive-switch';
 import { MANAGED_RUNNER_GATE, MANAGED_RUNNERS_OFF, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { AuthService } from './auth.service';
 import { BootstrapDto, ChangePasswordDto, LoginDto, RefreshDto } from './dto';

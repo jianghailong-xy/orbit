@@ -7,6 +7,7 @@
  */
 
 import { PrismaService } from '../prisma/prisma.service';
+import { LEGACY_STATUS_SELECT, legacySessionStatus } from '../sessions/session-legacy-words';
 import { taskRetirement } from './task-supersession';
 import {
   VerificationEpochEntry,
@@ -85,7 +86,7 @@ prerequisiteIds: string[],
   const sessions = await prisma.session.findMany({
     where: { taskId: { in: checkIds } },
     select: {
-      taskId: true, status: true, finishedAt: true, endReason: true,
+      taskId: true, ...LEGACY_STATUS_SELECT,
       completedAt: true, archivedAt: true, deletedAt: true,
     },
   });
@@ -93,7 +94,8 @@ prerequisiteIds: string[],
   for (const session of sessions) {
     if (!session.taskId) continue;
     const fact: VerificationRunFact = {
-      runStatus: session.status,
+      // The word derived from the facts (plan §3.1). A check's run is never a LANDING container, so no landing row.
+      runStatus: legacySessionStatus(session),
       finishedAt: session.finishedAt,
       endReason: session.endReason,
       deletedAt: session.deletedAt,

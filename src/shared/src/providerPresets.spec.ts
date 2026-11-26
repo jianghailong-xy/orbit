@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AgentProvider } from './enums';
-import { PROVIDER_PRESETS, providerPreset } from './providerPresets';
+import { PROVIDER_PRESETS, presetRegionOf, providerPreset, regionSiblings } from './providerPresets';
 
 // The catalogue is hand-edited whenever a vendor ships a model, and the server now derives real
 // behaviour from it — a configured provider's picker list, and the model a session dispatches with
@@ -41,8 +41,9 @@ describe('PROVIDER_PRESETS', () => {
   it('keeps every maintained list on a catalogue that recognizes its own models', () => {
     for (const p of PROVIDER_PRESETS) {
       if (!p.catalog) {
-        // The only lists allowed to stand still are the ones the runner's CLI reports instead.
-        expect(p.modelsFromRuntime).toBe(true);
+        // The only lists allowed to stand still are the ones the runner's CLI reports instead, and a
+        // coding plan's, which is the subscription's own and narrower than any vendor catalogue.
+        if (!p.planOf) expect(p.modelsFromRuntime).toBe(true);
         continue;
       }
       expect(p.catalog.source.trim()).not.toBe('');
@@ -79,6 +80,30 @@ describe('PROVIDER_PRESETS', () => {
     expect(gemini.modelsFromRuntime).toBe(true);
     expect(gemini.catalog).toBeUndefined();
     for (const m of gemini.models) expect(m.value).not.toMatch(/-(low|medium|high)$/);
+  });
+
+  it('lists a vendor\'s platforms with its own endpoint first, and finds each by its base URL', () => {
+    const regioned = PROVIDER_PRESETS.filter((p) => p.regions);
+    expect(regioned.map((p) => p.slug).sort()).toEqual(['glm', 'minimax', 'moonshot', 'qwen', 'qwen-coding-plan']);
+    for (const p of regioned) {
+      // The preset's own endpoint is one of its platforms, and that platform's key link is the preset's.
+      expect(presetRegionOf(p, p.baseUrl)?.keyUrl).toBe(p.keyUrl);
+      expect(p.regions!.map((r) => r.id)).toEqual(['global', 'cn']);
+      expect(presetRegionOf(p, p.regions![1].baseUrl + '/')?.id).toBe('cn');
+    }
+    // Qwen's preset stays on Beijing, as it always was; the others default to International.
+    expect(presetRegionOf(providerPreset('qwen'), providerPreset('qwen')!.baseUrl)?.id).toBe('cn');
+    expect(regionSiblings('https://API.MINIMAXI.com/anthropic')?.others.map((r) => r.baseUrl)).toEqual(['https://api.minimax.io/anthropic']);
+    expect(regionSiblings('https://api.deepseek.com/anthropic')).toBeUndefined();
+    expect(presetRegionOf(providerPreset('minimax'), 'https://proxy.example.com/anthropic')).toBeUndefined();
+  });
+
+  it('ties each coding plan to its vendor both ways', () => {
+    for (const p of PROVIDER_PRESETS) {
+      if (p.codingPlan && 'preset' in p.codingPlan) expect(providerPreset(p.codingPlan.preset)?.planOf).toBe(p.slug);
+      if (p.planOf) expect(providerPreset(p.planOf)?.codingPlan).toMatchObject({ preset: p.slug });
+    }
+    expect(providerPreset('moonshot')?.codingPlan).toEqual({ label: 'Kimi Code', signIn: 'kimi' });
   });
 
   it('resolves a preset only for a slug it knows', () => {

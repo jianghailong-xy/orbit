@@ -86,19 +86,19 @@
 // unless the host's .env sets it. No service, mount or port is added, and a deployment whose .env does not name it reads
 // every visitor's address exactly as before.
 //
-// On 2026-11-02 Documents' storage layer (project 34qIISTdcSurVokwRlp4w, task T1 34qId87cYLgqqL3UPTPMW, of the design the
-// account owner approved that day, docs/documents-design.md §2.10) moved attachment bytes out of Postgres into a store
+// On 2026-11-02 Drive' storage layer (project 34qIISTdcSurVokwRlp4w, task T1 34qId87cYLgqqL3UPTPMW, of the design the
+// account owner approved that day, docs/drive-design.md §2.10) moved attachment bytes out of Postgres into a store
 // named by sha256, and added to the apiserver six lines of environment — the store (local unless the host's .env says s3)
 // and the S3-compatible bucket's endpoint, bucket, key pair and region, each empty unless .env sets it — and one bind
 // mount, ./data/files, the local store's directory, beside ./data/postgres as the design asks. No service or port is
 // added. The two blocks below pin those lines.
 //
-// On 2026-11-02 Documents' off-host copy (project 34qIISTdcSurVokwRlp4w, task T10 34qNRF5OyfOW3hQ6J0NF3, of the same
+// On 2026-11-02 Drive' off-host copy (project 34qIISTdcSurVokwRlp4w, task T10 34qNRF5OyfOW3hQ6J0NF3, of the same
 // design, whose §2.10 has the backup sidecar sync ./data/files; its coordinator filed this mount) gave pgbackup one
 // read-only bind mount of ./data/files, so that scripts/pg-backup.sh can copy attachment bytes off the host. No service,
 // port or environment is added, and with no ORBIT_BACKUP_SYNC_TARGET nothing reads the mount. (r) pins the line.
 //
-// On 2026-11-03 Documents' retention (project 34qIISTdcSurVokwRlp4w, task T9 34qId8ccRB4cbKVh8Bws1, of the same design,
+// On 2026-11-03 Drive' retention (project 34qIISTdcSurVokwRlp4w, task T9 34qId8ccRB4cbKVh8Bws1, of the same design,
 // whose §2.8 and §2.10 ask for a per-account quota and a grace period no shorter than the Postgres backup retention; its
 // coordinator approved this pin) added three lines to the apiserver's environment: the quota, empty unless the host's .env
 // sets it, and the two values pgbackup keeps base backups by, with pgbackup's own defaults, so that the grace period reads
@@ -183,9 +183,9 @@
 // The apiserver gains one environment line, ORBIT_LOG_FORMAT (json unless the host's .env says text), its JSON log lines
 // carrying the web gateway's request id (src/apiserver/src/common/request-log.ts).
 //
-// On 2026-11-24 the drive was renamed Documents (project 352m8OwBHdxxcHAOboe9B, whose instructions the account owner
+// On 2026-11-24 the drive was renamed Drive (project 352m8OwBHdxxcHAOboe9B, whose instructions the account owner
 // chose: old names keep working wherever a host .env still uses them). The apiserver's and pgbackup's ORBIT_FILES_*
-// lines become ORBIT_DOCUMENTS_*, each defaulting to its ORBIT_FILES_* value and then to the default it had, so a host
+// lines become ORBIT_DRIVE_*, each defaulting to its ORBIT_FILES_* value and then to the default it had, so a host
 // .env from before renders the same values under the new names. Nothing else moves; the blocks below pin the lines.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -571,29 +571,29 @@ const APPROVED_APISERVER_BLOCKS = [
     '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
   ],
   // The repository a report opens its issue in (2026-11-19, the top of this file), empty unless the host's .env sets it.
-  // The line comes right after the releases', before Documents' store.
+  // The line comes right after the releases', before Drive' store.
   [
     '      ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"',
   ],
-  // Documents' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
+  // Drive' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
   // bucket's endpoint, bucket, key pair and region, each empty unless .env sets it. It comes after the releases' line in
-  // the file, and before the managed runners'. Amended on 2026-11-24, when the drive was renamed Documents (project
-  // 352m8OwBHdxxcHAOboe9B): each is ORBIT_DOCUMENTS_*, falling back to its ORBIT_FILES_* name in the host's .env.
+  // the file, and before the managed runners'. Amended on 2026-11-24, when the drive was renamed Drive (project
+  // 352m8OwBHdxxcHAOboe9B): each is ORBIT_DRIVE_*, falling back to its ORBIT_FILES_* name in the host's .env.
   [
-    '      ORBIT_DOCUMENTS_BACKEND: "${ORBIT_DOCUMENTS_BACKEND:-${ORBIT_FILES_BACKEND:-local}}"',
-    '      ORBIT_DOCUMENTS_S3_ENDPOINT: "${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}"',
-    '      ORBIT_DOCUMENTS_S3_BUCKET: "${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}"',
-    '      ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: "${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}"',
-    '      ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: "${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}"',
-    '      ORBIT_DOCUMENTS_S3_REGION: "${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}"',
-    '      ORBIT_DOCUMENTS_S3_MIRROR: "${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}"',
+    '      ORBIT_DRIVE_BACKEND: "${ORBIT_DRIVE_BACKEND:-${ORBIT_DOCUMENTS_BACKEND:-${ORBIT_FILES_BACKEND:-local}}}"',
+    '      ORBIT_DRIVE_S3_ENDPOINT: "${ORBIT_DRIVE_S3_ENDPOINT:-${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}}"',
+    '      ORBIT_DRIVE_S3_BUCKET: "${ORBIT_DRIVE_S3_BUCKET:-${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}}"',
+    '      ORBIT_DRIVE_S3_ACCESS_KEY_ID: "${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"',
+    '      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"',
+    '      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"',
+    '      ORBIT_DRIVE_S3_MIRROR: "${ORBIT_DRIVE_S3_MIRROR:-${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}}"',
   ],
-  // Documents' quota and grace period (2026-11-03, the top of this file): the quota, empty unless the host's .env sets it,
+  // Drive' quota and grace period (2026-11-03, the top of this file): the quota, empty unless the host's .env sets it,
   // and pgbackup's two retention values with its own defaults. They come right after the store's lines in the file.
-  // Amended on 2026-11-24 like the store's lines: ORBIT_DOCUMENTS_*, falling back to ORBIT_FILES_*.
+  // Amended on 2026-11-24 like the store's lines: ORBIT_DRIVE_*, falling back to ORBIT_FILES_*.
   [
-    '      ORBIT_DOCUMENTS_QUOTA_BYTES: "${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-}}"',
-    '      ORBIT_DOCUMENTS_STORE_QUOTA_BYTES: "${ORBIT_DOCUMENTS_STORE_QUOTA_BYTES:-${ORBIT_FILES_STORE_QUOTA_BYTES:-}}"',
+    '      ORBIT_DRIVE_QUOTA_BYTES: "${ORBIT_DRIVE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-}}}"',
+    '      ORBIT_DRIVE_STORE_QUOTA_BYTES: "${ORBIT_DRIVE_STORE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_STORE_QUOTA_BYTES:-${ORBIT_FILES_STORE_QUOTA_BYTES:-}}}"',
     '      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"',
     '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"',
   ],
@@ -603,6 +603,11 @@ const APPROVED_APISERVER_BLOCKS = [
   // existing deployment gains nothing on its disk.
   [
     '      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"',
+    // Approved by the account owner on 2026-11-24 (13:24:44Z, Orbit owner question item 353A3PcmP9bnqWpDCRayY, project
+    // 35370KiEBDnxlOS5Yyaxh), added by main commit 84eab3a5fb: the drive's switch, off unless the host's .env says true.
+    // The owner approved the line in both forms at that time; fix task 353ADwf90oOHuEm2Jp52K pinned the Drive form
+    // and this is the Drive form: ORBIT_DRIVE_ENABLED, falling back to ORBIT_DOCUMENTS_ENABLED and then ORBIT_FILES_ENABLED.
+    '      ORBIT_DRIVE_ENABLED: "${ORBIT_DRIVE_ENABLED:-${ORBIT_DOCUMENTS_ENABLED:-${ORBIT_FILES_ENABLED:-false}}}"',
     '      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"',
     '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json',
     '    volumes:',
@@ -611,7 +616,7 @@ const APPROVED_APISERVER_BLOCKS = [
     // read-only, at its path from before, which profile.json and channel.json written by an earlier install name.
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
   ],
-  // Documents' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
+  // Drive' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
   // mount of ./data/files beside ./data/postgres. It is the next entry of the managed runners' `volumes:`, before the name
   // every apiserver answers to.
   [
@@ -631,16 +636,16 @@ const APPROVED_WEB_BLOCK = [
   '        ORBIT_RUNNER_SOURCE: "${ORBIT_RUNNER_SOURCE:-.}"',
   '        ORBIT_RUNNER_SOURCE_SHA: "${ORBIT_RUNNER_SOURCE_SHA:-}"',
 ];
-// Documents' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
-// Its bucket settings were amended on 2026-11-24 like the apiserver's: ORBIT_DOCUMENTS_*, falling back to ORBIT_FILES_*.
+// Drive' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
+// Its bucket settings were amended on 2026-11-24 like the apiserver's: ORBIT_DRIVE_*, falling back to ORBIT_FILES_*.
 const PGBACKUP_FILES_MOUNT = '      - ./data/files:/var/lib/orbit/files:ro';
 const PGBACKUP_S3_MIRROR = [
-  '      ORBIT_DOCUMENTS_S3_MIRROR: "${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}"',
-  '      ORBIT_DOCUMENTS_S3_ENDPOINT: "${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}"',
-  '      ORBIT_DOCUMENTS_S3_BUCKET: "${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}"',
-  '      ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: "${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}"',
-  '      ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: "${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}"',
-  '      ORBIT_DOCUMENTS_S3_REGION: "${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}"',
+  '      ORBIT_DRIVE_S3_MIRROR: "${ORBIT_DRIVE_S3_MIRROR:-${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}}"',
+  '      ORBIT_DRIVE_S3_ENDPOINT: "${ORBIT_DRIVE_S3_ENDPOINT:-${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}}"',
+  '      ORBIT_DRIVE_S3_BUCKET: "${ORBIT_DRIVE_S3_BUCKET:-${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}}"',
+  '      ORBIT_DRIVE_S3_ACCESS_KEY_ID: "${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"',
+  '      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"',
+  '      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"',
 ];
 // The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
 // service. Each is found by its LAST line: `      - -c` opens every setting, so a block's first line would find the
@@ -1046,7 +1051,7 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
   assert.doesNotMatch(command, /"-(?:V|D|DV|VV|DVV)"|--trace|--debug/);
 });
 
-// The files directory since Documents (see the top of this file): the apiserver writes it, the backup sidecar reads it
+// The files directory since Drive (see the top of this file): the apiserver writes it, the backup sidecar reads it
 // and nothing else sees it. A writable mount in the sidecar could damage the only local copy of every attachment.
 test('(r) ./data/files is the apiserver\'s to write and pgbackup\'s to read, and no other service mounts it', () => {
   const mounts = { apiserver: ['      - ./data/files:/var/lib/orbit/files'], pgbackup: [PGBACKUP_FILES_MOUNT] };
@@ -1095,7 +1100,7 @@ for last; do :; done
       env: {
         PATH: `${stubs}:${process.env.PATH}`,
         ORBIT_ARCHIVE_DIR: path.join(scratch, 'archive'),
-        ORBIT_DOCUMENTS_DIR: filesDir,
+        ORBIT_DRIVE_DIR: filesDir,
         ORBIT_BACKUP_SYNC_TARGET: target,
         ORBIT_BACKUP_MIN_FREE_MB: '0',
       },
@@ -1149,7 +1154,7 @@ test('(r) the sidecar copies the files after the archive, beside its target, wit
   assert.ok(slashed.rsyncCalls[2].endsWith(` ${FILES_SYNC_TARGET}/`), slashed.rsyncCalls[2]);
 });
 
-test('(r) a files directory with nothing but tmp/ has nothing to copy, as with ORBIT_DOCUMENTS_BACKEND=s3, and that is no error', () => {
+test('(r) a files directory with nothing but tmp/ has nothing to copy, as with ORBIT_DRIVE_BACKEND=s3, and that is no error', () => {
   for (const files of [['tmp'], []]) {
     const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files });
     assert.equal(status, 7, log);

@@ -1,0 +1,838 @@
+[
+ {
+  "name": "status PENDING (queued)",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "PENDING",
+   "runStatus": "PENDING",
+   "runState": "QUEUED",
+   "lifecycleState": "OPEN",
+   "queuedReason": null,
+   "phase": "PENDING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": "TURN"
+  },
+  "row": 1
+ },
+ {
+  "name": "status PENDING (queued)",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "PENDING",
+   "runStatus": "PENDING",
+   "runState": "QUEUED",
+   "lifecycleState": "OPEN",
+   "queuedReason": null,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": "TURN"
+  },
+  "row": 2
+ },
+ {
+  "name": "status RUNNING",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "RUNNING",
+   "runStatus": "RUNNING",
+   "runState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": "TURN"
+  },
+  "row": 3
+ },
+ {
+  "name": "status RUNNING",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "RUNNING",
+   "runStatus": "RUNNING",
+   "runState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": "TURN"
+  },
+  "row": 4
+ },
+ {
+  "name": "status AWAITING_INPUT (held idle)",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 5
+ },
+ {
+  "name": "status AWAITING_INPUT (held idle)",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 6
+ },
+ {
+  "name": "status INTERRUPTED (held, stopped turn)",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "INTERRUPTED",
+   "runStatus": "INTERRUPTED",
+   "runState": "INTERRUPTED",
+   "lifecycleState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "INTERRUPTED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 7
+ },
+ {
+  "name": "status INTERRUPTED (held, stopped turn)",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "INTERRUPTED",
+   "runStatus": "INTERRUPTED",
+   "runState": "INTERRUPTED",
+   "lifecycleState": "OPEN",
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 8
+ },
+ {
+  "name": "status SUCCEEDED (task run finished)",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "SUCCEEDED",
+   "runStatus": "SUCCEEDED",
+   "runState": "SUCCEEDED",
+   "lifecycleState": "OPEN",
+   "endReason": "task_done",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": true,
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 9
+ },
+ {
+  "name": "status SUCCEEDED (task run finished)",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "SUCCEEDED",
+   "runStatus": "SUCCEEDED",
+   "runState": "SUCCEEDED",
+   "lifecycleState": "OPEN",
+   "endReason": "task_done",
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 10
+ },
+ {
+  "name": "status FAILED (released by a failed turn)",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "FAILED",
+   "runStatus": "FAILED",
+   "runState": "FAILED",
+   "lifecycleState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 11
+ },
+ {
+  "name": "status FAILED (released by a failed turn)",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "FAILED",
+   "runStatus": "FAILED",
+   "runState": "FAILED",
+   "lifecycleState": "OPEN",
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 12
+ },
+ {
+  "name": "status CANCELLED (released by End)",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "CANCELLED",
+   "runStatus": "CANCELLED",
+   "runState": "ENDED",
+   "lifecycleState": "OPEN",
+   "endReason": "ended",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 13
+ },
+ {
+  "name": "status CANCELLED (released by End)",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "CANCELLED",
+   "runStatus": "CANCELLED",
+   "runState": "ENDED",
+   "lifecycleState": "OPEN",
+   "endReason": "ended",
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 14
+ },
+ {
+  "name": "running a job with no turn",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "BACKGROUND_JOB",
+   "runningBgCount": 1,
+   "runningBgJobCount": 1,
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  },
+  "row": 15
+ },
+ {
+  "name": "running a job with no turn",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "BACKGROUND_JOB",
+   "runningBgCount": 1,
+   "runningBgJobCount": 1,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  },
+  "row": 16
+ },
+ {
+  "name": "waiting on an approval",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "RUNNING",
+   "runStatus": "RUNNING",
+   "runState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "pendingApprovals": 1,
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": "PERSON",
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": "TURN"
+  },
+  "row": 17
+ },
+ {
+  "name": "waiting on an approval",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "RUNNING",
+   "runStatus": "RUNNING",
+   "runState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "pendingApprovals": 1,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": "TURN"
+  },
+  "row": 18
+ },
+ {
+  "name": "on hold (queued, account paused)",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "PENDING",
+   "runStatus": "PENDING",
+   "runState": "QUEUED",
+   "lifecycleState": "OPEN",
+   "error": "Account paused until 2099-01-01",
+   "queuedReason": null,
+   "phase": "PENDING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": "HOLD",
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": "TURN"
+  },
+  "row": 19
+ },
+ {
+  "name": "on hold (queued, account paused)",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "PENDING",
+   "runStatus": "PENDING",
+   "runState": "QUEUED",
+   "lifecycleState": "OPEN",
+   "error": "Account paused until 2099-01-01",
+   "queuedReason": null,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": "TURN"
+  },
+  "row": 20
+ },
+ {
+  "name": "ended, runner never confirmed",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "FAILED",
+   "runStatus": "FAILED",
+   "runState": "FAILED",
+   "lifecycleState": "OPEN",
+   "endReason": "ended",
+   "error": "cancel not honored",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 21
+ },
+ {
+  "name": "ended, runner never confirmed",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "FAILED",
+   "runStatus": "FAILED",
+   "runState": "FAILED",
+   "lifecycleState": "OPEN",
+   "endReason": "ended",
+   "error": "cancel not honored",
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 22
+ },
+ {
+  "name": "old plain row stored SUCCEEDED",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "SUCCEEDED",
+   "runStatus": "SUCCEEDED",
+   "runState": "SUCCEEDED",
+   "lifecycleState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 23
+ },
+ {
+  "name": "old plain row stored SUCCEEDED",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "SUCCEEDED",
+   "runStatus": "SUCCEEDED",
+   "runState": "SUCCEEDED",
+   "lifecycleState": "OPEN",
+   "capabilities": {
+    "canSend": true,
+    "canResume": true,
+    "resumeBlockedReason": null,
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 24
+ },
+ {
+  "name": "ending after an interrupted turn",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "INTERRUPTED",
+   "runStatus": "INTERRUPTED",
+   "runState": "ENDED",
+   "lifecycleState": "OPEN",
+   "endReason": "ended",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "INTERRUPTED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": false,
+    "canResume": false,
+    "resumeBlockedReason": "ENDING",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 25
+ },
+ {
+  "name": "ending after an interrupted turn",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "INTERRUPTED",
+   "runStatus": "INTERRUPTED",
+   "runState": "ENDED",
+   "lifecycleState": "OPEN",
+   "endReason": "ended",
+   "capabilities": {
+    "canSend": false,
+    "canResume": false,
+    "resumeBlockedReason": "ENDING",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "activity": null
+  },
+  "row": 26
+ },
+ {
+  "name": "parked, engine started its own turn",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "engineTurnActive": true
+  },
+  "row": 27
+ },
+ {
+  "name": "parked, engine started its own turn",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   },
+   "engineTurnActive": true
+  },
+  "row": 28
+ },
+ {
+  "name": "parked, sub-agent running",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "runningSubagentCount": 1,
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  },
+  "row": 29
+ },
+ {
+  "name": "parked, sub-agent running",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "runningSubagentCount": 1,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  },
+  "row": 30
+ },
+ {
+  "name": "parked, will wake (watch or wake-up)",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "WAITING",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": "WAKE",
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  },
+  "row": 31
+ },
+ {
+  "name": "parked, will wake (watch or wake-up)",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "WAITING",
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  },
+  "row": 32
+ },
+ {
+  "name": "unknown status, no capabilities, held",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "HIBERNATING",
+   "lifecycleState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": null,
+   "workFinished": false,
+   "activity": null
+  },
+  "row": 33
+ },
+ {
+  "name": "unknown status, no capabilities, held",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "HIBERNATING",
+   "lifecycleState": "OPEN",
+   "activity": null
+  },
+  "row": 34
+ },
+ {
+  "name": "unknown status, no capabilities, released",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "HIBERNATING",
+   "lifecycleState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": false,
+   "activity": null
+  },
+  "row": 35
+ },
+ {
+  "name": "unknown status, no capabilities, released",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "HIBERNATING",
+   "lifecycleState": "OPEN",
+   "activity": null
+  },
+  "row": 36
+ }
+]

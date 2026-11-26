@@ -54,7 +54,7 @@ internal object NavShell {
     @Volatile var folders = "[]"
     @Volatile var tags = "[]"
     @Volatile var failWorkspaces: Int? = null
-    /** Answers a test adds before the fixture's own (the Documents drive's routes): null passes the request on. */
+    /** Answers a test adds before the fixture's own (the drive's routes): null passes the request on. */
     @Volatile var routes: ((ApiRequest) -> ApiResponse?)? = null
 
     fun reset() {

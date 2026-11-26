@@ -21,14 +21,14 @@ const DELETE_TRANSACTION_TIMEOUT_MS = 65_000;
 /** How long a drive write may go untouched before its staging, and the chunks only it held, are let go. */
 export const DRIVE_STAGING_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** How long the drive keeps a commit's answer and a change-feed row (docs/documents-drive-technical-design.md §1.1). */
+/** How long the drive keeps a commit's answer and a change-feed row (docs/drive-technical-design.md §1.1). */
 export const DRIVE_FEED_KEEP_MS = 24 * 60 * 60 * 1000;
 
 /** What one sweep did. */
 export interface FileSweepResult {
   /**
    * Drive stagings removed because nothing had touched them for DRIVE_STAGING_IDLE_MS, and the files a replacing rename
-   * removed (document_removed_entry) kept that long for a handle still writing one.
+   * removed (drive_removed_entry) kept that long for a handle still writing one.
    */
   stagingsRemoved: number;
   /** Drive commit answers and change-feed rows removed because they were older than DRIVE_FEED_KEEP_MS. */
@@ -46,7 +46,7 @@ export interface FileSweepResult {
  * Carries out §2.8's expiry (file-retention.ts says what the dates mean), in five steps, each of which can stop at any
  * instant and is carried on from by the next sweep:
  *
- *   0. A drive staging (docs/documents-drive-technical-design.md §2.4), a write no commit has taken, is removed once
+ *   0. A drive staging (docs/drive-technical-design.md §2.4), a write no commit has taken, is removed once
  *      nothing has touched it for seven days; its chunk rows go with it, and step 3 then finds what only they held. A
  *      drive commit's answer and a change-feed row go once they are a day old: a retried commit or a feed reader older
  *      than that starts again from the tree.
@@ -140,17 +140,17 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
     let total = 0;
     for (;;) {
       const removed = await this.prisma.$executeRaw`
-        DELETE FROM document_commit
+        DELETE FROM drive_commit
          WHERE (owner_id, commit_id) IN (
-           SELECT owner_id, commit_id FROM document_commit WHERE created_at < ${before}::timestamptz LIMIT ${SWEEP_BATCH}
+           SELECT owner_id, commit_id FROM drive_commit WHERE created_at < ${before}::timestamptz LIMIT ${SWEEP_BATCH}
          )`;
       total += removed;
       if (removed < SWEEP_BATCH) break;
     }
     for (;;) {
       const removed = await this.prisma.$executeRaw`
-        DELETE FROM document_change
-         WHERE seq IN (SELECT seq FROM document_change WHERE at < ${before}::timestamptz ORDER BY seq LIMIT ${SWEEP_BATCH})`;
+        DELETE FROM drive_change
+         WHERE seq IN (SELECT seq FROM drive_change WHERE at < ${before}::timestamptz ORDER BY seq LIMIT ${SWEEP_BATCH})`;
       total += removed;
       if (removed < SWEEP_BATCH) return total;
     }
@@ -162,9 +162,9 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
     let total = 0;
     for (;;) {
       const removed = await this.prisma.$executeRaw`
-        DELETE FROM document_staging
+        DELETE FROM drive_staging
          WHERE id IN (
-           SELECT id FROM document_staging
+           SELECT id FROM drive_staging
             WHERE committed_at IS NULL
               AND touched_at < ${before}::timestamptz
             ORDER BY touched_at
@@ -178,9 +178,9 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
     // A file a replacing rename removed is kept for a handle still writing it as long as an untouched staging is (§3.2).
     for (;;) {
       const removed = await this.prisma.$executeRaw`
-        DELETE FROM document_removed_entry
+        DELETE FROM drive_removed_entry
          WHERE (owner_id, entry_id) IN (
-           SELECT owner_id, entry_id FROM document_removed_entry WHERE removed_at < ${before}::timestamptz LIMIT ${SWEEP_BATCH}
+           SELECT owner_id, entry_id FROM drive_removed_entry WHERE removed_at < ${before}::timestamptz LIMIT ${SWEEP_BATCH}
          )`;
       total += removed;
       if (removed < SWEEP_BATCH) return total;
@@ -246,8 +246,8 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
         releasedAt: null,
         bytesDeletedAt: null,
         attachments: { none: { expiredAt: null } },
-        documentVersionChunks: { none: {} },
-        documentStagingChunks: { none: {} },
+        driveVersionChunks: { none: {} },
+        driveStagingChunks: { none: {} },
       },
       data: { releasedAt: now },
     });
@@ -256,8 +256,8 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
         releasedAt: { not: null },
         OR: [
           { attachments: { some: { expiredAt: null } } },
-          { documentVersionChunks: { some: {} } },
-          { documentStagingChunks: { some: {} } },
+          { driveVersionChunks: { some: {} } },
+          { driveStagingChunks: { some: {} } },
         ],
       },
       data: { releasedAt: null },
@@ -273,8 +273,8 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
         releasedAt: { lte: cutoff },
         lastReferencedAt: { lte: cutoff },
         attachments: { none: { OR: [{ expiredAt: null }, { expiredAt: { gt: cutoff } }] } },
-        documentVersionChunks: { none: {} },
-        documentStagingChunks: { none: {} },
+        driveVersionChunks: { none: {} },
+        driveStagingChunks: { none: {} },
       },
       select: { sha256: true },
       take: SWEEP_BATCH,
@@ -314,8 +314,8 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
           where: { sha256, OR: [{ expiredAt: null }, { expiredAt: { gt: cutoff } }] },
         });
         if (holders > 0) return false;
-        if (await tx.documentVersionChunk.count({ where: { sha256 }, take: 1 })) return false;
-        if (await tx.documentStagingChunk.count({ where: { sha256 }, take: 1 })) return false;
+        if (await tx.driveVersionChunk.count({ where: { sha256 }, take: 1 })) return false;
+        if (await tx.driveStagingChunk.count({ where: { sha256 }, take: 1 })) return false;
         const store = this.files.storeOf(blob.storage);
         if (!store) throw new Error(`this deployment has no ${blob.storage} store`);
         await store.remove(sha256);

@@ -45,6 +45,7 @@ import { isHeldPastClaim } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runner-presence';
+import { TURN_STATE_SELECT } from '../sessions/session-turn-state';
 
 /**
  * The main checkout's read and its four actions (docs/main-checkout-git-contract.md §2, §5–§7, §10).
@@ -498,8 +499,8 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     const session = await tx.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: {
-        status: true,
-        finishedAt: true,
+        // isHeldPastClaim's (common/session-release.ts).
+        ...TURN_STATE_SELECT,
         isolationStatus: true,
         assignedRunnerId: true,
         assignedRunner: { select: { capabilities: true } },

@@ -74,7 +74,7 @@ import {
   type SharedCase,
   type SharedLinkKind,
 } from './tenant-isolation-runner-cases';
-import { DocumentsService } from '../documents/documents.service';
+import { DriveService } from '../drive/drive.service';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
 
@@ -105,7 +105,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
   await sql.connect();
   const db: PrismaClient = prismaClientFor(url);
   let server: Apiserver | undefined;
-  // Where the server keeps the files it is sent (ORBIT_DOCUMENTS_DIR, files/file-store.ts): this run's own directory, so an
+  // Where the server keeps the files it is sent (ORBIT_DRIVE_DIR, files/file-store.ts): this run's own directory, so an
   // owner's upload is kept and a refused one is seen removed, whatever the host's /var/lib allows.
   const filesDir = mkdtempSync(path.join(tmpdir(), 'tenant-isolation-files-'));
   t.after(async () => {
@@ -124,7 +124,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     PROVIDER_SECRET_KEY,
     // No reaching models.dev from a spec: the catalogue keeps the lists this build shipped.
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_DOCUMENTS_DIR: filesDir,
+    ORBIT_DRIVE_DIR: filesDir,
   });
   const fixtures = censusFixtures({ run: RUN, db, sql, server, jwt });
   const { account, tenant, ok, idOf } = fixtures;
@@ -472,16 +472,16 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const driveChunkSha256 = createHash('sha256').update(`census drive chunk of ${name} ${ownerId}`).digest('hex');
     await db.fileBlob.upsert({ where: { sha256: driveChunkSha256 }, create: { sha256: driveChunkSha256, sizeBytes: 6, storage: 'local' }, update: {} });
     const driveStagingOf = async () =>
-      (await db.documentStaging.create({ data: { ownerId, source: 'TOOL', entryId: of.driveFileId, runnerId: of.runnerId } })).id;
+      (await db.driveStaging.create({ data: { ownerId, source: 'TOOL', entryId: of.driveFileId, runnerId: of.runnerId } })).id;
     const driveStagingId = await driveStagingOf();
-    await db.documentStagingChunk.create({ data: { stagingId: driveStagingId, idx: 0, ownerId, sha256: driveChunkSha256, sizeBytes: 6 } });
+    await db.driveStagingChunk.create({ data: { stagingId: driveStagingId, idx: 0, ownerId, sha256: driveChunkSha256, sizeBytes: 6 } });
     const driveCommitStagingId = await driveStagingOf();
     const driveCommitId = `census-commit-${name}-${randomUUID()}`;
-    await db.documentCommit.create({ data: { ownerId, commitId: driveCommitId, entryId: of.driveFileId, result: { census: true } } });
-    const drive = new DocumentsService(db as never);
+    await db.driveCommit.create({ data: { ownerId, commitId: driveCommitId, entryId: of.driveFileId, result: { census: true } } });
+    const drive = new DriveService(db as never);
     const driveMoveFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to move.txt' })).id;
     const driveDeleteFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to delete.txt' })).id;
-    const driveSyncId = (await db.documentSync.create({ data: { ownerId, runnerId: of.runnerId, sourceName: 'census', destPath: '/census' } })).id;
+    const driveSyncId = (await db.driveSync.create({ data: { ownerId, runnerId: of.runnerId, sourceName: 'census', destPath: '/census' } })).id;
 
     return {
       driveStagingId, driveCommitStagingId, driveChunkSha256, driveCommitId, driveMoveFileId, driveDeleteFileId, driveSyncId,

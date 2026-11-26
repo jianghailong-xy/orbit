@@ -1,5 +1,5 @@
 /**
- * What an evidence card reads (docs/documents-design.md §2.6): `GET /tasks/:taskId/evidence/:revision/files`, held against
+ * What an evidence card reads (docs/drive-design.md §2.6): `GET /tasks/:taskId/evidence/:revision/files`, held against
  * the production apiserver — `build/main.js` and every guard and pipe in front of the route — over a real PostgreSQL that
  * `scripts/run-pg-spec.sh` migrates from empty:
  *
@@ -97,8 +97,8 @@ test('the files of a version of evidence', { skip: !URL, concurrency: 1, timeout
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_DOCUMENTS_BACKEND: 'local',
-    ORBIT_DOCUMENTS_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
 

@@ -647,7 +647,7 @@ final class WikiCopyParityTests: XCTestCase {
                    in: Self.lib)
         assertSays(web, "return spaces.data !== undefined ? spaces.data !== null : spaces.isError;", in: Self.lib)
         let sidebar = try source(Self.sidebar)
-        assertSays(sidebar, "const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');",
+        assertSays(sidebar, "const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'drive' || drive.enabled));",
                    in: Self.sidebar)
         let page = try source(Self.page)
         assertSays(page, "<WikiEmpty>{WIKI_DISABLED_NOTE}</WikiEmpty>", in: Self.page)

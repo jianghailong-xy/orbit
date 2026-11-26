@@ -1795,7 +1795,8 @@ export const wikiChatDraftQuery = (draftId: string | null) =>
     enabled: draftId !== null,
     staleTime: 5_000,
     refetchInterval: (query) => {
-      const result = query.state.data?.state === 'applied' ? query.state.data.rewrite?.result : undefined;
+      const state = query.state.data?.state;
+      const result = state === 'applied' || state === 'rewritten' ? query.state.data?.rewrite?.result : undefined;
       return result === 'rewriting' || result === 'waiting' ? 15_000 : false;
     },
   });
@@ -1921,8 +1922,8 @@ export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
     enabled: refs.length > 0,
   });
 
-/** What `GET /documents/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
-export interface DocumentsUsage {
+/** What `GET /drive/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
+export interface DriveUsage {
   totalBytes: number;
   driveBytes: number;
   trashBytes: number;
@@ -1932,8 +1933,8 @@ export interface DocumentsUsage {
   nearQuota?: boolean;
 }
 
-export const documentsUsageQuery = () =>
+export const driveUsageQuery = () =>
   queryOptions({
     queryKey: ['drive', 'usage'] as const,
-    queryFn: () => api<DocumentsUsage>('/documents/usage'),
+    queryFn: () => api<DriveUsage>('/drive/usage'),
   });

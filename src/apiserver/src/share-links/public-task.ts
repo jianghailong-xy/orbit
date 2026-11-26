@@ -1,6 +1,7 @@
 import { CreatorType, Prisma } from '@prisma/client';
 import { SessionRunState } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
 import { taskOutcome, type TaskOutcome } from '../tasks/task-supersession';
 import { linkNotFound, type ShareInclude } from './share-link';
@@ -22,15 +23,12 @@ const EDGE_TASK = { id: true, title: true, status: true, projectId: true } satis
 
 /** What a run says about itself on the page: how it went, and when. */
 const RUN_SELECT = {
+  ...LEGACY_STATUS_SELECT,
   id: true,
-  status: true,
-  endReason: true,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
   createdAt: true,
-  startedAt: true,
-  finishedAt: true,
   lastTurnAt: true,
 } satisfies Prisma.SessionSelect;
 

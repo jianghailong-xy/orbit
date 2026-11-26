@@ -2,9 +2,10 @@
  * The shape of the scheduled tasks' doors (docs/scheduled-tasks-design.md §9.1), read off the controllers themselves:
  *
  *   (a) REST has exactly the read and control routes, the drafts of the Scheduled page, Change…'s conversation
- *       (which opens a session, as a draft does; the session changes the schedule), and the two card presses:
- *       no route creates or changes a schedule (no POST /schedules, no PATCH or PUT anywhere under it), and no other
- *       controller in the server serves a path under /schedules or /schedule-*.
+ *       (which opens a session, as a draft does; the session changes the schedule), the two card presses and rename:
+ *       no route creates a schedule or changes one (no POST /schedules, no PATCH or PUT anywhere under it), except
+ *       POST /schedules/:id/rename, the one door that changes a schedule, whose body is the title alone (§8.4,
+ *       owner 2026-11-26). No other controller in the server serves a path under /schedules or /schedule-*.
  *   (b) The two card presses are owner channel only: closed to every access token (OWNER_INTERACTIVE), not open to
  *       `orbit` in a terminal (no @TerminalRoute), and refused to a request carrying an acting session.
  *   (c) Nothing under /runner answers a card, and `orbit mcp` has no tool that does: a session, a run, an MCP tool
@@ -19,10 +20,12 @@ import { test } from 'node:test';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { getMetadataStorage } from 'class-validator';
 
 import { patDeclaration } from '../auth/pat-scope.decorator';
 import { TERMINAL_ROUTE } from '../auth/terminal-credentials';
 import { RunnerSchedulesController } from '../runner-api/runner-schedules.controller';
+import { ScheduleRenameDto } from './dto';
 import { SchedulesController, scheduleActorOf } from './schedules.controller';
 
 const reflector = new Reflector();
@@ -41,7 +44,7 @@ function routesOf(controller: Function): Array<{ handler: string; method: string
     });
 }
 
-test('(a) REST is read, control, drafts and the two presses: nothing creates or changes a schedule', () => {
+test('(a) REST is read, control, drafts, the two presses and rename: nothing else creates or changes a schedule', () => {
   const routes = routesOf(SchedulesController).map((r) => `${r.method} /${r.path}`).sort();
   assert.deepEqual(routes, [
     'DELETE /schedules/:id',
@@ -58,6 +61,7 @@ test('(a) REST is read, control, drafts and the two presses: nothing creates or 
     'POST /schedule-runs/:id/stop',
     'POST /schedules/:id/change',
     'POST /schedules/:id/pause',
+    'POST /schedules/:id/rename',
     'POST /schedules/:id/resume',
     'POST /schedules/:id/run',
     'POST /schedules/:id/undo',
@@ -67,6 +71,11 @@ test('(a) REST is read, control, drafts and the two presses: nothing creates or 
     assert.ok(!(r.method === 'POST' && r.path === 'schedules'), 'no POST /schedules: a schedule is created only by a card');
     assert.ok(r.method !== 'PATCH' && r.method !== 'PUT', `${r.method} /${r.path}: no REST door changes a schedule`);
   }
+  // The exception carries a title and nothing else: the global whitelist refuses any other field.
+  assert.deepEqual(
+    [...new Set(getMetadataStorage().getTargetValidationMetadatas(ScheduleRenameDto, '', false, false).map((m) => m.propertyName))],
+    ['title'],
+  );
 });
 
 test('(a) no other controller serves a path under /schedules or /schedule-*', () => {

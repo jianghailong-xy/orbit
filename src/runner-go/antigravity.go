@@ -365,7 +365,7 @@ func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDi
 		return nil, err
 	}
 	p.stdin = stdin
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		_ = stdin.Close()
 		cancel()
 		return nil, err
@@ -1175,6 +1175,7 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 	// The generation's inbox: what fetches its turns, and the turnIds already taken on, which a
 	// redelivery of one is dropped against for the generation's whole life.
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCh := make(chan agyInboxResult, 16)
 	go func() {

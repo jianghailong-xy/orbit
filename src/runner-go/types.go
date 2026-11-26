@@ -1664,9 +1664,9 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
-	// DocumentsDisabled is the same statement about Documents, the Orbit Files drive (the apiserver's
-	// ORBIT_DOCUMENTS_ENABLED); injected as ORBIT_DOCUMENTS=off, which leaves the drive tools and `orbit drive` out
-	// (documents_switch.go). Absent means on, which is also what a server that predates the switch means.
+	// DocumentsDisabled is the same statement about Drive (the apiserver's
+	// ORBIT_DRIVE_ENABLED); injected as ORBIT_DOCUMENTS=off, which leaves the drive tools and `orbit drive` out
+	// (drive_switch.go). Absent means on, which is also what a server that predates the switch means.
 	DocumentsDisabled bool `json:"documentsDisabled,omitempty"`
 	// BrowserEnabled is set while the Orbit Cloud browser is switched on on the server (its
 	// ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on); injected as ORBIT_BROWSER=on, which is what puts the
@@ -2025,6 +2025,10 @@ type TurnCompleteRequest struct {
 	// turn's report, by turnCompleteReporting, while the server offers it. The body says it because the runner link
 	// carries no request header of its own.
 	ReleaseProtocol string `json:"releaseProtocol,omitempty"`
+	// Draining says the pool drains for an update as the turn ends (docs/runner-update-drain-design.md §7.3): the
+	// control plane then keeps no slot for a queued follow-up and answers PENDING, which parks the session here instead
+	// of holding the follow-up. Set by turnComplete on every completion it sends, as the inbox fetch says draining=1.
+	Draining bool `json:"draining,omitempty"`
 }
 
 // TurnCompleteResponse carries the control-plane status after the ack. Newer
