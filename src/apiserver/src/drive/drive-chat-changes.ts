@@ -452,7 +452,7 @@ export class DriveChatChanges {
   private async answerOne(ownerId: string, question: QuestionRow, choice: 'KEEP_BOTH' | 'REPLACE') {
     const source = await this.prisma.driveEntry.findFirst({ where: { id: question.sourceEntryId, ownerId } });
     if (!source || source.trashedAt) {
-      throw refusal(HttpStatus.CONFLICT, 'DRIVE_ENTRY_NOT_FOUND', 'The file being moved is gone or in Trash now.');
+      throw refusal(HttpStatus.CONFLICT, 'DRIVE_ENTRY_NOT_FOUND', 'the file being moved is gone or in Trash now.');
     }
     let view;
     if (choice === 'REPLACE') {

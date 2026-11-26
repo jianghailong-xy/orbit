@@ -179,6 +179,11 @@ export class RunnerDriveController {
   async mkdir(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveMkdirDto) {
     const writer = this.writer(runner, dto.writer);
     const turn = await this.chatChanges.turnOf(runner.ownerId, writer);
+    // A `mkdir -p` of a folder already there changes nothing, so a full turn answers it rather than holding it.
+    if (turn && dto.parents === true) {
+      const there = await this.drive.liveAt(runner.ownerId, dto.path).catch(() => null);
+      if (there?.kind === 'FOLDER') return this.drive.stat(runner.ownerId, there);
+    }
     return this.chatWrite(turn, { op: 'MKDIR', path: dto.path, parents: dto.parents === true }, async () => {
       const made = await this.drive.mkdirPath(runner.ownerId, dto.path, { parents: dto.parents === true, writer });
       return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, made.id));
