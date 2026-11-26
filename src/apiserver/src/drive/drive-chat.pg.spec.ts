@@ -218,6 +218,9 @@ test('the Drive chat: made as a session, run where the owner last chatted, liste
       ['too many items', await create({ workspaceId: pub(wsA), entryIds: Array.from({ length: DRIVE_CHAT_RULES.selectionMax + 1 }, () => pub(randomUUID())) }), 400, 'DRIVE_CHAT_CONTEXT_INVALID'],
       ['a session header', await create({ workspaceId: pub(wsA) }, ownerToken, { 'x-orbit-session-id': pub(deliveryChat) }), 403, 'DRIVE_CHAT_OWNER_CHANNEL_ONLY'],
       ["another account's workspace", await create({ workspaceId: pub(wsStranger) }), 404],
+      ['a blank workspaceId', await create({ workspaceId: '  ' }), 400],
+      ['a blank attachmentIds', await create({ workspaceId: pub(wsA), attachmentIds: ' ' }), 400],
+      ['a blank attachment id', await create({ workspaceId: pub(wsA), attachmentIds: [''] }), 400],
     ];
     for (const [what, reply, status, code] of refusals) {
       assert.equal(reply.status, status, `${what}: ${reply.text}`);
