@@ -81,6 +81,7 @@ import {
 import { saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
 import { Diff, ExportCtx, KeyVals, Pre, relPath, safeJson, type ExportMode } from './ToolBlocks';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 // Re-exported for the modules that have always read them from the transcript.
 export { ExportCtx, Pre, relPath, type ExportMode };
 import { copyText } from '../lib/clipboard';
@@ -2678,7 +2679,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         );
       }
       if (isRunnerUpdateResume(node.text)) {
-        return <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>;
+        return <Tooltip content={node.text} delay={TEXT_TOOLTIP_DELAY_MS}><div className="chat-note runner-update-resume" data-seq={seq}>{RUNNER_UPDATE_RESUME_NOTE}</div></Tooltip>;
       }
       const ownerRequestEnding = resolutionTurnLabel(node.text);
       if (ownerRequestEnding) {
@@ -3010,13 +3011,15 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // is the runner's own account of why a turn failed and stays loud.
       const log = parseEngineLogLine(node.message);
       return (
-        <div className="chat-error" data-level={log?.level} data-seq={node.seq} title={log && node.message}>
-          <span className="chat-error-mark">
-            {!log || log.level === 'ERROR' ? '✖' : log.level === 'WARN' ? '⚠' : '·'}
-          </span>
-          <span className="chat-error-text">{log ? linkifyLogText(log.text) : node.message}</span>
-          {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
-        </div>
+        <Tooltip content={log ? node.message : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div className="chat-error" data-level={log?.level} data-seq={node.seq}>
+            <span className="chat-error-mark">
+              {!log || log.level === 'ERROR' ? '✖' : log.level === 'WARN' ? '⚠' : '·'}
+            </span>
+            <span className="chat-error-text">{log ? linkifyLogText(log.text) : node.message}</span>
+            {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
+          </div>
+        </Tooltip>
       );
     }
     case 'notice':
@@ -3700,18 +3703,20 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // says how far it got.
   const status =
     node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
-      <div className="chat-undelivered" title={node.deliveryReason}>
-        ⚠ {steerDeliveryState(node.delivery).label}
-        {node.delivery === 'failed' && putBack && typed && (
-          <button
-            type="button"
-            className="chat-undelivered-retry"
-            onClick={() => putBack(typed, node.attachmentRefs)}
-          >
-            Put back in the composer
-          </button>
-        )}
-      </div>
+      <Tooltip content={node.deliveryReason} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div className="chat-undelivered">
+          ⚠ {steerDeliveryState(node.delivery).label}
+          {node.delivery === 'failed' && putBack && typed && (
+            <button
+              type="button"
+              className="chat-undelivered-retry"
+              onClick={() => putBack(typed, node.attachmentRefs)}
+            >
+              Put back in the composer
+            </button>
+          )}
+        </div>
+      </Tooltip>
     ) : node.steer ? (
       <SteerState node={node} typed={typed} />
     ) : null;
@@ -3747,15 +3752,16 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
           {flipFoot && translationFoot}
           {flipFoot && typed && <span className="chat-meta-sep">·</span>}
           {typed && (
-            <button
-              type="button"
-              className="chat-copy"
-              onClick={copy}
-              title={copied ? 'Copied' : 'Copy message'}
-              aria-label={copied ? 'Copied' : 'Copy message'}
-            >
-              {copied ? <CheckOutlined /> : <CopyOutlined />}
-            </button>
+            <Tooltip content={copied ? 'Copied' : 'Copy message'}>
+              <button
+                type="button"
+                className="chat-copy"
+                onClick={copy}
+                aria-label={copied ? 'Copied' : 'Copy message'}
+              >
+                {copied ? <CheckOutlined /> : <CopyOutlined />}
+              </button>
+            </Tooltip>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
           {typed && node.ts && (status || held || (!flipFoot && translationFoot)) && (
@@ -3833,15 +3839,16 @@ function TurnFoot({ node }: { node: DividerNode }) {
   return (
     <div className="chat-turn-divider chat-turn-foot" data-seq={seq}>
       {reply && (
-        <button
-          type="button"
-          className="chat-copy"
-          onClick={copy}
-          title={copied ? 'Copied' : 'Copy reply'}
-          aria-label={copied ? 'Copied' : 'Copy reply'}
-        >
-          {copied ? <CheckOutlined /> : <CopyOutlined />}
-        </button>
+        <Tooltip content={copied ? 'Copied' : 'Copy reply'}>
+          <button
+            type="button"
+            className="chat-copy"
+            onClick={copy}
+            aria-label={copied ? 'Copied' : 'Copy reply'}
+          >
+            {copied ? <CheckOutlined /> : <CopyOutlined />}
+          </button>
+        </Tooltip>
       )}
       {ts && <span className="chat-time">{formatClock(new Date(ts))}</span>}
     </div>
@@ -3966,15 +3973,17 @@ function resolveFileObjectUrl(
 /** What a file whose bytes have gone leaves in a conversation: the grey a card's tile has, in the card's words. */
 function AttachmentExpiredTile({ at, name }: { at: string | null; name: string }) {
   return (
-    <span className="chat-expired" title={name}>
-      {EVIDENCE_FILE_EXPIRED}
-      {at === null ? null : (
-        <>
-          <br />
-          {evidenceExpiryDate(at)}
-        </>
-      )}
-    </span>
+    <Tooltip content={name} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="chat-expired">
+        {EVIDENCE_FILE_EXPIRED}
+        {at === null ? null : (
+          <>
+            <br />
+            {evidenceExpiryDate(at)}
+          </>
+        )}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -4075,17 +4084,18 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
     }
   };
   return (
-    <button
-      type="button"
-      className={`chat-file${failed ? ' is-error' : ''}`}
-      onClick={download}
-      title={failed ? `Retry download ${label}` : `Download ${label}`}
-      aria-label={failed ? `Retry download ${label}` : `Download ${label}`}
-      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
-    >
-      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
-      <span className="chat-file-name">{label}</span>
-    </button>
+    <Tooltip content={failed ? `Retry download ${label}` : `Download ${label}`}>
+      <button
+        type="button"
+        className={`chat-file${failed ? ' is-error' : ''}`}
+        onClick={download}
+        aria-label={failed ? `Retry download ${label}` : `Download ${label}`}
+        data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+      >
+        {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
+        <span className="chat-file-name">{label}</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -4182,15 +4192,16 @@ function CodeBlock({ children }: any) {
   };
   return (
     <div className="md-codeblock">
-      <button
-        type="button"
-        className="md-copy"
-        onClick={copy}
-        title={copied ? 'Copied' : 'Copy code'}
-        aria-label={copied ? 'Copied' : 'Copy code'}
-      >
-        {copied ? <CheckOutlined /> : <CopyOutlined />}
-      </button>
+      <Tooltip content={copied ? 'Copied' : 'Copy code'}>
+        <button
+          type="button"
+          className="md-copy"
+          onClick={copy}
+          aria-label={copied ? 'Copied' : 'Copy code'}
+        >
+          {copied ? <CheckOutlined /> : <CopyOutlined />}
+        </button>
+      </Tooltip>
       <pre ref={preRef}>{children}</pre>
     </div>
   );
@@ -4375,10 +4386,12 @@ function LocalArtifactFile({
   const filename = downloadName || fileLabel(artifactPath);
   if (!resolve || exp) {
     return (
-      <span className="md-image-unavailable" title={artifactPath}>
-        <PaperClipOutlined />
-        <code>{shown}</code>
-      </span>
+      <Tooltip content={artifactPath} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{shown}</code>
+        </span>
+      </Tooltip>
     );
   }
   const download = async (): Promise<void> => {
@@ -5356,22 +5369,24 @@ function SubagentWhy({ why, run }: { why: string; run: SubagentRunView | undefin
     : undefined;
   return (
     <>
-      <div className="chat-subagent-why" title={tooltip}>
-        <b>Why</b> · {why}
-        {more && (
-          <button
-            type="button"
-            className="chat-subagent-why-more"
-            aria-expanded={open}
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen((v) => !v);
-            }}
-          >
-            {open ? 'Hide' : 'Details'}
-          </button>
-        )}
-      </div>
+      <Tooltip content={tooltip} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div className="chat-subagent-why">
+          <b>Why</b> · {why}
+          {more && (
+            <button
+              type="button"
+              className="chat-subagent-why-more"
+              aria-expanded={open}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen((v) => !v);
+              }}
+            >
+              {open ? 'Hide' : 'Details'}
+            </button>
+          )}
+        </div>
+      </Tooltip>
       {open && (
         <ul className="chat-subagent-why-list">
           {reasons.map((line, i) => (

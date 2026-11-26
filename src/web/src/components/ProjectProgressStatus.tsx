@@ -70,6 +70,7 @@ import { signInHref } from './TaskSignInHold';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * What a project still owes somebody, and what its coordinator has left to spend
@@ -2179,12 +2180,13 @@ function ItemCard({
       <div className="approval-head project-open-item-head">
         <span className="project-open-item-heading">{heading}</span>
         {tag ? <span className={`project-open-item-state is-${tag.tone}`}>{tag.text}</span> : null}
-        <span
-          className={`criteria-provenance${tone === 'owner' ? '' : ' prov-neutral'}`}
-          title={FROM_ORBIT_TITLE}
-        >
-          {FROM_ORBIT}
-        </span>
+        <Tooltip content={FROM_ORBIT_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span
+            className={`criteria-provenance${tone === 'owner' ? '' : ' prov-neutral'}`}
+          >
+            {FROM_ORBIT}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-plan project-open-item-body">
         {fixing ? (
@@ -2858,9 +2860,11 @@ export function WhoFixesItCard({
       <div className="approval-head project-open-item-head">
         <span className="project-open-item-heading">{heading}</span>
         <span className="project-open-item-clock">{whoFixesClock(row, now)}</span>
-        <span className="criteria-provenance" title={FROM_ORBIT_TITLE}>
-          {FROM_ORBIT}
-        </span>
+        <Tooltip content={FROM_ORBIT_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {FROM_ORBIT}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-plan project-open-item-body">
         <p className="project-open-item-subline">{whoFixesSubline(row, name)}</p>
@@ -3063,10 +3067,12 @@ function OpenItemRowView({
         {/* §4.7 H1: the coordinator's rerun of it, while it runs — the row is still open, and says
             so rather than "handled". */}
         {row.handling ? (
-          <div className="project-open-item-line is-handling" title={row.handling.reason}>
-            <span className="project-open-item-state is-handling">{HANDLING_TAG}</span>
-            {` ${handlingLine(row, row.handling, now, main)}`}
-          </div>
+          <Tooltip content={row.handling.reason} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <div className="project-open-item-line is-handling">
+              <span className="project-open-item-state is-handling">{HANDLING_TAG}</span>
+              {` ${handlingLine(row, row.handling, now, main)}`}
+            </div>
+          </Tooltip>
         ) : null}
       </div>
       <div className="project-open-item-who">

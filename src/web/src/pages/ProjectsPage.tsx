@@ -126,6 +126,7 @@ import {
 import { RUN_STALLED } from '../lib/projectDependencyGraph';
 import { PROJECT_TASK_STARTS_BY_HAND } from '../lib/projectStart';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../components/ui/Tooltip';
 
 // The panel a task opens in over this page — TaskDetailPanel, and the transcript and editors it
 // draws — is needed only once a task is open, so it is not on the page's own import path: the
@@ -711,10 +712,12 @@ function ProjectRowMeter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
           a pointer. */}
       <div className="project-row-buckets" aria-hidden="true">
         {PANORAMA_BUCKETS.filter((bucket) => panoramaBucketValue(buckets, bucket.key) > 0).map((bucket) => (
-          <span key={bucket.key} title={bucket.label}>
-            <Glyph shape={bucket.glyph} color={bucket.color} size={8} />
-            <b>{panoramaBucketValue(buckets, bucket.key).toLocaleString('en-US')}</b>
-          </span>
+          <Tooltip key={bucket.key} content={bucket.label} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span>
+              <Glyph shape={bucket.glyph} color={bucket.color} size={8} />
+              <b>{panoramaBucketValue(buckets, bucket.key).toLocaleString('en-US')}</b>
+            </span>
+          </Tooltip>
         ))}
       </div>
     </div>
@@ -2548,9 +2551,11 @@ function ProjectTaskRow({
                       reader who needs the exact moment behind a to-the-minute local rendering. */}
                   {starts ? (
                     <Badge>
-                      <time dateTime={starts.iso} title={starts.iso}>
-                        Starts {starts.local}
-                      </time>
+                      <Tooltip content={starts.iso} delay={TEXT_TOOLTIP_DELAY_MS}>
+                        <time dateTime={starts.iso}>
+                          Starts {starts.local}
+                        </time>
+                      </Tooltip>
                     </Badge>
                   ) : null}
                 </span>

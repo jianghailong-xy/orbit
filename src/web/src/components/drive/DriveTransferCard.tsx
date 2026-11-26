@@ -15,6 +15,7 @@ import {
   type DriveTransferKind,
 } from '../../lib/driveTransfer';
 import { driveIdFromHref } from './DriveFileCard';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../ui/Tooltip';
 
 /** Rows a long transfer shows before "Show all". */
 const ROWS_SHOWN = 8;
@@ -107,19 +108,21 @@ function FileRow({ file, kind, folder }: { file: DriveTransferFile; kind: DriveT
             ? 'Stopped'
             : 'Failed';
   return (
-    <li className={`drive-xfer-row is-${file.status}`} title={file.path.slice(folder.length - 1)}>
-      <span className="drive-xfer-mark" aria-hidden="true">
-        {mark}
-      </span>
-      <span className="drive-xfer-name">
-        {file.status === 'done' ? <DriveEntryLink link={file.link}>{name}</DriveEntryLink> : name}
-      </span>
-      <span className="drive-xfer-size">{size}</span>
-      {file.status === 'running' && file.size !== null && (
-        <Bar fraction={file.sent / file.size} label={`${name} ${WORDS[kind].went.toLowerCase()}`} />
-      )}
-      {file.status === 'failed' && file.error && <span className="drive-xfer-error">{file.error}</span>}
-    </li>
+    <Tooltip content={file.path.slice(folder.length - 1)} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+      <li className={`drive-xfer-row is-${file.status}`}>
+        <span className="drive-xfer-mark" aria-hidden="true">
+          {mark}
+        </span>
+        <span className="drive-xfer-name">
+          {file.status === 'done' ? <DriveEntryLink link={file.link}>{name}</DriveEntryLink> : name}
+        </span>
+        <span className="drive-xfer-size">{size}</span>
+        {file.status === 'running' && file.size !== null && (
+          <Bar fraction={file.sent / file.size} label={`${name} ${WORDS[kind].went.toLowerCase()}`} />
+        )}
+        {file.status === 'failed' && file.error && <span className="drive-xfer-error">{file.error}</span>}
+      </li>
+    </Tooltip>
   );
 }
 

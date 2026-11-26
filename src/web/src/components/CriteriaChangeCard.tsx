@@ -35,6 +35,7 @@ import { useIsMobile } from '../lib/useMediaQuery';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { streamPoll } from '../lib/listBudget';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * "Confirm the new criteria?" — a started project whose criteria moved after the owner confirmed
@@ -125,9 +126,11 @@ export function CriteriaChangeCard({
     <div ref={ref} className="approval-card settlement-card criteria-change-card">
       <div className="approval-head settlement-card-head">
         <span className="settlement-card-heading">{CRITERIA_CHANGE_TITLE}</span>
-        <span className="criteria-provenance prov-brand" title={ACCEPTANCE_PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={ACCEPTANCE_PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance prov-brand">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions settlement-card-body">
         <div className="settlement-card-meta">

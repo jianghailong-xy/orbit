@@ -5,6 +5,7 @@ import { ApiError } from '../api';
 import { sessionQuery, taskRowQuery } from '../lib/queries';
 import { taskOutcomeChip, type OutcomeChip } from '../lib/taskOutcome';
 import { linkId, targetHref, watchStateCopy } from '../lib/watches';
+import { Tooltip } from './ui/Tooltip';
 
 /** A clock for the relative times on a watch ("checked 12s ago") that keeps them moving on screen. */
 export function useNow(intervalMs = 15_000): number {
@@ -113,23 +114,24 @@ export function WatchTargetLink({
   const shown = linkId(id);
   const status = showsStatus ? chip : null;
   return (
-    <Link
-      className={`watch-target${state ? ` is-${state.toLowerCase()}` : ''}`}
-      to={targetHref(kind, id)}
-      title={`${noun} ${shown}`}
-    >
-      <span className="watch-target-kind">{noun}</span>
-      <span className="watch-target-name">
-        {state === 'GONE' ? `Deleted ${noun.toLowerCase()}` : (title ?? name ?? `${shown.slice(0, 8)}…`)}
-      </span>
-      {status ? (
-        <span className={`watch-target-status tone-${status.tone}`}>{status.label}</span>
-      ) : (
-        state && (
-          <span className="watch-target-state">{TARGET_STATE_WORD[state] ?? state.toLowerCase()}</span>
-        )
-      )}
-    </Link>
+    <Tooltip content={`${noun} ${shown}`}>
+      <Link
+        className={`watch-target${state ? ` is-${state.toLowerCase()}` : ''}`}
+        to={targetHref(kind, id)}
+      >
+        <span className="watch-target-kind">{noun}</span>
+        <span className="watch-target-name">
+          {state === 'GONE' ? `Deleted ${noun.toLowerCase()}` : (title ?? name ?? `${shown.slice(0, 8)}…`)}
+        </span>
+        {status ? (
+          <span className={`watch-target-status tone-${status.tone}`}>{status.label}</span>
+        ) : (
+          state && (
+            <span className="watch-target-state">{TARGET_STATE_WORD[state] ?? state.toLowerCase()}</span>
+          )
+        )}
+      </Link>
+    </Tooltip>
   );
 }
 

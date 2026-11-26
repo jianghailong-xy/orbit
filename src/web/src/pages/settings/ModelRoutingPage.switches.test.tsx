@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { meQuery, type Me, type UserPreferences } from '../../lib/queries';
+import { hoverTooltip } from '../../test/tooltipHover';
 
 /**
  * Route by tier (once Smart model selection), one switch for the whole account (`preferences.modelRouting`), first on Providers →
@@ -197,7 +198,7 @@ describe('smart model selection, one switch for the whole account', () => {
   it('opens the page in Routing, above the models, saying what it does in one line and in full on hover', async () => {
     await mount({});
     expect(label().nextElementSibling?.textContent).toBe(HINT);
-    expect(smartSwitch().closest('[title]')?.getAttribute('title')).toBe(FULL_HINT);
+    expect(await hoverTooltip(smartSwitch().closest('.settings-row-control')!)).toBe(FULL_HINT);
     // The section it sits in is a region named by its title, the page's first.
     const sections = [...container!.querySelectorAll<HTMLElement>('section[aria-labelledby]')];
     const title = (section: HTMLElement) => document.getElementById(section.getAttribute('aria-labelledby')!)?.textContent;

@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ACCEPTANCE_CONFIRMATION_TITLE,
   ACCEPTANCE_CONFIRM_LABEL,
@@ -23,6 +23,17 @@ import {
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
+
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('./ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
 
 /**
  * What the settlement question puts in the strip, given the page's answer about its card — on a
@@ -214,7 +225,7 @@ describe('the settlement question on the line', () => {
     // No age, and one question has no position to stand in.
     expect(html).not.toContain('decision-strip-quiet');
     expect(buttonTags(html)).toHaveLength(1);
-    expect(buttonTags(html)[0]).toContain(`title="${GO_TO_CARD_HINT}"`);
+    expect(buttonTags(html)[0]).toContain(`data-tip="${GO_TO_CARD_HINT}"`);
   });
 });
 

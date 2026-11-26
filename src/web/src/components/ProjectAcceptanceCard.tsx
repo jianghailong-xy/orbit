@@ -77,6 +77,7 @@ import {
 } from '../lib/projectDone';
 import type { CriterionLandingReason, ProjectTextTranslation } from '@orbit/shared';
 import { ago } from '../lib/watches';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import './ui/Typography.css';
 
 /**
@@ -356,7 +357,7 @@ function RequiredAction({ code }: { code: string }) {
       </span>
     );
   }
-  return <span className="acceptance-held-up-action" title={code}>{sentence}</span>;
+  return <Tooltip content={code} delay={TEXT_TOOLTIP_DELAY_MS}><span className="acceptance-held-up-action">{sentence}</span></Tooltip>;
 }
 
 /** Who confirmed a criterion, as its row's state sentence says it. */

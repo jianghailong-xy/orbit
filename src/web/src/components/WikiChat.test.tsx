@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiDocView, WikiDocsDirectory } from '@orbit/shared';
 import { wikiChatQuoteCounts, type WikiChatList, type WikiChatWorkspace } from '../lib/wikiChat';
 import { readSidebarFolded } from '../lib/sidebarFold';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // A section's diagram is drawn by Mermaid, which jsdom cannot lay out.
 const mermaid = vi.hoisted(() => ({ initialize: vi.fn(), render: vi.fn() }));
@@ -611,7 +612,7 @@ describe('a selection on a document (design §2, comment design §2 step 1)', ()
     await press(document.querySelector('.wk-chat-ask'));
     const quote = document.querySelector('.wk-chat-chip.q')!;
     expect(quote.querySelector('.sub')?.textContent).toBe('20 sentences · 20 sources');
-    expect(quote.getAttribute('title')).toBe('The first 20 of 25 sentences');
+    expect(await hoverTooltip(quote)).toBe('The first 20 of 25 sentences');
   });
 });
 

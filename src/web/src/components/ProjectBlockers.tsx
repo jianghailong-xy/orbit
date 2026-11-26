@@ -8,6 +8,7 @@ import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import './ui/Typography.css';
 
 /**
@@ -303,9 +304,11 @@ function RefusedTaskList({ projectId, taskIds }: { projectId: string; taskIds: s
             </a>
             {/* What this blocker says about that row: its start is the one this line refused. Not
                 the task's own status, which a refusal deliberately does not change. */}
-            <span className="project-blockers-task-state" title={blockerTaskStateTitle}>
-              Refused
-            </span>
+            <Tooltip content={blockerTaskStateTitle} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+              <span className="project-blockers-task-state">
+                Refused
+              </span>
+            </Tooltip>
           </li>
         );
       })}

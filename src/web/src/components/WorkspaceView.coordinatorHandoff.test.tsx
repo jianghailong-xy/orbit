@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
 import { ToastViewport } from './ToastViewport';
 import { clearToasts } from '../lib/toastStore';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Compact and Start a new coordinator in the Context popover (board 01), and the handoff as the
@@ -477,7 +478,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     expect(mounted().querySelector('.workspace-header-main > .workspace-header-task')).toBeNull();
     const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
     expect(badge?.textContent).toBe('Coordinator');
-    expect(badge?.getAttribute('title')).toBe('Open project · Checkout redesign');
+    expect(await hoverTooltip(badge!)).toBe('Open project · Checkout redesign');
     expect(badge?.getAttribute('aria-label')).toBe('Coordinator · Open project Checkout redesign');
     await act(async () => badge!.click());
     // The test's one catch-all route keeps WorkspaceView mounted on /projects/…, which may route on from there.

@@ -23,6 +23,7 @@ import {
   type WikiTone,
   type WikiTrust,
 } from '../lib/wiki';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The Wiki's marks: the kind icon, the trust badge, the anchor word, the op chip and the change dot.
@@ -56,9 +57,11 @@ export function wikiKindIcon(kind: string): ReactNode {
 
 export function WikiKindMark({ kind, className = 'wk-kind' }: { kind: string; className?: string }) {
   return (
-    <span className={className} title={WIKI_KIND_LABELS[kind as WikiEntryKind] ?? kind} aria-hidden="true">
-      {wikiKindIcon(kind)}
-    </span>
+    <Tooltip content={WIKI_KIND_LABELS[kind as WikiEntryKind] ?? kind} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className={className} aria-hidden="true">
+        {wikiKindIcon(kind)}
+      </span>
+    </Tooltip>
   );
 }
 
