@@ -41,6 +41,8 @@ true, and the apiserver refuses a `discard` from a runner without it with the sa
 | `state` | `RunnerRepoHealth.state` vocabulary: `clean`, `dirty`, `unmerged`, `merge`, `rebase`, `cherry-pick`, `revert` |
 | `upstream?` | Upstream ref, e.g. `origin/main`; absent when the branch has none |
 | `ahead?` / `behind?` | Commits on the branch but not on upstream, and on upstream but not on the branch, as of the runner's last fetch |
+| `commits?` | The commits not pushed (`upstream..HEAD`), newest first, at most `MAIN_CHECKOUT_COMMITS_MAX` = 20, in the `BranchCommit` shape (`sha`, `subject`, `body?`, `committedAt`, `savedBy?`, `files[]` with numstat, `filesTruncated?`). Absent without an upstream, on a detached HEAD, and from older runners. On this read only, never on the heartbeat (§4) |
+| `commitsTruncated?` | There are more commits not pushed than `commits` lists |
 | `files[]` | `MainCheckoutFile`, sorted by path in **UTF-8 byte order**, at most `MAIN_CHECKOUT_FILE_LIMIT` = 200 |
 | `fileCount` | Files counted: `files.length`, or 200 when truncated |
 | `truncated` | The runner stopped counting at 200; there are more |
@@ -58,6 +60,12 @@ included.
 **Diff.** Patches are read per file on demand (`MainCheckoutFileDiff`: `path`, `binary`, `patch?`,
 `patchTruncated?`), each capped at `MAIN_CHECKOUT_PATCH_MAX_BYTES` (256 KiB). Patches never travel
 on the heartbeat, and file contents and credentials are never logged.
+
+**Commit read.** With `commit` (the full sha of one in `commits`), each `diff` file is answered from that commit against
+its first parent instead of from the working tree against HEAD: the same `MainCheckoutFileDiff` shape and byte cap. The
+rest of the snapshot is the checkout as it is now. The runner refuses a sha that is not in `upstream..HEAD`: it serves no
+other history. A runner too old to list `commits` ignores `commit`, so a client sends it only for a sha the snapshot
+listed.
 
 ## 3. Fingerprint
 
@@ -288,8 +296,9 @@ deadline. The TypeScript shapes live in `mainCheckoutGit.ts`, under "The relay".
 `RunnerHeartbeatResponse.mainCheckoutRequests?: MainCheckoutRunnerRequest[]` goes only to a runner that declares
 `main-checkout-git/v1`, and only while the runner is not draining. Each entry has one of two shapes:
 
-- `{ id, op: 'snapshot', root, diffPaths?, requestedAt, expiresAt }` — `diffPaths` holds at most
-  `MAIN_CHECKOUT_DIFF_PATHS_MAX` = 20 entries.
+- `{ id, op: 'snapshot', root, diffPaths?, commit?, requestedAt, expiresAt }` — `diffPaths` holds at most
+  `MAIN_CHECKOUT_DIFF_PATHS_MAX` = 20 entries. `commit`, a full sha, makes them that commit's own patches (§2). The
+  runner answers `{ error }` for a sha that is not in `upstream..HEAD`.
 - `{ id, op: 'action', command: MainCheckoutActionCommand }`.
 
 `id` is the row; the runner posts the answer under it. A runner never starts work after `expiresAt`. A snapshot read
@@ -299,7 +308,7 @@ waits `MAIN_CHECKOUT_SNAPSHOT_WAIT_SECONDS` = 20 s. An action waits `MAIN_CHECKO
 
 | Route | Body | Notes |
 |---|---|---|
-| `POST /runner/main-checkout/:id/snapshot` | `MainCheckoutSnapshotAnswer`: `{ snapshot, diffs? }` or `{ error }` | `{accepted:false}` once the read is finished |
+| `POST /runner/main-checkout/:id/snapshot` | `MainCheckoutSnapshotAnswer`: `{ snapshot, diffs? }` or `{ error }` | `{accepted:false}` once the read is finished. `snapshot.commits` is kept only as an array, cut to 20; `commitsTruncated` only as a boolean |
 | `POST /runner/main-checkout/:id/result` | `MainCheckoutActionResult` | `requestId` and `kind` must match the row. `status` is `done`, `partial` or `refused`. The runner never sends the four control-plane codes. |
 
 Both routes find the row by `(id, the calling runner)`. Any other row is 404.
@@ -335,11 +344,12 @@ A result line never writes a merge receipt, a session merge status or a project 
 
 | Route | Answer |
 |---|---|
-| `GET /workspaces/:id/main-checkout?diff=<path>` (repeat `diff` for each file) | `MainCheckoutView`: `snapshot`, `diffs?`, `actionsSupported`, `managedBranch`, `inFlight` |
+| `GET /workspaces/:id/main-checkout?diff=<path>&commit=<sha>` (repeat `diff` for each file; `commit` is optional) | `MainCheckoutView`: `snapshot`, `diffs?`, `actionsSupported`, `managedBranch`, `inFlight` |
 | `POST /workspaces/:id/main-checkout/actions` | `MainCheckoutActionAnswer`: `{ requestId, status: 'pending' }`, or `'finished'` with `result` |
 | `POST /workspaces/:id/main-checkout/actions/:requestId/cancel` | The same, `CANCELLED`. Only before the runner was handed the action; 409 after. |
 
-**GET errors.** 404 for a workspace that is not the caller's, or that has no reported checkout. 503 when its runner
+**GET errors.** 400 for a `commit` that is not 40 or 64 lowercase hex characters, with nothing queued. 502 when the
+runner answers `{ error }`, as it does for a `commit` it refuses. 404 for a workspace that is not the caller's, or that has no reported checkout. 503 when its runner
 is offline. 504 when the runner does not answer in time.
 
 **GET without the capability.** The runner is not asked. The snapshot is built from its last heartbeat, with
