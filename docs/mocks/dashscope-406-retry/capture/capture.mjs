@@ -45,7 +45,7 @@ async function shoot(browser, tree, url, theme, size) {
     engine: 'claude', error: ERR, lastTurnAt: t0,
     // What the server leaves after a failed turn (sessionPhaseFields.fixture 'released with a retry armed'):
     // released FAILED, idle, the turn FAILED; armed, it waits on a WAKE.
-    status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED', phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED',
+    status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED', phase: tree === 'after' ? 'RUNNING' : 'IDLE', released: true, lastTurnOutcome: 'FAILED',
     waitingOn: tree === 'after' ? 'WAKE' : null, finishedAt: '2026-11-13T01:14:18.000Z',
     // What the server arms on a retryable failure (auto-retry.service): first rung, 30 s + jitter.
     ...(tree === 'after' ? { retryAt: '2026-11-13T01:14:57.000Z', retryAttempts: 0 } : { retryAt: null, retryAttempts: 0 }),

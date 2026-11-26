@@ -75,7 +75,7 @@
   <h2>已定 · 方案 B：卡片用显示名，不用 slug</h2>
   <p class="b-sub">「The qwen API」→「The <b>Qwen (Model Studio)</b> API could not answer…」；自家登录的引擎写 CLI 名（「The Claude Code API」，原来是「The claude API」）。额度卡同理（「The 5-hour quota for Claude Code…」）。三端各用 composer 已有的同一个取名函数：web <code>providerNameOn</code>、Apple <code>SessionProviderChoices.providerName(on:)</code>、Android <code>catalog.providerName</code>。图 ①② 已是改后实拍。</p>
 
-  <h2 style="margin-top:26px">等待重试时，会话是什么状态</h2>
+  <h2 style="margin-top:26px">等待重试时，会话是什么状态 <small style="font-weight:400;color:#6e6e73">· 已定：算 Running（服务端 phase）</small></h2>
   <div class="b-row">
     <figure class="b-fig"><figcaption>⑤ 会话列表的行 <small>归在 Working</small></figcaption>
       <div class="b-crop" style="width:300px;height:100px;background-image:url(shots/after-light-desktop.png);background-position:-248px -128px"></div></figure>
@@ -85,9 +85,10 @@
       <div class="b-crop" style="width:640px;height:52px;background-image:url(shots/after-light-desktop.png);background-position:-580px -452px"></div></figure>
   </div>
   <table class="b-land" style="margin-top:16px">
-    <tr><td>服务端写的</td><td><code>status/runState FAILED</code> · <code>released: true</code>（回合结束、runner 名额已还）· <code>phase IDLE</code> · <code>lastTurnOutcome FAILED</code> · <code>waitingOn WAKE</code> · <code>retryAt</code> = 30 秒后（第一档），<code>retryAttempts 0</code>。</td></tr>
-    <tr><td>界面读成</td><td>不是「失败」，而是「Idle · ↻ Retrying」：FAILED 加上未过期的 <code>retryAt</code>（<code>sessionRetryPending</code>）= 一个会自己撤销的失败。列表归 Working，不进 Needs you；头部「Idle ↻ Retrying」；底部「Retrying automatically.」替换掉「Session failed.」。</td></tr>
+    <tr><td>服务端写的</td><td><code>status/runState FAILED</code> · <code>released: true</code>（回合结束、runner 名额已还）· <code>phase RUNNING</code>（原为 IDLE，迁移 1667）· <code>lastTurnOutcome FAILED</code> · <code>waitingOn WAKE</code> · <code>retryAt</code> = 30 秒后（第一档），<code>retryAttempts 0</code>。</td></tr>
+    <tr><td>界面读成</td><td>「Running · ↻ Retrying」：三端状态词直接读 phase，Retrying 标记照旧（released 失败 + WAKE）。列表归 Working，不进 Needs you；底部「Retrying automatically.」替换掉「Session failed.」。run state 仍是 FAILED：没有 Stop，发消息走 resume，不会当成插话塞进不存在的回合。</td></tr>
     <tr><td>之后</td><td>到点 AutoRetryService 认领（清 <code>retryAt</code>、次数 +1）并重发 → RUNNING。三次都失败（30 秒 / 2 分 / 5 分）就清掉 <code>retryAt</code>：变回普通 FAILED，进 Needs you，卡片「Auto-retry gave up」。<code>retryAt</code> 过期 2 分钟没人来认领，也自动回落成 FAILED，不会一直挂着「Retrying」。</td></tr>
+    <tr><td>没变的</td><td>只管已 released 的失败重试。停在 AWAITING_INPUT 的额度重试（held + retryAt）仍是 Idle：held 行读 RUNNING 会被三端当成回合在跑。watch / <code>session_await</code> / 侧栏计数不读 phase，行为不变；分享页仍按等待节奏轮询。</td></tr>
     <tr><td>你插手</td><td>这期间直接发消息 = 正常续上，armed 的重试被你的消息顶掉，不会重复发。</td></tr>
   </table>
 </section>
@@ -95,8 +96,8 @@
 <section class="b-part" id="part-4">
   <h2>落地（按代价排）</h2>
   <table class="b-land">
-    <tr><td>已提交</td><td><code>23a7b838b2</code> 判定：<code>CONNECTION_TIMED_OUT_MARKERS = ['read: connection timed out']</code>，shared / runner-go / Android / Swift。<br><code>b3365aceba</code> 显示名：web / macOS·iOS / Android 卡片调用处各一行。</td></tr>
-    <tr><td>已验证</td><td>shared vitest 58；runner Go 失败分类；Android <code>AutoRetry*</code> + <code>EngineErrors*</code>；web <code>WorkspaceView.retryMessage</code> + <code>Transcript</code> 158 通过，新加的两条在旧代码上会红。纯 <code>API Error: 406 Not Acceptable</code> 仍不重试。</td></tr>
+    <tr><td>已提交</td><td><code>23a7b838b2</code> 判定：<code>CONNECTION_TIMED_OUT_MARKERS = ['read: connection timed out']</code>，shared / runner-go / Android / Swift。<br><code>b3365aceba</code> 显示名：web / macOS·iOS / Android 卡片调用处各一行。<br><code>42bf9e7857</code> 等待重试 = RUNNING：<code>deriveSessionPhase</code> + 迁移 1667（trigger 加 <code>retry_at</code>、回填只写 phase）+ 契约文字 + census/backfill 脚本。</td></tr>
+    <tr><td>已验证</td><td>shared vitest 58；runner Go 失败分类；Android <code>AutoRetry*</code> + <code>EngineErrors*</code>；web <code>WorkspaceView.retryMessage</code> + <code>Transcript</code> 158、会话显示 153 通过；apiserver <code>session-phase</code> 单测；<b>真 PostgreSQL 16</b> 上 <code>session-turn-state-phase.pg.spec</code> 5/5（每种形状 set/clear <code>retry_at</code>）。纯 <code>API Error: 406 Not Acceptable</code> 仍不重试。</td></tr>
     <tr><td>未验证</td><td>macOS/iOS 的 Swift 编译与测试（只能在 Mac mini 上跑）。</td></tr>
     <tr><td>部署前</td><td>遇到这条手动发「continue」；频繁出现说明 dashscope-intl 端点本身不稳，可换北京端点 <code>dashscope.aliyuncs.com</code>。</td></tr>
   </table>
