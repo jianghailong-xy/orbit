@@ -246,12 +246,19 @@ export async function measureWatchFrames(browser, base, session, facts, { frames
   const title = (await page.locator('.session-col-list .session-row .session-title').allTextContents()).find((t) => idle.has(t));
   if (!title) throw new Error('no idle session on screen to watch');
   const api = async (path, body) => {
-    const res = await fetch(`${base}/api${path}`, {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${session.accessToken}` },
-      body: JSON.stringify(body ?? {}),
-    });
-    if (!res.ok) throw new Error(`POST ${path} answered ${res.status}: ${await res.text()}`);
-    return res.json();
+    for (let attempt = 1; ; attempt += 1) {
+      const res = await fetch(`${base}/api${path}`, {
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${session.accessToken}` },
+        body: JSON.stringify(body ?? {}),
+      });
+      if (res.ok) return res.json();
+      const text = await res.text();
+      // A write the database rolled back to break a conflict saved nothing, and is asked to be sent again.
+      if (res.status !== 503 || !text.includes('TRANSIENT_DB_CONFLICT') || attempt === 5) {
+        throw new Error(`POST ${path} answered ${res.status}: ${text}`);
+      }
+      await new Promise((done) => setTimeout(done, 1000));
+    }
   };
   let watchId;
   const frame = async (watching) => {
