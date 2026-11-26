@@ -122,6 +122,9 @@ export interface ManagedHeartbeatAnswer {
   concurrencyCap?: number;
   /** The sleep request to answer with, confirmed once the instance's acceptance is recorded. */
   sleep?: ManagedRunnerSleepRequest;
+  /** The mapping is STARTING and this beat may be the one READY waits for: the route kicks the manager rather than
+   *  leave it to the next poll. */
+  starting?: boolean;
 }
 
 /**
@@ -145,6 +148,7 @@ export async function managedRunnerHeartbeat(
   });
   if (!mapping) return { draining: false };
   const cap = mapping.concurrencyCap == null ? {} : { concurrencyCap: mapping.concurrencyCap };
+  if (mapping.managementState === 'STARTING') return { draining: false, ...cap, starting: true };
   if (mapping.managementState !== 'DRAINING') return { draining: false, ...cap };
   // Only the instance being drained is asked anything.
   if (mapping.generation !== instance.generation || mapping.podUid !== instance.podUid || !mapping.stopRequestedAt) {
