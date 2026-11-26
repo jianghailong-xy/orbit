@@ -65,6 +65,7 @@ import type {
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { unregisterWebPushOnSignOut } from '../lib/webPush';
+import { WebPushOffer } from './WebPushOffer';
 import { useDriveEnabled } from '../lib/driveSwitch';
 import { SIDEBAR_WIDTH_KEY, clampSidebarWidth, savedSidebarWidth } from '../lib/sidebarWidth';
 import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
@@ -1221,6 +1222,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
         </div>
       </div>
 
+      <WebPushOffer placement="rail" />
       <div className="tp-user">
         <Menu
           side="top"
