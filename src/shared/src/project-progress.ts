@@ -902,6 +902,9 @@ export type IntegrationJobBlockingReason = LandTaskBlockingReason;
  * receipt-first `TaskIntegrationView.state`: a receipt still says where the work IS, and this says
  * what the platform is doing with the newest attempt — which is how a task can read "on main" and
  * "generation 3 queued" at once without either overwriting the other.
+ *
+ * A MAIN line has no `LAND_TASK`: there, a task whose branch lands into main through a pull request carries that
+ * `LAND_PROMOTION` here, so its wait and its pull request are on the task as well as on the landing.
  */
 export interface LandTaskIntegrationView<Instant = string> {
   jobId: string;

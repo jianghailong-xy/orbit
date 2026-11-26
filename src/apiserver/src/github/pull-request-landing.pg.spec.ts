@@ -595,6 +595,14 @@ test('J-T14, the door and J-T15: a protected main lands through a pull request',
   const [checking] = await readInFlightJobs(h.prisma as never, landing.projectId, command.jobId);
   assert.equal(checking?.pullRequest?.number, pr.number);
   assert.deepEqual(checking.pullRequest?.checks, { passed: 1, required: 2, failed: [] });
+  // And on the task itself (task_get's integration.landTask), whose MAIN-line landing is the candidate's job.
+  const waitingRow = (await readTaskIntegrationViews(h.prisma as never, ownerId, landing.projectId, [landing.taskId])).get(landing.taskId);
+  assert.equal(waitingRow?.state, 'RUNNING');
+  assert.equal(waitingRow.landTask?.jobId, command.jobId);
+  assert.equal(waitingRow.landTask?.state, 'PULL_REQUEST');
+  assert.equal(waitingRow.landTask?.blockingReason?.code, 'WAITING_FOR_CHECKS');
+  assert.equal(waitingRow.landTask?.pullRequest?.number, pr.number);
+  assert.deepEqual(waitingRow.landTask?.pullRequest?.checks, { passed: 1, required: 2, failed: [] });
   // The landing's own view, which a client opens from the landing card, carries the pull request and its checks (§8).
   const landingSession = await h.prisma.projectLanding.findUniqueOrThrow({ where: { id: landing.landingId } });
   const view = await readLandingView(h.prisma as never, ownerId, landingSession.sessionId);

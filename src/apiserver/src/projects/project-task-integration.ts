@@ -36,7 +36,8 @@ import { isInFlightJobState } from './in-flight-job-states';
  * `NOT_APPLICABLE` covers everything else and is the ordinary answer: a codeless task, a task in a
  * project that has not started integrating, and every task of every project that has no line.
  *
- * Beside that answer, every view carries `landTask`: the newest LAND_TASK generation as its own row
+ * Beside that answer, every view carries `landTask`: the newest LAND_TASK generation (or, on a MAIN
+ * line, the newest merge into main of the task's own branch that goes through a pull request) as its own row
  * says it (§2.7a) — state, phase, generation, the four instants, the target ref, the queue wait and
  * why it waits or where it stopped. The task's page, the project's task rows and the project's
  * integration view all read it from here, so the three cannot describe one landing differently.
@@ -460,22 +461,49 @@ export async function readTaskIntegrationViews(
          AND t."owner_id" = ${ownerId}::uuid
          AND t."project_id" = ${projectId}::uuid
     ),
+    -- A MAIN line lands a task as a LAND_PROMOTION of its branch, which names no task. Once such a landing goes
+    -- through a pull request (docs/design/protected-branch-landing.md §8) it is the task's attempt too, so the wait
+    -- and the pull request are on the task's own row; one that pushed directly is the candidate's to show, as before.
+    pull_request_landing AS (
+      SELECT p."task_id" AS "of_task", j."id" AS "job_id"
+        FROM "project_promotion" p
+        JOIN "project_integration_job" j ON j."promotion_id" = p."id" AND j."kind" = 'LAND_PROMOTION'
+       WHERE p."project_id" = ${projectId}::uuid
+         AND p."task_id" IN (${ids})
+         AND p."source_kind" = 'TASK_BRANCH'
+         AND j."owner_id" = ${ownerId}::uuid
+         AND j."project_id" = ${projectId}::uuid
+         AND EXISTS (SELECT 1 FROM "github_pull_request" g WHERE g."landing_id" = j."landing_id")
+    ),
     -- The newest ATTEMPT, by generation: a second generation exists because somebody asked for one
     -- or the task branch moved (§2.1), and an older one says nothing about where the work is now.
     -- This project's own line only: a task filed elsewhere before keeps that line's jobs there.
+    -- A LAND_TASK first; a candidate's generations restart with each candidate, so those go by their time.
     newest_job AS (
-      SELECT DISTINCT ON (j."task_id")
-             j."task_id", j."id", j."kind", j."state", j."phase", j."generation", j."target_ref",
+      SELECT DISTINCT ON (attempt."of_task")
+             attempt."of_task" AS "task_id", j."id", j."kind", j."state", j."phase", j."generation", j."target_ref",
              j."serial_key", j."session_id", j."landing_id", j."error_code", j."cancel_requested_at",
-             j."pull_request_id",
+             -- A catch-up still queued has pushed nothing yet: its subject's pull request is the one it waits on.
+             COALESCE(j."pull_request_id", (
+               SELECT g."id" FROM "github_pull_request" g
+                WHERE j."kind" = 'LAND_PROMOTION' AND g."landing_id" = j."landing_id"
+                ORDER BY g."created_at" DESC, g."id" DESC LIMIT 1
+             )) AS "pull_request_id",
              cardinality(j."conflicts") AS "conflict_count", j."checks",
              j."created_at", j."started_at", j."claimed_at", j."heartbeat_at", j."finished_at"
-        FROM "project_integration_job" j
-       WHERE j."task_id" IN (${ids})
-         AND j."owner_id" = ${ownerId}::uuid
-         AND j."project_id" = ${projectId}::uuid
-         AND j."kind" = 'LAND_TASK'
-       ORDER BY j."task_id", j."generation" DESC, j."created_at" DESC, j."id" DESC
+        FROM (
+          SELECT t."task_id" AS "of_task", t."id" AS "job_id"
+            FROM "project_integration_job" t
+           WHERE t."task_id" IN (${ids})
+             AND t."owner_id" = ${ownerId}::uuid
+             AND t."project_id" = ${projectId}::uuid
+             AND t."kind" = 'LAND_TASK'
+          UNION ALL
+          SELECT "of_task", "job_id" FROM pull_request_landing
+        ) attempt
+        JOIN "project_integration_job" j ON j."id" = attempt."job_id"
+       ORDER BY attempt."of_task", (j."kind" = 'LAND_TASK') DESC,
+                CASE WHEN j."kind" = 'LAND_TASK' THEN j."generation" END DESC, j."created_at" DESC, j."id" DESC
     ),
     -- The newest OPEN exception of the three integration kinds. Newest rather than oldest: a task
     -- whose second attempt conflicted is described by that conflict, not by the one before it.
