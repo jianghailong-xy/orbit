@@ -28,6 +28,7 @@ import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-tes
 import { prismaClientFor } from '../prisma/prisma-client';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
 import { SessionsService } from './sessions.service';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -42,6 +43,7 @@ test('?status= lists the rows the stored word listed, but for the §3.4 kinds', 
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
   t.after(() => db.$disconnect());
+  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   // listForOrchestration reads nothing but the database.
   const sessions = Object.create(SessionsService.prototype) as SessionsService;
   Object.assign(sessions, { prisma: db });

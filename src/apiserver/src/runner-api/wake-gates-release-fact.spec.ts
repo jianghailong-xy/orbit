@@ -135,7 +135,7 @@ function oldConversationIsDown(session: Row): boolean {
 }
 
 /** The gateways' "open" test of a session row, before: the status in the open set. After: the release column unset. */
-const oldGatewayOpen = (session: Row): boolean => OPEN_SESSION_STATUSES.includes(session.status);
+const oldGatewayOpen = (session: Row): boolean => (OPEN_SESSION_STATUSES as readonly string[]).includes(session.status);
 const newGatewayOpen = (session: Row): boolean => isHeld(session);
 
 function newObserverRefusal(session: Row): string | null {

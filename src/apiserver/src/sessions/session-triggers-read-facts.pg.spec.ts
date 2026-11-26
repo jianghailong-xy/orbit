@@ -34,6 +34,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { prismaClientFor } from '../prisma/prisma-client';
 import { legacySessionStatus } from './session-legacy-words';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -155,6 +156,7 @@ test('the session triggers and functions read the facts and answer as before (16
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
+  await sql.query(ALLOW_UNFILLED_SESSIONS);
 
   const w: World = { ownerId: randomUUID(), runnerId: randomUUID(), workspaceId: randomUUID() };
   await db.user.create({ data: { id: w.ownerId, email: `t6-${w.ownerId}@triggers.invalid`, name: 't6', passwordHash: 'x' } });

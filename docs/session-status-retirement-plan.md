@@ -48,10 +48,11 @@ as before (§1.4). Phase never decides a slot.
 | D3 | the facts | a trigger derives the word from the facts, for rollback only | writers write the facts only; `status` leaves the Prisma model |
 | D4 | the facts | `status` and `run_status` dropped | unchanged |
 
-**What a person or runner sees change.** Seven kinds of released row read another legacy word (§3.4), each between
+**What a person or runner sees change.** Eight kinds of released row read another legacy word (§3.4), each between
 terminal words (mostly Failed or Succeeded becoming Ended): the end the runner did not honour and the old SUCCEEDED
-rows with no end, which the owner accepted, and five the owner has not seen yet (one current writer, one legacy set,
-three expected to hold no rows or very few). The out-of-memory stop keeps "Interrupted" (`ABANDONED`), a failed import
+rows with no end, which the owner accepted, the old SUCCEEDED rows ended `completed` with no turn outcome (C8),
+accepted on 2026-11-26, and five the owner has not seen yet (one current writer, one legacy set, three expected to hold
+no rows or very few). The out-of-memory stop keeps "Interrupted" (`ABANDONED`), a failed import
 and a landing container keep their words, and every held session keeps its word exactly. No runner or app release is
 needed.
 
@@ -542,6 +543,7 @@ From the shapes of `common/session-release-shapes.fixture.ts` (as migration 1441
 | C5. A finalize reporting SUCCEEDED with no end asked (N4 SUCCEEDED) | `ctl:10444`, logged at `ctl:10645-10647` | SUCCEEDED → CANCELLED | SUCCEEDED → ENDED | as C4 | expected 0: no runner the server accepts sends it (`common/session-release.ts:233-243`) | put to the owner with its count |
 | C6. A cancel with no end reason, not honoured (W7 no reason) | the reaper; no current writer leaves one (fixture) | FAILED → CANCELLED | FAILED → ENDED | FAILED → DORMANT | expected 0 | put to the owner with its count |
 | C7. A session that had started, ended while queued with reason `task_done` | `sessions/sessions.service.ts:10651-10667` writes CANCELLED for any reason | CANCELLED → SUCCEEDED | ENDED → SUCCEEDED | DORMANT → COMPLETED; unchanged when filed | not measured; P4's `started_at` keeps the never-started ones exact | put to the owner with its count |
+| C8. Old SUCCEEDED rows ended with reason `completed`: stored SUCCEEDED, `end_reason = 'completed'`, `last_turn_outcome` NULL, `kind = 'CONVERSATION'`, not imported | migration 1202 left the outcome NULL for a SUCCEEDED row without `task_done`; the projector reads P5 and cannot tell them from CANCELLED rows with the same facts (2,473 on the same census) | SUCCEEDED → CANCELLED (`runStatus` the same) | SUCCEEDED → ENDED | COMPLETED, unchanged when filed in Completed; an unfiled row reads CANCELLED; DELETED (Trash) unchanged | 4, all filed in Completed (T16b, restored production backup) | **accepted** by the owner on 2026-11-26 (ruling `3540fKdGRJ5Q8p58HlJrw`: "Accept the change as kind C8"). No projector change |
 
 `runState` and `sessionState` follow from the word, the end reason and the filing through the unchanged derivers
 (`src/shared/src/enums.ts:130-158, 188-228`): Trash reads DELETED first, Completed reads COMPLETED unless the word is
@@ -665,7 +667,8 @@ UPDATE "session" s
   (catalog, `open_list_bump_session`; the list is `OPEN_LIST_UNDRAWN_SESSION_COLUMNS`,
   `sessions/open-list-version.ts:223`), and the two new columns are not in it. So each owner with a row in the batch
   gets one list-changed hint: about 25 hints per owner in all, spread over the run.
-- The census (§7.2) runs after it; D2's first migration asserts that no row disagrees and refuses to run otherwise.
+- The census (§7.2) runs after it; D2's strict-CHECK migration (1651, §4.6) fills any row still empty and refuses to run
+  on a filled row that disagrees.
 
 ### 4.5 Partial indexes, and the query plans to re-measure
 
@@ -706,6 +709,10 @@ A plan that reads more buffers than today's stops T5 until an index answers it.
   a validating scan never runs under that lock, so each `VALIDATE CONSTRAINT` is in a file with no DO, which Prisma
   7.10 sends a statement at a time (header of `0479_wiki_chat_session_checks_index`), and so is each concurrent build.
 - `SET NOT NULL` on `phase` follows a validated `CHECK (phase IS NOT NULL)`, so it does not scan.
+- An upgrade needs no manual step: migration 1651 fills the rows that have no `turn_state` or `phase` (one UPDATE,
+  committed before it asks for the table lock), which is how a self-hosted database is filled. Production's batched
+  backfill (§4.4) was the path for a big table; there the UPDATE writes no row. 1651 still refuses a filled row that
+  disagrees with its word.
 - Migration numbers are chosen when each task is written, above everything on main, `project/*` and pushed `orbit/*`
   branches (main's highest today: 1600).
 - Every trigger added, restated or dropped (T2, T6, T14, T15) also changes its entry in `TRIGGER_WRITE_SOURCES`

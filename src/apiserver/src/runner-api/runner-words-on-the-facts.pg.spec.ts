@@ -41,6 +41,7 @@ import {
 import { WORD_SHAPES } from '../sessions/session-legacy-words.fixture';
 import { RunnerApiController } from './runner-api.controller';
 import { readRunnerLinkHints } from './runner-link-hints';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -79,6 +80,7 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  await sql.query(ALLOW_UNFILLED_SESSIONS);
   const { db, api } = connect(url);
   t.after(async () => {
     await db.$disconnect().catch(() => undefined);

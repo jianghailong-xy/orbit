@@ -35,6 +35,7 @@ import { assertCoordinatorPgUrlIsIsolated } from './coordinator-pg-test-safety';
 import { readProjectReadyToRun } from './project-ready-to-run';
 import { findIdleRuns } from './task-run-idle';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -114,6 +115,7 @@ test('projects, tasks and task lists read the facts, and a row with no turn_stat
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
   t.after(() => db.$disconnect());
+  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
 
   await t.test('(1) the helpers select what the old word sets selected, filled and unfilled', async () => {
     const ids = await world(db, 'helpers');

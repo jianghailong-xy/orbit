@@ -1,20 +1,25 @@
 /**
- * THE DATABASE HALF OF DEPLOY D2 THAT IS SAFE BEFORE THE BACKFILL: THE NOT VALID CHECKs ON turn_state AND THE PARTIAL
- * INDEXES (migrations 1622 and 1627 to 1634).
+ * THE DATABASE HALF OF DEPLOY D2: THE CHECKs THAT HOLD turn_state EQUAL TO THE STORED WORD WHILE BOTH EXIST, phase NOT
+ * NULL, THE PARTIAL INDEXES, THE FILL OF AN UN-BACKFILLED DATABASE AND THE GATE THAT REFUSES A WRONG ROW (migrations
+ * 1622, 1627 to 1634 and 1651 to 1655).
  *
- * docs/session-status-retirement-plan.md §1.4, §1.5, §4.1 (D2), §4.5 and §4.6; task T5. The project branch reaches main
- * as one merge, so these can be deployed before the backfill (task T3) has filled turn_state and phase. VALIDATE, phase
- * NOT NULL and the strict agreement CHECK wait for it, in a later task. Against PostgreSQL:
+ * docs/session-status-retirement-plan.md §1.4, §1.5, §4.1 (D2), §4.5 and §4.6; task T5 and the task that follows the
+ * backfill (T3). Against PostgreSQL:
  *
- *   (1) on the database run-pg-spec.sh migrated from empty: the two CHECKs, NOT VALID; phase still nullable; every index
- *       built, valid and over the columns and rows named here
- *   (2) a mismatched row is refused: a turn state written alone against every held word that does not mean it, and any
- *       turn state on a released row. A row that was refused is left as it was
+ *   (1) on the database run-pg-spec.sh migrated from empty: every CHECK validated, 1622's NULL-tolerant one and the
+ *       NOT NULL helper gone, phase NOT NULL, and every index built, valid and over the columns and rows named here
+ *   (2) a mismatched row is refused: turn_state written alone, against every held word and every turn state it does not
+ *       mean (null under a word that means one included); on a released row; a null phase. A row that was refused is left
+ *       as it was
  *   (3) what the two releases write passes: a D1 server's (the word only) and a D2 server's (the word and its turn
  *       state), for every word; and the released CHECK on its own, with the agreement CHECK taken away
- *   (4) on a populated database whose backfill has not run: prisma migrate deploy applies the files with no gate; the
- *       unfilled rows (turn_state and phase NULL) go on taking writes, which the plan's strict CHECK, even NOT VALID,
- *       would refuse; the backfill then fills them
+ *   (4) on a populated database whose backfill has not run: one prisma migrate deploy fills the unfilled rows as the
+ *       backfill would, writes no row that was filled, and ends in the state of (1)
+ *   (5) a filled but wrong row, turn_state or phase, is refused: 1651 names the count and changes no constraint, and the
+ *       unfilled rows beside it stay filled. Once the wrong rows are corrected and the migration resolved, it deploys to
+ *       the state of (1)
+ *   (6) 1651's fill is committed before it asks for the table lock: while another transaction keeps that lock from it,
+ *       the filled rows can be read and written
  *
  * The plans of §4.5 are scripts/session-status-query-plans.sql's.
  *
@@ -23,11 +28,13 @@
  * Run it on a database of its own, as run-pg-spec.sh does: (4) takes constraints away and puts them back.
  */
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { promisify } from 'node:util';
 
 import { Client } from 'pg';
 
@@ -48,9 +55,16 @@ const D2 = [
   '1632_session_over_capacity_queued_idx',
   '1633_session_owner_held_task_idx',
   '1634_session_released_failed_idx',
+  '1651_session_turn_state_strict_checks',
+  '1652_session_turn_state_agrees_validate',
+  '1653_session_turn_state_released_validate',
+  '1654_session_phase_not_null_validate',
+  '1655_session_phase_set_not_null',
 ];
+const GATE = '1651_session_turn_state_strict_checks';
 
-const AGREES = 'session_turn_state_agrees_unless_null_chk';
+const AGREES = 'session_turn_state_agrees_chk';
+const AGREES_UNLESS_NULL = 'session_turn_state_agrees_unless_null_chk';
 const RELEASED = 'session_turn_state_released_chk';
 
 /** Each index, as pg_get_indexdef words it after `USING btree`. */
@@ -70,9 +84,10 @@ const INDEXES: Record<string, string> = {
 /** Plan §1.4: the turn state each held word means; every other word means none. */
 const HELD_WORDS = { PENDING: 'QUEUED', RUNNING: 'IN_FLIGHT', INTERRUPTED: 'ABANDONED', AWAITING_INPUT: null } as const;
 const RELEASED_WORDS = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
-const TURN_STATES = ['QUEUED', 'IN_FLIGHT', 'ABANDONED'];
+const TURN_STATES = ['QUEUED', 'IN_FLIGHT', 'ABANDONED', null];
 
 const CHECK_VIOLATION = '23514';
+const NOT_NULL_VIOLATION = '23502';
 
 function prisma(url: string, ...args: string[]): { ok: boolean; output: string } {
   try {
@@ -86,7 +101,7 @@ function prisma(url: string, ...args: string[]): { ok: boolean; output: string }
   }
 }
 
-test('D2 before the backfill: the NOT VALID CHECKs and the partial indexes', {
+test('D2: the agreement CHECKs, phase NOT NULL, the partial indexes, the fill and the gate', {
   skip, concurrency: 1, timeout: 600_000,
 }, async (t) => {
   const url = URL!;
@@ -123,12 +138,12 @@ test('D2 before the backfill: the NOT VALID CHECKs and the partial indexes', {
   const checks = async () => (await sql.query<{ conname: string; convalidated: boolean }>(
     `SELECT conname, convalidated FROM pg_constraint WHERE conrelid = 'session'::regclass
         AND (conname LIKE 'session_turn_state_%chk' OR conname LIKE 'session_phase_%chk') ORDER BY conname`)).rows;
-  /** 1611's two value CHECKs, validated by 1612, beside this task's two, which nothing validates yet. */
+  /** 1611's two value CHECKs beside D2's two, all validated; the NOT NULL helper gone. */
   const EXPECTED_CHECKS = [
     { conname: 'session_phase_chk', convalidated: true },
-    { conname: AGREES, convalidated: false },
+    { conname: AGREES, convalidated: true },
     { conname: 'session_turn_state_chk', convalidated: true },
-    { conname: RELEASED, convalidated: false },
+    { conname: RELEASED, convalidated: true },
   ];
   const phaseNullable = async () => (await sql.query<{ is_nullable: string }>(
     `SELECT is_nullable FROM information_schema.columns WHERE table_name = 'session' AND column_name = 'phase'`,
@@ -141,13 +156,13 @@ test('D2 before the backfill: the NOT VALID CHECKs and the partial indexes', {
   const builtIndexes = Object.keys(INDEXES).sort()
     .map((name) => ({ name, def: INDEXES[name], valid: true, unique: false }));
 
-  await t.test('(1) a fresh database: the CHECKs NOT VALID, phase nullable, the indexes', async () => {
+  await t.test('(1) a fresh database: the CHECKs validated, phase NOT NULL, the indexes', async () => {
     assert.deepEqual(await checks(), EXPECTED_CHECKS);
-    assert.equal(await phaseNullable(), 'YES', 'NOT NULL waits for the backfill');
+    assert.equal(await phaseNullable(), 'NO');
     assert.deepEqual(await indexes(), builtIndexes);
   });
 
-  await t.test('(2) a NOT VALID CHECK refuses a new mismatched row, and leaves it as it was', async () => {
+  await t.test('(2) a mismatched row is refused, and left as it was', async () => {
     let refusals = 0;
     for (const [word, meant] of Object.entries(HELD_WORDS)) {
       const id = await insert(word);
@@ -159,12 +174,15 @@ test('D2 before the backfill: the NOT VALID CHECKs and the partial indexes', {
           CHECK_VIOLATION, AGREES, `${word} with turn_state ${wrong}`);
         refusals += 1;
       }
+      await refused(`UPDATE "session" SET "phase" = NULL WHERE "id" = $1`, [id],
+        NOT_NULL_VIOLATION, undefined, `${word} with a null phase`);
       assert.deepEqual(await read(id), before);
     }
-    assert.equal(refusals, 9);
+    // Three wrong values for each of the four held words, null among them where the word means a turn.
+    assert.equal(refusals, 12);
     for (const word of RELEASED_WORDS) {
       const id = await insert(word);
-      for (const state of TURN_STATES) {
+      for (const state of TURN_STATES.filter((s) => s !== null)) {
         await refused(`UPDATE "session" SET "turn_state" = $2 WHERE "id" = $1`, [id, state],
           CHECK_VIOLATION, undefined, `released ${word} with turn_state ${state}`);
       }
@@ -203,50 +221,129 @@ test('D2 before the backfill: the NOT VALID CHECKs and the partial indexes', {
     }
   });
 
-  await t.test('(4) before the backfill: the files apply with no gate, and unfilled rows go on taking writes', async () => {
-    const unfilled: Record<string, string> = {};
-    for (const word of Object.keys(HELD_WORDS)) unfilled[word] = await insert(word);
-    // The database as D1 leaves rows the backfill has not reached: no D2 objects, the two facts NULL.
-    await sql.query(`ALTER TABLE "session" DROP CONSTRAINT "${AGREES}", DROP CONSTRAINT "${RELEASED}"`);
-    for (const name of Object.keys(INDEXES)) await sql.query(`DROP INDEX "${name}"`);
+  /** The database as D1 leaves rows the backfill has not reached: `migrations` not yet applied, the two facts NULL. */
+  const rewind = async (migrations: string[], unfilled: string[]) => {
+    await sql.query(
+      `ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "${AGREES}", ALTER COLUMN "phase" DROP NOT NULL`);
+    if (migrations.includes(D2[0])) {
+      await sql.query(`ALTER TABLE "session" DROP CONSTRAINT "${RELEASED}"`);
+      for (const name of Object.keys(INDEXES)) await sql.query(`DROP INDEX "${name}"`);
+    }
     await sql.query(`ALTER TABLE "session" DISABLE TRIGGER "session_zz_phase"`);
-    await sql.query(`UPDATE "session" SET "turn_state" = NULL, "phase" = NULL WHERE "id" = ANY($1::uuid[])`,
-      [Object.values(unfilled)]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, "phase" = NULL WHERE "id" = ANY($1::uuid[])`, [unfilled]);
     await sql.query(`ALTER TABLE "session" ENABLE TRIGGER "session_zz_phase"`);
-    await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [D2]);
+    await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [migrations]);
+  };
+  /** One session of every word, none of them filled once `rewind` has had them. */
+  const everyWord = async (): Promise<Record<string, string>> => {
+    const ids: Record<string, string> = {};
+    for (const word of [...Object.keys(HELD_WORDS), ...RELEASED_WORDS]) ids[word] = await insert(word);
+    return ids;
+  };
+  /** What a filled row of each word reads, with nothing executing. */
+  const filled = (word: string) => ({
+    status: word,
+    turn_state: (HELD_WORDS as Record<string, string | null>)[word] ?? null,
+    phase: word === 'PENDING' ? 'PENDING' : word === 'RUNNING' ? 'RUNNING' : 'IDLE',
+  });
+  const census = async () => (await sql.query<{ turn_state_disagrees: number; phase_disagrees: number; phase_null: number }>(
+    readFileSync(join(SCRIPTS, 'session-turn-state-census.sql'), 'utf8'))).rows[0];
+  const assertCensusClean = async () => {
+    const { turn_state_disagrees, phase_disagrees, phase_null } = await census();
+    assert.deepEqual([turn_state_disagrees, phase_disagrees, phase_null], [0, 0, 0]);
+  };
+  /** Every row but `ids`, with the transaction that last wrote it. */
+  const versions = async (ids: string[]) => (await sql.query(
+    `SELECT "id", xmin::text AS xmin FROM "session" WHERE NOT "id" = ANY($1::uuid[]) ORDER BY "id"`, [ids])).rows;
+  const assertDeployed = async () => {
+    assert.deepEqual(await checks(), EXPECTED_CHECKS);
+    assert.equal(await phaseNullable(), 'NO');
+    assert.deepEqual(await indexes(), builtIndexes);
+  };
+
+  await t.test('(4) an un-backfilled database is filled by the deploy, and ends as a fresh one', async () => {
+    const unfilled = await everyWord();
+    // A parked session with a background job: its phase comes from more than its word.
+    const working = await insert('AWAITING_INPUT');
+    await sql.query(`UPDATE "session" SET "running_bg_jobs" = ARRAY['bgj_1'] WHERE "id" = $1`, [working]);
+    const ids = [...Object.values(unfilled), working];
+    await rewind(D2, ids);
+    assert.equal((await census()).phase_null, ids.length);
+    const others = await versions(ids);
+    assert.ok(others.length > 0, 'there are filled rows beside them');
 
     const deployed = prisma(url, 'migrate', 'deploy');
     assert.ok(deployed.ok, deployed.output);
-    assert.deepEqual(await checks(), EXPECTED_CHECKS);
+    await assertDeployed();
+    for (const [word, id] of Object.entries(unfilled)) assert.deepEqual(await read(id), filled(word), word);
+    assert.deepEqual(await read(working), { status: 'AWAITING_INPUT', turn_state: null, phase: 'RUNNING' });
+    await assertCensusClean();
+    assert.deepEqual(await versions(ids), others, 'no filled row was written');
+  });
+
+  await t.test('(5) a filled but wrong row is refused, and deploys once corrected', async () => {
+    const unfilled = await everyWord();
+    const wrongTurn = await insert('RUNNING');
+    const wrongPhase = await insert('AWAITING_INPUT');
+    await rewind(D2, Object.values(unfilled));
+    await sql.query(`UPDATE "session" SET "turn_state" = 'QUEUED' WHERE "id" = $1`, [wrongTurn]);
+    await sql.query(`UPDATE "session" SET "phase" = 'RUNNING' WHERE "id" = $1`, [wrongPhase]);
+
+    const refusal = prisma(url, 'migrate', 'deploy');
+    assert.equal(refusal.ok, false, 'deploy refuses');
+    assert.match(refusal.output,
+      /2 session rows have a filled turn_state or phase that is not derived from their status/);
+    assert.ok([wrongTurn, wrongPhase].some((id) => refusal.output.includes(id)), 'it names one of them');
+    // 1622's two CHECKs stand, NOT VALID, and nothing of 1651's swap or after.
+    assert.deepEqual(await checks(), [
+      { conname: 'session_phase_chk', convalidated: true },
+      { conname: AGREES_UNLESS_NULL, convalidated: false },
+      { conname: 'session_turn_state_chk', convalidated: true },
+      { conname: RELEASED, convalidated: false },
+    ]);
     assert.equal(await phaseNullable(), 'YES');
-    assert.deepEqual(await indexes(), builtIndexes);
+    for (const [word, id] of Object.entries(unfilled)) assert.deepEqual(await read(id), filled(word), word);
+    assert.deepEqual(await read(wrongPhase), { status: 'AWAITING_INPUT', turn_state: null, phase: 'RUNNING' });
 
-    // A write that names no state column leaves both facts NULL, and passes.
-    for (const [word, id] of Object.entries(unfilled)) {
-      await sql.query(`UPDATE "session" SET "title" = 'written', "updated_at" = now() WHERE "id" = $1`, [id]);
-      assert.deepEqual(await read(id), { status: word, turn_state: null, phase: null }, word);
-    }
-    // Why the plan's strict CHECK waits: even NOT VALID, it refuses that write on a row whose word means a turn.
-    await sql.query('BEGIN');
-    try {
-      await sql.query(`ALTER TABLE "session" ADD CONSTRAINT "session_turn_state_agrees_chk"
-        CHECK ("turn_state" IS NOT DISTINCT FROM (CASE "status" WHEN 'PENDING' THEN 'QUEUED'
-                 WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END)) NOT VALID`);
-      await refused(`UPDATE "session" SET "title" = $2 WHERE "id" = $1`, [unfilled.RUNNING, 'again'],
-        CHECK_VIOLATION, 'session_turn_state_agrees_chk', 'an unfilled RUNNING row under the strict CHECK');
-    } finally {
-      await sql.query('ROLLBACK');
-    }
-    // The writes that move an unfilled row: a background job (phase is written, turn_state stays NULL) and a release.
-    await sql.query(`UPDATE "session" SET "running_bg_jobs" = ARRAY['bgj_1'] WHERE "id" = $1`, [unfilled.RUNNING]);
-    assert.equal((await read(unfilled.RUNNING)).turn_state, null);
-    await sql.query(`UPDATE "session" SET "status" = 'CANCELLED', "finished_at" = now() WHERE "id" = $1`,
-      [unfilled.INTERRUPTED]);
-    assert.deepEqual(await read(unfilled.INTERRUPTED), { status: 'CANCELLED', turn_state: null, phase: 'IDLE' });
-
+    // The hint's correction: the backfill rewrites a disagreeing row from its status.
     await sql.query(readFileSync(join(SCRIPTS, 'session-turn-state-backfill.sql'), 'utf8'));
-    assert.deepEqual(await read(unfilled.PENDING), { status: 'PENDING', turn_state: 'QUEUED', phase: 'PENDING' });
-    assert.deepEqual(await read(unfilled.RUNNING), { status: 'RUNNING', turn_state: 'IN_FLIGHT', phase: 'RUNNING' });
-    assert.deepEqual(await read(unfilled.AWAITING_INPUT), { status: 'AWAITING_INPUT', turn_state: null, phase: 'IDLE' });
+    const resolved = prisma(url, 'migrate', 'resolve', '--rolled-back', GATE);
+    assert.ok(resolved.ok, resolved.output);
+    const deployed = prisma(url, 'migrate', 'deploy');
+    assert.ok(deployed.ok, deployed.output);
+    await assertDeployed();
+    assert.deepEqual(await read(wrongTurn), filled('RUNNING'));
+    assert.deepEqual(await read(wrongPhase), filled('AWAITING_INPUT'));
+  });
+
+  await t.test('(6) the fill is committed before 1651 asks for the table lock', async () => {
+    const id = await insert('PENDING');
+    await rewind(D2.slice(D2.indexOf(GATE)), [id]);
+    const holder = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    await holder.connect();
+    await holder.query('BEGIN');
+    // Lets the UPDATE through and keeps ALTER TABLE out.
+    await holder.query('LOCK TABLE "session" IN ACCESS SHARE MODE');
+    let ended = false;
+    const deploy = promisify(execFile)(process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy'],
+      { cwd: API, env: { ...process.env, DATABASE_URL: url } }).finally(() => { ended = true; });
+    deploy.catch(() => undefined);
+    try {
+      for (const until = Date.now() + 30_000; (await read(id)).phase === null;) {
+        assert.ok(Date.now() < until && !ended, 'the filled row is visible while the deploy waits');
+        await sleep(100);
+      }
+      // Behind a queued ALTER for 2 s at most; behind the row lock of an uncommitted fill, until the deploy ends.
+      await sql.query(`SET lock_timeout = '5s'`);
+      await sql.query(`UPDATE "session" SET "title" = 'written' WHERE "id" = $1`, [id]);
+      await sql.query('RESET lock_timeout');
+      assert.equal(ended, false, 'the deploy is still waiting for the table lock');
+    } finally {
+      await holder.query('ROLLBACK');
+      await holder.end();
+    }
+    await deploy;
+    await assertDeployed();
+    assert.deepEqual(await read(id), filled('PENDING'));
   });
 });

@@ -19,6 +19,7 @@ import {
   sessionWillWakeSql,
   type SessionWorkingRow,
 } from './session-working';
+import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 /**
  * The three questions of common/session-working.ts answer alike in all three forms — TypeScript
@@ -28,7 +29,9 @@ import {
  *
  * One owner, and one session per status (all seven) and per combination of seven bits: the engine's
  * own turn, a subagent, a background job, a background SHELL (which must count for nothing), an
- * ACTIVE RESUME_SESSION watch, a PENDING scheduled wake-up and an armed retry — 896 rows. Every
+ * ACTIVE RESUME_SESSION watch, a PENDING scheduled wake-up and an armed retry — 896 rows, each twice: with the
+ * `turn_state` migration 1611's trigger gives the word, and with none, as a row not yet backfilled (task T3) reads,
+ * so the facts select what the stored word selected on both (docs/session-status-retirement-plan.md §1.4). Every
  * session also carries the near misses that must not count: a CANCELLED RESUME_SESSION watch, an
  * ACTIVE NOTIFY_USER watch it observes, and a DELIVERED wake-up. Each row is then asked each
  * question three ways, and the answers are compared with each other and with the expectation stated
@@ -45,6 +48,8 @@ interface Fixture {
   id: string;
   status: RunStatus;
   on: Set<Bit>;
+  /** `turn_state` as the trigger wrote it; false: NULL, a row the backfill has not reached. */
+  filled: boolean;
 }
 
 const watchData = (ownerId: string, sessionId: string, action: string, state: string) => ({
@@ -61,6 +66,7 @@ const watchData = (ownerId: string, sessionId: string, action: string, state: st
 test('predicate, Prisma filter and SQL fragment agree on every status and fact combination', { skip }, async () => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
+  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   try {
     const ownerId = randomUUID();
     await db.user.create({
@@ -70,10 +76,12 @@ test('predicate, Prisma filter and SQL fragment agree on every status and fact c
     const fixtures: Fixture[] = [];
     for (const status of Object.values(RunStatus)) {
       for (let mask = 0; mask < 1 << BITS.length; mask += 1) {
-        fixtures.push({ id: randomUUID(), status, on: new Set(BITS.filter((_, bit) => mask & (1 << bit))) });
+        for (const filled of [true, false]) {
+          fixtures.push({ id: randomUUID(), status, on: new Set(BITS.filter((_, bit) => mask & (1 << bit))), filled });
+        }
       }
     }
-    assert.equal(fixtures.length, 7 * 128);
+    assert.equal(fixtures.length, 7 * 128 * 2);
 
     await db.session.createMany({
       data: fixtures.map((f) => ({
@@ -89,6 +97,18 @@ test('predicate, Prisma filter and SQL fragment agree on every status and fact c
         retryAt: f.on.has('retry') ? new Date(Date.now() + 60_000) : null,
       })),
     });
+    // Not yet backfilled: no writer of the word since migration 1611 (its trigger fires on writes of `status` only).
+    const unfilled = fixtures.filter((f) => !f.filled).map((f) => f.id);
+    await db.$executeRaw`UPDATE "session" SET "turn_state" = NULL WHERE "id" = ANY(${unfilled}::uuid[])`;
+    const stored = await db.session.groupBy({
+      by: ['turnState'], where: { id: { in: fixtures.filter((f) => NOT_ENDED.has(f.status) && f.status !== 'AWAITING_INPUT').map((f) => f.id) } },
+      _count: { _all: true },
+    });
+    assert.deepEqual(
+      Object.fromEntries(stored.map((g) => [String(g.turnState), g._count._all])),
+      { QUEUED: 128, IN_FLIGHT: 128, ABANDONED: 128, null: 3 * 128 },
+      'each held word with a turn state, filled and unfilled',
+    );
     await db.watch.createMany({
       data: fixtures.flatMap((f) => [
         watchData(ownerId, f.id, 'RESUME_SESSION', 'CANCELLED'),
@@ -133,8 +153,8 @@ test('predicate, Prisma filter and SQL fragment agree on every status and fact c
     const fetched = await db.session.findMany({
       where: { ownerId },
       select: {
-        id: true, status: true, engineTurnActive: true, runningSubagents: true, runningBgJobs: true,
-        retryAt: true,
+        id: true, status: true, finishedAt: true, turnState: true, engineTurnActive: true, runningSubagents: true,
+        runningBgJobs: true, retryAt: true,
         _count: {
           select: {
             observingWatches: { where: { state: 'ACTIVE', action: 'RESUME_SESSION' } },
@@ -144,14 +164,15 @@ test('predicate, Prisma filter and SQL fragment agree on every status and fact c
       },
     });
     const rows = new Map(fetched.map((r): [string, SessionWorkingRow] => [r.id, {
-      status: r.status, engineTurnActive: r.engineTurnActive, runningSubagents: r.runningSubagents,
+      status: r.status, finishedAt: r.finishedAt, turnState: r.turnState,
+      engineTurnActive: r.engineTurnActive, runningSubagents: r.runningSubagents,
       runningBgJobs: r.runningBgJobs, retryAt: r.retryAt,
       hasResumeWatch: r._count.observingWatches > 0, hasPendingWakeup: r._count.scheduledWakeups > 0,
     }]));
 
     const counts = { executing: 0, willWake: 0, holdsSlot: 0 };
     for (const f of fixtures) {
-      const label = `${f.status}: ${[...f.on].join(', ') || 'nothing'}`;
+      const label = `${f.status} (turn_state ${f.filled ? 'filled' : 'null'}): ${[...f.on].join(', ') || 'nothing'}`;
       const row = rows.get(f.id)!;
       const outsideTurn = f.on.has('engine') || f.on.has('subagent') || f.on.has('job');
       const wake = f.on.has('watch') || f.on.has('wakeup') || f.on.has('retry');
