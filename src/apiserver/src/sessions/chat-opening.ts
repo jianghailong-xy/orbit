@@ -5,5 +5,5 @@
  * seeder lays an `initial-` turn beside it, and it is listed and withdrawn no more than that seed is.
  */
 export function chatFiledItsOpening(session: { wikiChatSpaceId: string | null; openedBy: string }): boolean {
-  return session.wikiChatSpaceId !== null || session.openedBy === 'DRIVE_CHAT';
+  return session.wikiChatSpaceId != null || session.openedBy === 'DRIVE_CHAT';
 }
