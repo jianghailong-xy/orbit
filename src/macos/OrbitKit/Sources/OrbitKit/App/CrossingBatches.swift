@@ -203,8 +203,10 @@ public enum CrossingBatches {
 
     // MARK: the words
 
+    /// The heading: the question while it asks, what happened once it is answered.
     public static func title(_ batch: CrossingBatch) -> String {
         let one = batch.rows.count == 1
+        if let verdict = batch.verdict { return answeredTitle(batch, verdict) }
         if batch.out { return one ? takeOutTitle : takeOutManyTitle }
         if batch.kind == ProjectCrossings.moveKind, !batch.inTarget {
             return one ? "Move this task into \(targetTitle(batch))?"
@@ -214,6 +216,30 @@ public enum CrossingBatches {
         case ProjectCrossings.moveKind: return one ? "Move this task here?" : "Move these tasks here?"
         case dependKind: return one ? "Allow this dependency?" : "Allow these dependencies?"
         default: return one ? "File this task here?" : "File these tasks here?"
+        }
+    }
+
+    /// An answered card's heading, in the past tense; a mixed answer says only that.
+    public static func answeredTitle(_ batch: CrossingBatch, _ verdict: CrossingBatch.Verdict) -> String {
+        let one = batch.rows.count == 1
+        let noun = batch.kind == dependKind ? (one ? "Dependency" : "Dependencies") : (one ? "Task" : "Tasks")
+        switch verdict {
+        case .mixed: return one ? "Request answered" : "Requests answered"
+        case .refused:
+            if batch.out { return "\(noun) kept in the project" }
+            switch batch.kind {
+            case ProjectCrossings.moveKind: return one ? "Move refused" : "Moves refused"
+            case dependKind: return "\(noun) refused"
+            default: return one ? "Filing refused" : "Filings refused"
+            }
+        case .approved:
+            if batch.out { return "\(noun) taken out of the project" }
+            switch batch.kind {
+            case ProjectCrossings.moveKind:
+                return batch.inTarget ? "\(noun) moved here" : "\(noun) moved into \(targetTitle(batch))"
+            case dependKind: return "\(noun) allowed"
+            default: return "\(noun) filed here"
+            }
         }
     }
 
@@ -272,7 +298,15 @@ public enum CrossingBatches {
     /// server too old to send one falls back to the criterion's words, never its opaque key.
     public static func summary(_ batch: CrossingBatch) -> String {
         let n = batch.rows.count
-        if batch.out { return "\(n) \(noun(batch.kind, count: n)) to take out of \(batch.sourceTitle)" }
+        if batch.out {
+            let what = "\(n) \(noun(batch.kind, count: n))"
+            switch batch.verdict {
+            case nil: return "\(what) to take out of \(batch.sourceTitle)"
+            case .approved?: return "\(what) taken out of \(batch.sourceTitle)"
+            case .refused?: return "\(what) kept in \(batch.sourceTitle)"
+            case .mixed?: return "\(what) from \(batch.sourceTitle)"
+            }
+        }
         let head = "\(n) \(noun(batch.kind, count: n)) from \(batch.sourceTitle)"
         var seen = Set<String>()
         let criteria = batch.rows.compactMap(\.requestedCriterion).filter { seen.insert($0.key).inserted }
@@ -312,7 +346,8 @@ public enum CrossingBatches {
         "\(liveBadge(batch.kind)) · \(ProjectCrossings.waiting(batch.pending.count))"
     }
 
-    public static let provenance = "From Orbit — not the requesting agent."
+    /// Who wrote the card, not where the tasks come from: the From/To lines under it say that.
+    public static let provenance = "Written by Orbit — not the requesting agent."
     public static let fromLabel = "From"
     public static let toLabel = "To"
     public static let toThisProject = "this project"
@@ -334,10 +369,10 @@ public enum CrossingBatches {
     public static let takeOutManyRefuse = "Keep them here"
     /// The badge an answered move out earns, in place of an into-move's `moved`.
     public static let takenOutBadge = "taken out"
-    public static let takeOutConsequence =
-        "Confirming takes the task out of this project as soon as you answer, and nobody has to send the request again."
+    /// The project page's confirm prompt says the same of one task.
+    public static let takeOutConsequence = ProjectCrossings.moveOutApproveConsequence
     public static let takeOutManyConsequence =
-        "Confirming takes the tasks out of this project as soon as you answer, and nobody has to send the request again."
+        "Confirming takes the tasks out of this project as soon as you answer; no project's acceptance counts them any more."
 
     /// The approve button's words: a move out takes its task(s) out, a batch into the project keeps
     /// `Approve`.
@@ -376,6 +411,20 @@ public enum CrossingBatches {
     /// A row already answered names its state; a waiting one names nothing.
     public static func stateLine(_ row: ProjectCrossing) -> String? {
         ProjectCrossings.isAnswerable(row.state) ? nil : ProjectCrossings.label(row.state)
+    }
+
+    /// A row's state line in its batch: once every row went the same way the receipt says it, so
+    /// only a batch still asking or answered both ways names each row's state.
+    public static func stateLine(_ row: ProjectCrossing, in batch: CrossingBatch) -> String? {
+        switch batch.verdict {
+        case .approved?, .refused?: return nil
+        case nil, .mixed?: return stateLine(row)
+        }
+    }
+
+    /// The label over the quoted reasons: they are the agent's words, under a card Orbit wrote.
+    public static func reasonsHead(_ count: Int) -> String {
+        count == 1 ? "Reason given by the requesting agent" : "Reasons given by the requesting agent"
     }
 
     /// Each distinct reason given, once, quoted, in the order first given.

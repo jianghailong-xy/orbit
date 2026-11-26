@@ -225,10 +225,12 @@ function QuestionImageTile({ id, alt }: { id: string; alt: string }): JSX.Elemen
   // The bytes are gone or unreadable; the chip is what the card can still say about them.
   if (failed) {
     return (
-      <span className="md-image-unavailable" title={id}>
-        <PaperClipOutlined />
-        <code>{alt || 'Image'}</code>
-      </span>
+      <Tooltip content={id} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{alt || 'Image'}</code>
+        </span>
+      </Tooltip>
     );
   }
   if (!url) return <span className="md-image md-image-loading" />;

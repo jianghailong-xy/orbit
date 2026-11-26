@@ -167,11 +167,13 @@ function Acceptance({ task }: { task: SharedTask }) {
 function InputFile({ token, input }: { token: string; input: NonNullable<SharedTask['inputs']>[number] }) {
   const open = () => openUserFile(sharedAttachmentUrl(token, input.id), input.mimeType, input.fileName ?? 'attachment');
   return (
-    <button type="button" className="share-input" onClick={open} title="Open this file">
-      <FileOutlined />
-      <span className="share-input-name">{input.fileName ?? 'attachment'}</span>
-      <span className="share-muted">{humanSize(input.sizeBytes)}</span>
-    </button>
+    <Tooltip content="Open this file">
+      <button type="button" className="share-input" onClick={open}>
+        <FileOutlined />
+        <span className="share-input-name">{input.fileName ?? 'attachment'}</span>
+        <span className="share-muted">{humanSize(input.sizeBytes)}</span>
+      </button>
+    </Tooltip>
   );
 }
 

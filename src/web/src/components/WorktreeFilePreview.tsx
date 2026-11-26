@@ -14,6 +14,7 @@ import {
 } from '../lib/worktreeFile';
 import { Button } from './ui/Button';
 import { ImagePreview } from './ui/ImagePreview';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * A binary file in the diff drawer. Git has no patch for it, so the pane shows the file itself, read
@@ -132,12 +133,12 @@ export function WorktreeFilePreview({
         </div>
       ) : (url && !broken) || (placeholder && !url && !q.error) ? (
         <div className="wt-preview-body">
+          <Tooltip content="Open in viewer">
           <button
             type="button"
             className="wt-preview-img"
             disabled={!url}
             aria-label={`Open ${name}`}
-            title="Open in viewer"
             onClick={(e) => {
               // The viewer grows from where the picture was pressed: a tall board's middle is often
               // off screen. Enter or Space has no pointer, so it grows from the middle.
@@ -156,6 +157,7 @@ export function WorktreeFilePreview({
               </>
             )}
           </button>
+          </Tooltip>
           {url && (
             <ImagePreview
               open={viewer != null}
