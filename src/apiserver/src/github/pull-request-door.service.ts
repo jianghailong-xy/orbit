@@ -769,17 +769,21 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
 
   /**
    * §4.8's title and body: the task's title, `Merge project/<name> into main: <project title>`, or the session's
-   * title; a body that links the landing and says the branch is Orbit's.
+   * title; a body that links the landing, says what Orbit checked and says the branch is Orbit's. A fallback from
+   * Push as me says so and quotes the refusal the landing records (§5.5).
    */
   private async pullRequestCopy(row: GithubPullRequest, base: string): Promise<{ title: string; body: string }> {
     const origin = (process.env.PUBLIC_ORIGIN?.trim() || 'http://localhost:2086').replace(/\/+$/, '');
+    const refusal = pushAsMeRefusalCopy(row.refusal, base);
+    const because = refusal ? `because Push as me could not push ${base} directly` : `because ${base} requires a pull request`;
     if (row.sessionId) {
       const session = await this.prisma.session.findUnique({ where: { id: row.sessionId }, select: { title: true } });
       const title = clipTitle(session?.title?.trim() || `Merge an Orbit session into ${base}`);
       return {
         title,
         body: [
-          `Orbit opened this pull request to land a session's work on ${base}, because ${base} requires a pull request.`,
+          `Orbit opened this pull request to land a session's work on ${base}, ${because}.`,
+          ...refusal ?? [],
           '',
           `Session: ${origin}/sessions/${uuidToBase62(row.sessionId)}`,
           '',
@@ -790,7 +794,9 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
     const job = await this.prisma.projectIntegrationJob.findFirst({
       where: { pullRequestId: row.id },
       orderBy: { createdAt: 'desc' },
-      select: { kind: true, taskId: true, sessionId: true, projectId: true, sourceRef: true, checks: true, landingId: true },
+      select: {
+        kind: true, taskId: true, sessionId: true, projectId: true, sourceRef: true, checks: true, landingId: true, promotionId: true,
+      },
     });
     const projectBranch = job?.kind === 'LAND_PROMOTION' && job.sourceRef.startsWith('refs/heads/project/');
     // A promotion's job names no task; a task branch's promotion is still that task's work, named by its session.
@@ -805,14 +811,22 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
     const title = clipTitle(projectBranch && job
       ? `Merge ${branchOf(job.sourceRef)} into ${base}: ${project?.title ?? 'an Orbit project'}`
       : task?.title?.trim() || `Land Orbit work on ${base}`);
-    const checks = (Array.isArray(job?.checks) ? job.checks : []) as Array<{ name?: unknown; skipped?: unknown }>;
-    const ran = checks.filter((check) => typeof check.name === 'string' && !check.skipped).map((check) => String(check.name));
+    // A promotion whose upstream had not moved since its check runs nothing again when it lands (M5): the tree on the
+    // landing branch is the one the candidate's check passed on, and its checks are what ran.
+    let ran = checksRun(job?.checks);
+    if (ran.length === 0 && job?.promotionId) {
+      const promotion = await this.prisma.projectPromotion.findUnique({ where: { id: job.promotionId }, select: { checks: true } });
+      ran = checksRun(promotion?.checks);
+    }
     return {
       title,
       body: [
-        `Orbit opened this pull request to land ${task ? `"${task.title}"` : 'this work'} on ${base}, because ${base} requires a pull request.`,
+        `Orbit opened this pull request to land ${task ? `"${task.title}"` : 'this work'} on ${base}, ${because}.`,
+        ...refusal ?? [],
         '',
-        ran.length > 0 ? `Orbit's checks passed before the push: ${ran.join(', ')}.` : 'Orbit ran no checks of its own before the push.',
+        ran.length > 0
+          ? `Before the push Orbit ran ${ran.join(' and ')}, and ${ran.length === 1 ? 'it' : 'they'} passed.`
+          : 'Orbit ran no checks of its own before the push.',
         ...(landing ? ['', `Landing: ${origin}/sessions/${uuidToBase62(landing.sessionId)}`] : []),
         '',
         "Orbit updates this branch. Make changes on the task's own branch instead.",
@@ -902,6 +916,37 @@ function pullRequestFailureFact(failure: PullRequestFailure, reading: GithubPull
     case 'HEAD_CHANGED':
       return { data: { step: 'HEAD_CHANGED', number: reading.number, headSha: reading.headSha }, text: `${which} holds a commit Orbit did not push` };
   }
+}
+
+const CHECK_WORDS: Record<string, string> = {
+  TASK_ACCEPTANCE: "the task's acceptance command",
+  MERGE_CHECK: 'the merge check',
+  LANDING_CHECK: 'the landing check',
+};
+
+/** The checks a stored `checks` column says ran and passed, in a pull request body's words: skipped ones did not run. */
+function checksRun(stored: unknown): string[] {
+  const checks = (Array.isArray(stored) ? stored : []) as Array<{ name?: unknown; skipped?: unknown; exitCode?: unknown; expectedExitCode?: unknown }>;
+  const names = checks
+    .filter((check) => typeof check.name === 'string' && !check.skipped && check.exitCode === check.expectedExitCode)
+    .map((check) => CHECK_WORDS[check.name as string] ?? String(check.name));
+  return [...new Set(names)];
+}
+
+/** The start of the runner's refusal when Orbit, not GitHub, stopped the push as the owner (push_as_me.go). */
+const ORBIT_REFUSED_PREFIX = 'Orbit could not use your GitHub account';
+
+/**
+ * §5.5 for the pull request's own body: why Push as me did not push the target, in the words the landing records.
+ * Fenced, so a name GitHub quotes is not a mention. Null for any other pull request.
+ */
+function pushAsMeRefusalCopy(stored: unknown, base: string): string[] | null {
+  const refusal = stored as { via?: unknown; message?: unknown } | null;
+  if (refusal?.via !== 'PUSH_AS_ME' || typeof refusal.message !== 'string') return null;
+  const lead = refusal.message.startsWith(ORBIT_REFUSED_PREFIX)
+    ? `Orbit did not push ${base} with the owner's account:`
+    : `GitHub refused the push to ${base} with the owner's account:`;
+  return ['', lead, '', '```text', refusal.message.replaceAll('```', "'''"), '```'];
 }
 
 /** `refs/heads/main` → `main`. */

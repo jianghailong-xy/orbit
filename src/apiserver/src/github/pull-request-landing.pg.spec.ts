@@ -583,6 +583,10 @@ test('J-T14, the door and J-T15: a protected main lands through a pull request',
   assert.equal((opened.body as { base: string }).base, 'main');
   assert.equal((opened.body as { title: string }).title, 'Add the release notes page');
   assert.match((opened.body as { body: string }).body, /Orbit updates this branch/);
+  // This landing ran nothing again (M5): the body says what the candidate's check ran on the same tree.
+  assert.match((opened.body as { body: string }).body, /Before the push Orbit ran .+, and it passed\./);
+  assert.doesNotMatch((opened.body as { body: string }).body, /ran no checks/);
+  assert.doesNotMatch((opened.body as { body: string }).body, /Push as me/, 'a pull request that is no fallback quotes no refusal');
   pr = await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: pr.id } });
   assert.equal(pr.state, 'OPEN');
   assert.equal(pr.number, h.github.pulls[0]!.number);
@@ -1108,6 +1112,13 @@ test('(12) a refused Push as me lands through a pull request and the workspace s
   assert.equal(alerts[0]!.title, FIRST_REFUSAL_ALERT);
   await service.afterJobResult(command.jobId);
   assert.equal(alerts.length, 1, 'and only the first');
+  // The fallback pull request's own body says why, in GitHub's words (§5.5).
+  h.github.scenario(ws.fullName).mergeStateStatus = 'BLOCKED';
+  await h.door.advance(answered.after!.pullRequestIds!);
+  const opened = h.github.calls.find((call) => call.method === 'POST' && call.path === `/repos/${ws.fullName}/pulls`);
+  const body = (opened?.body as { body: string } | undefined)?.body ?? '';
+  assert.match(body, /because Push as me could not push main directly\./);
+  assert.ok(body.includes(`GitHub refused the push to main with the owner's account:\n\n\`\`\`text\n${refusedWords}\n\`\`\``), body);
   // The landing view quotes it as the owner's refused push (§5.5).
   const [inFlight] = await readInFlightJobs(h.prisma as never, (await h.job(command.jobId)).projectId, command.jobId);
   assert.equal(inFlight?.pullRequest?.refusal?.via, 'PUSH_AS_ME');
