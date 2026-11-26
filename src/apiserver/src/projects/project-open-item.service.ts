@@ -2760,13 +2760,40 @@ export class ProjectOpenItemService {
       }
 
       if (baselineItem && baselineFailure) {
-        const queued = await tx.projectIntegrationJob.findFirstOrThrow({
+        // K5: the baseline result queued the next generation behind the hold, and this retry releases it. A task
+        // filed to fix the OPEN baseline item gets none — it is exempt from the hold — so when its own landing came
+        // back baseline-red under a new (U, T0), the retry queues that generation itself, as J-T1b reruns any other
+        // failure (2026-11-26: findFirstOrThrow here answered the coordinator 500 / P2025).
+        const held = await tx.projectIntegrationJob.findFirst({
           where: { taskId, kind: 'LAND_TASK', state: 'QUEUED' },
           orderBy: [{ generation: 'desc' }],
         });
-        const landing = queued.landingId
-          ? await tx.projectLanding.findUnique({ where: { id: queued.landingId }, select: { sessionId: true } })
+        const landing = held?.landingId
+          ? await tx.projectLanding.findUnique({ where: { id: held.landingId }, select: { sessionId: true } })
           : null;
+        const queued = held
+          ? { jobId: held.id, generation: held.generation, sourceRef: held.sourceRef,
+            landingSessionId: landing?.sessionId ?? null }
+          : await queueLandingRetry(tx, {
+            ownerId,
+            projectId,
+            taskId,
+            retry: {
+              ofJobId: baselineFailure.id,
+              failureClass: decision.failureClass,
+              reason,
+              requestedBySessionId: ownerRequester ? undefined : asking!,
+              requestedByUserId: ownerRequester ?? undefined,
+            },
+          });
+        if (!queued) {
+          throw new ConflictException({
+            code: INTEGRATION_RETRY_NOT_APPLICABLE,
+            message:
+              'the landing could not be queued: the task has no work branch to hand the line, or the '
+              + 'project no longer integrates on a branch of its own.',
+          });
+        }
         const closed = await tx.projectOpenItem.updateMany({
           where: { id: baselineItem.id, state: 'OPEN' },
           data: { state: 'RESOLVED', resolution: 'RETRIED', resolvedAt: new Date(),
@@ -2775,8 +2802,7 @@ export class ProjectOpenItemService {
             resolutionNote: reason },
         });
         if (closed.count === 0) throw new ConflictException('the baseline item is no longer open');
-        return { taskId, jobId: queued.id, generation: queued.generation, sourceRef: queued.sourceRef,
-          landingSessionId: landing?.sessionId ?? null, retryOfJobId: baselineFailure.id,
+        return { taskId, ...queued, retryOfJobId: baselineFailure.id,
           failureClass: decision.failureClass, reason, handlingItemIds: [] };
       }
       const queued = await queueLandingRetry(tx, {

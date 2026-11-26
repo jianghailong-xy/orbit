@@ -2445,7 +2445,7 @@ O-L2、O-L5、O-L6 的读法（R29-8）：
 | 事实 | resolution |
 |---|---|
 | `fixes_open_item_id` 指向这条待办的任务在这条线上 `LANDED`（扣留期间能落地的只有它） | `LANDED`（`PLATFORM`） |
-| 协调会话或 owner 带理由 `integration_retry` 这条待办（返回已排的下一代；upstream 前进本身不解扣） | `RETRIED` |
+| 协调会话或 owner 带理由 `integration_retry` 这条待办（返回已排的下一代；修基线的任务不入扣留的一代，它自己的基线红由这次 retry 按 J-T1b 入队下一代；upstream 前进本身不解扣） | `RETRIED` |
 | K6 的修复任务进了 upstream（M-T8 `MERGED`，第二期） | 拟写 `LANDED`（`PLATFORM`） |
 | `open_item_resolve` | `HANDLED` |
 
