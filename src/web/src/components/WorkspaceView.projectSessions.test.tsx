@@ -710,6 +710,23 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     expect(column()!.querySelectorAll('.session-row.active')).toHaveLength(1);
   });
 
+  it('keeps the list on the coordinator’s folder, its project row selected, when the column opens a member filed elsewhere', async () => {
+    folders = [FOLDER];
+    rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, TASK];
+    await mount(undefined, `/workspaces/${WORKSPACE_ID}?folder=${FOLDER.id}`);
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    const listTitle = () => mounted().querySelector('aside.session-col:not(.session-project-column) .session-folder-title')?.textContent;
+    expect(listTitle()).toBe(FOLDER.name);
+    const member = [...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title);
+    await click(member, 'the member in the column');
+    await until(() => expect(shown()).toContain(`/sessions/${TASK.id}`));
+    await settle();
+    const listCol = mounted().querySelector('aside.session-col:not(.session-project-column)')!;
+    expect(listCol.querySelector('.session-folder-title')?.textContent).toBe(FOLDER.name);
+    expect(projectRow().classList.contains('active')).toBe(true);
+  });
+
   it('folds with its ✕, which keeps ?project= on the address so the title bar’s button brings it back', async () => {
     await mount();
     await click(projectRow(), 'the project row');

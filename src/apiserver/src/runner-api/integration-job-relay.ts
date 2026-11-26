@@ -24,6 +24,13 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { baselineHoldSql } from '../projects/baseline-hold';
+import { lineSyncDedupeKey, lineSyncHoldSql } from '../projects/line-sync-hold';
+import {
+  legacyMainSyncTaskIds,
+  lineSyncItemTitle,
+  openLineSyncOf,
+  resolveLineSyncOnLanding,
+} from '../projects/line-sync-item';
 import {
   INTEGRATION_CLAIM_STALE_MS,
   INTEGRATION_JOBS_PER_HEARTBEAT,
@@ -58,6 +65,7 @@ import {
   queueLandingBehindTheWork,
   queueLandingRetry,
   queueBaselineHeld,
+  queueMainSyncHeld,
   queueSkippedLandingAfterStop,
   shortBranchName,
   timedOutErrorCode,
@@ -808,17 +816,16 @@ async function claimOne(
          -- rearmItemFixedBy). Without both tips, it meets the same conflict and opens an item of
          -- its own, on the fix task and assigned as any landing's failure is, which the fix's next
          -- landing is exempt from as the conflicted task's is.
+         --
+         -- docs/design/project-line-upstream-sync.md §4.3: what the above says is now the LEGACY item's rule, for an
+         -- item opened about one task before the line-sync item existed. A MAIN_SYNC conflict now opens the line-sync
+         -- item (IMS:<serial_key>, about the line, no task), which holds the conflicted task's own held generation as
+         -- well — it would meet the same conflict — and lets through only its sync task, whose landing closes it.
+         -- lineSyncHoldSql is the one predicate for both shapes, shared with the task and line readers.
          AND NOT EXISTS (
            SELECT 1 FROM "project_open_item" i
              JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
-            WHERE f."serial_key" = c."serial_key"
-              AND f."phase" = 'MAIN_SYNC'
-              AND i."kind" = 'INTEGRATION_CONFLICT'
-              AND i."state" = 'OPEN'
-              AND f."task_id" IS DISTINCT FROM c."task_id"
-              AND NOT EXISTS (
-                SELECT 1 FROM "task" fix
-                 WHERE fix."id" = c."task_id" AND fix."fixes_open_item_id" = i."id"))
+            WHERE ${lineSyncHoldSql('c')})
          AND NOT EXISTS (
            SELECT 1 FROM "project_open_item" i
              JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
@@ -2145,6 +2152,16 @@ function pullRequestEndRefusal(state: string, errorCode: string | null | undefin
   return `the pull request door does not end an attempt with ${errorCode ?? 'no error code'}`;
 }
 
+/** K5: whether the task was filed to fix the OPEN baseline item (`ICB:`) of this serial key. */
+async function taskFixesOpenBaselineItem(tx: Prisma.TransactionClient, taskId: string, serialKey: string): Promise<boolean> {
+  const task = await tx.task.findUnique({ where: { id: taskId }, select: { fixesOpenItemId: true } });
+  if (!task?.fixesOpenItemId) return false;
+  const item = await tx.projectOpenItem.findUnique({
+    where: { id: task.fixesOpenItemId }, select: { state: true, dedupeKey: true },
+  });
+  return item?.state === 'OPEN' && !!item.dedupeKey?.startsWith(`ICB:${serialKey}:`);
+}
+
 /**
  * Apply one finished job (J-T5, J-T6, J-T7).
  *
@@ -2501,16 +2518,24 @@ export async function applyIntegrationJobResult(
     //   * the tasks its receipts and comment name, FOR KEY SHARE;
     //   * then the binding.
     // K5 needs the same lower-rank parents before enqueueing; its task lock also serializes generations.
-    if (stoppedLanding || body.baselineRed === true) {
+    // docs/design/project-line-upstream-sync.md §4.2 / §4.6 item 7: so does a MAIN_SYNC conflict, whose held generation
+    // is queued here, and a landing that releases the line for tasks still under a legacy MAIN_SYNC item, whose
+    // landings it queues again (those tasks are locked with it, in the same id order).
+    const mainSyncConflict = job.kind === 'LAND_TASK' && state === 'CONFLICT' && body.phase === 'MAIN_SYNC';
+    const legacySyncTaskIds = job.kind === 'LAND_TASK' && state === 'LANDED'
+      ? await legacyMainSyncTaskIds(tx, { projectId: job.projectId, serialKey: job.serialKey, exceptTaskId: job.taskId })
+      : [];
+    const queuesHeld = body.baselineRed === true || mainSyncConflict || legacySyncTaskIds.length > 0;
+    if (stoppedLanding || queuesHeld) {
       recoveryHeld = await MergeReceiptService.lockLandedRecoveries(
         tx, [job.sessionId, ...repairs.flatMap((repair) => repair.sessionIds)], true);
       await tx.$queryRaw(Prisma.sql`
         SELECT "id" FROM "project" WHERE "id" = ${job.projectId}::uuid FOR KEY SHARE`);
       await tx.$queryRaw(Prisma.sql`
         SELECT "id" FROM "task"
-         WHERE "id" = ANY(${orderedIds([job.taskId, ...repairs.flatMap((repair) => repair.taskIds)])}::uuid[])
+         WHERE "id" = ANY(${orderedIds([job.taskId, ...repairs.flatMap((repair) => repair.taskIds), ...legacySyncTaskIds])}::uuid[])
          ORDER BY "id"
-         ${body.baselineRed === true ? Prisma.sql`FOR UPDATE` : Prisma.sql`FOR KEY SHARE`}`);
+         ${queuesHeld ? Prisma.sql`FOR UPDATE` : Prisma.sql`FOR KEY SHARE`}`);
       await tx.$queryRaw(Prisma.sql`
         SELECT "id" FROM "project_codebase"
          WHERE "project_id" = ${job.projectId}::uuid AND "slot" = 'primary'
@@ -3187,7 +3212,17 @@ export async function applyIntegrationJobResult(
       // first to the task's own work session, when W4 holds; any other result, or W4 false, opens the
       // item for the coordinator exactly as before. W8: with the session's rounds used up, it opens handed back,
       // ROUNDS_EXHAUSTED, and is the coordinator's at once.
+      // docs/design/project-line-upstream-sync.md §4.1–§4.2: a task landing's MAIN_SYNC conflict is the line's. It opens,
+      // or adds to, the one line-sync item of this serial key, which names no task; the task that hit it stays DONE and
+      // untouched, and its landing is queued again behind that item. Read before the item is written: whether the task
+      // is itself the sync task filed against the item that is already open (L-T2), which gets no held generation.
+      const lineSync = mainSyncConflict
+        ? await openLineSyncOf(tx, {
+          projectId: job.projectId, serialKey: job.serialKey, upstreamRef: job.upstreamRef, taskId: liveTaskId,
+        })
+        : null;
       const handOff = await landingFixWorkSession(tx, {
+        phase: body.phase ?? null,
         jobKind: job.kind,
         sessionId: job.sessionId,
         taskId: job.kind === 'LAND_TASK' ? liveTaskId : candidateRow?.taskId ?? null,
@@ -3201,16 +3236,31 @@ export async function applyIntegrationJobResult(
         projectId: job.projectId,
         ownerId: job.ownerId,
         jobId: job.id,
-        // The item's `task_id` is a foreign key; its `session_id` is history, like the job's (0278).
-        taskId: liveTaskId,
+        // The item's `task_id` is a foreign key; its `session_id` is history, like the job's (0278). The line-sync
+        // item's subject is the project branch, so it names no task.
+        taskId: lineSync ? null : liveTaskId,
         sessionId: job.sessionId,
         promotionId: job.promotionId,
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
-        title: integrationItemTitle(state, job.kind, task?.title ?? candidateTask?.title ?? 'a task', mainBranch,
-          candidateRow?.sourceKind ?? null),
-        dedupeKey: body.baselineRed === true
-          ? `ICB:${job.serialKey}:${body.upstreamSha}:${body.targetShaBefore}`
-          : integrationDedupeKey(state, job.id),
+        title: lineSync
+          ? lineSyncItemTitle(lineSync.upstreamRef)
+          : integrationItemTitle(state, job.kind, task?.title ?? candidateTask?.title ?? 'a task', mainBranch,
+            candidateRow?.sourceKind ?? null),
+        dedupeKey: lineSync
+          ? lineSyncDedupeKey(job.serialKey)
+          : body.baselineRed === true
+            ? `ICB:${job.serialKey}:${body.upstreamSha}:${body.targetShaBefore}`
+            : integrationDedupeKey(state, job.id),
+        ...(lineSync ? {
+          lineSync: {
+            heldTaskId: liveTaskId && !lineSync.taskFixesIt ? liveTaskId : null,
+            attempt: {
+              jobId: job.id, taskId: liveTaskId, upstreamSha: body.upstreamSha ?? null,
+              targetSha: body.targetShaBefore ?? null, sourceSha: body.sourceSha ?? null,
+              conflicts: body.conflicts ?? [],
+            },
+          },
+        } : {}),
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.
         heldByOwner: await ownerHoldOnHandledItems(tx, job.id),
@@ -3228,6 +3278,18 @@ export async function applyIntegrationJobResult(
               check: checks.find((check) => check.scope === 'BASELINE')!,
             },
             heldTaskIds: liveTaskId ? [liveTaskId] : [],
+          } : {}),
+          // §4.1: the line-sync item's own facts. heldTaskIds and attempts are append-only (recordIntegrationFailure).
+          ...(lineSync ? {
+            subject: 'LINE',
+            upstreamRef: lineSync.upstreamRef,
+            upstreamSha: body.upstreamSha ?? null,
+            heldTaskIds: liveTaskId && !lineSync.taskFixesIt ? [liveTaskId] : [],
+            attempts: [{
+              jobId: job.id, taskId: liveTaskId, upstreamSha: body.upstreamSha ?? null,
+              targetSha: body.targetShaBefore ?? null, sourceSha: body.sourceSha ?? null,
+              conflicts: body.conflicts ?? [],
+            }],
           } : {}),
           ...failurePayload(state, {
             kind: job.kind,
@@ -3271,9 +3333,21 @@ export async function applyIntegrationJobResult(
       // opened, in this transaction — the old card ends RETRIED and points at the new failure, which
       // is in front of somebody; nothing about it is closed quietly.
       if (opened) await supersedeHandledItems(tx, job.id, opened.itemId);
-      if (body.baselineRed === true && liveTaskId) await queueBaselineHeld(tx, {
+      // K5 follow-up: the task filed to fix the OPEN baseline item on this key is exempt from its hold
+      // (`baselineHoldSql`), so a held generation queued for it would be claimed at once and run the same red
+      // check on the same source. It gets none; the item, re-keyed above, is in front of the coordinator again.
+      const fixesOpenBaseline = body.baselineRed === true && liveTaskId
+        ? await taskFixesOpenBaselineItem(tx, liveTaskId, job.serialKey)
+        : false;
+      if (body.baselineRed === true && liveTaskId && !fixesOpenBaseline) await queueBaselineHeld(tx, {
         ownerId: job.ownerId, projectId: job.projectId, taskId: liveTaskId,
         sessionId: job.sessionId!, sourceRef: job.sourceRef, runnerId: job.runnerId,
+      });
+      // §4.2: the conflicted landing is held, not failed — unless the task is the item's own sync task, whose branch
+      // cannot change without a new commit (L-T2: the attempt is on the item, and the item is delivered again).
+      if (lineSync && liveTaskId && !lineSync.taskFixesIt && job.sessionId) await queueMainSyncHeld(tx, {
+        ownerId: job.ownerId, projectId: job.projectId, taskId: liveTaskId,
+        sessionId: job.sessionId, sourceRef: job.sourceRef, runnerId: job.runnerId,
       });
     }
     // §2.2 J-T5: the task's landing answers what was open about landing it, in this same
@@ -3295,6 +3369,19 @@ export async function applyIntegrationJobResult(
     // §4.4 X-D4 (5): this task was filed to fix an exception, and its landing is in — receipted, and
     // not the answer about a branch the work did not end on. Whether the work that exception is
     // about went in with it is the coordinator's to check, so the item goes back in front of it.
+    // docs/design/project-line-upstream-sync.md §4.5 L-T3: a landing that pushed onto the project branch carries the
+    // upstream tip its own fetch read, which came after the fetch that conflicted, so the line has absorbed it and
+    // the line-sync item closes. Before rearmItemFixedBy, so a sync task's landing closes the item instead of
+    // delivering it again. §4.6 item 7: the tasks still under a legacy MAIN_SYNC item on this line get their landing
+    // queued again, and that landing closes their item.
+    if (job.kind === 'LAND_TASK' && state === 'LANDED') {
+      await resolveLineSyncOnLanding(tx, { projectId: job.projectId, serialKey: job.serialKey, jobId: job.id });
+      for (const legacyTaskId of legacySyncTaskIds) {
+        await queueLandingRetry(tx, {
+          ownerId: job.ownerId, projectId: job.projectId, taskId: legacyTaskId, cause: 'MAIN_SYNC_HELD',
+        });
+      }
+    }
     const rearmedItemId = job.kind === 'LAND_TASK' && job.taskId && receiptState !== null && !leftWorkBehind
       ? await rearmItemFixedBy(tx, job.taskId, job.serialKey)
       : null;

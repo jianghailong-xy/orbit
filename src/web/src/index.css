@@ -1355,9 +1355,11 @@ button.toast--pill:focus-visible {
 }
 .tp-account-menu .orbit-menu-submenu-icon {
   position: absolute;
-  top: calc(50% - 5.5px);
+  top: 50%;
   right: 8px;
+  display: flex;
   margin: 0;
+  transform: translateY(-50%);
   color: var(--text-3);
   font-size: 12px;
 }
@@ -1391,6 +1393,7 @@ button.toast--pill:focus-visible {
 }
 .tp-account-appearance-label {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
@@ -3148,7 +3151,6 @@ button.toast--pill:focus-visible {
    (owner 2026-11-11, board 5): the shared bottom drawer, rounded on top, its title kept for the
    reader only (the page head inside draws it), and a grabber that drags it between medium and full. */
 .project-sessions-sheet {
-  border-radius: 14px 14px 0 0;
   background: var(--bg-raised);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -5091,13 +5093,13 @@ button.toast--pill:focus-visible {
   margin-right: auto;
 }
 /* The header's ⋯ and Share (docs/mocks/session-header-share-more, A): ⋯ then Share, 30px buttons
-   2px apart with 18px glyphs in the title's colour (docs/mocks/session-header-icon-size B, beside the
+   14px apart (docs/mocks/session-header-share-tray) with 18px glyphs in the title's colour (docs/mocks/session-header-icon-size B, beside the
    17px title), nudged 6px right so the last glyph sits near the transcript's edge. Share takes the
    live link's green, with a dot, while the session is shared. */
 .workspace-header .workspace-header-more,
 .workspace-header .workspace-header-share { flex: none; width: 30px; height: 30px; color: var(--text-1); font-size: 18px; }
 .workspace-header-actions { display: flex; align-items: center; flex: none; margin-right: -6px; }
-.workspace-header-actions .workspace-header-share { margin-left: 2px; }
+.workspace-header-actions .workspace-header-share { margin-left: 14px; }
 .workspace-header .workspace-header-share.is-live,
 .workspace-header .workspace-header-share.is-live:hover:where(:not(:disabled)) { color: var(--success); }
 .workspace-header .workspace-header-share.is-live::after {

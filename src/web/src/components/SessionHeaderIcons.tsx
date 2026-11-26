@@ -1,5 +1,5 @@
 // The wide session header's two glyphs (docs/mocks/session-header-share-more): a horizontal ⋯ and the
-// tray-with-up-arrow share symbol the Apple clients use (square.and.arrow.up).
+// share symbol: an open tray with an up arrow (docs/mocks/session-header-share-tray).
 export function HeaderMoreIcon() {
   return (
     <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false">
@@ -24,9 +24,9 @@ export function HeaderShareIcon() {
       aria-hidden="true"
       focusable="false"
     >
-      <path d="M5.6 6.2H4.6a1.1 1.1 0 0 0-1.1 1.1v5.6a1.1 1.1 0 0 0 1.1 1.1h6.8a1.1 1.1 0 0 0 1.1-1.1V7.3a1.1 1.1 0 0 0-1.1-1.1h-1" />
-      <path d="M8 1.6v8.2" />
-      <path d="M5.7 3.9 8 1.6l2.3 2.3" />
+      <path d="M2 8.5v2.7a2.6 2.6 0 0 0 2.6 2.6h6.8a2.6 2.6 0 0 0 2.6-2.6V8.5" />
+      <path d="M8 1.8v8" />
+      <path d="M4.45 5.35 8 1.8l3.55 3.55" />
     </svg>
   );
 }

@@ -4969,6 +4969,8 @@ model ProjectOpenItem {
   assignee       String
   assigneeReason String @map("assignee_reason")
 
+  /// NULL for an item about no one task: a promotion's, the project's failing observations, and the line-sync item
+  /// (docs/design/project-line-upstream-sync.md §4.1), whose subject is the project branch.
   taskId String? @map("task_id") @db.Uuid
   task   Task?   @relation(fields: [taskId], references: [id], onDelete: Cascade)
   /// The attempt the item came from. History rather than a foreign key: a session purged from Trash
@@ -4981,6 +4983,7 @@ model ProjectOpenItem {
   fuseEpisode      ProjectFuseEpisode? @relation(fields: [fuseEpisodeId], references: [id], onDelete: Cascade)
   askedBySessionId String?             @map("asked_by_session_id") @db.Uuid
 
+  /// One OPEN item per key (0278). `IMS:<serial_key>` is the line-sync item: at most one per project line.
   dedupeKey String @map("dedupe_key")
   /// Written once from rows that do not change, so a delivery built from them reads the same on replay.
   title     String
