@@ -18,9 +18,18 @@ import (
 // provider schema it was defined against. No test here starts a Codex process or touches a credit.
 
 type codexResetContractFile struct {
-	ProtocolVersion int    `json:"protocolVersion"`
-	Capability      string `json:"capability"`
-	Provider        struct {
+	ProtocolVersion  int              `json:"protocolVersion"`
+	ProtocolVersions map[string][]int `json:"protocolVersions"`
+	Capability       string           `json:"capability"`
+	CapabilityV2     string           `json:"capabilityV2"`
+	AccountSlot      struct {
+		Default                        string `json:"default"`
+		Pattern                        string `json:"pattern"`
+		SnapshotAccountsField          string `json:"snapshotAccountsField"`
+		CommandSlotFromProtocolVersion int    `json:"commandSlotFromProtocolVersion"`
+		AddedSlotCapability            string `json:"addedSlotCapability"`
+	} `json:"accountSlot"`
+	Provider struct {
 		AccountReadMethod string   `json:"accountReadMethod"`
 		ReadMethod        string   `json:"readMethod"`
 		ConsumeMethod     string   `json:"consumeMethod"`
@@ -149,9 +158,9 @@ func codexResetSameJSON(t *testing.T, what string, got interface{}, want []byte)
 
 func TestCodexResetRunnerConstantsMatchTheContract(t *testing.T) {
 	contract := loadCodexResetContract(t)
-	if contract.ProtocolVersion != codexRateLimitResetProtocolVersion || contract.Capability != codexRateLimitResetCapabilityV1 {
+	if contract.ProtocolVersion != codexRateLimitResetProtocolVersionV2 || contract.Capability != codexRateLimitResetCapabilityV1 {
 		t.Fatalf("contract %d/%q, runner %d/%q", contract.ProtocolVersion, contract.Capability,
-			codexRateLimitResetProtocolVersion, codexRateLimitResetCapabilityV1)
+			codexRateLimitResetProtocolVersionV2, codexRateLimitResetCapabilityV1)
 	}
 	provider := contract.Provider
 	if provider.AccountReadMethod != codexAccountReadMethod || provider.ReadMethod != codexRateLimitsReadMethod ||
@@ -569,7 +578,10 @@ func TestCodexResetCommandDispositionFencesLeaseAndFreshness(t *testing.T) {
 		{"this process's fresh command", nil, own.LeaseOwner, 5 * time.Second, codexResetCommandAct},
 		{"another process's claim", nil, "0b9e8d7c-6a5f-4e3d-8c2b-1a0f9e8d7c6b", 5 * time.Second, codexResetCommandIgnore},
 		{"a command from a stale heartbeat response", nil, own.LeaseOwner, codexRateLimitResetCommandFreshness + time.Second, codexResetCommandIgnore},
-		{"a consume of a newer protocol", func(c *CodexRateLimitResetCommand) { c.ProtocolVersion = 2 }, own.LeaseOwner, time.Second, codexResetCommandRefuseProtocol},
+		{"a consume of a newer protocol", func(c *CodexRateLimitResetCommand) { c.ProtocolVersion = 3 }, own.LeaseOwner, time.Second, codexResetCommandRefuseProtocol},
+		{"a version 2 consume on Default", func(c *CodexRateLimitResetCommand) { c.ProtocolVersion, c.AccountSlot = 2, accountSlotDefaultID }, own.LeaseOwner, time.Second, codexResetCommandAct},
+		{"a version 2 consume on an added slot", func(c *CodexRateLimitResetCommand) { c.ProtocolVersion, c.AccountSlot = 2, "3fa91c2e" }, own.LeaseOwner, time.Second, codexResetCommandAct},
+		{"a version 2 consume naming no slot", func(c *CodexRateLimitResetCommand) { c.ProtocolVersion = 2 }, own.LeaseOwner, time.Second, codexResetCommandIgnore},
 		{"a consume without its key", func(c *CodexRateLimitResetCommand) { c.ProviderIdempotencyKey = "" }, own.LeaseOwner, time.Second, codexResetCommandIgnore},
 	}
 	for _, tc := range cases {

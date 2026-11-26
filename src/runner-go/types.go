@@ -585,7 +585,8 @@ type HeartbeatResponse struct {
 	// The one Codex rate-limit reset step claimed for this process
 	// (docs/codex-rate-limit-reset-contract.md §6). Nil from older control planes and whenever no
 	// operation is claimed for it; nothing acts on it until this binary declares
-	// codex-rate-limit-reset-v1.
+	// codex-rate-limit-reset-v1. A protocol version 2 command names its account slot (AccountSlot,
+	// contract v2 §12) and is sent only to a binary that declares codex-rate-limit-reset-v2.
 	CodexRateLimitResetRequest *CodexRateLimitResetCommand `json:"codexRateLimitResetRequest,omitempty"`
 	// Integration jobs this process has just been handed: the platform's own git work, putting a
 	// task's branch onto its project's integration line

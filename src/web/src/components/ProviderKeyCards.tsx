@@ -13,6 +13,7 @@ import { SettingsCard, SettingsRow } from './settings/SettingsBlocks';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Menu, type MenuItem } from './ui/Menu';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** The exact time behind a key's relative Used, for its tooltip. */
 const stampOf = (iso: string): string =>
@@ -120,9 +121,11 @@ export function ProviderKeyRows({
                   <span className="vk-used-item">
                     {' '}<span className="prov-engine-sep">·</span>{' '}
                     {row.lastUsedAt ? (
-                      <span className="vk-used" title={stampOf(row.lastUsedAt)}>
-                        last used {ago(row.lastUsedAt, nowMs)}
-                      </span>
+                      <Tooltip content={stampOf(row.lastUsedAt)} delay={TEXT_TOOLTIP_DELAY_MS}>
+                        <span className="vk-used">
+                          last used {ago(row.lastUsedAt, nowMs)}
+                        </span>
+                      </Tooltip>
                     ) : (
                       <span className="vk-used never">never used</span>
                     )}

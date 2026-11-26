@@ -82,24 +82,27 @@ function Row({ row }: { row: PendingTrayRow }) {
       </span>
       {thumb}
       <span className="pending-tray-body">
-        <button
-          type="button"
-          className={`pending-tray-text${words ? '' : ' is-files'}${row.shell ? ' is-shell' : ''}${open ? ' is-open' : ''}`}
-          title={words ? shown : undefined}
-          aria-expanded={words ? open : undefined}
-          onClick={() => words && setOpen((o) => !o)}
-        >
-          {shown}
-        </button>
+        <Tooltip content={words ? shown : undefined} truncatedOnly>
+          <button
+            type="button"
+            className={`pending-tray-text${words ? '' : ' is-files'}${row.shell ? ' is-shell' : ''}${open ? ' is-open' : ''}`}
+            aria-expanded={words ? open : undefined}
+            onClick={() => words && setOpen((o) => !o)}
+          >
+            {shown}
+          </button>
+        </Tooltip>
         <span className="pending-tray-state">{row.state}</span>
       </span>
       {!row.busy && (row.onSteer || row.onWithdraw) && (
         <span className="pending-tray-actions">
           {row.onSteer && (
-            <button type="button" className="pending-tray-btn" onClick={row.onSteer} title="Send into the current turn now">
-              {STEER_ICON}
-              Steer
-            </button>
+            <Tooltip content="Send into the current turn now" align="end">
+              <button type="button" className="pending-tray-btn" onClick={row.onSteer}>
+                {STEER_ICON}
+                Steer
+              </button>
+            </Tooltip>
           )}
           {row.onWithdraw && (
             <Tooltip align="end" content="Withdraw — back to the composer">

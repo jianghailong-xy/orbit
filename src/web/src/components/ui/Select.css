@@ -1,7 +1,7 @@
 .orbit-select {
   position: relative; display: inline-flex; align-items: center; box-sizing: border-box;
   height: var(--orbit-control-height); padding: 4px 11px; color: var(--text-1); background: var(--bg-raised); border: 1px solid var(--border);
-  border-radius: var(--orbit-radius); font-family: var(--orbit-font-family); font-size: 14px; line-height: 22px;
+  border-radius: 10px; font-family: var(--orbit-font-family); font-size: 14px; line-height: 22px;
   transition: border-color .2s, box-shadow .2s;
 }
 .orbit-select:hover { border-color: var(--orbit-control-primary-hover); }
@@ -21,7 +21,7 @@
 }
 .orbit-choice-clear:hover { color: var(--text-2); }
 .orbit-choice-clear:focus-visible { outline: 2px solid var(--orbit-focus-color); outline-offset: 2px; }
-.orbit-select[data-size='small'] { height: 24px; padding: 0 7px; border-radius: 4px; }
+.orbit-select[data-size='small'] { height: 24px; padding: 0 7px; border-radius: 6px; }
 .orbit-select[data-size='small'] .orbit-choice-clear { right: 7px; }
 .orbit-select[data-variant='borderless'] { background: transparent; border-color: transparent; box-shadow: none; }
 /* The replaced borderless select showed focus, and its open list, as a 1px outline inside its box. */

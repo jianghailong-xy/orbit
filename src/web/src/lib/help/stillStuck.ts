@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import type { HelpAskAdminBody, HelpAskAdminResult, HelpAskReportMachine, HelpAskStuck } from '@orbit/shared';
+import type { HelpAskAdminResult, HelpAskStuck } from '@orbit/shared';
 import { api } from '../../api';
 import { parseAnswer } from './helpAsk';
 
@@ -7,16 +7,16 @@ import { parseAnswer } from './helpAsk';
 // the GitHub report — whose body is built by reportBody alone, so what it may and may not carry is tested in one place.
 
 /** GET /api/help/ask/:id/stuck. */
-export const helpAskStuckQuery = (sessionId: string) =>
+export const helpAskStuckQuery = (askId: string) =>
   queryOptions({
-    queryKey: ['help', 'ask', 'stuck', sessionId] as const,
+    queryKey: ['help', 'ask', 'stuck', askId] as const,
     meta: { entities: ['workspace'] },
-    queryFn: () => api<HelpAskStuck>(`/help/ask/${sessionId}/stuck`),
+    queryFn: () => api<HelpAskStuck>(`/help/ask/${askId}/stuck`),
   });
 
-/** POST /api/help/ask/:id/admin: the conversation, as a task in an admin's own list. */
-export const askYourAdmin = (sessionId: string, body: HelpAskAdminBody) =>
-  api<HelpAskAdminResult>(`/help/ask/${sessionId}/admin`, { method: 'POST', body });
+/** POST /api/help/ask/:id/admin: the conversation, as the server holds it, as a task in an admin's own list. */
+export const askYourAdmin = (askId: string) =>
+  api<HelpAskAdminResult>(`/help/ask/${askId}/admin`, { method: 'POST' });
 
 /** An answer as words a person reads outside Orbit: no source list, `[n](cite:n)` back to `[n]`. */
 export function answerText(answer: string): string {
@@ -93,39 +93,14 @@ export function scrubForReport(text: string, privateNames: readonly string[] = [
 
 // ── the report ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** The OS as GOOS names it, as people do. */
-export function osName(os: string | null): string | null {
-  switch (os) {
-    case null: return null;
-    case 'linux': return 'Linux';
-    case 'darwin': return 'macOS';
-    case 'windows': return 'Windows';
-    case 'freebsd': return 'FreeBSD';
-    default: return os;
-  }
-}
-
-/** "2h 4m ago", "just now": how long since a machine last beat. */
-export function heartbeatAgo(iso: string | null, now: Date): string {
-  if (!iso) return 'never';
-  const minutes = Math.max(0, Math.round((now.getTime() - new Date(iso).getTime()) / 60_000));
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours}h ${minutes % 60}m ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
 export interface ReportInput {
   /** Orbit's version, as this client was built from it. */
   orbitVersion: string;
   /** `web`, `macos`, `ios`, `android`. */
   client: string;
-  machine: HelpAskReportMachine | null;
   exchanges: { question: string; answer: string }[];
   /** The person's workspace, folder and repository names (HelpAskStuck.report.privateNames). */
   privateNames?: readonly string[];
-  now?: Date;
 }
 
 /** How much of the conversation a report carries: a new-issue URL stays well under what GitHub and browsers take. */
@@ -137,22 +112,15 @@ const clip = (text: string, chars: number) => (text.length <= chars ? text : `${
 export const REPORT_NOT_INCLUDED = 'Not included: repository names, file contents, keys';
 
 /**
- * The GitHub issue's body: Orbit's version and client, the machine the Ask ran on — its runner's version, its OS and
- * its last heartbeat — and the question and answer, scrubbed by scrubForReport. The one builder of a report; the card
+ * The GitHub issue's body: Orbit's version and client, and the question and answer, scrubbed by scrubForReport. The one builder of a report; the card
  * shows exactly this text before it opens GitHub.
  */
 export function reportBody(input: ReportInput): string {
-  const now = input.now ?? new Date();
-  const m = input.machine;
   const lines = [
     '### Diagnostics',
     '',
     '```',
     `Orbit ${input.orbitVersion} · ${input.client}`,
-    m
-      ? `Machine: runner ${m.runnerVersion ?? 'unknown'} · ${osName(m.os) ?? 'unknown OS'}`
-      : 'Machine: none',
-    `Last heartbeat: ${m ? heartbeatAgo(m.lastHeartbeatAt, now) : 'none'}`,
     '```',
   ];
   const shown = input.exchanges.slice(-REPORT_EXCHANGES);

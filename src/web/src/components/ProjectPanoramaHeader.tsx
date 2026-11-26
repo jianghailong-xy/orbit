@@ -23,6 +23,7 @@ import { Button } from './ui/Button';
 import { Spinner } from './ui/Spinner';
 import './ui/Typography.css';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * Where a project's work stands, and — when none of it is moving — why (the header card of the
@@ -1218,16 +1219,16 @@ export function BucketMeter({
         <span style={{ flex: 1, background: 'var(--fill-muted)', borderRadius: 4 }} />
       ) : (
         drawn.map((segment, index) => (
-          <span
-            key={segment.key}
-            title={`${segment.label} ${segment.value}`}
-            style={{
-              flex: segment.value,
-              minWidth: 3,
-              background: segment.color,
-              borderRadius: segmentRadius(index, drawn.length),
-            }}
-          />
+          <Tooltip key={segment.key} content={`${segment.label} ${segment.value}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span
+              style={{
+                flex: segment.value,
+                minWidth: 3,
+                background: segment.color,
+                borderRadius: segmentRadius(index, drawn.length),
+              }}
+            />
+          </Tooltip>
         ))
       )}
     </div>

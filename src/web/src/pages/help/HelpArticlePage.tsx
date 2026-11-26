@@ -5,6 +5,7 @@ import { HelpMarkdown } from '../../components/help/HelpMarkdown';
 import { Spinner } from '../../components/ui/Spinner';
 import { articleMeta, forPlatform, tableOfContents } from '../../lib/help/helpContent';
 import { useHelpVote } from '../../lib/help/helpFeedback';
+import { useHelpLanguage } from '../../lib/help/helpLanguage';
 import { helpArticlePath, helpArticleQuery } from '../../lib/help/helpQueries';
 import { useHelpAccount } from '../../lib/help/useHelpAccount';
 import { useDocumentTitle } from './useDocumentTitle';
@@ -17,7 +18,8 @@ import { useDocumentTitle } from './useDocumentTitle';
  */
 export function HelpArticlePage() {
   const { category = '', slug = '' } = useParams();
-  const article = useQuery(helpArticleQuery(slug));
+  const { language } = useHelpLanguage();
+  const article = useQuery(helpArticleQuery(slug, language));
   const { links } = useHelpAccount();
   const { vote, choose } = useHelpVote('article', slug);
   useDocumentTitle(article.data?.title);

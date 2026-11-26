@@ -1337,6 +1337,13 @@ export interface IntegrationFailure {
    * the coordinator's from the start — so it is delivered and its clock runs from the moment it opens.
    */
   roundsExhausted?: LandingFixHandBack | null;
+  /**
+   * docs/design/project-line-upstream-sync.md §4.1 / §4.5 L-T2: set for the line-sync item (`IMS:<serial_key>`). When
+   * that item is already OPEN, this conflict adds to it rather than opening a second one: the attempt is appended,
+   * the held task too (when there is one), and the item is delivered to its holder again (`assigned_at` moves;
+   * `waiting_since` and `escalate_at` stay, because the line has been held since the first conflict).
+   */
+  lineSync?: { heldTaskId: string | null; attempt: Record<string, unknown> } | null;
 }
 
 /** Why an item leaves its task's own work session's hands (§12.4 `work_session_return_reason`). */
@@ -1562,7 +1569,33 @@ export async function recordIntegrationFailure(
     skipDuplicates: true,
     select: { id: true },
   });
+  if (!created && failure.lineSync) {
+    const heldTaskIds = JSON.stringify(failure.lineSync.heldTaskId ? [failure.lineSync.heldTaskId] : []);
+    const [item] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
+      UPDATE "project_open_item"
+         SET "payload" = jsonb_set(jsonb_set("payload", '{heldTaskIds}',
+               COALESCE("payload"->'heldTaskIds', '[]'::jsonb) ||
+               CASE WHEN COALESCE("payload"->'heldTaskIds', '[]'::jsonb) @> ${heldTaskIds}::jsonb
+                    THEN '[]'::jsonb ELSE ${heldTaskIds}::jsonb END),
+               '{attempts}',
+               COALESCE("payload"->'attempts', '[]'::jsonb) || jsonb_build_array(${JSON.stringify(failure.lineSync.attempt)}::jsonb)),
+             "assigned_at" = CASE WHEN "assignee" = 'COORDINATOR' THEN now() ELSE "assigned_at" END
+       WHERE "project_id" = ${failure.projectId}::uuid AND "dedupe_key" = ${failure.dedupeKey}
+         AND "state" = 'OPEN'
+       RETURNING "id", "assignee"`);
+    return item ? { itemId: item.id, projectId: failure.projectId, taskId: null, assignee: item.assignee } : null;
+  }
   if (!created && failure.dedupeKey.startsWith('ICB:') && failure.taskId) {
+    // K5 follow-up: the task filed to fix this item is exempt from its hold, so it is not added to `heldTaskIds`;
+    // its red landing puts the item in front of the coordinator again under a new key instead.
+    const [fixed] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
+      UPDATE "project_open_item" i
+         SET "assigned_at" = CASE WHEN i."assignee" = 'COORDINATOR' THEN now() ELSE i."assigned_at" END
+        FROM "task" t
+       WHERE i."project_id" = ${failure.projectId}::uuid AND i."dedupe_key" = ${failure.dedupeKey}
+         AND i."state" = 'OPEN' AND t."id" = ${failure.taskId}::uuid AND t."fixes_open_item_id" = i."id"
+       RETURNING i."id", i."assignee"`);
+    if (fixed) return { itemId: fixed.id, projectId: failure.projectId, taskId: failure.taskId, assignee: fixed.assignee };
     const [held] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
       UPDATE "project_open_item"
          SET "payload" = jsonb_set("payload", '{heldTaskIds}',
@@ -3274,6 +3307,58 @@ function observationFailureMessage(
     + `\n\n${notice}`;
 }
 
+/**
+ * The line-sync item's message (docs/design/project-line-upstream-sync.md §4.1): the project branch could not absorb
+ * the upstream. It says that no task caused it and none needs reopening, that the line's landings wait and then go by
+ * themselves, and how one sync task resolves it. Every door it names is its cell's (`openItemDoorMessageNames`).
+ *
+ * Read from the payload the item was opened with, plus the attempts appended to it. An attempt is appended in the same
+ * statement that moves `assigned_at` (L-T2), which is the delivery key, so a replay of one key words the same text
+ * (G6). The tasks it holds are not named here: that list grows without a new key, and the card reads it.
+ */
+function lineSyncMessage(
+  item: OpenItemMessageSource,
+  projectId: string,
+  payload: IntegrationItemPayload & { upstreamRef?: string; upstreamSha?: string | null; attempts?: unknown },
+  notice: string,
+  doors: OpenItemDoorMessageNames,
+): string {
+  const short = (ref: string | undefined, fallback: string): string => ref ? ref.replace(/^refs\/heads\//, '') : fallback;
+  const line = short(payload.targetRef, 'the project branch');
+  const upstream = short(payload.upstreamRef, 'the upstream');
+  const at = (sha: string | null | undefined): string => (sha ? ` at ${sha.slice(0, 7)}` : '');
+  const files = payload.files ?? [];
+  const itemId = uuidToBase62(item.id);
+  const attempts = Array.isArray(payload.attempts)
+    ? payload.attempts as Array<{ taskId?: string | null; sourceSha?: string | null }>
+    : [];
+  // A conflict reported after the first one, while the item was open, is a sync task's (only its landing is let
+  // through): its commit holds a resolution that main moved past.
+  const lastSync = attempts.length > 1 ? attempts[attempts.length - 1] : null;
+  const fileText = files.length > 0 ? ` in ${files.join(', ')}` : '';
+  const create = doors.taskCreateMcp == null ? null
+    : `To resolve it, file one sync task with ${doors.taskCreateMcp}, fixesOpenItemId: ${itemId}. It starts from the tip of ${line}, `
+      + `merges ${upstream} into its branch, resolves the conflicts in the files above, and commits that merge and nothing else. `
+      + 'Its evidence says how each file was resolved. Its landing is the only one allowed through while this item is open; '
+      + 'when it lands, this item closes and the waiting landings go ahead.'
+      + (lastSync?.sourceSha
+        ? ` A sync task already tried and its landing conflicted again, because ${upstream} moved on: start the new one by merging `
+          + `${lastSync.sourceSha.slice(0, 7)}, the earlier sync task's commit, which already holds a resolution, and file it with `
+          + 'supersedesTaskId naming the earlier sync task.'
+        : '');
+  const close = doors.resolveMcp == null ? null
+    : `If ${upstream} is about to change these files itself, you can close this item instead (${doors.resolveMcp}, projectId: ${projectId}, `
+      + `itemId: ${itemId}, with your reason). The next waiting landing then tries the sync again, and if it still conflicts, this item comes back.`;
+  return `From Orbit · exception item: ${item.title}\n\n`
+    + `The project branch ${line} could not absorb ${upstream}${at(payload.upstreamSha)}: merging ${upstream} into its tip`
+    + `${at(payload.targetSha)} conflicted${fileText}.\n\n`
+    + `The conflict is between the project branch and ${upstream}. No task's work caused it, and no task needs reopening or rework: `
+    + 'every DONE task stays as it was judged. The landings queued on this line wait until the project branch has absorbed '
+    + `${upstream}. Then they go ahead by themselves, in order.\n\n`
+    + lines(create, close, askOwnerFirst(projectId, itemId, doors))
+    + `\n\n${notice}`;
+}
+
 function openItemBody(item: OpenItemMessageSource): string {
   const projectId = uuidToBase62(item.projectId);
   const payload = (item.payload ?? {}) as {
@@ -3304,6 +3389,9 @@ function openItemBody(item: OpenItemMessageSource): string {
     + `close it with ${doorNames.resolveMcp}, giving your reason: it is marked handled (HANDLED), and your session and reason stay on the item.`;
   if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind) && payload.jobKind === 'OBSERVE_LANDING') {
     return observationFailureMessage(item, projectId, payload, notice, doorNames);
+  }
+  if (item.kind === 'INTEGRATION_CONFLICT' && !item.taskId && !item.promotionId && payload.phase === 'MAIN_SYNC') {
+    return lineSyncMessage(item, projectId, payload, notice, doorNames);
   }
   if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
     const taskId = item.taskId ? uuidToBase62(item.taskId) : null;

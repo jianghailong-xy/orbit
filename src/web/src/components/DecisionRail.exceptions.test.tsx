@@ -17,6 +17,7 @@ import {
   type PendingDecisionRow,
 } from './DecisionRail';
 import { ItemAsCard } from './ProjectProgressStatus';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The cards the owner answers by pressing — an exception that became theirs, the pause only they
@@ -306,6 +307,12 @@ async function page(
 const line = (scope: HTMLElement): HTMLButtonElement =>
   scope.querySelector<HTMLButtonElement>('.decision-strip-line')!;
 
+/** The line's tip, read as a pointer arriving on it afresh. */
+async function tip(element: Element): Promise<string | null> {
+  await act(async () => element.dispatchEvent(new MouseEvent('mouseleave')));
+  return hoverTooltip(element);
+}
+
 async function press(scope: HTMLElement): Promise<void> {
   await act(async () => {
     line(scope).dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -341,7 +348,7 @@ describe('a press goes to the card', () => {
     // foot, but the arrow is about the words beside it (owner, 2026-11-25).
     expect(line(scope).querySelector('.decision-strip-title')?.textContent)
       .toBe(`Escalated to you · ${ESCALATED.title}`);
-    expect(line(scope).getAttribute('title')).toBe(GO_TO_NEXT_CARD_HINT);
+    expect(await tip(line(scope))).toBe(GO_TO_NEXT_CARD_HINT);
     expect(line(scope).querySelector('.decision-strip-caret')?.textContent).toBe('↑');
   });
 });

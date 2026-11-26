@@ -3478,6 +3478,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1574 adds three nullable columns to wiki_chat_draft (auto_queued_at, held, held_by_id), two checks, a partial index,
       // and loosens its undone, seen and told checks; no preserved relation, row, trigger, function or DONE fence changes.
       '1574_wiki_chat_draft_auto',
+      // 1582 widens the enqueue event cause CHECK to admit MAIN_SYNC_HELD and adds its LAND_TASK-only twin of 0518's
+      // baseline CHECK (docs/design/project-line-upstream-sync.md §5); no preserved rows or DONE fence changes.
+      '1582_integration_main_sync_held',
       // 1590 rewrites the access token scopes `documents` and `files` to `drive` in personal_access_token.scopes and
       // pat_device_login.scopes: two UPDATEs of those tables only, none of the preserved relations, no row added or
       // removed, and no table, column, trigger, function or DONE fence changes.
@@ -3537,7 +3540,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // session_phase_from_facts at it, re-creates session_zz_phase to fire on retry_at as well, and writes phase alone
       // on the released rows with retry_at set. Only `session` is touched; no preserved relation, trigger, function or
       // DONE fence changes.
-      '1667_session_phase_retry_running'],
+      '1667_session_phase_retry_running',
+      // 1668 creates `help_ask_conversation` only, with foreign keys to `user` and `task`; no existing table,
+      // trigger, function or DONE fence is touched.
+      '1668_help_ask_conversation',
+      // 1669 adds `codex_rate_limit_reset_operation.account_slot` (NOT NULL DEFAULT 'default', so no row is rewritten),
+      // a CHECK on it, and replaces that table's own guard function to list the column as immutable. Only that table is
+      // touched; no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another writer
+      // of the DONE fence.
+      '1669_codex_reset_operation_account_slot'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

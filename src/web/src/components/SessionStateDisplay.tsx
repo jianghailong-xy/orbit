@@ -1,6 +1,7 @@
 import { ClockCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import { SESSION_MARKS, type SessionDisplayState, type SessionMark } from '../lib/sessionDisplay';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * How the web draws what lib/sessionDisplay decides (the approved board, docs/mocks/session-display-three-states):
@@ -30,20 +31,26 @@ export function SessionStateGlyph({ state, size = 16 }: { state: SessionDisplayS
   const label = state.word;
   if (state.icon === 'spinner')
     return (
-      <span className="session-state-glyph" data-state={state.phase} title={label}>
-        <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize: size }} />
-      </span>
+      <Tooltip content={label} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span aria-label={label} className="session-state-glyph" data-state={state.phase}>
+          <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize: size }} />
+        </span>
+      </Tooltip>
     );
   if (state.icon === 'clock')
     return (
-      <span className="session-state-glyph" data-state={state.phase} title={label}>
-        <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize: size }} />
-      </span>
+      <Tooltip content={label} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span aria-label={label} className="session-state-glyph" data-state={state.phase}>
+          <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize: size }} />
+        </span>
+      </Tooltip>
     );
   return (
-    <span className="session-state-glyph" data-state={state.phase} title={label} style={{ color: 'var(--text-3)' }}>
-      {svg(<circle cx="8" cy="8" r="6.25" />, size)}
-    </span>
+    <Tooltip content={label} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span aria-label={label} className="session-state-glyph" data-state={state.phase} style={{ color: 'var(--text-3)' }}>
+        {svg(<circle cx="8" cy="8" r="6.25" />, size)}
+      </span>
+    </Tooltip>
   );
 }
 

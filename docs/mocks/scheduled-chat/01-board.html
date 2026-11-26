@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scheduled page chat: board 01</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef0f3; font: 15px/1.55 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
+  .b-part { width: 2300px; padding: 40px 48px 48px; background: #f5f6f8; border-bottom: 1px solid #dde0e5; font: 15px/1.55 Inter, "Noto Sans SC", sans-serif; }
+  .b-part > h1 { margin: 0 0 4px; font-size: 30px; }
+  .b-part > .b-sub { margin: 0 0 28px; color: #6b6f76; font-size: 17px; max-width: 1700px; }
+  .b-row { display: flex; gap: 40px; align-items: flex-start; }
+  .b-stage { display: flex; flex-direction: column; gap: 12px; }
+  .b-stage > h2 { margin: 0; font-size: 19px; }
+  .b-stage > h2 small { font-weight: 400; color: #6b6f76; margin-left: 8px; font-size: 15px; }
+  .b-cap { margin: 0; color: #6b6f76; max-width: 760px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-right: 8px; vertical-align: 2px; }
+  .b-tag.today { background: #e5e7eb; color: #4b5563; }
+  .b-tag.new { background: #dbeafe; color: #1d4ed8; }
+  .b-n { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e8590c; color: #fff; font: 700 12px/22px Inter, sans-serif; justify-content: center; flex: none; }
+  .b-pin { position: absolute; z-index: 9; box-shadow: 0 0 0 3px #fff; }
+  .b-ring { position: absolute; border: 2px dashed #e8590c; border-radius: 10px; pointer-events: none; z-index: 8; }
+  .b-notes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px 34px; margin-top: 26px; }
+  .b-note { display: flex; gap: 10px; font-size: 15px; }
+  .b-note b { display: block; }
+  .b-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 28px; }
+  .b-card { background: #fff; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+  .b-card h3 { margin: 0 0 10px; font-size: 19px; }
+  .b-card ul, .b-card ol { margin: 0; padding-left: 20px; }
+  .b-card li { margin: 5px 0; }
+  .b-opt { border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 14px; margin: 10px 0; color: #6b6f76; }
+  .b-opt.rec { border: 2px solid #2b63d9; background: #f5f8ff; color: #1d1d1f; }
+  .b-opt b { display: block; }
+  .b-chosen { font-size: 12px; font-weight: 700; color: #1d4ed8; margin-left: 6px; }
+  code { font: 13px "JetBrains Mono", monospace; background: #f1f2f4; padding: 1px 5px; border-radius: 4px; }
+  .b-band { display: grid; grid-template-columns: 170px 1fr; gap: 6px 18px; font-size: 15px; }
+  .b-band div:nth-child(odd) { font-weight: 600; }
+
+  /* ---- web window ---- */
+  .w-win { background: #fff; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,.12); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .w-bar { height: 34px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; padding: 0 14px; gap: 7px; flex: none; }
+  .w-bar i { width: 12px; height: 12px; border-radius: 50%; background: #d1d5db; display: block; }
+  .w-bar span { margin-left: 14px; font-size: 12px; color: #8a8f98; }
+  .w-body { flex: 1; display: flex; min-height: 0; position: relative; }
+  .w-nav { width: 190px; background: #f7f7f8; border-right: 1px solid #e8e9ec; padding: 16px 10px; flex: none; font-size: 14px; }
+  .w-nav div { padding: 6px 10px; border-radius: 7px; color: #3c3f44; display: flex; gap: 9px; align-items: center; }
+  .w-nav div.on { background: #e6ecfb; color: #2b63d9; font-weight: 600; }
+  .w-nav .ic { width: 16px; height: 16px; border-radius: 4px; background: #d5d8de; flex: none; }
+  .w-nav div.on .ic { background: #9db5ee; }
+  .w-nav.rail { width: 56px; padding: 16px 8px; }
+  .w-nav.rail div { justify-content: center; padding: 8px 0; }
+  .w-list { flex: 1; padding: 20px 24px; overflow: hidden; min-width: 0; }
+  .w-h1 { display: flex; align-items: baseline; }
+  .w-h1 b { font-size: 28px; color: #3266e3; font-weight: 700; }
+  .w-h1 span { margin-left: auto; font-size: 26px; color: #8a8f98; font-weight: 600; }
+  .w-tools { display: flex; align-items: center; gap: 12px; margin: 8px 0 16px; font-size: 13px; }
+  .w-chip { border: 1px solid #d6d9de; border-radius: 15px; padding: 3px 11px; background: #fff; }
+  .w-tog { margin-left: auto; display: flex; gap: 7px; align-items: center; color: #3c3f44; }
+  .w-tog i { width: 30px; height: 17px; border-radius: 9px; background: #3266e3; position: relative; display: block; }
+  .w-tog i::after { content: ''; position: absolute; right: 2px; top: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; }
+  .w-chat { display: inline-flex; gap: 6px; align-items: center; border: 1px solid #d6d9de; border-radius: 7px; padding: 3px 10px; background: #fff; color: #3c3f44; position: relative; }
+  .w-chat.on { background: #e6ecfb; border-color: #9db5ee; color: #2b63d9; font-weight: 600; }
+  .w-chat .bub { width: 13px; height: 11px; border: 1.6px solid currentColor; border-radius: 4px; display: inline-block; position: relative; }
+  .w-chat .amb { background: #f59f00; color: #fff; font-size: 11px; font-weight: 700; border-radius: 8px; padding: 0 6px; line-height: 16px; }
+  .w-chat .ring { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #c9d6f6; border-top-color: #2b63d9; display: inline-block; }
+  .w-day { font-size: 17px; font-weight: 700; margin: 12px 0 2px; padding-bottom: 6px; border-bottom: 1px solid #eef0f2; }
+  .w-day small { font-weight: 400; color: #8a8f98; font-size: 13px; margin-left: 6px; }
+  .w-day.mute { color: #8a8f98; }
+  .w-r { display: flex; gap: 12px; padding: 9px 8px; border-bottom: 1px solid #eef0f2; position: relative; border-radius: 8px; }
+  .w-r.sel { background: #eaf1fe; }
+  .w-r.flash { background: #fff6db; box-shadow: inset 0 0 0 2px #f5c451; }
+  .w-c { width: 20px; height: 20px; border: 2px solid #c8ccd2; border-radius: 50%; flex: none; margin-top: 2px; }
+  .w-c.done { background: #3fa34d; border-color: #3fa34d; position: relative; }
+  .w-c.done::after { content: '✓'; color: #fff; font-size: 12px; position: absolute; left: 3px; top: -1px; font-weight: 700; }
+  .w-t { font-size: 15px; }
+  .w-t.past { color: #6b6f76; }
+  .w-m { font-size: 12.5px; color: #8a8f98; }
+  .w-time { margin-left: auto; color: #3c3f44; font-size: 14px; white-space: nowrap; }
+  .w-new { color: #2f9e44; font-weight: 600; font-size: 13px; margin-right: 10px; }
+  .w-quick { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: #8a8f98; font-size: 14px; border-bottom: 1px solid #eef0f2; padding: 6px 0; }
+  .w-quick .plus { width: 20px; height: 20px; border-radius: 50%; background: #3266e3; color: #fff; text-align: center; line-height: 20px; font-weight: 700; }
+  .w-quick .w-chip { margin-left: auto; color: #3c3f44; }
+  .w-insp { width: 330px; border-left: 1px solid #e5e7eb; padding: 20px 20px; position: relative; background: #fbfbfc; flex: none; font-size: 13.5px; }
+  .w-insp h4 { margin: 0 0 4px; font-size: 18px; line-height: 1.3; }
+  .w-insp .meta { color: #8a8f98; font-size: 12.5px; margin-bottom: 12px; }
+  .w-insp .lbl { font-size: 11px; color: #8a8f98; text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 3px; }
+  .w-insp p { margin: 0; }
+  .w-btns { display: flex; gap: 6px; margin: 12px 0 4px; flex-wrap: wrap; }
+  .w-btn { border: 1px solid #d6d9de; background: #fff; border-radius: 7px; padding: 2px 10px; font-size: 12.5px; }
+  .w-hist { font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid #eef0f2; display: flex; gap: 8px; align-items: baseline; }
+  .w-hist .who { color: #8a8f98; }
+  .w-hist .undo { margin-left: auto; color: #2b63d9; white-space: nowrap; }
+  .w-hist.fresh { background: #f0f6ff; margin: 0 -8px; padding: 6px 8px; border-radius: 6px; }
+  .w-hist a { color: #2b63d9; text-decoration: none; }
+  .w-scrim { position: absolute; inset: 0; background: rgba(0,0,0,.18); z-index: 2; }
+  .w-over { position: absolute; top: 0; right: 0; bottom: 0; z-index: 3; box-shadow: -10px 0 30px rgba(0,0,0,.16); display: flex; }
+
+  /* ---- chat column ---- */
+  .c-col { width: 440px; border-left: 1px solid #e5e7eb; display: flex; flex-direction: column; background: #fff; flex: none; position: relative; }
+  .c-head { height: 46px; padding: 0 14px; display: flex; align-items: center; border-bottom: 1px solid #eef0f2; gap: 6px; flex: none; }
+  .c-title { font-weight: 600; font-size: 14.5px; }
+  .c-title small { color: #8a8f98; font-weight: 400; }
+  .c-icons { margin-left: auto; display: flex; gap: 14px; color: #6b6f76; font-size: 15px; }
+  .c-runs { padding: 7px 14px; font-size: 12.5px; color: #6b6f76; border-bottom: 1px solid #eef0f2; display: flex; gap: 6px; align-items: center; }
+  .c-runs .w-chip { padding: 1px 9px; font-size: 12.5px; color: #3c3f44; }
+  .c-runs.off { background: #fff8e6; color: #8a5a00; }
+  .c-body { flex: 1; padding: 14px 16px; overflow: hidden; display: flex; flex-direction: column; gap: 11px; font-size: 13.5px; line-height: 1.55; }
+  .c-orbit { color: #3c3f44; }
+  .c-orbit .ex { color: #2b63d9; display: block; margin-left: 4px; }
+  .c-orbit .fine { color: #8a8f98; font-size: 12.5px; display: block; margin-top: 6px; }
+  .c-user { align-self: flex-end; max-width: 82%; background: #eef0f3; border-radius: 16px; padding: 7px 13px; }
+  .c-foot { align-self: flex-end; font-size: 11.5px; color: #a0a4ab; margin-top: -8px; }
+  .c-tool { font-size: 12px; color: #8a8f98; }
+  .c-agent a, .c-link { color: #2b63d9; text-decoration: none; }
+  .c-change { border: 1px solid #e3e6ea; border-radius: 10px; padding: 8px 12px; font-size: 13px; display: flex; gap: 10px; align-items: baseline; background: #fbfbfc; }
+  .c-change .ok { color: #2f9e44; font-weight: 700; }
+  .c-change .by { color: #8a8f98; }
+  .c-change .undo { margin-left: auto; color: #2b63d9; white-space: nowrap; }
+  .c-card { border: 1px solid #f0c36d; border-radius: 12px; padding: 12px 14px; background: #fffaf0; font-size: 13px; }
+  .c-card h5 { margin: 0 0 6px; font-size: 14.5px; }
+  .c-card .kv { display: grid; grid-template-columns: 60px 1fr; gap: 2px 8px; }
+  .c-card .kv span:nth-child(odd) { color: #8a8f98; }
+  .c-card .fine { color: #8a8f98; margin-top: 6px; }
+  .c-card .bt { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  .c-b { border: 1px solid #d6d9de; background: #fff; border-radius: 7px; padding: 3px 12px; font-size: 13px; }
+  .c-b.pri { background: #2b63d9; color: #fff; border-color: #2b63d9; }
+  .c-run { display: flex; gap: 10px; align-items: center; border: 1px solid #e3e6ea; border-radius: 10px; padding: 8px 12px; background: #fbfbfc; }
+  .c-run .c-b { display: inline-flex; gap: 6px; align-items: center; }
+  .c-comp { border: 1px solid #d6d9de; border-radius: 14px; margin: 0 12px 12px; padding: 8px 10px; flex: none; }
+  .c-chiprow { display: flex; gap: 6px; margin-bottom: 6px; }
+  .c-ctx { font-size: 12px; background: #eef2fb; color: #2b63d9; border-radius: 6px; padding: 1px 8px; }
+  .c-ph { color: #a0a4ab; font-size: 13.5px; }
+  .c-bar { display: flex; gap: 10px; align-items: center; margin-top: 8px; font-size: 12px; color: #6b6f76; }
+  .c-send { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: #c9d1df; color: #fff; text-align: center; line-height: 26px; font-weight: 700; }
+
+  /* ---- session list crop ---- */
+  .s-list { width: 380px; background: #fff; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,.12); padding: 12px 10px; font-size: 13.5px; position: relative; }
+  .s-list h6 { margin: 2px 8px 8px; font-size: 12px; color: #8a8f98; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .s-row { padding: 7px 10px; border-radius: 8px; }
+  .s-row .t { display: flex; gap: 8px; align-items: baseline; }
+  .s-row .t span:last-child { margin-left: auto; color: #8a8f98; font-size: 12px; }
+  .s-row .m { color: #8a8f98; font-size: 12.5px; }
+  .s-row .amb { color: #c77700; }
+  .s-from { font-size: 11px; color: #6b6f76; background: #f1f2f4; border-radius: 5px; padding: 0 6px; }
+
+  /* ---- phone ---- */
+  .p-ph { width: 393px; height: 800px; background: #f2f2f7; border-radius: 48px; border: 10px solid #1d1d1f; overflow: hidden; position: relative; flex: none; }
+  .p-status { height: 50px; display: flex; justify-content: space-between; align-items: center; padding: 6px 30px 0; font-weight: 600; font-size: 15px; }
+  .p-top { display: flex; justify-content: space-between; padding: 0 18px; color: #007aff; font-size: 17px; align-items: center; height: 34px; }
+  .p-top .bubb { width: 30px; height: 30px; border-radius: 50%; background: #e4e9f5; display: inline-flex; align-items: center; justify-content: center; }
+  .p-top .bubb i { width: 14px; height: 12px; border: 1.8px solid #007aff; border-radius: 4px; display: block; }
+  .p-nav { padding: 2px 18px 6px; font-size: 32px; font-weight: 700; color: #3266e3; }
+  .p-grp { padding: 10px 18px 4px; font-size: 18px; font-weight: 700; }
+  .p-grp small { font-weight: 400; color: #8a8a8d; font-size: 14px; margin-left: 6px; }
+  .p-r { display: flex; gap: 12px; padding: 10px 18px; background: #fff; border-bottom: 1px solid #ececef; position: relative; }
+  .p-r .t { font-size: 16px; }
+  .p-r .m { font-size: 12.5px; color: #8a8a8d; }
+  .p-r .tm { margin-left: auto; color: #8a8a8d; font-size: 14px; }
+  .p-dim { position: absolute; inset: 0; background: rgba(0,0,0,.25); z-index: 2; }
+  .p-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 16px 16px 0 0; z-index: 3; box-shadow: 0 -4px 20px rgba(0,0,0,.15); display: flex; flex-direction: column; }
+  .p-grab { width: 36px; height: 5px; border-radius: 3px; background: #d1d1d6; margin: 7px auto 2px; }
+  .p-sh { display: flex; align-items: center; padding: 6px 16px 8px; font-size: 16px; font-weight: 600; }
+  .p-sh .x { margin-left: auto; color: #8a8a8d; font-weight: 400; display: flex; gap: 16px; }
+  .p-sheet .c-body { padding: 8px 16px; font-size: 14.5px; }
+  .p-sheet .c-comp { margin: 0 12px 30px; }
+  .p-insp { padding: 6px 18px; font-size: 14px; }
+  .p-insp h4 { margin: 6px 0 2px; font-size: 22px; }
+  .p-insp .meta { color: #8a8a8d; font-size: 13px; margin-bottom: 10px; }
+  .p-cardx { background: #f2f2f7; border-radius: 12px; padding: 6px 14px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<!-- ================= Part 1 ================= -->
+<section class="b-part" id="part-1">
+  <h1>Scheduled page chat: manage every schedule from one conversation (web, ≥ 1440 px)</h1>
+  <p class="b-sub">Today, managing schedules by chat means leaving the page. The proposal is a <b>Chat</b> button in the header that docks a conversation on the right, next to the list and the inspector. Plan: <code>docs/scheduled-chat-design.md</code>. Owner decisions 11-26: A on D1–D6. Sample data only.</p>
+  <div class="b-row">
+
+    <div class="b-stage">
+      <h2><span class="b-tag today">Today</span>The page has no chat</h2>
+      <div class="w-win" style="width:560px;height:520px">
+        <div class="w-bar"><i></i><i></i><i></i></div>
+        <div class="w-body">
+          <div class="w-list">
+            <div class="w-h1"><b>Scheduled</b><span>4</span></div>
+            <div class="w-tools"><span class="w-chip">All workspaces ▾</span><span class="w-tog"><i></i>Show past runs</span></div>
+            <div class="w-day">Today <small>Thu, Nov 26</small></div>
+            <div class="w-r"><span class="w-c done"></span><div><div class="w-t past">Codex stable check</div><div class="w-m">Codex 0.48.1 is out (pinned 0.48.0)…</div></div><span class="w-time"><span class="w-new">New</span>06:00</span></div>
+            <div class="w-day">Tomorrow <small>Fri, Nov 27</small></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">Codex stable check</div><div class="w-m">↻ Every day at 06:00 · dev-box · Check only</div></div><span class="w-time">06:00</span></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">Nightly dependency audit</div><div class="w-m">↻ Every day at 06:00 · dev-box · Open a PR</div></div><span class="w-time">06:00</span></div>
+            <div class="w-day mute">Paused <small>2</small></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t past">Changelog watch (docs)</div><div class="w-m">↻ Every day at 09:00 · mac-mini · paused Nov 17</div></div></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t past">Changelog watch (API)</div><div class="w-m">↻ Every day at 23:46 · mac-mini · paused Nov 17</div></div></div>
+          </div>
+        </div>
+      </div>
+      <p class="b-cap" style="max-width:560px">To pause or move a schedule by chat, you open a session somewhere else and lose sight of the list. Change… covers one schedule and also leaves the page.</p>
+    </div>
+
+    <div class="b-stage">
+      <h2><span class="b-tag new">Proposal</span>Chat docked on the right: list · inspector · chat</h2>
+      <div class="w-win" id="p1" style="width:1460px;height:860px">
+        <div class="w-bar"><i></i><i></i><i></i><span>1460 px window</span></div>
+        <div class="w-body">
+          <div class="w-nav">
+            <div><span class="ic"></span>Projects</div><div><span class="ic"></span>Tasks</div><div><span class="ic"></span>Waiting on you</div><div class="on"><span class="ic"></span>Scheduled</div><div><span class="ic"></span>Wiki</div>
+          </div>
+          <div class="w-list">
+            <div class="w-h1"><b>Scheduled</b><span>4</span></div>
+            <div class="w-tools"><span class="w-chip">All workspaces ▾</span><span class="w-tog"><i></i>Show past runs</span><span class="w-chat on" id="p1-btn"><span class="bub"></span>Chat</span></div>
+            <div class="w-day">Today <small>Thu, Nov 26</small></div>
+            <div class="w-r"><span class="w-c done"></span><div><div class="w-t past">Codex stable check</div><div class="w-m">Codex 0.48.1 is out (pinned 0.48.0)…</div></div><span class="w-time"><span class="w-new">New</span>06:00</span></div>
+            <div class="w-day">Tomorrow <small>Fri, Nov 27</small></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">Codex stable check</div><div class="w-m">↻ Every day at 06:00 · dev-box · Check only</div></div><span class="w-time">06:00</span></div>
+            <div class="w-r sel flash" id="p1-row"><span class="w-c"></span><div><div class="w-t">Nightly dependency audit</div><div class="w-m">↻ Weekdays at 07:00 · dev-box · Open a PR</div></div><span class="w-time">07:00</span></div>
+            <div class="w-day mute">Paused <small>2</small></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t past">Changelog watch (docs)</div><div class="w-m">↻ Every day at 09:00 · mac-mini · paused Nov 17</div></div></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t past">Changelog watch (API)</div><div class="w-m">↻ Every day at 23:46 · mac-mini · paused Nov 17</div></div></div>
+            <div class="w-quick" id="p1-quick"><span class="plus">+</span>Say it in the chat…<span class="w-chip">dev-box ▾</span></div>
+          </div>
+          <div class="w-insp" id="p1-insp">
+            <h4>Nightly dependency audit</h4>
+            <div class="meta">↻ Weekdays at 07:00 · dev-box · Open a PR</div>
+            <div class="w-btns"><span class="w-btn">Pause</span><span class="w-btn">Run now</span><span class="w-btn">Change…</span><span class="w-btn">⋯</span></div>
+            <div class="lbl">Does</div>
+            <p>I audit the lockfile every weekday at 07:00 and open a PR when a dependency has a fix.</p>
+            <div class="lbl">Next run</div>
+            <p>Mon, Nov 30 at 07:00</p>
+            <div class="lbl">History</div>
+            <div class="w-hist fresh" id="p1-hist"><span>Every day 06:00 → weekdays 07:00</span><span class="who">you · <a>chat</a> · now</span><span class="undo">Undo</span></div>
+            <div class="w-hist"><span>Ran · opened PR #212</span><span class="who">Nov 25</span></div>
+            <div class="w-hist"><span>Created</span><span class="who">you · Nov 12</span></div>
+          </div>
+          <div class="c-col" id="p1-chat">
+            <div class="c-head"><span class="c-title">Scheduled chat <small>▾</small></span><span class="c-icons"><span>＋</span><span>↗</span><span>✕</span></span></div>
+            <div class="c-body">
+              <div class="c-orbit">You have 4 scheduled tasks: 2 active, 2 paused, none failing. Next: Codex stable check, tomorrow at 06:00 on dev-box.<span class="fine">Moving a time, rewording what a task checks or how it reports applies at once, and you can undo it. More runs, longer runs, more access or another workspace need your Allow.</span></div>
+              <div class="c-user">What runs tomorrow?</div>
+              <div class="c-agent">Two, both on dev-box at 06:00: <a>Codex stable check</a> (check only) and <a>Nightly dependency audit</a> (opens a PR). Both changelog watches have been paused since Nov 17.</div>
+              <div class="c-user" id="p1-user">Move the audit to 07:00, weekdays only.</div>
+              <div class="c-foot">⊕ Orbit attached: Nightly dependency audit</div>
+              <div class="c-tool">› Read Nightly dependency audit · › Updated it</div>
+              <div class="c-change" id="p1-change"><span class="ok">✓</span><span>Changed <a class="c-link">Nightly dependency audit</a>: every day 06:00 → weekdays 07:00 <span class="by">· by you</span></span><span class="undo">Undo</span></div>
+              <div class="c-agent">Done. Its next run is Monday at 07:00. It still opens a PR only when a fix exists.</div>
+            </div>
+            <div class="c-comp" id="p1-comp">
+              <div class="c-chiprow"><span class="c-ctx">⌗ Nightly dependency audit ✕</span></div>
+              <div class="c-ph">Ask about your schedules, or say what to change…</div>
+              <div class="c-bar"><span>Claude ▾</span><span>Default ▾</span><span class="c-send">↑</span></div>
+            </div>
+          </div>
+          <span class="b-n b-pin" style="left:672px;top:62px">1</span>
+          <span class="b-n b-pin" style="left:1006px;top:-4px">2</span>
+          <span class="b-n b-pin" style="left:190px;top:345px">3</span>
+          <span class="b-n b-pin" style="left:1004px;top:722px">4</span>
+          <span class="b-n b-pin" style="left:675px;top:271px">5</span>
+          <span class="b-n b-pin" style="left:1004px;top:404px">6</span>
+          <span class="b-n b-pin" style="left:190px;top:568px">7</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <div class="b-note"><span class="b-n">1</span><div><b>Chat in the header (D1 A)</b>At the far right of the tools row, after Show past runs. It shows as pressed while the panel is open, and a second press closes it. This departs on purpose from the Wiki's round button, because the bottom right holds the quick-add line.</div></div>
+    <div class="b-note"><span class="b-n">2</span><div><b>One docked chat for the whole page (D2 A)</b>An ordinary session in a panel (Wiki chat's pattern): title → history, ＋ new, ↗ full session, ✕ close. It doesn't open by itself, and open or closed is remembered per device (D3 A).</div></div>
+    <div class="b-note"><span class="b-n">3</span><div><b>What the chat changes shows up in the list</b>The row re-reads, flashes once, and moves to its new day and time. The schedule's name in a change line selects the row and opens it in the inspector.</div></div>
+    <div class="b-note"><span class="b-n">4</span><div><b>The selected row rides along</b>A removable chip in the composer: "probably about this one", not a limit. Under the sent message it is one grey line, never inside the bubble.</div></div>
+    <div class="b-note"><span class="b-n">5</span><div><b>Recorded as yours, with Undo</b><code>changedBy = USER</code> and the words of that turn, linked to the chat. The envelope still decides: inside it, the change applies at once.</div></div>
+    <div class="b-note"><span class="b-n">6</span><div><b>The existing change line</b>One per change (<code>Changed {title}: {change}</code>), each with its own Undo. "Pause both" makes two lines. Grouping them is not in v1.</div></div>
+    <div class="b-note"><span class="b-n">7</span><div><b>One composer per page</b>While the panel is open, the quick-add line sends into the chat instead of opening a second session. Change… stays as it is in v1 (D5 A).</div></div>
+  </div>
+</section>
+
+<!-- ================= Part 2 ================= -->
+<section class="b-part" id="part-2">
+  <h1>Narrower windows</h1>
+  <p class="b-sub">List (min 360) + inspector (min 320) + chat (400) = 1,080 px before the sidebar. So at 1200–1439 px the sidebar folds to its icon rail, as on the Wiki page, and below 1200 px the chat slides over the page.</p>
+  <div class="b-row">
+    <div class="b-stage">
+      <h2>1280 px <small>sidebar folds to icons; three columns stay</small></h2>
+      <div class="w-win" style="width:1280px;height:640px">
+        <div class="w-bar"><i></i><i></i><i></i><span>1280 px window</span></div>
+        <div class="w-body">
+          <div class="w-nav rail"><div><span class="ic"></span></div><div><span class="ic"></span></div><div><span class="ic"></span></div><div class="on"><span class="ic"></span></div><div><span class="ic"></span></div></div>
+          <div class="w-list">
+            <div class="w-h1"><b>Scheduled</b><span>4</span></div>
+            <div class="w-tools"><span class="w-chip">All ▾</span><span class="w-tog"><i></i>Past runs</span><span class="w-chat on"><span class="bub"></span>Chat</span></div>
+            <div class="w-day">Tomorrow <small>Fri, Nov 27</small></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">Codex stable check</div><div class="w-m">↻ Every day at 06:00 · dev-box</div></div><span class="w-time">06:00</span></div>
+            <div class="w-r sel"><span class="w-c"></span><div><div class="w-t">Nightly dependency audit</div><div class="w-m">↻ Weekdays at 07:00 · dev-box</div></div><span class="w-time">07:00</span></div>
+            <div class="w-day mute">Paused <small>2</small></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t past">Changelog watch (docs)</div><div class="w-m">↻ Every day at 09:00 · mac-mini</div></div></div>
+          </div>
+          <div class="w-insp" style="width:320px">
+            <h4>Nightly dependency audit</h4>
+            <div class="meta">↻ Weekdays at 07:00 · dev-box · Open a PR</div>
+            <div class="w-btns"><span class="w-btn">Pause</span><span class="w-btn">Run now</span><span class="w-btn">Change…</span><span class="w-btn">⋯</span></div>
+            <div class="lbl">History</div>
+            <div class="w-hist fresh"><span>Every day 06:00 → weekdays 07:00</span><span class="who">you · now</span><span class="undo">Undo</span></div>
+          </div>
+          <div class="c-col" style="width:420px">
+            <div class="c-head"><span class="c-title">Scheduled chat <small>▾</small></span><span class="c-icons"><span>＋</span><span>↗</span><span>✕</span></span></div>
+            <div class="c-body">
+              <div class="c-user">Move the audit to 07:00, weekdays only.</div>
+              <div class="c-change"><span class="ok">✓</span><span>Changed <a class="c-link">Nightly dependency audit</a>: every day 06:00 → weekdays 07:00</span><span class="undo">Undo</span></div>
+            </div>
+            <div class="c-comp"><div class="c-chiprow"><span class="c-ctx">⌗ Nightly dependency audit ✕</span></div><div class="c-ph">Ask about your schedules, or say what to change…</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="b-stage">
+      <h2>1024 px <small>chat slides over; a row press shows the inspector</small></h2>
+      <div class="w-win" style="width:840px;height:640px">
+        <div class="w-bar"><i></i><i></i><i></i><span>1024 px window (drawn at 82 %)</span></div>
+        <div class="w-body">
+          <div class="w-nav rail"><div><span class="ic"></span></div><div><span class="ic"></span></div><div><span class="ic"></span></div><div class="on"><span class="ic"></span></div><div><span class="ic"></span></div></div>
+          <div class="w-list">
+            <div class="w-h1"><b>Scheduled</b><span>4</span></div>
+            <div class="w-tools"><span class="w-chip">All ▾</span><span class="w-tog"><i></i>Past runs</span><span class="w-chat on"><span class="bub"></span>Chat</span></div>
+            <div class="w-day">Tomorrow <small>Fri, Nov 27</small></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">Codex stable check</div><div class="w-m">↻ Every day at 06:00 · dev-box</div></div><span class="w-time">06:00</span></div>
+            <div class="w-r"><span class="w-c"></span><div><div class="w-t">Nightly dependency audit</div><div class="w-m">↻ Weekdays at 07:00 · dev-box</div></div><span class="w-time">07:00</span></div>
+          </div>
+          <div class="w-scrim"></div>
+          <div class="w-over">
+            <div class="c-col" style="width:420px">
+              <div class="c-head"><span class="c-title">Scheduled chat <small>▾</small></span><span class="c-icons"><span>＋</span><span>↗</span><span>✕</span></span></div>
+              <div class="c-body">
+                <div class="c-user">Move the audit to 07:00, weekdays only.</div>
+                <div class="c-change"><span class="ok">✓</span><span>Changed <a class="c-link" style="text-decoration:underline">Nightly dependency audit</a>: every day 06:00 → weekdays 07:00</span><span class="undo">Undo</span></div>
+                <div class="c-agent" style="color:#8a8f98;font-size:12.5px">Clicking the name closes this panel and opens the schedule in the inspector.</div>
+              </div>
+              <div class="c-comp"><div class="c-ph">Ask about your schedules, or say what to change…</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="b-row" style="margin-top:28px">
+    <div class="b-stage" style="width:760px">
+      <h2>Every width</h2>
+      <div class="b-card b-band">
+        <div>≥ 1440 px</div><div>list · inspector · chat (chat 400–480, resizable)</div>
+        <div>1200–1439</div><div>sidebar folds to its icon rail, then the three columns</div>
+        <div>640–1199</div><div>the chat slides over from the right</div>
+        <div>≤ 900</div><div>the inspector keeps stacking under the list, as today</div>
+        <div>&lt; 640</div><div>the chat is a bottom sheet</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Part 3 ================= -->
+<section class="b-part" id="part-3">
+  <h1>States: a card while the panel is closed, Run now, an empty account, an offline machine</h1>
+  <p class="b-sub">Anything outside the envelope still waits on a card. The chat is a listed session (D4 A), so a card left in it can be found again. Run now is your press, never the agent's (D6 A).</p>
+  <div class="b-row">
+
+    <div class="b-stage">
+      <h2>① A card waits, panel closed</h2>
+      <div class="w-win" style="width:520px;height:120px">
+        <div class="w-body" style="padding:18px 22px;display:block">
+          <div class="w-h1"><b>Scheduled</b><span>4</span></div>
+          <div class="w-tools"><span class="w-chip">All workspaces ▾</span><span class="w-tog"><i></i>Show past runs</span><span class="w-chat" id="p3-btn"><span class="bub"></span>Chat<span class="amb">1</span></span></div>
+        </div>
+      </div>
+      <div class="w-win" style="width:520px;height:104px">
+        <div class="w-body" style="padding:18px 22px;display:block">
+          <div class="w-tools" style="margin:0"><span class="w-chip">All workspaces ▾</span><span class="w-tog"><i></i>Show past runs</span><span class="w-chat"><span class="ring"></span>Chat</span></div>
+          <div style="font-size:12.5px;color:#8a8f98;margin-top:10px">…and while a turn runs: a ring on the button.</div>
+        </div>
+      </div>
+      <div class="s-list">
+        <h6>dev-box · sessions</h6>
+        <div class="s-row"><div class="t"><span>Fix flaky upload test</span><span>2h</span></div><div class="m">Working…</div></div>
+        <div class="s-row" style="background:#fff8e6"><div class="t"><span>Scheduled chat</span><span class="s-from">From Scheduled</span><span>now</span></div><div class="m amb">Waiting for you to allow</div></div>
+        <div class="s-row"><div class="t"><span>Release notes draft</span><span>1d</span></div><div class="m">Completed</div></div>
+      </div>
+      <p class="b-cap" style="max-width:520px">The amber count says a card is waiting. The same chat is in its workspace's session list with a <b>From Scheduled</b> tag, using the existing "Waiting for you to allow" preview.</p>
+    </div>
+
+    <div class="b-stage">
+      <h2>② The card in the chat <small>unchanged from today</small></h2>
+      <div class="w-win" style="width:440px;height:560px">
+        <div class="c-col" style="border:0;height:100%">
+          <div class="c-head"><span class="c-title">Scheduled chat <small>▾</small></span><span class="c-icons"><span>＋</span><span>↗</span><span>✕</span></span></div>
+          <div class="c-body">
+            <div class="c-user">Check the Codex release every 6 hours instead of daily.</div>
+            <div class="c-agent">That's 28 runs a week, more than the 7 it's allowed now, so it needs your Allow.</div>
+            <div class="c-card">
+              <h5>Let Codex stable check run more often?</h5>
+              <div class="kv"><span>Now</span><span>Up to 7 runs a week, 30 min each</span><span>Asked</span><span>Up to 28 runs a week, 30 min each</span></div>
+              <div class="fine">Applies from the next run.</div>
+              <div class="bt"><span class="c-b">Keep as it is</span><span class="c-b pri">Allow</span></div>
+            </div>
+          </div>
+          <div class="c-comp"><div class="c-ph">Ask about your schedules, or say what to change…</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="b-stage">
+      <h2>③ Run now is your press (D6 A)</h2>
+      <div class="w-win" style="width:440px;height:560px">
+        <div class="c-col" style="border:0;height:100%">
+          <div class="c-head"><span class="c-title">Scheduled chat <small>▾</small></span><span class="c-icons"><span>＋</span><span>↗</span><span>✕</span></span></div>
+          <div class="c-body">
+            <div class="c-user">Run the Codex check now.</div>
+            <div class="c-agent">Press it here and it starts right away. A press from you doesn't count toward any limit.</div>
+            <div class="c-run" id="p3-run"><span>Codex stable check</span><span class="c-b pri" style="margin-left:auto">▶ Run now</span></div>
+            <div class="c-run" style="opacity:.55"><span class="ok" style="color:#2f9e44;font-weight:700">✓</span><span>Started · <a class="c-link">open run</a></span><span style="margin-left:auto;color:#8a8f98;font-size:12px">after the press</span></div>
+          </div>
+          <div class="c-comp"><div class="c-ph">Ask about your schedules, or say what to change…</div></div>
+        </div>
+      </div>
+      <p class="b-cap" style="max-width:440px">If the agent pressed it as a session, it would count toward a per-schedule budget (one press a week on a weekly schedule), while the inspector's own button has no limit.</p>
+    </div>
+
+    <div class="b-stage">
+      <h2>④ Empty account · offline machine</h2>
+      <div class="w-win" style="width:440px;height:560px">
+        <div class="c-col" style="border:0;height:100%">
+          <div class="c-head"><span class="c-title">New chat</span><span class="c-icons"><span>＋</span><span>↗</span><span>✕</span></span></div>
+          <div class="c-runs off">Runs in <span class="w-chip">mac-mini ▾</span> · offline since 08:12. Pick another, or it waits.</div>
+          <div class="c-body">
+            <div class="c-orbit">You have no scheduled tasks yet. Say what should happen and when, and I'll set it up. For example:
+              <span class="ex">· "Every weekday at 09:00, check a changelog and tell me what's new"</span>
+              <span class="ex">· "Every hour until 18:00, watch the deploy and tell me if it fails"</span>
+              <span class="fine">Nothing runs until you say something.</span></div>
+          </div>
+          <div class="c-comp"><div class="c-ph">Describe a scheduled task…</div></div>
+        </div>
+      </div>
+      <p class="b-cap" style="max-width:440px"><b>Runs in</b> has its own picker on a new chat. The default is the page's workspace filter, else the account default, never "last used". It folds away after the first message.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Part 4 ================= -->
+<section class="b-part" id="part-4">
+  <h1>iPhone (Android follows iOS); macOS and iPad get a third column</h1>
+  <p class="b-sub">A toolbar button opens the chat as a sheet (medium and large detents). A schedule's name in a change line closes the sheet and opens that schedule's own sheet.</p>
+  <div class="b-row">
+    <div class="b-stage">
+      <h2>① A chat button in the toolbar</h2>
+      <div class="p-ph">
+        <div class="p-status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="p-top"><span>‹ Back</span><span class="bubb" id="p4-btn"><i></i></span></div>
+        <div class="p-nav">Scheduled</div>
+        <div class="p-grp">Tomorrow <small>Fri, Nov 27</small></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t">Codex stable check</div><div class="m">↻ Every day at 06:00 · Check only</div></div><span class="tm">06:00</span></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t">Nightly dependency audit</div><div class="m">↻ Every day at 06:00 · Open a PR</div></div><span class="tm">06:00</span></div>
+        <div class="p-grp" style="color:#8a8a8d">Paused <small>2</small></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t" style="color:#8a8a8d">Changelog watch (docs)</div><div class="m">↻ Every day at 09:00 · paused Nov 17</div></div></div>
+        <div class="p-r"><span class="w-c"></span><div><div class="t" style="color:#8a8a8d">Changelog watch (API)</div><div class="m">↻ Every day at 23:46 · paused Nov 17</div></div></div>
+      </div>
+    </div>
+    <div class="b-stage">
+      <h2>② The chat as a sheet</h2>
+      <div class="p-ph">
+        <div class="p-status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="p-top"><span>‹ Back</span><span class="bubb"><i></i></span></div>
+        <div class="p-nav">Scheduled</div>
+        <div class="p-dim"></div>
+        <div class="p-sheet" style="top:150px">
+          <div class="p-grab"></div>
+          <div class="p-sh">Scheduled chat ▾<span class="x"><span>＋</span><span>✕</span></span></div>
+          <div class="c-body">
+            <div class="c-user">Move the audit to 07:00, weekdays only.</div>
+            <div class="c-change" id="p4-change"><span class="ok">✓</span><span>Changed <a class="c-link">Nightly dependency audit</a>: every day 06:00 → weekdays 07:00</span><span class="undo">Undo</span></div>
+            <div class="c-agent">Done. Its next run is Monday at 07:00.</div>
+          </div>
+          <div class="c-comp"><div class="c-ph">Ask or say what to change…</div><div class="c-bar"><span class="c-send">↑</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="b-stage">
+      <h2>③ Tap the name: that schedule's sheet</h2>
+      <div class="p-ph">
+        <div class="p-status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="p-top"><span>‹ Back</span><span class="bubb"><i></i></span></div>
+        <div class="p-nav">Scheduled</div>
+        <div class="p-dim"></div>
+        <div class="p-sheet" style="top:90px">
+          <div class="p-grab"></div>
+          <div class="p-insp">
+            <div style="display:flex;justify-content:space-between;color:#007aff;font-size:16px"><span>‹ Chat</span><span>⋯</span></div>
+            <h4>Nightly dependency audit</h4>
+            <div class="meta">↻ Weekdays at 07:00 · dev-box · Open a PR</div>
+            <div class="p-cardx"><div class="w-hist fresh" style="margin:0"><span>Every day 06:00 → weekdays 07:00</span><span class="who">you · now</span><span class="undo">Undo</span></div><div class="w-hist" style="border:0"><span>Created</span><span class="who">you · Nov 12</span></div></div>
+          </div>
+        </div>
+      </div>
+      <p class="b-cap" style="max-width:393px"><b>‹ Chat</b> goes back to the conversation.</p>
+    </div>
+    <div class="b-stage" style="width:520px">
+      <h2>macOS and iPad (regular width)</h2>
+      <div class="b-card">
+        <ul>
+          <li>The toolbar's Chat button opens a third column next to the inspector.</li>
+          <li>Open or closed is remembered per device (UserDefaults), and it never opens by itself.</li>
+          <li>When an iPad narrows to compact width, the column becomes the iPhone sheet.</li>
+          <li>The same chat, cards, change lines and Undo as on the web. The history lists the account's Scheduled chats.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Part 5 ================= -->
+<section class="b-part" id="part-5">
+  <h1>Decisions (owner 11-26: A on all six) and what gets built</h1>
+  <p class="b-sub">Revision 2 of the plan takes in Fable 5.2's review. What v1 leaves out is listed on the right.</p>
+  <div class="b-cols">
+    <div class="b-card">
+      <h3>D1–D3</h3>
+      <div><b>D1 Entry point</b></div>
+      <div class="b-opt rec"><b>A · Chat button in the header <span class="b-chosen">CHOSEN</span></b>Bottom right holds the quick-add line. A deliberate departure from the Wiki's FAB.</div>
+      <div class="b-opt"><b>B · the Wiki's round FAB</b></div>
+      <div><b>D2 Inspector and chat together</b></div>
+      <div class="b-opt rec"><b>A · three columns, width bands of part 2 <span class="b-chosen">CHOSEN</span></b></div>
+      <div class="b-opt"><b>B · the chat replaces the inspector while open</b></div>
+      <div><b>D3 Open by default</b></div>
+      <div class="b-opt rec"><b>A · no, open on a press, remembered per device <span class="b-chosen">CHOSEN</span></b></div>
+      <div class="b-opt"><b>B · open by default on wide windows, like the Wiki</b></div>
+    </div>
+    <div class="b-card">
+      <h3>D4–D6</h3>
+      <div><b>D4 Session kind</b></div>
+      <div class="b-opt rec"><b>A · listed, tagged From Scheduled <span class="b-chosen">CHOSEN</span></b>A marker column, as Wiki chats have. No new run source, and nothing for old clients to decode.</div>
+      <div class="b-opt"><b>B · hidden like Change…</b>A new run source and about 17 filter sites.</div>
+      <div><b>D5 Change… and quick-add</b></div>
+      <div class="b-opt rec"><b>A · unchanged in v1 <span class="b-chosen">CHOSEN</span></b>While the panel is open, the quick-add line sends into it.</div>
+      <div class="b-opt"><b>B · move both into the panel now</b></div>
+      <div><b>D6 Run now from the chat</b></div>
+      <div class="b-opt rec"><b>A · a Run now button you press <span class="b-chosen">CHOSEN</span></b>Owner channel, no budget.</div>
+      <div class="b-opt"><b>B · the agent presses it as a session</b></div>
+    </div>
+    <div class="b-card">
+      <h3>What gets built (by cost)</h3>
+      <ol>
+        <li><b>Server:</b> <code>Session.scheduleChatAt</code>; <code>POST/GET /api/schedules/chat</code>; the turn's optional <code>context</code> (filter, selected schedule); the <code>&lt;orbit_schedules&gt;</code> note (counts and the selection, titles escaped as data); <code>resolveActor</code> → USER with that turn's words; the From Scheduled tag.</li>
+        <li><b>Web:</b> <code>ScheduledChatPanel</code> on the shared conversation and composer; header button and its states; chip; row flash; Run now button; width bands; quick-add into the chat.</li>
+        <li><b>macOS + iOS.</b></li>
+        <li><b>Android</b> (follows iOS).</li>
+      </ol>
+      <h3 style="margin-top:18px">Not in v1</h3>
+      <ul>
+        <li>One grouped Undo for several changes in a turn</li>
+        <li>Creating in another workspace from one chat</li>
+        <li>Managing tasks that wait on a condition (questions only)</li>
+        <li>Splitting the Wiki chat panel into a generic frame</li>
+        <li>A revision check on in-envelope edits (they're last-writer-wins today)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

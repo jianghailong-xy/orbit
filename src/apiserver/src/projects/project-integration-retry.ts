@@ -74,6 +74,8 @@ export interface IntegrationRetryFacts {
    * landing stops at MAIN_SYNC again and its conflict item comes back exactly as it does today.
    */
   sourceTips?: { conflicted: string | null; current: string | null };
+  /** The OPEN line-sync item a QUEUED newest landing waits behind (docs/design/project-line-upstream-sync.md §4.2). */
+  heldByLineSync?: { itemId: string } | null;
 }
 
 /** What the rerun of a MAIN_SYNC conflict whose branch moved says it is doing. */
@@ -153,6 +155,14 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
   // A landing whose runner stopped reporting past its limit will not end by itself (§2.2 J-T9): the
   // retry ends it as the ERROR it is, and reruns it like any other.
   const timedOut = newest.state === 'RUNNING' && newest.timedOut === true;
+  if (!timedOut && newest.state === 'QUEUED' && facts.heldByLineSync) {
+    return refuse(409, INTEGRATION_RETRY_IN_FLIGHT,
+      `generation ${newest.generation} of this task's landing is already QUEUED, behind line-sync item `
+      + `${facts.heldByLineSync.itemId}: the project branch could not absorb the upstream, and no landing goes in `
+      + 'until it has. Nothing about this task needs rerunning or reopening. The landing goes ahead by itself once '
+      + 'the sync task filed against that item lands (or the item is closed), in queue order.',
+      { newestLanding: landing });
+  }
   if (!timedOut && isInFlightJobState(newest.state)) {
     return refuse(409, INTEGRATION_RETRY_IN_FLIGHT,
       `generation ${newest.generation} of this task's landing is already ${newest.state}: nothing new is `

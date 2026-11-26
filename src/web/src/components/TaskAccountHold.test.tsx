@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskAccountHold } from '../lib/accountHealth';
 import { accountHoldLineText, RelaxedRunNote, TaskAccountHoldLine, TaskAccountHoldNote } from './TaskAccountHold';
+import { hoverTooltip } from '../test/tooltipHover';
 
 const hold: TaskAccountHold = {
   kind: 'ACCOUNT_NEEDS_ACTION',
@@ -47,12 +48,16 @@ describe('a task held for an account', () => {
     expect(host.querySelector('[data-testid="relaxed-run"]')!.textContent).toBe(sentence);
   });
 
-  it('on a row it is one quiet line: the words, the next try and Open account, the whole sentence as its name', () => {
+  it('on a row it is one quiet line: the words, the next try and Open account, the whole sentence as its name', async () => {
     act(() => root.render(<MemoryRouter><TaskAccountHoldLine hold={hold} /></MemoryRouter>));
     const line = host.querySelector('[data-testid="task-account-hold-line"]')!;
     const text = accountHoldLineText(hold);
     expect(text).toMatch(/^Held · Cursor said "Add a payment method to continue" · Next try \d\d:\d\d$/);
-    expect(line.getAttribute('title')).toBe(`${text} · Open account`);
+    // jsdom lays nothing out: give the label a cut-off box so its tip opens.
+    Object.defineProperty(line.querySelector('.task-hold-line-text')!, 'scrollWidth', { value: 500, configurable: true });
+    Object.defineProperty(line.querySelector('.task-hold-line-text')!, 'clientWidth', { value: 200, configurable: true });
+    // The tip waits on a real timer; only the date is faked here.
+    expect(await hoverTooltip(line)).toBe(`${text} · Open account`);
     expect(line.querySelector('.task-hold-line-text')!.getAttribute('aria-label')).toBe(`${text} · Open account`);
     expect(line.querySelector('a')!.getAttribute('href')).toBe('/settings/machines');
     expect(line.querySelector('.badge, [class*="Badge"]')).toBeNull();

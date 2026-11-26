@@ -63,6 +63,17 @@ import {
 import { OTHER_OPTION, RECOMMENDED } from './CoordinatorQuestionCard';
 import { sessionLine, statusLabel } from './WorkspaceView';
 
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('./ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
+
 /**
  * The owner-confirmation card's review bar (docs/owner-confirmation-review-contract.md §6–§9): the
  * lines it draws in each state, proved against the fixture OrbitKit is proved against too; the

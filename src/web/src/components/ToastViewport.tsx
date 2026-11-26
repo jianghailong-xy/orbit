@@ -13,10 +13,10 @@ import {
 } from '@ant-design/icons';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { levelOf, type ToastGlyph, type ToastItem } from '../lib/toastFeed';
-import { closeToast, holdToasts, openToast, releaseToasts, useToastFeed } from '../lib/toastStore';
+import { closeToast, holdToasts, openToast, releaseToasts, setToastRoute, useToastFeed } from '../lib/toastStore';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { useFeedbackPortal } from './ui/feedbackPortal';
 
@@ -101,6 +101,10 @@ export function ToastViewport() {
   }, []);
   const narrow = useMediaQuery(PHONE_QUERY);
   const navigate = useNavigate();
+  const location = useLocation();
+  const here = `${location.pathname}${location.search}${location.hash}`;
+  // A toast raised from now on is about this page.
+  useLayoutEffect(() => setToastRoute(here), [here]);
   const [allPinned, setAllPinned] = useState(false);
 
   const openSession = (toast: ToastItem) => {
@@ -110,6 +114,18 @@ export function ToastViewport() {
     if (!toast.sessionId) return;
     closeToast(toast.id);
     navigate(`/sessions/${encodeId(toast.sessionId)}`);
+  };
+
+  // A failure card has no buttons: the whole card is the way to where it happened — its session, else
+  // the page it was raised on. The one whose fix is the page itself (part of it didn't load) reloads it.
+  const openFailure = (toast: ToastItem) => {
+    if (window.getSelection()?.toString()) return;
+    if (toast.sessionId) return openSession(toast);
+    // Raised on the page on screen, it has nowhere to go: only its × takes it down.
+    if (!toast.action && !(toast.origin && toast.origin !== here)) return;
+    closeToast(toast.id);
+    if (toast.action) toast.action.onClick();
+    else navigate(toast.origin!);
   };
 
   const visible = useMemo(() => {
@@ -179,7 +195,7 @@ export function ToastViewport() {
           {folded ? (
             <Pill toast={toast} behind={behind} onClick={() => openToast(toast.id)} />
           ) : levelOf(toast) === 'attention' ? (
-            <AttentionCard toast={toast} onOpen={openSession} />
+            <AttentionCard toast={toast} here={here} onOpen={openFailure} />
           ) : levelOf(toast) === 'result' ? (
             <ResultCard toast={toast} onOpen={openSession} />
           ) : (
@@ -333,25 +349,30 @@ function ResultCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: Toast
   );
 }
 
-/** ③ What failed, what it was about, the server's words to read twice and paste, and what to do.
+/** ③ What failed, what it was about, and the server's words to read twice (and select, and paste).
  *
- *  The copy block carries the click into the session, the same as ② — a press that only follows the
- *  toast is one the whole card should answer, not one the card keeps to a button of its own. A
- *  button is left here only for what does MORE than follow it (`action`, which resolves in the
- *  session) or what acts on the card's own text (`Copy error`). */
-function AttentionCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: ToastItem) => void }) {
-  const copyable = typeof toast.detail === 'string' ? toast.detail : null;
-  const action = toast.action;
+ *  No buttons but its ×: a press anywhere on the card takes you to where it happened (`onOpen`), and a
+ *  press that ends a selection of its words stays a selection. The copy block is that press's button,
+ *  for the keyboard and a screen reader, when the card has somewhere to go. */
+function AttentionCard({ toast, here, onOpen }: { toast: ToastItem; here: string; onOpen: (toast: ToastItem) => void }) {
+  const label = toast.sessionId
+    ? typeof toast.subtitle === 'string' ? `Open ${toast.subtitle}` : 'Open the session'
+    : toast.action ? toast.action.ariaLabel
+    : toast.origin && toast.origin !== here ? 'Go to where this happened' : null;
   return (
-    <div className={`toast toast--card toast--attention toast--${toast.tone} toast--live`}>
+    <div className={`toast toast--card toast--attention toast--${toast.tone} toast--live${label ? ' toast--opens' : ''}`}
+      onClick={() => onOpen(toast)}>
       <div className="toast-row">
         <Glyph toast={toast} />
-        {toast.sessionId ? (
+        {label ? (
           <button
             type="button"
             className="toast-copy toast-copy--link"
-            aria-label={typeof toast.subtitle === 'string' ? `Open ${toast.subtitle}` : undefined}
-            onClick={() => onOpen(toast)}
+            aria-label={label}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen(toast);
+            }}
           >
             <Copy toast={toast} withDetail={false} />
           </button>
@@ -360,33 +381,14 @@ function AttentionCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: To
             <Copy toast={toast} withDetail={false} />
           </span>
         )}
-        <button type="button" className="toast-close" aria-label="Dismiss" onClick={() => closeToast(toast.id)}>
+        <button type="button" className="toast-close" aria-label="Dismiss" onClick={(event) => {
+          event.stopPropagation();
+          closeToast(toast.id);
+        }}>
           <CloseOutlined />
         </button>
       </div>
       {present(toast.detail) && <div className="toast-reason">{toast.detail}</div>}
-      {(action || copyable) && (
-        <div className="toast-actions">
-          {action && (
-            <button
-              type="button"
-              className="toast-action toast-action--primary"
-              aria-label={action.ariaLabel}
-              onClick={() => {
-                closeToast(toast.id);
-                action.onClick();
-              }}
-            >
-              {action.label}
-            </button>
-          )}
-          {copyable && (
-            <button type="button" className="toast-action" onClick={() => void navigator.clipboard?.writeText(copyable)}>
-              Copy error
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

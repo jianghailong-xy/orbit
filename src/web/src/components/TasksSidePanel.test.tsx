@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   handleProjectsShortcut,
   handleNavActivation,
@@ -14,6 +14,17 @@ import {
   workspaceRunnerIsOffline,
   workspaceShortcutLabel,
 } from './TasksSidePanel';
+
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('./ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
 
 // TasksSidePanel itself reaches for localStorage, several polled queries and an SSE hook on
 // mount, none of which exist in this Node test environment — so instead of mounting it, this
@@ -89,7 +100,7 @@ describe('TasksSidePanel nav', () => {
     expect(projectsShortcutLabel(true)).toBe('⌘P');
     expect(projectsShortcutLabel(false)).toBe('Ctrl P');
     expect(source).toContain('className="tp-count tp-nav-shortcut"');
-    expect(source).toContain("title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}");
+    expect(source).toContain("<Tooltip key={t.key} content={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}");
     expect(styles).toMatch(
       /\.tp-workspace-shortcut,\s*\.tp-nav-shortcut\s*\{[\s\S]*?display:\s*none;/,
     );
@@ -403,7 +414,7 @@ describe('TasksSidePanel workspace rows', () => {
       />,
     );
     expect(html).toContain('tp-workspace-icon-running');
-    expect(html).toContain('title="Running"');
+    expect(html).toContain('data-tip="Running"');
     expect(html).toContain('aria-label="Workspace has a running session"');
     expect(html).not.toContain('anticon-loading');
     expect(styles).toMatch(
@@ -459,7 +470,7 @@ describe('TasksSidePanel workspace rows', () => {
     // A job in flight with nobody generating: the workspace row was previously blank here.
     const jobsOnly = row(2);
     expect(jobsOnly).toContain('tp-workspace-icon-jobs');
-    expect(jobsOnly).toContain('title="2 background jobs running"');
+    expect(jobsOnly).toContain('data-tip="2 background jobs running"');
     expect(jobsOnly).toContain('aria-label="Workspace has a background job running"');
     expect(jobsOnly).not.toContain('tp-workspace-icon-running');
 
@@ -708,7 +719,7 @@ describe('TasksSidePanel project rows', () => {
   });
 
   it('breathes the dot for a running task or a working coordinator alike', () => {
-    expect(row({ buckets: { running: 1 } })).toContain('class="tp-list-dot running" title="Work in flight"');
+    expect(row({ buckets: { running: 1 } })).toContain('class="tp-list-dot running" aria-label="Work in flight" data-tip="Work in flight"');
     expect(row({ coordinatorActivity: { working: true, lastTurnAt: null } })).toContain(
       'class="tp-list-dot running"',
     );
@@ -717,7 +728,7 @@ describe('TasksSidePanel project rows', () => {
 
   it('keeps the project active while a landing or project merge is queued or running', () => {
     expect(row({ integration: { line: 'PROJECT_BRANCH', ref: 'project/x', activeJobCount: 1 } }))
-      .toContain('class="tp-list-dot running" title="Work in flight"');
+      .toContain('class="tp-list-dot running" aria-label="Work in flight" data-tip="Work in flight"');
     expect(row({ integration: { line: 'PROJECT_BRANCH', ref: 'project/x', activeJobCount: 0 } }))
       .not.toContain('tp-list-dot running');
   });
@@ -732,7 +743,7 @@ describe('TasksSidePanel project rows', () => {
         ],
       },
     });
-    expect(html).toContain('class="tp-count needs-you" title="3 waiting on you" aria-label="3 waiting on you">3</span>');
+    expect(html).toContain('class="tp-count needs-you" aria-label="3 waiting on you" data-tip="3 waiting on you">3</span>');
     expect(html).toContain('tp-list-dot running');
   });
 

@@ -17,5 +17,7 @@ import { HelpLibrary } from './help-library';
     AdminRoleGuard,
     { provide: HelpLibrary, useFactory: () => HelpLibrary.load() },
   ],
+  // The Ask answers from the same library (help-ask.module.ts).
+  exports: [HelpLibrary],
 })
 export class HelpModule {}

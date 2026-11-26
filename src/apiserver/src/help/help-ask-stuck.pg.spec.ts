@@ -1,19 +1,19 @@
 /**
  * Still stuck (docs/mocks/help-center board 02 ② right frame, side note 5; help/help-ask.ts#stuck and #askAdmin,
- * migration 0890), held against the production apiserver — `build/main.js`, the whole AppModule — over a real
+ * migration 1668), held against the production apiserver — `build/main.js`, the whole AppModule — over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/help/help-ask-stuck.pg.spec.ts
  *
  * Accounts: `admin` (ADMIN, the instance's longest-standing), `member` and `stranger` (MEMBER). The member and the
- * admin each ask on their own machine. Against one server, started with ORBIT_RELEASE_REPOSITORY set:
+ * admin each ask, answered by a DeepSeek stub. Against one server, started with ORBIT_RELEASE_REPOSITORY set:
  *
- *   1. what Still stuck offers a member: the admin by name, the release repository, the machine's runner version, OS
- *      and last heartbeat, and the member's own workspace and repository names for a report to leave out;
+ *   1. what Still stuck offers a member: the admin by name, the release repository, and the member's own workspace
+ *      and repository names for a report to leave out;
  *   2. an admin is offered no Ask your admin, and is refused one: nothing is written;
- *   3. another account's Ask is the 404 of one that is not there, on both routes: no task, no hand-off row;
+ *   3. another account's Ask is the 404 of one that is not there, on both routes: no task, the Ask not marked sent;
  *   4. Ask your admin makes an ordinary task in the admin's own task list — theirs, in no workspace, not started —
- *      holding the question, the answer and a link to the Ask; the admin's event stream is told, the member's is not;
+ *      holding the question, the answer the server stored and a link to the Ask; the admin's event stream is told, the member's is not;
  *      and nothing goes through the Waiting on you inbox (no owner request);
  *   5. asked again, it answers with the same task and makes no other;
  *   6. /help → Your questions says With your admin, and who it was sent to.
@@ -25,17 +25,17 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { HELP_ASK_V1, toUuid, uuidToBase62 } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { hashPassword } from '../common/crypto.util';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { startDeepSeekStub } from '../test-support/deepseek-stub';
 import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
-const ENGINES = [{ engine: 'claude', installed: true, auth: 'yes', version: '2.3.0' }];
 const QUESTION = 'Why is build-box offline?';
 const ANSWER = 'build-box went to sleep [1]. Wake it, then turn off sleep while plugged in.';
 const REPOSITORY = 'acme/orbit-fork';
@@ -53,7 +53,7 @@ function listen(port: number, bearer: string, ms: number): Promise<string> {
   });
 }
 
-test('Still stuck: Ask your admin is a task in an admin\'s list, and a report carries the machine and no names', {
+test('Still stuck: Ask your admin is a task in an admin\'s list, and a report carries no names', {
   skip: !URL_, concurrency: 1, timeout: 600_000,
 }, async (t) => {
   const url = URL_!;
@@ -62,8 +62,10 @@ test('Still stuck: Ask your admin is a task in an admin\'s list, and a report ca
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
   let server: Apiserver | undefined;
+  const deepSeek = await startDeepSeekStub(() => ANSWER);
   t.after(async () => {
     await server?.stop();
+    await deepSeek.stop();
     await sql.end().catch(() => undefined);
   });
 
@@ -82,7 +84,11 @@ test('Still stuck: Ask your admin is a task in an admin\'s list, and a report ca
   const member = await account('member', 'MEMBER');
   const stranger = await account('stranger', 'MEMBER');
 
-  server = await startApiserver(url, `help-stuck-${randomUUID()}`, { ORBIT_RELEASE_REPOSITORY: `https://github.com/${REPOSITORY}.git` });
+  server = await startApiserver(url, `help-stuck-${randomUUID()}`, {
+    ORBIT_RELEASE_REPOSITORY: `https://github.com/${REPOSITORY}.git`,
+    DEEPSEEK_API_KEY: 'test-deepseek-key',
+    DEEPSEEK_BASE_URL: deepSeek.url,
+  });
   const api = (method: string, route: string, bearer?: string, body?: unknown, headers?: Record<string, string>): Promise<Reply> =>
     call(server!, method, route, bearer, body, headers);
   const signIn = async (who: { email: string; password: string }) => {
@@ -94,50 +100,45 @@ test('Still stuck: Ask your admin is a task in an admin\'s list, and a report ca
   const memberToken = await signIn(member);
   const strangerToken = await signIn(stranger);
 
-  const machine = async (bearer: string, name: string) => {
-    const minted = await api('POST', '/api/runners/enrollment-tokens', bearer, { label: `help stuck ${RUN}` });
-    assert.equal(minted.status, 201, minted.text);
-    const registered = await api('POST', '/api/runner/register', undefined, { enrollmentToken: minted.json.token, name, hostname: name, version: '0.1.255' });
-    assert.equal(registered.status, 201, registered.text);
-    const beat = await api('POST', '/api/runner/heartbeat', registered.json.runnerToken, { status: 'ONLINE', engines: ENGINES, version: '0.1.255' },
-      { 'x-orbit-runner-capabilities': HELP_ASK_V1, 'x-orbit-runner-os': 'linux' });
-    assert.equal(beat.status < 300, true, beat.text);
-    return { runnerId: toUuid(registered.json.runnerId), name };
-  };
-  const ask = async (bearer: string, runnerId: string) => {
-    const reply = await api('POST', '/api/help/ask', bearer, { content: QUESTION, runnerId: uuidToBase62(runnerId), engine: 'claude' });
+  /** An Ask, once it is answered. */
+  const ask = async (bearer: string) => {
+    const reply = await api('POST', '/api/help/ask', bearer, { content: QUESTION });
     assert.equal(reply.status, 201, reply.text);
-    return toUuid(reply.json.sessionId);
+    const id = toUuid(reply.json.id);
+    for (let i = 0; i < 100; i++) {
+      const read = await api('GET', `/api/help/ask/${uuidToBase62(id)}`, bearer);
+      if (read.json?.status === 'answered') return id;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error(`Ask ${id} was not answered`);
   };
-  const memberBox = await machine(memberToken, `build-box-${RUN}`);
-  const adminBox = await machine(adminToken, `admin-box-${RUN}`);
-  const memberAsk = await ask(memberToken, memberBox.runnerId);
-  const adminAsk = await ask(adminToken, adminBox.runnerId);
+  const memberAsk = await ask(memberToken);
+  const adminAsk = await ask(adminToken);
   // The member's code, by the names a report must leave out.
   await sql.query(
-    `INSERT INTO "workspace" (id, name, owner_id, runner_id, work_dir, repo_url) VALUES ($1, $2, $3, $4, $5, $6)`,
-    [randomUUID(), `payments-${RUN}`, member.id, memberBox.runnerId, `/srv/billing-worker-${RUN}`, `git@github.com:acme-corp/payments-api-${RUN}.git`],
+    `INSERT INTO "workspace" (id, name, owner_id, work_dir, repo_url) VALUES ($1, $2, $3, $4, $5)`,
+    [randomUUID(), `payments-${RUN}`, member.id, `/srv/billing-worker-${RUN}`, `git@github.com:acme-corp/payments-api-${RUN}.git`],
   );
 
   const tasksOf = async (ownerId: string) =>
     (await sql.query(`SELECT * FROM "task" WHERE "owner_id" = $1::uuid ORDER BY created_at`, [ownerId])).rows;
+  /** The Asks marked sent to an admin. */
   const handoffs = async () =>
-    (await sql.query(`SELECT * FROM "help_ask_admin_request" WHERE "session_id" IN ($1::uuid, $2::uuid)`, [memberAsk, adminAsk])).rows;
+    (await sql.query(
+      `SELECT "owner_id", "admin_id", "admin_task_id" FROM "help_ask_conversation"
+        WHERE "id" IN ($1::uuid, $2::uuid) AND "sent_to_admin_at" IS NOT NULL`,
+      [memberAsk, adminAsk],
+    )).rows;
   const ownerRequests = async (ownerId: string) =>
     Number((await sql.query(`SELECT count(*) AS n FROM "owner_request" WHERE "owner_id" = $1::uuid`, [ownerId])).rows[0].n);
-  const body = { exchanges: [{ question: QUESTION, answer: ANSWER }] };
 
-  await t.test('1. a member is offered the admin by name, and a report its machine and the names to leave out', async () => {
+  await t.test('1. a member is offered the admin by name, and a report the names to leave out', async () => {
     const reply = await api('GET', `/api/help/ask/${uuidToBase62(memberAsk)}/stuck`, memberToken);
     assert.equal(reply.status, 200, reply.text);
     assert.deepEqual(reply.json.admin, { name: admin.name });
     assert.equal(reply.json.sentToAdmin, null);
     assert.equal(reply.json.report.repository, REPOSITORY, 'the release repository as ORBIT_RELEASE_REPOSITORY names it');
-    const m = reply.json.report.machine;
-    assert.equal(m.name, memberBox.name);
-    assert.equal(m.runnerVersion, '0.1.255');
-    assert.equal(m.os, 'linux');
-    assert.ok(Date.now() - Date.parse(m.lastHeartbeatAt) < 10 * 60_000, `a recent heartbeat: ${m.lastHeartbeatAt}`);
+    assert.equal('machine' in reply.json.report, false, 'no machine answered it');
     const names = reply.json.report.privateNames as string[];
     for (const name of [`payments-${RUN}`, `billing-worker-${RUN}`, `acme-corp/payments-api-${RUN}`, `payments-api-${RUN}`]) {
       assert.ok(names.includes(name), `${name} in ${JSON.stringify(names)}`);
@@ -149,7 +150,7 @@ test('Still stuck: Ask your admin is a task in an admin\'s list, and a report ca
     assert.equal(reply.status, 200, reply.text);
     assert.equal(reply.json.admin, null);
     const before = (await tasksOf(admin.id)).length;
-    const refused = await api('POST', `/api/help/ask/${uuidToBase62(adminAsk)}/admin`, adminToken, body);
+    const refused = await api('POST', `/api/help/ask/${uuidToBase62(adminAsk)}/admin`, adminToken);
     assert.equal(refused.status, 403, refused.text);
     assert.equal(refused.json.code, 'HELP_ASK_NO_ADMIN');
     assert.equal((await tasksOf(admin.id)).length, before);
@@ -160,14 +161,11 @@ test('Still stuck: Ask your admin is a task in an admin\'s list, and a report ca
     const read = await api('GET', `/api/help/ask/${uuidToBase62(memberAsk)}/stuck`, strangerToken);
     assert.equal(read.status, 404, read.text);
     const before = (await tasksOf(admin.id)).length;
-    const sent = await api('POST', `/api/help/ask/${uuidToBase62(memberAsk)}/admin`, strangerToken, body);
+    const sent = await api('POST', `/api/help/ask/${uuidToBase62(memberAsk)}/admin`, strangerToken);
     assert.equal(sent.status, 404, sent.text);
     assert.equal((await tasksOf(admin.id)).length, before);
     assert.equal((await tasksOf(stranger.id)).length, 0);
     assert.deepEqual(await handoffs(), []);
-    // An ordinary session is not an Ask either.
-    const malformed = await api('POST', `/api/help/ask/${uuidToBase62(memberAsk)}/admin`, memberToken, { exchanges: [] });
-    assert.equal(malformed.status, 400, malformed.text);
   });
 
   let taskId = '';
@@ -176,7 +174,7 @@ test('Still stuck: Ask your admin is a task in an admin\'s list, and a report ca
     const adminHears = listen(server!.port, adminToken, 4_000);
     const memberHears = listen(server!.port, memberToken, 4_000);
     await new Promise((resolve) => setTimeout(resolve, 800));
-    const reply = await api('POST', `/api/help/ask/${uuidToBase62(memberAsk)}/admin`, memberToken, body);
+    const reply = await api('POST', `/api/help/ask/${uuidToBase62(memberAsk)}/admin`, memberToken);
     assert.equal(reply.status, 201, reply.text);
     assert.equal(reply.json.adminName, admin.name);
     taskId = toUuid(reply.json.taskId);
@@ -213,12 +211,12 @@ test('Still stuck: Ask your admin is a task in an admin\'s list, and a report ca
     assert.equal(await ownerRequests(member.id), 0);
     const rowsAfter = await handoffs();
     assert.equal(rowsAfter.length, 1);
-    assert.deepEqual([rowsAfter[0].owner_id, rowsAfter[0].admin_id, rowsAfter[0].task_id], [member.id, admin.id, taskId]);
+    assert.deepEqual([rowsAfter[0].owner_id, rowsAfter[0].admin_id, rowsAfter[0].admin_task_id], [member.id, admin.id, taskId]);
   });
 
   await t.test('5. asked again, the same task, and no other', async () => {
     const count = (await tasksOf(admin.id)).length;
-    const reply = await api('POST', `/api/help/ask/${uuidToBase62(memberAsk)}/admin`, memberToken, body);
+    const reply = await api('POST', `/api/help/ask/${uuidToBase62(memberAsk)}/admin`, memberToken);
     assert.equal(reply.status, 201, reply.text);
     assert.equal(toUuid(reply.json.taskId), taskId);
     assert.equal((await tasksOf(admin.id)).length, count);
@@ -227,16 +225,13 @@ test('Still stuck: Ask your admin is a task in an admin\'s list, and a report ca
   });
 
   await t.test('6. Your questions says With your admin, and who it went to', async () => {
-    // Answered, as an Ask is by the time its person says it did not help: no machine runs in this spec, so the
-    // session is settled the way its runner would leave it. Still PENDING, it reads Working, which outranks this.
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" IN ($1::uuid, $2::uuid)`, [memberAsk, adminAsk]);
-    const reply = await api('GET', '/api/help/ask/sessions', memberToken);
+    const reply = await api('GET', '/api/help/ask/conversations', memberToken);
     assert.equal(reply.status, 200, reply.text);
-    const row = (reply.json.questions as Array<{ sessionId: string; outcome: string; sentTo: string | null }>)
-      .find((q) => toUuid(q.sessionId) === memberAsk)!;
+    const row = (reply.json.questions as Array<{ id: string; outcome: string; sentTo: string | null }>)
+      .find((q) => toUuid(q.id) === memberAsk)!;
     assert.equal(row.outcome, 'with-admin');
     assert.equal(row.sentTo, admin.name);
-    const adminRows = (await api('GET', '/api/help/ask/sessions', adminToken)).json.questions as Array<{ outcome: string; sentTo: string | null }>;
+    const adminRows = (await api('GET', '/api/help/ask/conversations', adminToken)).json.questions as Array<{ outcome: string; sentTo: string | null }>;
     assert.ok(adminRows.every((q) => q.outcome !== 'with-admin' && q.sentTo === null), 'the admin\'s own Ask was sent nowhere');
   });
 });

@@ -1,6 +1,7 @@
 import type { BranchCommit } from '@orbit/shared';
 import type { SessionChangedFile } from '../api';
 import { ago } from '../lib/watches';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The worktree bar counted in commits (docs/mocks/session-commits-first): what the session did is
@@ -79,10 +80,12 @@ export function CommitSummary({
     <span className="wt-commits-lead">
       {commits.length > 1 && <span className="wt-commits-count">{commitCountLabel(commits.length)}</span>}
       {dirty && <span className="wt-commit-tag wt-commit-tag-pending">+ uncommitted</span>}
-      <span className="wt-commits-subject" title={latest.subject}>
-        {commits.length > 1 && <span className="wt-dim">· latest: </span>}
-        {latest.subject}
-      </span>
+      <Tooltip content={latest.subject} truncatedOnly>
+        <span className="wt-commits-subject">
+          {commits.length > 1 && <span className="wt-dim">· latest: </span>}
+          {latest.subject}
+        </span>
+      </Tooltip>
     </span>
   );
 }
@@ -102,58 +105,62 @@ function CommitRow({
   const saved = savedByLabel(commit.savedBy);
   const n = commit.files.length;
   return (
-    <button
-      type="button"
-      className={`wt-commit-row${active ? ' active' : ''}`}
-      data-row-focus=""
-      onClick={(e) => {
-        e.stopPropagation();
-        onOpen();
-      }}
-      title={commit.body ? `${commit.subject}\n\n${commit.body}` : commit.subject}
-    >
-      <span className={`wt-commit-dot${saved ? ' wt-commit-dot-auto' : ''}`} aria-hidden="true" />
-      <span className="wt-commit-text">
-        <span className="wt-commit-subject">{commit.subject || '(no message)'}</span>
-        <span className="wt-commit-meta">
-          <code className="wt-commit-sha">{shortSha(commit.sha)}</code>
-          <span>
-            · {ago(commit.committedAt, now)} · {n}
-            {commit.filesTruncated ? '+' : ''} {n === 1 ? 'file' : 'files'}
-          </span>
-          {saved && (
-            <span className="wt-commit-tag" title={saved.title}>
-              {saved.label}
+    <Tooltip content={commit.body ? `${commit.subject}\n\n${commit.body}` : commit.subject}>
+      <button
+        type="button"
+        className={`wt-commit-row${active ? ' active' : ''}`}
+        data-row-focus=""
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <span className={`wt-commit-dot${saved ? ' wt-commit-dot-auto' : ''}`} aria-hidden="true" />
+        <span className="wt-commit-text">
+          <span className="wt-commit-subject">{commit.subject || '(no message)'}</span>
+          <span className="wt-commit-meta">
+            <code className="wt-commit-sha">{shortSha(commit.sha)}</code>
+            <span>
+              · {ago(commit.committedAt, now)} · {n}
+              {commit.filesTruncated ? '+' : ''} {n === 1 ? 'file' : 'files'}
             </span>
-          )}
+            {saved && (
+              <Tooltip content={saved.title} delay={TEXT_TOOLTIP_DELAY_MS}>
+                <span className="wt-commit-tag">
+                  {saved.label}
+                </span>
+              </Tooltip>
+            )}
+          </span>
         </span>
-      </span>
-      <span className="wt-commit-stat">
-        <span className="wt-add">+{add}</span>
-        <span className="wt-del">−{del}</span>
-      </span>
-    </button>
+        <span className="wt-commit-stat">
+          <span className="wt-add">+{add}</span>
+          <span className="wt-del">−{del}</span>
+        </span>
+      </button>
+    </Tooltip>
   );
 }
 
 function PendingRow({ active, onOpen }: { active?: boolean; onOpen: () => void }) {
   return (
-    <button
-      type="button"
-      className={`wt-commit-row${active ? ' active' : ''}`}
-      data-row-focus=""
-      onClick={(e) => {
-        e.stopPropagation();
-        onOpen();
-      }}
-      title="Changes in the worktree that no commit holds yet"
-    >
-      <span className="wt-commit-dot wt-commit-dot-pending" aria-hidden="true" />
-      <span className="wt-commit-text">
-        <span className="wt-commit-subject">Uncommitted changes</span>
-        <span className="wt-commit-meta">Not committed yet · shown under All changes</span>
-      </span>
-    </button>
+    <Tooltip content="Changes in the worktree that no commit holds yet">
+      <button
+        type="button"
+        className={`wt-commit-row${active ? ' active' : ''}`}
+        data-row-focus=""
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <span className="wt-commit-dot wt-commit-dot-pending" aria-hidden="true" />
+        <span className="wt-commit-text">
+          <span className="wt-commit-subject">Uncommitted changes</span>
+          <span className="wt-commit-meta">Not committed yet · shown under All changes</span>
+        </span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -259,9 +266,11 @@ export function CommitHead({ commit, mixed }: { commit: BranchCommit; mixed: boo
           · {commit.files.length} {commit.files.length === 1 ? 'file' : 'files'}
         </span>
         {saved && (
-          <span className="wt-commit-tag" title={saved.title}>
-            {saved.label}
-          </span>
+          <Tooltip content={saved.title} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span className="wt-commit-tag">
+              {saved.label}
+            </span>
+          </Tooltip>
         )}
       </div>
       {commit.body && <div className="wt-commit-head-body">{commit.body}</div>}

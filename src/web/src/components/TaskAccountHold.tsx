@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { pauseResumeTime } from '../lib/accountPause';
 import type { TaskAccountHold } from '../lib/accountHealth';
 import { Badge } from './ui/Badge';
+import { Tooltip } from './ui/Tooltip';
 
 /** Where an account's row, and its Check again, lives. */
 export const ACCOUNTS_HREF = '/settings/machines';
@@ -49,9 +50,11 @@ export function TaskAccountHoldLine({ hold }: { hold: TaskAccountHold }) {
   const text = accountHoldLineText(hold);
   const full = `${text} · Open account`;
   return (
-    <div className="task-hold-line" data-testid="task-account-hold-line" title={full}>
-      <span className="task-hold-line-text" aria-label={full}>{text}</span>
-      <Link className="task-hold-line-action" to={ACCOUNTS_HREF} onClick={stop} onMouseDown={stop}>Open account</Link>
-    </div>
+    <Tooltip content={full} truncatedOnly>
+      <div className="task-hold-line" data-testid="task-account-hold-line">
+        <span className="task-hold-line-text" aria-label={full}>{text}</span>
+        <Link className="task-hold-line-action" to={ACCOUNTS_HREF} onClick={stop} onMouseDown={stop}>Open account</Link>
+      </div>
+    </Tooltip>
   );
 }

@@ -205,6 +205,53 @@ describe('background agent and workflow cards', () => {
     await act(async () => container.querySelector<HTMLElement>('.chat-tool-task .chat-tool-row')!.click());
     expect(container.textContent).toContain('Available without progress');
   });
+
+  it('keeps an agent whose call is older than the loaded window inside a card, not raw at the top level', async () => {
+    // A tail page that starts in the middle of a long workflow: neither the Workflow call nor its
+    // agent's call is loaded, only what the agent did since and the result the runner relays.
+    const key = 'toolu_wf:workflow-agent:a1';
+    const verdict = '{"claim_held":false,"evidence":["id=1 -\\u003e id=2"]}';
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <Transcript events={[
+            ev(901, 'assistant', { text: 'Composing the verdict.', parentToolUseId: key }),
+            ev(902, 'tool_use', { id: 'so', name: 'StructuredOutput', input: {}, parentToolUseId: key }),
+            ev(903, 'tool_result', { toolUseId: 'so', content: 'ok', parentToolUseId: key }),
+            ev(904, 'tool_result', { toolUseId: key, content: verdict, parentToolUseId: 'toolu_wf' }),
+          ]} />
+        </MemoryRouter>,
+      );
+    });
+    // Folded: nothing the agent wrote spills out of its card.
+    expect(container.textContent).not.toContain('Composing the verdict.');
+    expect(container.textContent).not.toContain('claim_held');
+    const rows = [...container.querySelectorAll<HTMLElement>('.chat-tool-row')];
+    expect(rows.map((r) => r.querySelector('.chat-tool-name')?.textContent)).toEqual(['Workflow']);
+    await act(async () => rows[0].click());
+    const agent = container.querySelector<HTMLElement>('.chat-tool-task .chat-tool-row')!;
+    expect(agent.querySelector('.chat-tool-name')?.textContent).toBe('Agent');
+    expect(agent.querySelector('.anticon-check-circle')).not.toBeNull();
+    await act(async () => agent.click());
+    expect(container.textContent).toContain('Composing the verdict.');
+    expect(container.textContent).toContain('claim_held');
+  });
+
+  it('never hands a result whose call is not loaded to the call still open above it', async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <Transcript events={[
+            ev(1, 'tool_use', { id: 'open', name: 'Bash', input: { command: 'sleep 9' } }),
+            ev(2, 'tool_result', { toolUseId: 'unloaded', content: 'Not the sleep output' }),
+          ]} live />
+        </MemoryRouter>,
+      );
+    });
+    // The sleep is still running; the stray result is drawn on its own rather than as its output.
+    expect(container.textContent).toContain('Not the sleep output');
+    expect(container.querySelector('.chat-result')?.closest('.chat-tool-card, .chat-steps')).toBeNull();
+  });
 });
 
 describe('the tray', () => {
