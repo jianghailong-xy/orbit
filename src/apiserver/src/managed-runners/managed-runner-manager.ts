@@ -9,7 +9,6 @@ import {
 } from '@orbit/shared';
 
 import { generateToken, sha256 } from '../common/crypto.util';
-import { ABANDONED_TURN_STATUS } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { issueDriveMountCredential, revokeDriveMountCredentials } from '../drive/drive-mount-credential';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -2259,7 +2258,6 @@ export class ManagedRunnerManager {
           await tx.session.updateMany({
             where: { assignedRunnerId: mapping.runnerId, ...turnStateFilter(['IN_FLIGHT']) },
             data: {
-              status: ABANDONED_TURN_STATUS,
               turnState: 'ABANDONED',
               error: REPEATED_OOM_REASON,
               lastTurnOutcome: 'INTERRUPTED',

@@ -38,13 +38,11 @@ import { sessionTurnStateSql, turnStateOf } from './session-turn-state';
 
 /** The row columns the fields read. Absent execution and wake facts read as "not there", as for an old row; an absent
  *  end reason as none asked for, and an absent kind as a conversation. */
-export interface SessionPhaseRow extends Omit<SessionWorkingRow, 'status'> {
+export interface SessionPhaseRow extends SessionWorkingRow {
   /** The release column (common/session-release.ts). */
   finishedAt: Date | string | null;
-  /** The turn state (session-turn-state.ts), read through turnStateOf: a held row without one reads its stored word
-   *  `status` (not yet backfilled), and one with neither reads as parked. */
-  turnState?: string | null;
-  status?: string;
+  /** The turn state (session-turn-state.ts), read through turnStateOf. */
+  turnState: string | null;
   lastTurnOutcome?: string | null;
   error?: string | null;
   endReason?: string | null;
@@ -83,10 +81,9 @@ const WAKE_FACTS = [RESUME_WATCH, PENDING_WAKEUP, ARMED_RETRY] as const;
  * otherwise. A released session is IDLE, except one an armed retry will re-send, which is RUNNING: the owner's ruling
  * of 2026-11-26, "waiting for retry counts as the running state" (design §4.2, amended). Read from the facts (turn
  * state, release, the execution columns, `retry_at`), the rule migration 1667's `session_zz_phase` stores (plan §1.2),
- * and the reference its PG spec holds the trigger to; a held row not yet backfilled reads its turn state from its
- * stored word (turnStateOf). A held session's armed retry (a quota parked at AWAITING_INPUT) leaves it IDLE: RUNNING
- * on a held row reads as a turn in flight to every client, which would steer the next message into a turn that is
- * not there.
+ * and the reference its PG spec holds the trigger to. A held session's armed retry (a quota parked at AWAITING_INPUT)
+ * leaves it IDLE: RUNNING on a held row reads as a turn in flight to every client, which would steer the next message
+ * into a turn that is not there.
  */
 export function deriveSessionPhase(row: SessionPhaseRow): SessionPhase {
   if (isReleased(row)) return ARMED_RETRY.holds(row) ? 'RUNNING' : 'IDLE';
@@ -102,13 +99,13 @@ export function deriveSessionPhase(row: SessionPhaseRow): SessionPhase {
  * Claude region check, dsh not ready. Any other `error` on a PENDING row is a leftover the claim keeps, not a hold.
  * Clients never rebuild this from `error`: they read `waitingOn: 'HOLD'`.
  */
-export function sessionHasHoldNotice(row: Pick<SessionPhaseRow, 'status' | 'finishedAt' | 'turnState' | 'error'>): boolean {
+export function sessionHasHoldNotice(row: Pick<SessionPhaseRow, 'finishedAt' | 'turnState' | 'error'>): boolean {
   return turnStateOf(row) === 'QUEUED' && isHoldNotice(row.error);
 }
 
 /** A queued turn that something nobody asked for keeps from starting. */
 export function sessionIsHeld(
-  row: Pick<SessionPhaseRow, 'status' | 'finishedAt' | 'turnState' | 'error'>,
+  row: Pick<SessionPhaseRow, 'finishedAt' | 'turnState' | 'error'>,
   hold: SessionHoldFacts,
 ): boolean {
   return turnStateOf(row) === 'QUEUED'
@@ -132,7 +129,7 @@ export function sessionWakes(row: SessionPhaseRow): boolean {
       finishedAt: row.finishedAt,
       endReason: row.endReason ?? null,
       lastTurnOutcome: row.lastTurnOutcome ?? null,
-      status: row.status ?? '',
+      turnState: row.turnState,
     })
     && deriveSessionLifecycleState(row) === SessionLifecycleState.OPEN;
 }
@@ -196,7 +193,7 @@ interface FactsRow {
   /** The projected word (legacySessionStatusSql), which countLiveApprovalsBySession reads. */
   status: RunStatus;
   finishedAt: Date | null;
-  /** Resolved in SQL (sessionTurnStateSql), the stored word's fallback included. */
+  /** Resolved in SQL (sessionTurnStateSql). */
   turnState: string | null;
   lastTurnOutcome: string | null;
   error: string | null;
