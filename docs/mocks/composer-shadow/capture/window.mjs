@@ -172,7 +172,14 @@ const WIDE = { width: 1440, height: 820 };
 const FLAT = `.composer-box, .composer-box:focus-within, .composer-box:has(.composer-attach-btn[data-popup-open], .composer-model-chip[data-popup-open], .orbit-select[data-open]) { box-shadow: none; }`;
 const PANEL = `.composer-box { border-color: var(--border-subtle); }
 .composer-box, .composer-box:focus-within, .composer-box:has(.composer-attach-btn[data-popup-open], .composer-model-chip[data-popup-open], .orbit-select[data-open]) { box-shadow: var(--panel-shadow); }`;
+// Board 03, corners (after option ③ landed, so the build already has the panels' edge): ② the composer takes
+// the panel radius; ③ the composer and the Tasks / Agents strips (and the pending tray) all take it.
+const R_COMPOSER = `.composer-box { border-radius: var(--panel-radius, 12px); }`;
+const R_ALL = R_COMPOSER + `.bg-tray, .pending-tray { border-radius: var(--panel-radius, 12px); }`;
 const SCENES = {
+  'r-today': { vp: WIDE },
+  'r-composer': { vp: WIDE, css: R_COMPOSER },
+  'r-all': { vp: WIDE, css: R_ALL },
   'today': { vp: WIDE },
   'flat': { vp: WIDE, css: FLAT },
   'panel': { vp: WIDE, css: PANEL },
