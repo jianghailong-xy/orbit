@@ -42,7 +42,6 @@ import { MachineProtocol } from '../common/machine-protocol';
 import { isStopping, pauseUnlessStopping } from '../common/graceful-stop';
 import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
-import { answeredPerson } from '../sessions/session-listed-at';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
 import { reloadCarriesEnv } from '../sessions/session-settings';
@@ -7476,9 +7475,6 @@ export class RunnerApiController {
           ...LEGACY_STATUS_SELECT,
           taskId: true,
           startsTaskWork: true,
-          // Whose opening this session's first turn is, for `answeredPerson` below (parentSessionId is read further down).
-          openedBy: true,
-          promptByOrbit: true,
           ownerId: true,
           creatorId: true,
           workspaceId: true,
@@ -8551,12 +8547,10 @@ export class RunnerApiController {
           ...branchCommitsData(dto.branchCommits),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
-          // The turn ended on its owner: a person's message answered and nothing queued behind it, so the row moves to
-          // the top of their list (session.listed_at, migration 1434). A wake-up's, a notification's or a task brief's
-          // end leaves it where it was; FAILED and every other end move it through the session_listed_at_settle trigger.
-          ...(nextStatus === RunStatus.AWAITING_INPUT && answeredPerson(current, completedTurn, sessionId)
-            ? { listedAt: new Date() }
-            : {}),
+          // The turn ended on its owner with nothing queued behind it, so the row moves to the top of their list
+          // (session.listed_at, migration 1434), whoever started the turn: a wake-up's or another session's reply is
+          // news too (owner 2026-11-26). FAILED and every other end move it through the session_listed_at_settle trigger.
+          ...(nextStatus === RunStatus.AWAITING_INPUT ? { listedAt: new Date() } : {}),
           numTurns: { increment: turnInc },
           costUsd: { increment: gatewayBooked ? 0 : turnCostUsd },
           // The totals this turn was measured to, for the next completion to be measured from.

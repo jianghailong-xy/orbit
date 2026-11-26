@@ -9,7 +9,7 @@
     "Every other row goes to a date section by the calendar day of listedAt (createdAt when listedAt is null), counted back from today in the reader's time zone: 0 or a future instant 'Today', 1 'Yesterday', 2–7 '2–7 days ago', 8–30 '8–30 days ago', more 'Older'.",
     "Within every section: listedAt descending (createdAt when null), then createdAt descending, then id ascending. lastTurnAt is never an order key: it is the liveness clock and moves with every streamed event.",
     "Empty sections are not drawn.",
-    "listedAt moves only when the session changes for its owner: it is created; a person sends it a message; a turn ends on the owner (a person's turn answered, a card or question raised, an owner request filed); it ends (SUCCEEDED, FAILED, CANCELLED) or is completed. Streamed text, tool calls, background-job output, wake-up turns, queue claims and runner reconnects do not move it."
+    "listedAt moves only when the session changes for its owner: it is created; a person sends it a message; a turn ends on the owner (any turn answered with nothing queued behind it, a wake-up's or another session's included; a card or question raised; an owner request filed); it ends (SUCCEEDED, FAILED, CANCELLED) or is completed. Streamed text, tool calls, background-job output, a wake-up turn's arrival, queue claims and runner reconnects do not move it."
   ],
   "sectionTitles": [
     "Pinned",
