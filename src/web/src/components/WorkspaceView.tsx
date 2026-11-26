@@ -11493,17 +11493,20 @@ export function WorkspaceView({
                         },
                       ]
                 }
-                trigger={<Button ref={headerMore} variant="text" className="workspace-header-more" icon={<HeaderMoreIcon />} title="More actions" />}
+                tooltip="More actions"
+                trigger={<Button ref={headerMore} variant="text" className="workspace-header-more" icon={<HeaderMoreIcon />} aria-label="More actions" />}
               />
               {!isMobile && !selectedTrashed && (
-                <Button
-                  variant="text"
-                  className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
-                  icon={<HeaderShareIcon />}
-                  title={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}
-                  aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
-                  onClick={() => setShareOpen(true)}
-                />
+                // The app's tooltip, as on ⋯, not the browser's own (`title`).
+                <Tooltip side="bottom" align="end" content={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}>
+                  <Button
+                    variant="text"
+                    className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
+                    icon={<HeaderShareIcon />}
+                    aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
+                    onClick={() => setShareOpen(true)}
+                  />
+                </Tooltip>
               )}
               </div>
             </>
