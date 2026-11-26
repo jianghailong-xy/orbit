@@ -759,25 +759,36 @@ export function sessionProjectListing<T extends SessionProjectSession>(
   return { folders: opts.folderId ? [] : folderListing.folders, projects: rows, sessions: loose, entries };
 }
 
-/** A session's own entry in the list: a member of a project that has no row here carries the project's mark. */
+/** The entry last made of each session object. */
+const sessionEntries = new WeakMap<object, SessionProjectEntry<SessionProjectSession>>();
+
+const sameMark = (a: SessionProjectMark | undefined, b: SessionProjectMark | undefined): boolean =>
+  a?.projectId === b?.projectId && a?.title === b?.title && a?.status === b?.status &&
+  a?.taskCounts === b?.taskCounts && a?.runningCount === b?.runningCount;
+
+/** A session's own entry in the list: a member of a project that has no row here carries the project's mark.
+ *  The same session object reading the same mark is the same entry object, so a list worked out again — a
+ *  re-read, a new page — does not redraw the rows it did not change. */
 export function sessionEntry<T extends SessionProjectSession>(
   session: T,
   summaries: ReadonlyMap<string, SidebarProject>,
 ): SessionProjectEntry<T> {
   const membership = session.projectMembership;
-  if (!membership) return { ...session, kind: 'session' };
-  const summary = summaries.get(membership.projectId);
-  return {
-    ...session,
-    kind: 'session',
-    projectMark: {
-      projectId: membership.projectId,
-      title: summary?.title ?? membership.projectTitle,
-      status: summary?.status ?? membership.projectStatus,
-      taskCounts: summary?.taskCounts,
-      runningCount: summary?.buckets.running ?? 0,
-    },
-  };
+  const summary = membership && summaries.get(membership.projectId);
+  const projectMark: SessionProjectMark | undefined = membership ? {
+    projectId: membership.projectId,
+    title: summary?.title ?? membership.projectTitle,
+    status: summary?.status ?? membership.projectStatus,
+    taskCounts: summary?.taskCounts,
+    runningCount: summary?.buckets.running ?? 0,
+  } : undefined;
+  const before = sessionEntries.get(session) as (T & { kind: 'session'; projectMark?: SessionProjectMark }) | undefined;
+  if (before && sameMark(before.projectMark, projectMark)) return before;
+  const entry: SessionProjectEntry<T> = projectMark
+    ? { ...session, kind: 'session', projectMark }
+    : { ...session, kind: 'session' };
+  sessionEntries.set(session, entry);
+  return entry;
 }
 
 /** What a project row is worked out with: `sessionProjectListing`'s options, as far as one row reads them. */

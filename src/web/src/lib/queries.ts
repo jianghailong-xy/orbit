@@ -1,4 +1,4 @@
-import { infiniteQueryOptions, queryOptions, replaceEqualDeep } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import type {
   EventSearchResponse,
   LinkPreviewRef,
@@ -88,7 +88,7 @@ import {
 } from './taskPages';
 import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
 import { readOpenList, type OpenListAnswer } from './openListDelta';
-import { latestListingPages, type SessionListingPage } from './sessionListingData';
+import { shareListingData, type SessionListingPage } from './sessionListingData';
 import type { SessionReach, SessionReachDeclaration, TaskReachDeclaration } from './sessionReach';
 
 export type { ConfiguredProvider };
@@ -470,7 +470,8 @@ export const sessionsQuery = (
  * that did not move is answered 304. BootGate warms this same key, so a page load reads it once.
  *
  * An answer with `restarted: true` replaces every page read before it (latestListingPages): it is applied
- * where React Query writes the cache, so a next page, a refetch and an optimistic write all keep to it.
+ * where React Query writes the cache, so a next page, a refetch and an optimistic write all keep to it. What
+ * a read did not change keeps its object, wherever it now sits (shareListingData).
  */
 export const sessionListingQuery = (opts: {
   runnerId?: string | null;
@@ -496,7 +497,7 @@ export const sessionListingQuery = (opts: {
       return api<SessionListingPage>(`/sessions/listing?${qs}`);
     },
     getNextPageParam: (page) => page.next,
-    structuralSharing: (prev, next) => replaceEqualDeep(prev, latestListingPages(next)),
+    structuralSharing: shareListingData,
     staleTime: streamStaleTime,
   });
 };

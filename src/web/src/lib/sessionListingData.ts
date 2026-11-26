@@ -1,7 +1,7 @@
 // `GET /sessions/listing` as the web caches it (docs/session-list-scale-design.md §3.2): one workspace's list
 // as top-level entries, read a page at a time into one infinite query (queries.ts sessionListingQuery). Pure,
 // and free of components, so the stream's readers (useControlPlane, lib/sessionReach) can read it too.
-import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
+import { replaceEqualDeep, type InfiniteData, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import type { SessionListItem } from '../api';
 
 /** A folder row's tallies, as the server counts them (workspaceSessionCounts' predicates, by folder). */
@@ -69,6 +69,39 @@ export function latestListingPages(data: unknown): unknown {
   });
   if (from === 0) return data;
   return { pages: data.pages.slice(from), pageParams: [null, ...data.pageParams.slice(from + 1)] };
+}
+
+/** What an entry is, whichever place it holds in the list. */
+const entryKey = (entry: SessionListingEntry): string =>
+  entry.kind === 'session' ? `session:${entry.session.id}` : `project:${entry.projectId}`;
+
+const sameItems = (a: readonly unknown[], b: readonly unknown[]): boolean =>
+  a.length === b.length && a.every((item, i) => item === b[i]);
+
+/**
+ * A re-read's pages, keeping the object of everything that reads as it did, so the rows drawn from it are not
+ * redrawn (sessionListingQuery's `structuralSharing`). An entry is matched by what it is, not by where it sits:
+ * React Query's own sharing matches by position, which hands every entry below a moved one a new object.
+ */
+export function shareListingData(previous: unknown, next: unknown): unknown {
+  const latest = latestListingPages(next);
+  if (!isListingData(previous) || !isListingData(latest)) return replaceEqualDeep(previous, latest);
+  const held = new Map(previous.pages.flatMap((page) => page.entries.map((entry) => [entryKey(entry), entry] as const)));
+  const pages = latest.pages.map((page, i): SessionListingPage => {
+    const was = previous.pages[i];
+    const entries = page.entries.map((entry) => {
+      const before = held.get(entryKey(entry));
+      return before ? replaceEqualDeep(before, entry) : entry;
+    });
+    if (!was) return { ...page, entries };
+    const { entries: wasEntries, ...wasRest } = was;
+    const { entries: _, ...nextRest } = page;
+    const rest = replaceEqualDeep<Omit<SessionListingPage, 'entries'>>(wasRest, nextRest);
+    const kept = sameItems(wasEntries, entries);
+    return rest === wasRest && kept ? was : { ...rest, entries: kept ? wasEntries : entries };
+  });
+  const pageParams = replaceEqualDeep(previous.pageParams, latest.pageParams);
+  return pageParams === previous.pageParams && sameItems(previous.pages, pages) ? previous : { pages, pageParams };
 }
 
 /** Every session row the loaded pages hold: each session entry's, and each project entry's coordinator. */
