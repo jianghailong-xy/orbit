@@ -7,6 +7,7 @@
     "A project entry is filed in its coordinator's folder; a session in its own. A folder that is not a live folder of this workspace counts as no folder.",
     "Without folderId: the entries in no live folder. With folderId: the entries filed in that folder, and no folder rows.",
     "Order: in the Open view, pinned entries first (a project entry is pinned when its coordinator is); then placement (listedAt, else createdAt) descending; at the same placement a session before a project; then createdAt descending; then id ascending.",
+    "The Completed view has no Pinned, and its order switches on whether any session of the view in this workspace (every folder counted) is held by a project: none held, GET /sessions?view=completed's order — COALESCE(completedAt, archivedAt) descending, then createdAt descending, then id ascending; any held, the placement order above. A cursor written under one order and read under the other starts again from the first page.",
     "A project entry's placedAt is the greatest listedAt (else createdAt) of the members it holds; its spokeAt the greatest lastTurnAt (else createdAt); memberCount how many members it holds here; its createdAt (for order) its coordinator's, else that of the member that placed it.",
     "Folder rows (first page, no folderId): every live folder in Open, only those holding a session of the view in Completed, by name (case-insensitive, digits by value), the id settling a tie. rowCount: the rows the folder's page lists (a project is one row). needsYou: how many of its sessions (held members filed with their project) need you; running / jobs: whether any of them runs / has a background job moving — workspaceSessionCounts' predicates.",
     "Paging: each page's `next` is the sort key of its last entry; the next page lists the entries strictly after it, so no entry is skipped or repeated however many share a place."
@@ -19,7 +20,9 @@
     "project": "the project its membership names, or absent",
     "role": "COORDINATOR (the project's coordinator) or TASK (a run of one of its tasks, the default when `project` is set)",
     "activity": "what workspaceSessionCounts counts it as: needsYou, running or jobs; absent for none",
-    "createdAt": "defaults to `defaultCreatedAt`"
+    "createdAt": "defaults to `defaultCreatedAt`",
+    "completedAt": "when a completed session was completed; defaults to its listedAt",
+    "archivedAt": "set instead of completedAt on a legacy archived-only row"
   },
   "defaultCreatedAt": "2026-11-19T00:00:00.000Z",
   "cases": [
@@ -175,7 +178,7 @@
       ]
     },
     {
-      "name": "completed view: no Pinned, folders only where a completed session is, an Open coordinator still files its project",
+      "name": "completed view with a held project: listedAt order for every entry (completedAt says otherwise), no Pinned, folders only where a completed session is, an Open coordinator still files its project",
       "folders": [
         { "id": "F7", "name": "Done" },
         { "id": "F8", "name": "Idle" },
@@ -184,8 +187,8 @@
       "foreignFolders": [],
       "projects": ["P7", "P8"],
       "sessions": [
-        { "id": "k1", "lifecycle": "completed", "listedAt": "2026-11-20T10:00:00.000Z" },
-        { "id": "k2", "lifecycle": "completed", "pinnedAt": "2026-11-20T05:00:00.000Z", "listedAt": "2026-11-20T09:00:00.000Z" },
+        { "id": "k1", "lifecycle": "completed", "completedAt": "2026-11-20T08:00:00.000Z", "listedAt": "2026-11-20T10:00:00.000Z" },
+        { "id": "k2", "lifecycle": "completed", "pinnedAt": "2026-11-20T05:00:00.000Z", "completedAt": "2026-11-20T12:00:00.000Z", "listedAt": "2026-11-20T09:00:00.000Z" },
         { "id": "kf", "lifecycle": "completed", "folder": "F7", "listedAt": "2026-11-20T08:00:00.000Z" },
         { "id": "o1", "folder": "F8", "listedAt": "2026-11-20T12:00:00.000Z" },
         { "id": "c7", "project": "P7", "role": "COORDINATOR", "pinnedAt": "2026-11-20T05:00:00.000Z", "listedAt": "2026-11-20T15:00:00.000Z" },
@@ -220,6 +223,36 @@
             ],
             "entries": [
               { "kind": "project", "id": "P7", "coordinator": "c7", "memberCount": 1, "placedAt": "2026-11-20T15:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "completed view, nothing held: GET /sessions?view=completed's order, even where listedAt moved after Complete, and an archived-only row",
+      "folders": [],
+      "foreignFolders": [],
+      "projects": [],
+      "sessions": [
+        { "id": "ka", "lifecycle": "completed", "completedAt": "2026-11-20T10:00:00.000Z", "listedAt": "2026-11-20T15:00:00.000Z" },
+        { "id": "kb", "lifecycle": "completed", "completedAt": "2026-11-20T11:00:00.000Z", "listedAt": "2026-11-20T11:00:00.000Z" },
+        { "id": "kc", "lifecycle": "completed", "archivedAt": "2026-11-20T12:00:00.000Z", "listedAt": "2026-11-20T08:00:00.000Z" },
+        { "id": "kd", "lifecycle": "completed", "pinnedAt": "2026-11-20T05:00:00.000Z", "completedAt": "2026-11-20T09:00:00.000Z", "listedAt": "2026-11-20T09:00:00.000Z", "createdAt": "2026-11-18T00:00:00.000Z" },
+        { "id": "kf", "lifecycle": "completed", "completedAt": "2026-11-20T09:00:00.000Z", "listedAt": "2026-11-20T07:00:00.000Z" },
+        { "id": "ko", "listedAt": "2026-11-20T16:00:00.000Z" }
+      ],
+      "reads": [
+        {
+          "view": "completed",
+          "folderId": null,
+          "expected": {
+            "folders": [],
+            "entries": [
+              { "kind": "session", "id": "kc" },
+              { "kind": "session", "id": "kb" },
+              { "kind": "session", "id": "ka" },
+              { "kind": "session", "id": "kf" },
+              { "kind": "session", "id": "kd" }
             ]
           }
         }

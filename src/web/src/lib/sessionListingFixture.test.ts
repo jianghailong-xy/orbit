@@ -20,6 +20,8 @@ interface FixtureSession {
   listedAt?: string;
   createdAt?: string;
   lastTurnAt?: string;
+  completedAt?: string;
+  archivedAt?: string;
 }
 interface Read {
   view: string;
@@ -36,7 +38,7 @@ interface Case {
   reads: Read[];
 }
 
-type Row = SessionProjectSession & { activity?: string };
+type Row = SessionProjectSession & { activity?: string; completedAt?: string | null; archivedAt?: string | null };
 
 const row = (s: FixtureSession): Row => ({
   id: s.id,
@@ -51,14 +53,18 @@ const row = (s: FixtureSession): Row => ({
     ? { projectId: s.project, projectTitle: s.project, projectStatus: 'IN_PROGRESS', role: s.role ?? 'TASK' } as Row['projectMembership']
     : null,
   activity: s.activity,
+  completedAt: s.lifecycle === 'completed' && !s.archivedAt ? (s.completedAt ?? s.listedAt ?? null) : null,
+  archivedAt: s.archivedAt ?? null,
 });
 
 const at = (iso: string | null | undefined) => Date.parse(iso ?? '');
 
-/** The order GET /sessions hands the list in: Pinned first (Open), listedAt, then createdAt, descending; then id. */
+/** The order GET /sessions hands the list in, then id: Open, Pinned first, then listedAt and createdAt, descending;
+ *  Completed, COALESCE(completedAt, archivedAt) and createdAt, descending, with no Pinned. */
 const serverOrder = (view: string) => (a: Row, b: Row) =>
-  (view === 'open' ? Number(!!b.pinnedAt) - Number(!!a.pinnedAt) : 0)
-  || at(b.listedAt ?? b.createdAt) - at(a.listedAt ?? a.createdAt)
+  (view === 'open'
+    ? Number(!!b.pinnedAt) - Number(!!a.pinnedAt) || at(b.listedAt ?? b.createdAt) - at(a.listedAt ?? a.createdAt)
+    : at(b.completedAt ?? b.archivedAt) - at(a.completedAt ?? a.archivedAt))
   || at(b.createdAt) - at(a.createdAt)
   || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 

@@ -42,6 +42,7 @@ BigInt.prototype.toJSON = function () { return this.toString(); };
 interface FixtureSession {
   id: string; workspace?: string; lifecycle?: string; folder?: string; project?: string; role?: string;
   activity?: string; pinnedAt?: string; listedAt?: string; createdAt?: string; lastTurnAt?: string;
+  completedAt?: string; archivedAt?: string;
 }
 interface ExpectedFolder { folderId: string; rowCount: number; needsYou: number; running: boolean; jobs: boolean }
 interface Read {
@@ -181,7 +182,7 @@ async function seed(c: Case): Promise<Seeded> {
       : null;
     const completed = s.lifecycle === 'completed';
     const state: Partial<Prisma.SessionUncheckedCreateInput> =
-      completed ? { status: 'SUCCEEDED', finishedAt: new Date(), completedAt: new Date() }
+      completed ? { status: 'SUCCEEDED', finishedAt: new Date(), ...(s.archivedAt ? { archivedAt: new Date() } : { completedAt: new Date() }) }
         : s.activity === 'needsYou' ? { status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED' }
           : s.activity === 'running' ? { status: 'RUNNING' }
             : s.activity === 'jobs' ? { status: 'AWAITING_INPUT', runningBgJobs: ['bgj_listing'], runningBgJobActivity: {} }
@@ -198,11 +199,23 @@ async function seed(c: Case): Promise<Seeded> {
     if (project && s.role === 'COORDINATOR') {
       await h.db.project.update({ where: { id: project }, data: { coordinatorSessionId: id } });
     }
-    // The clocks last: a settled status stamps listed_at (migration 1490), and the fixture names it.
+    // The clocks last: a settled status or a first completed_at stamps listed_at (migration 1490), and the
+    // fixture names it. completed_at is already set here, so moving it does not stamp it again.
+    // An archived-only row is a legacy one: since migration 0076 session_completed_at_compat mirrors each column
+    // into the other, so it is written with that trigger off, inside one transaction nobody else sees it off in.
+    const legacy = completed && !!s.archivedAt;
+    await h.sql.query('BEGIN');
+    if (legacy) await h.sql.query('ALTER TABLE session DISABLE TRIGGER session_completed_at_compat');
     await h.sql.query(
-      `UPDATE session SET listed_at = $2, created_at = $3, last_turn_at = $4, pinned_at = $5 WHERE id = $1`,
-      [id, s.listedAt ?? null, s.createdAt ?? FIXTURE.defaultCreatedAt, s.lastTurnAt ?? null, s.pinnedAt ?? null],
+      `UPDATE session SET listed_at = $2, created_at = $3, last_turn_at = $4, pinned_at = $5,
+              completed_at = $6, archived_at = $7 WHERE id = $1`,
+      [
+        id, s.listedAt ?? null, s.createdAt ?? FIXTURE.defaultCreatedAt, s.lastTurnAt ?? null, s.pinnedAt ?? null,
+        completed && !legacy ? (s.completedAt ?? s.listedAt) : null, legacy ? s.archivedAt : null,
+      ],
     );
+    if (legacy) await h.sql.query('ALTER TABLE session ENABLE TRIGGER session_completed_at_compat');
+    await h.sql.query('COMMIT');
   }
   return { h, ownerId, bearer, here: workspaces.here, ids, names: new Map([...ids].map(([name, id]) => [id, name])) };
 }
@@ -327,4 +340,23 @@ test('a malformed read is refused before anything is read', { skip }, async () =
   const stranger = await seed(FIXTURE.cases[1]);
   const theirs = await read(stranger, { workspaceId });
   assert.deepEqual(theirs, { folders: [], entries: [], next: null });
+});
+
+test('a cursor from before the Completed order switched starts again from the first page, never a mixed page', { skip }, async () => {
+  const c = FIXTURE.cases.find((each) => each.reads.some((r) => r.view === 'completed') && each.projects.length === 0)!;
+  const s = await seed(c);
+  const query = { workspaceId: uuidToBase62(s.here), view: 'completed' };
+  const first = await read(s, { ...query, limit: '2' });
+  assert.deepEqual(named(s, first).entries, c.reads[0].expected.entries.slice(0, 2), 'nothing held: the Completed order');
+  assert.ok(first.next?.startsWith('c.'), `a cursor of the Completed order: ${first.next}`);
+
+  // One of them becomes a project's coordinator: something is held now, and the list sorts by listedAt.
+  const project = await s.h.db.project.create({ data: { ownerId: s.ownerId, title: 'held after the first page' } });
+  await s.h.db.project.update({ where: { id: project.id }, data: { coordinatorSessionId: s.ids.get('kb')! } });
+  s.names.set(project.id, 'held');
+  const whole = named(s, await read(s, query)).entries;
+  assert.equal(whole[0].id, 'ka', 'now by listedAt: ka was listed last');
+  const second = await read(s, { ...query, limit: '2', after: first.next! });
+  assert.deepEqual(named(s, second).entries, whole.slice(0, 2), 'the old cursor reads the new order from the top');
+  assert.ok(second.next?.startsWith('p.'));
 });

@@ -5009,6 +5009,7 @@ export class SessionsService {
       this.prisma.$queryRaw<ListingSession[]>(Prisma.sql`
         SELECT s.id, s.folder_id AS "folderId", s.pinned_at AS "pinnedAt", s.listed_at AS "listedAt",
                s.created_at AS "createdAt", s.last_turn_at AS "lastTurnAt",
+               COALESCE(s.completed_at, s.archived_at) AS "completedAt",
                (${sessionProjectMembershipSql('s')} ->> 'projectId') AS "projectId"
           FROM session s
          WHERE s.owner_id = ${ownerId}::uuid
@@ -5060,7 +5061,7 @@ export class SessionsService {
         jobs: new Set(activity.jobs.flatMap((session) => session.stalled ? [] : [session.id])),
       },
     });
-    const { page, next } = listingPage(built.entries, opts.after, opts.limit);
+    const { page, next } = listingPage(built.entries, opts.after, opts.limit, built.order);
     const shown = page.flatMap((entry) => entry.kind === 'session' ? [entry.id] : entry.coordinatorId ? [entry.coordinatorId] : []);
     const rowConfined = opts.confinedTo
       ? Prisma.sql`AND s.workspace_id = ANY(${[...opts.confinedTo]}::uuid[])`
