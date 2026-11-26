@@ -1335,12 +1335,13 @@ test('§7.2 A2: a process that died after retiring but before re-queueing, or a 
   await db.session.update({ where: { id: run.sessionId! }, data: { turnState: null, finishedAt: new Date(), cancelRequestedAt: clockNow } });
   assert.equal(await runs.reconcileRun(run.id), 'RETRY');
   // A session of the run left alive (a create that committed after its caller gave up) is retired before a new one.
+  // Queued, as every create writes it.
   const stray = randomUUID();
   await db.session.create({
     data: {
       id: stray, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: 'stray', prompt: 'p',
       provider: 'claude', engine: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER,
-      runSource: SessionRunSource.SCHEDULE, scheduleRunId: run.id,
+      runSource: SessionRunSource.SCHEDULE, scheduleRunId: run.id, turnState: 'QUEUED',
     },
   });
   advance(MINUTE);

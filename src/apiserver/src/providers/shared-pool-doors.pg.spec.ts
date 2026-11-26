@@ -59,8 +59,7 @@ import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsController } from './shared-pools.controller';
 import { SharedPoolsService } from './shared-pools.service';
-import { turnStateOfWord } from '../sessions/session-turn-state';
-import { WORD_SELECT } from '../test-support/session-word';
+import { fixtureFacts, withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The service encrypts the keys it is handed; any secret does in a throwaway database.
@@ -127,10 +126,7 @@ async function sessionOn(
     data: {
       title: 'shared pool doors',
       prompt: 'hello',
-      turnState: turnStateOfWord(status),
-      ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
-        ? { finishedAt: new Date()}
-        : {}),
+      ...fixtureFacts({ status }),
       ownerId: owner.id,
       creatorId: owner.id,
       workspaceId,
@@ -265,8 +261,8 @@ suite('a shared pool, door by door: every cell of §2.5, on real PostgreSQL', { 
   const roleOf = async (who: Person) =>
     (await db.providerPoolPerson.findUnique({ where: { poolId_userId: { poolId: pool.id, userId: who.id } } }))?.role ?? null;
   const keysOf = (who: Person) => db.poolApiKey.findMany({ where: { poolId: pool.id, contributorId: who.id }, select: { id: true } });
-  const recorded = (sessionId: string) =>
-    db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { provider: true, ...WORD_SELECT } });
+  const recorded = async (sessionId: string) =>
+    withWord(await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { provider: true, ...WORD_SELECT } }));
 
   await t.test('the pool as made: Ann its creator and an admin, Adam an admin, Mia and Max members, Otto not in it', async () => {
     assert.deepEqual(

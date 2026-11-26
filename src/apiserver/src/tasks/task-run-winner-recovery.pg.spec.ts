@@ -30,6 +30,7 @@ import { taskRunDesiredSessionId, taskRunRequestKey, taskRunResumeTurnId } from 
 import { TASK_RUN_ACTION } from './task-run-receipt';
 import { turnStateOfWord } from '../sessions/session-turn-state';
 import { wordOf, WORD_SELECT } from '../test-support/session-word';
+import { fixtureFacts } from '../test-support/session-word';
 
 /**
  * H2F — a legacy run request is a COMMAND WITH A RECEIPT, on a real PostgreSQL, through the public
@@ -165,10 +166,7 @@ async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus) {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.update({
       where: { id: sessionId },
-      data: {
-        turnState: turnStateOfWord(status),
-        finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
-      },
+      data: { finishedAt: null, ...fixtureFacts({ status }) },
     });
   });
 }
@@ -768,7 +766,7 @@ test('the duplicate shapes the unit tests construct are the ones this server pro
       const row = (id: string, status: RunStatus) => ({
         id, ownerId: target.ownerId, creatorId: target.ownerId, taskId: target.taskId,
         workspaceId: target.agentId, assignedRunnerId: target.runnerId, title: 's', prompt: 'p',
-        provider: 'claude', status, dispatchOrigin: SessionDispatchOrigin.USER,
+        provider: 'claude', turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
       });

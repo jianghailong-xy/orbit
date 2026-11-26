@@ -159,7 +159,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     // A capability value without its reported-at snapshot is not a declaration.
     await db.runner.update({ where: { id: f.runner.id }, data: { capabilities: ['provider:dsh'], capabilitiesReportedAt: null } });
     assert.equal(await f.claim(CURRENT), null);
-    assert.equal(await rawUpdate(id, "status = 'RUNNING'", true), 0);
+    assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", true), 0);
     assert.ok(!(await f.reclaim(CURRENT)).sessions.some((s) => s.sessionId === id));
     await f.beat(CURRENT);
     assert.equal((await f.claim(CURRENT))?.sessionId, id);
@@ -182,12 +182,12 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     const configured = await f.provider();
     for (const [slug, builtin] of [['dsh', true], [configured.slug, false]] as const) {
       const id = await f.session(slug, builtin);
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'"), 0);
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'", false), 0);
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'"), 0);
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", false), 0);
       await f.beat(LEGACY);
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'", true), 0, 'a GUC cannot replace the heartbeat');
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", true), 0, 'a GUC cannot replace the heartbeat');
       await f.beat(CURRENT);
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'", true), 1);
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", true), 1);
       const leaseOwner = randomUUID();
       const generation = randomUUID();
       assert.equal(await rawUpdate(id, `inbox_lease_owner = '${leaseOwner}'::uuid`), 0, 'legacy reclaim takeover');
@@ -198,17 +198,17 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
       assert.equal(await rawUpdate(id, `inbox_lease_owner = '${leaseOwner}'::uuid`, true), 1);
       assert.equal(await rawUpdate(id, `inbox_lease_generation = '${generation}'::uuid`, true), 1);
       assert.equal(await rawUpdate(id, 'inbox_lease_owner = NULL, inbox_lease_generation = NULL'), 1, 'release stays available');
-      assert.equal(await rawUpdate(id, "status = 'CANCELLED', finished_at = now()"), 1);
+      assert.equal(await rawUpdate(id, "turn_state = NULL, finished_at = now()"), 1);
       const handoff = newTerminalResumeHandoffOwner();
-      assert.equal(await rawUpdate(id, `status = 'PENDING', finished_at = NULL, inbox_lease_owner = '${handoff}'::uuid`), 1, 'server terminal revive only reserves a handoff marker');
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'"), 0, 'the handoff marker cannot bypass the actual claim gate');
+      assert.equal(await rawUpdate(id, `turn_state = 'QUEUED', finished_at = NULL, inbox_lease_owner = '${handoff}'::uuid`), 1, 'server terminal revive only reserves a handoff marker');
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'"), 0, 'the handoff marker cannot bypass the actual claim gate');
       assert.equal(await rawUpdate(id, `inbox_lease_owner = '${leaseOwner}'::uuid`), 0, 'the handoff marker cannot bypass runner takeover');
-      await rawUpdate(id, "status = 'CANCELLED', finished_at = now(), inbox_lease_owner = NULL");
+      await rawUpdate(id, "turn_state = NULL, finished_at = now(), inbox_lease_owner = NULL");
     }
     // The GUC is transaction-local: the prior authorized transaction cannot authorize the next one.
-    assert.equal(await rawUpdate(await f.session(), "status = 'RUNNING'"), 0);
+    assert.equal(await rawUpdate(await f.session(), "turn_state = 'IN_FLIGHT'"), 0);
     const disabled = await f.session((await f.provider('dsh', false)).slug, false);
-    assert.equal(await rawUpdate(disabled, "status = 'RUNNING'", true), 0, 'a capable raw acquisition cannot use a disabled Harness provider');
+    assert.equal(await rawUpdate(disabled, "turn_state = 'IN_FLIGHT'", true), 0, 'a capable raw acquisition cannot use a disabled Harness provider');
 
     const contested = await f.session();
     const heartbeat = new Client({ connectionString: URL });
@@ -217,11 +217,11 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
       await verifyCoordinatorPgIdentity(heartbeat);
       await heartbeat.query('BEGIN');
       await heartbeat.query('UPDATE "runner" SET capabilities = ARRAY[]::text[] WHERE id = $1', [f.runner.id]);
-      assert.equal(await rawUpdate(contested, "status = 'RUNNING'", true), 0, 'a concurrent heartbeat withdrawal makes acquisition skip without deadlock');
+      assert.equal(await rawUpdate(contested, "turn_state = 'IN_FLIGHT'", true), 0, 'a concurrent heartbeat withdrawal makes acquisition skip without deadlock');
       await heartbeat.query('COMMIT');
-      assert.equal(await rawUpdate(contested, "status = 'RUNNING'", true), 0, 'the committed withdrawal remains authoritative');
+      assert.equal(await rawUpdate(contested, "turn_state = 'IN_FLIGHT'", true), 0, 'the committed withdrawal remains authoritative');
       await f.beat(CURRENT);
-      assert.equal(await rawUpdate(contested, "status = 'RUNNING'", true), 1);
+      assert.equal(await rawUpdate(contested, "turn_state = 'IN_FLIGHT'", true), 1);
     } finally {
       await heartbeat.query('ROLLBACK');
       await heartbeat.end();
@@ -299,7 +299,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     await db.modelProvider.update({ where: { slug: 'dsh' }, data: { runtime: 'dsh' } });
     const borrowed = await f.session('dsh', false);
     assert.equal(await f.claim(LEGACY), null, 'a colliding slug borrowing Harness still needs the capability');
-    assert.equal(await rawUpdate(borrowed, "status = 'RUNNING'"), 0);
+    assert.equal(await rawUpdate(borrowed, "turn_state = 'IN_FLIGHT'"), 0);
     await f.beat(CURRENT);
     assert.equal((await f.claim(CURRENT))?.provider, AgentProvider.DSH);
     assert.equal((await db.modelProvider.findUniqueOrThrow({ where: { slug: 'dsh' } })).slug, 'dsh');
@@ -314,7 +314,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     assert.ok((await f.reclaim(withoutAntigravity)).sessions.some((s) => s.sessionId === native && s.provider === AgentProvider.DSH));
     const legacyAntigravity = await f.session('dsh', false);
     assert.equal(await f.claim(withoutAntigravity), null, 'the configured colliding identity still requires Antigravity');
-    assert.equal(await rawUpdate(legacyAntigravity, "status = 'RUNNING'", true), 0, 'the Antigravity database barrier still applies to the configured identity');
+    assert.equal(await rawUpdate(legacyAntigravity, "turn_state = 'IN_FLIGHT'", true), 0, 'the Antigravity database barrier still applies to the configured identity');
     assert.ok(!(await f.reclaim(withoutAntigravity)).sessions.some((s) => s.sessionId === legacyAntigravity));
     assert.equal((await f.claim(LEGACY))?.provider, AgentProvider.ANTIGRAVITY);
     assert.ok((await f.reclaim(LEGACY)).sessions.some((s) => s.sessionId === legacyAntigravity && s.provider === AgentProvider.ANTIGRAVITY));

@@ -39,7 +39,6 @@ import {
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
-import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -71,7 +70,6 @@ type CoordinatorState = 'live' | 'down' | 'retry' | 'ended' | 'cancelled';
 function coordinatorColumns(state: CoordinatorState) {
   const failed = state === 'down' || state === 'retry';
   return {
-    status: failed ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
     finishedAt: failed ? new Date() : null,
     // A failure release carries FAILED on its turn (removal step R2), which is what reads it as down since R7.
     lastTurnOutcome: failed ? 'FAILED' : null,

@@ -35,7 +35,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
-import { WORD_SELECT } from '../test-support/session-word';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts the members' keys and the claim decrypts them; both only need the same secret.
@@ -247,7 +247,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
     assert.equal(await queue.claimSessionForRunner({ id: stranger.runnerId }), null);
     assert.deepEqual(await recorded(theirs), { poolMemberProviderId: null, poolSwitchNotice: null });
     assert.deepEqual(
-      await db.session.findUniqueOrThrow({ where: { id: theirs }, select: { ...WORD_SELECT, error: true } }),
+      withWord(await db.session.findUniqueOrThrow({ where: { id: theirs }, select: { ...WORD_SELECT, error: true } })),
       { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR },
     );
   });
@@ -296,7 +296,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
     await nextTurn(sessionId);
     assert.equal(await queue.claimSessionForRunner({ id: me.runnerId }), null);
     assert.deepEqual(
-      await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ...WORD_SELECT, error: true } }),
+      withWord(await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ...WORD_SELECT, error: true } })),
       { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR },
     );
   });

@@ -22,6 +22,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -151,6 +152,10 @@ function say(api: RunnerApiController, f: Fixture, seq: number, type: RunEventTy
  * This spec once split the file into statements itself, while prisma sends a file with a CREATE PROCEDURE whole, in
  * which the old procedure's per-batch COMMIT is refused (production's deploy of af55a2fb38 failed with 2D000).
  */
+/** Migration 1671 (deploy D3) and its down script, which leaves the database deploy 2 ran on: for case (8). */
+const D3_DOWN = readFileSync(join(__dirname, '..', '..', '..', '..', 'scripts', 'session-status-from-facts-down.sql'), 'utf8');
+const D3_UP = readFileSync(join(__dirname, '..', '..', 'prisma', 'migrations', '1671_session_status_from_facts', 'migration.sql'), 'utf8');
+
 async function deployAgain(sql: Client, url: string, migration: string): Promise<void> {
   await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = $1`, [migration]);
   try {
@@ -312,7 +317,11 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     assert.equal(session.last_turn_outcome, 'ANSWERED');
   });
 
-  await t.test('(8) migration 1202 backfills last_turn_outcome per status as design §4.3 says', async () => {
+  await t.test('(8) migration 1202 backfills last_turn_outcome per status as design §4.3 says', async (st) => {
+    // 1202 is a deploy-1 backfill that reads the stored word. Since deploy D3 that word follows the facts (migration
+    // 1671), so the rehearsal runs on the database deploy 2 left, 1671 rolled back by its down script, with the words
+    // written as deploy 2 wrote them; 1671 is put back after. The rows are made first, as today's writers make them.
+    st.after(() => sql.query(D3_UP));
     // One session per row of the table, the outcome cleared as on a row written before 1201.
     const cases: Array<{ status: RunStatus; endReason: string | null; expected: string | null }> = [
       { status: RunStatus.PENDING, endReason: null, expected: null },
@@ -337,6 +346,10 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     const written = await fixture(db, 'backfill-written', 'message', { status: RunStatus.FAILED });
     await sql.query(`UPDATE "session" SET last_turn_outcome = 'CANCELLED' WHERE id = $1::uuid`, [written.sessionId]);
     const ids = made.map((m) => m.id);
+    await sql.query(D3_DOWN);
+    for (const [i, c] of cases.entries()) {
+      await sql.query(`UPDATE "session" SET status = $2::run_status WHERE id = ANY($1::uuid[])`, [ids.slice(3 * i, 3 * i + 3), c.status]);
+    }
     await sql.query(`UPDATE "session" SET last_turn_outcome = NULL WHERE id = ANY($1::uuid[])`, [ids]);
 
     await deployAgain(sql, url, '1202_turn_outcome_backfill');

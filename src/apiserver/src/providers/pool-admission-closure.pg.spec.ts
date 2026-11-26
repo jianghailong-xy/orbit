@@ -46,7 +46,6 @@ import { RunStatus } from '@orbit/shared';
 import { RunEventType, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
-import { isReleasedStatus } from '../common/session-release';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PublicIdExceptionFilter } from '../common/public-id.filter';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
@@ -75,8 +74,7 @@ import { CodexLoginService } from './codex-login.service';
 import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProvidersService } from './providers.service';
 import '../test-support/dequeue-under-lease';
-import { turnStateOfWord } from '../sessions/session-turn-state';
-import { WORD_SELECT, wordOf } from '../test-support/session-word';
+import { fixtureFacts, withWord, WORD_SELECT } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -218,8 +216,7 @@ async function sessionOn(
     data: {
       title: 'pool closure',
       prompt: 'hello',
-      turnState: turnStateOfWord(status),
-      ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
+      ...fixtureFacts({ status }),
       ownerId,
       creatorId: ownerId,
       workspaceId: at.workspaceId,
@@ -422,11 +419,11 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
       .map((event) => (event.payload as { notice?: unknown }).notice)
       .filter((notice): notice is string => typeof notice === 'string');
   const token = (env: Record<string, string> | undefined) => env?.ANTHROPIC_AUTH_TOKEN;
-  const recorded = (sessionId: string) =>
-    db.session.findUniqueOrThrow({
+  const recorded = async (sessionId: string) =>
+    withWord(await db.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: { provider: true, ...WORD_SELECT, poolMemberProviderId: true, poolSwitchNotice: true },
-    });
+    }));
   const memberIdsOf = async (poolId: string) =>
     (await db.providerPoolMember.findMany({ where: { poolId }, select: { providerId: true } }))
       .map((member) => member.providerId)
@@ -640,7 +637,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
     await sessions.resume(alice, over, { clientTurnId: randomUUID(), content: 'again', provider: spent.slug });
     const revived = await recorded(over);
     assert.equal(revived.provider, spent.slug);
-    assert.equal(wordOf(revived), RunStatus.PENDING);
+    assert.equal(revived.status, RunStatus.PENDING);
   });
 
   await t.test('(2) a task is not pinned to a pool that can run nothing, created or edited; it is pinned to a spent pool', async () => {

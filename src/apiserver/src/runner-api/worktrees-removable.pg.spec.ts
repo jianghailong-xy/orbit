@@ -21,6 +21,7 @@ import { test } from 'node:test';
 
 import { PrismaClient, RunnerStatus } from '@prisma/client';
 import { RunStatus } from '@orbit/shared';
+import { fixtureFacts } from '../test-support/session-word';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -88,10 +89,7 @@ test('worktrees-removable: what is kept, and what of that is resumable', {
           numTurns: 1,
           runtimeSessionId: randomUUID(),
           branch: `orbit/${title.replace(/\W+/g, '-')}-${RUN}`,
-          ...columns,
-          ...(columns.status === RunStatus.SUCCEEDED || columns.status === RunStatus.FAILED || columns.status === RunStatus.CANCELLED
-            ? { finishedAt: new Date()}
-            : {}),
+          ...fixtureFacts(columns),
         } as never,
       })
     ).id;

@@ -48,6 +48,7 @@ import {
   TaskCompletionCriterion,
 } from '@prisma/client';
 import { RunStatus } from '@orbit/shared';
+import { fixtureFacts } from '../test-support/session-word';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -750,7 +751,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
       const endToken = newToken();
       const id = await conversation(`Ended: ${end.label}`, { shareToken: endToken });
       await event(id, 1, RunEventType.USER, { text: 'hello' });
-      await db.session.update({ where: { id }, data: { ...end.row, finishedAt: new Date(), error: secret } });
+      await db.session.update({ where: { id }, data: { ...fixtureFacts(end.row), finishedAt: new Date(), error: secret } });
       const root = await visit(`${encodeURIComponent(endToken)}`);
       assert.equal(root.status, 200, root.body.toString());
       assert.deepEqual(

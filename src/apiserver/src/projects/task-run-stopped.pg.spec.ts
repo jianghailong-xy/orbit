@@ -63,7 +63,7 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { RUN_STOPPED_WAKE_COORDINATOR_DISABLED, TaskRunStoppedProducer } from './task-run-stopped.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
-import { wordOf } from '../test-support/session-word';
+import { fixtureFacts, type SessionFixture, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -167,7 +167,7 @@ async function world(
   });
   await db.workspace.create({ data: { id: workspaceId, ownerId, runnerId, name: `${label}-agent`, enabled: true } });
 
-  async function conversation(title: string, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
+  async function conversation(title: string, data: SessionFixture = {}): Promise<string> {
     const id = randomUUID();
     await db.session.create({
       data: {
@@ -175,7 +175,7 @@ async function world(
         title, prompt: title, provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
-        ...data,
+        ...fixtureFacts(data),
       },
     });
     return id;

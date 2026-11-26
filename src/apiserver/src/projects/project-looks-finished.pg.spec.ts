@@ -105,6 +105,7 @@ import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
 import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { fixtureFacts } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -836,7 +837,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
       { status: RunStatus.PENDING, retryAt: null },
       { status: RunStatus.RUNNING, retryAt: null },
     ]) {
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: fixtureFacts(data) });
       assert.equal((await due()).has(w.projectId), false, `${data.status} escalated an unread turn`);
       assert.deepEqual(await signalsFor(stack, w), []);
     }
@@ -867,7 +868,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
       { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date(), endReason: 'USER_ENDED', deletedAt: null },
       { status: RunStatus.AWAITING_INPUT, finishedAt: null, endReason: null, deletedAt: new Date() },
     ]) {
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: fixtureFacts(data) });
       assert.equal((await due()).has(w.projectId), true, 'a truly unavailable coordinator hands off immediately');
     }
     await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: null, endReason: null, deletedAt: null } });

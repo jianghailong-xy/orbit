@@ -93,6 +93,8 @@ async function everyShape(
         providerBuiltin: true, workspaceId: workspace.id, assignedRunnerId: ids.runnerId, runtimeSessionId: randomUUID(),
         startedAt: new Date(Date.now() - 60 * 60_000), runClaimedAt: new Date(Date.now() - 60 * 60_000),
         ...(held ? {} : { finishedAt: new Date(), lastTurnOutcome: word === RunStatus.FAILED ? 'FAILED' : 'ANSWERED' }),
+        // A SUCCEEDED run's writers ask the task_done end (plan §3.1 P4); released without it, it reads CANCELLED.
+        ...(word === RunStatus.SUCCEEDED ? { endReason: 'task_done' } : {}),
         ...options.data?.(word),
       },
     });
@@ -185,8 +187,9 @@ test('the reaper and realtime read the facts, and select what the stored word se
       const queued = row.word === RunStatus.PENDING;
       assert.deepEqual(
         [wordOf(now), now.turnState, now.finishedAt != null, now.lastTurnOutcome, now.error, now.endReason, now.retryAt],
+        // An end asked and not honoured reads CANCELLED, which since deploy D3 is also the stored word (plan §3.4 C1).
         [
-          queued ? RunStatus.CANCELLED : RunStatus.FAILED, null, true,
+          RunStatus.CANCELLED, null, true,
           row.word === RunStatus.RUNNING ? 'CANCELLED' : null,
           queued ? null : 'cancel not honored', SessionEndReason.CANCELLED, null,
         ],
@@ -197,13 +200,13 @@ test('the reaper and realtime read the facts, and select what the stored word se
 
   await t.test("the cancel grace's STATUS event carries the word the released row answers with", async () => {
     const held = grace.rows.filter((row) => row.held);
-    assert.equal(held.length, 8);
+    assert.equal(held.length, HELD_WORDS.length);
     const projected: Array<[string, string]> = [];
     for (const row of held) {
       const facts = await db.session.findUniqueOrThrow({ where: { id: row.id }, select: LEGACY_STATUS_SELECT });
       projected.push([row.title, legacySessionStatus(facts)]);
     }
-    // An end somebody asked for: every one reads CANCELLED, the unhonoured ones too, which are stored FAILED (C1).
+    // An end somebody asked for: every one reads CANCELLED, the unhonoured ones too, which deploy 2 stored FAILED (C1).
     assert.deepEqual(projected, held.map((row) => [row.title, RunStatus.CANCELLED]));
     assert.deepEqual(held.map((row) => [row.title, grace.published.get(row.id)?.status]), projected);
   });

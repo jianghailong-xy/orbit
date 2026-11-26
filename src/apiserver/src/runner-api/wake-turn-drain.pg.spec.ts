@@ -529,12 +529,13 @@ test('a wakeup filed onto a queued turn that its session\'s end drains is settle
       assert.equal(wordOf((await sessionRow(id))), RunStatus.CANCELLED);
       settled.push(['the owner\'s End of a queued session', (await oneShot(filed.id)).state]);
     }
-    // The runner finishes the run: SUCCEEDED.
+    // The runner finishes the run: SUCCEEDED with no end asked, which reads CANCELLED since deploy D3 (plan §3.4 C5).
     {
       const { id } = await working(m);
       const filed = await fileOneShot(m, id, 'finished');
       await runnerApi.finalize(m.runner as never, id, { status: RunStatus.SUCCEEDED, result: 'the archive is moved' } as never);
-      assert.equal(wordOf((await sessionRow(id))), RunStatus.SUCCEEDED, 'the runner\'s finalize did not end the run');
+      assert.ok((await sessionRow(id)).finishedAt, 'the runner\'s finalize did not end the run');
+      assert.equal(wordOf((await sessionRow(id))), RunStatus.CANCELLED, 'the runner\'s finalize did not end the run');
       settled.push(['the runner\'s finalize SUCCEEDED', (await oneShot(filed.id)).state]);
     }
 

@@ -103,6 +103,8 @@ async function everyShape(db: PrismaClient): Promise<{ ownerId: string; rows: Ro
         runningBgJobs: extra === 'job' ? ['bgj_t7'] : [],
         runningBgShells: extra === 'job' ? ['bgj_t7'] : [],
         ...(held ? {} : { finishedAt: new Date(), lastTurnOutcome: word === RunStatus.FAILED ? 'FAILED' : 'ANSWERED' }),
+        // A SUCCEEDED run's writers ask the task_done end (plan §3.1 P4); released without it, it reads CANCELLED.
+        ...(word === RunStatus.SUCCEEDED ? { endReason: 'task_done' } : {}),
       },
     });
     // A turn in flight and a message waiting, on every row: what the dispatch pause and the drain count read.
@@ -285,7 +287,7 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
              (SELECT count(*) FROM "session" s WHERE s."deleted_at" IS NULL AND s."status" = 'RUNNING'::"run_status")::int AS running`);
     const gauges = await readFleetGauges(db);
     assert.deepEqual(gauges.sessions, before);
-    assert.ok(gauges.sessions.queued >= 6 && gauges.sessions.running >= 6);
+    assert.ok(gauges.sessions.queued >= EXTRAS.length && gauges.sessions.running >= EXTRAS.length);
   });
 
   await t.test('the claim takes exactly the queued rows, and the slot gate counts the turns in flight', async () => {

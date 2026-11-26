@@ -333,7 +333,7 @@ test('a decided criteria proposal is answered back to the session that proposed 
     const f = await fixture(stack, owner, 'ended');
     const held = await proposeAsSession(stack, f);
     await sql.query(
-      `UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()), "completed_at" = now() WHERE "id" = $1::uuid`,
+      `UPDATE "session" SET "turn_state" = NULL, "end_reason" = 'task_done', "finished_at" = COALESCE("finished_at", now()), "completed_at" = now() WHERE "id" = $1::uuid`,
       [f.sessionId],
     );
 

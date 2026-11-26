@@ -55,8 +55,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
-import { turnStateOfWord } from '../sessions/session-turn-state';
-import { wordOf, WORD_SELECT } from '../test-support/session-word';
+import { fixtureFacts, wordOf, WORD_SELECT } from '../test-support/session-word';
 
 /**
  * AN AUTOMATIC PROJECT'S COORDINATOR DECIDES THE EVIDENCE; THE OWNER'S CARD IS THE FALLBACK.
@@ -232,10 +231,7 @@ async function conversation(
       title,
       prompt: title,
       provider: 'claude',
-      turnState: turnStateOfWord(options.status ?? RunStatus.AWAITING_INPUT),
-      ...(options.status === RunStatus.SUCCEEDED || options.status === RunStatus.FAILED
-        ? { finishedAt: new Date()}
-        : options.status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),
+      ...fixtureFacts({ status: options.status ?? RunStatus.AWAITING_INPUT }),
       dispatchOrigin: SessionDispatchOrigin.USER,
       ...(options.taskId === undefined ? { titleManagedByProject: true } : {}),
       ...(options.ended ? { completedAt: new Date() } : {}),

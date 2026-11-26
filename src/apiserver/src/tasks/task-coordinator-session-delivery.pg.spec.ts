@@ -55,6 +55,7 @@ import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
 import { turnStateOfWord } from '../sessions/session-turn-state';
 import { sessionWord } from '../test-support/session-word';
+import { SessionEndReason } from '@orbit/shared';
 
 /**
  * `DELIVERED`: the wake that reached the coordinator conversation this project already had.
@@ -270,7 +271,7 @@ async function fixture(
         prompt: `协调：${label}`,
         provider: 'claude',
         turnState: turnStateOfWord(wanted === 'PARKED' ? RunStatus.AWAITING_INPUT : RunStatus.SUCCEEDED),
-        ...(wanted === 'PARKED' ? {} : { finishedAt: new Date()}),
+        ...(wanted === 'PARKED' ? {} : { startedAt: new Date(), finishedAt: new Date(), endReason: SessionEndReason.TASK_DONE }),
         dispatchOrigin: SessionDispatchOrigin.USER,
         titleManagedByProject: true,
         ...(wanted === 'ENDED' ? { completedAt: new Date() } : {}),

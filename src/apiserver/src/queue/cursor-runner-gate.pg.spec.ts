@@ -188,7 +188,7 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
     // A capability without its reported-at snapshot is not a declaration.
     await db.runner.update({ where: { id: f.runner.id }, data: { capabilities: ['provider:cursor'], capabilitiesReportedAt: null } });
     assert.equal(await f.claim(CURRENT), null);
-    assert.equal(await rawUpdate(id, "status = 'RUNNING'", CURRENT_REPLICA), 0);
+    assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", CURRENT_REPLICA), 0);
     assert.ok(!(await f.reclaim(CURRENT)).sessions.some((s) => s.sessionId === id));
     await f.beat(CURRENT);
     assert.equal((await f.claim(CURRENT))?.sessionId, id);
@@ -210,13 +210,13 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
     for (const engine of [AgentProvider.CURSOR, null]) {
       const id = await f.session({ engine });
       // Before 0414 a replica reads no engine: a claim is skipped, and a lease write on a recorded one refused.
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'", BEFORE_0414), 0, 'a replica before 0414 claimed it');
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", BEFORE_0414), 0, 'a replica before 0414 claimed it');
       // After it, one that does not know Cursor CLI never declares it: skipped, a lease write too.
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'", BEFORE_0426), 0, 'a replica before 0426 claimed it');
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", BEFORE_0426), 0, 'a replica before 0426 claimed it');
       await f.beat(LEGACY);
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'", CURRENT_REPLICA), 0, 'a declaration cannot replace the heartbeat');
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", CURRENT_REPLICA), 0, 'a declaration cannot replace the heartbeat');
       await f.beat(CURRENT);
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'", CURRENT_REPLICA), 1);
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", CURRENT_REPLICA), 1);
       const leaseOwner = randomUUID();
       const generation = randomUUID();
       if (engine) {
@@ -234,14 +234,14 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
       assert.equal(await rawUpdate(id, `inbox_lease_generation = '${generation}'::uuid`, CURRENT_REPLICA), 1);
       // Letting go is never an acquisition: release, cancel and a server terminal revive stay open to all.
       assert.equal(await rawUpdate(id, 'inbox_lease_owner = NULL, inbox_lease_generation = NULL'), 1, 'release stays available');
-      assert.equal(await rawUpdate(id, "status = 'CANCELLED', finished_at = now()"), 1);
+      assert.equal(await rawUpdate(id, "turn_state = NULL, finished_at = now()"), 1);
       const handoff = newTerminalResumeHandoffOwner();
-      assert.equal(await rawUpdate(id, `status = 'PENDING', finished_at = NULL, inbox_lease_owner = '${handoff}'::uuid`), 1, 'a terminal revive only reserves a handoff marker');
-      assert.equal(await rawUpdate(id, "status = 'RUNNING'", BEFORE_0426), 0, 'the handoff marker cannot bypass the claim gate');
-      await rawUpdate(id, "status = 'CANCELLED', finished_at = now(), inbox_lease_owner = NULL");
+      assert.equal(await rawUpdate(id, `turn_state = 'QUEUED', finished_at = NULL, inbox_lease_owner = '${handoff}'::uuid`), 1, 'a terminal revive only reserves a handoff marker');
+      assert.equal(await rawUpdate(id, "turn_state = 'IN_FLIGHT'", BEFORE_0426), 0, 'the handoff marker cannot bypass the claim gate');
+      await rawUpdate(id, "turn_state = NULL, finished_at = now(), inbox_lease_owner = NULL");
     }
     // The declaration is transaction-local: the last authorized transaction cannot authorize the next.
-    assert.equal(await rawUpdate(await f.session(), "status = 'RUNNING'", BEFORE_0426), 0);
+    assert.equal(await rawUpdate(await f.session(), "turn_state = 'IN_FLIGHT'", BEFORE_0426), 0);
     // A heartbeat withdrawing the declaration while a claim runs makes it skip, without deadlock.
     const contested = await f.session();
     const heartbeat = new Client({ connectionString: URL });
@@ -250,11 +250,11 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
       await verifyCoordinatorPgIdentity(heartbeat);
       await heartbeat.query('BEGIN');
       await heartbeat.query('UPDATE "runner" SET capabilities = ARRAY[]::text[] WHERE id = $1', [f.runner.id]);
-      assert.equal(await rawUpdate(contested, "status = 'RUNNING'", CURRENT_REPLICA), 0);
+      assert.equal(await rawUpdate(contested, "turn_state = 'IN_FLIGHT'", CURRENT_REPLICA), 0);
       await heartbeat.query('COMMIT');
-      assert.equal(await rawUpdate(contested, "status = 'RUNNING'", CURRENT_REPLICA), 0, 'the committed withdrawal holds');
+      assert.equal(await rawUpdate(contested, "turn_state = 'IN_FLIGHT'", CURRENT_REPLICA), 0, 'the committed withdrawal holds');
       await f.beat(CURRENT);
-      assert.equal(await rawUpdate(contested, "status = 'RUNNING'", CURRENT_REPLICA), 1);
+      assert.equal(await rawUpdate(contested, "turn_state = 'IN_FLIGHT'", CURRENT_REPLICA), 1);
     } finally {
       await heartbeat.query('ROLLBACK');
       await heartbeat.end();
@@ -272,14 +272,14 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
       const job = await f.claim(LEGACY);
       assert.equal(job?.sessionId, id, `${engine} waited behind Cursor CLI`);
       assert.equal(job?.provider, engine);
-      assert.equal(await rawUpdate(id, "status = 'AWAITING_INPUT'"), 1);
+      assert.equal(await rawUpdate(id, "turn_state = NULL"), 1);
     }
     assert.equal(wordOf((await row(cursor))), RunStatus.PENDING);
     assert.equal((await row(cursor)).error, null, 'the queue never held it for another runtime');
     // The capability gates of the others are untouched: OpenCode still needs its own declaration.
     const opencode = await f.session({ provider: AgentProvider.OPENCODE, engine: AgentProvider.OPENCODE });
     await db.session.update({ where: { id: opencode }, data: { model: null } });
-    assert.equal(await rawUpdate(opencode, "status = 'RUNNING'", { 'orbit.claim_reads_session_engine': '1' }), 0);
+    assert.equal(await rawUpdate(opencode, "turn_state = 'IN_FLIGHT'", { 'orbit.claim_reads_session_engine': '1' }), 0);
     const withoutOpenCode = CURRENT.filter((engine) => engine !== AgentProvider.OPENCODE);
     await f.beat(CURRENT);
     const next = await f.claim(withoutOpenCode);

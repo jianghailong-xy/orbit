@@ -59,8 +59,7 @@ import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsService } from './shared-pools.service';
 import '../test-support/dequeue-under-lease';
-import { turnStateOfWord } from '../sessions/session-turn-state';
-import { WORD_SELECT, wordOf } from '../test-support/session-word';
+import { fixtureFacts, withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec stores keys through the providers' own door and the code under test decrypts them.
@@ -167,10 +166,7 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
       data: {
         title: 'shared provider',
         prompt: 'hello',
-        turnState: turnStateOfWord(status),
-        ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
-          ? { finishedAt: new Date()}
-          : {}),
+        ...fixtureFacts({ status }),
         ownerId,
         creatorId: ownerId,
         workspaceId: at.workspaceId,
@@ -186,8 +182,8 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     });
     return session.id;
   }
-  const recorded = (sessionId: string) =>
-    db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { provider: true, ...WORD_SELECT, error: true } });
+  const recorded = async (sessionId: string) =>
+    withWord(await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { provider: true, ...WORD_SELECT, error: true } }));
 
   /** Everything any runner of the member's was handed: (6) reads it whole at the end. */
   const handedToMember: unknown[] = [];
@@ -320,7 +316,7 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     const theirs = await sessionOn(admin.id, adminAt, 'claude', RunStatus.FAILED);
     await sessions.resume(admin.id, theirs, { clientTurnId: randomUUID(), content: 'again', provider: sharedClaude.slug });
     assert.deepEqual(
-      { provider: (await recorded(theirs)).provider, status: wordOf((await recorded(theirs))) },
+      { provider: (await recorded(theirs)).provider, status: (await recorded(theirs)).status },
       { provider: sharedClaude.slug, status: RunStatus.PENDING },
     );
   });

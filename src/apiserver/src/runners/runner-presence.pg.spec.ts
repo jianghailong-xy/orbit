@@ -78,7 +78,7 @@ import {
 } from './runner-presence';
 import '../test-support/daemon-routes-over-http';
 import { turnStateOfWord } from '../sessions/session-turn-state';
-import { WORD_SELECT, wordOf } from '../test-support/session-word';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -282,7 +282,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       });
       return id;
     };
-    const stateOf = (id: string) => db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, error: true } });
+    const stateOf = async (id: string) => withWord(await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, error: true } }));
     // Thirty runners heard five seconds ago: one silent runner among them is a machine, not an outage. They beat again
     // before each reading below that wants them heard, as runners beating every 30 s would: none of them misses a beat.
     const crowd: string[] = [];
@@ -340,7 +340,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       runnerId: signedOff[1], ownerId: fay.id, workspaceId,
     });
     await sweep(reaperOf());
-    assert.equal(wordOf((await stateOf(held))), RunStatus.RUNNING, 'nothing silent is reaped while a fifth of the cell is silent');
+    assert.equal((await stateOf(held)).status, RunStatus.RUNNING, 'nothing silent is reaped while a fifth of the cell is silent');
     assert.deepEqual(await stateOf(signedOffMeanwhile), { status: RunStatus.FAILED, error: 'runner offline' },
       'a runner that signed off said so itself: the hold is over silence, and does not keep its run');
 
@@ -350,7 +350,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     started.onModuleInit();
     try {
       await sweep(started);
-      assert.equal(wordOf((await stateOf(held))), RunStatus.RUNNING, 'nor inside the startup grace');
+      assert.equal((await stateOf(held)).status, RunStatus.RUNNING, 'nor inside the startup grace');
     } finally {
       started.onModuleDestroy();
     }
@@ -359,7 +359,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const kept = await db.runnerMassDisconnect.findMany();
     assert.equal(kept.length, 1, `the mass silence was kept: ${JSON.stringify(kept, (_, v) => (typeof v === 'bigint' ? String(v) : v))}`);
     await sweep(reaperOf());
-    assert.equal(wordOf((await stateOf(held))), RunStatus.RUNNING, 'the disconnection kept holds the runner silent in it');
+    assert.equal((await stateOf(held)).status, RunStatus.RUNNING, 'the disconnection kept holds the runner silent in it');
     // A runner that went quiet on its own a minute before the disconnection's first beat, and so outside it, past the line
     // now: no disconnection holds it.
     const alone = await runner(fay.id, 'alone', { lastHeartbeatAt: new Date(Date.now() - 10 * MINUTE) });
@@ -367,7 +367,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const ofAlone = await running('its runner went quiet on its own', { runnerId: alone.id, ownerId: fay.id, workspaceId });
     await sweep(reaperOf());
     assert.deepEqual(await stateOf(ofAlone), { status: RunStatus.FAILED, error: 'runner offline' });
-    assert.equal(wordOf((await stateOf(held))), RunStatus.RUNNING);
+    assert.equal((await stateOf(held)).status, RunStatus.RUNNING);
     // Silent past the window, the runner held has not come back from that disconnection: its run is reaped.
     const pastTheWindow = new Date(Date.now() - MASS_DISCONNECT_HOLD_MS - 30_000);
     await db.runner.update({ where: { id: silent.id }, data: { lastHeartbeatAt: pastTheWindow } });

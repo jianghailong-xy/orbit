@@ -32,7 +32,7 @@ import { canonicalRepoUrl } from './project-integration-line';
 import { queueLandingRetry } from './project-integration-job';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
-import { WORD_SELECT } from '../test-support/session-word';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 /**
  * A landing failure goes first to the task's own work session (`docs/project-integration-line-contract.md`
@@ -241,9 +241,9 @@ async function finalize(stack: Stack, w: World, t: Finished, label: string): Pro
 }
 
 async function endingOf(stack: Stack, sessionId: string) {
-  return stack.db.session.findUniqueOrThrow({
+  return withWord(await stack.db.session.findUniqueOrThrow({
     where: { id: sessionId }, select: { ...WORD_SELECT, finishedAt: true, endReason: true, cancelRequestedAt: true },
-  });
+  }), 'finishedAt', 'endReason');
 }
 
 /**

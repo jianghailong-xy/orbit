@@ -45,12 +45,16 @@ const URL = process.env.COORDINATOR_PG_URL;
 const SHA = (c: string) => c.repeat(40);
 
 /**
- * The historical repair runs here against the current schema, which also requires a release cause.
+ * The historical repair runs here against the current schema, which also requires a release cause, and since deploy
+ * D3 reads and writes the facts (migration 1671 stores the word from them): it releases with the failed turn that
+ * reads FAILED, and picks RUNNING rows by their turn state.
  */
 const REPAIR_SQL = readFileSync(
   path.resolve(__dirname, '../../prisma/migrations/0394_close_refused_running_shells/migration.sql'),
   'utf8',
-).replace(`SET "status" = 'FAILED',`, `SET "status" = 'FAILED',`);
+)
+  .replace(`SET "status" = 'FAILED',`, `SET "turn_state" = NULL, "last_turn_outcome" = 'FAILED',`)
+  .replaceAll(`s."status" = 'RUNNING'`, `s."finished_at" IS NULL AND s."turn_state" = 'IN_FLIGHT'`);
 
 interface World {
   ownerId: string;

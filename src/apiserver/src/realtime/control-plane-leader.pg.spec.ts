@@ -66,7 +66,7 @@ import {
   ReaperService,
   STARTUP_GRACE_MS,
 } from './reaper.service';
-import { WORD_SELECT, wordOf } from '../test-support/session-word';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -176,7 +176,7 @@ test('several apiserver processes over one database: one runs the singleton swee
     });
     return id;
   };
-  const stateOf = (id: string) => db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, error: true } });
+  const stateOf = async (id: string) => withWord(await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, error: true } }));
   const REAPED = { status: RunStatus.FAILED, error: 'runner offline' };
   /** A reaper over `presence`, sweeping through `client`, its log kept. Its timers are never started. */
   const reaperOf = (presence: RunnerPresenceService | undefined, leader?: ControlPlaneLeader, client: PrismaClient = db) => {
@@ -288,11 +288,11 @@ test('several apiserver processes over one database: one runs the singleton swee
     const a = reaperOf(presence, leaderA);
     await crowdBeats(6 * MINUTE);
     await a.reaper.tick();
-    assert.equal(wordOf((await stateOf(session))), RunStatus.RUNNING, 'held through the mass silence');
+    assert.equal((await stateOf(session)).status, RunStatus.RUNNING, 'held through the mass silence');
     assert.match(a.warns.join('\n'), /a mass disconnection: 31 of the 31 runners heard from lost contact/);
     await crowdBeats();
     await a.reaper.tick();
-    assert.equal(wordOf((await stateOf(session))), RunStatus.RUNNING, 'and held on as the silence lifts');
+    assert.equal((await stateOf(session)).status, RunStatus.RUNNING, 'and held on as the silence lifts');
     assert.match(a.warns.at(-1)!, /its runner lost contact in a mass disconnection \(31 of the 31 runners heard from/);
 
     // That process is killed. Another, up as a follower for an hour, takes the lock: inside its grace it reaps nothing.
@@ -306,14 +306,14 @@ test('several apiserver processes over one database: one runs the singleton swee
     sinceB = Date.now();
     await crowdBeats();
     await b.reaper.tick();
-    assert.equal(wordOf((await stateOf(session))), RunStatus.RUNNING, 'the reaper that took over reaps nothing at once');
+    assert.equal((await stateOf(session)).status, RunStatus.RUNNING, 'the reaper that took over reaps nothing at once');
     assert.match(b.warns.join('\n'), /the reaper started \d+s ago, inside its 180s startup grace/);
 
     // Past its grace, it reads the disconnection the other process kept, and holds the runner still out in it.
     sinceB = Date.now() - STARTUP_GRACE_MS - MINUTE;
     await crowdBeats();
     await b.reaper.tick();
-    assert.equal(wordOf((await stateOf(session))), RunStatus.RUNNING, 'the disconnection is the cell\'s, not the memory of the process that kept it');
+    assert.equal((await stateOf(session)).status, RunStatus.RUNNING, 'the disconnection is the cell\'s, not the memory of the process that kept it');
     assert.match(b.warns.at(-1)!, /its runner lost contact in a mass disconnection \(31 of the 31/);
 
     // A runner gone quiet on its own since — last heard five minutes and five seconds ago, past the reap line and
@@ -323,7 +323,7 @@ test('several apiserver processes over one database: one runs the singleton swee
     await crowdBeats();
     await b.reaper.tick();
     assert.deepEqual(await stateOf(ofAlone), REAPED);
-    assert.equal(wordOf((await stateOf(session))), RunStatus.RUNNING);
+    assert.equal((await stateOf(session)).status, RunStatus.RUNNING);
 
     // Silent past the window, the runner held has not come back from the disconnection: its run is reaped too.
     const pastTheWindow = new Date(Date.now() - MASS_DISCONNECT_HOLD_MS - 30 * SECOND);
@@ -368,7 +368,7 @@ test('several apiserver processes over one database: one runs the singleton swee
     const held = await running(silent, 'held while A cannot write the beats it takes');
     await crowdBeats();
     await b.sweep();
-    assert.equal(wordOf((await stateOf(held))), RunStatus.RUNNING, 'B does not read the silence A left as the runner gone');
+    assert.equal((await stateOf(held)).status, RunStatus.RUNNING, 'B does not read the silence A left as the runner gone');
     assert.match(b.warns.at(-1)!, new RegExp(`a heartbeat write failed on apiserver process ${leaderA.processId.slice(0, 8)} \\d+s ago, inside the ${RUNNER_REAP_AFTER_MS / 1000}s runner silence is read from`));
     assert.equal(presenceB.lastBeatNotRecordedAt(), null, 'B lost no beat of its own: the hold is A’s');
 
@@ -413,10 +413,10 @@ test('several apiserver processes over one database: one runs the singleton swee
     const connectedQuiet = await running(silent, 'held while A is quiet but connected');
     assert.equal(await connected(leaderA.processId), true);
     await sweepAfter(APISERVER_PROCESS_QUIET_AFTER_MS + 10 * SECOND);
-    assert.equal(wordOf((await stateOf(connectedQuiet))), RunStatus.RUNNING);
+    assert.equal((await stateOf(connectedQuiet)).status, RunStatus.RUNNING);
     assert.match(b.warns.at(-1)!, new RegExp(`apiserver process ${a8} has not reported for 40s though it is still connected`));
     await sweepAfter(APISERVER_PROCESS_QUIET_AFTER_MS + 5 * MINUTE);
-    assert.equal(wordOf((await stateOf(connectedQuiet))), RunStatus.RUNNING, 'for as long as it is connected, within the window');
+    assert.equal((await stateOf(connectedQuiet)).status, RunStatus.RUNNING, 'for as long as it is connected, within the window');
     await sweepAfter(APISERVER_PROCESS_QUIET_AFTER_MS + MASS_SILENCE_WINDOW_MS + MINUTE);
     assert.deepEqual(await stateOf(connectedQuiet), REAPED, 'not a latch: quiet past the window, it holds nothing');
 
@@ -426,7 +426,7 @@ test('several apiserver processes over one database: one runs the singleton swee
     await until('A is seen gone', async () => !(await connected(leaderA.processId)), 10 * SECOND);
     const gone = await running(silent, 'held while A has just gone quiet, connected or not');
     await sweepAfter(APISERVER_PROCESS_QUIET_AFTER_MS + 30 * SECOND);
-    assert.equal(wordOf((await stateOf(gone))), RunStatus.RUNNING);
+    assert.equal((await stateOf(gone)).status, RunStatus.RUNNING);
     assert.match(b.warns.at(-1)!, new RegExp(`apiserver process ${a8} has not reported for 60s, so the heartbeats`));
     await sweepAfter(APISERVER_PROCESS_QUIET_AFTER_MS + RUNNER_REAP_AFTER_MS + 30 * SECOND);
     assert.deepEqual(await stateOf(gone), REAPED);
@@ -471,7 +471,7 @@ test('several apiserver processes over one database: one runs the singleton swee
     const alone = reaperOf(presence, leader);
     await crowdBeats();
     await alone.reaper.tick();
-    assert.equal(wordOf((await stateOf(session))), RunStatus.RUNNING);
+    assert.equal((await stateOf(session)).status, RunStatus.RUNNING);
     assert.match(alone.warns.at(-1)!, /inside its 180s startup grace/);
     // A process gone just before this one started holds the reaping for at most QUIET_AFTER + REAP_AFTER past its
     // last report. With the reap line at five minutes that now outlasts the restart's grace, which is only ever a

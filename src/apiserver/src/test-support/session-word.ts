@@ -6,7 +6,7 @@
  * settlement: pass it, or read the word with sessionWord.
  */
 import type { Prisma } from '@prisma/client';
-import type { RunStatus } from '@orbit/shared';
+import { SessionEndReason, type RunStatus } from '@orbit/shared';
 
 import {
   LEGACY_STATUS_SELECT,
@@ -78,9 +78,11 @@ const RELEASED_WORDS: ReadonlySet<string> = new Set(['SUCCEEDED', 'FAILED', 'CAN
 
 /**
  * A session helper's `data` with its fixture word (`status`) turned into the facts a writer stores for it, and the
- * word taken out: the turn state of a held word; for a released one the release (`finishedAt`), and for FAILED with
- * no end asked the failed turn that records it (every failure writer does, design §12.1). What `data` names itself
- * wins. Data with no word is returned as it is.
+ * word taken out: the turn state of a held word; for a released one the release (`finishedAt`), for SUCCEEDED the
+ * `task_done` end its writers ask (a finalize with none reads CANCELLED, plan §3.4 C5) on a run that started (P4),
+ * and for FAILED with no end
+ * asked the failed turn that records it (every failure writer does, design §12.1). What `data` names itself wins.
+ * Data with no word is returned as it is.
  */
 export function fixtureFacts<T extends object>(data: T): Omit<T, 'status'> {
   const { status, ...rest } = data as T & { status?: unknown };
@@ -90,6 +92,8 @@ export function fixtureFacts<T extends object>(data: T): Omit<T, 'status'> {
   return {
     turnState: turnStateOfWord(word),
     ...(RELEASED_WORDS.has(word) && named.finishedAt === undefined ? { finishedAt: new Date() } : {}),
+    ...(word === 'SUCCEEDED' && named.endReason === undefined ? { endReason: SessionEndReason.TASK_DONE } : {}),
+    ...(word === 'SUCCEEDED' && named.startedAt === undefined ? { startedAt: new Date() } : {}),
     ...(word === 'FAILED' && named.lastTurnOutcome === undefined && !named.endReason ? { lastTurnOutcome: 'FAILED' } : {}),
     ...rest,
   } as unknown as Omit<T, 'status'>;

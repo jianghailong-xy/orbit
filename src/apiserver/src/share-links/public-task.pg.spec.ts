@@ -43,7 +43,7 @@ import {
   TaskStatus,
 } from '@prisma/client';
 import { RunStatus } from '@orbit/shared';
-import { isReleasedStatus } from '../common/session-release';
+import { fixtureFacts } from '../test-support/session-word';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -195,14 +195,10 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
   }
   async function session(title: string, extra: Record<string, unknown> = {}): Promise<string> {
     const id = randomUUID();
-    const fixtureStatus = (extra.status as RunStatus | undefined) ?? RunStatus.AWAITING_INPUT;
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
-        ...(isReleasedStatus(fixtureStatus) ? {
-          finishedAt: extra.finishedAt ?? new Date(),
-        } : {}),
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, ...fixtureFacts(extra),
       } as never,
     });
     return id;
@@ -299,7 +295,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
   // accepted by the owner, so the page reads it ENDED.
   const RUN_FIELDS = { taskId: shared, provider: SECRET.provider, model: SECRET.model, branch: SECRET.branch, baseSha: SECRET.sha, costUsd: 12.5 };
   const succeeded = await session(`Run of ${TITLE}`, {
-    ...RUN_FIELDS, status: RunStatus.SUCCEEDED,
+    ...RUN_FIELDS, status: RunStatus.SUCCEEDED, endReason: null,
     createdAt: new Date('2026-09-20T10:00:00Z'), startedAt: new Date('2026-09-20T10:00:05Z'),
     finishedAt: new Date('2026-09-20T11:11:05Z'),
   });
