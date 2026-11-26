@@ -1,0 +1,67 @@
+{
+ "today-wide": {
+  "w": 1440,
+  "h": 820,
+  "url": "/sessions/2zwQZ2hd93IvLb59t6pcm",
+  "boxes": {
+   "column": [
+    1120,
+    0,
+    320,
+    820
+   ]
+  }
+ },
+ "a-wide": {
+  "w": 1440,
+  "h": 820,
+  "url": "/sessions/2zwQZ2hd93IvLb59t6pcm",
+  "boxes": {
+   "column": [
+    1112,
+    8,
+    320,
+    804
+   ]
+  }
+ },
+ "b-wide": {
+  "w": 1440,
+  "h": 820,
+  "url": "/sessions/2zwQZ2hd93IvLb59t6pcm",
+  "boxes": {
+   "column": [
+    1112,
+    8,
+    320,
+    804
+   ]
+  }
+ },
+ "today-narrow": {
+  "w": 1120,
+  "h": 820,
+  "url": "/sessions/2zwQZ2hd93IvLb59t6pcm",
+  "boxes": {
+   "column": [
+    800,
+    0,
+    320,
+    820
+   ]
+  }
+ },
+ "b-narrow": {
+  "w": 1120,
+  "h": 820,
+  "url": "/sessions/2zwQZ2hd93IvLb59t6pcm",
+  "boxes": {
+   "column": [
+    792,
+    8,
+    320,
+    804
+   ]
+  }
+ }
+}
