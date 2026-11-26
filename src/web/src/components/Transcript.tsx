@@ -71,7 +71,7 @@ import {
 } from '@orbit/shared';
 import { DELEGATE_TOOL, delegateResultText, delegateRunId, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
-import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
+import { fetchSessionArtifactObjectUrl } from '../api';
 import {
   EVIDENCE_FILE_EXPIRED,
   ExpiredAttachmentError,
@@ -188,11 +188,11 @@ import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies } from '../lib/sessionRequest';
 import { SessionReplyCards } from './SessionReplyCard';
 
-// How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
-// bearer-guarded owner route; the public shared page overrides it with the share-token route
-// so a logged-out viewer can still see inline images. See SharedSessionPage.
-export const AttachmentResolverContext =
-  createContext<(id: string) => Promise<string>>(fetchAttachmentObjectUrl);
+// How a surface fetches an attachment's bytes (as an object URL), defined in its own module so the
+// cards that draw attachments need not import the transcript. Re-exported here because the pages
+// and tests import it with the transcript's other contexts.
+import { AttachmentResolverContext } from '../lib/attachmentResolver';
+export { AttachmentResolverContext };
 
 export const ArtifactResolverContext =
   createContext<((artifactPath: string) => Promise<string>) | null>(null);
