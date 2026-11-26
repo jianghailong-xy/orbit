@@ -902,7 +902,7 @@ test('§7.4/§12.1 a run\'s session is in no list but its Scheduled runs folder,
   const counts = await sessionsService.workspaceSessionCounts(w.ownerId);
   const row = counts.find((c) => c.workspaceId === w.workspaceId);
   const people = await db.session.count({
-    where: { workspaceId: w.workspaceId, completedAt: null, deletedAt: null, status: { in: ['RUNNING', 'PENDING'] }, runSource: { not: 'SCHEDULE' } },
+    where: { workspaceId: w.workspaceId, completedAt: null, deletedAt: null, turnState: { in: ['IN_FLIGHT', 'QUEUED'] }, runSource: { not: 'SCHEDULE' } },
   });
   assert.equal(row?.active ?? 0, people, 'workspaceSessionCounts counts only the people\'s');
 

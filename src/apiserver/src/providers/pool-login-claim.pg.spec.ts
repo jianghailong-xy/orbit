@@ -53,6 +53,7 @@ import { PoolNotices } from './pool-notice';
 import { encryptSecret } from './provider-crypto';
 import { ProvidersService } from './providers.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'pool-login-claim-spec';
@@ -175,7 +176,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
   const sessionRow = (sessionId: string) =>
     db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { ownerId: true, provider: true, poolCodexAccountId: true, poolSwitchNotice: true, retryAt: true, status: true },
+      select: { ownerId: true, provider: true, poolCodexAccountId: true, poolSwitchNotice: true, retryAt: true, ...WORD_SELECT },
     });
   /** The account the session is on, and the transcript line it is owed. */
   const standing = async (sessionId: string) => {
@@ -287,7 +288,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
     assert.deepEqual(await queue.accountPoolResumesAt(owner.id, pool.slug, now), bBack);
     // The turn the limit ends arms its retry there.
     const failed = await failTurn(owner, session);
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'no retry was armed for a turn every account had spent');
     assert.ok(
       failed.retryAt.getTime() >= bBack.getTime() && failed.retryAt.getTime() < bBack.getTime() + 60_000,
@@ -321,7 +322,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
 
     const before = Date.now();
     const failed = await failTurn(owner, session);
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'no retry was armed');
     assert.ok(
       failed.retryAt.getTime() >= before && failed.retryAt.getTime() < Date.now() + 60_000,

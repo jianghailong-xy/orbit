@@ -270,7 +270,7 @@ test('(1) the 2026-10-26 incident: a session parked with nothing to wake it free
     // Nobody ended or started anything by hand: the waiting session is exactly where it was, and
     // each of the three tasks still has the one run it had.
     const waiting = await s.db.session.findUniqueOrThrow({
-      where: { id: c1b.sessionId }, select: { status: true, endReason: true },
+      where: { id: c1b.sessionId }, select: { ...WORD_SELECT, endReason: true },
     });
     assert.deepEqual(waiting, { status: RunStatus.AWAITING_INPUT, endReason: null },
       'the waiting session was ended or woken to make room');

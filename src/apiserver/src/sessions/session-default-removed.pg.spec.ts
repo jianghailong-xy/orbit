@@ -61,6 +61,7 @@ import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
 import { turnStateOfWord } from './session-turn-state';
+import { WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -397,7 +398,7 @@ test('no session runs on a Default its owner removed from Orbit', {
     const at = new Date(Math.max(after.retry_ms!, Date.now()) + 1_000);
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
-    const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAttempts: true } });
+    const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, retryAttempts: true } });
     assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 }, 'held back by the quota of a Default nobody uses');
     const claimed = await claims.claimSessionForRunner({ id: m.runnerId });
     assert.equal(claimed?.agent.env?.CLAUDE_CONFIG_DIR, home('claude', WORK));

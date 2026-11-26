@@ -240,8 +240,8 @@ test('under the release protocol the failed turn holds the task, and its release
       assert.equal(await s.tasks.replaceRefusedRun(run1), null, 'not while the run still holds the task');
 
       await s.api.release({ id: f.runnerId }, run1, {} as never, SESSION_RELEASE_V1);
-      const released = await s.db.session.findUniqueOrThrow({ where: { id: run1 }, select: { status: true, finishedAt: true, failureKind: true } });
-      assert.equal(released.status, RunStatus.FAILED);
+      const released = await s.db.session.findUniqueOrThrow({ where: { id: run1 }, select: { ...WORD_SELECT, finishedAt: true, failureKind: true } });
+      assert.equal(wordOf(released), RunStatus.FAILED);
       assert.ok(released.finishedAt);
       assert.equal(released.failureKind, RunFailureKind.ACCOUNT_ACTION_REQUIRED, 'the release keeps the turn report\'s classification');
       const [row] = await s.db.accountHealth.findMany({ where: { ownerId: f.ownerId, clearedAt: null } });

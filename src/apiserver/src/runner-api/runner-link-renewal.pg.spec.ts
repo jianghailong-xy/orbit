@@ -75,6 +75,7 @@ import { readRunnerLink, RUNNER_LINK, runnerLinkCredential, signRunnerLinkToken,
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import '../test-support/daemon-routes-over-http';
+import { WORD_SELECT } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -289,7 +290,7 @@ test('lockstep link-token renewals are no mass disconnection; a real simultaneou
   const sweep = () => (new ReaperService(db as unknown as PrismaService, reaperRealtime, undefined, presence) as unknown as {
     sweep(): Promise<void>;
   }).sweep();
-  const stateOf = (m: Machine) => db.session.findUniqueOrThrow({ where: { id: m.sessionId }, select: { status: true, error: true } });
+  const stateOf = (m: Machine) => db.session.findUniqueOrThrow({ where: { id: m.sessionId }, select: { ...WORD_SELECT, error: true } });
   const lostAt = async (m: Machine) => (await db.runnerPresence.findUniqueOrThrow({ where: { runnerId: m.id } })).lostAt;
   const running = { status: RunStatus.RUNNING, error: null };
   const offline = { status: RunStatus.FAILED, error: 'runner offline' };

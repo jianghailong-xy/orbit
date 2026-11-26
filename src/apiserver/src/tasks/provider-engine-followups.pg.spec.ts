@@ -28,6 +28,8 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { QUOTA_BLIND_RETRY_BACKOFF_MS } from './task-retry-policy';
 import { TasksService } from './tasks.service';
+import type { LegacyStatusFacts } from '../sessions/session-legacy-words';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'provider-engine-followups-spec';
@@ -39,7 +41,7 @@ const MINUTE = 60_000;
 const CLAUDE = AgentProvider.CLAUDE;
 
 type World = { ownerId: string; workspaceId: string; projectId: string; prerequisiteId: string };
-type Run = { id: string; status: RunStatus; engine: string | null; provider: string; createdAt: Date };
+type Run = LegacyStatusFacts & { id: string; engine: string | null; provider: string; createdAt: Date };
 
 /** A write's typed refusal, as its body. */
 async function refusalOf(write: () => Promise<unknown>): Promise<Record<string, unknown>> {
@@ -125,7 +127,7 @@ test('T3 follow-up on PostgreSQL', { timeout: 600_000 }, async (t) => {
   const runs = (taskId: string): Promise<Run[]> => db.session.findMany({
     where: { taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: { id: true, status: true, engine: true, provider: true, createdAt: true },
+    select: { id: true, ...WORD_SELECT, engine: true, provider: true, createdAt: true },
   });
   /** One pass of the ready sweep, as the service's timer runs it. */
   const sweep = () => (tasks as unknown as { reconcileReadyTasks(): Promise<void> }).reconcileReadyTasks();
@@ -177,7 +179,7 @@ test('T3 follow-up on PostgreSQL', { timeout: 600_000 }, async (t) => {
     await sweep();
     const tokenRuns = await runs(onToken);
     assert.equal(tokenRuns.length, 2, 'the token was not tried again once the brake ended');
-    assert.deepEqual([tokenRuns[1].status, tokenRuns[1].engine, tokenRuns[1].provider], [RunStatus.PENDING, CLAUDE, token]);
+    assert.deepEqual([wordOf(tokenRuns[1]), tokenRuns[1].engine, tokenRuns[1].provider], [RunStatus.PENDING, CLAUDE, token]);
     assert.equal((await runs(onSignIn)).length, 2, 'the sign-in was not tried again once the brake ended');
     assert.equal(await skipped(w.ownerId, onToken), null);
   });
@@ -211,7 +213,7 @@ test('T3 follow-up on PostgreSQL', { timeout: 600_000 }, async (t) => {
     // tried again at once, as before.
     const keyRuns = await runs(onKey);
     assert.equal(keyRuns.length, 2, "the API key's usage-limit failure held its task back");
-    assert.deepEqual([keyRuns[1].status, keyRuns[1].engine, keyRuns[1].provider], [RunStatus.PENDING, CLAUDE, apiKey]);
+    assert.deepEqual([wordOf(keyRuns[1]), keyRuns[1].engine, keyRuns[1].provider], [RunStatus.PENDING, CLAUDE, apiKey]);
     assert.equal(await skipped(w.ownerId, onKey), null);
     // The subscription token beside it waits out its brake, and the sign-in still waits for its reset.
     assert.equal((await runs(onToken)).length, 1, 'the subscription token was re-dispatched a minute after its usage limit');

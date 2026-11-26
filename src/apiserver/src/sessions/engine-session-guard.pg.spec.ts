@@ -47,6 +47,7 @@ import {
   ENGINE_SESSION_DOORS,
   ENGINE_SESSION_FIELD_CASES,
 } from './engine-session-cases';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * The engine-path guard and the kind census, against a real PostgreSQL (contract §2.9 LS1, LS6;
@@ -444,7 +445,7 @@ test('every user door refuses a LANDING session with 409 SESSION_IS_PLATFORM_DRI
       await expectPlatformDriven(drive(stack, w, landing), route);
       const after = await stack.db.session.findUniqueOrThrow({
         where: { id: landing },
-        select: { status: true, title: true, deletedAt: true, completedAt: true, prompt: true },
+        select: { ...WORD_SELECT, title: true, deletedAt: true, completedAt: true, prompt: true },
       });
       assert.deepEqual(after, {
         status: RunStatus.AWAITING_INPUT,
@@ -557,7 +558,7 @@ test('the queue and the reaper do not touch a LANDING row', { skip }, async () =
     await (stack.reaper as unknown as { sweep(): Promise<void> }).sweep();
     const after = await stack.db.session.findUniqueOrThrow({
       where: { id: parked },
-      select: { status: true, error: true, retryAt: true, cancelRequestedAt: true },
+      select: { ...WORD_SELECT, error: true, retryAt: true, cancelRequestedAt: true },
     });
     assert.deepEqual(after, {
       status: RunStatus.AWAITING_INPUT, error: null, retryAt: null, cancelRequestedAt: null,
@@ -767,7 +768,7 @@ test('only a claimed subject gets a session row, and the compensation points ins
     } as never);
     const inserted = await stack.db.session.findUnique({
       where: { id: await preGeneratedId(stack, f) },
-      select: { sessionKind: true, provider: true, startsTaskWork: true, status: true },
+      select: { provider: true, startsTaskWork: true, ...WORD_SELECT },
     });
     assert.deepEqual(inserted, {
       sessionKind: 'LANDING', provider: 'orbit', startsTaskWork: false, status: RunStatus.AWAITING_INPUT,
@@ -786,7 +787,7 @@ test('only a claimed subject gets a session row, and the compensation points ins
     assert.deepEqual(
       await stack.db.session.findUnique({
         where: { id: await preGeneratedId(stack, d) },
-        select: { sessionKind: true, status: true },
+        select: { ...WORD_SELECT },
       }),
       { sessionKind: 'LANDING', status: RunStatus.AWAITING_INPUT },
       'the heartbeat claim did not insert the landing row',
@@ -807,7 +808,7 @@ test('only a claimed subject gets a session row, and the compensation points ins
     assert.deepEqual(
       await stack.db.session.findUnique({
         where: { id: await preGeneratedId(stack, r) },
-        select: { sessionKind: true, status: true },
+        select: { ...WORD_SELECT },
       }),
       { sessionKind: 'LANDING', status: RunStatus.SUCCEEDED },
       'the result did not insert the landing row',
@@ -823,9 +824,9 @@ test('only a claimed subject gets a session row, and the compensation points ins
     const settled = await ensureLandingSession(stack.db, g.landingId, claimed);
     assert.ok(settled?.created);
     const settledRow = await stack.db.session.findUniqueOrThrow({
-      where: { id: settled!.sessionId }, select: { status: true, finishedAt: true},
+      where: { id: settled!.sessionId }, select: { ...WORD_SELECT, finishedAt: true},
     });
-    assert.equal(settledRow.status, RunStatus.SUCCEEDED);
+    assert.equal(wordOf(settledRow), RunStatus.SUCCEEDED);
     // Released from the start, at the moment its landing settled (plan step 3.1).
     const settledAt = (await stack.db.projectLanding.findUniqueOrThrow({ where: { id: g.landingId } })).settledAt;
     assert.equal(settledRow.finishedAt?.getTime(), settledAt?.getTime(), 'the release column is the settlement time');
@@ -885,7 +886,7 @@ test("another account's landing id is answered exactly like an id that names not
     assert.deepEqual(
       await stack.db.session.findUniqueOrThrow({
         where: { id: foreignLanding },
-        select: { sessionKind: true, status: true, cancelRequestedAt: true },
+        select: { ...WORD_SELECT, cancelRequestedAt: true },
       }),
       { sessionKind: 'LANDING', status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
     );

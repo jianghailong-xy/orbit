@@ -69,6 +69,7 @@ import { subagentRouteInput } from '../runner-api/subagent-route';
 import { subagentCandidateRefusal } from '../tasks/model-routing';
 import { QueueService } from './queue.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 process.env.PROVIDER_SECRET_KEY ??= 'claude-region-hold-spec';
 
@@ -230,7 +231,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     queue.claimSessionForRunner({ id: m.runnerId, supportedProviders: [AgentProvider.CLAUDE] });
   const row = (id: string) => db.session.findUniqueOrThrow({
     where: { id },
-    select: { status: true, error: true, provider: true, assignedRunnerId: true, finishedAt: true, cancelRequestedAt: true, numTurns: true },
+    select: { ...WORD_SELECT, error: true, provider: true, assignedRunnerId: true, finishedAt: true, cancelRequestedAt: true, numTurns: true },
   });
   const turnsOf = (id: string) => db.conversationTurn.findMany({
     where: { sessionId: id }, orderBy: { seq: 'asc' }, select: { id: true, content: true, status: true, deliveredAt: true },
@@ -252,11 +253,11 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
 
     const claimed = await claim(m);
     assert.equal(claimed?.sessionId, deepseek, 'the DeepSeek-key session is the one claimed');
-    assert.equal((await row(deepseek)).status, RunStatus.RUNNING);
+    assert.equal(wordOf((await row(deepseek))), RunStatus.RUNNING);
     assert.equal(await claim(m), null, 'nothing else on the runner is claimed');
     for (const [what, id] of [['own sign-in', ownSignIn], ['Anthropic preset', byPreset], ['anthropic.com endpoint', byEndpoint], ['Claude pool', pool]] as const) {
       const held = await row(id);
-      assert.equal(held.status, RunStatus.PENDING, `${what}: still queued`);
+      assert.equal(wordOf(held), RunStatus.PENDING, `${what}: still queued`);
       assert.equal(held.error, refused(m), `${what}: the refusal sentence`);
       assert.ok(held.error?.startsWith(`${CLAUDE_REGION_UNSUPPORTED}: `));
     }
@@ -290,7 +291,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     assert.equal((await row(id)).error, refused(m));
     await check(m, ALLOWED);
     assert.equal((await claim(m))?.sessionId, id);
-    assert.deepEqual(await row(id).then((r) => [r.status, r.error]), [RunStatus.RUNNING, null]);
+    assert.deepEqual(await row(id).then((r) => [wordOf(r), r.error]), [RunStatus.RUNNING, null]);
   });
 
   await t.test('(3b) a blocked verdict 24 hours old lets the claim through and clears the sentence', async () => {
@@ -304,7 +305,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
       [m.runnerId, dayAgo],
     );
     assert.equal((await claim(m))?.sessionId, id);
-    assert.deepEqual(await row(id).then((r) => [r.status, r.error]), [RunStatus.RUNNING, null]);
+    assert.deepEqual(await row(id).then((r) => [wordOf(r), r.error]), [RunStatus.RUNNING, null]);
   });
 
   await t.test('(3c) a switch to a DeepSeek key on the PENDING session lets the claim through and clears the sentence', async () => {
@@ -315,9 +316,9 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     assert.equal((await row(id)).error, refused(m));
     const deepseek = await key(m.ownerId, 'deepseek');
     await sessions.updateConfig(m.ownerId, id, { provider: deepseek });
-    assert.equal((await row(id)).status, RunStatus.PENDING, 'a PENDING session is only rewritten; the claim reads it');
+    assert.equal(wordOf((await row(id))), RunStatus.PENDING, 'a PENDING session is only rewritten; the claim reads it');
     assert.equal((await claim(m))?.sessionId, id);
-    assert.deepEqual(await row(id).then((r) => [r.status, r.error, r.provider]), [RunStatus.RUNNING, null, deepseek]);
+    assert.deepEqual(await row(id).then((r) => [wordOf(r), r.error, r.provider]), [RunStatus.RUNNING, null, deepseek]);
   });
 
   await t.test('(3d) a move to another machine releases the hold, and the waiting message runs there', async () => {
@@ -342,7 +343,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     assert.equal(moves.needsEnd, false, 'and moves it as it is');
     await sessions.move(from.ownerId, id, { workspaceId: to.workspaceId });
     const moved = await row(id);
-    assert.deepEqual([moved.status, moved.assignedRunnerId, moved.error], [RunStatus.PENDING, to.runnerId, null]);
+    assert.deepEqual([wordOf(moved), moved.assignedRunnerId, moved.error], [RunStatus.PENDING, to.runnerId, null]);
     assert.equal(await claim(from), null, 'the machine it left has nothing to claim');
     assert.equal((await claim(to))?.sessionId, id);
     const turn = await dequeue(id, to);
@@ -373,7 +374,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     });
     assert.deepEqual(answer, { ok: true, keepCheckout: true });
     const held = await row(id);
-    assert.deepEqual([held.status, held.error, held.finishedAt, held.cancelRequestedAt], [RunStatus.PENDING, refused(m), null, null]);
+    assert.deepEqual([wordOf(held), held.error, held.finishedAt, held.cancelRequestedAt], [RunStatus.PENDING, refused(m), null, null]);
     assert.deepEqual((await turnsOf(id)).map((turn) => [turn.content, turn.status]), [[seed.content, 'PENDING']], 'its message intact');
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: taskId } })).status, 'IN_PROGRESS', 'its task is told nothing');
     assert.equal(await claim(m), null, 'held');
@@ -407,7 +408,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     const answer = await api.turnComplete({ id: m.runnerId }, id, report);
     assert.deepEqual(answer, { ok: true, status: RunStatus.PENDING }, 'the waiting status, which ends the run on the runner');
     const held = await row(id);
-    assert.deepEqual([held.status, held.error, held.cancelRequestedAt, held.numTurns], [RunStatus.PENDING, refused(m), null, 1]);
+    assert.deepEqual([wordOf(held), held.error, held.cancelRequestedAt, held.numTurns], [RunStatus.PENDING, refused(m), null, 1]);
     assert.deepEqual((await turnsOf(id)).map((turn) => [turn.id, turn.status, turn.deliveredAt]), [[turnId, 'PENDING', null]]);
     // A re-post changes nothing.
     assert.deepEqual(await api.turnComplete({ id: m.runnerId }, id, report), { ok: true, status: RunStatus.PENDING });
@@ -430,11 +431,11 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     });
     assert.deepEqual(answer, { ok: true, status: RunStatus.AWAITING_INPUT });
     const rested = await row(id);
-    assert.deepEqual([rested.status, rested.error, rested.cancelRequestedAt], [RunStatus.AWAITING_INPUT, stopped, null]);
+    assert.deepEqual([wordOf(rested), rested.error, rested.cancelRequestedAt], [RunStatus.AWAITING_INPUT, stopped, null]);
     assert.deepEqual((await turnsOf(id)).map((turn) => turn.status), ['ANSWERED'], 'the stopped turn is not replayed');
     // Resumable: the next message queues it, and the hold decides.
     await sessions.createTurn(m.ownerId, id, { clientTurnId: randomUUID(), content: 'carry on' });
-    assert.equal((await row(id)).status, RunStatus.PENDING);
+    assert.equal(wordOf((await row(id))), RunStatus.PENDING);
     assert.equal(await claim(m), null);
     assert.equal((await row(id)).error, refused(m));
 
@@ -449,7 +450,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
       }),
       { ok: true, status: RunStatus.PENDING },
     );
-    assert.deepEqual(await row(behind.id).then((r) => [r.status, r.error]), [RunStatus.PENDING, stopped]);
+    assert.deepEqual(await row(behind.id).then((r) => [wordOf(r), r.error]), [RunStatus.PENDING, stopped]);
 
     // Reported on finalize instead: the same rest, and the run's checkout is kept.
     const viaFinalize = await running(m);
@@ -458,7 +459,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
       { ok: true, keepCheckout: true },
     );
     const finalized = await row(viaFinalize.id);
-    assert.deepEqual([finalized.status, finalized.error, finalized.finishedAt], [RunStatus.AWAITING_INPUT, stopped, null]);
+    assert.deepEqual([wordOf(finalized), finalized.error, finalized.finishedAt], [RunStatus.AWAITING_INPUT, stopped, null]);
     assert.deepEqual((await turnsOf(viaFinalize.id)).map((turn) => turn.status), ['ANSWERED']);
   });
 
@@ -483,7 +484,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
     }
     assert.equal(await db.session.count({ where: { ownerId: m.ownerId } }), before, 'nothing was created');
     const deepseek = await sessions.create(m.ownerId, { prompt: 'hello', workspaceId: m.workspaceId, provider: await key(m.ownerId, 'deepseek') });
-    assert.equal((await row(deepseek.id)).status, RunStatus.PENDING);
+    assert.equal(wordOf((await row(deepseek.id))), RunStatus.PENDING);
   });
 
   // ── (8) Claude sign-in ───────────────────────────────────────────────────────────────────────────────────────────

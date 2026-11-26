@@ -96,6 +96,7 @@ import { decryptSecret, encryptSecret } from './provider-crypto';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsService } from './shared-pools.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'pool-login-gateway-spec';
@@ -361,7 +362,7 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
   const sessionRow = (sessionId: string) =>
     db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { ownerId: true, provider: true, poolCodexAccountId: true, poolSwitchNotice: true, retryAt: true, status: true },
+      select: { ownerId: true, provider: true, poolCodexAccountId: true, poolSwitchNotice: true, retryAt: true, ...WORD_SELECT },
     });
   const loginRow = (poolId: string, accountId: string) =>
     db.poolCodexLogin.findUniqueOrThrow({ where: { poolId_accountId: { poolId, accountId } } });
@@ -706,7 +707,7 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
       costUsd: 0,
     });
     const failed = await sessionRow(session);
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'no retry was armed for a turn the spent account ended');
     assert.ok(
       failed.retryAt!.getTime() >= RECORDED_RESET.getTime() && failed.retryAt!.getTime() < RECORDED_RESET.getTime() + 60_000,

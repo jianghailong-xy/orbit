@@ -579,7 +579,7 @@ async function claim(stack: Stack, w: World): Promise<void> {
   await stack.db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
-      where: { id: w.coordinatorSessionId, status: RunStatus.PENDING },
+      where: { id: w.coordinatorSessionId, turnState: 'QUEUED' },
       data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: null },
     });
   });

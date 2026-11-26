@@ -42,6 +42,7 @@ import {
 import { openingTurnKey } from './orbit-authored-turn';
 import '../test-support/daemon-routes-over-http';
 import { turnStateOfWord } from './session-turn-state';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -133,8 +134,8 @@ test('Run now starts one queued turn over its runner\'s limit, up to max + burst
   const runNow = (sessionId: string, bearer = alice.login, headers?: Record<string, string>) =>
     api('POST', `/api/sessions/${uuidToBase62(sessionId)}/run-now`, bearer, undefined, headers);
   const state = async (sessionId: string) => {
-    const s = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true, overCapacityTurnId: true } });
-    return { status: s.status, pass: s.overCapacityTurnId };
+    const s = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ...WORD_SELECT, overCapacityTurnId: true } });
+    return { status: wordOf(s), pass: s.overCapacityTurnId };
   };
   /** A pass laid down without the door, to show the claim itself holds a gate the door would have refused on. */
   async function passWithoutTheDoor(sessionId: string) {

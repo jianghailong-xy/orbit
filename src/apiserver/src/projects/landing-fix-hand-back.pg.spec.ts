@@ -50,6 +50,8 @@ import { SessionAttemptService } from './session-attempt.service';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 /**
  * W7's hand-backs and W8's rounds (`docs/project-integration-line-contract.md` Â§12.5, revision 42, ruling R2; W-T4, W-T5).
@@ -421,7 +423,7 @@ async function runFixTurn(
   await stack.db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
-      where: { id: t.sessionId, status: { in: [RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
+      where: { id: t.sessionId, ...turnStateFilter(['QUEUED', null]) },
       data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation },
     });
     await tx.inboxLeaseGeneration.updateMany({
@@ -747,7 +749,7 @@ test('W-T5 SESSION_ENDED: a person deletes the revived session before it runs â€
     try {
       const { w, t, first } = await handedOff(stack, 'person-deleted');
       const revived = await stack.db.session.findUniqueOrThrow({
-        where: { id: t.sessionId }, select: { finishedAt: true, status: true },
+        where: { id: t.sessionId }, select: { ...WORD_SELECT },
       });
       assert.equal(revived.finishedAt, null, 'CONTROL: the landing-fix turn revived the session');
       const before = new Date();
@@ -756,7 +758,7 @@ test('W-T5 SESSION_ENDED: a person deletes the revived session before it runs â€
         where: { id: t.sessionId }, select: { deletedAt: true },
       });
       assert.ok(deleted.deletedAt, 'CONTROL: the session is in Trash');
-      if (revived.status !== RunStatus.PENDING) {
+      if (wordOf(revived) !== RunStatus.PENDING) {
         // A session the runner holds finishes by its finalize.
         await stack.api.finalize({ id: w.runnerId } as never, t.sessionId, {
           status: SharedRunStatus.SUCCEEDED, isolationStatus: 'worktree', branch: t.branch, branchSha: DELIVERED,

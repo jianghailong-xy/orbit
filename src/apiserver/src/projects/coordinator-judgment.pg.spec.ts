@@ -34,6 +34,7 @@ import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.servi
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { establishProjectContractForPgTest } from './project-contract-test-helper';
 import { ProjectsService } from './projects.service';
+import { WORD_SELECT } from '../test-support/session-word';
 
 /**
  * Unit T3 against a real PostgreSQL, because every claim it makes is the DATABASE's.
@@ -479,7 +480,7 @@ test('a second wake opens a second session — an ended judgment is never resume
       // The judgment does its work and ends, which is the ordinary end of one.
       await stack.sessions.end(target.ownerId, firstId);
       const ended = await stack.db.session.findUniqueOrThrow({
-        where: { id: firstId }, select: { finishedAt: true, status: true },
+        where: { id: firstId }, select: { ...WORD_SELECT },
       });
       assert.ok(ended.finishedAt, 'the first judgment really has finished');
 

@@ -469,7 +469,7 @@ test('what a session answers about a run reaches the run only as the table says'
     });
     const run = await prisma.session.findUniqueOrThrow({
       where: { id: stop.run },
-      select: { status: true, endReason: true, completedAt: true, deletedAt: true, cancelRequestedAt: true, taskId: true },
+      select: { ...WORD_SELECT, endReason: true, completedAt: true, deletedAt: true, cancelRequestedAt: true, taskId: true },
     });
     const turns = await prisma.conversationTurn.count({ where: { sessionId: stop.run } });
     const decisions = await prisma.taskEvidenceDecision.count({ where: { taskId: stop.taskId } });
@@ -1037,7 +1037,7 @@ test('what a session answers about a run reaches the run only as the table says'
     return JSON.stringify({
       check: await taskRow(pair.check),
       subject: await taskRow(pair.subject),
-      run: await prisma.session.findUniqueOrThrow({ where: { id: pair.run }, select: { status: true, endReason: true, cancelRequestedAt: true } }),
+      run: await prisma.session.findUniqueOrThrow({ where: { id: pair.run }, select: { ...WORD_SELECT, endReason: true, cancelRequestedAt: true } }),
     });
   }
 

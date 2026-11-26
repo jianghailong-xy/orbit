@@ -55,6 +55,7 @@ import { SessionAttemptService } from './session-attempt.service';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 /**
  * Where a landing failure handed to its task's own work session stands (`docs/project-integration-line-contract.md`
@@ -391,7 +392,7 @@ async function runFixTurn(
   await stack.db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
-      where: { id: t.sessionId, status: { in: [RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
+      where: { id: t.sessionId, ...turnStateFilter(['QUEUED', null]) },
       data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation },
     });
     await tx.inboxLeaseGeneration.updateMany({

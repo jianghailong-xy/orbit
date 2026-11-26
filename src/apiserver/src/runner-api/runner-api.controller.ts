@@ -5769,7 +5769,7 @@ export class RunnerApiController {
         where: { sessionId, kind: { in: ['message', 'shell'] }, status },
       });
       if (await executable('IN_FLIGHT') > 0) return { status: RunStatus.RUNNING, returned: false };
-      // Back in the queue behind the update, or parked; both spellings, as deploy 2 writes them.
+      // Back in the queue behind the update, or parked.
       const turnState = await executable('PENDING') > 0 ? 'QUEUED' as const : null;
       const status = turnState === 'QUEUED' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT;
       await tx.session.update({ where: { id: sessionId }, data: { turnState, engineTurnActive: false } });

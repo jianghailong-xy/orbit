@@ -42,6 +42,7 @@ import {
 import { CURSOR_ACCOUNT_MOVE_V1, CURSOR_CONVERSATION_MOVE_REFUSAL } from '../providers/account-move-capability';
 import { ProvidersService } from '../providers/providers.service';
 import { SessionsService } from './sessions.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -200,7 +201,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
       [id],
     )).rows as Array<{ content: string }>).map((turn) => JSON.parse(turn.content) as Record<string, unknown>);
   const stored = (id: string) => db.session.findUniqueOrThrow({
-    where: { id }, select: { provider: true, providerBuiltin: true, cursorAccount: true, cursorAccountPinned: true, status: true },
+    where: { id }, select: { provider: true, providerBuiltin: true, cursorAccount: true, cursorAccountPinned: true, ...WORD_SELECT },
   });
 
   /** The switch is refused with 409 and `words`, and leaves the session exactly as it was. */
@@ -261,7 +262,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
     const ended = await cursorSession(m, TALKED.ended, { provider: m.key });
     await revive(m, ended, { provider: m.key });
     assert.deepEqual(
-      { provider: (await stored(ended)).provider, status: (await stored(ended)).status },
+      { provider: (await stored(ended)).provider, status: wordOf((await stored(ended))) },
       { provider: m.key, status: RunStatus.PENDING },
     );
   });
@@ -308,13 +309,13 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
     const ended = await cursorSession(m, UNSPOKEN.ended, { provider: m.key });
     await revive(m, ended, { provider: m.otherKey });
     assert.deepEqual(
-      { provider: (await stored(ended)).provider, status: (await stored(ended)).status },
+      { provider: (await stored(ended)).provider, status: wordOf((await stored(ended))) },
       { provider: m.otherKey, status: RunStatus.PENDING },
     );
     const endedOnLogin = await cursorSession(m, UNSPOKEN.ended);
     await sessions.switchAccount(m.ownerId, endedOnLogin, WORK);
     assert.deepEqual(
-      { account: (await stored(endedOnLogin)).cursorAccount, status: (await stored(endedOnLogin)).status },
+      { account: (await stored(endedOnLogin)).cursorAccount, status: wordOf((await stored(endedOnLogin))) },
       { account: WORK, status: RunStatus.FAILED },
     );
     const endedToLogin = await cursorSession(m, UNSPOKEN.ended, { provider: m.key });
@@ -355,7 +356,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
     const revived = await cursorSession(carrying, TALKED.ended, { provider: carrying.key });
     await revive(carrying, revived, { provider: carrying.otherKey });
     assert.deepEqual(
-      { provider: (await stored(revived)).provider, status: (await stored(revived)).status },
+      { provider: (await stored(revived)).provider, status: wordOf((await stored(revived))) },
       { provider: carrying.otherKey, status: RunStatus.PENDING },
     );
 

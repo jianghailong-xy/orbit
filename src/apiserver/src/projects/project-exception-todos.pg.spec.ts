@@ -64,7 +64,7 @@ import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
 import { landingFixWorkSession, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 import { turnStateOfWord } from '../sessions/session-turn-state';
-import { wordOf } from '../test-support/session-word';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * Exception items (docs/project-integration-line-contract.md §4): a task FAILED from any door opens
@@ -1241,11 +1241,11 @@ test('the owner’s own run-again press picks a FAILED task up, and answers its 
       const started = press as { sessionId: string };
       const run = await stack.db.session.findUniqueOrThrow({
         where: { id: started.sessionId },
-        select: { taskId: true, startsTaskWork: true, status: true },
+        select: { taskId: true, startsTaskWork: true, ...WORD_SELECT },
       });
       assert.equal(run.taskId, a.taskId);
       assert.equal(run.startsTaskWork, true, 'the press starts run work, not a conversation');
-      assert.ok(['PENDING', 'RUNNING'].includes(run.status), `the run is live: ${run.status}`);
+      assert.ok(['PENDING', 'RUNNING'].includes(wordOf(run)), `the run is live: ${wordOf(run)}`);
       assert.notEqual(started.sessionId, a.sessionId, 'a fresh run, not the attempt that failed');
 
       // And the failure item is answered by that fact (§4.2's fourth fact, `resolveByFact`): a run
@@ -1549,7 +1549,7 @@ async function claimed(stack: Stack, sessionId: string): Promise<void> {
   await stack.db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', '1', true), set_config('orbit.runner_supports_antigravity', '1', true), set_config('orbit.runner_supports_dsh', '1', true), set_config('orbit.runner_supports_cursor', '1', true), set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
-      where: { id: sessionId, status: RunStatus.PENDING },
+      where: { id: sessionId, turnState: 'QUEUED' },
       data: { turnState: 'IN_FLIGHT' },
     });
   });
@@ -1615,9 +1615,9 @@ async function rework(stack: Stack, w: World, a: Attempt, label: string): Promis
 async function drainRequestedEnd(stack: Stack, w: World, sessionId: string, leaseOwner?: string): Promise<boolean> {
   const row = await stack.db.session.findUniqueOrThrow({
     where: { id: sessionId },
-    select: { cancelRequestedAt: true, status: true },
+    select: { cancelRequestedAt: true, ...WORD_SELECT },
   });
-  if (!row.cancelRequestedAt || row.status !== RunStatus.AWAITING_INPUT) return false;
+  if (!row.cancelRequestedAt || wordOf(row) !== RunStatus.AWAITING_INPUT) return false;
   await stack.api.finalize({ id: w.runnerId }, sessionId, {
     status: SharedRunStatus.SUCCEEDED,
     subtype: 'success',
@@ -2198,7 +2198,7 @@ async function retryCoordinator(stack: Stack, w: World): Promise<void> {
   await stack.db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
-      where: { id: coordinator, status: RunStatus.PENDING },
+      where: { id: coordinator, turnState: 'QUEUED' },
       data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: null },
     });
   });

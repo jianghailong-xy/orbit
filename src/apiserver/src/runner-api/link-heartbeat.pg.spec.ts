@@ -860,7 +860,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       const listed = (await runners.listRunners(ownerId)).find((r) => r.id === runnerId)!;
       return listed.activeSessions;
     };
-    const inTurn = await prisma.session.count({ where: { assignedRunnerId: runnerId, status: RunStatus.RUNNING } });
+    const inTurn = await prisma.session.count({ where: { assignedRunnerId: runnerId, turnState: 'IN_FLIGHT' } });
     assert.ok(inTurn >= 1, 'busy is in a turn');
     assert.equal(await running(), inTurn, 'a beat without the member counts turns alone');
     assert.deepEqual(await holders(), []);

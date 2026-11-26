@@ -21,7 +21,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TASK_RUN_ACTION } from './task-run-receipt';
 import { TasksService } from './tasks.service';
-import { wordOf } from '../test-support/session-word';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * A reconcile pass must not report — or pay for — a dispatch it only replayed.
@@ -157,7 +157,7 @@ const workRuns = (db: PrismaClient, taskId: string) =>
   db.session.findMany({
     where: { taskId, startsTaskWork: true },
     orderBy: { createdAt: 'asc' },
-    select: { id: true, status: true, dispatchOrigin: true },
+    select: { id: true, ...WORD_SELECT, dispatchOrigin: true },
   });
 
 /** WHICH MOMENT a task is at, straight off the row the trigger writes. */
@@ -361,9 +361,9 @@ test('the dependency scan stops offering a task whose moment\'s run was filed aw
     // does not retry (task-auto-run-retry-after-run-ended.pg.spec.ts covers the failed run).
     await s.sessions.complete(ids.ownerId, run.id);
     const ended = await s.db.session.findUniqueOrThrow({
-      where: { id: run.id }, select: { status: true, endReason: true, completedAt: true },
+      where: { id: run.id }, select: { ...WORD_SELECT, endReason: true, completedAt: true },
     });
-    assert.equal(ended.status, RunStatus.CANCELLED);
+    assert.equal(wordOf(ended), RunStatus.CANCELLED);
     assert.equal(ended.endReason, 'completed');
     assert.ok(ended.completedAt, 'Complete did not file the run');
     assert.equal(

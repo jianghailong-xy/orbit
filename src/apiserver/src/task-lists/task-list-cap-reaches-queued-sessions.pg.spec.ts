@@ -44,6 +44,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TaskListsService } from './task-lists.service';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 /** Emails are unique and this database can outlive one run. */
@@ -161,10 +162,10 @@ async function seedSession(
 async function ceilings(db: PrismaClient, listId: string) {
   const rows = await db.session.findMany({
     where: { batchId: listId },
-    select: { id: true, batchMaxConcurrent: true, status: true },
+    select: { id: true, batchMaxConcurrent: true, ...WORD_SELECT },
     orderBy: { createdAt: 'asc' },
   });
-  return new Map(rows.map((r) => [r.id, { cap: r.batchMaxConcurrent, status: r.status }]));
+  return new Map(rows.map((r) => [r.id, { cap: r.batchMaxConcurrent, status: wordOf(r) }]));
 }
 
 /** `xmin` per session — the control: an UPDATE moves it, nothing else does. */

@@ -14,7 +14,7 @@ import { QueueService } from '../queue/queue.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
-import { turnStateOfWord } from './session-turn-state';
+import { turnStateFilter, turnStateOfWord } from './session-turn-state';
 import { sessionWord } from '../test-support/session-word';
 
 // The translator's circuit breaker is the process's: each test starts with it closed and nothing counted.
@@ -312,7 +312,7 @@ scenario('skipTranslation (the prompt optimizer\'s English): an opening message 
   // The scenarios above leave sessions running on this one runner; settle them so its capacity is free
   // and the claim answers only whether this session's work is held.
   await prisma.session.updateMany({
-    where: { ownerId, id: { not: created.id }, status: { in: [RunStatus.RUNNING, RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
+    where: { ownerId, id: { not: created.id }, ...turnStateFilter(['IN_FLIGHT', 'QUEUED', null]) },
     data: { turnState: null, finishedAt: new Date()},
   });
   const claimed = await queue.claimSessionForRunner({ id: runnerId });

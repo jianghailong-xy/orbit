@@ -2254,7 +2254,7 @@ export class ManagedRunnerManager {
         }
         if (opts.interruptSessions) {
           // Reclaim can retain these open checkouts without starting their turns. Their turns were in flight; the
-          // runner was stopped under them (ABANDONED, beside the word: deploy 2 writes both).
+          // runner was stopped under them (ABANDONED).
           await tx.session.updateMany({
             where: { assignedRunnerId: mapping.runnerId, ...turnStateFilter(['IN_FLIGHT']) },
             data: {

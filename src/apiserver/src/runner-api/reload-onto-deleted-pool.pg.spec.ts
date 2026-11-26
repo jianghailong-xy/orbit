@@ -46,6 +46,7 @@ import { RunnerApiController } from './runner-api.controller';
 import { PROVIDER_UNAVAILABLE_ERROR } from './runner-provider-support';
 import '../test-support/dequeue-under-lease';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts the member's key and the doors decrypt it; both only need the same secret.
@@ -157,7 +158,7 @@ suite('a reload onto an account pool deleted before the inbox hands it out, on r
   const queueOf = async (sessionId: string) =>
     (await turns(sessionId)).map(({ kind, status, delivered }) => ({ kind, status, delivered }));
   const recorded = (sessionId: string) =>
-    db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true, error: true } });
+    db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ...WORD_SELECT, error: true } });
 
   const me = randomUUID();
   await db.user.create({

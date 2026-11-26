@@ -57,7 +57,7 @@ import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 import { TaskListsService } from '../task-lists/task-lists.service';
 import { TasksService } from '../tasks/tasks.service';
 import { SessionsService } from './sessions.service';
-import type { SessionFixture } from '../test-support/session-word';
+import { type SessionFixture, WORD_SELECT, wordOf } from '../test-support/session-word';
 import { turnStateOfWord } from './session-turn-state';
 
 declare global {
@@ -328,8 +328,8 @@ test('a session stops a wider run from its task’s side only as the table says'
   ];
 
   async function assertAskedToEnd(run: string): Promise<void> {
-    const row = await prisma.session.findUniqueOrThrow({ where: { id: run }, select: { status: true, cancelRequestedAt: true } });
-    assert.ok(row.cancelRequestedAt !== null || row.status === RunStatus.CANCELLED, `the run was not ended: ${JSON.stringify(row)}`);
+    const row = await prisma.session.findUniqueOrThrow({ where: { id: run }, select: { ...WORD_SELECT, cancelRequestedAt: true } });
+    assert.ok(row.cancelRequestedAt !== null || wordOf(row) === RunStatus.CANCELLED, `the run was not ended: ${JSON.stringify(row)}`);
   }
 
   /** A run in a mode, on a task of this door's fixture. */
@@ -349,7 +349,7 @@ test('a session stops a wider run from its task’s side only as the table says'
     const list = stop.listId ? await prisma.taskList.findUnique({ where: { id: stop.listId }, select: { id: true, updatedAt: true } }) : null;
     const run = await prisma.session.findUniqueOrThrow({
       where: { id: stop.run },
-      select: { status: true, endReason: true, completedAt: true, deletedAt: true, cancelRequestedAt: true, taskId: true },
+      select: { ...WORD_SELECT, endReason: true, completedAt: true, deletedAt: true, cancelRequestedAt: true, taskId: true },
     });
     const turns = await prisma.conversationTurn.count({ where: { sessionId: stop.run } });
     return JSON.stringify({ task, list, run, turns });

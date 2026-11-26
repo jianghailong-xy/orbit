@@ -198,7 +198,7 @@ async function seedTask(
 /** The runs the list is holding: what the materialisation budget and the claim both count. */
 async function queued(db: PrismaClient, listId: string): Promise<Array<{ id: string; taskId: string }>> {
   const rows = await db.session.findMany({
-    where: { batchId: listId, status: { in: ['PENDING', 'RUNNING'] } },
+    where: { batchId: listId, turnState: { in: ['IN_FLIGHT', 'QUEUED'] } },
     select: { id: true, taskId: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   });

@@ -396,7 +396,7 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
           where: {
             projectId: pid,
             status: TaskStatus.OPEN,
-            sessions: { some: { ownerId: owner, status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } } },
+            sessions: { some: { ownerId: owner, turnState: { in: ['IN_FLIGHT', 'QUEUED'] } } },
           },
         });
         assert.equal(row.buckets.running, inProgress + dispatched,

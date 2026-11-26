@@ -779,9 +779,9 @@ test('(6) a coordinator conversation that has ended is not written to or revived
         'an ended conversation was written to');
       const standing = await stack.db.session.findUniqueOrThrow({
         where: { id: w.coordinatorSessionId! },
-        select: { status: true, completedAt: true },
+        select: { ...WORD_SELECT, completedAt: true },
       });
-      assert.equal(standing.status, RunStatus.SUCCEEDED, 'the ended conversation was revived');
+      assert.equal(wordOf(standing), RunStatus.SUCCEEDED, 'the ended conversation was revived');
       assert.ok(standing.completedAt);
       assert.deepEqual(await ownerAsked(stack, w), [w.taskId]);
       assert.equal(await ownerCount(stack, w), 1);

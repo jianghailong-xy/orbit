@@ -126,7 +126,7 @@ function services(f: Fixture) {
     resume: async (_owner: string, sessionId: string, dto: { clientTurnId: string; content: string; intent?: string }) => {
       turns.push({ sessionId, ...dto });
       await db.session.updateMany({
-        where: { id: sessionId, status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } },
+        where: { id: sessionId, finishedAt: { not: null } },
         // As the real revive: held again, so the release column and its cause go with the terminal status.
         data: { turnState: 'QUEUED', finishedAt: null},
       });

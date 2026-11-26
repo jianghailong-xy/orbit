@@ -48,6 +48,7 @@ import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import { PAT_FORBIDDEN_REASONS, type PatForbiddenReason } from './pat-scope.decorator';
 import { PAT_SCOPES, PatService } from './pat.service';
 import { call, startApiserver, type Apiserver, type Reply } from './pat-test-apiserver';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -890,7 +891,7 @@ test('the owner channel refuses a personal access token door by door and field b
     );
   });
 
-  const sessionRow = () => db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { permissionMode: true, effort: true, status: true } });
+  const sessionRow = () => db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { permissionMode: true, effort: true, ...WORD_SELECT } });
 
   await t.test("PATCH /sessions/:id/config: a token's permission mode is refused whole, to any value; its other settings are written; a login changes the mode", async () => {
     const original = await sessionRow();
@@ -931,7 +932,7 @@ test('the owner channel refuses a personal access token door by door and field b
       await api('POST', `/sessions/${sessionId}/resume`, token, { clientTurnId: randomUUID(), content: 'from a token', permissionMode: 'bypassPermissions' }),
       ['permissionMode'],
     );
-    assert.deepEqual((await sessionRow()).status, 'SUCCEEDED', 'the token revived nothing');
+    assert.deepEqual(wordOf((await sessionRow())), 'SUCCEEDED', 'the token revived nothing');
     ok(await api('POST', `/sessions/${sessionId}/resume`, login, { clientTurnId: randomUUID(), content: 'from a login', permissionMode: 'acceptEdits' }), 'a login reviving it');
     assert.equal((await sessionRow()).permissionMode, 'acceptEdits');
   });

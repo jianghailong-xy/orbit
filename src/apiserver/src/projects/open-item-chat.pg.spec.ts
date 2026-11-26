@@ -55,6 +55,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * "Chat about this" on an exception item, as `GET /projects/:id/open-items` serves it
@@ -832,9 +833,9 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
       assert.deepEqual({ assignee: after.assignee, state: after.state }, { assignee: 'COORDINATOR', state: 'OPEN' });
       assert.equal(returned.escalateAt, null);
       const session = await stack.db.session.findUniqueOrThrow({
-        where: { id: w.coordinatorSessionId }, select: { status: true, cancelRequestedAt: true },
+        where: { id: w.coordinatorSessionId }, select: { ...WORD_SELECT, cancelRequestedAt: true },
       });
-      assert.equal(session.status, RunStatus.FAILED);
+      assert.equal(wordOf(session), RunStatus.FAILED);
       assert.ok(session.cancelRequestedAt);
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },

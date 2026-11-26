@@ -45,6 +45,7 @@ import { canonicalRepoUrl } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { wordOf } from '../test-support/session-word';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 /**
  * W6 (docs/project-integration-line-contract.md §12.5, revision 42, ruling R3, R2): a failed landing
@@ -754,7 +755,7 @@ async function acrossTheTurn(label: string, withAttempt: boolean): Promise<void>
     await stack.db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
       await tx.session.updateMany({
-        where: { id: t.sessionId, status: { in: [RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
+        where: { id: t.sessionId, ...turnStateFilter(['QUEUED', null]) },
         data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation },
       });
       await tx.inboxLeaseGeneration.updateMany({

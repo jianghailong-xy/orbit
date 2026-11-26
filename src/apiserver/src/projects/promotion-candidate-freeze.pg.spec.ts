@@ -225,7 +225,7 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
    */
   async function enqueueOverMovingWork(tx: Prisma.TransactionClient, taskId: string) {
     const moving = (await tx.session.findMany({
-      where: { taskId, startsTaskWork: true, deletedAt: null, status: RunStatus.RUNNING }, select: { id: true },
+      where: { taskId, startsTaskWork: true, deletedAt: null, turnState: 'IN_FLIGHT' }, select: { id: true },
     })).map((row) => row.id);
     if (moving.length > 0) {
       await tx.session.updateMany({

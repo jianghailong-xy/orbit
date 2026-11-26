@@ -48,6 +48,7 @@ import { AutoRetryService, BACKOFF_MS } from './auto-retry.service';
 import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -218,9 +219,9 @@ function connect(url: string): Harness {
       // this service armed — which is the trap the dispatch-hold spec's own comment names.
       const row = await db.session.findUniqueOrThrow({
         where: { id: sessionId },
-        select: { retryAt: true, retryAttempts: true, status: true },
+        select: { retryAt: true, retryAttempts: true, ...WORD_SELECT },
       });
-      return { retryAt: row.retryAt, attempts: row.retryAttempts, status: row.status };
+      return { retryAt: row.retryAt, attempts: row.retryAttempts, status: wordOf(row) };
     },
     async heartbeatAt(runnerId, at) {
       // A runner that is up at the instant the sweep is handed: the sweep refuses to release a

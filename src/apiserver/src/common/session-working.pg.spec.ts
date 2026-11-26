@@ -21,6 +21,7 @@ import {
   type SessionWorkingRow,
 } from './session-working';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT } from '../test-support/session-word';
 
 /**
  * The three questions of common/session-working.ts answer alike in all three forms — TypeScript
@@ -146,7 +147,7 @@ test('predicate, Prisma filter and SQL fragment agree on every status and fact c
     const fetched = await db.session.findMany({
       where: { ownerId },
       select: {
-        id: true, status: true, finishedAt: true, turnState: true, engineTurnActive: true, runningSubagents: true,
+        id: true, ...WORD_SELECT, finishedAt: true, turnState: true, engineTurnActive: true, runningSubagents: true,
         runningBgJobs: true, retryAt: true,
         _count: {
           select: {

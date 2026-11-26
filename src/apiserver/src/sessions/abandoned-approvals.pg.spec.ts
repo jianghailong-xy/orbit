@@ -67,6 +67,7 @@ import {
 } from './abandoned-approvals';
 import { SessionsService } from './sessions.service';
 import { pastCreateAllowance } from '../test-support/past-create-allowance';
+import { WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -758,7 +759,7 @@ test('a job card is collected when its job ends, not when the turn does', {
     assert.ok(row, 'the conversation is in this owner’s Open list');
     const session = await db.session.findUniqueOrThrow({
       where: { id: f.sessionId },
-      select: { id: true, taskId: true, status: true, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+      select: { id: true, taskId: true, ...WORD_SELECT, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
     });
     const shown = await stack.sessions.listApprovals(f.ownerId, f.sessionId, 'PENDING');
     const live = await countLiveApprovals(db as never, session);

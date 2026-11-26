@@ -39,6 +39,7 @@ import {
   SESSION_SOURCE_SELECT,
   SESSION_SOURCE_TASK_SELECT,
 } from './session-source';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const SHA = (c: string) => c.repeat(40);
@@ -475,11 +476,11 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     const row = await db.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: {
-        status: true, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
+        ...WORD_SELECT, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
         inboxLeaseGeneration: true, numTurns: true, sourceState: true, 
       },
     });
-    assert.equal(row.status, RunStatus.FAILED, 'a refused run was left running');
+    assert.equal(wordOf(row), RunStatus.FAILED, 'a refused run was left running');
     assert.equal(row.error, `BASE_REF_NOT_FOUND: ${stderr}`);
     assert.ok(row.finishedAt instanceof Date && row.finishedAt >= before && row.finishedAt <= after);
     assert.equal(row.numTurns, 0, 'the refused run reported turns');
@@ -577,11 +578,11 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     const closed = await db.session.findUniqueOrThrow({
       where: { id: shell },
       select: {
-        status: true, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
+        ...WORD_SELECT, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
         sourceState: true, updatedAt: true,
       },
     });
-    assert.equal(closed.status, RunStatus.FAILED);
+    assert.equal(wordOf(closed), RunStatus.FAILED);
     assert.equal(closed.error, `BASE_REF_NOT_FOUND: ${stderr}`);
     assert.ok(closed.finishedAt instanceof Date, 'the closed shell has no finished_at');
     assert.equal(closed.runClaimedAt, null, 'the closed shell still holds its claim clock');
@@ -592,9 +593,9 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     });
     assert.ok(tombstone.retiredAt instanceof Date, 'the closed shell left its lease generation open');
     const closedOrphan = await db.session.findUniqueOrThrow({
-      where: { id: orphanShell }, select: { status: true, error: true, runClaimedAt: true },
+      where: { id: orphanShell }, select: { ...WORD_SELECT, error: true, runClaimedAt: true },
     });
-    assert.equal(closedOrphan.status, RunStatus.FAILED);
+    assert.equal(wordOf(closedOrphan), RunStatus.FAILED);
     assert.equal(closedOrphan.error, `SOURCE_AUTHORITY_UNREACHABLE: ${stderr}`);
     assert.equal(closedOrphan.runClaimedAt, null);
 

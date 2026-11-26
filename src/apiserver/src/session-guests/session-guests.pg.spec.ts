@@ -27,6 +27,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
 import { GUEST_NO_ACCOUNT, GUEST_SESSION_NOT_SHARED, GUEST_TURN_ACTIVITY } from './session-guests.service';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -205,9 +206,9 @@ test('session guests: invite by email, a guest turn as ORBIT_GUEST, Shared with 
 
     const row = await db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { status: true, lastUserText: true, lastUserFromExternalSource: true, lastUserFromExternalName: true },
+      select: { ...WORD_SELECT, lastUserText: true, lastUserFromExternalSource: true, lastUserFromExternalName: true },
     });
-    assert.equal(row.status, RunStatus.PENDING, 'the turn is queued as the owner’s would be');
+    assert.equal(wordOf(row), RunStatus.PENDING, 'the turn is queued as the owner’s would be');
     assert.equal(row.lastUserText, 'could you also check the tests?');
     assert.equal(row.lastUserFromExternalSource, 'ORBIT_GUEST');
     assert.equal(row.lastUserFromExternalName, guest.name);
@@ -249,11 +250,11 @@ test('session guests: invite by email, a guest turn as ORBIT_GUEST, Shared with 
     const row = await db.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: {
-        status: true, endReason: true, permissionMode: true, model: true, provider: true, providerBuiltin: true,
+        ...WORD_SELECT, endReason: true, permissionMode: true, model: true, provider: true, providerBuiltin: true,
         lastUserFromExternalSource: true, lastUserFromExternalName: true,
       },
     });
-    assert.equal(row.status, RunStatus.PENDING, 'resumed: waiting for its runner to pick the turn up');
+    assert.equal(wordOf(row), RunStatus.PENDING, 'resumed: waiting for its runner to pick the turn up');
     assert.equal(row.endReason, null);
     assert.deepEqual(
       { permissionMode: row.permissionMode, model: row.model, provider: row.provider, providerBuiltin: row.providerBuiltin },

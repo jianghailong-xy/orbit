@@ -13,6 +13,7 @@ import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from './sessions.service';
 import { turnStateOfWord } from './session-turn-state';
+import { WORD_SELECT } from '../test-support/session-word';
 
 /**
  * A search hit carries the six session facts and the Background mark's inputs (task 353YrK2AEGTm6mfl8GrW9), read for
@@ -115,7 +116,7 @@ test('a search page costs the same statements for 50 hits as for 5, and each hit
     // The batch the page is counted with says, session by session, what the one-session count says.
     const readers = await db.session.findMany({
       where: { id: { in: large.ids } },
-      select: { id: true, taskId: true, status: true, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+      select: { id: true, taskId: true, ...WORD_SELECT, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
     });
     const batched = await countLiveApprovalsBySession(db as never, readers);
     for (const reader of readers) {

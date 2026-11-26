@@ -66,6 +66,7 @@ import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -350,9 +351,11 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
   // The DONE asks its idle work session to end (`endIdleWorkOfDoneTask`), and the runner's finalize is that end —
   // in production within a second. Until then the session is ending, and a merge of it waits for the turn.
-  const { cancelRequestedAt, status, inboxLeaseOwner } = await s.db.session.findUniqueOrThrow({
-    where: { id: sessionId }, select: { cancelRequestedAt: true, status: true, inboxLeaseOwner: true },
+  const ending = await s.db.session.findUniqueOrThrow({
+    where: { id: sessionId }, select: { cancelRequestedAt: true, ...WORD_SELECT, inboxLeaseOwner: true },
   });
+  const { cancelRequestedAt, inboxLeaseOwner } = ending;
+  const status = wordOf(ending);
   if (cancelRequestedAt && status === RunStatus.AWAITING_INPUT) {
     await s.api.finalize({ id: w.runnerId }, sessionId, {
       status: SharedRunStatus.SUCCEEDED, subtype: 'success', numTurns: 2, costUsd: 0,

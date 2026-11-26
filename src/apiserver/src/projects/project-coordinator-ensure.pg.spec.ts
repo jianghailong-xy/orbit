@@ -32,6 +32,7 @@ import { ProjectAcceptanceService } from './project-acceptance.service';
 import { establishProjectContractForPgTest } from './project-contract-test-helper';
 import { ProjectsService } from './projects.service';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT } from '../test-support/session-word';
 
 /**
  * The agent's `ensure` door, against a real PostgreSQL.
@@ -500,7 +501,7 @@ test('a conversation whose run was replaced is replaced too, and the old one is 
       const before = await coordination(stack.db, w.projectId);
       const standingBefore = await stack.db.session.findUniqueOrThrow({
         where: { id: standingSession(w) },
-        select: { completedAt: true, status: true },
+        select: { completedAt: true, ...WORD_SELECT },
       });
       assert.equal(standingBefore.completedAt, null, 'the fixture must not pre-complete the row');
 

@@ -65,6 +65,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -514,9 +515,9 @@ test('a turn nothing answered goes back in the queue instead of being marked ANS
       'and it is not back in the queue for the engine to read a second time',
     );
     const settled = await db.session.findUniqueOrThrow({
-      where: { id: f.sessionId }, select: { status: true, error: true, retryAt: true },
+      where: { id: f.sessionId }, select: { ...WORD_SELECT, error: true, retryAt: true },
     });
-    assert.equal(settled.status, RunStatus.AWAITING_INPUT, 'the run parks, as after any answered turn');
+    assert.equal(wordOf(settled), RunStatus.AWAITING_INPUT, 'the run parks, as after any answered turn');
     assert.equal(settled.error, null, 'and no failure is reported for it');
     assert.equal(settled.retryAt, null, 'and nothing re-sends it later');
   });

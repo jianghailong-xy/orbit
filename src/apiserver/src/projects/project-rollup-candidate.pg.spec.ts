@@ -327,7 +327,7 @@ test('every write that can take a task out of its status’s lane names it, and 
         ['work session', async () => {
           const task = live();
           const running = await db.session.findFirst({
-            where: { taskId: task.id, status: RunStatus.RUNNING }, select: { id: true },
+            where: { taskId: task.id, turnState: 'IN_FLIGHT' }, select: { id: true },
           });
           if (running) {
             return db.session.update({ where: { id: running.id }, data: { turnState: null, finishedAt: new Date()} });

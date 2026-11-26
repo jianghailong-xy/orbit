@@ -70,6 +70,7 @@ import { ProvidersService } from './providers.service';
 import { nextUsageWindowStart, usageWindowStart } from './shared-pool';
 import { SharedPoolsService } from './shared-pools.service';
 import '../test-support/dequeue-under-lease';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'pool-gateway-spec';
@@ -289,7 +290,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
       where: { id: sessionId },
       select: {
         ownerId: true, provider: true, poolKeyId: true, poolCodexAccountId: true,
-        poolSwitchNotice: true, retryAt: true, status: true,
+        poolSwitchNotice: true, retryAt: true, ...WORD_SELECT,
       },
     });
   const keyRow = (keyId: string) => db.poolApiKey.findUniqueOrThrow({ where: { id: keyId }, select: { state: true, spentUntil: true, throttledUntil: true } });
@@ -474,7 +475,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
       costUsd: 0,
     });
     const failed = await sessionRow(session);
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'no retry was armed for a turn a spent key ended');
     assert.ok(failed.retryAt!.getTime() >= before.getTime() && failed.retryAt!.getTime() <= Date.now() + 61_000,
       `the retry is not now: ${failed.retryAt!.toISOString()}`);

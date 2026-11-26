@@ -20,6 +20,7 @@ import {
   namesExecutionClaimIndex,
 } from '../tasks/task-supersession';
 import { readTaskWorkCarriers } from './task-work-carrier';
+import { WORD_SELECT } from '../test-support/session-word';
 
 /**
  * ONE LIVE RUN PER TASK, RELEASE A: 1426's index on the release column beside 0130's on the status set.
@@ -487,7 +488,7 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
       { notifySessionQueued: () => undefined } as never,
       { notifyInbox: () => undefined, notifyRunnerWake: () => undefined } as never,
     );
-    const holderSelect = { id: true, status: true, workspaceId: true } as const;
+    const holderSelect = { id: true, ...WORD_SELECT, workspaceId: true } as const;
     type Statement = { query: string; params: string };
     const one = (list: Statement[], pick: (s: Statement) => boolean, what: string): Statement => {
       const found = list.filter(pick);

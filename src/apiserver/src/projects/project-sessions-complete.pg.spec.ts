@@ -28,7 +28,7 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from './coordinator-pg-test-safety';
 import { turnStateOfWord } from '../sessions/session-turn-state';
-import type { SessionFixture } from '../test-support/session-word';
+import { type SessionFixture, WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -175,7 +175,7 @@ async function snapshot(o: Owner, ids: string[]) {
   const rows = await o.h.db.session.findMany({
     where: { id: { in: ids } },
     select: {
-      id: true, status: true, endReason: true, cancelRequestedAt: true, finishedAt: true,
+      id: true, ...WORD_SELECT, endReason: true, cancelRequestedAt: true, finishedAt: true,
       completedAt: true, archivedAt: true, deletedAt: true,
     },
   });
@@ -253,7 +253,7 @@ test('DONE: the coordinator and every member still in Open, in every workspace, 
   }
   // Never ran: settled at once, as Complete settles a queued session.
   const settledQueued = after.get(queued)!;
-  assert.equal(settledQueued.status, 'CANCELLED');
+  assert.equal(wordOf(settledQueued), 'CANCELLED');
   assert.equal(settledQueued.endReason, 'completed');
   assert.ok(settledQueued.finishedAt);
   assert.deepEqual(settledQueued.endTurns, []);

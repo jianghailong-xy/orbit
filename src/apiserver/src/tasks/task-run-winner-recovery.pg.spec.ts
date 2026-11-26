@@ -1423,9 +1423,9 @@ test('a revive that loses the claim to a re-dispatched run is a 409, not a raw P
         where: {
           taskId: target.taskId,
           deletedAt: null,
-          status: { in: [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
+          finishedAt: null,
         },
-        select: { id: true, status: true },
+        select: { id: true, ...WORD_SELECT },
       });
       let raised: unknown;
       await services.sessions.resume(

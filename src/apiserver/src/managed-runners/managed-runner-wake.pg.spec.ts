@@ -623,7 +623,7 @@ test('managed runners wake on demand and sleep through the real application', {
     await accounts.reload();
     const awake = await upAndReady(o.userId, 2);
     await assertSameIdentity(o.mapping, awake);
-    const waited = new Set((await db.session.findMany({ where: { assignedRunnerId: runnerId, status: 'PENDING' }, select: { id: true } })).map((r) => r.id));
+    const waited = new Set((await db.session.findMany({ where: { assignedRunnerId: runnerId, turnState: 'QUEUED' }, select: { id: true } })).map((r) => r.id));
     for (const id of [parked, scheduled, observer]) assert.ok(waited.has(id), 'the work queued while it was disabled is still there');
     assert.ok(waited.has(toUuid((await claim(awake.runnerId)).sessionId)), 'and the woken runner serves it');
   });

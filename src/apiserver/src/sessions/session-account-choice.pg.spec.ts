@@ -87,7 +87,7 @@ import { RunnersService } from '../runners/runners.service';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
 import { turnStateOfWord } from './session-turn-state';
-import type { SessionFixture } from '../test-support/session-word';
+import { type SessionFixture, WORD_SELECT, wordOf } from '../test-support/session-word';
 import { RunStatus } from '@orbit/shared';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -650,7 +650,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     const at = new Date(armed.retry_ms! + 1_000);
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
-    const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAttempts: true } });
+    const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, retryAttempts: true } });
     assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 }, 'not re-sent while Default is still spent');
 
     // The claim that picks it up starts it on Work, and the transcript says why.
@@ -752,7 +752,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     const at = new Date(armed.retry_ms! + 1_000);
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
-    const revived = await db.session.findUniqueOrThrow({ where: { id: refused }, select: { status: true, retryAttempts: true } });
+    const revived = await db.session.findUniqueOrThrow({ where: { id: refused }, select: { ...WORD_SELECT, retryAttempts: true } });
     assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 });
     assert.deepEqual(await pending(refused), [{ kind: 'message', content: 'can it be a card instead?' }]);
     // ...and the claim that picks it up starts it on Default.
@@ -971,8 +971,8 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     for (let i = 0; i < 4; i += 1) full.push(await sessionOn(m, 'claude', RunStatus.RUNNING, { claudeAccount: WORK }));
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(new Date(at.getTime() + 1_000));
-    const held = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAt: true } });
-    assert.equal(held.status, RunStatus.FAILED, 'Work is past its share: nothing is re-sent');
+    const held = await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, retryAt: true } });
+    assert.equal(wordOf(held), RunStatus.FAILED, 'Work is past its share: nothing is re-sent');
     assert.ok(held.retryAt && held.retryAt.getTime() >= Date.parse(back), `re-armed for ${held.retryAt?.toISOString()}`);
   });
 

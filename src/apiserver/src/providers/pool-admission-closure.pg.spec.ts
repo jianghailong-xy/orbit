@@ -76,6 +76,7 @@ import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProvidersService } from './providers.service';
 import '../test-support/dequeue-under-lease';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -424,7 +425,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
   const recorded = (sessionId: string) =>
     db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { provider: true, status: true, poolMemberProviderId: true, poolSwitchNotice: true },
+      select: { provider: true, ...WORD_SELECT, poolMemberProviderId: true, poolSwitchNotice: true },
     });
   const memberIdsOf = async (poolId: string) =>
     (await db.providerPoolMember.findMany({ where: { poolId }, select: { providerId: true } }))
@@ -639,7 +640,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
     await sessions.resume(alice, over, { clientTurnId: randomUUID(), content: 'again', provider: spent.slug });
     const revived = await recorded(over);
     assert.equal(revived.provider, spent.slug);
-    assert.equal(revived.status, RunStatus.PENDING);
+    assert.equal(wordOf(revived), RunStatus.PENDING);
   });
 
   await t.test('(2) a task is not pinned to a pool that can run nothing, created or edited; it is pinned to a spent pool', async () => {

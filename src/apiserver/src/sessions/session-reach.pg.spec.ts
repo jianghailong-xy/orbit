@@ -83,6 +83,7 @@ import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
 import type { SessionFixture } from '../test-support/session-word';
 import { turnStateOfWord } from './session-turn-state';
+import { WORD_SELECT } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -413,7 +414,7 @@ test('a session reaches a wider session only as the table says', {
     const row = await prisma.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: {
-        status: true, endReason: true, completedAt: true, deletedAt: true, mergeStatus: true, cancelRequestedAt: true,
+        ...WORD_SELECT, endReason: true, completedAt: true, deletedAt: true, mergeStatus: true, cancelRequestedAt: true,
         folderId: true,
       },
     });

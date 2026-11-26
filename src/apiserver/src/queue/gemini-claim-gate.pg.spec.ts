@@ -31,6 +31,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { ANTIGRAVITY_RUNNER_UPGRADE_ERROR, PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts the row's key and the claim decrypts it; both only need the same secret.
@@ -120,7 +121,7 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
     return session.id;
   }
   const row = (id: string) =>
-    db.session.findUniqueOrThrow({ where: { id }, select: { status: true, error: true } });
+    db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, error: true } });
   /** The runner's claim, as the controller answers it. */
   const claimed = (providerHeader: string) => runnerApi.claim(runner, providerHeader);
 
@@ -130,7 +131,7 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
 
   await t.test('(1) a runner that does not advertise antigravity is not handed the session', async () => {
     assert.equal(await queue.claimSessionForRunner({ id: runnerId, supportedProviders: LEGACY }), null);
-    assert.equal((await row(sessionId)).status, RunStatus.PENDING);
+    assert.equal(wordOf((await row(sessionId))), RunStatus.PENDING);
     // Nor on the runner's own claim, which says on the row why it waits.
     assert.equal(await claimed(LEGACY.join(',')), null);
     assert.deepEqual(await row(sessionId), { status: RunStatus.PENDING, error: ANTIGRAVITY_RUNNER_UPGRADE_ERROR });

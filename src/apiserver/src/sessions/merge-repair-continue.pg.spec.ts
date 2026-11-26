@@ -40,7 +40,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
-import type { SessionFixture } from '../test-support/session-word';
+import { type SessionFixture, WORD_SELECT, wordOf } from '../test-support/session-word';
 import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -200,7 +200,7 @@ function repairsOf(db: PrismaClient, parentId: string) {
     where: { parentSessionId: parentId, source: 'merge-repair' },
     orderBy: { createdAt: 'asc' },
     select: {
-      id: true, status: true, prompt: true, workspaceId: true, assignedRunnerId: true, deletedAt: true,
+      id: true, ...WORD_SELECT, prompt: true, workspaceId: true, assignedRunnerId: true, deletedAt: true,
       finishedAt: true, completedAt: true, endReason: true, cancelRequestedAt: true, branch: true,
     },
   });
@@ -294,7 +294,7 @@ test('S2 the merge repair door hands the next step to the same repair session on
     assert.equal(answer.finishedAt, null, 'resumed: its run is on its way again');
     const [row] = await repairsOf(db, parent);
     assert.equal(row.id, repair, 'and no new repair session');
-    assert.equal(row.status, RunStatus.PENDING);
+    assert.equal(wordOf(row), RunStatus.PENDING);
     assert.equal(row.finishedAt, null);
     const turns = await turnsOf(db, repair);
     assert.equal(turns.length, 2);
@@ -332,7 +332,7 @@ test('S2 the merge repair door hands the next step to the same repair session on
       const answer = await sessions.startMergeRepair(w.ownerId, parent) as unknown as Record<string, unknown>;
       assertRepairShape(answer, repair, status);
       assert.deepEqual(await turnsOf(db, repair), before, `${status}: no message`);
-      assert.deepEqual((await repairsOf(db, parent)).map((r) => [r.id, r.status]), [[repair, status]], `${status}: nothing else`);
+      assert.deepEqual((await repairsOf(db, parent)).map((r) => [r.id, wordOf(r)]), [[repair, status]], `${status}: nothing else`);
     }
   });
 
@@ -365,7 +365,7 @@ test('S2 the merge repair door hands the next step to the same repair session on
       assert.equal(opened.branch, null, `${label}: no branch of its own`);
       if (old) {
         assert.deepEqual(await turnsOf(db, old), oldTurns, `${label}: the old one is sent nothing`);
-        assert.equal(repairs[0].status, (row?.status ?? RunStatus.AWAITING_INPUT), `${label}: and left as it was`);
+        assert.equal(wordOf(repairs[0]), (row?.status ?? RunStatus.AWAITING_INPUT), `${label}: and left as it was`);
       }
       // The parent's detail now shows the new one.
       assert.equal(((await sessions.get(w.ownerId, parent)).mergeRepairSession as unknown as Record<string, unknown>).id, opened.id, label);

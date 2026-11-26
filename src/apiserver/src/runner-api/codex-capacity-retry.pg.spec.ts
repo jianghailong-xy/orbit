@@ -44,6 +44,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -205,7 +206,7 @@ test('a Codex run a busy model stopped goes on by itself, and says what stopped 
   const row = (sessionId: string) =>
     db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { status: true, error: true, retryAt: true, retryAttempts: true },
+      select: { ...WORD_SELECT, error: true, retryAt: true, retryAttempts: true },
     });
   const notes = async (taskId: string) =>
     (await db.taskComment.findMany({ where: { taskId }, select: { body: true } })).map((c) => c.body);
@@ -222,7 +223,7 @@ test('a Codex run a busy model stopped goes on by itself, and says what stopped 
     await api.turnComplete({ id: f.runnerId }, f.sessionId, failed(f, CAPACITY));
 
     const after = await row(f.sessionId);
-    assert.equal(after.status, RunStatus.FAILED, 'this run of the session failed, as it did');
+    assert.equal(wordOf(after), RunStatus.FAILED, 'this run of the session failed, as it did');
     assert.equal(after.error, CAPACITY, 'the reason is what stopped it, not what the agent said before');
     assert.ok(onFirstRung(after.retryAt, before), `not armed on the first rung: ${after.retryAt?.toISOString()}`);
     assert.equal(after.retryAttempts, 0, 'arming spends no attempt; the sweep does');

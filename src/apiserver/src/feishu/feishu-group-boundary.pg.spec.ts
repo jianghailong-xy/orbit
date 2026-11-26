@@ -43,6 +43,7 @@ import { FEISHU_TEST_OPEN_PLATFORM_ENV } from './feishu-open-platform';
 import { feishuDedupeUuid } from './feishu-outbound';
 import { FEISHU_TEST_TIME_SCALE_ENV } from './feishu-timing';
 import { FakeOpenPlatform, type FakeConnection, type FakeRequest } from './test-support/fake-open-platform';
+import { WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY = `feishu-group-boundary-${randomUUID()}`;
@@ -210,7 +211,7 @@ test('Feishu: a group session asks the owner in private and answers the group wi
     const approvalId = filed.json.id as string;
     const row = await until(`the card of approval ${approvalId} SENT`, () =>
       db.feishuMessage.findFirst({ where: { appId: X.appId, approvalId, status: 'SENT' } })).catch(async (error) => {
-      throw new Error(`${(error as Error).message}; session ${JSON.stringify(await db.session.findUnique({ where: { id: sessionId }, select: { status: true, engineTurnActive: true, assignedRunnerId: true } }))}`
+      throw new Error(`${(error as Error).message}; session ${JSON.stringify(await db.session.findUnique({ where: { id: sessionId }, select: { ...WORD_SELECT, engineTurnActive: true, assignedRunnerId: true } }))}`
         + `; approvals ${JSON.stringify(await db.approval.findMany({ where: { sessionId }, select: { status: true } }))}`
         + `; feishu_message ${JSON.stringify(await db.feishuMessage.findMany({ where: { appId: X.appId } }))}`
         + `; requests ${JSON.stringify(fake.messages.slice(from).map((m) => m.path))}; the apiserver said:\n${said()}`);

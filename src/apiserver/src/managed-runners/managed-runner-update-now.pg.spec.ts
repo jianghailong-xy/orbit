@@ -69,7 +69,7 @@ import { managedRunnerHeartbeat, storedWorkloadFor } from './managed-runner-slee
 import { recordManagedDemand } from './managed-runner-work';
 import { ManagedRunnerWorker } from './managed-runner-worker';
 import { MANAGED_RUNNER_UPDATE_NOW_ACTIVITY, ManagedRunnerService } from './managed-runner.service';
-import { wordOf } from '../test-support/session-word';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const quiet = { warn: () => undefined, error: () => undefined, log: () => undefined };
@@ -501,9 +501,9 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     assert.equal(awake.stopRequestedAt?.getTime(), requested.stopRequestedAt!.getTime(), 'the next generation keeps the stop request');
     assert.ok(awake.stopAcknowledgedAt && awake.stopAcknowledgedAt >= awake.stopRequestedAt!, 'and Docker\'s report of the exit as its acknowledgement');
     // The sessions are the runner's to stop and resume: the server changed none of them.
-    const sessions = await db.session.findMany({ where: { id: { in: [first.id, second.id, queued.id] } }, select: { id: true, status: true } });
+    const sessions = await db.session.findMany({ where: { id: { in: [first.id, second.id, queued.id] } }, select: { id: true, ...WORD_SELECT } });
     assert.deepEqual(
-      Object.fromEntries(sessions.map((s) => [s.id, s.status])),
+      Object.fromEntries(sessions.map((s) => [s.id, wordOf(s)])),
       { [first.id]: 'RUNNING', [second.id]: 'RUNNING', [queued.id]: 'PENDING' },
     );
   });
@@ -800,8 +800,8 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     assert.equal(awake.stopRequestedAt?.getTime(), requested.stopRequestedAt!.getTime(), 'the next generation keeps the stop request');
     assert.ok(awake.stopAcknowledgedAt && awake.stopAcknowledgedAt >= awake.stopRequestedAt!, 'and the kubelet\'s report of the exit as its acknowledgement');
     // The sessions are the runner's to stop and resume: the server changed none of them.
-    const sessions = await db.session.findMany({ where: { id: { in: [turn.id, queued.id] } }, select: { id: true, status: true } });
-    assert.deepEqual(Object.fromEntries(sessions.map((s) => [s.id, s.status])), { [turn.id]: 'RUNNING', [queued.id]: 'PENDING' });
+    const sessions = await db.session.findMany({ where: { id: { in: [turn.id, queued.id] } }, select: { id: true, ...WORD_SELECT } });
+    assert.deepEqual(Object.fromEntries(sessions.map((s) => [s.id, wordOf(s)])), { [turn.id]: 'RUNNING', [queued.id]: 'PENDING' });
   });
 
   await t.test('(6b) on Kubernetes: a request recorded before it could stop a Pod (waitsForIdle: true) is taken up by the stop on the next pass', async () => {

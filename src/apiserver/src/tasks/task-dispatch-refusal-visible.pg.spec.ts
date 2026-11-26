@@ -45,6 +45,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { PREREQUISITE_NOT_LANDED_MESSAGE } from './task-dependencies';
 import { DISPATCH_REFUSED_SIGNAL_CODE, dispatchRefusalNextStep } from './task-dispatch-refusal';
 import { TasksService } from './tasks.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 /**
  * A start the runner refuses before its run can begin is a fact somebody can see.
@@ -574,9 +575,9 @@ test('(a) a start whose pinned commit lacks the prerequisite\'s landed commit is
       assert.deepEqual(outcome.missing, [p.landedSha], 'the runner admitted a checkout it should have refused');
       assert.equal(outcome.checkout, null);
       const run = await stack.db.session.findUniqueOrThrow({
-        where: { id: sessionId }, select: { status: true, sourceBaseSha: true, error: true },
+        where: { id: sessionId }, select: { ...WORD_SELECT, sourceBaseSha: true, error: true },
       });
-      assert.equal(run.status, RunStatus.FAILED, 'the refused run is over');
+      assert.equal(wordOf(run), RunStatus.FAILED, 'the refused run is over');
       assert.equal(run.sourceBaseSha, outcome.pin);
 
       // The task says so: code, time, the commit it stood on, what that commit lacked and whose

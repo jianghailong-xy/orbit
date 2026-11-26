@@ -239,7 +239,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     assert.equal(jobs.length, 1, 'concurrent pollers share the same one-slot runner cap');
     if (old) assert.equal(old.provider, AgentProvider.CLAUDE);
     assert.ok(!reclaimed.sessions.some((s) => s.sessionId === dsh || s.sessionId === borrowed));
-    assert.equal(await db.session.count({ where: { assignedRunnerId: f.runner.id, status: RunStatus.RUNNING } }), 1);
+    assert.equal(await db.session.count({ where: { assignedRunnerId: f.runner.id, turnState: 'IN_FLIGHT' } }), 1);
     await db.session.update({ where: { id: jobs[0]!.sessionId }, data: { turnState: null } });
     const pendingDsh = wordOf((await row(dsh))) === RunStatus.PENDING ? dsh : borrowed;
     const race = await Promise.all([f.claim(CURRENT), f.claim(CURRENT), f.reclaim(LEGACY), f.reclaim(CURRENT)]);

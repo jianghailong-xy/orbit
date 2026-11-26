@@ -60,6 +60,7 @@ import { ProvidersService } from './providers.service';
 import { SharedPoolsController } from './shared-pools.controller';
 import { SharedPoolsService } from './shared-pools.service';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The service encrypts the keys it is handed; any secret does in a throwaway database.
@@ -265,7 +266,7 @@ suite('a shared pool, door by door: every cell of §2.5, on real PostgreSQL', { 
     (await db.providerPoolPerson.findUnique({ where: { poolId_userId: { poolId: pool.id, userId: who.id } } }))?.role ?? null;
   const keysOf = (who: Person) => db.poolApiKey.findMany({ where: { poolId: pool.id, contributorId: who.id }, select: { id: true } });
   const recorded = (sessionId: string) =>
-    db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { provider: true, status: true } });
+    db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { provider: true, ...WORD_SELECT } });
 
   await t.test('the pool as made: Ann its creator and an admin, Adam an admin, Mia and Max members, Otto not in it', async () => {
     assert.deepEqual(
