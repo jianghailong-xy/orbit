@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Task run sidebar · board 01</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f3f4f6; color: #1f2329; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .b-part { padding: 40px 44px 48px; width: 1720px; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .b-h1 { font-size: 30px; font-weight: 700; margin: 0 0 6px; }
+  .b-sub { color: #5b6270; margin: 0 0 26px; max-width: 1560px; }
+  .b-row { display: flex; gap: 32px; align-items: flex-start; }
+  .b-cap { font-weight: 600; margin: 0 0 10px; }
+  .b-cap span { color: #8a909c; font-weight: 400; }
+  code, .mono { font-family: "JetBrains Mono", monospace; font-size: .86em; }
+  .b-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 40px; margin-top: 26px; background: #fff; border-radius: 14px; padding: 22px 28px; }
+  .b-note { display: flex; gap: 10px; }
+  .b-n { flex: 0 0 24px; height: 24px; border-radius: 12px; background: #e5483f; color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; margin-top: 2px; }
+  .b-n.blue { background: #3370ff; }
+  .b-mark { position: absolute; width: 26px; height: 26px; border-radius: 13px; background: #e5483f; color: #fff; font: 700 13px/26px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 3px #fff; z-index: 5; }
+  .b-mark.blue { background: #3370ff; }
+  .b-ring { position: absolute; border: 2.5px solid #e5483f; border-radius: 8px; z-index: 4; pointer-events: none; }
+
+  /* ---- app window ---- */
+  .w-win { position: relative; background: #fff; border-radius: 12px; box-shadow: 0 2px 14px rgba(0,0,0,.08); overflow: hidden; display: flex; height: 880px; font-size: 13px; line-height: 1.5; }
+  .w-rail { width: 52px; border-right: 1px solid #eceef1; background: #fafbfc; flex: none; }
+  .w-chat { flex: 1; min-width: 0; padding: 18px 26px; position: relative; overflow: hidden; }
+  .w-chat h3 { margin: 0 0 2px; font-size: 16px; }
+  .w-chat .meta { color: #8a909c; font-size: 12px; margin-bottom: 14px; }
+  .w-turn { margin: 0 0 12px; }
+  .w-turn .g { color: #8a909c; font-size: 12px; }
+  .w-turn p { margin: 4px 0; }
+  .w-comp { position: absolute; left: 26px; right: 26px; bottom: 18px; border: 1px solid #e3e5e9; border-radius: 12px; padding: 10px 14px; color: #a0a6b1; height: 74px; background: #fff; }
+  .w-branch { position: absolute; left: 26px; right: 26px; bottom: 104px; border: 1px solid #e3e5e9; border-radius: 8px; padding: 5px 10px; font-size: 12px; color: #5b6270; background: #fff; white-space: nowrap; overflow: hidden; }
+  .w-fade { position: absolute; top: 0; right: 0; bottom: 0; width: 0; }
+
+  /* today's overlay panel */
+  .p-over { position: absolute; top: 8px; right: 8px; bottom: 8px; width: 56%; background: #fff; border-radius: 12px; box-shadow: -6px 0 24px rgba(0,0,0,.12); padding: 18px 22px; overflow: hidden; }
+  .p-title { font-size: 16px; font-weight: 600; line-height: 1.35; margin: 0 0 8px; padding-right: 120px; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12px; font-weight: 500; }
+  .pill.red { background: #fdecea; color: #d4380d; }
+  .pill.green { background: #e8f7ee; color: #1f8a4c; }
+  .pill.blue { background: #eaf1ff; color: #3370ff; }
+  .pill.grey { background: #f1f2f4; color: #5b6270; }
+  .btn { display: inline-block; padding: 4px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; border: 1px solid #dfe1e5; background: #fff; color: #1f2329; }
+  .btn.pri { background: #3370ff; border-color: #3370ff; color: #fff; }
+  .sec { border-top: 1px solid #eceef1; padding: 12px 0; }
+  .sec-t { color: #6b7280; font-weight: 600; font-size: 12px; margin-bottom: 6px; }
+  .chip { display: inline-block; background: #f1f2f4; color: #3b414b; border-radius: 6px; padding: 1px 8px; margin: 0 4px 4px 0; font-size: 12px; }
+  .chip b { color: #8a909c; font-weight: 400; }
+  .grey { color: #8a909c; }
+  .muted-lines p { margin: 3px 0; }
+
+  /* proposed docked column */
+  .p-dock { width: 380px; flex: none; border-left: 1px solid #eceef1; background: #fff; padding: 14px 18px; overflow: hidden; position: relative; }
+  .p-dock .p-title { padding-right: 0; font-size: 15px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .d-head { display: flex; justify-content: space-between; align-items: center; color: #8a909c; font-size: 12px; margin-bottom: 6px; }
+  .d-verdict { border-radius: 10px; padding: 10px 12px; margin: 10px 0 4px; }
+  .d-verdict.red { background: #fff5f4; border: 1px solid #f6d3cf; }
+  .d-verdict.blue { background: #f5f8ff; border: 1px solid #d9e4ff; }
+  .d-verdict.green { background: #f3fbf6; border: 1px solid #cfeedd; }
+  .d-verdict h4 { margin: 0 0 4px; font-size: 13px; }
+  .d-line { display: flex; gap: 8px; margin: 3px 0; }
+  .d-line .ic { flex: 0 0 14px; text-align: center; }
+  .ok { color: #1f8a4c; } .bad { color: #d4380d; } .run { color: #3370ff; }
+  .d-acts { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .link { color: #3370ff; }
+  .kv { display: grid; grid-template-columns: 74px 1fr; gap: 2px 8px; }
+  .kv .k { color: #8a909c; }
+  .bar { height: 5px; border-radius: 3px; background: #e6e8ec; margin: 6px 0; }
+  .bar i { display: block; height: 100%; border-radius: 3px; background: #3370ff; }
+  .fold { color: #8a909c; display: flex; justify-content: space-between; }
+  .b-dim { position: absolute; inset: 0; background: repeating-linear-gradient(135deg, rgba(229,72,63,.06) 0 10px, transparent 10px 20px); pointer-events: none; }
+
+  .b-ab { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 8px; }
+  .b-card { background: #fff; border-radius: 14px; padding: 18px 22px; }
+  .b-card h4 { margin: 0 0 6px; font-size: 16px; }
+  .b-rec { color: #1f8a4c; font-weight: 600; }
+  table.b-cost { border-collapse: collapse; width: 100%; background: #fff; border-radius: 14px; overflow: hidden; }
+  .b-cost td, .b-cost th { padding: 10px 16px; border-bottom: 1px solid #eceef1; text-align: left; vertical-align: top; }
+  .b-cost th { background: #fafbfc; font-size: 13px; color: #5b6270; }
+</style>
+</head>
+<body>
+
+<!-- ============ PART 1 : today vs proposal (failed) ============ -->
+<section class="b-part" id="part-1">
+  <h1 class="b-h1">任务侧栏（1/2）：在任务自己的会话里打开任务 —— 今天 vs 改后</h1>
+  <p class="b-sub">场景就是你截图里那个：在任务的运行会话里点开任务，面板盖在会话上。今天的面板是「配置单」——Done means、Brief、Runs with 占满首屏，而你真正想知道的「为什么 Failed、要不要我、分支上还有什么」埋在最底下一条评论里。改后：面板变成会话右侧的<b>停靠侧栏</b>，不盖住对话，只放<b>对话里看不到的东西</b>。任务数据为示例；界面文字一律英文。</p>
+
+  <div class="b-row">
+    <!-- TODAY -->
+    <div style="width:820px">
+      <p class="b-cap">① 今天 <span>— 面板盖住会话右半，会话正文被截断</span></p>
+      <div class="w-win" id="today">
+        <div class="w-rail"></div>
+        <div class="w-chat">
+          <h3>Task: Fix the date-dependent failures in the w…</h3>
+          <div class="meta">Worked for 1m 49s · Used 1 tool, ran 3 shell commands</div>
+          <div class="w-turn"><p>Main already carries the same hidden-tab fix (<code>ca1e0d</code>), using…</p></div>
+          <div class="w-turn"><p>The rebase is done. Since main fixed several of the same…</p></div>
+          <div class="w-turn"><p>Only one commit is left: <code>16f4a7</code>, which renames the…</p></div>
+          <div class="w-turn"><p>Main had meanwhile fixed all the web failures itself, so my…</p></div>
+          <div class="w-turn" style="border:1px solid #eceef1;border-radius:8px;height:150px;padding:8px;color:#8a909c">(table of dropped commits, cut off)</div>
+          <div class="w-turn"><p><b>The task still shows FAILED.</b> The records I read don't…</p></div>
+          <div class="w-branch">⎇ orbit/task-fix-date-dependent-fail… · docs: name…</div>
+          <div class="w-comp">Reply…</div>
+          <div class="p-over">
+            <div style="position:absolute;right:20px;top:16px"><span class="btn pri">▶ Retry</span> &nbsp;⋮ &nbsp;✕</div>
+            <div class="p-title">Fix the date-dependent failures in the web test suite and the duplicate heading in the config guide</div>
+            <span class="pill red">Failed</span> <span class="grey">orbit-ws01 · Sonnet 5.5 · $1.32</span>
+            <div style="margin:6px 0 10px"><span class="chip">✓ Judged by · its acceptance command</span></div>
+            <div class="sec">
+              <div class="sec-t">Done means</div>
+              <div class="muted-lines">
+                <p class="grey" style="font-size:12px">Acceptance criteria</p>
+                <p>On the task's branch, synced with the latest main: <code>npm run docs:check</code> passes and the full web suite passes with 0 failed tests…</p>
+                <p class="grey" style="font-size:12px">Automatic judgement</p>
+                <p><code>npm run docs:check &amp;&amp; cd src/web &amp;&amp; npx vitest run</code> done when it exits 0</p>
+                <p class="grey" style="font-size:12px">Brief for the agent · Show all</p>
+                <p>main is red in two places, found while landing an unrelated header change. Both also fail on main's own code…</p>
+              </div>
+            </div>
+            <div class="sec">
+              <div class="sec-t">Runs with</div>
+              <span class="chip"><b>Agent</b> orbit-ws01</span><span class="chip"><b>Tier</b> M · Sonnet 5.5</span><span class="chip"><b>Engine</b> Claude Code</span><span class="chip"><b>Provider</b> Sign-in on HPC</span><span class="chip"><b>Model</b> Smart selection</span>
+              <div class="grey">No list · No input files</div>
+            </div>
+            <div class="sec">
+              <div class="sec-t">Activity</div>
+              <p style="margin:2px 0"><span class="grey">Nov 25, 2:40 PM</span> Filed from <span class="link">Polish the header share button</span></p>
+              <p style="margin:2px 0">orbit-ws01 · Nov 25, 2:41 PM · $1.32 <span class="pill grey">Idle</span></p>
+              <p style="margin:6px 0 2px"><b>orbit-ws01</b> <span class="grey">Nov 26, 3:11 PM</span></p>
+              <p style="margin:0">Why this run ended FAILED, and why nothing from it lands. Cause: machine load, not the code. The run's own check exited 0 at 06:48; Orbit's acceptance ran the same command at 06:50 and exited 1…</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROPOSAL -->
+    <div style="width:820px">
+      <p class="b-cap">② 改后 · Failed <span>— 停靠在会话右侧，会话变窄但完整可读</span></p>
+      <div class="w-win" id="after">
+        <div class="w-rail"></div>
+        <div class="w-chat">
+          <h3>Task: Fix the date-dependent failures in the web…</h3>
+          <div class="meta">Worked for 1m 49s · Used 1 tool, ran 3 shell commands</div>
+          <div class="w-turn"><p>Main already carries the same hidden-tab fix (<code>ca1e0d</code>), using the file's hidden-tab driver.</p></div>
+          <div class="w-turn"><p>The rebase is done. Since main fixed several of the same failures, I'm checking my remaining commits.</p></div>
+          <div class="w-turn"><p>Only one commit is left: <code>16f4a7</code>, which renames the second "Drive" heading. The suite passes all 9789 tests in 718 files.</p></div>
+          <div class="w-turn"><p>Main had meanwhile fixed all the web failures itself, so my other commits fell away.</p></div>
+          <div class="w-turn" style="border:1px solid #eceef1;border-radius:8px;height:120px;padding:8px;color:#8a909c">(table of dropped commits, fully visible)</div>
+          <div class="w-turn"><p><b>The task still shows FAILED.</b> The records I read don't say why.</p></div>
+          <div class="w-branch">⎇ orbit/task-fix-date-dependent-fail…</div>
+          <div class="w-comp">Reply…</div>
+        </div>
+        <div class="p-dock" id="dock">
+          <div class="d-head"><span>Task</span><span>⤢ &nbsp; ⋮ &nbsp; ✕</span></div>
+          <div class="p-title">Fix the date-dependent failures in the web test suite and the duplicate heading in the config guide</div>
+          <div><span class="pill red">Failed · check exited 1</span> <span class="grey">Nov 25 · 1m 49s · $1.32</span></div>
+
+          <div class="d-verdict red" id="v-fail">
+            <h4>Why it failed</h4>
+            <div class="d-line"><span class="ic ok">✓</span><span>Agent's own run of the check · exit 0 · 06:48</span></div>
+            <div class="d-line"><span class="ic bad">✕</span><span>Orbit's acceptance run · exit 1 · 06:53 · <span class="link">Output</span></span></div>
+            <div class="d-line"><span class="ic grey">↳</span><span class="grey">Same tree <code>432e94</code>. Latest note (orbit-ws01, Nov 26): machine load, not the code. <span class="link">Read</span></span></div>
+            <div class="d-acts"><span class="btn pri">Re-run the check</span><span class="btn">Retry the task</span><span class="btn">Close as not needed</span></div>
+          </div>
+
+          <div class="sec" id="s-branch">
+            <div class="sec-t">Branch</div>
+            <div class="kv">
+              <span class="k">Branch</span><span class="mono" style="font-size:11.5px">orbit/task-fix-date-dep…</span>
+              <span class="k">vs main</span><span>1 ahead · 0 behind · <span class="link">View changes</span></span>
+              <span class="k">Left</span><span><code>16f4a7</code> docs: rename the second "Drive" heading</span>
+              <span class="k">Landing</span><span class="grey">Not landed — main already has the rest</span>
+            </div>
+          </div>
+
+          <div class="sec" id="s-done">
+            <div class="sec-t">Done means</div>
+            <div class="d-line"><span class="ic ok">✓</span><span><code>npm run docs:check</code></span></div>
+            <div class="d-line"><span class="ic bad">✕</span><span>Full web suite, 0 failed <span class="grey">(acceptance)</span></span></div>
+            <div class="d-line"><span class="ic grey">·</span><span class="grey">Fix the clock dependence, don't weaken tests</span></div>
+            <div class="fold" style="margin-top:4px"><span>Criteria text · Brief</span><span class="link">Show</span></div>
+          </div>
+
+          <div class="sec" id="s-runs">
+            <div class="sec-t">Runs</div>
+            <div class="d-line"><span class="ic bad">●</span><span><b>Run 1</b> · Nov 25 2:41 PM · 1m 49s · $1.32 <span class="grey">· this conversation</span></span></div>
+          </div>
+
+          <div class="sec" id="s-env">
+            <div class="fold"><span>orbit-ws01 · Sonnet 5.5 · Claude Code</span><span class="link">Edit</span></div>
+          </div>
+          <div class="sec">
+            <div class="fold"><span>Activity · 3 · Filed from <span class="link">Polish the header…</span></span><span>›</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="b-notes">
+    <div class="b-note"><span class="b-n">1</span><div><b>盖住了对话。</b>面板占窗口 56%，会话每一行都被截断（截图左侧 "…fail"、表格、FAILED 那句）。人是在看 agent 说了什么时点开任务的，盖住正好挡住了他要对照的东西。</div></div>
+    <div class="b-note"><span class="b-n">2</span><div><b>首屏是配置单。</b>Done means 全文 + Brief + Runs with 五个芯片，都是建任务时就写好的；在任务自己的会话里，Brief 已经是对话的第一条消息，重复了。</div></div>
+    <div class="b-note"><span class="b-n">3</span><div><b>「为什么 Failed」埋在 Activity 最底的评论里。</b>状态 pill 只写 Failed；验收命令哪次 exit 1、和 agent 自己那次 exit 0 有何不同，要读完一段长评论才知道。</div></div>
+    <div class="b-note"><span class="b-n">4</span><div><b>分支状态完全不在面板上。</b>分支还剩几个提交、比 main 领先/落后、为什么不落地——这些只在会话正文里，面板里看不到。</div></div>
+    <div class="b-note"><span class="b-n blue">A</span><div><b>停靠，不覆盖。</b>宽度 ≥ 1280 时侧栏固定 380px 推开会话；更窄时退回今天的覆盖方式。<code>⤢</code> 打开完整任务页（今天的全部内容都还在那里）。</div></div>
+    <div class="b-note"><span class="b-n blue">B</span><div><b>判定放第一块，带下一步。</b>pill 写明「check exited 1」；卡片并排两次检查结果、最新一条说明的一句摘要，以及三个按钮：Re-run the check（只重跑验收，不重跑 agent）/ Retry the task / Close as not needed。</div></div>
+    <div class="b-note"><span class="b-n blue">C</span><div><b>Branch 一块。</b>分支名、相对 main 的 ahead/behind、剩下的提交、Landing 一句话状态。数据来自今天已有的 integration / landing 记录，不新造。</div></div>
+    <div class="b-note"><span class="b-n blue">D</span><div><b>Done means 变成检查清单。</b>每条标准一行、带 ✓/✕；全文和 Brief 折叠成一行。Runs 列出每次运行，标出「this conversation」；Runs with 与 Activity 各压成一行。</div></div>
+  </div>
+</section>
+
+<!-- ============ PART 2 : states + decisions ============ -->
+<section class="b-part" id="part-2">
+  <h1 class="b-h1">任务侧栏（2/2）：同一列在 Running / Needs you / Done 时 · 待定 · 落地</h1>
+  <p class="b-sub">第一块永远回答「现在怎样、要不要我」，第二块回答「交付物在哪」；下面几块在各状态里不变。</p>
+
+  <div class="b-row" style="gap:24px">
+    <!-- running -->
+    <div>
+      <p class="b-cap">③ Running</p>
+      <div class="w-win" style="height:600px;width:400px"><div class="p-dock" style="width:400px;border:0">
+        <div class="d-head"><span>Task</span><span>⤢ &nbsp; ⋮ &nbsp; ✕</span></div>
+        <div class="p-title">Add retry to the upload step</div>
+        <div><span class="pill blue">Running · 7m</span> <span class="grey">$0.84 so far</span></div>
+        <div class="d-verdict blue">
+          <h4>Now · step 3 of 5</h4>
+          <div class="bar"><i style="width:55%"></i></div>
+          <div class="d-line"><span class="ic ok">✓</span><span>Read the design</span></div>
+          <div class="d-line"><span class="ic run">●</span><span>Retry with backoff in <code>upload.ts</code></span></div>
+          <div class="d-line"><span class="ic grey">○</span><span class="grey">Specs + evidence</span></div>
+        </div>
+        <div class="sec"><div class="sec-t">Branch</div><div class="kv"><span class="k">vs main</span><span>3 ahead · 0 behind · <span class="link">View changes</span></span><span class="k">Landing</span><span class="grey">After it's done</span></div></div>
+        <div class="sec"><div class="sec-t">Done means</div>
+          <div class="d-line"><span class="ic grey">○</span><span>Upload retries 3× on 5xx</span></div>
+          <div class="d-line"><span class="ic grey">○</span><span><code>npm test</code> exits 0</span></div></div>
+        <div class="sec"><div class="fold"><span>orbit-ws01 · Opus 5.5 · Claude Code</span><span class="link">Edit</span></div></div>
+      </div></div>
+    </div>
+    <!-- needs you -->
+    <div>
+      <p class="b-cap">④ Needs you</p>
+      <div class="w-win" style="height:600px;width:400px"><div class="p-dock" style="width:400px;border:0">
+        <div class="d-head"><span>Task</span><span>⤢ &nbsp; ⋮ &nbsp; ✕</span></div>
+        <div class="p-title">Add retry to the upload step</div>
+        <div><span class="pill" style="background:#fff6e5;color:#b26a00">Needs you · evidence r1</span></div>
+        <div class="d-verdict" style="background:#fffaf0;border:1px solid #f3dfb5">
+          <h4>Review the evidence</h4>
+          <div class="d-line"><span class="ic ok">✓</span><span>Diff · 4 files +112 −18</span></div>
+          <div class="d-line"><span class="ic ok">✓</span><span><code>npm test</code> · 214 passed</span></div>
+          <div class="d-acts"><span class="btn pri">Accept</span><span class="btn">Send back</span></div>
+        </div>
+        <div class="sec"><div class="sec-t">Branch</div><div class="kv"><span class="k">vs main</span><span>4 ahead · 2 behind · <span class="link">View changes</span></span><span class="k">Landing</span><span class="grey">After you accept</span></div></div>
+        <div class="sec"><div class="sec-t">Done means</div>
+          <div class="d-line"><span class="ic ok">✓</span><span>Upload retries 3× on 5xx</span></div>
+          <div class="d-line"><span class="ic ok">✓</span><span><code>npm test</code> exits 0</span></div></div>
+        <div class="sec"><div class="sec-t">Runs</div><div class="d-line"><span class="ic ok">●</span><span><b>Run 1</b> · 46m · $3.12 <span class="grey">· this conversation</span></span></div></div>
+      </div></div>
+    </div>
+    <!-- done -->
+    <div>
+      <p class="b-cap">⑤ Done</p>
+      <div class="w-win" style="height:600px;width:400px"><div class="p-dock" style="width:400px;border:0">
+        <div class="d-head"><span>Task</span><span>⤢ &nbsp; ⋮ &nbsp; ✕</span></div>
+        <div class="p-title">Add retry to the upload step</div>
+        <div><span class="pill green">Done</span> <span class="pill green">Landed on main · 7c41e9</span></div>
+        <div class="d-verdict green">
+          <h4>Delivered</h4>
+          <div class="d-line"><span class="ic ok">✓</span><span>Evidence r1 accepted · 10:31 AM</span></div>
+          <div class="d-line"><span class="ic ok">✓</span><span>Landed on main · 10:40 AM · <span class="link">Landing</span></span></div>
+        </div>
+        <div class="sec"><div class="sec-t">Branch</div><div class="kv"><span class="k">Merged</span><span><code>7c41e9</code> · <span class="link">View changes</span></span></div></div>
+        <div class="sec"><div class="sec-t">Done means</div>
+          <div class="d-line"><span class="ic ok">✓</span><span>Upload retries 3× on 5xx</span></div>
+          <div class="d-line"><span class="ic ok">✓</span><span><code>npm test</code> exits 0</span></div></div>
+        <div class="sec"><div class="sec-t">Runs</div><div class="d-line"><span class="ic ok">●</span><span><b>Run 1</b> · 46m · $3.12 <span class="grey">· this conversation</span></span></div></div>
+      </div></div>
+    </div>
+    <div style="flex:1;align-self:stretch;background:#fff;border-radius:14px;padding:18px 22px">
+      <h4 style="margin:0 0 8px">各状态的第一块</h4>
+      <p style="margin:0 0 8px"><b>Running</b>：沿用今天的 Now（task_progress_report 步骤条），去掉「Run started…」等会话里已有的行。</p>
+      <p style="margin:0 0 8px"><b>Needs you</b>：要你做的事和按钮放第一块，与 iOS 已批准的规则一致（一个主按钮，随状态换字）。</p>
+      <p style="margin:0 0 8px"><b>Done</b>：今天的 Delivered 缩成两行；证据详情点进去。</p>
+      <p style="margin:0"><b>Failed</b>：见 1/2 ②。原因优先取「验收结果」本身，其次取最新一条评论的首句。</p>
+    </div>
+  </div>
+
+  <h2 style="margin:34px 0 8px;font-size:20px">待定 · 要你拍板</h2>
+  <div class="b-ab">
+    <div class="b-card"><h4>D1 · 什么时候是侧栏</h4>
+      <p style="margin:0"><b>A</b> 只在「任务自己的运行会话」里停靠；从别处的链接打开仍是今天的覆盖面板。<br><b>B</b> 所有会话页里打开任务都停靠（窗口够宽时）。</p>
+      <p class="b-rec" style="margin:8px 0 0">建议 A：先解决你截图这一处，别处的覆盖面板是 task-link-in-place 刚定下的。</p></div>
+    <div class="b-card"><h4>D2 · 侧栏是否常驻</h4>
+      <p style="margin:0"><b>A</b> 点了才出现，记住开/关（按会话）。<br><b>B</b> 任务会话默认就开着侧栏，可收起。</p>
+      <p class="b-rec" style="margin:8px 0 0">建议 B：任务会话里，这一列就是「这次运行的结果」，默认可见才有用。</p></div>
+    <div class="b-card"><h4>D3 · Failed 的「Re-run the check」</h4>
+      <p style="margin:0"><b>A</b> 新增：只在同一棵树上重跑验收命令，不起新 run。<br><b>B</b> 不加，只给 Retry the task。</p>
+      <p class="b-rec" style="margin:8px 0 0">建议 A：你截图这次就是负载导致的误判，重跑验收几十秒、零 agent 成本。需要服务端新接口。</p></div>
+  </div>
+
+  <h2 style="margin:34px 0 8px;font-size:20px">落地（按代价排）</h2>
+  <table class="b-cost">
+    <tr><th style="width:42px">#</th><th>改动</th><th style="width:420px">范围</th></tr>
+    <tr><td>1</td><td>侧栏内容重排：判定块（含 Failed 原因、两次检查对照）→ Branch → Done means 清单 → Runs → 一行 Runs with / Activity</td><td>web <code>TaskDetailPanel</code> 加 compact 变体；数据都已有</td></tr>
+    <tr><td>2</td><td>任务会话里停靠而不覆盖（≥ 1280px），更窄时退回覆盖；<code>⤢</code> 到完整任务页</td><td>web 会话页布局 + <code>TaskOverPagePanel</code></td></tr>
+    <tr><td>3</td><td>Failed pill 写明原因（check exited 1 / run stopped / over budget …）</td><td>shared 文案表 + 三端</td></tr>
+    <tr><td>4</td><td>Re-run the check（D3 = A 时）</td><td>apiserver 新动作 + runner 执行验收 + 三端按钮</td></tr>
+    <tr><td>5</td><td>iOS / Android 对应：任务会话顶部的任务卡片用同一顺序</td><td>按 web 定稿后跟进</td></tr>
+  </table>
+</section>
+
+<script>
+  // numbered marks on part 1, placed after layout
+  window.drawMarks = () => {
+    const put = (host, el, n, cls, ring) => {
+      const h = document.getElementById(host).getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      if (ring) {
+        const d = document.createElement('div'); d.className = 'b-ring';
+        Object.assign(d.style, { left: (r.left - h.left - 3) + 'px', top: (r.top - h.top - 3) + 'px', width: (r.width + 6) + 'px', height: (r.height + 6) + 'px' });
+        document.getElementById(host).appendChild(d);
+      }
+      const m = document.createElement('div'); m.className = 'b-mark ' + cls; m.textContent = n;
+      Object.assign(m.style, { left: (r.left - h.left - 13) + 'px', top: Math.max(6, r.top - h.top - 10) + 'px' });
+      document.getElementById(host).appendChild(m);
+    };
+    const q = (s) => document.querySelector(s);
+    put('today', q('#today .w-chat .w-turn'), 1, '', false);
+    put('today', q('#today .p-over .sec'), 2, '', true);
+    put('today', q('#today .p-over .sec:last-child p:last-child'), 3, '', true);
+    put('today', q('#today .w-branch'), 4, '', true);
+    put('after', q('#dock'), 'A', 'blue', false);
+    put('after', q('#v-fail'), 'B', 'blue', false);
+    put('after', q('#s-branch'), 'C', 'blue', false);
+    put('after', q('#s-done'), 'D', 'blue', false);
+  };
+</script>
+</body>
+</html>
