@@ -35,7 +35,7 @@
 
 <section class="b-part" id="part-1">
   <h1>DashScope 406 网关超时：从「红字死掉」改成「自动重试」</h1>
-  <p class="b-sub">真实 web 构建截图，同一会话、同一事件、同一时钟（Asia/Shanghai 11-13 09:14）。左 = main <code>1668e157f3</code>，右 = 本分支 <code>23a7b838b2</code>。不新造外观：右边是已有的「Provider unavailable」卡片。</p>
+  <p class="b-sub">真实 web 构建截图，同一会话、同一事件、同一时钟（Asia/Shanghai 11-13 09:14）。左 = main <code>1668e157f3</code>，右 = 本分支 <code>b3365aceba</code>。不新造外观：右边是已有的「Provider unavailable」卡片。</p>
   <div class="b-row">
     <figure class="b-fig">
       <figcaption>① 今天 <small>你截图里的那条</small></figcaption>
@@ -72,27 +72,33 @@
 </section>
 
 <section class="b-part" id="part-3">
-  <h2>待定 · 要你拍板：卡片里写「The <b>qwen</b> API」</h2>
-  <p class="b-sub">卡片取的是会话的 provider slug（<code>qwen</code>），不是预设的显示名。这是改之前就有的：DeepSeek 等自定义 provider 也会显示成小写 slug。</p>
+  <h2>已定 · 方案 B：卡片用显示名，不用 slug</h2>
+  <p class="b-sub">「The qwen API」→「The <b>Qwen (Model Studio)</b> API could not answer…」；自家登录的引擎写 CLI 名（「The Claude Code API」，原来是「The claude API」）。额度卡同理（「The 5-hour quota for Claude Code…」）。三端各用 composer 已有的同一个取名函数：web <code>providerNameOn</code>、Apple <code>SessionProviderChoices.providerName(on:)</code>、Android <code>catalog.providerName</code>。图 ①② 已是改后实拍。</p>
+
+  <h2 style="margin-top:26px">等待重试时，会话是什么状态</h2>
   <div class="b-row">
-    <div class="b-opt b-rec">
-      <b>方案 A · 这次不动 UI</b><span class="b-tag">推荐</span>
-      <p>本次只修判定（已完成），显示名另起一个小任务。改动面小，三端零 UI 差异，今天就能落。</p>
-    </div>
-    <div class="b-opt">
-      <b>方案 B · 一起改成显示名</b>
-      <p>卡片改用预设 label：「The Qwen (Model Studio) API could not answer…」。要改 web + iOS/macOS + Android 三处卡片和测试，会拖慢这次修复。</p>
-    </div>
+    <figure class="b-fig"><figcaption>⑤ 会话列表的行 <small>归在 Working</small></figcaption>
+      <div class="b-crop" style="width:300px;height:100px;background-image:url(shots/after-light-desktop.png);background-position:-248px -128px"></div></figure>
+    <figure class="b-fig"><figcaption>⑥ 会话头 <small>手机</small></figcaption>
+      <div class="b-crop" style="width:300px;height:62px;background-image:url(shots/after-light-phone.png);background-size:300px auto;background-position:0 0"></div></figure>
+    <figure class="b-fig"><figcaption>⑦ 对话底部一行</figcaption>
+      <div class="b-crop" style="width:640px;height:52px;background-image:url(shots/after-light-desktop.png);background-position:-580px -452px"></div></figure>
   </div>
+  <table class="b-land" style="margin-top:16px">
+    <tr><td>服务端写的</td><td><code>status/runState FAILED</code> · <code>released: true</code>（回合结束、runner 名额已还）· <code>phase IDLE</code> · <code>lastTurnOutcome FAILED</code> · <code>waitingOn WAKE</code> · <code>retryAt</code> = 30 秒后（第一档），<code>retryAttempts 0</code>。</td></tr>
+    <tr><td>界面读成</td><td>不是「失败」，而是「Idle · ↻ Retrying」：FAILED 加上未过期的 <code>retryAt</code>（<code>sessionRetryPending</code>）= 一个会自己撤销的失败。列表归 Working，不进 Needs you；头部「Idle ↻ Retrying」；底部「Retrying automatically.」替换掉「Session failed.」。</td></tr>
+    <tr><td>之后</td><td>到点 AutoRetryService 认领（清 <code>retryAt</code>、次数 +1）并重发 → RUNNING。三次都失败（30 秒 / 2 分 / 5 分）就清掉 <code>retryAt</code>：变回普通 FAILED，进 Needs you，卡片「Auto-retry gave up」。<code>retryAt</code> 过期 2 分钟没人来认领，也自动回落成 FAILED，不会一直挂着「Retrying」。</td></tr>
+    <tr><td>你插手</td><td>这期间直接发消息 = 正常续上，armed 的重试被你的消息顶掉，不会重复发。</td></tr>
+  </table>
 </section>
 
 <section class="b-part" id="part-4">
   <h2>落地（按代价排）</h2>
   <table class="b-land">
-    <tr><td>已提交</td><td><code>23a7b838b2</code>：<code>CONNECTION_TIMED_OUT_MARKERS = ['read: connection timed out']</code>，shared / runner-go / Android / Swift 四处 + 各自测试与 parity 测试。</td></tr>
-    <tr><td>已验证</td><td>shared vitest 58 通过；runner Go 失败分类测试通过；Android <code>EngineErrors*</code> 通过。纯 <code>API Error: 406 Not Acceptable</code> 仍不重试。</td></tr>
-    <tr><td>未验证</td><td>macOS/OrbitKit Swift 测试（只能在 Mac mini 上跑），改动与 Android 逐行对应。</td></tr>
-    <tr><td>部署前</td><td>遇到这条手动发一句「continue」即可；若频繁出现，是 dashscope-intl 端点本身不稳，可换北京端点 <code>dashscope.aliyuncs.com</code>。</td></tr>
+    <tr><td>已提交</td><td><code>23a7b838b2</code> 判定：<code>CONNECTION_TIMED_OUT_MARKERS = ['read: connection timed out']</code>，shared / runner-go / Android / Swift。<br><code>b3365aceba</code> 显示名：web / macOS·iOS / Android 卡片调用处各一行。</td></tr>
+    <tr><td>已验证</td><td>shared vitest 58；runner Go 失败分类；Android <code>AutoRetry*</code> + <code>EngineErrors*</code>；web <code>WorkspaceView.retryMessage</code> + <code>Transcript</code> 158 通过，新加的两条在旧代码上会红。纯 <code>API Error: 406 Not Acceptable</code> 仍不重试。</td></tr>
+    <tr><td>未验证</td><td>macOS/iOS 的 Swift 编译与测试（只能在 Mac mini 上跑）。</td></tr>
+    <tr><td>部署前</td><td>遇到这条手动发「continue」；频繁出现说明 dashscope-intl 端点本身不稳，可换北京端点 <code>dashscope.aliyuncs.com</code>。</td></tr>
   </table>
 </section>
 

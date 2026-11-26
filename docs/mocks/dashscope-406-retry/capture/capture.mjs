@@ -42,7 +42,11 @@ async function shoot(browser, tree, url, theme, size) {
   const t0 = '2026-11-13T01:14:00.000Z';
   const session = {
     ...sf.SESSION, title: 'Translate the release notes', provider: 'qwen', model: 'qwen3.7-max',
-    status: 'FAILED', runState: 'AWAITING_INPUT', error: ERR, lastTurnAt: t0,
+    engine: 'claude', error: ERR, lastTurnAt: t0,
+    // What the server leaves after a failed turn (sessionPhaseFields.fixture 'released with a retry armed'):
+    // released FAILED, idle, the turn FAILED; armed, it waits on a WAKE.
+    status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED', phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED',
+    waitingOn: tree === 'after' ? 'WAKE' : null, finishedAt: '2026-11-13T01:14:18.000Z',
     // What the server arms on a retryable failure (auto-retry.service): first rung, 30 s + jitter.
     ...(tree === 'after' ? { retryAt: '2026-11-13T01:14:57.000Z', retryAttempts: 0 } : { retryAt: null, retryAttempts: 0 }),
   };
@@ -54,6 +58,8 @@ async function shoot(browser, tree, url, theme, size) {
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (route.request().method() !== 'GET') return route.fallback();
+    if (path === '/api/providers') return route.fulfill({ json: [{ slug: 'qwen', label: 'Qwen (Model Studio)', runtime: 'claude',
+      presetSlug: 'qwen', engines: ['claude'], models: [{ value: 'qwen3.7-max', label: 'Qwen3.7 Max' }], defaultModel: 'qwen3.7-max' }] });
     if (path === '/api/sessions') return route.fulfill({ json: [session] });
     if (path === `/api${sf.SESSION_PATH}`) return route.fulfill({ json: session });
     if (path === `/api${sf.SESSION_PATH}/events/page`) return route.fulfill({ json: { events, hasMore: false } });
