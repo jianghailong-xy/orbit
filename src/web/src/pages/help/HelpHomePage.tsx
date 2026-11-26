@@ -79,7 +79,7 @@ export function HelpHomePage() {
               <h2 id="help-common">Common problems</h2>
               <div className="help-list">
                 {common.map((article) => (
-                  <Link key={article.slug} to={helpArticlePath(article)} className="help-list-row">
+                  <Link key={article.slug} to={helpArticlePath(article)} className="help-list-row" data-row-focus="">
                     <span>{article.title}</span>
                     <RightOutlined />
                   </Link>

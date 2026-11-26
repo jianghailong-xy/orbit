@@ -128,7 +128,7 @@ export function SessionCreatedTasksStrip({
               </div>
             ))}
             {card.rows.map((row) => (
-              <Link key={row.id} className="ct-row" to={pageHref({ kind: 'task', id: toUuid(row.id) })}>
+              <Link key={row.id} className="ct-row" data-row-focus="" to={pageHref({ kind: 'task', id: toUuid(row.id) })}>
                 <span className="ct-pill">{row.standing && <TaskStatusPill {...row.standing} />}</span>
                 <span className="ct-eye">{row.watched && <WatchEye stale={row.stale} />}</span>
                 <span className="ct-title" title={row.title}>

@@ -112,25 +112,25 @@ export function WikiDirectory({
 
   return (
     <nav className="wk-toc autohide-scrollbar" aria-label={WIKI_CONTENTS}>
-      <Link className={`wk-toc-item${at.view === 'home' ? ' active' : ''}`} to={wikiSpacePath(spaceSlug)}>
+      <Link className={`wk-toc-item${at.view === 'home' ? ' active' : ''}`} data-row-focus="" to={wikiSpacePath(spaceSlug)}>
         <span className="tp-ico">
           <HomeOutlined />
         </span>
         <span className="lb">{WIKI_DIRECTORY_HOME}</span>
       </Link>
-      <Link className={`wk-toc-item${at.view === 'browse' ? ' active' : ''}`} to={wikiBrowsePath(spaceSlug)}>
+      <Link className={`wk-toc-item${at.view === 'browse' ? ' active' : ''}`} data-row-focus="" to={wikiBrowsePath(spaceSlug)}>
         <span className="tp-ico">
           <AppstoreOutlined />
         </span>
         <span className="lb">{WIKI_BROWSE}</span>
       </Link>
-      <Link className={`wk-toc-item${at.view === 'index' ? ' active' : ''}`} to={wikiIndexPath(spaceSlug)}>
+      <Link className={`wk-toc-item${at.view === 'index' ? ' active' : ''}`} data-row-focus="" to={wikiIndexPath(spaceSlug)}>
         <span className="tp-ico">
           <SortAscendingOutlined />
         </span>
         <span className="lb">{WIKI_AZ_INDEX}</span>
       </Link>
-      <Link className={`wk-toc-item plan${at.view === 'plan' ? ' active' : ''}`} to={wikiPlanPath(spaceSlug)}>
+      <Link className={`wk-toc-item plan${at.view === 'plan' ? ' active' : ''}`} data-row-focus="" to={wikiPlanPath(spaceSlug)}>
         <span className="tp-ico">
           <ProfileOutlined />
         </span>
@@ -151,6 +151,7 @@ export function WikiDirectory({
               <div key={row.slug}>
                 <Link
                   className={`wk-toc-item${open && part === 0 ? ' active' : open ? ' open' : ''}`}
+                  data-row-focus=""
                   to={wikiArticlePath(spaceSlug, row.slug)}
                   aria-current={open && part === 0 ? 'page' : undefined}
                 >
@@ -163,6 +164,7 @@ export function WikiDirectory({
                     <Link
                       key={sub.part}
                       className={`wk-toc-item sub${sub.part === part ? ' active' : ''}`}
+                      data-row-focus=""
                       to={wikiArticlePath(spaceSlug, row.slug, sub.part)}
                       aria-current={sub.part === part ? 'page' : undefined}
                     >
@@ -199,6 +201,7 @@ function WikiDocGroupRows({
           <div key={doc.slug}>
             <Link
               className={`wk-toc-item doc${open ? ' active' : ''}${doc.written ? '' : ' todo'}`}
+              data-row-focus=""
               to={wikiDocPath(spaceSlug, doc.slug)}
               aria-current={open ? 'page' : undefined}
             >
@@ -211,6 +214,7 @@ function WikiDocGroupRows({
                 <Link
                   key={row.key}
                   className={`wk-toc-item sec${section === row.key ? ' active' : ''}${row.written ? '' : ' todo'}`}
+                  data-row-focus=""
                   to={wikiDocSectionPath(spaceSlug, doc.slug, row.key)}
                 >
                   <span className="no">{row.number}</span>

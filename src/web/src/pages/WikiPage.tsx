@@ -433,7 +433,7 @@ function WikiActivityRow({ space, waiting, on }: { space: SpaceRow; waiting: num
   const dots = parts.filter((part) => part.mark === 'dot' && (part.tone === 'error' || part.tone === 'warn'));
   const tone = dots.some((part) => part.tone === 'error') ? 'error' : dots.length > 0 ? 'warn' : null;
   return (
-    <Link className={`wk-toc-item${on ? ' active' : ''}`} to={wikiActivityPath(space.slug)} aria-current={on ? 'page' : undefined}>
+    <Link className={`wk-toc-item${on ? ' active' : ''}`} data-row-focus="" to={wikiActivityPath(space.slug)} aria-current={on ? 'page' : undefined}>
       <span className="tp-ico">
         <HistoryOutlined />
       </span>
