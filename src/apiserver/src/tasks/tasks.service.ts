@@ -9746,6 +9746,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             effort: true,
             // What the run has cost so far, for the panel's status line and its Now card.
             costUsd: true,
+            // The run's own outcome sentence ("runner offline", "acceptance command exited 1; expected 0"):
+            // the task run sidebar's status pill names its cause from it (@orbit/shared taskStatusReason).
+            error: true,
             workspace: { select: { name: true } },
           },
         },
