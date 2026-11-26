@@ -13,9 +13,9 @@ datasource db {
   provider = "postgresql"
 }
 
-// The column session.status and its type run_status are gone (deploys D3 and D4, migrations 1671 and 1691;
-// docs/session-status-retirement-plan.md §4.1, §4.3): no code reads or writes them. The protocol's words are
-// `RunStatus` of @orbit/shared.
+// A session stores no status word: deploys D3 and D4 (migrations 1671 and 1691;
+// docs/session-status-retirement-plan.md §4.1, §4.3) took the stored one and its enum type away. The words the API
+// answers are `RunStatus` of @orbit/shared, derived from the facts.
 
 enum RunnerStatus {
   ONLINE

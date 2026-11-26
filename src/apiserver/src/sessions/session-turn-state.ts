@@ -1,6 +1,6 @@
 /**
  * A held session's turn state, the explicit fact for runner slots and claims (docs/session-status-retirement-plan.md
- * §1.3, §2.1), which the readers moved off `session.status` read (tasks T7 to T12).
+ * §1.3, §2.1), which the readers moved off the stored status word read (tasks T7 to T12).
  *
  * `session.turn_state` is QUEUED, IN_FLIGHT, ABANDONED or null, one for one with the held words PENDING, RUNNING,
  * INTERRUPTED and AWAITING_INPUT. The writers write it (deploy D3, task T14) and nothing reads the stored word: every
