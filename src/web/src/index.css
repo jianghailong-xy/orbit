@@ -29857,6 +29857,11 @@ button.agent-progress-agent:hover {
 .wk-chat-choice .m { font-size: 12px; color: var(--text-3); }
 .wk-chat-body { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
 .wk-chat-empty { margin: 34px 16px; text-align: center; font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
+/* A new Drive chat's examples under its empty state (board drive-chat 01 ②): a press fills the box and sends nothing. */
+.wk-chat-examples { margin: 14px 0 0; padding-left: 18px; text-align: left; font-size: 12.5px; color: var(--text-2); }
+.wk-chat-examples li { margin: 4px 0; }
+.wk-chat-example { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.wk-chat-example:hover { color: var(--brand); }
 /* The panel's composer is the session page's (board 43): its box 12px in from the panel's edges, as the short one it
    replaced was — 374 wide in the default panel, where its toolbar keeps one line as it is. Dragged narrower (to 320),
    the toolbar does what the session page's does on a phone (the 600px block of .composer-toolbar): tighter gaps, the
@@ -31696,7 +31701,7 @@ td > .routing-report-tier + .model-routing-flag {
 
   /* Drive: with a file's details open, the head, folders and list are one panel and the details
      another. The body steps aside (display: contents) so the details can stand beside the head too. */
-  .app-shell .app-main > .app-view:has(> .files-page .files-pane) {
+  .app-shell .app-main > .app-view:has(.files-page .files-pane) {
     background: none;
     border: 0;
     border-radius: 0;
@@ -31732,6 +31737,24 @@ td > .routing-report-tier + .model-routing-flag {
     grid-column: 3;
     grid-row: 1 / 3;
     margin-left: var(--panel-gap);
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  /* Drive with its chat docked (board drive-chat 01 ②): the files and the chat are two panels on the canvas. The chat's
+     host steps aside, so the files page is the panel — or, with a file's details open, its own panels are. */
+  .app-shell .wk-chat-frame.is-drive.is-columned:has(> :is(.wk-chat-panel, .wk-chat-slot)) > .wk-chat-host {
+    padding: 0;
+    overflow: hidden;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .wk-chat-frame.is-drive.is-columned > .wk-chat-host > .files-page:not(:has(.files-pane)) {
+    box-sizing: border-box;
+    overflow: hidden;
     background: var(--bg-base);
     border: 1px solid var(--border-subtle);
     border-radius: var(--panel-radius);
