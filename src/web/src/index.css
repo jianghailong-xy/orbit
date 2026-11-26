@@ -4130,6 +4130,31 @@ button.toast--pill:focus-visible {
   background: var(--warning-bg);
   color: var(--warning);
 }
+/* A phone's branch row is one line, and cannot hold the branch, the count, the latest subject, the
+   pending tag, the diff stat and Commit at once — its left edge used to cut the tag mid-word
+   ("+ unco"), and letting the branch shrink instead cut the branch name to "or…". The two pieces
+   of prose give way: the pending tag, because the Commit button beside it is drawn only while the
+   worktree is dirty and says the same thing, and the latest subject, which is one tap away in the
+   commit list. The branch name ellipsizes only as a last resort. */
+@media (max-width: 600px) {
+  .wt-row .wt-branch,
+  .wt-row .wt-branch-name {
+    min-width: 0;
+  }
+  .wt-row .wt-stat {
+    flex: none;
+  }
+  /* On the commits row the count is a word, not an ellipsis: it stays whole and the branch name
+     takes the squeeze. (A row with no commits yet keeps its own shrinking lead, so the branch
+     keeps its name there.) */
+  .wt-row .wt-commits-lead:has(.wt-commits-subject) {
+    min-width: max-content;
+  }
+  .wt-commits-lead .wt-commits-subject,
+  .wt-commits-lead .wt-commit-tag-pending {
+    display: none;
+  }
+}
 .wt-commits-foot {
   display: flex;
   align-items: center;
@@ -5020,8 +5045,7 @@ button.toast--pill:focus-visible {
     }
   }
 }
-/* A wide window's top pill, moved up into the middle of the header row (the same pill the
-   transcript floats on a phone). */
+/* The transcript's top pill, in the header row: centred in it on a wide window. */
 .workspace-header-jump {
   position: absolute;
   left: 50%;
@@ -5036,6 +5060,30 @@ button.toast--pill:focus-visible {
 }
 .workspace-header-jump[hidden] {
   display: none;
+}
+/* A phone's header has no room for the capsule beside the title, and floating it over the
+   transcript covers the message the reader scrolled up to. Docked here instead: the header wraps,
+   the capsule takes a line of its own below the title's (last in the header, so it wraps under
+   the actions rather than pushing them down), and the conversation starts under the header's
+   rule where nothing covers it. */
+@media (max-width: 960px) {
+  .workspace-header:has(> .workspace-header-jump.is-phone) {
+    flex-wrap: wrap;
+  }
+  .workspace-header-jump.is-phone {
+    position: static;
+    /* The base rule centres itself over the row; docked, it is a row of its own. */
+    transform: none;
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .workspace-header-jump.is-phone .chat-older-pill.chat-older-split {
+    max-width: 100%;
+  }
+  /* Docked, it is part of the header rather than a chip floating over content. */
+  .workspace-header-jump.is-phone .chat-older-pill {
+    box-shadow: none;
+  }
 }
 /* Centred over the whole row, so the title stops short of the pill's half instead of running under it. */
 .workspace-header.has-jump {
@@ -8372,6 +8420,17 @@ button.toast--pill:focus-visible {
   .composer-toolbar > .composer-pill-workspace {
     min-width: 0;
     flex-shrink: 1;
+  }
+  /* The "<Language> → English" tag is a long word pair, and it used to keep its whole width on a
+     phone: it pushed the account and model names to an ellipsis and left nothing between itself
+     and Send. It gives way with the names, and it is the one that takes the ellipsis when the
+     toolbar runs out — the account and model are what a reader changes; the tag is what they
+     read. */
+  .composer-toolbar > .composer-translation-tag {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .composer-pill-workspace .orbit-select {
     min-width: 0;
