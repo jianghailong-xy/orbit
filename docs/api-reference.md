@@ -433,7 +433,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `GET` | `/api/runners/:id/claude-history` | path `id`; query `workDir` | `RunnersController.claudeHistory` |
 | `POST` | `/api/runners/:id/claude-history` | body `Object`; path `id` | `RunnersController.askClaudeHistory` |
 | `DELETE` | `/api/runners/:id/codex-accounts/:account` | path `account`, `id` | `RunnersController.removeCodexAccount` |
-| `GET` | `/api/runners/:id/codex-rate-limit-reset` | path `id` | `CodexRateLimitResetController.list` |
+| `GET` | `/api/runners/:id/codex-rate-limit-reset` | path `id`; query `accountFingerprint` | `CodexRateLimitResetController.list` |
 | `POST` | `/api/runners/:id/codex-rate-limit-reset` | body `Object`; path `id` | `CodexRateLimitResetController.create` |
 | `GET` | `/api/runners/:id/codex-rate-limit-reset/:operationId` | path `id`, `operationId` | `CodexRateLimitResetController.get` |
 | `GET` | `/api/runners/:id/dir-probe` | path `id`; query `path` | `RunnersController.dirProbe` |
