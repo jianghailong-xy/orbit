@@ -75,14 +75,19 @@ test('commit queues atomically only while a session is truly idle', async () => 
   assert.equal(updates.length, 1);
   const update = updates[0] as {
     where: {
-      status: RunStatus;
+      finishedAt: null;
+      OR: unknown[];
       cancelRequestedAt: null;
       runningSubagents: { isEmpty: boolean };
       runningBgShells?: { isEmpty: boolean };
     };
     data: { commitStatus: string };
   };
-  assert.equal(update.where.status, RunStatus.AWAITING_INPUT);
+  // Parked (turnStateFilter([null])): held, with no turn state, or not yet backfilled and stored AWAITING_INPUT.
+  assert.equal(update.where.finishedAt, null);
+  assert.deepEqual(update.where.OR, [
+    { turnState: null, status: { notIn: [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.INTERRUPTED] } },
+  ]);
   assert.equal(update.where.cancelRequestedAt, null);
   assert.deepEqual(update.where.runningSubagents, { isEmpty: true });
   // Background shells are not part of the compare-and-set: a left-up dev server never exits, so
@@ -185,12 +190,12 @@ test('an ended session whose checkout still holds work may commit it', async () 
 
   assert.equal(updates.length, 1);
   const update = updates[0] as {
-    where: { status: { notIn: RunStatus[] }; worktreeDirty: boolean };
+    where: { OR: unknown[]; worktreeDirty: boolean };
     data: { commitStatus: string };
   };
   // Still ended and still holding work is the compare-and-set: the race an ended session has is
-  // being RESUMED, which would put a turn back in the checkout.
-  assert.ok(update.where.status.notIn.includes(RunStatus.AWAITING_INPUT));
+  // being RESUMED, which would put a turn back in the checkout. Not live: released, or queued.
+  assert.deepEqual(update.where.OR[0], { finishedAt: { not: null } });
   assert.equal(update.where.worktreeDirty, true);
   assert.equal(update.data.commitStatus, 'pending');
 });

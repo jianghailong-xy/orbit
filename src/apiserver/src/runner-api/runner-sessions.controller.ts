@@ -15,7 +15,8 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { randomUUID } from 'crypto';
-import { Prisma, Runner, RunStatus } from '@prisma/client';
+import { Prisma, Runner } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { ProjectsService } from '../projects/projects.service';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';

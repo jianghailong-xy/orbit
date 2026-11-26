@@ -387,11 +387,12 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/guests': 'SessionGuestsService.ownedSession',
   'DELETE /sessions/:id/guests/:userId': 'SessionGuestsService.ownedSession',
 
-  // ── the runner door (32) ──────────────────────────────────────────────────────────────────────
+  // ── the runner door (33) ──────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/:id/source/pin': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/takeover-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/activate-leases': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/release-leases': 'RunnerApiController.assertEngineSessionById',
+  'POST /runner/sessions/:id/return-slot': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/orchestration-credential': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/attachments': 'RunnerApiController.assertSessionOwnership',
   'POST /runner/sessions/:id/files': 'RunnerApiController.assertSessionOwnership',

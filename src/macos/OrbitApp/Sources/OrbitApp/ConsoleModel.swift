@@ -2695,8 +2695,17 @@ final class ConsoleModel {
         // What this row says it is waiting on the owner for moves before any card here does: a
         // coordinator asking to start its project lands on its row as a count (`waitingKind`
         // START_REQUEST), and the card that asks it is drawn from the read this kicks.
-        let waiting = "\(session.pendingApprovals ?? 0)|\(session.waitingKind?.rawValue ?? "")"
-        sessionWaitingKind = session.waitingKind
+        //
+        // Only a list row carries these two: the detail read (`GET /sessions/:id`) has neither, and
+        // its silence is not "nothing is waiting". Taken as one, every detail refresh cleared the
+        // owner's Record as done… and took its card down, and the list row, unchanged, never put
+        // it back (the owner's iOS report, 2026-11-25). A record without the count keeps what the
+        // last row said.
+        let carriesWaiting = session.pendingApprovals != nil
+        if carriesWaiting { sessionWaitingKind = session.waitingKind }
+        let waiting = carriesWaiting
+            ? "\(session.pendingApprovals ?? 0)|\(session.waitingKind?.rawValue ?? "")"
+            : waitingSignal ?? "0|"
         // The moves this conversation draws move with this row even when the needs-you word does
         // not: an answered batch drops the count to the same "0|" a row that never waited has,
         // and the row's own updated time is what says it changed at all.
@@ -3678,6 +3687,13 @@ final class ConsoleModel {
     /// freshest word on what the session runs; the console's own provider is the fallback for a
     /// detail that has not loaded.
     var outageProvider: String { worktree.detail?.provider ?? provider }
+    /// The same provider as the auto-retry card names it — "Qwen (Model Studio)", "Claude Code", never the slug (web
+    /// `outageProviderName`).
+    var outageProviderName: String {
+        SessionProviderChoices.providerName(
+            on: engine, SessionProviderChoices.current(engine: engine, provider: outageProvider,
+                                                       in: engineProviders, sources: choiceSources))
+    }
 
     /// Re-read the armed retry. Called when an auto-retry card appears: the server arms the retry as
     /// the failing turn settles, and a session that just went terminal is exactly the one the
@@ -4232,6 +4248,42 @@ final class ConsoleModel {
             publishStateNow()
         } catch {
             statusMessage = "Send as written failed — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Cancel on a held message that failed to translate (web parity: `cancelTurn`): the queued
+    /// Cancel's DELETE, and only on the server's yes the message leaves the conversation and what
+    /// the owner typed goes back under any draft, its files with it. The server deletes a withdrawn
+    /// turn's attachments, so their bytes are read first and staged as new uploads.
+    func cancelUntranslated(_ bubble: UserBubble) async {
+        guard SessionTranslation.offersCancel(bubble), let turnId = bubble.turnId,
+              !cancellingHeld.contains(turnId) else { return }
+        cancellingHeld.insert(turnId)
+        defer { cancellingHeld.remove(turnId) }
+        var files: [(ref: TurnAttachment, data: Data)] = []
+        for ref in bubble.attachments {
+            guard let data = await attachments.data(for: ref.id) else {
+                onToast(ToastRequest(message: "Couldn't cancel the message",
+                                     detail: "Its attachments couldn't be read.", tone: .error))
+                return
+            }
+            files.append((ref, data))
+        }
+        do {
+            try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
+        } catch {
+            onToast(ToastRequest(message: "Couldn't cancel the message",
+                                 detail: APIClient.failureReason(error), tone: .error))
+            return
+        }
+        reducer.removeWithdrawnSteer(turnId: turnId)
+        publishStateNow()
+        let words = ComposerLogic.withdrawnText(of: bubble).map { bubble.shell ? "!" + $0 : $0 }
+        composerText = HeldCancel.composer(composerText, restoring: words)
+        for (ref, data) in files {
+            let mime = ref.mime ?? "application/octet-stream"
+            let ext = UTType(mimeType: mime)?.preferredFilenameExtension
+            attach(filename: ref.name ?? "attachment" + (ext.map { "." + $0 } ?? ""), mimeType: mime, data: data)
         }
     }
 

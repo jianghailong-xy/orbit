@@ -53,11 +53,22 @@ test("a runner's report is read strictly: only a named outcome can remove a mess
 function settleTx() {
   const deletes: Array<Record<string, unknown>> = [];
   const updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
+  const detached: Array<Record<string, unknown>> = [];
   return {
     deletes,
     updates,
+    detached,
     tx: {
+      attachment: {
+        findMany: async () => [{ id: 'file-1', turnId: STEER_ID }],
+        updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+          detached.push(args);
+          return { count: 1 };
+        },
+      },
       conversationTurn: {
+        // The steer is there until deleted.
+        findMany: async () => (deletes.length > 0 ? [] : [{ id: STEER_ID }]),
         deleteMany: async ({ where }: { where: Record<string, unknown> }) => {
           deletes.push(where);
           return { count: 1 };
@@ -85,6 +96,8 @@ test('a withdrawn steer leaves with the completion that says so, and the outcome
   assert.deepEqual(h.deletes, [
     { id: STEER_ID, sessionId: SESSION_ID, kind: 'steer', status: 'IN_FLIGHT', deliveryStatus: null },
   ]);
+  // Its files stay on the session, for the words' way back to the composer.
+  assert.deepEqual(h.detached, [{ where: { id: { in: ['file-1'] } }, data: { turnId: null } }]);
   assert.equal(h.updates.length, 1);
   assert.deepEqual(h.updates[0].where, { id: WITHDRAW_ID, sessionId: SESSION_ID, kind: 'withdraw' });
   assert.deepEqual(JSON.parse(String(h.updates[0].data.content)), { turnId: STEER_ID, outcome: 'withdrawn' });
@@ -105,6 +118,7 @@ test('every other outcome leaves the steer where it was, and says why', async ()
       { result, error: 'the engine said so' },
     );
     assert.deepEqual(h.deletes, [], `${result} removed the steer`);
+    assert.deepEqual(h.detached, [], `${result} moved the steer's files`);
     assert.deepEqual(JSON.parse(String(h.updates[0].data.content)), {
       turnId: STEER_ID,
       outcome,

@@ -8,7 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 
 /**
- * Where the bytes of Documents are kept (docs/documents-design.md §2.1, §2.10): a store addressed by
+ * Where the bytes of Drive are kept (docs/drive-design.md §2.1, §2.10): a store addressed by
  * each content's sha256. `file_blob.storage` names the store a content is in.
  */
 export type FileStorage = 'local' | 's3';
@@ -58,7 +58,7 @@ export interface StoredObject {
 
 export const SHA256_NAME = /^[0-9a-f]{64}$/;
 
-/** The S3-compatible bucket a deployment keeps files in (`ORBIT_DOCUMENTS_BACKEND=s3`). */
+/** The S3-compatible bucket a deployment keeps files in (`ORBIT_DRIVE_BACKEND=s3`). */
 export interface S3FilesConfig {
   /** The service's URL, e.g. `https://s3.eu-west-1.amazonaws.com` or `http://minio:9000`. Objects are
    *  addressed path-style, `<endpoint>/<bucket>/<key>`. */
@@ -71,18 +71,18 @@ export interface S3FilesConfig {
 
 export interface FilesConfig {
   /**
-   * The files directory (ORBIT_DOCUMENTS_DIR, default /var/lib/orbit/files, which Compose bind-mounts from
+   * The files directory (ORBIT_DRIVE_DIR, default /var/lib/orbit/files, which Compose bind-mounts from
    * ./data/files). The local store keeps bytes in it, and every upload is written to its `tmp/` first,
    * whichever store then keeps it.
    */
   dir: string;
-  /** The store new bytes go to (ORBIT_DOCUMENTS_BACKEND, default `local`). */
+  /** The store new bytes go to (ORBIT_DRIVE_BACKEND, default `local`). */
   storage: FileStorage;
   /** Set exactly when `storage` is `s3`. */
   s3?: S3FilesConfig;
-  /** The deployment mirrors its bucket off host (ORBIT_DOCUMENTS_S3_MIRROR=1), so s3 bytes are in the off-host copy as local ones are. */
+  /** The deployment mirrors its bucket off host (ORBIT_DRIVE_S3_MIRROR=1), so s3 bytes are in the off-host copy as local ones are. */
   s3Mirror?: boolean;
-  /** The most one account may keep (ORBIT_DOCUMENTS_QUOTA_BYTES). Unset: no limit, a self-hosted deployment's default. */
+  /** The most one account may keep (ORBIT_DRIVE_QUOTA_BYTES). Unset: no limit, a self-hosted deployment's default. */
   quotaBytes?: number;
   /** Configured capacity of the S3 store, shared by all accounts. */
   storeQuotaBytes?: number;
@@ -98,24 +98,25 @@ export interface FilesConfig {
 export const DEFAULT_FILES_DIR = '/var/lib/orbit/files';
 
 /**
- * The name a setting is read by: ORBIT_DOCUMENTS_<suffix>, or ORBIT_FILES_<suffix>, its name before the drive was
- * renamed Documents, when the new one is unset or blank and the old one is not, so that a host .env written before the
- * rename keeps working. The name read is the one an error names.
+ * The name a setting is read by: ORBIT_DRIVE_<suffix>, or ORBIT_DOCUMENTS_<suffix> and then ORBIT_FILES_<suffix>, its
+ * names before the drive was renamed back to Drive, when each newer one is unset or blank and the older one is not, so
+ * that a host .env written under an earlier name keeps working. The name read is the one an error names.
  */
-export function documentsSettingName(env: NodeJS.ProcessEnv, suffix: string): string {
-  const name = `ORBIT_DOCUMENTS_${suffix}`;
-  const legacy = `ORBIT_FILES_${suffix}`;
-  return !env[name]?.trim() && env[legacy]?.trim() ? legacy : name;
+export function driveSettingName(env: NodeJS.ProcessEnv, suffix: string): string {
+  for (const prefix of ['ORBIT_DRIVE_', 'ORBIT_DOCUMENTS_', 'ORBIT_FILES_']) {
+    if (env[`${prefix}${suffix}`]?.trim()) return `${prefix}${suffix}`;
+  }
+  return `ORBIT_DRIVE_${suffix}`;
 }
 
-/** The setting's value, trimmed, by documentsSettingName; undefined when neither name is set. */
-function documentsSetting(env: NodeJS.ProcessEnv, suffix: string): string | undefined {
-  return env[documentsSettingName(env, suffix)]?.trim();
+/** The setting's value, trimmed, by driveSettingName; undefined when no name is set. */
+function driveSetting(env: NodeJS.ProcessEnv, suffix: string): string | undefined {
+  return env[driveSettingName(env, suffix)]?.trim();
 }
 
-/** ORBIT_DOCUMENTS_DIR, or its default. */
+/** ORBIT_DRIVE_DIR, or its default. */
 export function filesDirFrom(env: NodeJS.ProcessEnv = process.env): string {
-  return documentsSetting(env, 'DIR') || DEFAULT_FILES_DIR;
+  return driveSetting(env, 'DIR') || DEFAULT_FILES_DIR;
 }
 
 /** A whole number above zero from the environment, or `fallback` when it is unset or blank. */
@@ -134,11 +135,11 @@ function fileLimitsFrom(env: NodeJS.ProcessEnv): Pick<FilesConfig, 'quotaBytes' 
   // The sidecar's own defaults (scripts/pg-backup.sh), so that the two agree when neither is set.
   const interval = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_INTERVAL', 86_400);
   const keep = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_KEEP', 2);
-  const quotaBytes = positiveIntegerFrom(env, documentsSettingName(env, 'QUOTA_BYTES'));
+  const quotaBytes = positiveIntegerFrom(env, driveSettingName(env, 'QUOTA_BYTES'));
   return {
     ...(quotaBytes ? { quotaBytes } : {}),
     backupRetentionMs: interval * (keep + 1) * 1000,
-    ...(documentsSetting(env, 'S3_MIRROR') === '1' ? { s3Mirror: true } : {}),
+    ...(driveSetting(env, 'S3_MIRROR') === '1' ? { s3Mirror: true } : {}),
   };
 }
 
@@ -156,31 +157,31 @@ export function uploadTempDir(dir: string): string {
 export function filesConfigFrom(env: NodeJS.ProcessEnv = process.env): FilesConfig {
   const dir = filesDirFrom(env);
   const limits = fileLimitsFrom(env);
-  const backend = documentsSetting(env, 'BACKEND') || 'local';
+  const backend = driveSetting(env, 'BACKEND') || 'local';
   if (backend === 'local') return { dir, storage: 'local', ...limits };
   if (backend !== 's3') {
-    throw new Error(`${documentsSettingName(env, 'BACKEND')} must be local or s3, not "${backend}"`);
+    throw new Error(`${driveSettingName(env, 'BACKEND')} must be local or s3, not "${backend}"`);
   }
   const s3 = {
-    endpoint: documentsSetting(env, 'S3_ENDPOINT') ?? '',
-    bucket: documentsSetting(env, 'S3_BUCKET') ?? '',
-    accessKeyId: documentsSetting(env, 'S3_ACCESS_KEY_ID') ?? '',
-    secretAccessKey: documentsSetting(env, 'S3_SECRET_ACCESS_KEY') ?? '',
-    region: documentsSetting(env, 'S3_REGION') || 'us-east-1',
+    endpoint: driveSetting(env, 'S3_ENDPOINT') ?? '',
+    bucket: driveSetting(env, 'S3_BUCKET') ?? '',
+    accessKeyId: driveSetting(env, 'S3_ACCESS_KEY_ID') ?? '',
+    secretAccessKey: driveSetting(env, 'S3_SECRET_ACCESS_KEY') ?? '',
+    region: driveSetting(env, 'S3_REGION') || 'us-east-1',
   };
   const missing = Object.entries({
-    ORBIT_DOCUMENTS_S3_ENDPOINT: s3.endpoint,
-    ORBIT_DOCUMENTS_S3_BUCKET: s3.bucket,
-    ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: s3.accessKeyId,
-    ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+    ORBIT_DRIVE_S3_ENDPOINT: s3.endpoint,
+    ORBIT_DRIVE_S3_BUCKET: s3.bucket,
+    ORBIT_DRIVE_S3_ACCESS_KEY_ID: s3.accessKeyId,
+    ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
   }).filter(([, value]) => !value).map(([name]) => name);
   if (missing.length > 0) {
-    throw new Error(`${documentsSettingName(env, 'BACKEND')}=s3 needs ${missing.join(', ')}`);
+    throw new Error(`${driveSettingName(env, 'BACKEND')}=s3 needs ${missing.join(', ')}`);
   }
   if (!/^https?:\/\//.test(s3.endpoint)) {
-    throw new Error(`${documentsSettingName(env, 'S3_ENDPOINT')} must be an http:// or https:// URL, not "${s3.endpoint}"`);
+    throw new Error(`${driveSettingName(env, 'S3_ENDPOINT')} must be an http:// or https:// URL, not "${s3.endpoint}"`);
   }
-  const storeQuotaBytes = positiveIntegerFrom(env, documentsSettingName(env, 'STORE_QUOTA_BYTES'));
+  const storeQuotaBytes = positiveIntegerFrom(env, driveSettingName(env, 'STORE_QUOTA_BYTES'));
   return { dir, storage: 's3', s3, ...limits, ...(storeQuotaBytes ? { storeQuotaBytes } : {}) };
 }
 

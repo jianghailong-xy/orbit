@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BranchCommit, RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
@@ -939,12 +939,12 @@ function MergeButton({
             </>
           )
         }
+        tooltip="Merge into another branch"
         trigger={
           <button
             type="button"
             className={`wt-merge-caret${failed ? ' wt-merge-btn-failed' : ''}`}
             aria-label="Choose a branch to merge into"
-            title="Merge into another branch"
             onClick={(e) => e.stopPropagation()}
           >
             ▾
@@ -1076,6 +1076,10 @@ const WT_DIFF_WIDTH_MIN = 560;
 const WT_DIFF_WIDTH_DEFAULT = 'min(1400px, 94vw)';
 const WT_DIFF_MODE_KEY = 'wt-diff-mode';
 const WT_DIFF_MAX_KEY = 'wt-diff-max';
+const WT_DIFF_LIST_WIDTH_KEY = 'wt-diff-list-width';
+const WT_DIFF_LIST_WIDTH_MIN = 160;
+// The diff pane keeps at least this much room when the file list is dragged wider.
+const WT_DIFF_PANE_MIN = 320;
 // Render at most this many rows of a single file's diff up front; a giant file (e.g. a
 // 2k-line new file) then offers a "show more" button rather than laying out everything at once.
 const DIFF_ROW_CAP = 600;
@@ -1435,6 +1439,50 @@ export function WorktreeDiffDrawer({
     localStorage.removeItem(WT_DIFF_WIDTH_KEY);
   };
 
+  // Drag the line between the file list and the diff to widen or narrow the list; the width
+  // persists, and a double-click on the line resets it. null → the CSS default (248px).
+  const [listWidth, setListWidth] = useState<number | null>(() => {
+    const s = Number(localStorage.getItem(WT_DIFF_LIST_WIDTH_KEY));
+    return s >= WT_DIFF_LIST_WIDTH_MIN ? s : null;
+  });
+  const [listResizing, setListResizing] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const startListResize = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    e.preventDefault();
+    const handle = e.currentTarget;
+    const pointerId = e.pointerId;
+    handle.setPointerCapture(pointerId);
+    const startX = e.clientX;
+    const startW = listRef.current?.getBoundingClientRect().width ?? 248;
+    const bodyW = bodyRef.current?.getBoundingClientRect().width ?? 1100;
+    const maxW = Math.max(WT_DIFF_LIST_WIDTH_MIN, bodyW - WT_DIFF_PANE_MIN);
+    let latest = startW;
+    setListResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: PointerEvent): void => {
+      latest = Math.min(maxW, Math.max(WT_DIFF_LIST_WIDTH_MIN, startW + ev.clientX - startX));
+      setListWidth(latest);
+    };
+    const onUp = (): void => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setListResizing(false);
+      localStorage.setItem(WT_DIFF_LIST_WIDTH_KEY, String(Math.round(latest)));
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+  };
+  const resetListWidth = (): void => {
+    setListWidth(null);
+    localStorage.removeItem(WT_DIFF_LIST_WIDTH_KEY);
+  };
+
   // Split (default) vs unified rendering of the diff, remembered across reloads.
   const [viewMode, setViewMode] = useState<'unified' | 'split'>(() =>
     localStorage.getItem(WT_DIFF_MODE_KEY) === 'unified' ? 'unified' : 'split',
@@ -1550,7 +1598,7 @@ export function WorktreeDiffDrawer({
             title="Drag to resize · double-click to reset"
           />
         )}
-        <div className="wt-diff-list">
+        <div className="wt-diff-list" ref={listRef} style={listWidth != null ? { width: listWidth } : undefined}>
           {source ? (
             <>
               {source.listHead}
@@ -1586,6 +1634,15 @@ export function WorktreeDiffDrawer({
             <FileTree files={files} activePath={openPath} onSelect={onSelect} />
           )}
         </div>
+        <div
+          className={`wt-diff-list-resizer${listResizing ? ' resizing' : ''}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize file list"
+          onPointerDown={startListResize}
+          onDoubleClick={resetListWidth}
+          title="Drag to resize · double-click to reset"
+        />
         <div className="wt-diff-pane">
           {commit && <CommitHead commit={commit} mixed={mixed} />}
           {active ? (
@@ -1645,13 +1702,17 @@ function DiffPane({
   const head = (
     <>
       <span className="wt-diff-nav">
-        <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file" title="Previous file">
-          ‹
-        </button>
+        <Tooltip side="bottom" content="Previous file">
+          <button type="button" onClick={onPrev} disabled={!onPrev} aria-label="Previous file">
+            ‹
+          </button>
+        </Tooltip>
         <span className="wt-diff-nav-pos">{pos}</span>
-        <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file" title="Next file">
-          ›
-        </button>
+        <Tooltip side="bottom" content="Next file">
+          <button type="button" onClick={onNext} disabled={!onNext} aria-label="Next file">
+            ›
+          </button>
+        </Tooltip>
       </span>
       <span className="wt-diff-pane-path">{file.path}</span>
     </>

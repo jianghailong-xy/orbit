@@ -5,7 +5,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { MANAGED_RUNNER_COPY, managedRunnerDisplay, type ManagedRunnerDisplay, type ManagedRunnerStatus } from '@orbit/shared';
+import { MANAGED_RUNNER_COPY, MANAGED_RUNNER_NEXT_TRY_COPY, managedRunnerDisplay, managedRunnerNextTry, type ManagedRunnerDisplay, type ManagedRunnerStatus } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -96,7 +96,9 @@ describe('every server state sample, drawn', () => {
       expect(notice().dataset.kind, name).toBe(expected.kind);
       expect(notice().querySelector('.managed-runner-notice-title')?.textContent, name).toBe(expected.title);
       expect(notice().querySelector('.managed-runner-notice-detail')?.textContent, name).toBe(expected.detail);
-      expect(!!button(MANAGED_RUNNER_COPY.retry), `${name}: Retry`).toBe(expected.retry);
+      // Retry now while an automatic try is scheduled anyway; Retry otherwise.
+      const retryLabel = managedRunnerNextTry(status) ? MANAGED_RUNNER_NEXT_TRY_COPY.retryNow : MANAGED_RUNNER_COPY.retry;
+      expect(!!button(retryLabel), `${name}: ${retryLabel}`).toBe(expected.retry);
       expect(!!button(MANAGED_RUNNER_COPY.ensure), `${name}: Set up`).toBe(expected.ensure);
       const signIn = [...container.querySelectorAll('a')].find((a) => a.textContent === MANAGED_RUNNER_COPY.signIn);
       expect(!!signIn, `${name}: Open Machines & models`).toBe(expected.signIn);
@@ -124,6 +126,38 @@ describe('every server state sample, drawn', () => {
     expect(button(MANAGED_RUNNER_COPY.retry)).toBeUndefined();
     await render(state('failed: retryable'));
     expect(button(MANAGED_RUNNER_COPY.retry)).toBeDefined();
+  });
+
+  it('shows a stopped runner\'s cause, attempt and next automatic try, with Retry now', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-09T08:00:00.000Z'));
+    try {
+      await render(state('failed: kept running out of memory, its slow retry scheduled'));
+      expect(notice().dataset.kind).toBe('failed');
+      expect(notice().querySelector('.managed-runner-notice-detail')?.textContent).toMatch(/^The runner kept running out of memory/);
+      const at = new Date('2026-10-09T08:30:00.000Z').toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      expect(notice().querySelector('.managed-runner-notice-next')?.textContent).toBe(`Attempt 6 · next automatic try at ${at}`);
+      expect(button('Retry now')).toBeDefined();
+
+      await render(state('failed: kept filling its temporary storage, its slow retry due'));
+      expect(notice().querySelector('.managed-runner-notice-detail')?.textContent).toMatch(/^The runner kept filling its temporary storage/);
+      expect(notice().querySelector('.managed-runner-notice-next')?.textContent).toBe('Attempt 7 · next automatic try as soon as work is waiting');
+
+      await render(state('waking: restarting after it filled its temporary storage, its next try scheduled'));
+      expect(notice().querySelector('.managed-runner-notice-detail')?.textContent).toMatch(/^The runner filled its temporary storage/);
+      expect(notice().querySelector('.managed-runner-notice-next')?.textContent).toMatch(/^Attempt 2 · next automatic try at /);
+
+      // FAILED with no next try: the cause and Retry, no next-try line.
+      await render(state('failed: kept running out of memory'));
+      expect(notice().querySelector('.managed-runner-notice-next')).toBeNull();
+      expect(button(MANAGED_RUNNER_COPY.retry)).toBeDefined();
+      // Asleep is no stop: no next-try line, and it reads as asleep.
+      await render(state('sleeping'));
+      expect(notice().querySelector('.managed-runner-notice-next')).toBeNull();
+      expect(notice().querySelector('.managed-runner-notice-title')?.textContent).toBe('Managed runner asleep');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows a reason it has never heard of by the server’s own sentence', async () => {

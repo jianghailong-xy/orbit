@@ -129,6 +129,11 @@ describe('sessionProjectListing', () => {
     expect(out.projects[0].lastTurnAt).toBe(ago(2));
   });
 
+  it('dates the row by the member that spoke last, not the one listed last', () => {
+    const out = listing([coordinator({ listedAt: ago(30), lastTurnAt: ago(3) }), member('worker', { listedAt: ago(10), lastTurnAt: ago(10) })]);
+    expect(out.projects[0]).toMatchObject({ listedAt: ago(10), lastTurnAt: ago(3) });
+  });
+
   it('puts all members in the coordinator folder, counting the project there as one row', () => {
     const folders = [folder('f1', 'Release'), folder('f2', 'Tasks'), folder('empty', 'Empty')];
     const sessions = [coordinator({ folderId: 'f1' }), member('worker', { folderId: 'f2', motion: 'spinner' }), member('waiting', { line: { text: 'Waiting', tone: 'approval' } }), row('ordinary')];

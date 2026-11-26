@@ -84,8 +84,8 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_DOCUMENTS_BACKEND: 'local',
-    ORBIT_DOCUMENTS_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
 

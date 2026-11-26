@@ -452,7 +452,9 @@ def cmd_wait_session(args):
         if (answered and settled) or view.get('status') == 'FAILED' or time.monotonic() > deadline:
             break
         time.sleep(2)
-    session_row = table_rows(f"select id, status, assigned_runner_id, provider, provider_builtin, engine, model, "
+    word = ('session_legacy_status(finished_at, turn_state, end_reason, last_turn_outcome, started_at, import_source_cwd, kind, '
+            '(select l.settled_as from project_landing l where l.session_id = session.id), session.status::text)')  # the fallback, until T14
+    session_row = table_rows(f"select id, {word} as status, assigned_runner_id, provider, provider_builtin, engine, model, "
                              f"runtime_session_id, created_at from session where id = '{to_uuid(args.session)}'")
     kinds = {}
     for event in events:

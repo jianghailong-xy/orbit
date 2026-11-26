@@ -81,12 +81,12 @@ public enum AccessTokensList {
         ScopeGroup(resource: "Events", read: "events:read", write: nil),
     ]
 
-    /// Files (the Documents drive) is one grant that reads and changes it, so Read-only leaves it out and Read & write
+    /// Files (the Drive) is one grant that reads and changes it, so Read-only leaves it out and Read & write
     /// includes it; Notifications (POST /api/notify) sends a push to the owner's own apps and reaches nothing else.
     /// Both as the web's accessTokens.ts has them (FILES_SCOPE, NOTIFY_SCOPE).
-    static let filesScope = "documents"
+    static let filesScope = "drive"
     static let notifyScope = "notify"
-    static let filesGroup = ScopeGroup(resource: "Documents", read: filesScope, write: filesScope)
+    static let filesGroup = ScopeGroup(resource: "Drive", read: filesScope, write: filesScope)
 
     static var readScopes: [String] { scopeGroups.map(\.read) }
     static var allScopes: [String] {

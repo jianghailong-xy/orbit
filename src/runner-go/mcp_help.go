@@ -106,7 +106,8 @@ func mcpHelp() string {
 		fmt.Sprintf("initialize answers with the Orbit agent primer as the server's instructions: primer %s, "+
 			"written from Agent Contract %s, at most %d characters, of which the first %d stand alone. The runner "+
 			"writes the same primer into each engine's own instructions too, for an engine that does not show a "+
-			"server's instructions.", agentPrimerVersion, agentContractVersion, agentPrimerMaxBytes, agentPrimerLeadMaxChars),
+			"server's instructions. Inside a Claude Code session, whose appended system prompt carries the whole "+
+			"primer, initialize answers with its first paragraph only.", agentPrimerVersion, agentContractVersion, agentPrimerMaxBytes, agentPrimerLeadMaxChars),
 		"tools/list is the operation catalogue's MCP side, for " + englishList(served) + "; `orbit capabilities " +
 			"--json` is its CLI side, which --summary, --family and --id answer a view at a time, and the guide " +
 			"tool (`orbit guide`) answers it by what a person asks for. The tools " + englishList(orchestrated) +

@@ -76,11 +76,15 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
     val counts = ProjectDone.counts(doc)
     val nonCode = DoneFollowUps.nonCode(doc)
     val main = ProjectDone.mainBranch(doc)
-    // The coordinator's call and gaps in the owner's language (Settings › Translation), flipped whole to its own words by the foot.
+    // The coordinator's call and gaps, and the project's title and criteria, in the owner's language (Settings › Translation),
+    // flipped whole to their own words by the one foot.
     var showOriginal by rememberSaveable(tag) { mutableStateOf(false) }
     val owner = LocalTranslation.current.cardLanguage
     val translated = request?.let { OwnerCardTranslation.openItem(it, owner) }
     val asked = (if (translated != null && !showOriginal) translated else request)?.obj("doneRequest")
+    val project = OwnerCardTranslation.project(doc, owner)
+    // For drawing only: the presses and what they open keep reading `doc`.
+    val shown = project?.takeUnless { showOriginal } ?: doc
     var recording by remember { mutableStateOf(false) }
     // "Not yet…" and the note it asks for, kept while the card is up.
     var notYetOpen by rememberSaveable(tag) { mutableStateOf(false) }
@@ -98,14 +102,14 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
             trailing()
         }
         // Which project, and who asked and how long it has waited — or that nobody did.
-        Text(ProjectDone.meta(doc.text("title").orEmpty(), asked != null, if (asked != null) ProjectDone.requestWaiting(request?.text("waitingSince"), now) else null),
+        Text(ProjectDone.meta(shown.text("title").orEmpty(), asked != null, if (asked != null) ProjectDone.requestWaiting(request?.text("waitingSince"), now) else null),
             Modifier.testTag("$tag-meta"), style = MaterialTheme.typography.labelMedium, color = muted)
         asked?.let { DoneHead(ProjectDone.coordinatorCall); DonePanel { Text(it.text("judgment").orEmpty(), Modifier.padding(12.dp).testTag("$tag-judgment")) } }
-        if (asked != null && translated != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
+        if ((asked != null && translated != null) || project != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
         // A non-code project says so first, who marked it and when, and where to change it (decided board ③ A).
         if (nonCode) NonCodeBanner(doc, "$tag-non-code", actions?.changeMark)
         // Done when: the counts, and every criterion — open at once up to a dozen, one press away beyond.
-        val criteria = ProjectDone.criteria(doc)
+        val criteria = ProjectDone.criteria(doc).zip(ProjectDone.criteria(shown)) { criterion, words -> criterion.copy(text = words.text) }
         val count = counts?.number("criteria") ?: criteria.size
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { DoneHead(ProjectDone.doneWhenHead(count)) }
@@ -123,7 +127,7 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
             }
         }
         MovedOutLines(doc.objects("criteriaMovedOut"), "$tag-moved-out", actions?.openProject)
-        if (asked != null) ProjectDoneGapList(doc, ProjectDone.gaps(doc, asked), tag)
+        if (asked != null) ProjectDoneGapList(shown, ProjectDone.gaps(shown, asked), tag)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("✓", Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelMedium, color = LocalOrbitColors.current.success)
             Text(ProjectDone.orbitCheckedLine(counts, confirmedAt, openItems, running), Modifier.testTag("$tag-orbit-checked"),
@@ -213,16 +217,20 @@ private fun ProjectDoneReceipt(doc: JsonObject, record: JsonObject?, enabled: Bo
     val scope = rememberCoroutineScope()
     val accepted = ProjectDone.accepted(doc, record)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    var showOriginal by rememberSaveable(tag) { mutableStateOf(false) }
+    val project = OwnerCardTranslation.project(doc, LocalTranslation.current.cardLanguage)
+    val shown = project?.takeUnless { showOriginal } ?: doc
     Column(Modifier.fillMaxWidth().testTag("$tag-receipt"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DoneSettledHead(ProjectDone.provenanceBadge, trailing)
-        Text(ProjectDone.receiptMeta(doc, record), Modifier.testTag("$tag-receipt-meta"), style = MaterialTheme.typography.labelMedium, color = muted)
+        Text(ProjectDone.receiptMeta(shown, record), Modifier.testTag("$tag-receipt-meta"), style = MaterialTheme.typography.labelMedium, color = muted)
         Text(ProjectDone.receiptLine(doc, record), Modifier.testTag("$tag-receipt-line"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         Text(ProjectDone.receiptTally(doc, record), Modifier.testTag("$tag-receipt-tally"), style = MaterialTheme.typography.labelMedium, color = muted)
         if (accepted.isNotEmpty()) {
             Text(if (acceptedOpen) ProjectDone.showLess else ProjectDone.seeWhatAccepted, Modifier.clickable(role = Role.Button) { acceptedOpen = !acceptedOpen }
                 .testTag("$tag-accepted"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            if (acceptedOpen) ProjectDoneGapList(doc, accepted, tag)
+            if (acceptedOpen) ProjectDoneGapList(shown, accepted, tag)
         }
+        if (project != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
         error?.let { Text(it, Modifier.testTag("$tag-error"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error) }
         onReopen?.let { reopen -> OutlinedButton(onClick = {
             if (reopening) return@OutlinedButton
@@ -362,8 +370,10 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
     // In the conversation the question is a preview — its heading, the project and its tally — that opens the whole card in a review
     // sheet, its answers pinned at the sheet's foot (the owner, 2026-11-17; iOS `ProjectDoneCardView`). The receipt is short and stays
     // whole where it arrived: it is the answer left in the conversation.
+    // The preview names the project in the owner's language; the card it opens offers Show original.
+    val title = (OwnerCardTranslation.project(doc, LocalTranslation.current.cardLanguage) ?: doc).text("title").orEmpty()
     if (asking) CardPreviewView(tag, CardPreview(ProjectDone.heading,
-        "${doc.text("title").orEmpty()} · ${ProjectDone.cardTally(ProjectDone.counts(doc), ProjectDone.mainBranch(doc), DoneFollowUps.nonCode(doc),
+        "$title · ${ProjectDone.cardTally(ProjectDone.counts(doc), ProjectDone.mainBranch(doc), DoneFollowUps.nonCode(doc),
             DoneFollowUps.waitingConfirmation(doc))}", PreviewTone.BLUE)) { review(true) }
     else Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
         color = LocalOrbitColors.current.success.copy(alpha = 0.08f).compositeOver(MaterialTheme.colorScheme.surface)) {

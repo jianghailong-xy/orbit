@@ -590,7 +590,7 @@ data class ScheduleRunAnswer(val run: ScheduleRunView) {
     }
 }
 
-/** `POST /schedules/:id/undo`: APPLIED, UNCHANGED or PENDING (a card, when undoing would widen). */
+/** `POST /schedules/:id/undo` and `…/rename`: APPLIED, UNCHANGED or PENDING (a card, when undoing would widen). */
 data class ScheduleUpdateAnswer(val outcome: String, val schedule: ScheduleView?, val card: ScheduleCard?) {
     companion object {
         fun parse(json: JsonElement?): ScheduleUpdateAnswer? {

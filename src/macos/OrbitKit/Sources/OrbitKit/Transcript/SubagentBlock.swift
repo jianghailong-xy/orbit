@@ -382,6 +382,17 @@ public struct SubagentSessionSummary: Equatable, Sendable {
         nonEmpty(run.modelLabel) ?? nonEmpty(run.model) ?? nonEmpty(run.engine).map(SubagentBlock.shortName)
     }
 
+    /// The model as the Agents sheet's row names it: the label without a trailing build number
+    /// (`DeepSeek V4.1 Flash 1017` → `DeepSeek V4.1 Flash`). The block in the conversation keeps it.
+    public static func sheetModelLabel(_ run: SubagentRunView) -> String? {
+        guard let label = modelLabel(run) else { return nil }
+        var words = label.split(separator: " ")
+        if words.count > 1, let last = words.last, last.count >= 4, last.allSatisfy(\.isNumber) {
+            words.removeLast()
+        }
+        return words.joined(separator: " ")
+    }
+
     /// Whether a run took the session's own model: a shadow row (no engine of its own) runs on the
     /// parent's, and a run on the parent's engine with the parent's model is no different from it.
     static func ownModel(_ run: SubagentRunView, parentEngine: String?, parentModel: String?) -> Bool {

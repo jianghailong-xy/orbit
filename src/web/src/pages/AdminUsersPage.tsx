@@ -457,8 +457,9 @@ export function AdminUsersPage() {
         <Menu
           align="end"
           items={items}
+          tooltip={MORE_ACTIONS}
           trigger={
-            <Button size="small" variant="text" icon={<MoreOutlined />} title={MORE_ACTIONS} aria-label={`${MORE_ACTIONS} for ${u.email}`} />
+            <Button size="small" variant="text" icon={<MoreOutlined />} aria-label={`${MORE_ACTIONS} for ${u.email}`} />
           }
         />
       </div>

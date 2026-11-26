@@ -680,7 +680,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 	app.permission = func(permissionCtx context.Context, params map[string]interface{}) map[string]interface{} {
 		return app.bridgeKimiPermission(permissionCtx, t, job, params)
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
 		_ = stderr.Close()
@@ -1077,12 +1077,12 @@ func kimiNameValuePairs(value interface{}) []map[string]string {
 	return pairs
 }
 
-func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecordedWork, watches, workflows bool) string {
+func kimiAgentInstructions(agent AgentExecConfig, shape SessionShape) string {
 	parts := []string{}
 	if strings.TrimSpace(agent.SystemPrompt) != "" {
 		parts = append(parts, agent.SystemPrompt)
 	}
-	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches, agentDelegates(agent), workflows)); appendPrompt != "" {
+	if appendPrompt := strings.TrimSpace(withOrbitInstructions(agent.AppendSystemPrompt, compose(shape, kimiProfile).System)); appendPrompt != "" {
 		parts = append(parts, appendPrompt)
 	}
 	if len(agent.AllowedTools) > 0 {
@@ -1094,12 +1094,12 @@ func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecorde
 	return strings.Join(parts, "\n\n")
 }
 
-func kimiPromptText(agent AgentExecConfig, orbitExe, text string, insideRecordedWork, watches, workflows bool) string {
-	instructions := kimiAgentInstructions(agent, orbitExe, insideRecordedWork, watches, workflows)
+func kimiPromptText(agent AgentExecConfig, shape SessionShape, text string) string {
+	instructions := kimiAgentInstructions(agent, shape)
 	if instructions == "" {
 		return text
 	}
-	return "<orbit-agent-instructions>\n" + instructions + "\n</orbit-agent-instructions>\n\n" + text
+	return kimiInstructionsOpen + instructions + "\n</orbit-agent-instructions>\n\n" + text
 }
 
 type kimiPreparedPrompt struct {
@@ -1107,7 +1107,9 @@ type kimiPreparedPrompt struct {
 	refs   []map[string]interface{}
 }
 
-func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string) kimiPreparedPrompt {
+// prepareKimiPrompt builds the prompt for one turn. It carries Orbit's instructions when instructions says the
+// conversation does not hold them (kimiInstructionLedger.due; a nil ledger: always).
+func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string, instructions *kimiInstructionLedger) kimiPreparedPrompt {
 	blocks := []map[string]interface{}{}
 	refs := []map[string]interface{}{}
 	writtenPaths := []string{}
@@ -1147,7 +1149,9 @@ func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, r
 			feedText = note
 		}
 	}
-	feedText = kimiPromptText(job.instructionAgent(), orbitCLIExecutable(), feedText, job.insideRecordedWork(), job.watchesOn(), job.workflowsOn())
+	if instructions.due() {
+		feedText = kimiPromptText(job.instructionAgent(), job.sessionShape(orbitCLIExecutable()), feedText)
+	}
 	if feedText != "" || len(blocks) == 0 {
 		blocks = append(blocks, map[string]interface{}{"type": "text", "text": feedText})
 	}
@@ -1822,6 +1826,8 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	}
 	turns.setSession(sessionID)
 	job.RuntimeSessionID = sessionID
+	// Whether the conversation holds Orbit's instructions, read from its own history (a resumed one's included).
+	instructions := newKimiInstructionLedger(realHome, sessionID)
 	expectedSessionID.Store(sessionID)
 	writeKimiSessionMeta(scratchDir, job, execDir)
 	if err := app.configureSession(ctx, sessionID, job.Agent); err != nil {
@@ -1844,6 +1850,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	defer pollCancel()
 	// The generation's inbox: what fetches its turns, and the turnIds being processed.
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCh := make(chan *RunInboxResponse, 8)
 	app.wg.Add(1)
@@ -2055,7 +2062,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					continue
 				}
 				inbox.markInflight(resp.TurnID)
-				prepared := prepareKimiPrompt(ctx, t, job, resp, pendingShellCtx)
+				prepared := prepareKimiPrompt(ctx, t, job, resp, pendingShellCtx, instructions)
 				pendingShellCtx = nil
 				userEvent := map[string]interface{}{"text": resp.Content}
 				if len(prepared.refs) > 0 {
@@ -2413,6 +2420,13 @@ func (a *kimiACPClient) bridgeKimiPermission(ctx context.Context, t *Transport, 
 				"options":  questionOptions,
 			}},
 		}
+		// One plan to approve is Orbit's plan card, which renders the plan as Markdown: its Approve is
+		// Kimi's allow_once plan_approve and its Keep planning the first reject_once, plan_revise
+		// (kimiPermissionOption). A choice between plans (plan_opt_*) stays a question.
+		if kimiHasOption(options, "plan_approve") {
+			toolName = "ExitPlanMode"
+			input = map[string]interface{}{"plan": question}
+		}
 	}
 	if ctx.Err() != nil {
 		return kimiCancelledPermissionResult()
@@ -2558,6 +2572,13 @@ func kimiQuestionFromPermission(toolCall map[string]interface{}, options []inter
 			}
 		}
 	}
+	// Kimi heads a plan review with where it saved the plan, a path in the engine's own home that
+	// nobody reading the card can open.
+	if strings.HasPrefix(question, "Plan saved to: ") {
+		if _, plan, ok := strings.Cut(question, "\n\n"); ok {
+			question = strings.TrimSpace(plan)
+		}
+	}
 	questionOptions := []map[string]interface{}{}
 	for _, optionValue := range options {
 		option := mapValue(optionValue)
@@ -2573,6 +2594,15 @@ func kimiQuestionFromPermission(toolCall map[string]interface{}, options []inter
 		return "", nil
 	}
 	return question, questionOptions
+}
+
+func kimiHasOption(options []interface{}, optionID string) bool {
+	for _, optionValue := range options {
+		if firstString(mapValue(optionValue), "optionId", "option_id") == optionID {
+			return true
+		}
+	}
+	return false
 }
 
 func kimiPermissionOption(options []interface{}, decision *ApprovalDecisionResponse, question string) string {

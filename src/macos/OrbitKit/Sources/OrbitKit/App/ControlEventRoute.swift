@@ -51,8 +51,8 @@ public enum ControlEventRoute: Equatable, Sendable {
     /// `translation.status_changed`: the account (`GET /users/me`), whose `translationUnavailableUntil`
     /// the composer's language tag reads.
     case account
-    /// `drive.changed`: what the Documents page has loaded. `drive.sync`: the agents' directory syncs as well.
-    case documents(syncs: Bool)
+    /// `drive.changed`: what the Drive page has loaded. `drive.sync`: the agents' directory syncs as well.
+    case drive(syncs: Bool)
     /// Nothing to read: the reserved `notification` channel, and any type this client does not know.
     case nothing
 
@@ -78,8 +78,8 @@ public enum ControlEventRoute: Equatable, Sendable {
         case .wikiChanged: return .wiki
         case .terminalsChanged: return .terminals
         case .translationStatusChanged: return .account
-        case .driveChanged: return .documents(syncs: false)
-        case .driveSync: return .documents(syncs: true)
+        case .driveChanged: return .drive(syncs: false)
+        case .driveSync: return .drive(syncs: true)
         case .notification, .unknown: return .nothing
         }
     }

@@ -109,7 +109,9 @@ runner tear the engine down (`runner-api.controller.ts:7810-7832`).
 | **Retry armed** | `retryAt`, unchanged, on a released session | `FAILED` + `retryAt` |
 | **Filed, trashed** | `completedAt`, `deletedAt`, unchanged | same |
 
-Invariant: a released session is always `IDLE`. Sending to it clears `releasedAt` and makes it
+Invariant: a released session is always `IDLE`. *Amended 2026-11-26 by the owner, "waiting for retry counts as the
+running state":* a released session an armed retry (`retryAt`) will re-send is `RUNNING`, and its `waitingOn` stays
+`WAKE`; a held session's armed retry (a quota parked at `AWAITING_INPUT`) stays `IDLE`. Migration 1667 stores it. Sending to it clears `releasedAt` and makes it
 `PENDING` in one write, as the revive does today.
 
 > **Superseded 2026-11-21 by decision D9 (§12).** The owner decided that the session carries no failure fact:
@@ -621,6 +623,12 @@ Renaming `AWAITING_INPUT` to `IDLE` fixes none of this, and makes the first kind
   > session with no retry armed, and an `IDLE` session waiting only on a session request it sent or an
   > `ask_owner` question, because neither is a wake fact of `sessionWillWake`. Waiting on a sub-agent
   > or a background job is `RUNNING`.
+  >
+  > **Corrected 2026-11-26.** On a released session `WAKE` read any of the three facts, but only an
+  > armed retry, or a scheduled wake-up on a release by a failure still filed in Open, revives one; a
+  > watch never does. `sessionWakes` (`session-phase.ts`) now reads only those there, so a crash with a
+  > leftover `task_await` watch reads null rather than a wake that never comes. A scheduled run asks
+  > `sessionWakes` beside `PERSON`, so an owner request it filed does not hide its wake.
 - **The background sets must become exact first.** They are inferred today: an id goes in
   when a launch is seen and out when an end is reported, and the ten-minute freshness rule
   exists because that drifts. A state that people and agents rely on cannot rest on them
@@ -764,9 +772,9 @@ outcome; W7 and W5 are left out of a row when the reader's other guards already 
 | `help/help-ask-marker.ts:57` | turn: show the ask as failed | `failed`, or `last_turn_outcome = 'FAILED'` on a released row | none |
 | `projects/coordinator-handoff.service.ts:271`, `:274` | standing: did the coordinator fail or stop before acknowledging | `failed` | **W7**: today `TURN_FAILED`, under C `TURN_STOPPED` (an end was asked) |
 | `projects/project-open-item.ts:866` `conversationIsDown`, `:962` `projectCoordinatorCanTake` | standing: is the coordinator down and recoverable; can it take an item after its retry | `failed` (`:866` already requires no end reason) | none |
-| `schedules/schedule-runs.service.ts:213` `LIVE_SESSION` | retry: may a prior session still run | `failed` + `retry_at` | none |
-| `schedule-runs.service.ts:645` `reconcileRun` | attempt: did the run's session fail before reporting (engine crash, quota) | `failed`, with `error` as today | **W7**: today read as a failure (crash or quota by its error), under C as a stop |
-| `schedule-runs.service.ts:728` `landRun` | the work: did the session finish | `finished` | none |
+| `schedules/schedule-runs.service.ts` `mayStillRun` (was `LIVE_SESSION`) | retry: may a prior session still run | the phase fields and `sessionWakes` (2026-11-26): held, or released with a revive coming | none |
+| `schedule-runs.service.ts` `reconcileRun` | attempt: did the run's session fail before reporting (engine crash, quota) | the phase fields and `sessionWakes` (`schedule-run-session-reading.ts`, 2026-11-26); `error` only for the QUOTA label | **W7**: an end asked for and not honoured reads as a stop |
+| `schedule-runs.service.ts` `landRun` | the work: did the session finish | the phase fields' `workFinished`, `released` and `endReason` (2026-11-26) | none |
 | `tasks/tasks.service.ts:13095` `autoRunHoldOff`, failures | attempt: the retry brake | `failed` on the task's sessions | **W7** stops counting as a failure; **W1a** counts only if W1a records `FAILED` (recommended) |
 | `tasks.service.ts:13131`, unrequested stops | attempt: the brake's count of stops nobody asked for | released, no end reason, not `failed`, not `finished` | **W7** moves out of both counts (it has an end reason) |
 | `tasks.service.ts:13162`, quota | attempt: newest usage-limit failure | `failed` + `error` match | none |

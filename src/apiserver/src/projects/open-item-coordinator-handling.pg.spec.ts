@@ -464,10 +464,19 @@ async function report(stack: Stack, w: World, job: IntegrationJobCommand, result
 async function failedLanding(stack: Stack, w: World, label: string) {
   const task = await doneCodeTask(stack, w, label);
   const landing = await onlyClaim(stack, w, 'LAND_TASK');
+  // Revision 42 (W4): a red landing goes first to its task's own work session while that session could take it. These
+  // cases are about the coordinator's handling of the item, so a person ended the work session first and the failure
+  // is the coordinator's from the start (W-T6).
+  await stack.db.session.update({
+    where: { id: task.sessionId }, data: { endReason: 'ended' },
+  });
   const answer = await report(stack, w, landing, RED_LANDING);
   assert.equal(answer.accepted, true);
   const [item] = await itemsWhere(stack.db, { taskId: task.taskId });
   assert.ok(item, 'the red landing opened an item');
+  assert.equal((await stack.db.projectOpenItem.findUniqueOrThrow({
+    where: { id: item.id }, select: { workSessionOfferedAt: true },
+  })).workSessionOfferedAt, null, 'CONTROL: the failure was not handed to the work session a person ended (W4)');
   await receiveOpenItem(stack.db, item.id);
   return { ...task, firstJobId: landing.jobId, itemId: item.id };
 }

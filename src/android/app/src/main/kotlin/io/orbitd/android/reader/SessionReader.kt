@@ -1,5 +1,9 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.directory.QueuedCapacity
+import io.orbitd.android.directory.RunningOverLimit
+import io.orbitd.android.management.int
+import io.orbitd.android.management.personalFailure
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -281,6 +285,21 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     },
                         { it.message ?: RunnerUpdateNow.FAILED })
             })
+        }
+    } }
+    // Run now in a full runner's, run's or batch's popover (docs/mocks/queued-run-now): this one queued turn over the limit. A
+    // refusal the server gives only at the press is said in a toast; either way the row is read again.
+    var runNowPending by remember(route.id) { mutableStateOf(false) }
+    val runNow: (@Composable () -> Unit)? = runnerUpdatingGate?.takeIf(QueuedCapacity::isCapacityHeld)?.let { gate -> {
+        RunNowAction(gate, runnerUpdatingMachine, runnerUpdatingRow?.int("activeSessions"), runnerUpdatingRow?.int("maxConcurrent"), runNowPending) {
+            runNowPending = true
+            updateNowScope.launch {
+                try { api.mutate(listOf("sessions", route.id!!, "run-now")) }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (e: Exception) { OrbitToasts.show(QueuedCapacity.RUN_NOW_FAILED, detail = personalFailure(e), tone = ToastTone.ERROR) }
+                app.realtime.refreshDirectory(); app.realtime.refreshSession()
+                runNowPending = false
+            }
         }
     } }
     val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
@@ -813,6 +832,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val heldHead = if (runnerUpdatingGate == null || live == null || tailHeld) null else accepted.lastOrNull()
                 val heldSeq = if (runnerUpdatingGate == null || live == null || tailHeld || heldHead != null) null
                     else displayedRows.lastOrNull { it.event.type == "user" && it.steps.isEmpty() && it.exchanges.isEmpty() }?.event?.seq
+                // A turn started over its runner's limit says so under the message that opened it, while it runs (docs/mocks/queued-run-now ②):
+                // the accepted head until its echo lands, else the open turn's own message.
+                val overflow = listRow?.takeIf { live != null && it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.RUNNING }
+                    ?.let { RunningOverLimit.of(it.runningOverLimit) }
+                val overflowSeq = if (overflow == null || accepted.isNotEmpty()) null else openTurnUserSeq(state.window.events)
                 val targetSeq = state.targetSeq
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(Modifier.fillMaxSize().fadesIntoComposerBand().onSizeChanged {
@@ -894,11 +918,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
                         val held = runnerUpdatingGate?.takeIf { heldSeq != null && row.event.seq == heldSeq }
                         val drawRow: @Composable () -> Unit = {
-                            if (head == null && held == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
+                            if (head == null && held == null && !(overflow != null && row.event.seq == overflowSeq)) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
                             else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
                                 // Under the reader's own message, so it stands at the bubble's right edge, as on iOS and web.
-                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater) }
+                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, runNow = runNow) }
+                                overflow?.takeIf { row.event.seq == overflowSeq && row.steps.isEmpty() }?.let { RunningOverLimitFoot(it, Modifier.align(Alignment.End)) }
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
@@ -937,14 +962,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         // a person's turn — no dashes, no "Queued", no Cancel: the runner has it.
                         items(accepted, key = { "accepted:${it.turnId}" }) { head ->
                             val gate = runnerUpdatingGate?.takeIf { heldHead != null && head.turnId == heldHead.turnId }
-                            if (gate == null) Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
+                            val over = overflow?.takeIf { head.turnId == accepted.last().turnId }
+                            if (gate == null && over == null) Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
                             else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
                                 // ` · Cancel` beside the tag: the turn withdrawn as the tray's is, its words back in the composer.
                                 val withdraw = heldCancel?.takeIf { it.turnId == head.turnId }?.let { held ->
                                     { composer.withdraw(held.turnId, held.words, steer = false, engine = console.engine) }
                                 }
-                                RunnerUpdatingFoot(gate, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, cancel = withdraw)
+                                gate?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, cancel = withdraw, runNow = runNow) }
+                                over?.let { RunningOverLimitFoot(it, Modifier.align(Alignment.End)) }
                             }
                         }
                     }
@@ -963,7 +990,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
                     if (live != null) items(queued, key = { it.key }) { turn ->
                         val held: (@Composable () -> Unit)? = runnerUpdatingGate?.takeIf { turn.heldByUpdate }?.let { gate ->
-                            { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) }
+                            { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater, runNow = runNow) }
                         }
                         CompositionLocalProvider(LocalQueuedHeld provides held) {
                             QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy,
@@ -998,7 +1025,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // holds the keyboard.
                 Box(Modifier.heightIn(max = composerHeight).then(if (composerHeight == 0.dp) Modifier.clipToBounds() else Modifier)) {
                     SessionPendingTray(composer, state.session, unreadSteers,
-                        held = runnerUpdatingGate?.let { gate -> { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) } })
+                        held = runnerUpdatingGate?.let { gate -> { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater, runNow = runNow) } })
                 }
                 // A08-5: a run that never started says why, first of the band's cards under the tray — and stays while a phone types.
                 Box(Modifier.conversationCard()) { SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true, console,

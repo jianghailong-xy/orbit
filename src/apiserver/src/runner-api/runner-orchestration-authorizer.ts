@@ -5,7 +5,7 @@ import { Runner } from '@prisma/client';
 import { createHmac } from 'node:crypto';
 import { sessionRefusal } from '../sessions/session-recovery';
 import { orchestrationEnabled } from '../common/orchestration-switch';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { heldFilter } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 
 const ORCHESTRATION_AUDIENCE = 'orbit-runner-orchestration';
@@ -140,7 +140,7 @@ export class RunnerOrchestrationAuthorizer {
         assignedRunnerId: runner.id,
         deletedAt: null,
         cancelRequestedAt: null,
-        status: { in: OPEN_SESSION_STATUSES },
+        ...heldFilter(),
         workspace: { deletedAt: null },
       },
       select: { id: true, owner: { select: { preferences: true } } },

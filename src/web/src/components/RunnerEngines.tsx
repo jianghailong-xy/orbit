@@ -652,7 +652,8 @@ function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setD
         align="end"
         popupClassName="re-account-menu"
         items={items}
-        trigger={<Button ref={moreRef} size="small" variant="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions" title="More actions"
+        tooltip="More actions"
+        trigger={<Button ref={moreRef} size="small" variant="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions"
           onFocus={() => {
             if (!renameOnFocus.current) return;
             renameOnFocus.current = false;
@@ -1756,7 +1757,7 @@ function BlockingSessions({ sessions }: { sessions: RunnerAccountRemoveSession[]
         const label = tone === 'running' ? RUNNER_ACCOUNT_IN_USE_RUNNING : tone === 'waiting' ? RUNNER_ACCOUNT_IN_USE_WAITING : null;
         return (
           <li key={s.id}>
-            <Link className="re-blocking-row" to={`/sessions/${encodeId(s.id)}`}>
+            <Link className="re-blocking-row" data-row-focus="" to={`/sessions/${encodeId(s.id)}`}>
               <span className={`re-blocking-dot ${tone}`} aria-hidden />
               <span className="re-blocking-title">{s.title.trim() || RUNNER_ACCOUNT_IN_USE_UNTITLED}</span>
               {label && <span className="re-blocking-state">{label}</span>}

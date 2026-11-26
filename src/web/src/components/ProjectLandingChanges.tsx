@@ -123,7 +123,7 @@ export function ProjectChangesRow({ projectId, changes }: { projectId: string; c
   if (!changes || changes.length === 0) return null;
   return (
     <div className="project-integration-setting project-changes-entry">
-      <button type="button" className="project-changes-row" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="project-changes-row" data-row-focus="" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span className="project-integration-setting-label">{CHANGES_COPY.TITLE}</span>
         <span className="project-changes-count">{changesRowLabel(changes.length)} ›</span>
       </button>

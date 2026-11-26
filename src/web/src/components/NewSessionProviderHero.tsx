@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { CheckOutlined, CodeOutlined, FolderOutlined, StopOutlined } from '@ant-design/icons';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { AgentProvider } from '@orbit/shared';
 import { CLAUDE_REGION_DETAILS, CLAUDE_REGION_USE_ANOTHER_PROVIDER, anthropicUnavailableOn } from '../lib/claudeRegionCopy';
@@ -50,6 +51,102 @@ function hexAlpha(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
+/** Where a new session will run: its workspace and, where the workspace has folders, its folder. */
+export interface NewSessionPlace {
+  workspace: { id: string; name: string };
+  /** Every workspace a session can start in, in sidebar order. */
+  workspaces: { id: string; name: string }[];
+  onPickWorkspace: (id: string) => void;
+  /** The folder the session starts in; null is none. */
+  folder: { id: string; name: string } | null;
+  /** This workspace's folders. With none, the line names the workspace alone. */
+  folders: { id: string; name: string }[];
+  onPickFolder: (id: string | null) => void;
+}
+
+/**
+ * The hero's second line (docs/mocks/new-session-top ②⑤): `in [workspace ▾] › [folder ▾]`, each a menu, so
+ * where the session runs is read and changed under the engine rather than in a header line far from it.
+ */
+function PlaceLine({ place }: { place: NewSessionPlace }) {
+  const [open, setOpen] = useState<'workspace' | 'folder' | null>(null);
+  const menu = (
+    which: 'workspace' | 'folder',
+    icon: ReactNode,
+    label: string,
+    rows: ReactNode,
+  ) => (
+    <Popover
+      title={null}
+      trigger={
+        <button
+          type="button"
+          className={`np-place-chip${open === which ? ' open' : ''}`}
+          aria-haspopup="menu"
+          aria-expanded={open === which}
+          aria-label={`${which === 'workspace' ? 'Workspace' : 'Folder'}: ${label}`}
+          title={label}
+        >
+          {icon}
+          <span className="np-place-name">{label}</span>
+          <span className="np-chev">▾</span>
+        </button>
+      }
+      side="bottom"
+      open={open === which}
+      onOpenChange={(next) => setOpen(next ? which : null)}
+      arrow={false}
+      popupClassName="np-pop"
+    >
+      <div className="np-list np-place-list">{rows}</div>
+    </Popover>
+  );
+  const row = (key: string, icon: ReactNode, name: string, on: boolean, pick: () => void) => (
+    <button
+      key={key}
+      type="button"
+      className={`np-row${on ? ' on' : ''}`}
+      data-row-focus=""
+      onClick={() => {
+        setOpen(null);
+        if (!on) pick();
+      }}
+    >
+      {icon}
+      <span className="np-row-name">{name}</span>
+      {on && <CheckOutlined className="np-place-check" />}
+    </button>
+  );
+  return (
+    <div className="np-place">
+      <span className="np-place-in">in</span>
+      {menu(
+        'workspace',
+        <CodeOutlined />,
+        place.workspace.name,
+        place.workspaces.map((w) =>
+          row(w.id, <CodeOutlined />, w.name, w.id === place.workspace.id, () => place.onPickWorkspace(w.id))),
+      )}
+      {place.folders.length > 0 && (
+        <>
+          <span className="np-place-sep">›</span>
+          {menu(
+            'folder',
+            place.folder ? <FolderOutlined /> : <StopOutlined />,
+            place.folder?.name ?? 'No folder',
+            <>
+              {row('none', <StopOutlined />, 'No folder', !place.folder, () => place.onPickFolder(null))}
+              <div className="np-sep" />
+              {place.folders.map((f) =>
+                row(f.id, <FolderOutlined />, f.name, f.id === place.folder?.id, () => place.onPickFolder(f.id)))}
+            </>,
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /**
  * The New Session middle area: which engine runs this session — fixed for its life once it starts.
  *
@@ -72,6 +169,7 @@ export function NewSessionProviderHero({
   fellBackFrom = null,
   machine,
   cantRun = false,
+  place = null,
 }: {
   /** The engine the draft runs on, landing on the provider it will spend. */
   current: EngineChoice;
@@ -96,6 +194,8 @@ export function NewSessionProviderHero({
   currentModelLabel?: string;
   /** The Projects entry point still uses this same picker; only its framing copy changes. */
   projectIntent?: boolean;
+  /** Where the session runs, said and picked under the engine; none before the workspace is known. */
+  place?: NewSessionPlace | null;
 }) {
   const [open, setOpen] = useState(false);
   const displayed = engines.some((engine) => engine.slug === current.slug) ? engines : [current, ...engines];
@@ -119,6 +219,7 @@ export function NewSessionProviderHero({
         key={engine.slug}
         to={fixLink(engine)}
         className="np-row np-unavailable"
+        data-row-focus=""
         title={`${engine.label}: ${engine.unavailable}${onRunner(engine)}${engine.regionBlocked ? '' : ' — fix it on the Machines & models page'}`}
         onClick={() => setOpen(false)}
       >
@@ -131,6 +232,7 @@ export function NewSessionProviderHero({
         key={engine.slug}
         type="button"
         className={`np-row${engine.slug === current.slug ? ' on' : ''}`}
+        data-row-focus=""
         onClick={() => {
           setOpen(false);
           if (engine.slug !== current.slug && engine.provider) onPick(engine.slug, engine.provider.slug);
@@ -146,7 +248,7 @@ export function NewSessionProviderHero({
     <div className="np-list">
       {displayed.map(row)}
       <div className="np-sep" />
-      <Link to="/settings/providers/new" className="np-row np-connect" onClick={() => setOpen(false)}>
+      <Link to="/settings/providers/new" className="np-row np-connect" data-row-focus="" onClick={() => setOpen(false)}>
         <span className="np-plus">+</span>
         <span className="np-row-name">Connect a provider…</span>
       </Link>
@@ -247,6 +349,7 @@ export function NewSessionProviderHero({
           {list}
         </Popover>
       )}
+      {place && <PlaceLine place={place} />}
       {fixSummary ??
         fallbackSummary ??
         (projectIntent ? (
@@ -258,10 +361,8 @@ export function NewSessionProviderHero({
             <Link to={`/settings/machines/${encodeId(runnerId)}`}>Manage</Link>
           </div>
         ) : (
-          <>
-            <div className="np-empty-copy">Send a task to get started.</div>
-            <div className="np-current-model">{modelLabel}</div>
-          </>
+          // The model is said once, in the composer, where it is changed (docs/mocks/new-session-top ③).
+          <div className="np-empty-copy">Send a task to get started.</div>
         ))}
       {cantRunNote}
       {note && <div className="np-note">{note}</div>}

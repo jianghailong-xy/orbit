@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { sessionCarriesTaskSql, taskCarriedSql } from '../sessions/task-work-carrier';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import { readProjectReadyToRun } from './project-ready-to-run';
 import { ProjectsService } from './projects.service';
 
@@ -175,8 +176,10 @@ test('queued and running work stays ahead of the remaining ready queue', async (
   assert.match(text, /SELECT DISTINCT ON \(t\.id\)/);
   assert.ok(text.includes(sessionCarriesTaskSql('s')), 'active rows are the carried ones');
   assert.match(text, /s\.id AS "sessionId"/);
-  // PENDING is still exactly QUEUED; everything else a session carries is RUNNING.
-  assert.match(text, /WHEN 'PENDING'::run_status THEN 'QUEUED'\s+ELSE 'RUNNING'/);
+  // A turn waiting for its claim is exactly QUEUED; everything else a session carries is RUNNING. Read off the
+  // turn state (session-turn-state.ts), which session-turn-state-readers.pg.spec.ts holds to the stored word.
+  assert.ok(text.includes(`CASE ${sessionTurnStateSql('s').sql}`), 'the run state reads the turn state');
+  assert.match(text, /WHEN 'QUEUED' THEN 'QUEUED'\s+ELSE 'RUNNING'/);
   assert.match(text, /FROM candidates candidate/);
   assert.match(text, /candidate\."activeSince" DESC NULLS LAST/);
 });

@@ -3,7 +3,7 @@ import {
   BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, Optional,
   PayloadTooLargeException,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { uuidToBase62, type GuestSessionSummary, type SessionGuestPerson, type SessionGuestSuggestion } from '@orbit/shared';
 import {
   assertValidUpload, COMPOSER_IMAGE_TYPES, GUEST_IMAGE_TOO_LARGE, GUEST_IMAGE_TYPE_REFUSED, imageBytesMatch,
@@ -20,8 +20,10 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
 import { assertEngineSession } from '../sessions/engine-session';
+import { LEGACY_STATUS_SELECT, readLandingSettlements } from '../sessions/session-legacy-words';
 import { withSessionState } from '../sessions/session-state';
-import { readSessionActivities } from '../sessions/task-work-carrier';
+import { TURN_STATE_SELECT, turnStateOf } from '../sessions/session-turn-state';
+import { readSessionBackgroundFields } from '../sessions/task-work-carrier';
 import { readSessionPhaseFields } from '../sessions/session-phase';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 
@@ -242,7 +244,7 @@ export class SessionGuestsService {
         data: { removedAt: new Date(), removedReason: reason },
       });
       if (count === 0) return null;
-      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true } });
+      const turn = turnStateOf(await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: TURN_STATE_SELECT }));
       const queued = await tx.conversationTurn.findMany({
         where: {
           sessionId,
@@ -258,7 +260,7 @@ export class SessionGuestsService {
       // A RUNNING session whose runner has claimed it but not yet leased a turn holds a runner permit only a
       // /turn-complete releases (cancelQueuedTurn's own rule): its next message has crossed the "started" line,
       // so when the guest's is the only one left, that one stays and the rest go.
-      if (session.status === RunStatus.RUNNING) {
+      if (turn === 'IN_FLIGHT') {
         const others = await tx.conversationTurn.count({
           where: {
             sessionId,
@@ -274,12 +276,12 @@ export class SessionGuestsService {
         await tx.conversationTurn.deleteMany({ where: { id: { in: take.map((t) => t.id) }, sessionId, status: 'PENDING' } });
       }
       // The last queued message gone from a session that was only waiting for it: back to waiting for the next.
-      if (session.status === RunStatus.PENDING) {
+      if (turn === 'QUEUED') {
         const executable = await tx.conversationTurn.count({
           where: { sessionId, kind: { in: ['message', 'shell'] }, status: { in: ['PENDING', 'IN_FLIGHT'] } },
         });
         if (executable === 0) {
-          await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, lastTurnAt: new Date() } });
+          await tx.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT', turnState: null, lastTurnAt: new Date() } });
         }
       }
       return take.length;
@@ -319,18 +321,21 @@ export class SessionGuestsService {
         addedAt: true,
         session: {
           select: {
-            id: true, title: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+            ...LEGACY_STATUS_SELECT,
+            id: true, title: true, completedAt: true, archivedAt: true, deletedAt: true,
             lastTurnAt: true, owner: { select: { name: true } },
           },
         },
       },
     });
-    const activities = await readSessionActivities(this.prisma, rows.map(({ session }) => session.id));
+    // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
+    const background = await readSessionBackgroundFields(this.prisma, rows.map(({ session }) => session.id));
+    const landings = await readLandingSettlements(this.prisma, rows.map(({ session }) => session));
     // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
     const phases = await readSessionPhaseFields(this.prisma, rows.map(({ session }) => session.id));
     return {
       sessions: rows.map(({ addedAt, session }) => {
-        const state = withSessionState(session);
+        const state = withSessionState(session, landings.get(session.id));
         return {
           id: session.id,
           title: session.title,
@@ -338,7 +343,8 @@ export class SessionGuestsService {
           status: state.status,
           sessionState: state.sessionState,
           lifecycleState: state.lifecycleState,
-          activity: activities.get(session.id) ?? null,
+          activity: background.get(session.id)?.activity ?? null,
+          runningBgCount: background.get(session.id)?.runningBgCount ?? 0,
           ...phases.get(session.id),
           addedAt: addedAt.toISOString(),
           lastTurnAt: session.lastTurnAt?.toISOString() ?? null,

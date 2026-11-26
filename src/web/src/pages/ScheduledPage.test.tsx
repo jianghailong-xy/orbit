@@ -299,6 +299,25 @@ describe('the inspector (board 1/2 ②)', () => {
     expect(block('next').textContent).toBe('Next runTomorrow 09:00Last · Today 10:00 · Known 0.49.0, linked PR #831 · not notified');
   });
 
+  it('widens by dragging its left edge, within the list’s room, and keeps the width in this browser', async () => {
+    await openCodex();
+    const page = document.querySelector<HTMLElement>('.sched-page')!;
+    const handle = document.querySelector<HTMLElement>('[data-schedule-resizer]')!;
+    expect(handle.nextElementSibling).toBe(inspector());
+    expect(page.style.getPropertyValue('--sched-inspector-width')).toBe('');
+    vi.spyOn(inspector(), 'getBoundingClientRect').mockReturnValue({ width: 400 } as DOMRect);
+    vi.spyOn(handle.previousElementSibling!, 'getBoundingClientRect').mockReturnValue({ width: 700 } as DOMRect);
+    const mouse = (type: string, clientX: number) =>
+      act(() => { (type === 'mousedown' ? handle : document).dispatchEvent(new MouseEvent(type, { bubbles: true, clientX })); });
+    mouse('mousedown', 1000);
+    mouse('mousemove', 850);
+    expect(page.style.getPropertyValue('--sched-inspector-width')).toBe('550px');
+    mouse('mousemove', 0);
+    expect(page.style.getPropertyValue('--sched-inspector-width')).toBe('740px');
+    mouse('mouseup', 0);
+    expect(localStorage.getItem('orbit.scheduleInspectorWidth')).toBe('740');
+  });
+
   it('has Run now, Pause, Change… and ⋯', async () => {
     await openCodex();
     expect([...block('doors').querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Run now', 'Pause', 'Change…', '⋯']);
@@ -447,5 +466,202 @@ describe('the empty page (board 1/2 ⑤)', () => {
     await click(examples[2]!);
     expect(host.querySelector<HTMLInputElement>('.sched-add-input')!.value).toBe('At 18:00 today, check that the deploy is healthy and tell me');
     expect(document.querySelector('form')).toBeNull();
+  });
+});
+
+describe('the keyboard', () => {
+  const press = async (key: string, target: EventTarget = document.body) => {
+    await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
+    await flush();
+  };
+  // A run's row, a missed run's and a waiting task's never show as selected, so the cursor steps over them.
+  const all = () => [...host.querySelectorAll<HTMLElement>('.sched-row')]
+    .filter((r) => !/^(run|missed|CONDITION:task):/.test(r.dataset.row!));
+  beforeEach(() => { Element.prototype.scrollIntoView = () => {}; });
+  const selectedTitle = () => host.querySelector('.sched-row.is-selected .sched-row-title')?.textContent ?? null;
+
+  it('Down and Up move the selection through the rows as drawn, open its inspector, and stop at the ends', async () => {
+    serve();
+    await open();
+    const titles = all().map((r) => r.querySelector('.sched-row-title')!.textContent);
+    expect(host.querySelector('.sched-row[data-row^="run:"]')).not.toBeNull();
+    await press('ArrowDown');
+    expect(selectedTitle()).toBe(titles[0]);
+    expect(document.activeElement).toBe(all()[0]);
+    await press('ArrowDown');
+    expect(selectedTitle()).toBe(titles[1]);
+    expect(inspector().querySelector('.sched-inspector-title')!.textContent).toBe(titles[1]);
+    await press('ArrowUp');
+    expect(selectedTitle()).toBe(titles[0]);
+    await press('ArrowUp');
+    expect(selectedTitle()).toBe(titles[0]);
+    for (let i = 0; i < titles.length + 2; i += 1) await press('ArrowDown');
+    expect(selectedTitle()).toBe(titles[titles.length - 1]);
+  });
+
+  it('leaves the keys alone while typing in the line at the end', async () => {
+    serve();
+    await open();
+    const input = host.querySelector<HTMLElement>('input, textarea')!;
+    await press('ArrowDown', input);
+    expect(selectedTitle()).toBeNull();
+  });
+});
+
+describe('Rename… (§8.4 Rename; board docs/mocks/schedule-rename)', () => {
+  const field = () => inspector()?.querySelector<HTMLInputElement>('input[aria-label="Name"]') ?? null;
+  const renames = () => calls.filter((c) => c.method === 'POST' && c.path.endsWith('/rename'));
+  const menuItems = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  const menuItem = (label: string) => menuItems().find((m) => m.textContent === label)!;
+  const title = () => inspector().querySelector('.sched-inspector-title')!.textContent;
+  const codexRow = () => row(group('TOMORROW'), 'Codex stable check');
+  const type = async (text: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field(), text);
+      field()!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  const press = async (key: 'Enter' | 'Escape') => {
+    await act(async () => { field()!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
+    await flush();
+  };
+  const rightClick = async (el: Element) => {
+    await act(async () => {
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 60 }));
+    });
+    await flush();
+  };
+  async function openCodex() {
+    serve();
+    await open();
+    await click(codexRow());
+  }
+  async function openField() {
+    await openCodex();
+    await click(inspector().querySelector('.sched-title')!);
+    expect(field()).not.toBeNull();
+  }
+
+  it('the ⋯ menu has Rename…, which turns the title into the field with the name selected', async () => {
+    await openCodex();
+    await click(button(block('doors'), '⋯'));
+    expect(menuItems().map((m) => m.textContent)).toEqual(['Rename…', 'Delete']);
+    await click(menuItem('Rename…'));
+    expect(field()!.value).toBe('Codex stable check');
+    expect(field()!.maxLength).toBe(200);
+    expect(document.activeElement).toBe(field());
+    expect([field()!.selectionStart, field()!.selectionEnd]).toEqual([0, 'Codex stable check'.length]);
+    expect(inspector().querySelector('.sched-inspector-title')).toBeNull();
+    expect(renames()).toEqual([]);
+  });
+
+  it('a right-click on a row offers Rename…, which opens the schedule with the field', async () => {
+    serve();
+    await open();
+    expect(host.querySelector('.sched-inspector')).toBeNull();
+    await rightClick(codexRow());
+    expect(menuItems().map((m) => m.textContent)).toEqual(['Run now', 'Pause', 'Rename…', 'Change…', 'Delete']);
+    await click(menuItem('Rename…'));
+    expect(codexRow().classList).toContain('is-selected');
+    expect(field()!.value).toBe('Codex stable check');
+    expect(document.activeElement).toBe(field());
+  });
+
+  it('a paused schedule’s row menu has Resume, and a draft’s row has no menu', async () => {
+    serve();
+    await open();
+    await rightClick(row(group('PAUSED'), 'Gateway CSP report digest'));
+    expect(menuItems().map((m) => m.textContent)).toEqual(['Run now', 'Resume', 'Rename…', 'Change…', 'Delete']);
+    act(() => root?.unmount());
+    host.remove();
+    await open();
+    await rightClick(host.querySelector('.sched-row.is-draft')!);
+    expect(menuItems()).toEqual([]);
+  });
+
+  it('the row menu’s other picks go through the inspector’s doors: Pause once, Delete asks first', async () => {
+    serve();
+    await open();
+    await rightClick(codexRow());
+    await click(menuItem('Pause'));
+    expect(calls.filter((c) => c.method === 'POST').map((c) => c.path)).toEqual(['/schedules/sch-codex/pause']);
+    await rightClick(codexRow());
+    await click(menuItem('Delete'));
+    expect(document.querySelector('[role="dialog"], [role="alertdialog"]')!.textContent)
+      .toContain(scheduleFill(SCHEDULE_COPY.deleteConfirm.title, { title: 'Codex stable check' }));
+    expect(calls.filter((c) => c.method === 'DELETE')).toEqual([]);
+  });
+
+  it('Return saves the trimmed text in one request, and the list, the title and History update from the answer', async () => {
+    await openField();
+    const detail = scheduleDetail('sch-codex');
+    const served = apiMock.getMockImplementation()!;
+    let renamed = false;
+    apiMock.mockImplementation((async (path: string, options: { method?: string; body?: unknown } = {}) => {
+      if (options.method === 'POST' && path === '/schedules/sch-codex/rename') {
+        renamed = true;
+        calls.push({ path, method: 'POST', body: options.body });
+        const schedule = { ...detail.schedule, title: 'Codex releases', revision: 9 };
+        const record = {
+          scheduleId: 'sch-codex', title: 'Codex releases', revision: 9, changedBy: 'USER', sessionId: null,
+          createdAt: SCHEDULE_NOW, askedText: null, changed: ['title'],
+          before: { title: 'Codex stable check' }, after: { title: 'Codex releases' }, undoOfRevision: null,
+          undoneByRevision: null, undo: { method: 'POST', path: '/api/schedules/sch-codex/undo', body: { revision: 9 } },
+        };
+        return { outcome: 'APPLIED', changed: true, note: '', schedule, record };
+      }
+      // No read comes back after the rename: what the page shows is the answer's.
+      if (renamed && !options.method) return new Promise(() => {});
+      return served(path, options as never);
+    }) as never);
+    await type('  Codex releases  ');
+    await press('Enter');
+    expect(renames()).toEqual([{ path: '/schedules/sch-codex/rename', method: 'POST', body: { title: 'Codex releases' } }]);
+    expect(field()).toBeNull();
+    expect(title()).toBe('Codex releases');
+    expect(row(group('TOMORROW'), 'Codex releases')).toBeDefined();
+    const first = block('history').querySelector<HTMLElement>('.sched-history-row')!;
+    expect(first.querySelector('.sched-history-what')!.textContent).toBe('Renamed from “Codex stable check”');
+    expect(first.querySelector('.sched-who')!.textContent).toBe('You');
+    await click(button(first, 'Undo'));
+    expect(calls.find((c) => c.method === 'POST' && c.path === '/schedules/sch-codex/undo')!.body).toEqual({ revision: 9 });
+  });
+
+  it('leaving the field saves too', async () => {
+    await openField();
+    await type('Codex releases');
+    await act(async () => { field()!.blur(); });
+    await flush();
+    expect(renames().map((c) => c.body)).toEqual([{ title: 'Codex releases' }]);
+  });
+
+  it.each([
+    ['Esc', 'Codex releases', 'Escape'],
+    ['an emptied field', '', 'Enter'],
+    ['only spaces', '   ', 'Enter'],
+    ['unchanged text', 'Codex stable check', 'Enter'],
+    ['unchanged text after trimming', '  Codex stable check ', 'Enter'],
+  ] as const)('%s sends nothing and puts the title back', async (_name, text, key) => {
+    await openField();
+    await type(text);
+    await press(key);
+    expect(field()).toBeNull();
+    expect(title()).toBe('Codex stable check');
+    expect(calls.filter((c) => c.method !== 'GET')).toEqual([]);
+  });
+
+  it('shows a refused rename in the server’s words', async () => {
+    await openField();
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation((async (path: string, options: { method?: string } = {}) => {
+      if (options.method === 'POST' && path.endsWith('/rename')) {
+        throw new ApiError('The schedule has ended.', 409, 'SCHEDULE_ENDED', { message: 'The schedule has ended.' });
+      }
+      return served(path, options as never);
+    }) as never);
+    await type('Codex releases');
+    await press('Enter');
+    expect(inspector().querySelector('[role="alert"]')!.textContent).toBe('The schedule has ended.');
+    expect(title()).toBe('Codex stable check');
   });
 });

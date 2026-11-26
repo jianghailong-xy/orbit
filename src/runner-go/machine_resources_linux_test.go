@@ -123,3 +123,11 @@ func TestReadCgroupResourcesWithoutLimits(t *testing.T) {
 		t.Fatalf("memory = %d of %d, want the container's 2000 used out of the machine's 8000", *r.MemAvailableBytes, *r.MemTotalBytes)
 	}
 }
+
+// The turn memory gate's reading (memory_reserve.go): on Linux there is always one, the container's or the machine's.
+func TestAvailableMemoryOnThisMachine(t *testing.T) {
+	available, ok := availableMemory()
+	if !ok || available == 0 {
+		t.Fatalf("availableMemory() = %d, %v; want a reading", available, ok)
+	}
+}

@@ -18,7 +18,7 @@ import {
   authorizeDriveMount,
   driveMountCredentialOutsideDrive,
   isDriveMountToken,
-} from '../documents/documents-mount-credential';
+} from '../drive/drive-mount-credential';
 import { authorizeManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -115,7 +115,7 @@ export class RunnerAuthGuard implements CanActivate {
 
     if (!token) throw new UnauthorizedException('missing runner token');
 
-    // The mount daemon's credential (docs/documents-drive-technical-design.md §4.3): the runner drive door only.
+    // The mount daemon's credential (docs/drive-technical-design.md §4.3): the runner drive door only.
     if (isDriveMountToken(token)) {
       if (Reflect.getMetadata(ACCEPTS_DRIVE_MOUNT_CREDENTIAL, context.getClass()) !== true) throw driveMountCredentialOutsideDrive();
       const { runner, instance, mount } = await authorizeDriveMount(this.prisma, token, req.headers, admitRunner);

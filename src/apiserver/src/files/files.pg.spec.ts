@@ -1,13 +1,13 @@
 /**
- * Documents' storage layer (docs/documents-design.md §2.1, §2.10; migration 0462; files/), held against the
+ * Drive' storage layer (docs/drive-design.md §2.1, §2.10; migration 0462; files/), held against the
  * production apiserver — `build/main.js`, the whole AppModule, multer and every guard and pipe in front of the routes —
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, once with each store:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/files/files.pg.spec.ts
  *
- *   local  the files directory, a directory of this run's (ORBIT_DOCUMENTS_DIR);
+ *   local  the files directory, a directory of this run's (ORBIT_DRIVE_DIR);
  *   s3     a real S3-compatible server — VersityGW, the image pinned in test-support/s3-test-server.ts — started on Docker the way
- *          scripts/run-pg-spec.sh starts its PostgreSQL, with a bucket of the run's (ORBIT_DOCUMENTS_BACKEND=s3). It checks
+ *          scripts/run-pg-spec.sh starts its PostgreSQL, with a bucket of the run's (ORBIT_DRIVE_BACKEND=s3). It checks
  *          every request's signature and every PUT's payload hash, as AWS S3 does.
  *
  * The same cases with each store:
@@ -16,13 +16,13 @@
  *       keeps no bytes in Postgres;
  *   (2) every read door — GET /attachments/:id, GET /runner/sessions/:id/attachments/:attId, and GET
  *       /shared/:token/attachments/:id on a session link and on a task link — answers those bytes, byte for byte;
- *   (3) a row from before Documents, its bytes in `data`, is answered from there through the same doors;
+ *   (3) a row from before Drive, its bytes in `data`, is answered from there through the same doors;
  *   (4) an upload goes through a temporary file on disk, never a buffer: halfway through the request its bytes are
  *       already in a file under <files dir>/tmp, and once it is answered that file is gone into the store;
  *   (5) a single file is still capped at 25 MiB: exactly that much is kept, one byte more is refused 413, and a
  *       refused upload — too large, or another runner's session — leaves nothing behind, on disk or in the database;
  *   (6) a dispatch copies a task's inputs as rows naming the same bytes (tasks.service.ts#copyTaskAttachments): no
- *       bytes copied and no file_blob row added; an input from before Documents has its bytes kept the first time
+ *       bytes copied and no file_blob row added; an input from before Drive has its bytes kept the first time
  *       it is copied, and is copied the same way from then on;
  *   (7) a client that hangs up in the middle of an upload leaves nothing behind;
  *   (8) nor does an upload refused before its handler is entered — a malformed id, which PublicIdPipe turns down after
@@ -402,7 +402,7 @@ function storeCases(leg: Leg) {
         'one copy per input, in order, each a row that names the bytes and carries none',
       );
       assert.deepEqual(await blob(sha), shaBlob, 'copying a stored input writes nothing about its bytes');
-      // The input from before Documents: its bytes kept once, the first time it was copied, and named on the row.
+      // The input from before Drive: its bytes kept once, the first time it was copied, and named on the row.
       assert.deepEqual(
         await db.attachment.findUniqueOrThrow({ where: { id: legacy.task }, select: { sha256: true } }),
         { sha256: oldSha },
@@ -560,7 +560,7 @@ test('Documents storage, on the local files directory and on an S3-compatible se
     storage: 'local',
     dir: localDir,
     config: { dir: localDir, storage: 'local' },
-    env: { ORBIT_DOCUMENTS_BACKEND: 'local', ORBIT_DOCUMENTS_DIR: localDir },
+    env: { ORBIT_DRIVE_BACKEND: 'local', ORBIT_DRIVE_DIR: localDir },
   }));
 
   const s3 = await startS3((fn) => t.after(fn));
@@ -569,13 +569,13 @@ test('Documents storage, on the local files directory and on an S3-compatible se
     dir: s3Dir,
     config: { dir: s3Dir, storage: 's3', s3 },
     env: {
-      ORBIT_DOCUMENTS_BACKEND: 's3',
-      ORBIT_DOCUMENTS_DIR: s3Dir,
-      ORBIT_DOCUMENTS_S3_ENDPOINT: s3.endpoint,
-      ORBIT_DOCUMENTS_S3_BUCKET: s3.bucket,
-      ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: s3.accessKeyId,
-      ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
-      ORBIT_DOCUMENTS_S3_REGION: s3.region,
+      ORBIT_DRIVE_BACKEND: 's3',
+      ORBIT_DRIVE_DIR: s3Dir,
+      ORBIT_DRIVE_S3_ENDPOINT: s3.endpoint,
+      ORBIT_DRIVE_S3_BUCKET: s3.bucket,
+      ORBIT_DRIVE_S3_ACCESS_KEY_ID: s3.accessKeyId,
+      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+      ORBIT_DRIVE_S3_REGION: s3.region,
     },
   }));
 });

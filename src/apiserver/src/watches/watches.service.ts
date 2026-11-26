@@ -35,6 +35,8 @@ import { PENDING_WAKEUP, RESUME_WATCH } from '../common/session-working';
 import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { legacySessionStatus, LEGACY_STATUS_SELECT, readLandingSettlements } from '../sessions/session-legacy-words';
+import { turnStateOf } from '../sessions/session-turn-state';
 import { readTaskWorkCarriers, taskRunOverlay } from '../sessions/task-work-carrier';
 import { assertEngineSession } from '../sessions/engine-session';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
@@ -448,8 +450,9 @@ export class WatchesService {
       ? []
       : await this.prisma.session.findMany({
           where: { id: { in: sessionIds }, ownerId },
-          select: { id: true, title: true, status: true, endReason: true, taskId: true },
+          select: { id: true, title: true, taskId: true, ...LEGACY_STATUS_SELECT },
         });
+    const landings = await readLandingSettlements(this.prisma, sessions);
     const taskIds = [...new Set([...idsOf('TASK'), ...sessions.flatMap((row) => (row.taskId ? [row.taskId] : []))])];
     const [tasks, carriers] = await Promise.all([
       taskIds.length === 0
@@ -473,7 +476,7 @@ export class WatchesService {
     }
     const read = new Map<string, { title: string | null; status: WatchTargetStatusView; task: WatchTargetTaskView | null }>();
     for (const row of sessions) {
-      const state = deriveSessionRunState({ status: row.status, endReason: row.endReason });
+      const state = deriveSessionRunState({ status: legacySessionStatus(row, landings.get(row.id)), endReason: row.endReason });
       read.set(`SESSION:${row.id}`, {
         title: row.title,
         status: {
@@ -737,7 +740,7 @@ export class WatchesService {
     const sessions = await tx.session.findMany({
       where: { id: { in: ids('SESSION') }, ownerId },
       select: {
-        id: true, sessionKind: true, status: true, finishedAt: true, endReason: true,
+        id: true, ...LEGACY_STATUS_SELECT,
         completedAt: true, archivedAt: true, deletedAt: true,
         // The job leaf's columns: the jobs in flight and when each one's output last moved. Never their output.
         runningBgJobs: true, runningBgJobActivity: true,
@@ -768,6 +771,7 @@ export class WatchesService {
     const awaitingAnswer = new Set(approvals.map((approval) => approval.sessionId));
     const taskById = new Map(tasks.map((task) => [task.id, task]));
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
+    const landings = await readLandingSettlements(tx, sessions);
     return request.targets.map((target): ObservedTarget => {
       if (target.kind === 'TASK') {
         const task = taskById.get(target.id)!;
@@ -794,7 +798,8 @@ export class WatchesService {
         fact: {
           kind: 'SESSION',
           sessionKind: session.sessionKind,
-          status: session.status,
+          status: legacySessionStatus(session, landings.get(session.id)),
+          turnState: turnStateOf(session),
           finishedAt: session.finishedAt,
           endReason: session.endReason,
           completedAt: session.completedAt,

@@ -17,7 +17,7 @@ export function testManagedRunnerProfile(overrides: {
   capacity?: Partial<ManagedRunnerProfile['capacity']>;
   /** Another cluster key is another capacity pool: a test with a budget of its own names one. */
   clusterKey?: string;
-  /** The Documents drive: runner Pods receive it, and the manager writes mount Secrets in `orbit-documents-test`. */
+  /** The Drive: runner Pods receive it, and the manager writes mount Secrets in `orbit-drive-test`. */
   files?: boolean;
 } = {}): ManagedRunnerProfile {
   return {
@@ -33,7 +33,7 @@ export function testManagedRunnerProfile(overrides: {
       namespace: 'orbit-cloud-test',
     },
     storage: { className: 'runner-data', capacity: '20Gi' },
-    ...(overrides.files ? { files: { namespace: 'orbit-documents-test' } } : {}),
+    ...(overrides.files ? { files: { namespace: 'orbit-drive-test' } } : {}),
     runner: {
       image: `registry.invalid/orbit-cloud-runner@sha256:${'a'.repeat(64)}`,
       serverUrl: 'https://orbit.invalid',

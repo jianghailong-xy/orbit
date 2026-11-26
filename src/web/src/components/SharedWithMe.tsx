@@ -5,7 +5,8 @@ import { useMatch } from 'react-router-dom';
 import type { GuestSessionSummary } from '@orbit/shared';
 import { listGuestSessions } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
-import { sessionStateWord } from '../lib/sessionState';
+import { sessionLifecycleLabel, sessionLifecycleStateOf, sessionStateWord } from '../lib/sessionState';
+import { sessionDisplayText } from '../lib/sessionDisplay';
 import type { SessionReach } from '../lib/sessionReach';
 import { titleFirstLine } from '../lib/title';
 
@@ -101,8 +102,16 @@ function GuestSessionRow({
         <span className="tp-guest-session-time">{ago(s.lastTurnAt ?? s.addedAt)}</span>
       </span>
       <span className="tp-guest-session-sub">
-        {s.ownerName} · {sessionStateWord(s)}
+        {s.ownerName} · {sharedWithMeStateText(s)}
       </span>
     </div>
   );
+}
+
+/** A guest row's state: from a server that sends the facts, the state word and its marks, then Completed for a filed
+ *  session (lib/sessionDisplay); from an older one, the shared header's word as before. */
+function sharedWithMeStateText(s: Parameters<typeof sessionStateWord>[0]): string {
+  const shown = sessionDisplayText(s);
+  if (!shown) return sessionStateWord(s);
+  return sessionLifecycleStateOf(s) === 'COMPLETED' ? `${shown} · ${sessionLifecycleLabel('COMPLETED')}` : shown;
 }

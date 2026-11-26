@@ -72,6 +72,9 @@ public struct GuestSessionSummary: Codable, Equatable, Sendable, Identifiable {
     @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
     @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
     @LenientSessionField public private(set) var endReason: String?
+    @LenientSessionField public private(set) var activity: String?
+    @LenientSessionField public private(set) var pendingApprovals: Int?
+    @LenientSessionField public private(set) var runningBgCount: Int?
     public let sessionState: String?
     public let lifecycleState: String?
     public let addedAt: String
@@ -94,7 +97,8 @@ public struct GuestSessionSummary: Codable, Equatable, Sendable, Identifiable {
         GuestSessionState(runState: nil, runStatus: status, sessionState: sessionState,
                           lifecycleState: lifecycleState, waitingOnOwner: false,
                           phase: phase, released: released, lastTurnOutcome: lastTurnOutcome,
-                          waitingOn: waitingOn, endReason: endReason, workFinished: workFinished)
+                          waitingOn: waitingOn, endReason: endReason, workFinished: workFinished,
+                          activity: activity, pendingApprovals: pendingApprovals, runningBgCount: runningBgCount)
     }
 }
 
@@ -117,11 +121,15 @@ public struct GuestSessionState: Equatable, Sendable {
     public let waitingOn: SessionWaitingOn?
     public let endReason: String?
     public let workFinished: Bool?
+    public let activity: String?
+    public let pendingApprovals: Int?
+    public let runningBgCount: Int?
 
     public init(runState: SessionRunState?, runStatus: String?, sessionState: String?,
                 lifecycleState: String?, waitingOnOwner: Bool, phase: SessionPhase? = nil,
                 released: Bool? = nil, lastTurnOutcome: SessionTurnOutcome? = nil,
-                waitingOn: SessionWaitingOn? = nil, endReason: String? = nil, workFinished: Bool? = nil) {
+                waitingOn: SessionWaitingOn? = nil, endReason: String? = nil, workFinished: Bool? = nil,
+                activity: String? = nil, pendingApprovals: Int? = nil, runningBgCount: Int? = nil) {
         self.runState = runState
         self.runStatus = runStatus
         self.sessionState = sessionState
@@ -133,13 +141,16 @@ public struct GuestSessionState: Equatable, Sendable {
         self.waitingOn = waitingOn
         self.endReason = endReason
         self.workFinished = workFinished
+        self.activity = activity
+        self.pendingApprovals = pendingApprovals
+        self.runningBgCount = runningBgCount
     }
 }
 
 private enum GuestHeadKeys: String, CodingKey {
     case title, ownerName, status, runStatus, sessionState, runState, lifecycleState, filingState,
          waitingOnOwner, events, hasMore, after, phase, released, lastTurnOutcome, waitingOn,
-         endReason, workFinished
+         endReason, workFinished, activity, pendingApprovals, runningBgCount
 }
 
 private extension KeyedDecodingContainer where K == GuestHeadKeys {
@@ -158,7 +169,10 @@ private extension KeyedDecodingContainer where K == GuestHeadKeys {
             lastTurnOutcome: try? decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome),
             waitingOn: try? decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn),
             endReason: try? decodeIfPresent(String.self, forKey: .endReason),
-            workFinished: try? decodeIfPresent(Bool.self, forKey: .workFinished))
+            workFinished: try? decodeIfPresent(Bool.self, forKey: .workFinished),
+            activity: try? decodeIfPresent(String.self, forKey: .activity),
+            pendingApprovals: try? decodeIfPresent(Int.self, forKey: .pendingApprovals),
+            runningBgCount: try? decodeIfPresent(Int.self, forKey: .runningBgCount))
     }
 }
 

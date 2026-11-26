@@ -1,0 +1,112 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:Mono;src:url(/var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf)}
+body{margin:0;padding:32px;background:#e7e7ec;font-family:Inter,sans-serif;color:#000;width:1340px}
+h1{font-size:24px;margin:0 0 6px}.sub{color:#555;font-size:15px;margin-bottom:20px;line-height:1.5}
+.cols{display:flex;gap:28px}.col{width:413px}.col h2{font-size:18px;margin:0 0 10px}
+.phone{width:393px;height:852px;border-radius:48px;background:#f2f2f7;overflow:hidden;box-shadow:0 0 0 10px #111,0 10px 30px rgba(0,0,0,.25);position:relative;margin:10px}
+.bar{display:flex;align-items:center;justify-content:center;height:56px;margin-top:50px;position:relative}
+.bar b{font-size:17px}.done{position:absolute;right:16px;background:#fff;border-radius:20px;padding:8px 16px;font-weight:600;font-size:16px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.card{background:#fff;border-radius:22px;margin:14px 16px 0;padding:2px 14px 2px 16px}
+.row{display:flex;gap:10px;padding:11px 0;position:relative}
+.row+.row{border-top:.5px solid #d8d8dd;margin-left:28px}.row+.row .g{margin-left:-28px}
+.g{width:18px;flex:none;margin-top:2px;display:flex;justify-content:center}
+.body{flex:1;min-width:0}
+.chev{color:#c4c4c7;font-size:15px;margin-top:1px;flex:none}
+.ok{width:15px;height:15px;border-radius:50%;background:#34c759;color:#fff;font-size:10px;text-align:center;line-height:15px;font-weight:800}
+.okq{width:15px;height:15px;color:#aeaeb2;font-size:14px;text-align:center;line-height:15px;font-weight:700}
+.bad{width:15px;height:15px;border-radius:50%;background:#ff3b30;color:#fff;font-size:10px;text-align:center;line-height:15px;font-weight:800}
+.spin{width:12px;height:12px;border-radius:50%;border:2.5px solid #d6e4ff;border-top-color:#0a84ff;margin-top:1px}
+.t{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.l1{display:flex;align-items:baseline;gap:8px}.l1 .t{flex:1;min-width:0}
+.dur{font-family:Mono;font-size:12.5px;color:#8a8a8e;flex:none}
+.dur.live{color:#0a84ff}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;font-size:13px;align-items:center;color:#8a8a8e}
+.chip{border-radius:6px;padding:2px 6px 2px 3px;display:inline-flex;gap:4px;align-items:center;color:#000}
+.chip.c{background:#f7e9e3}.chip.x{background:#ececec}.chip.k{background:#e5eeff}
+.mk{width:14px;height:14px;border-radius:4px;color:#fff;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.mk.c{background:#c97b5a}.mk.x{background:#111}.mk.k{background:#2f6bff}
+.m{background:#eee;border-radius:6px;padding:2px 6px;color:#666}
+/* after */
+.l2{display:flex;align-items:center;gap:5px;margin-top:4px;font-size:13px;color:#8a8a8e;white-space:nowrap;overflow:hidden}
+.l2 .mod{color:#3c3c43}
+.l2 .dot{color:#c7c7cc}
+.live2{font-family:Mono;font-size:12px;color:#8a8a8e;font-style:italic;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr{display:flex;justify-content:space-between;color:#8a8a8e;font-size:13px;margin:16px 32px -6px;font-weight:500}
+.ann{position:absolute;right:-4px;top:8px;background:#e5484d;color:#fff;font-size:11px;font-weight:700;border-radius:50%;width:18px;height:18px;text-align:center;line-height:18px}
+.ann.g2{background:#1f9d55}
+.notes{font-size:14px;color:#222;line-height:1.55;background:#fff;border-radius:14px;padding:14px 18px;width:440px}
+.notes h3{margin:0 0 6px;font-size:15px}.notes ol{margin:0 0 12px;padding-left:22px}.notes li{margin-bottom:5px}
+.notes .n{display:inline-block;width:17px;height:17px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;text-align:center;line-height:17px;margin-right:4px}
+.q{margin-top:12px;border-top:1px solid #eee;padding-top:10px}
+</style></head><body>
+<h1>Agents sheet: one shape per row (iPhone · Mac uses the same view)</h1>
+<div class="sub">Hand-drawn from <code>AgentsSheet</code> in AgentBlockViews.swift with the data from your screenshot. Left: today, problems numbered in red. Middle: proposed. Right: what changes and the open questions.</div>
+<div class="cols">
+
+<div class="col"><h2>Today</h2><div class="phone">
+ <div class="bar"><b>Agents</b><span class="done">Done</span></div>
+ <div class="card">
+  <div class="row"><div class="g"><div class="spin"></div></div><div class="body"><div class="t">Android: commits-first worktree bar</div><div class="meta"><span>Claude →</span><span class="chip x"><span class="mk x">C</span><b>Codex</b> GPT-6.2-Sol</span></div></div><span class="chev">›</span><span class="ann" style="top:30px;left:-14px;right:auto">3</span><span class="ann" style="top:40px">4</span></div>
+  <div class="row"><div class="g"><div class="ok">✓</div></div><div class="body"><div class="t">Mac: build and test Apple commits bar</div><div class="meta"><span class="chip c"><span class="mk c">C</span><b>Claude</b> DeepSeek V4.1 Flash 1017</span><span class="m">▭ on orbit-ws05</span><span>11m 34s</span></div></div><span class="chev">›</span><span class="ann" style="top:44px">1</span></div>
+  <div class="row"><div class="g"><div class="ok">✓</div></div><div class="body"><div class="t">Check production runs b7d3cb914</div><div class="meta"><span>Claude →</span><span class="chip k"><span class="mk k">K</span><b>Kimi</b> K3</span><span class="m">▭ on orbit-prod</span><span>1m 26s</span></div></div><span class="chev">›</span><span class="ann" style="top:68px">1</span></div>
+  <div class="row"><div class="g"><div class="ok">✓</div></div><div class="body"><div class="t">Wait, then deploy b7d3cb914</div><div class="meta"><span class="chip c"><span class="mk c">C</span><b>Claude</b> DeepSeek V4.1 Flash 1017</span><span class="m">▭ on orbit-ws04</span><span>21m 5s</span></div></div><span class="chev">›</span><span class="ann" style="top:40px;right:30px">2</span></div>
+  <div class="row"><div class="g"><div class="ok">✓</div></div><div class="body"><div class="t">Deploy b7d3cb914 to production</div><div class="meta"><span class="chip c"><span class="mk c">C</span><b>Claude</b> DeepSeek V4.1 Flash 1017</span><span class="m">▭ on orbit-ws04</span><span>56s</span></div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="ok">✓</div></div><div class="body"><div class="t">Check prod; list non-git workspaces</div><div class="meta"><span>Claude →</span><span class="chip k"><span class="mk k">K</span><b>Kimi</b> K3</span><span class="m">▭ on orbit-prod</span><span>2m 2s</span></div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="ok">✓</div></div><div class="body"><div class="t">Resume deploy of b649c6341</div><div class="meta"><span class="chip c"><span class="mk c">C</span><b>Claude</b> DeepSeek V4.1 Flash 1017</span><span class="m">▭ on orbit-ws04</span><span>9m 48s</span></div></div><span class="chev">›</span><span class="ann" style="top:30px;left:-14px;right:auto">5</span></div>
+  <div class="row"><div class="g"><div class="ok">✓</div></div><div class="body"><div class="t">Deploy b649c6341 to production</div><div class="meta"><span class="chip c"><span class="mk c">C</span><b>Claude</b> DeepSeek V4.1 Flash 1017</span><span class="m">▭ on orbit-ws04</span><span>1m 57s</span></div></div><span class="chev">›</span></div>
+ </div>
+</div></div>
+
+<div class="col"><h2>Proposed</h2><div class="phone">
+ <div class="bar"><b>Agents</b><span class="done">Done</span></div>
+ <div class="hdr"><span>1 running · 8 done</span></div>
+ <div class="card">
+  <div class="row"><div class="g"><div class="spin"></div></div><div class="body">
+   <div class="l1"><div class="t">Android: commits-first worktree bar</div><span class="dur live">4m 12s</span></div>
+   <div class="l2"><span class="mk x">C</span><span class="mod">GPT-6.2-Sol</span><span class="dot">·</span><span>this machine</span></div>
+   <div class="live2">Running ./gradlew :app:testDebugUnitTest…</div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="okq">✓</div></div><div class="body">
+   <div class="l1"><div class="t">Mac: build and test Apple commits bar</div><span class="dur">11m 34s</span></div>
+   <div class="l2"><span class="mk c">C</span><span class="mod">DeepSeek V4.1 Flash</span><span class="dot">·</span><span>orbit-ws05</span></div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="okq">✓</div></div><div class="body">
+   <div class="l1"><div class="t">Check production runs b7d3cb914</div><span class="dur">1m 26s</span></div>
+   <div class="l2"><span class="mk k">K</span><span class="mod">Kimi K3</span><span class="dot">·</span><span>orbit-prod</span></div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="okq">✓</div></div><div class="body">
+   <div class="l1"><div class="t">Wait, then deploy b7d3cb914</div><span class="dur">21m 5s</span></div>
+   <div class="l2"><span class="mk c">C</span><span class="mod">DeepSeek V4.1 Flash</span><span class="dot">·</span><span>orbit-ws04</span></div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="okq">✓</div></div><div class="body">
+   <div class="l1"><div class="t">Deploy b7d3cb914 to production</div><span class="dur">56s</span></div>
+   <div class="l2"><span class="mk c">C</span><span class="mod">DeepSeek V4.1 Flash</span><span class="dot">·</span><span>orbit-ws04</span></div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="okq">✓</div></div><div class="body">
+   <div class="l1"><div class="t">Check prod; list non-git workspaces</div><span class="dur">2m 2s</span></div>
+   <div class="l2"><span class="mk k">K</span><span class="mod">Kimi K3</span><span class="dot">·</span><span>orbit-prod</span></div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="okq">✓</div></div><div class="body">
+   <div class="l1"><div class="t">Resume deploy of b649c6341</div><span class="dur">9m 48s</span></div>
+   <div class="l2"><span class="mk c">C</span><span class="mod">DeepSeek V4.1 Flash</span><span class="dot">·</span><span>orbit-ws04</span></div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="okq">✓</div></div><div class="body">
+   <div class="l1"><div class="t">Deploy b649c6341 to production</div><span class="dur">1m 57s</span></div>
+   <div class="l2"><span class="mk c">C</span><span class="mod">DeepSeek V4.1 Flash</span><span class="dot">·</span><span>orbit-ws04</span></div></div><span class="chev">›</span></div>
+  <div class="row"><div class="g"><div class="bad">!</div></div><div class="body">
+   <div class="l1"><div class="t">Read one session's stored commit list</div><span class="dur">44s</span></div>
+   <div class="l2"><span class="mk k">K</span><span class="mod">Kimi K3</span><span class="dot">·</span><span>orbit-prod</span><span class="dot">·</span><span style="color:#ff3b30">Failed</span></div></div><span class="chev">›</span></div>
+ </div>
+</div></div>
+
+<div class="col" style="width:460px"><h2>What changes</h2><div class="notes">
+<ol>
+<li><span class="n" style="background:#e5484d">1</span><b>Ragged rows.</b> The identity line wraps when the model name is long, so a row is 2 or 3 lines and the time lands in a different place each time. → Every row is two lines; the time sits at the right end of the title line, in a fixed spot down the column.</li>
+<li><span class="n" style="background:#e5484d">2</span><b>Repeated chips.</b> "Claude DeepSeek V4.1 Flash 1017" in a tinted pill five times over. → The engine's letter mark plus the model's short name, in plain text. The engine name and the "1017" build stay in the Agent block in the conversation.</li>
+<li><span class="n" style="background:#e5484d">3</span><b>A running row has no time and does not say what it is doing.</b> → Live elapsed time in blue, and a third line showing its current step (the same text the block in the conversation shows).</li>
+<li><span class="n" style="background:#e5484d">4</span><b>"Claude →"</b> appears on some rows and not others. Every row here was started by this session, so it adds nothing. → Removed from the sheet only.</li>
+<li><span class="n" style="background:#e5484d">5</span><b>Green on every row.</b> (The last row is drawn as failed only to show that look; in your screenshot it succeeded.) Eight green checks drown out a failure. → A finished run gets a grey check; only a running row (blue) or a failed one (red, with the word "Failed") stands out. The machine drops its pill and the "on".</li>
+</ol>
+<div class="q"><b>Open questions</b>
+<ol style="margin-top:6px">
+<li>A count line above the list ("1 running · 8 done"). Keep it, or leave the list on its own?</li>
+<li>A run on this session's own machine: say "this machine", or show nothing?</li>
+<li>Drop the model's build number ("1017") in the sheet: OK?</li>
+</ol></div>
+</div></div>
+</div>
+</body></html>

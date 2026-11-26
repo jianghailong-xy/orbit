@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { sessionWakeSourceSql } from '../sessions/task-work-carrier';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorDeliveryService, type CoordinatorDeliveryOutcome } from './coordinator-delivery.service';
@@ -115,7 +116,8 @@ export class TaskRunStoppedProducer {
       where: {
         id: sessionId,
         startsTaskWork: true,
-        status: RunStatus.AWAITING_INPUT,
+        // Parked (plan §2.1: A).
+        ...turnStateFilter([null]),
         task: {
           projectId: { not: null },
           completionCriterion: 'EVIDENCE_JUDGMENT',

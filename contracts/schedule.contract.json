@@ -299,7 +299,7 @@
       "LANDING_FAILED": "could not land on main"
     },
     "runReasonTexts": {
-      "OVER_BUDGET": "Not started: it had already started as many runs in the past 7 days as you allowed."
+      "OVER_BUDGET": "Not started: it had already started as many scheduled runs in the past 7 days as you allowed."
     },
     "failureReasonsWithSummary": {
       "REPORTED_FAILED": "reported a failure: {summary}",
@@ -393,6 +393,7 @@
       "pause": "Pause",
       "resume": "Resume",
       "change": "Change…",
+      "rename": "Rename…",
       "delete": "Delete",
       "undo": "Undo",
       "open": "Open",
@@ -415,6 +416,12 @@
       "body": "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here.",
       "confirm": "Delete",
       "cancel": "Cancel"
+    },
+    "renameAlert": {
+      "title": "Rename Schedule",
+      "body": "Only the name changes. When it runs and what it does stay the same.",
+      "cancel": "Cancel",
+      "save": "Save"
     },
     "stopConfirm": {
       "title": "Stop this run?",
@@ -482,7 +489,8 @@
       "resumed": "Resumed",
       "ended": "Ended: {reason}",
       "minutes": "{minutes} min",
-      "noEnd": "no end"
+      "noEnd": "no end",
+      "renamed": "Renamed from “{title}”"
     },
     "changeConversation": {
       "title": "Change {title}",
@@ -565,6 +573,7 @@
     "push": {
       "failedBody": "The last run {reason}. It keeps running until you pause it.",
       "goalReachedTitle": "{title} ended itself",
+      "reportedLateTitle": "{title} reported after all",
       "stoppedAsPlanned": "Stopped as planned after {runs}"
     },
     "empty": {

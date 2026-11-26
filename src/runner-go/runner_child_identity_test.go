@@ -97,7 +97,7 @@ func TestRunnerStartedShellsActAsTheMachineBesideASavedLogin(t *testing.T) {
 	t.Run("a ! shell", func(t *testing.T) {
 		user, runner, orbit := aRunnerWithASavedLogin(t)
 		out, exit := runShellTurn(context.Background(), t.TempDir(), orbit+" whoami --json",
-			func(string, map[string]interface{}) {}, "bang", nil, shellTurnTimeout)
+			func(string, map[string]interface{}) {}, "bang", nil, shellTurnTimeout, "")
 		if exit != 0 {
 			t.Fatalf("orbit whoami exited %d:\n%s", exit, out)
 		}

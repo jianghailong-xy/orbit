@@ -6,7 +6,7 @@ import type { Readable } from 'node:stream';
 import { SHA256_NAME, assertRange, removeTempFile, type ByteRange, type FileStore, type S3FilesConfig, type StoredObject } from './file-store';
 
 /**
- * An S3-compatible bucket as a file store (`ORBIT_DOCUMENTS_BACKEND=s3`, docs/documents-design.md §2.10):
+ * An S3-compatible bucket as a file store (`ORBIT_DRIVE_BACKEND=s3`, docs/drive-design.md §2.10):
  * `files/<sha256[0:2]>/<sha256>`, addressed path-style (`<endpoint>/<bucket>/<key>`), which AWS S3, MinIO,
  * Ceph, R2 and the other S3-compatible services all answer.
  *

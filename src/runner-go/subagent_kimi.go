@@ -123,7 +123,10 @@ func runKimiChild(ctx context.Context, c subagentChild) (ExecResult, string, err
 	activeMu.Unlock()
 	app.beginPermissionTurn()
 	wire, wireFrom := kimiTurnWire(realHome, sessionID)
-	text := kimiPromptText(child.instructionAgent(), orbitExe, c.prompt, child.insideRecordedWork(), child.watchesOn(), child.workflowsOn())
+	text := c.prompt
+	if newKimiInstructionLedger(realHome, sessionID).due() {
+		text = kimiPromptText(child.instructionAgent(), child.sessionShape(orbitExe), c.prompt)
+	}
 	result, promptErr := app.request(ctx, "session/prompt", map[string]interface{}{
 		"sessionId": sessionID,
 		"prompt":    []map[string]interface{}{{"type": "text", "text": text}},

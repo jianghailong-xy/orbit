@@ -40,6 +40,10 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.directory.SessionDisplay
+import io.orbitd.android.directory.SessionDisplayState
+import io.orbitd.android.directory.SessionMarkChips
+import io.orbitd.android.directory.SessionStateGlyph
 import io.orbitd.android.directory.orderedWorkspaceRows
 import io.orbitd.android.composer.ComposerCatalog
 import io.orbitd.android.composer.CredentialKind
@@ -983,14 +987,18 @@ private fun modelName(id: String, task: JsonObject, data: TaskDetailData): Strin
 @Composable
 private fun RunRow(run: JsonObject, task: JsonObject, data: TaskDetailData, open: (OrbitRoute) -> Unit, why: () -> Unit) {
     val state = resolvedRunState(run)
-    val color = when (state) { "RUNNING" -> LocalOrbitColors.current.running; "QUEUED", "AWAITING_INPUT" -> LocalOrbitColors.current.needsYou
+    // With the session facts, the state from `phase` and the marks beside it (the board); from an older server, today's dot and word.
+    val shown = SessionDisplay.state(SessionDisplay.facts(run))
+    val color = if (shown != null) (if (shown == SessionDisplayState.RUNNING) LocalOrbitColors.current.running else MaterialTheme.colorScheme.onSurfaceVariant)
+        else when (state) { "RUNNING" -> LocalOrbitColors.current.running; "QUEUED", "AWAITING_INPUT" -> LocalOrbitColors.current.needsYou
         "SUCCEEDED", "FINISHED" -> LocalOrbitColors.current.success; "FAILED" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.onSurfaceVariant }
     val smartSelection = LocalSmartSelection.current
     val route = TaskDetailLogic.runRoute(run, smartSelection)
     val name: (String) -> String = { modelName(it, task, data) }
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { run.text("id")?.let { open(OrbitRoute(Destination.SESSION, it)) } }.padding(vertical = 6.dp)
         .testTag("task-run:${run.text("id")}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (state == "RUNNING") CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp) else Box(Modifier.size(8.dp).background(color, CircleShape))
+        if (shown != null) SessionStateGlyph(shown)
+        else if (state == "RUNNING") CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp) else Box(Modifier.size(8.dp).background(color, CircleShape))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row {
                 Text(run.obj("agent")?.text("name") ?: run.text("title") ?: TaskDetailCopy.untitledSession, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -998,7 +1006,8 @@ private fun RunRow(run: JsonObject, task: JsonObject, data: TaskDetailData, open
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(TaskDetailLogic.runLabel(run), style = MaterialTheme.typography.bodySmall, color = color)
+                Text(shown?.word ?: TaskDetailLogic.runLabel(run), Modifier.testTag("task-run-state:${run.text("id")}"), style = MaterialTheme.typography.bodySmall, color = color)
+                if (shown != null) SessionMarkChips(SessionDisplay.marks(SessionDisplay.facts(run)))
                 TaskDetailLogic.runModelLine(run, smartSelection, name)?.let { Text("· $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)) }
                 if (route?.flag("applied") == true) Text(TaskDetailLogic.routeTierTag(route), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,

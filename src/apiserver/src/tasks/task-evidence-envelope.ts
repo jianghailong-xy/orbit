@@ -188,16 +188,16 @@ function refuseShape(why: string): never {
 }
 
 /**
- * Whether a FILE reference names a drive file (docs/documents-drive-technical-design.md §4.5): an `orbit-document:` link
- * (or `orbit-drive:`, its scheme before the Documents rename), or a path by any of the drive's spellings on Orbit Cloud. The drive's content changes under its name (D17), so it is
+ * Whether a FILE reference names a drive file (docs/drive-technical-design.md §4.5): an `orbit-document:` link
+ * (or `orbit-drive:`, its scheme before the Drive rename), or a path by any of the drive's spellings on Orbit Cloud. The drive's content changes under its name (D17), so it is
  * never what evidence binds; `file_upload` of the path makes the evidence copy that is.
  */
 export function namesDriveFile(ref: string): boolean {
   const text = ref.trim();
   return /^orbit-(?:document|drive):/i.test(text)
-    || /^(?:~|\/home\/orbit)\/(?:Documents|Files)(?:\/|$)/.test(text)
-    // /run/orbit-files is the mount root of a Pod of the CSI driver from before the rename to Documents.
-    || /^\/run\/orbit-(?:documents|files)\/drive(?:\/|$)/.test(text);
+    || /^(?:~|\/home\/orbit)\/(?:Drive|Documents|Files)(?:\/|$)/.test(text)
+    // /run/orbit-documents and /run/orbit-files are the mount roots of Pods of the older CSI drivers.
+    || /^\/run\/orbit-(?:drive|documents|files)\/drive(?:\/|$)/.test(text);
 }
 
 function refuseCitation(code: string, message: string, requiredAction: string): never {
@@ -465,7 +465,7 @@ async function resolveArtifact(
  * bundle is its manifest's row, whose sha256 binds every file it lists (`FileBundleManifest`). Whose a row is can be read
  * off the row, so this takes one query where the other resolvers take two.
  *
- * A row with no sha256 has no bytes to bind and is not found. Only a row from before Documents could be one, and saving
+ * A row with no sha256 has no bytes to bind and is not found. Only a row from before Drive could be one, and saving
  * a citation gives such a row its sha256 first (`FilesService.prepareCitedFiles`).
  */
 async function resolveFile(
@@ -630,7 +630,7 @@ export async function resolveEvidenceCitations(
     if (submitted.kind === 'FILE' && namesDriveFile(submitted.ref)) {
       refuseCitation(
         'EVIDENCE_FILE_IS_A_DRIVE_PATH',
-        `evidence.checks[${index}] names a file in the Documents drive; nothing was written. A drive file can be `
+        `evidence.checks[${index}] names a file in the Drive; nothing was written. A drive file can be `
         + 'overwritten after it is cited, so evidence never cites one. Keep it with file_upload, which makes an evidence '
         + 'copy of it under the evidence rules, and cite the id that answers',
         'UPLOAD_THE_FILE_AND_CITE_ITS_ID',
@@ -787,7 +787,7 @@ export async function describeCitedFiles(
 }
 
 /**
- * What a revision's decider reads about its files (docs/documents-design.md §2.7): each one, and the call that fetches
+ * What a revision's decider reads about its files (docs/drive-design.md §2.7): each one, and the call that fetches
  * it. Listed rather than delivered, because the p90 of evidence is 142 files and a judgment usually wants a few.
  */
 export function citedFilesBlock(files: ReadonlyArray<CitedFileLine>): string {

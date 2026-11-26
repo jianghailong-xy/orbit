@@ -64,8 +64,8 @@ test('a session write is the write its card approved', { skip: !URL, concurrency
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY: `task-write-approval-${RUN}`,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_DOCUMENTS_BACKEND: 'local',
-    ORBIT_DOCUMENTS_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
 

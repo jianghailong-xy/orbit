@@ -210,4 +210,61 @@ final class RunnerUpdatingTests: XCTestCase {
     private func summary(_ json: String) throws -> ControlSessionSummary {
         try JSONDecoder().decode(ControlSessionSummary.self, from: Data(json.utf8))
     }
+
+    // MARK: - The server's own payload
+
+    /// `src/shared/src/runner-update-held-session.fixture.json`: the apiserver's replies for a session held by a runner
+    /// update, captured by turn-complete-draining.pg.spec.ts case 7 (web and Android test against the same file) — a
+    /// turn ended on the draining runner with a follow-up queued and a dev server still up.
+    private struct HeldFixture: Decodable {
+        let listRow: Session
+        let detail: Session
+    }
+
+    private func heldFixture() throws -> HeldFixture {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            let file = dir.appendingPathComponent("src/shared/src/runner-update-held-session.fixture.json")
+            if FileManager.default.fileExists(atPath: file.path) {
+                return try JSONDecoder().decode(HeldFixture.self, from: Data(contentsOf: file))
+            }
+            dir = dir.deletingLastPathComponent()
+        }
+        throw CocoaError(.fileNoSuchFile)
+    }
+
+    func testTheServersHeldSessionReadsQueuedBehindTheUpdateNeverRunning() throws {
+        let row = try heldFixture().listRow
+        XCTAssertEqual(row.phase, .pending)
+        XCTAssertEqual(row.waitingOn, .hold)
+        XCTAssertEqual(row.queuedReason, "runner_updating")
+        XCTAssertEqual(row.effectiveRunState, .queued)
+        XCTAssertFalse(row.isGenerating)
+        XCTAssertTrue(RunnerUpdating.holds(row))
+        XCTAssertEqual(SessionLine.make(for: row, live: true), SessionLine(text: "Runner updating", tone: .warning))
+        XCTAssertEqual(SessionHeader.statusWord(for: row), "Runner updating")
+        // The glyph's own words: the Mac row's tooltip and what VoiceOver says (web `StatusIcon`'s tooltip).
+        XCTAssertEqual(SessionStatusGlyph.make(for: row).label, "Runner updating")
+        XCTAssertNotEqual(SessionStatusGlyph.make(for: row).shape, .spinner)
+        XCTAssertEqual(RunnerUpdating.plain(RunnerUpdating.description(row, machine: "studio-mac")),
+                       "studio-mac is updating to 0.1.254. It starts no new work until 2 turns finish: Backfill missing shard rows and Why are 11-08 metrics zero. This session starts right after.")
+    }
+
+    /// The detail names no gate of its own, and still reads queued.
+    func testTheServersHeldDetailIsNotRunningEither() throws {
+        let detail = try heldFixture().detail
+        XCTAssertEqual(detail.effectiveRunState, .queued)
+        XCTAssertFalse(detail.isGenerating)
+        XCTAssertEqual(SessionHeader.statusWord(for: detail), "On hold")
+    }
+
+    /// The composer's Stop is offered for the background work, and what it sends is what the server accepts on this
+    /// session (case 7 of the spec).
+    func testStopIsOfferedOnTheServersHeldSessionAndAsksForTheBackgroundWork() throws {
+        let row = try heldFixture().listRow
+        XCTAssertTrue(ComposerLogic.showsInterrupt(session: row, stream: .pending, hasText: false,
+                                                   hasAttachments: false, replying: false))
+        let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(SessionStopRequest())) as? [String: Bool]
+        XCTAssertEqual(body, ["stopBackgroundWork": true])
+    }
 }

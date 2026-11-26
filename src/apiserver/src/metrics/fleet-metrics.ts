@@ -2,6 +2,8 @@ import { Logger } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { RUNNER_OFFLINE_AFTER_MS, runnerLastBeatSql } from '../runners/runner-presence';
+import { sessionHeldSql } from '../common/session-release';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
 
 /**
@@ -81,16 +83,19 @@ export async function readFleetGauges(db: GaugeReader): Promise<FleetGauges> {
       (SELECT count(*) FROM runner_state WHERE "state" = 'offline')::int AS runners_offline,
       (SELECT EXTRACT(EPOCH FROM now() - min("at"))::float8 FROM runner_state
         WHERE "state" IN ('online', 'draining')) AS oldest_beat_age_seconds,
+      -- Queued and running are the turn states QUEUED and IN_FLIGHT (sessions/session-turn-state.ts), of held rows.
       (SELECT count(*) FROM "session" s
-        WHERE s."deleted_at" IS NULL AND s."status" = 'PENDING'::"run_status")::int AS sessions_queued,
+        WHERE s."deleted_at" IS NULL AND ${sessionHeldSql('s')}
+          AND ${sessionTurnStateSql('s')} = 'QUEUED')::int AS sessions_queued,
       (SELECT count(*) FROM "session" s
-        WHERE s."deleted_at" IS NULL AND s."status" = 'RUNNING'::"run_status")::int AS sessions_running,
+        WHERE s."deleted_at" IS NULL AND ${sessionHeldSql('s')}
+          AND ${sessionTurnStateSql('s')} = 'IN_FLIGHT')::int AS sessions_running,
       (SELECT count(*) FROM "session" carrier
         WHERE carrier."task_id" IS NOT NULL AND ${Prisma.raw(sessionCarriesTaskSql('carrier'))}
-          AND carrier."status" = 'PENDING'::"run_status")::int AS tasks_queued,
+          AND ${sessionTurnStateSql('carrier')} IS NOT DISTINCT FROM 'QUEUED')::int AS tasks_queued,
       (SELECT count(*) FROM "session" carrier
         WHERE carrier."task_id" IS NOT NULL AND ${Prisma.raw(sessionCarriesTaskSql('carrier'))}
-          AND carrier."status" <> 'PENDING'::"run_status")::int AS tasks_running`);
+          AND ${sessionTurnStateSql('carrier')} IS DISTINCT FROM 'QUEUED')::int AS tasks_running`);
   return {
     runners: {
       online: Number(row?.runners_online ?? 0),

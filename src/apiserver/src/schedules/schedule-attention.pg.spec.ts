@@ -54,7 +54,7 @@ import {
 } from './schedule-access';
 import type { ScheduleAlert, ScheduleNotifier } from './schedule-attention';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
-import { ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
+import { SCHEDULE_IDLE_SETTLE_MS, ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
 import { SchedulesService, type ScheduleActor, type ScheduleCreateInput } from './schedules.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -255,6 +255,8 @@ test('§7.3 NO_CHANGE notifies nobody, files nothing and its session is complete
   await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Still 0.48.0.' });
   assert.deepEqual(alertsOf(schedule.id), []);
   assert.deepEqual(await items(schedule.id), []);
+  // §7.4: the worker's pass completes it, once nothing works in it.
+  assert.ok((await runs.completeNoChangeSessions(1000)).includes(sessionId), 'the pass completes the run\'s session');
   assert.ok((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).completedAt, 'the session is completed');
 });
 
@@ -317,7 +319,11 @@ test('§7.3 FAILED: push and Waiting on you; the third in a row says "failed 3 r
   const two = await nextRun(schedule.id);
   await db.conversationTurn.updateMany({ where: { sessionId: two.sessionId }, data: { status: 'ANSWERED' } });
   await db.session.update({ where: { id: two.sessionId }, data: { status: 'AWAITING_INPUT' } });
+  // §7.1: idle fails the run only once it has read so for the settle time.
+  assert.equal(await runs.reconcileRun(two.run.id), 'UNCHANGED', 'idle is not settled at once');
+  advance(SCHEDULE_IDLE_SETTLE_MS);
   assert.equal(await runs.reconcileRun(two.run.id), 'FAILED');
+  assert.equal((await runOf(two.run.id)).failureReason, 'NO_REPORT');
   const three = await nextRun(schedule.id);
   advance(31 * MINUTE);
   assert.equal(await runs.reconcileRun(three.run.id), 'FAILED');
@@ -934,6 +940,7 @@ test('§7.4/§12.1 a run\'s session is in no list but its Scheduled runs folder,
   // A NO_CHANGE run's completed session is not in Completed either.
   await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
   await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Same.' });
+  assert.ok((await runs.completeNoChangeSessions(1000)).includes(sessionId), 'the worker\'s pass completes it');
   assert.ok(!ids(await sessionsService.list(w.ownerId, { view: 'completed' })).includes(sessionId), 'list (Completed)');
   assert.deepEqual(ids(await sessionsService.list(w.ownerId, { view: 'completed', workspaceId: w.workspaceId, scheduled: true })),
     [sessionId], 'the Scheduled runs folder\'s Completed lists it');

@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeId } from '../lib/idCodec';
 import type { Runner } from './TasksSidePanel';
 
 vi.mock('../api', async (importOriginal) => {
@@ -77,7 +78,8 @@ beforeEach(() => {
     if (path === '/workspaces') {
       return Promise.resolve([
         {
-          id: WORKSPACE_ID,
+          // The server's spelling: the web asks for public ids, so the route's id resolves to this one.
+          id: encodeId(WORKSPACE_ID),
           name: 'orbit',
           runnerId: RUNNER_ID,
           createdAt: '2026-01-01T00:00:00Z',
@@ -192,13 +194,20 @@ describe('New Session project intent', () => {
       '— Describe the outcome you want; Orbit will read the repository before working out the plan with you',
     );
     expect(intent.querySelectorAll('button[aria-label="Dismiss project intent"]')).toHaveLength(1);
+    // A project names its workspace and no folder.
+    await waitForUi(() => expect(one('.np-place button[aria-label="Workspace: orbit"]')).toBeTruthy());
+    expect(container?.querySelector('.np-place button[aria-label^="Folder:"]')).toBeNull();
   });
 
   it('uses the empty-state hierarchy when the route has no intent', async () => {
     await mount(NEW_SESSION_PATH, 'Start a new session');
 
     expect(one('.np-empty-copy').textContent).toBe('Send a task to get started.');
-    expect(one('.np-current-model').textContent).toBeTruthy();
+    // docs/mocks/new-session-top: the model is the composer's to say, where it runs is said under the
+    // engine, and a wide window's draft has no header above them.
+    expect(container?.querySelector('.np-current-model')).toBeNull();
+    await waitForUi(() => expect(one('.np-place button[aria-label="Workspace: orbit"]')).toBeTruthy());
+    expect(container?.querySelector('.workspace-header')).toBeNull();
     expect(container?.querySelector('.composer-project-intent')).toBeNull();
     expect(container?.querySelector('.np-title')).toBeNull();
     expect(container?.querySelector('.np-sub')).toBeNull();
@@ -217,7 +226,7 @@ describe('New Session project intent', () => {
     expect(one('[data-testid="location"]').textContent).toBe(NEW_SESSION_PATH);
     expect(mountedContainer().querySelector('.composer-project-intent')).toBeNull();
     expect(one('.np-empty-copy').textContent).toBe('Send a task to get started.');
-    expect(one('.np-current-model').textContent).toBeTruthy();
+    expect(container?.querySelector('.np-current-model')).toBeNull();
   });
 });
 

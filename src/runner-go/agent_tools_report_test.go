@@ -288,7 +288,7 @@ func TestAgentToolsReportReadsTheRecordedEngineFrames(t *testing.T) {
 	job := agentToolsJob() // orchestration off, as the probe's orbit mcp was spawned
 	r := claudeAgentToolsReport(job, init)
 	// Claude enumerated the tools in the recording. Keep the count from that probe as the catalogue grows.
-	const recordedClaudeTools = 99
+	const recordedClaudeTools = 100
 	if r.MCP.Status != "connected" || r.MCP.Tools != recordedClaudeTools {
 		t.Errorf("recorded Claude init read as %+v, want connected with %d tools", r.MCP, recordedClaudeTools)
 	}

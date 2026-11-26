@@ -754,7 +754,9 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // writes nothing. `task` 37 since 1060 added `condition_ended_with_task`, which ends a task's
   // condition when the task is cancelled, done or failed, and writes only `condition`. `session` 26 since 1490 added
   // `session_listed_at_settle`, which sets the row's own `listed_at` when it settles and writes no other relation.
-  assert.deepEqual(counts, { run_event: 1, session: 26, task: 37 });
+  // `session` 28 since 1611 added `session_aa_turn_state_from_status` and `session_zz_phase`, which set the row's own
+  // `turn_state` and `phase` from its stored word and write no other relation.
+  assert.deepEqual(counts, { run_event: 1, session: 28, task: 37 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

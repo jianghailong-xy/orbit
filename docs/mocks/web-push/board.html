@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>Web Push · 浏览器通知</title>
+<style>
+  :root { --bg:#f5f5f7; --card:#fff; --line:#e5e5ea; --ink:#1d1d1f; --mute:#6e6e73; --blue:#0a84ff; --amber:#b25000; --green:#34c759; --red:#e5484d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#e9e9ee; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color:var(--ink); }
+  section.b-part { width:1200px; margin:0 auto 24px; padding:32px 40px; background:#fff; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  h1 { font-size:26px; margin:0 0 4px; } h2 { font-size:20px; margin:0 0 6px; }
+  .b-sub { color:var(--mute); margin:0 0 20px; }
+  .b-row { display:flex; gap:28px; align-items:flex-start; }
+  .b-col { flex:1; min-width:0; }
+  .b-tag { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:6px; background:#eef4ff; color:var(--blue); margin-bottom:8px; }
+  .b-tag.old { background:#f0f0f2; color:var(--mute); }
+  /* browser frame */
+  .b-win { border:1px solid #d2d2d7; border-radius:10px; overflow:hidden; background:var(--bg); box-shadow:0 6px 24px rgba(0,0,0,.08); }
+  .b-bar { height:34px; background:#ececef; display:flex; align-items:center; gap:7px; padding:0 12px; border-bottom:1px solid #d9d9de; }
+  .b-dot { width:11px; height:11px; border-radius:50%; background:#ff5f57; } .b-dot:nth-child(2){background:#febc2e;} .b-dot:nth-child(3){background:#28c840;}
+  .b-url { margin-left:14px; flex:1; height:22px; border-radius:6px; background:#fff; font-size:12px; color:var(--mute); display:flex; align-items:center; padding:0 10px; }
+  .b-page { display:flex; min-height:420px; }
+  .b-nav { width:150px; border-right:1px solid var(--line); padding:16px 10px; font-size:13px; color:var(--mute); background:#fafafa; }
+  .b-nav div { padding:5px 8px; border-radius:6px; } .b-nav .on { background:#e8e8ed; color:var(--ink); font-weight:600; }
+  .b-main { flex:1; padding:22px 24px; }
+  .b-main h3 { margin:0 0 14px; font-size:18px; }
+  .b-group { font-size:12px; color:var(--mute); margin:16px 0 6px 4px; text-transform:none; }
+  .b-card { background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  .b-set { display:flex; align-items:center; gap:14px; padding:12px 14px; border-top:1px solid var(--line); position:relative; }
+  .b-set:first-child { border-top:0; }
+  .b-set .t { font-size:14px; font-weight:500; } .b-set .d { font-size:12.5px; color:var(--mute); line-height:1.45; }
+  .b-set .tx { flex:1; }
+  .b-sw { width:38px; height:22px; border-radius:11px; background:#d1d1d6; position:relative; flex:none; }
+  .b-sw::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); }
+  .b-sw.on { background:var(--green); } .b-sw.on::after { left:18px; }
+  .b-sw.dis { opacity:.45; }
+  .b-new { outline:2px dashed var(--blue); outline-offset:4px; border-radius:10px; }
+  .b-mk { position:absolute; width:22px; height:22px; border-radius:50%; background:var(--blue); color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .b-notes { margin-top:18px; display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; }
+  .b-note { display:flex; gap:10px; font-size:14px; }
+  .b-note .b-mk { position:static; flex:none; margin-top:2px; }
+  .b-states { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:6px; }
+  .b-state h4 { margin:0 0 6px; font-size:13px; color:var(--mute); font-weight:600; }
+  .b-hint { font-size:12px; color:var(--amber); }
+  /* desktop + notification */
+  .b-desk { height:260px; border-radius:12px; background:linear-gradient(135deg,#3a4a6b,#7a6f9c 60%,#c49a8a); position:relative; overflow:hidden; }
+  .b-ntf { position:absolute; right:18px; top:18px; width:360px; background:rgba(246,246,248,.94); border-radius:14px; padding:12px 14px; box-shadow:0 8px 30px rgba(0,0,0,.3); display:flex; gap:10px; }
+  .b-ntf.two { top:132px; }
+  .b-ico { width:36px; height:36px; border-radius:9px; background:#111; color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; flex:none; font-size:15px; }
+  .b-ntf .h { font-size:13px; font-weight:600; } .b-ntf .s { font-size:11px; color:var(--mute); } .b-ntf .m { font-size:13px; line-height:1.4; }
+  .b-ntf .acts { margin-top:6px; font-size:12px; color:var(--blue); }
+  /* diagram */
+  .b-flow { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; margin:8px 0 4px; }
+  .b-box { border:1.5px solid #c7c7cc; border-radius:9px; padding:7px 10px; font-size:12.5px; flex:none; max-width:230px; background:#fafafa; }
+  .b-box.new { border-color:var(--blue); background:#eef4ff; }
+  .b-box small { display:block; color:var(--mute); font-size:11.5px; }
+  .b-arr { color:var(--mute); font-size:18px; }
+  .b-fan { display:flex; flex-direction:column; gap:8px; }
+  table.b-t { width:100%; border-collapse:collapse; font-size:14px; margin-top:6px; }
+  table.b-t th, table.b-t td { border-bottom:1px solid var(--line); padding:9px 10px; text-align:left; vertical-align:top; }
+  table.b-t th { color:var(--mute); font-weight:600; font-size:13px; }
+  .b-rec { color:#0b7a33; font-weight:600; }
+  ol.b-ol { margin:6px 0 0; padding-left:22px; } ol.b-ol li { margin:6px 0; }
+  code { font-family:"JetBrains Mono", monospace; font-size:12.5px; background:#f2f2f5; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>浏览器通知（Web Push）· 设置页</h1>
+  <p class="b-sub">Settings → Notifications。① 今天 vs ② 建议：多一张「This browser」卡片，一个开关，只管当前这个浏览器。原有两个开关不动，照样管这个浏览器收哪些提醒。</p>
+  <div class="b-row">
+    <div class="b-col" style="flex:.82">
+      <span class="b-tag old">① 今天</span>
+      <div class="b-win">
+        <div class="b-bar"><span class="b-dot"></span><span class="b-dot"></span><span class="b-dot"></span><span class="b-url">orbitd.io/settings/notifications</span></div>
+        <div class="b-page">
+          <div class="b-nav"><div>Account</div><div>Appearance</div><div class="on">Notifications</div><div>Language</div><div>Access tokens</div></div>
+          <div class="b-main">
+            <h3>Notifications</h3>
+            <div class="b-card">
+              <div class="b-set"><div class="tx"><div class="t">When a session finishes</div><div class="d">Alert your devices when a session ends its turn.</div></div><span class="b-sw on"></span></div>
+              <div class="b-set"><div class="tx"><div class="t">When an agent asks for you</div><div class="d">Alert your devices when an agent sends you a message.</div></div><span class="b-sw on"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="b-col">
+      <span class="b-tag">② 建议</span>
+      <div class="b-win">
+        <div class="b-bar"><span class="b-dot"></span><span class="b-dot"></span><span class="b-dot"></span><span class="b-url">orbitd.io/settings/notifications</span></div>
+        <div class="b-page">
+          <div class="b-nav"><div>Account</div><div>Appearance</div><div class="on">Notifications</div><div>Language</div><div>Access tokens</div></div>
+          <div class="b-main">
+            <h3>Notifications</h3>
+            <div class="b-group">This browser</div>
+            <div class="b-card b-new" style="position:relative">
+              <span class="b-mk" style="left:-34px;top:12px">1</span>
+              <div class="b-set"><div class="tx"><div class="t">Notifications in this browser</div><div class="d">Show Orbit alerts on this computer, even with no Orbit tab open.</div></div><span class="b-sw"></span>
+                <span class="b-mk" style="right:62px;top:-11px">2</span></div>
+            </div>
+            <div class="b-group">All your devices</div>
+            <div class="b-card" style="position:relative">
+              <span class="b-mk" style="left:-34px;top:12px">3</span>
+              <div class="b-set"><div class="tx"><div class="t">When a session finishes</div><div class="d">Alert your devices when a session ends its turn.</div></div><span class="b-sw on"></span></div>
+              <div class="b-set"><div class="tx"><div class="t">When an agent asks for you</div><div class="d">Alert your devices when an agent sends you a message.</div></div><span class="b-sw on"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <div class="b-note"><span class="b-mk">1</span><div>新卡片只管<b>这个浏览器</b>：在公司 Chrome 打开、家里 Safari 不开，互不影响。每个打开的浏览器在服务器上就是一台设备，跟 iPhone、Android 一样。</div></div>
+    <div class="b-note"><span class="b-mk">2</span><div>默认关。点一下才弹浏览器的「允许通知」（浏览器只允许点击后弹）。允许后立刻订阅并登记；关掉就退订并删除登记。</div></div>
+    <div class="b-note"><span class="b-mk">3</span><div>原来两个开关加个分组标题「All your devices」，行为不变：浏览器跟手机收同一套提醒（见 D2）。</div></div>
+    <div class="b-note"><span class="b-mk" style="background:#8e8e93">i</span><div>退出登录时先退订这个浏览器；没送到也没关系，服务器本来就不给已结束的登录推送。</div></div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>③ 开关的其它状态</h2>
+  <p class="b-sub">只有四种，都在同一行里说清楚，不弹窗。</p>
+  <div class="b-states">
+    <div class="b-state"><h4>开着</h4><div class="b-card"><div class="b-set"><div class="tx"><div class="t">Notifications in this browser</div><div class="d">Show Orbit alerts on this computer, even with no Orbit tab open.</div></div><span class="b-sw on"></span></div></div></div>
+    <div class="b-state"><h4>点了开关，浏览器弹出询问（浏览器自己的弹窗）</h4><div class="b-card"><div class="b-set"><div class="tx"><div class="t">Notifications in this browser</div><div class="d">Allow notifications in the browser's prompt…</div></div><span class="b-sw on" style="opacity:.6"></span></div></div></div>
+    <div class="b-state"><h4>用户在浏览器里点了「阻止」：开关变灰，告诉他去哪改</h4><div class="b-card"><div class="b-set"><div class="tx"><div class="t">Notifications in this browser</div><div class="d b-hint">Blocked for orbitd.io. Allow notifications in your browser's site settings, then turn this on.</div></div><span class="b-sw dis"></span></div></div></div>
+    <div class="b-state"><h4>浏览器不支持（如 iPhone 上没加到主屏幕的 Safari）</h4><div class="b-card"><div class="b-set"><div class="tx"><div class="t">Notifications in this browser</div><div class="d">This browser can't show Orbit notifications. On iPhone, add Orbit to the Home Screen first, or use the Orbit app.</div></div><span class="b-sw dis"></span></div></div></div>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>④ 通知长什么样、点了去哪</h2>
+  <p class="b-sub">系统通知中心里的一条，跟 YouTube 一样。标题和正文就是手机上那条，一字不改（服务器同一份内容）。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <div class="b-desk">
+        <div class="b-ntf"><div class="b-ico">O</div><div><div class="s">Google Chrome · orbitd.io · now</div><div class="h">Approval needed · Fix login redirect</div><div class="m">Claude wants to run: npm run test:pg</div><div class="acts">Settings ▾</div></div></div>
+        <div class="b-ntf two"><div class="b-ico">O</div><div><div class="s">Google Chrome · orbitd.io · 2m ago</div><div class="h">Session finished · Translate owner cards</div><div class="m">All 3 tasks are done. Review the changes.</div></div></div>
+      </div>
+      <p style="font-size:13px;color:var(--mute);margin:8px 0 0">示例文字，非真实数据。macOS 上的 Chrome；Windows 和 Firefox 外观各自不同，内容相同。</p>
+    </div>
+    <div class="b-col">
+      <ul style="margin:0;padding-left:20px">
+        <li><b>点通知</b>：已有 Orbit 标签页就切过去并跳到那个会话 / 项目 / 任务；没有就新开一个。跳转地址跟飞书卡片的「Open in Orbit」同一套规则。</li>
+        <li><b>同一会话的新提醒顶掉旧的</b>：同一个会话等审批，只留最新一条，跟手机一样。</li>
+        <li><b>在手机上批了</b>：浏览器里那条审批通知自动消失（服务器本来就发「清掉这些会话」的同步，浏览器也收）。</li>
+        <li><b>浏览器全关了</b>：收不到；推送服务保留 1 天，下次打开浏览器时送达。</li>
+        <li><b>Orbit 标签页正在前台</b>：见 D3。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>⑤ 架构：多一个出口，上游一行不改</h2>
+  <p class="b-sub">哪些事提醒、什么时候提醒、两个开关、退出登录就停推，全在 <code>deliver()</code> 之前，已经对三个平台一致。浏览器只是第三种设备。</p>
+  <div class="b-flow">
+    <div class="b-box">提醒的来源<small>审批、完成、Agent 找你、Owner item…</small></div><span class="b-arr">→</span>
+    <div class="b-box">PushService<small>判断要不要响、开关、去重</small></div><span class="b-arr">→</span>
+    <div class="b-box">deliver()<small>owner 的每一台在线设备</small></div><span class="b-arr">→</span>
+    <div class="b-fan">
+      <div class="b-box">ios → APNs</div>
+      <div class="b-box">android → FCM</div>
+      <div class="b-box new">web → WebPushTransport（新）<small>加密 + VAPID 签名，POST 到浏览器厂商的推送服务</small></div>
+    </div><span class="b-arr">→</span>
+    <div class="b-box new">浏览器的 sw.js（新）<small>显示通知 · 点击跳转 · 清掉已处理的</small></div>
+  </div>
+  <table class="b-t" style="margin-top:18px">
+    <tr><th style="width:22%">改哪里</th><th>内容</th></tr>
+    <tr><td>数据库</td><td><code>device_tokens</code> 加一列 <code>web_keys</code>（浏览器订阅的两把公钥）。<code>token</code> 存订阅的 endpoint，<code>platform = 'web'</code>。</td></tr>
+    <tr><td>服务器</td><td>新 <code>web-push-transport.ts</code>（用 <code>web-push</code> 库），<code>GET /api/push/web-config</code> 给公钥，<code>register</code> 收 <code>platform: 'web'</code>。endpoint 只认浏览器厂商的推送域名，防止被拿来请求任意地址。推送服务回 404/410 就删掉这条登记。</td></tr>
+    <tr><td>Web</td><td><code>public/sw.js</code>，Settings 新卡片，退出登录时退订。nginx 给 <code>/sw.js</code> 加 <code>no-cache</code>。</td></tr>
+    <tr><td>部署</td><td>生产 <code>.env</code> 加 <code>WEB_PUSH_PUBLIC_KEY</code> / <code>WEB_PUSH_PRIVATE_KEY</code>（一次性生成，之后不能换，换了所有浏览器要重新订阅）。不配置就整个功能关闭，开关不显示。</td></tr>
+  </table>
+</section>
+
+<section class="b-part" id="part-5">
+  <h2>待定 · 要你拍板</h2>
+  <table class="b-t">
+    <tr><th style="width:18%"></th><th>方案 A</th><th>方案 B</th><th style="width:22%">建议</th></tr>
+    <tr><td><b>D1</b> 在哪打开</td><td>只在 Settings → Notifications 的开关打开。</td><td>再加一条登录后出现一次的提示条「Get notified in this browser」，可关掉。</td><td class="b-rec">A：不打扰；先看用得怎样再说提示条。</td></tr>
+    <tr><td><b>D2</b> 收哪些</td><td>跟手机完全一样，受同样两个开关管。</td><td>只收「需要你」的：审批、Agent 找你、Owner item。</td><td class="b-rec">A：一套规则，不出现「手机响了浏览器没响」。</td></tr>
+    <tr><td><b>D3</b> Orbit 标签页正在前台</td><td>不弹系统通知，页面本身已经显示了。</td><td>照样弹。</td><td class="b-rec">A：人就在页面上，再弹一次是重复。</td></tr>
+  </table>
+  <h2 style="margin-top:26px">落地（按代价排）</h2>
+  <ol class="b-ol">
+    <li><b>服务器</b>：迁移、WebPushTransport、web-config、register/unregister 支持 web，带测试（内容转换、域名白名单、410 删登记、退出登录不推）。</li>
+    <li><b>Web</b>：sw.js、Settings 卡片和四种状态、退出登录退订、nginx，带测试。</li>
+    <li><b>生产</b>：生成 VAPID 密钥写进生产 .env，部署；所有 Orbit 标签页关掉的情况下，在 Chrome 里实测一条审批通知。</li>
+    <li><b>第二期</b>：自建部署 10.66.82.117，需要先有 HTTPS（域名 + 证书）和到浏览器推送服务的外网。</li>
+  </ol>
+  <p style="color:var(--mute);font-size:13px">限制：iPhone / iPad 上的 Safari 只有把 Orbit 加到主屏幕（iOS 16.4+）才能收；有 Orbit App 的话不需要。</p>
+</section>
+
+</body>
+</html>

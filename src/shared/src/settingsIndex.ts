@@ -104,6 +104,14 @@ export const PERSONAL_SETTINGS = {
     'When a session finishes',
     'Alert your devices when a session you started finishes on its own or fails for good. Task, coordinator and agent-started sessions stay quiet; Project done still rings.',
   ),
+  // This browser's own switch (docs/web-push-design.md): a row only where the server sends web push, so search finds it
+  // only there too (settingsSearch's `webPush`).
+  browserNotifications: setting(
+    'browserNotifications',
+    '/settings/notifications',
+    'Notifications in this browser',
+    'Show Orbit alerts on this computer, even with no Orbit tab open.',
+  ),
   notifyAgentMessage: setting(
     'notifyAgentMessage',
     '/settings/notifications',

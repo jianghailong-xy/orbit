@@ -6,6 +6,7 @@ import { engineKeepsAccounts } from '../common/runner-engines';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import type { RoutingHealthEntry } from '../tasks/model-routing';
 import { ACCOUNT_CHOICE } from './account';
 import { runAccount } from './plan-usage-accounts';
@@ -447,7 +448,7 @@ export async function claimTrialByKey(
        AND (h."trial_session_id" IS NULL
             OR h."trial_session_id" = ${sessionId}::uuid
             OR (h."trial_claimed_at" <= ${stale}
-                AND NOT EXISTS (SELECT 1 FROM "session" s WHERE s."id" = h."trial_session_id" AND s."status" = 'RUNNING')))`;
+                AND NOT EXISTS (SELECT 1 FROM "session" s WHERE s."id" = h."trial_session_id" AND ${sessionTurnStateSql('s')} = 'IN_FLIGHT')))`;
   if (claimed > 0) return 'CLAIMED';
   const [row] = await db.$queryRaw<Array<{ due: boolean }>>`
     SELECT ("state" = 'BLOCKED' AND "blocked_until" <= ${now}) AS "due"
@@ -462,7 +463,7 @@ export async function liveAccountHealth(db: HealthDb, ownerId: string, now = new
   const rows = await db.$queryRaw<Array<RawRow & { subject_key: string; scope_model: string; trial_running: boolean }>>`
     SELECT h."id", h."subject_key", h."scope_model", h."state", h."kind", h."said", h."strikes", h."trips",
            h."first_at", h."last_at", h."last_session_id", h."blocked_until", h."trial_session_id", h."trial_claimed_at",
-           EXISTS (SELECT 1 FROM "session" s WHERE s."id" = h."trial_session_id" AND s."status" = 'RUNNING') AS "trial_running"
+           EXISTS (SELECT 1 FROM "session" s WHERE s."id" = h."trial_session_id" AND ${sessionTurnStateSql('s')} = 'IN_FLIGHT') AS "trial_running"
       FROM "account_health" h
      WHERE h."owner_id" = ${ownerId}::uuid AND h."cleared_at" IS NULL
      ORDER BY h."subject_key", h."scope_model"`;

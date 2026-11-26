@@ -1,29 +1,45 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 import { isSessionGenerating } from './session-generating';
 
+/**
+ * Rows as the server stores them: a released word with its `finished_at`, a held one with the turn state the
+ * trigger of migration 1611 gives it, or with none (a row not yet backfilled, task T3), which reads its stored word.
+ */
+const shapes = (status: RunStatus) => {
+  const finishedAt = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED].includes(status) ? new Date() : null;
+  return [
+    { label: `${status}, turn_state filled`, row: { status, finishedAt, turnState: turnStateOfWord(status) } },
+    { label: `${status}, turn_state null`, row: { status, finishedAt, turnState: null } },
+  ];
+};
+
 test('a dispatched turn is generating', () => {
-  assert.equal(isSessionGenerating({ status: RunStatus.RUNNING }), true);
+  for (const { label, row } of shapes(RunStatus.RUNNING)) assert.equal(isSessionGenerating(row), true, label);
 });
 
 /** The whole point: a self-driven turn runs while the session is still parked. */
 test('a parked session generating on its own counts', () => {
-  assert.equal(
-    isSessionGenerating({ status: RunStatus.AWAITING_INPUT, engineTurnActive: true }),
-    true,
-  );
-  assert.equal(
-    isSessionGenerating({ status: RunStatus.AWAITING_INPUT, engineTurnActive: false }),
-    false,
-  );
-  // Older control planes never set the flag; a parked session simply reads as parked.
-  assert.equal(isSessionGenerating({ status: RunStatus.AWAITING_INPUT }), false);
+  for (const { label, row } of shapes(RunStatus.AWAITING_INPUT)) {
+    assert.equal(isSessionGenerating({ ...row, engineTurnActive: true }), true, label);
+    assert.equal(isSessionGenerating({ ...row, engineTurnActive: false }), false, label);
+    // Older control planes never set the flag; a parked session simply reads as parked.
+    assert.equal(isSessionGenerating(row), false, label);
+  }
+});
+
+/** A queued or abandoned turn is no turn the engine runs: its flag is read only on a parked session. */
+test('a queued or abandoned session is generating only through a dispatched turn', () => {
+  for (const status of [RunStatus.PENDING, RunStatus.INTERRUPTED]) {
+    for (const { label, row } of shapes(status)) assert.equal(isSessionGenerating({ ...row, engineTurnActive: true }), false, label);
+  }
 });
 
 /** The flag is display state, so a terminal session can carry a stale one and must ignore it. */
 test('a terminal session is never generating', () => {
-  for (const status of [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] as const) {
-    assert.equal(isSessionGenerating({ status, engineTurnActive: true }), false);
+  for (const status of [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED]) {
+    for (const { label, row } of shapes(status)) assert.equal(isSessionGenerating({ ...row, engineTurnActive: true }), false, label);
   }
 });

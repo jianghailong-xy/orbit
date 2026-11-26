@@ -197,7 +197,8 @@ export function brandForProvider(
   if (slug === AgentProvider.DSH && !presetSlug) presetSlug = DSH_PRESET_SLUG;
   const presetKey = presetSlug ?? ENGINE_PRESET[slug];
   const preset = presetKey ? PROVIDER_PRESETS.find((p) => p.slug === presetKey) : undefined;
-  if (preset) return { brand: preset.brand, glyphKey: preset.slug };
+  // A coding plan wears its vendor's mark.
+  if (preset) return { brand: preset.brand, glyphKey: preset.planOf ?? preset.slug };
   return ENGINE_BRAND[slug] ?? { brand: NEUTRAL_BRAND(label) };
 }
 
@@ -520,6 +521,7 @@ const KEY_VENDORS: Readonly<Record<string, string>> = {
   glm: 'Z.AI',
   minimax: 'MiniMax',
   qwen: 'Qwen',
+  'qwen-coding-plan': 'Qwen',
 };
 
 /** A key as a sentence names it, lowercase for the middle of one: `the DeepSeek key “DeepSeek 2”` —

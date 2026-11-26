@@ -51,6 +51,10 @@ export const RUNNER_BROWSER_COPY = {
   signInAsked: (site: string, title: string | null) => (title ? `Sign in to ${site}, asked by “${title}”` : `Sign in to ${site}`),
   signedIn: 'I’m signed in',
   signedInFailed: "Couldn't send your answer",
+  // An engine sign-in this tab saw going through the runner's browser, and then fail: the card says so in the tab
+  // the owner left, so this one says it too instead of staying on the vendor's last page.
+  engineSignInFailed: (engine: string) => `Couldn't sign in to ${engine}`,
+  engineSignInRetry: 'Try again from the sign-in card.',
 } as const;
 
 /** `GET /runners/:id/browser`, or null when the server has no browser for it (the switch off answers 404). */

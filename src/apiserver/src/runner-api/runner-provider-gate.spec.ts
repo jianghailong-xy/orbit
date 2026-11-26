@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider, SESSION_SOURCE_PIN_V1 } from '@orbit/shared';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { RunnerApiController } from './runner-api.controller';
 import {
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
@@ -114,7 +115,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
   assert.deepEqual(marked[0].where, {
     id: { in: ['agy-1'] },
     assignedRunnerId: RUNNER.id,
-    status: 'PENDING',
+    AND: [turnStateFilter(['QUEUED'])],
     sessionKind: 'CONVERSATION',
     OR: [
       { engine: AgentProvider.ANTIGRAVITY },

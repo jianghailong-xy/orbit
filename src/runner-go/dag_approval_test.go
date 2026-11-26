@@ -103,9 +103,21 @@ func cardAndWrite(t *testing.T, recorder *surfaceRecorder) (card map[string]inte
 	return filed[0], writes[0]
 }
 
+// dropDerivedKey removes the key `orbit mcp` derived from a recorded request, at its top level or in a batch's body.
+func dropDerivedKey(v interface{}) {
+	if m, ok := v.(map[string]interface{}); ok {
+		if key, _ := m["idempotencyKey"].(string); strings.HasPrefix(key, "auto-") {
+			delete(m, "idempotencyKey")
+		}
+	}
+}
+
 // sameOnBothSurfaces compares what the two doors asked and what they wrote, field by field.
 func sameOnBothSurfaces(t *testing.T, mcpCard map[string]interface{}, mcpWrite surfaceCall, cliCard map[string]interface{}, cliWrite surfaceCall) {
 	t.Helper()
+	// `orbit mcp` alone derives an idempotency key for a create that carries none (D4, task_create_autorun.go).
+	dropDerivedKey(mcpCard["input"])
+	dropDerivedKey(mcpWrite.body)
 	mcpCardJSON, _ := json.Marshal(mcpCard)
 	cliCardJSON, _ := json.Marshal(cliCard)
 	if string(mcpCardJSON) != string(cliCardJSON) {

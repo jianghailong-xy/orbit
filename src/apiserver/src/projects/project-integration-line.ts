@@ -31,6 +31,7 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { baselineHoldSql } from './baseline-hold';
+import { lineSyncHoldSql } from './line-sync-hold';
 import {
   landingCheckValueOf,
   recordSettingChange,
@@ -1144,22 +1145,18 @@ async function readInFlightJobsForProjects(
       -- holds every later landing on it; the conflicted job's own later generations are exempt (M3),
       -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in the
       -- claim. The claim reads the item, not a handling generation (T17), so this does too.
+      -- The line-sync item (docs/design/project-line-upstream-sync.md §4.3) has no same-task exemption: lineSyncHoldSql.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
-               ft."title" AS "taskTitle",
+               -- The line-sync item is about the line, not the task that happened to land next.
+               CASE WHEN i."task_id" IS NOT NULL THEN ft."title" END AS "taskTitle",
                CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
                     THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
           LEFT JOIN "task" ft ON ft."id" = f."task_id"
           LEFT JOIN "project_integration_job" handling ON handling."id" = i."handling_job_id"
-         WHERE j."state" = 'QUEUED'
-           AND f."serial_key" = j."serial_key" AND f."phase" = 'MAIN_SYNC'
-           AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
-           AND f."task_id" IS DISTINCT FROM j."task_id"
-           AND NOT EXISTS (
-             SELECT 1 FROM "task" fix
-              WHERE fix."id" = j."task_id" AND fix."fixes_open_item_id" = i."id")
+         WHERE j."state" = 'QUEUED' AND ${lineSyncHoldSql('j')}
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       LEFT JOIN LATERAL (

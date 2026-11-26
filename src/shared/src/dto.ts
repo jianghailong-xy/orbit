@@ -33,6 +33,7 @@ import type { WikiRepoOpCommand } from './wikiRepoOps';
 import type { ApprovalTranslation } from './translation';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 import type { ExternalMessageFrom } from './session-message';
+import type { SessionBackgroundFields, SessionPhaseFields } from './session-phase';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -3997,6 +3998,21 @@ export interface ReleaseTurnLeasesRequest {
   leaseOwner?: string;
 }
 
+/** Runner → control plane (POST /runner/sessions/:id/return-slot): a runner draining for an update gives back the slot
+ *  it holds for a session under which no turn runs — the claim made for an engine's own turn that has ended, or one
+ *  whose queued message the draining inbox holds (docs/runner-update-drain-design.md §7.3). The session goes back to
+ *  the queue behind the update, or idle when nothing is queued; a turn in flight keeps the slot. */
+export interface ReturnSlotRequest {
+  /** Stable for one runner process: the process that holds the session. */
+  leaseOwner?: string;
+}
+
+/** The session's status after a slot return: RUNNING when a turn in flight kept the slot, which the runner keeps too. */
+export interface ReturnSlotResponse {
+  ok: true;
+  status: string;
+}
+
 /** Runner → control plane: make one freshly reserved engine generation the sole inbox consumer.
  * Idempotent for the same generation; rejected while a different generation remains active. */
 export interface ActivateTurnLeasesRequest {
@@ -4197,6 +4213,10 @@ export interface TurnCompleteRequest {
   /** SESSION_RELEASE_V1, declared in the body: how a runner on the runner link declares it per request, since the link
    *  carries no request header. The same declaration as the capabilities header. */
   releaseProtocol?: string;
+  /** True while the runner's pool drains for an update (docs/runner-update-drain-design.md §7.3): the session keeps no
+   *  slot for a follow-up queued behind this turn, and goes back to the queue behind the update instead. Also records
+   *  the runner as draining (`runner.heartbeat_draining`). Omitted by a runner that is not draining, and by older ones. */
+  draining?: boolean;
 }
 
 /**
@@ -4591,7 +4611,9 @@ export type SessionSearchMatchField =
 
 /** One row of GET /sessions/search. Deliberately thinner than a session-list row — the palette
  *  renders a title, a status glyph, an agent name and a snippet, and nothing else. */
-export interface SessionSearchHit {
+/** A search hit carries the six session facts and the Background mark's inputs (SessionPhaseFields,
+ *  SessionBackgroundFields) as the list row does; all absent from an older control plane. */
+export interface SessionSearchHit extends Partial<SessionPhaseFields>, Partial<SessionBackgroundFields> {
   id: string;
   title: string;
   /** @deprecated Raw runner status; retained as a wire-compatible alias of `runStatus`. */

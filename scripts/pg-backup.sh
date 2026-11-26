@@ -15,7 +15,7 @@
 # That bind mount is on the same disk as the database, so with ORBIT_BACKUP_SYNC_TARGET
 # set the loop also mirrors it to another machine over ssh — the only copy that survives
 # losing this disk. The attachment files go with it: Postgres only names their bytes, which
-# are in the files directory (docs/documents-design.md §2.10), mounted here read-only.
+# are in the files directory (docs/drive-design.md §2.10), mounted here read-only.
 # Before the mirror's --delete it reads the target, and leaves one it cannot read, or that holds another
 # cluster's archive, alone. The files copy is pruned by name, of bytes the database says have gone.
 #
@@ -39,18 +39,18 @@ SYNC_SSH_PORT="${ORBIT_BACKUP_SYNC_SSH_PORT:-22}"
 SYNC_SSH_KEY="${ORBIT_BACKUP_SYNC_SSH_KEY:-/ssh/id_rsa}"
 SYNC_KNOWN_HOSTS="${ORBIT_BACKUP_SYNC_KNOWN_HOSTS:-/ssh/known_hosts}"
 # The attachment files, and where they go: beside the target, never under it, where the
-# archive mirror's --delete would remove them. Each ORBIT_DOCUMENTS_* setting here falls back to its
-# ORBIT_FILES_* name from before the rename to Documents.
-FILES_DIR="${ORBIT_DOCUMENTS_DIR:-${ORBIT_FILES_DIR:-/var/lib/orbit/files}}"
+# archive mirror's --delete would remove them. Each ORBIT_DRIVE_* setting here falls back to its
+# ORBIT_DOCUMENTS_* and then ORBIT_FILES_* name from before the rename to Drive.
+FILES_DIR="${ORBIT_DRIVE_DIR:-${ORBIT_DOCUMENTS_DIR:-${ORBIT_FILES_DIR:-/var/lib/orbit/files}}}"
 FILES_SYNC_TARGET="${SYNC_TARGET%/}-files"
-# A deployment that mirrors its bucket (ORBIT_DOCUMENTS_S3_MIRROR=1, docs/documents-drive-technical-design.md §10.2) keeps the
+# A deployment that mirrors its bucket (ORBIT_DRIVE_S3_MIRROR=1, docs/drive-technical-design.md §10.2) keeps the
 # mirror of the bucket's files/ prefix here, beside the other two, and the apiserver sets off_host_prune_at for its s3 blobs.
-FILES_S3_MIRROR="${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}"
-S3_ENDPOINT="${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}"
-S3_BUCKET="${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}"
-S3_ACCESS_KEY_ID="${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}"
-S3_SECRET_ACCESS_KEY="${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}"
-S3_REGION="${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-us-east-1}}"
+FILES_S3_MIRROR="${ORBIT_DRIVE_S3_MIRROR:-${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}}"
+S3_ENDPOINT="${ORBIT_DRIVE_S3_ENDPOINT:-${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}}"
+S3_BUCKET="${ORBIT_DRIVE_S3_BUCKET:-${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}}"
+S3_ACCESS_KEY_ID="${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"
+S3_SECRET_ACCESS_KEY="${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"
+S3_REGION="${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-us-east-1}}}"
 BUCKET_SYNC_TARGET="${SYNC_TARGET%/}-bucket"
 # The database that names those files (POSTGRES_DB in docker-compose.yml); PGDATABASE here is postgres.
 FILES_DB=orbit
@@ -317,7 +317,7 @@ sync_archive() {
 # Copy the attachment files to the same machine. A name is a sha256 and never changes its
 # bytes, so each poll carries only what is new.
 sync_files() {
-  # Nothing but tmp/: the bytes are in a bucket (ORBIT_DOCUMENTS_BACKEND=s3), or nothing has been
+  # Nothing but tmp/: the bytes are in a bucket (ORBIT_DRIVE_BACKEND=s3), or nothing has been
   # uploaded yet. Asked of the directory, not the setting: a deployment that moved to a bucket
   # still has its older bytes here. A directory that is not there at all is not this case: it
   # is a container not recreated since the mount was added, which rsync then reports below.
@@ -338,7 +338,7 @@ sync_files() {
 
 copy_bucket() {
   if [ -z "$S3_BUCKET" ] || [ -z "$S3_ENDPOINT" ] || [ -z "$S3_ACCESS_KEY_ID" ] || [ -z "$S3_SECRET_ACCESS_KEY" ]; then
-    log "ERROR: cannot mirror the bucket: set ORBIT_DOCUMENTS_S3_BUCKET, ORBIT_DOCUMENTS_S3_ENDPOINT and the S3 key pair"
+    log "ERROR: cannot mirror the bucket: set ORBIT_DRIVE_S3_BUCKET, ORBIT_DRIVE_S3_ENDPOINT and the S3 key pair"
     return 1
   fi
   if ! command -v rclone >/dev/null 2>&1 && ! apk add --no-cache rclone >/dev/null 2>&1; then
@@ -576,7 +576,7 @@ while :; do
     MIRROR_FAILED_FILES=$((MIRROR_FAILED_FILES + 1))
     [ "$FILES_S3_MIRROR" != 1 ] || MIRROR_FAILED_BUCKET=$((MIRROR_FAILED_BUCKET + 1))
   elif [ "$FILES_S3_MIRROR" = 1 ]; then
-    log "ERROR: ORBIT_DOCUMENTS_S3_MIRROR=1 requires ORBIT_BACKUP_SYNC_TARGET"
+    log "ERROR: ORBIT_DRIVE_S3_MIRROR=1 requires ORBIT_BACKUP_SYNC_TARGET"
     MIRROR_FAILED_BUCKET=$((MIRROR_FAILED_BUCKET + 1))
   fi
   write_metrics

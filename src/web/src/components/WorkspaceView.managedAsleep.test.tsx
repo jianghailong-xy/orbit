@@ -229,6 +229,25 @@ describe('a workspace on the account\'s managed runner', { timeout: 60_000 }, ()
     expect(placeholder()).not.toContain('offline');
   });
 
+  it('failed with its slow retry scheduled: the box takes a message, which queues and wakes it; with no next try it does not', async () => {
+    await mount(managedIn('failed: kept running out of memory, its slow retry scheduled'));
+    expect(headDot()?.getAttribute('aria-label')).toBe(MANAGED_RUNNER_COPY.short.failed);
+    const notice = mounted().querySelector('.managed-runner-notice');
+    expect(notice?.getAttribute('data-kind')).toBe('failed');
+    expect(notice?.querySelector('.managed-runner-notice-next')?.textContent).toMatch(/^Attempt 6 · next automatic try /);
+    expect(placeholder()).not.toContain('offline');
+    expect(placeholder()).not.toBe(MANAGED_RUNNER_COPY.title.failed);
+    expect(mounted().querySelector('textarea')?.disabled).toBe(false);
+    expect(mounted().textContent).not.toMatch(/runner offline/i);
+    await act(async () => root!.unmount());
+    root = null;
+    container?.remove();
+
+    // No next try: it waits for the owner's Retry, and the box says it failed instead of taking a message.
+    await mount(managedIn('failed: kept running out of memory'));
+    expect(placeholder()).toBe(MANAGED_RUNNER_COPY.title.failed);
+  });
+
   it('any other runner offline: the heartbeat dot and Runner offline, as before', async () => {
     await mount(null);
     expect(headDot()?.hasAttribute('data-managed-kind')).toBe(false);

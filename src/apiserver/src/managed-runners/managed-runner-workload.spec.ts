@@ -1,6 +1,6 @@
 /**
- * A runner with Documents drive handles holding bytes no commit has taken is not idle, so it is neither drained nor
- * confirmed into a sleep (docs/documents-drive-technical-design.md §8.1).
+ * A runner with drive handles holding bytes no commit has taken is not idle, so it is neither drained nor
+ * confirmed into a sleep (docs/drive-technical-design.md §8.1).
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

@@ -30,11 +30,11 @@ public struct ManagedRunnerCapability: Decodable, Equatable, Sendable {
 /// Reading it allocates nothing on the server.
 public struct ServerCapabilities: Decodable, Equatable, Sendable {
     public let managedRunners: ManagedRunnerCapability?
-    /// Documents (the drive, `/documents`), the deployment switch ORBIT_DOCUMENTS_ENABLED. A server from before
-    /// the switch omits it; `DocumentsLogic.shown` reads that as on.
-    public let documents: DocumentsCapability?
+    /// Drive (the drive, `/drive`), the deployment switch ORBIT_DRIVE_ENABLED. A server from before
+    /// the switch omits it; `DriveLogic.shown` reads that as on.
+    public let documents: DriveCapability?
 
-    public init(managedRunners: ManagedRunnerCapability?, documents: DocumentsCapability? = nil) {
+    public init(managedRunners: ManagedRunnerCapability?, documents: DriveCapability? = nil) {
         self.managedRunners = managedRunners
         self.documents = documents
     }
@@ -44,7 +44,7 @@ public struct ServerCapabilities: Decodable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         managedRunners = try? values.decode(ManagedRunnerCapability.self, forKey: .managedRunners)
-        documents = try? values.decode(DocumentsCapability.self, forKey: .documents)
+        documents = try? values.decode(DriveCapability.self, forKey: .documents)
     }
 }
 
@@ -105,6 +105,9 @@ public struct ManagedRunnerStatus: Decodable, Equatable, Sendable {
     public let usable: Bool
     public let reason: ManagedRunnerReason?
     public let retryAfter: String?
+    /// Its next automatic try, as the server stored it: a restart's backoff, or a FAILED runner's slow retry (which may
+    /// be past: it is taken once work is waiting). Nil when none is scheduled, and from a server that predates the field.
+    public let nextAttemptAt: String?
     /// What the runner was found ready with, which its first session starts on:
     /// a runtime signed in on it, or one of the owner's model keys (its slug). Nil until the runner
     /// has been READY.

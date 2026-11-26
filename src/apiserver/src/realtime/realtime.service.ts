@@ -2,6 +2,7 @@ import { questionsWithCoordinator } from '../sessions/run-question';
 import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
 import { readMergeRecovery, type MergeRecoveryAction, type SessionPhaseFields } from '@orbit/shared';
 import { readOneSessionPhaseFields } from '../sessions/session-phase';
+import { readOneSessionBackgroundFields } from '../sessions/task-work-carrier';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -40,7 +41,9 @@ import { enqueueRecap } from '../sessions/recap';
 import { translationEventOf } from '../sessions/reply-translation';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
-import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { heldFilter, isHeld, releasedFilter } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, readLandingSettlements } from '../sessions/session-legacy-words';
+import { TURN_STATE_SELECT, turnStateFilter } from '../sessions/session-turn-state';
 import { isNoiseSystemEvent, NON_REPLAYABLE_EVENT_TYPES } from '../common/system-noise';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
@@ -1459,8 +1462,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * An agent's directory sync into the owner's Documents started, reported progress or ended
-   * (docs/documents-directory-sync-design.md S4). THE PAYLOAD IS THE SYNC'S ID AND NOTHING ELSE: the tray reads
+   * An agent's directory sync into the owner's Drive started, reported progress or ended
+   * (docs/drive-directory-sync-design.md S4). THE PAYLOAD IS THE SYNC'S ID AND NOTHING ELSE: the tray reads
    * `GET /drive/syncs`, and re-reads it on focus and reconnect. Published after the write commits, and only to the
    * streams that declared `hints=drive_syncs`.
    */
@@ -1474,7 +1477,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The owner's drive changed (docs/documents-drive-technical-design.md §5.4): a write committed rows to its change feed,
+   * The owner's drive changed (docs/drive-technical-design.md §5.4): a write committed rows to its change feed,
    * the highest of them `seq`. THE PAYLOAD IS THE SEQ AND NOTHING ELSE: no name, path or size. An accelerant only: the Files
    * page reads `GET /drive/changes` for what changed, and re-reads it on focus and reconnect. Published after the write
    * commits, and only to the streams that declared `hints=drive_changed`.
@@ -1751,6 +1754,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             // The row as it stands now (sessions/session-phase.ts); absent when the session is gone. The end reason
             // stays the one the end settled with, as this event has always sent it.
             ...withoutEndReason(await readOneSessionPhaseFields(this.prisma, sessionId)),
+            // The Background mark's inputs, activity and runningBgCount, the row as it stands now; absent when it is gone.
+            ...(await readOneSessionBackgroundFields(this.prisma, sessionId)),
           };
         }
       case ControlEventType.SESSION_ERROR:
@@ -1778,7 +1783,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // and this is the number the client overwrites its row with.
         const reader = await this.prisma.session.findUnique({
           where: { id: sessionId },
-          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+          select: {
+            id: true, taskId: true, ...TURN_STATE_SELECT, engineTurnActive: true, runningBgShells: true,
+            runningSubagents: true,
+          },
         });
         const approvals = reader ? await countLiveApprovals(this.prisma, reader) : 0;
         const decisions = await this.ownerDecisionsOn(sessionId, ownerId);
@@ -1831,7 +1839,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         ownerId: true,
         taskId: true,
         title: true,
-        status: true,
+        // The facts the legacy words are derived from (sessions/session-legacy-words.ts), among them the end reason
+        // and the release column the capabilities below read (common/session-release.ts).
+        ...LEGACY_STATUS_SELECT,
         engineTurnActive: true,
         // Read by the approval count below: the set a card's `background_job_id` has to be in to
         // be a question on a conversation that is not generating (migration 0291).
@@ -1841,14 +1851,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         enginePhase: true,
         runClaimedAt: true,
         enginePhaseSince: true,
-        endReason: true,
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
-        // The release column the capabilities below read (common/session-release.ts).
-        finishedAt: true,
         cancelRequestedAt: true,
-        startedAt: true,
         numTurns: true,
         retryAt: true,
         runtimeSessionId: true,
@@ -1891,8 +1897,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!s) return null;
-    const sessionState = deriveSessionState(s);
-    const runState = deriveSessionRunState(s);
+    const status = legacySessionStatus(s, (await readLandingSettlements(this.prisma, [s])).get(s.id));
+    const worded = { ...s, status };
+    const sessionState = deriveSessionState(worded);
+    const runState = deriveSessionRunState(worded);
     const lifecycleState = deriveSessionLifecycleState(s);
     const filingState = deriveSessionFilingState(s);
     const capabilities = deriveSessionCapabilities(s);
@@ -1917,8 +1925,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       id: s.id,
       taskId: s.taskId ?? null,
       title: s.title ?? null,
-      status: s.status as RunStatus,
-      runStatus: s.status as RunStatus,
+      status,
+      runStatus: status,
       sessionState,
       runState,
       lifecycleState,
@@ -1954,6 +1962,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       waitingKind: sessionWaitingKind(approvals, decisions),
       // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), over the count above.
       ...(await readOneSessionPhaseFields(this.prisma, sessionId, pendingApprovals)),
+      // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
+      ...(await readOneSessionBackgroundFields(this.prisma, sessionId)),
       confirmationUnderReview: underReview
         ? {
           ...underReview,
@@ -2126,8 +2136,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             // Terminal sessions have no supervisor and may be claimed directly
             // by this runner's current heartbeat process.
             OR: [
-              { status: { notIn: OPEN_SESSION_STATUSES } },
-              { status: { in: OPEN_SESSION_STATUSES }, inboxLeaseOwner: leaseOwner },
+              releasedFilter(),
+              { ...heldFilter(), inboxLeaseOwner: leaseOwner },
             ],
           },
         ],
@@ -2141,7 +2151,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         mergeRecoveryAction: true,
         mergeOperationId: true,
         mergeOperationOwner: true,
-        status: true,
+        finishedAt: true,
         taskId: true,
         ownerId: true,
         workspace: { select: { workDir: true } },
@@ -2158,9 +2168,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
               mergeStatus: 'pending',
               mergeOperationId: s.mergeOperationId,
               OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: leaseOwner }],
-              ...(OPEN_SESSION_STATUSES.includes(s.status)
-                ? { status: { in: OPEN_SESSION_STATUSES }, inboxLeaseOwner: leaseOwner }
-                : { status: { notIn: OPEN_SESSION_STATUSES } }),
+              ...(isHeld(s) ? { ...heldFilter(), inboxLeaseOwner: leaseOwner } : releasedFilter()),
             },
             // Redelivery restamps requestedAt each heartbeat, so the staleness clock in
             // pendingWorktreeOperationMayBeExecuting measures time since the owning process
@@ -2253,7 +2261,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             // SessionsService.commitWorktree): the parent turn and sub-workspaces write the
             // checkout, background shells (dev servers, watchers) don't gate it.
             inboxLeaseOwner: leaseOwner,
-            status: RunStatus.AWAITING_INPUT,
+            // Parked: held, with no turn queued, in flight or abandoned.
+            AND: [turnStateFilter([null])],
             cancelRequestedAt: null,
             runningSubagents: { isEmpty: true },
             OR: [{ commitOperationOwner: null }, { commitOperationOwner: leaseOwner }],
@@ -2268,7 +2277,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             // Without the flag the old reasoning stands: the checkout may already be gone.
             // Unowned is claimed once, the same way the live arm does it: whoever sets
             // commitOperationOwner first stops being unowned for everybody else.
-            status: { notIn: OPEN_SESSION_STATUSES },
+            ...releasedFilter(),
             OR: [
               { commitOperationOwner: leaseOwner },
               { commitOperationOwner: null, worktreeDirty: true },
@@ -2281,7 +2290,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         branch: true,
         commitOperationId: true,
         commitAction: true,
-        status: true,
+        finishedAt: true,
       },
     });
     const claimed = await Promise.all(
@@ -2297,10 +2306,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
               assignedRunnerId: runnerId,
               commitStatus: 'pending',
               commitOperationId: s.commitOperationId,
-              ...(OPEN_SESSION_STATUSES.includes(s.status)
+              ...(isHeld(s)
                 ? {
                     inboxLeaseOwner: leaseOwner,
-                    status: RunStatus.AWAITING_INPUT,
+                    AND: [turnStateFilter([null])],
                     cancelRequestedAt: null,
                     runningSubagents: { isEmpty: true },
                     OR: [
@@ -2309,7 +2318,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
                     ],
                   }
                 : {
-                    status: { notIn: OPEN_SESSION_STATUSES },
+                    ...releasedFilter(),
                     OR: [
                       { commitOperationOwner: leaseOwner },
                       { commitOperationOwner: null, worktreeDirty: true },

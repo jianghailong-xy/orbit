@@ -1,8 +1,0 @@
-# This image accepts only the mount daemon's sources, never host state.
-**
-!src/
-!src/documents-mount/
-!src/documents-mount/**/*.go
-!src/documents-mount/go.mod
-!src/documents-mount/go.sum
-src/documents-mount/**/*_test.go

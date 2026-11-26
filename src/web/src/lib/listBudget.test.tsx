@@ -336,6 +336,7 @@ describe('R3: a hidden tab reads nothing', () => {
     await publish('session.updated', { id: 'S1', status: 'IDLE' }, 'S1');
     await publish('approval.requested', { id: 'A1' }, 'S1');
     await publish('agent.changed', { agentId: 'W1' });
+    await publish('drive.sync', {});
     await advance(10_000);
     expect(h.calls.slice(from).map((call) => call.path), 'a hidden tab read on the stream’s word').toEqual([]);
 

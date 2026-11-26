@@ -1,0 +1,48 @@
+/* The proposal, injected over the real build for frame ②. Dark only; light is untouched. */
+
+/* ① The session list sits one step below the conversation: sidebar #17171a < list #1c1c1f < page #202023. */
+:root[data-theme='dark'] .app-shell .workspace-split > .session-col:not(.session-project-column, .ss-column) {
+  background: #1c1c1f;
+}
+
+/* ② Quietest text reaches 4.5:1 on the page (was #71767f, 3.56:1); text-3 moves up with it so the
+   two stay apart. The composer's prompt uses text-4 too. */
+:root[data-theme='dark'] {
+  --text-3: #9a9fa8;
+  --text-4: #858a93;
+}
+:root[data-theme='dark'] .composer-field textarea.orbit-textarea::placeholder {
+  -webkit-text-fill-color: var(--text-4);
+}
+
+/* ③ New session is a plain bordered button; blue stays for selection, your message and links. */
+:root[data-theme='dark'] .session-new,
+:root[data-theme='dark'] .session-new:hover,
+:root[data-theme='dark'] .session-new.active {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-1);
+}
+:root[data-theme='dark'] .session-new:hover {
+  background: var(--bg-hover);
+}
+:root[data-theme='dark'] .session-new-kbd {
+  border-color: var(--border);
+  color: var(--text-3);
+  opacity: 1;
+}
+
+/* ④ Inline code is a light chip, not a dark hole in the text. */
+:root[data-theme='dark'] .md code {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-subtle);
+}
+:root[data-theme='dark'] .md pre code {
+  background: transparent;
+  border: 0;
+}
+
+/* The list's sticky section heads paint the panel's colour behind them; they follow ① to the new step. */
+:root[data-theme='dark'] .app-shell .workspace-split > .session-col .session-section-head {
+  background: #1c1c1f;
+}

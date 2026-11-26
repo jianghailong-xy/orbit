@@ -90,7 +90,7 @@ function setup(blobs: Blob[], endpoint: string, dir: string, driveChunks: Readon
       },
       findUnique: async ({ where }: { where: { sha256: string } }) => blobs.find((b) => b.sha256 === where.sha256) ?? null,
     },
-    documentVersionChunk: {
+    driveVersionChunk: {
       findMany: async ({ where }: { where: { sha256: string } }) => {
         const versionId = driveChunks.get(where.sha256);
         return versionId === undefined ? [] : [{ versionId }];

@@ -1,3 +1,4 @@
+import type { TaskRunReason } from '@orbit/shared';
 /**
  * A node returned by the task dependency-graph endpoint.
  *
@@ -11,6 +12,9 @@ export interface TaskDependencyGraphNode {
   dependencyState?: string;
   running?: boolean;
   queued?: boolean;
+  /** The live run's facts the task list's rows carry too, which the status pill reads. */
+  runReason?: TaskRunReason | null;
+  queuedOnHold?: boolean;
   autoRunWhenReady?: boolean;
   depth?: number;
   isDirect?: boolean;

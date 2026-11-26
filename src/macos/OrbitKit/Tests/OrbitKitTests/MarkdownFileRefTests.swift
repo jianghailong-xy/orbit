@@ -22,7 +22,7 @@ final class MarkdownFileRefTests: XCTestCase {
         XCTAssertTrue(ref.isImage)
     }
 
-    func testDocumentsAreNotClassifiedFromAnImageLabelWhenTheyHaveAFilename() throws {
+    func testDriveAreNotClassifiedFromAnImageLabelWhenTheyHaveAFilename() throws {
         let source = #"[preview.png](orbit-attachment:doc123 "report.pdf") [notes](orbit-attachment:notes123 "notes.md")"#
         let refs = MarkdownFileRef.matches(in: source).map(\.ref)
         XCTAssertEqual(refs.map(\.fileName), ["report.pdf", "notes.md"])

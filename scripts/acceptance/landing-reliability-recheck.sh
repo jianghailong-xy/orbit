@@ -40,6 +40,7 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO" || exit 2
+source "$REPO/scripts/lib/session-word.sh"
 
 RACED=789a8fffc0bf0223efe8d8286ed5fcae2cb6c414         # the commit the work session made
 LINE_TIP=d6b55d2d853f8b2410977674e3ec54c39f52a34e      # the same work on the project line
@@ -107,7 +108,7 @@ WITH job AS (SELECT * FROM project_integration_job WHERE id = '0a443775-3288-451
                   WHERE w.project_id = '01a09bd1-405c-751d-b04e-69bedefeb70c'
                     AND w.event = 'PROJECT_ACCEPTANCE_LANDED' AND w.created_at > onto_line.at)
 SELECT 'judged', job.state, job.source_ref, to_char(job.finished_at, 'HH24:MI:SS.MS"Z"') FROM job
-UNION ALL SELECT 'work_finished', work.status::text, work.worktree_branch,
+UNION ALL SELECT 'work_finished', $(session_word_sql work), work.worktree_branch,
                  to_char(work.finished_at::timestamptz, 'HH24:MI:SS.MS"Z"') FROM work
 UNION ALL SELECT 'onto_line', '-', '-', to_char(onto_line.at, 'HH24:MI:SS.MS"Z"') FROM onto_line
 UNION ALL SELECT 'settled', '-', '-', to_char(settled.at, 'HH24:MI:SS.MS"Z"') FROM settled
