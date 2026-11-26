@@ -3,10 +3,13 @@
 Before/after of the web session list on a seed of 1,500 Open sessions in one workspace with folders and
 projects (docs/session-list-scale-design.md §5 T4).
 
+The two commits are the project branch tip and the commit of main it holds
+(`git merge-base origin/main <project branch>`), as measured on 2026-11-26.
+
 ```bash
 node src/web/perf/session-list-scale/measure.mjs \
-  --before b0bf3799bed176cec027d3c2811082b722751134 \
-  --after  0522c25db849a345daec87225a7d8f1a3f988af2 \
+  --before 037cdcfdedc6d1f5623289b5b1cff48151f6c665 \
+  --after  afb319b702a9ffa2c918aee244c76dc347eeaf8c \
   --work /mnt/tmp/session-list-scale/work --out /mnt/tmp/session-list-scale/results \
   --runs 10 --frames 20 --max-load 16
 ```
