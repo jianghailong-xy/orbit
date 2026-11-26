@@ -10,7 +10,8 @@ import type { DriveWriter } from './drive.service';
  * takes the group row FOR UPDATE after every drive row the write holds, and nothing after it.
  *
  *   - A write is a Drive chat's when its writer is an agent whose session — the owner's, on the runner the write came
- *     through, as `checkedWriter` keeps it — was opened by DRIVE_CHAT. Its turn is the message the session is working
+ *     through, as `checkedWriter` keeps it — was opened by DRIVE_CHAT. A write through a runner's mount that names no
+ *     session is the chat's when the chat is the runner's only live session (driveChatOfUnattributedMountWrite). Its turn is the message the session is working
  *     on (the one IN_FLIGHT, of which the inbox hands out one at a time), else its last message.
  *   - A turn makes at most 200 changes (DRIVE_CHAT_TURN_CHANGES_MAX). The write that would be the 201st, and every one
  *     after it in that turn, throws DriveChatTurnFull here, which rolls the write back: the runner door then holds a
@@ -92,6 +93,32 @@ export async function driveChatTurnOf(db: Db, ownerId: string, writer: DriveWrit
     select: { id: true },
   });
   return turn ? { ownerId, sessionId: session.id, turnId: turn.id } : null;
+}
+
+/**
+ * The Drive chat an unattributed write through a runner's mount is counted as (docs/drive-technical-design.md §5.8): on
+ * a mount that cannot tell its callers apart (Docker's mounter keeps its own pid namespace, so every pid reads 0), a
+ * write that names no session comes from a process of one of the runner's live sessions. When the only live session
+ * on the runner — not ended, and with a turn in flight or a background process still running — is a Drive chat of this
+ * owner's, the write is that chat's, and its rules apply to it as to the chat's drive tools. With any other session
+ * live, or none, it is nobody's: null. Read without locks, over the runner's held sessions (session_runner_held_idx).
+ */
+export async function driveChatOfUnattributedMountWrite(
+  db: Pick<Prisma.TransactionClient, 'session'>,
+  ownerId: string,
+  runnerId: string,
+): Promise<string | null> {
+  const live = await db.session.findMany({
+    where: {
+      assignedRunnerId: runnerId, finishedAt: null,
+      OR: [{ turnState: 'IN_FLIGHT' }, { runningBgShells: { isEmpty: false } }],
+    },
+    select: { id: true, ownerId: true, openedBy: true },
+    take: 2,
+  });
+  if (live.length !== 1) return null;
+  const [only] = live;
+  return only.ownerId === ownerId && only.openedBy === 'DRIVE_CHAT' ? only.id : null;
 }
 
 /** The turn's group collecting changes as they are made, made here when it has none, held FOR UPDATE. */
