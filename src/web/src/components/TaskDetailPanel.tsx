@@ -4,6 +4,7 @@ import {
   CloseOutlined,
   DeleteOutlined,
   EyeOutlined,
+  ExpandAltOutlined,
   FileMarkdownOutlined,
   GlobalOutlined,
   LinkOutlined,
@@ -12,6 +13,7 @@ import {
   PlusOutlined,
   ProjectOutlined,
   RedoOutlined,
+  RightOutlined,
   RollbackOutlined,
   SafetyOutlined,
 } from '@ant-design/icons';
@@ -22,7 +24,16 @@ import { TaskInputs } from './TaskInputs';
 import { TaskLandingExempt } from './TaskLandingExempt';
 import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { AgentProvider, ALL_ENGINES, ENGINE_CLI_NAMES, isEngine, type RunnerModelCatalog } from '@orbit/shared';
+import {
+  AgentProvider,
+  ALL_ENGINES,
+  ENGINE_CLI_NAMES,
+  isEngine,
+  taskFailureReason,
+  taskStatusReasonText,
+  type RunnerModelCatalog,
+  type TaskAcceptanceRound,
+} from '@orbit/shared';
 import { Alert } from './ui/Alert';
 import { Avatar } from './ui/Avatar';
 import { Button } from './ui/Button';
@@ -58,12 +69,14 @@ import {
 } from '../lib/workspaceDefaults';
 import { currentProviderChoice, engineProviders, engineTitleFor, type ChoiceSources } from '../lib/sessionProviderChoices';
 import { BrandMark } from './NewSessionProviderHero';
-import { encodeId } from '../lib/idCodec';
+import { encodeId, routeId } from '../lib/idCodec';
+import { projectTaskPath } from '../lib/projectTaskRoute';
+import { revealOwnerConfirmationCard } from './DecisionRail';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { taskStartOwnedByCompletionDeclaration, type FilterableTask } from '../lib/taskFilters';
 import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
-import { meQuery, ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
+import { meQuery, ownerConfirmationQuery, providersQuery, runnersQuery, sessionQuery } from '../lib/queries';
 import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
@@ -181,6 +194,72 @@ export function costLabel(usd: number | null | undefined): string | null {
   if (usd == null || !(usd > 0)) return null;
   return usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`;
 }
+
+/** Which first block the task run sidebar draws (docs/task-run-sidebar-design.md); null draws none. */
+export type CompactTaskState = 'FAILED' | 'RUNNING' | 'NEEDS_YOU' | 'DONE';
+
+export function compactTaskState({ status, needsYou, running }: { status: string; needsYou: boolean; running: boolean }): CompactTaskState | null {
+  if (status === 'DONE') return 'DONE';
+  if (status === 'FAILED') return 'FAILED';
+  if (needsYou) return 'NEEDS_YOU';
+  if (running) return 'RUNNING';
+  return null;
+}
+
+/** One row of the sidebar's Done means checklist: ✓ passed, ✕ failed, ○ not settled yet. */
+export interface DoneMeansRow {
+  key: string;
+  text: string;
+  code: boolean;
+  mark: 'passed' | 'failed' | 'pending';
+}
+
+/**
+ * Done means as a checklist: the acceptance command, judged by the newest round Orbit ran, then each
+ * criterion of the text (its list items, or the text as one row), ticked once the task is accepted.
+ * No record says which line of a text criterion holds, so a line is never crossed out on its own.
+ */
+export function doneMeansChecklist({
+  criteria,
+  command,
+  round,
+  status,
+  evidenceDecision,
+}: {
+  criteria: string | null;
+  command: string | null;
+  round: Pick<TaskAcceptanceRound, 'exitCode' | 'expectedExitCode'> | null;
+  status: string;
+  evidenceDecision: string | null;
+}): DoneMeansRow[] {
+  const rows: DoneMeansRow[] = [];
+  if (command) {
+    rows.push({
+      key: 'command',
+      text: command,
+      code: true,
+      mark: !round ? 'pending' : round.exitCode === round.expectedExitCode ? 'passed' : 'failed',
+    });
+  }
+  const settled = status === 'DONE' || evidenceDecision === 'CONFIRM';
+  const text = criteria?.trim() ?? '';
+  const items = text.split('\n').map((line) => line.trim()).filter((line) => /^([-*•]|\d+[.)])\s+/.test(line));
+  const lines = items.length >= 2 ? items.map((line) => line.replace(/^([-*•]|\d+[.)])\s+/, '')) : text ? [text.replace(/\s+/g, ' ')] : [];
+  lines.forEach((line, i) => rows.push({ key: `criterion-${i}`, text: line, code: false, mark: settled ? 'passed' : 'pending' }));
+  return rows;
+}
+
+const shortDay = (d?: string | null): string | null =>
+  d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }) : null;
+
+const clock = (d?: string | null): string =>
+  d ? new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—';
+
+/** A comment's first line, for the line the Failed block quotes. */
+const firstLine = (body?: string | null): string => {
+  const line = (body ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+  return line.length > 160 ? `${line.slice(0, 157)}…` : line;
+};
 
 /**
  * The plan in one sentence, beside the graph that shows it: whether anything still blocks the task
@@ -758,6 +837,7 @@ export function TaskDetailPanel({
   onDelete,
   deleting,
   docked = false,
+  compact = false,
   hereSessionId = null,
 }: {
   taskId: string;
@@ -770,6 +850,9 @@ export function TaskDetailPanel({
   /** A column of fixed width beside the conversation it was opened from (docs/mocks/session-task-column):
    *  no drag handle, and the width the Tasks page stores is not applied. */
   docked?: boolean;
+  /** The task run sidebar's arrangement of the same panel (docs/task-run-sidebar-design.md): its blocks in the
+   *  board's order, the rest one press away. TaskOverPagePanel asks for it while docked. */
+  compact?: boolean;
   /** The conversation the panel sits beside: its run row says so instead of linking to itself. */
   hereSessionId?: string | null;
 }) {
@@ -1798,135 +1881,8 @@ export function TaskDetailPanel({
   for (const c of comments) activity.push({ key: `comment-${c.id}`, at: at(c.createdAt), node: commentRow(c) });
   activity.sort((a, b) => a.at - b.at);
 
-  return (
-    <aside
-      ref={asideRef}
-      className={`task-detail-panel${docked ? ' is-docked' : ''}`}
-      style={width != null && !docked ? { width } : undefined}
-    >
-      {!docked && (
-        <div
-          className={`tdp-resizer${resizing ? ' resizing' : ''}`}
-          onMouseDown={startResize}
-        />
-      )}
-      <div className="tdp-head">
-        <div className="tdp-head-main">
-          {/* The project it is filed under. Its tasks are not listed on the Tasks page, so a task
-              opened from a link names the project, and says so when the project was cancelled. */}
-          {q.data?.project && (
-            <div className="tdp-project-line">
-              <ProjectOutlined />
-              <Link to={`/projects/${q.data.project.id}`}>{q.data.project.title}</Link>
-              {q.data.project.status === 'CANCELLED' && (
-                <span className="tdp-badge tone-muted">Cancelled</span>
-              )}
-            </div>
-          )}
-          {q.data?.project?.status === 'CANCELLED' && (
-            <div className="tdp-project-note">{PROJECT_CANCELLED_NOTE}</div>
-          )}
-          <div className="tdp-title">{task?.title ?? 'Loading…'}</div>
-          <div className="tdp-meta">
-            <span className={`tdp-badge tone-${headline.tone}`}>{headline.label}</span>
-            {/* DONE is not landed: the landing gets its own badge beside the status, never in it. */}
-            {landing && (
-              <span className={`tdp-badge tone-${landing.tone}`} data-landing-badge="">{landing.label}</span>
-            )}
-            {task?.id && <WaitingOnYouTaskBadge taskId={task.id} />}
-            {supersession && <span className="tdp-meta-item muted">· {supersession}</span>}
-            {task?.assignee && (
-              <span className="tdp-meta-item">
-                <Avatar size={18} style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 10 }}>
-                  {initial(task.assignee.name)}
-                </Avatar>
-                {task.assignee.name}
-              </span>
-            )}
-            {latestModel && <span className="tdp-meta-item muted">· {modelLabel(latestModel)}</span>}
-            {totalCost && <span className="tdp-meta-item muted">· {totalCost}</span>}
-          </div>
-          {/* A task forked from a session says where its checkout came from, in the server's own
-              words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
-          {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
-          {/* No account that could run it can run now (§7.5): the provider's words, the next try, and where to look. */}
-          {q.data?.accountHold && <div className="tdp-account-hold"><TaskAccountHoldNote hold={q.data.accountHold} /></div>}
-          {/* A task that starts when its condition holds says what it waits for (condition-triggers design §6.2):
-              "Waiting for: 3 or more OSDs are in", in the server's own words, while the condition has not fired. */}
-          {q.data?.startWhen?.waitingLine && (
-            <div className="tdp-start-when" data-start-when="">
-              <GaugeIcon />
-              <span>{q.data.startWhen.waitingLine}</span>
-            </div>
-          )}
-          {/* How this row is judged, which nothing else on the page said: a row whose completion
-              is owned by a check has no work of its own, and every other row names the method
-              that settles it. */}
-          {judgment && (
-            <div className={`tdp-judgment is-${judgment.icon}`}>
-              {judgment.icon === 'gate' ? <SafetyOutlined /> : <CheckOutlined />}
-              <span>{judgment.text}</span>
-            </div>
-          )}
-        </div>
-        <div className="tdp-head-actions">
-          {ownerWaiting ? (
-            // A run is waiting on the owner: its card in that session is where this is answered,
-            // so the panel only takes the reader there. While its report is still with its reviewer
-            // the pointer says so, in the quieter tone, as the session's row does (contract §5 N3).
-            <Link
-              className={`tdp-owner-confirmation-pointer${
-                ownerWaiting.review?.state === 'UNDER_REVIEW' ? ' is-under-review' : ''}`}
-              to={`/sessions/${encodeId(ownerWaiting.sessionId)}`}
-              state={{ revealOwnerConfirmation: true }}
-            >
-              {ownerWaiting.review?.state === 'UNDER_REVIEW' ? UNDER_REVIEW : WAITING_FOR_CONFIRMATION}
-            </Link>
-          ) : confirmHere ? (
-            <Button loading={confirmDone.isPending} onClick={() => confirmDone.mutate()}>
-              {OWNER_CONFIRM_ACTION}
-            </Button>
-          ) : null}
-          {/* A run of this task is going and this panel knows which one, so the header's press is
-              the way into it. It replaces a disabled button reading "Running" — true, and the one
-              thing a reader who wants to see it cannot act on. */}
-          {entry.kind === 'OPEN_RUN' && entry.href ? (
-            <Tooltip content={entry.hint}>
-              <Link to={entry.href}>
-                <Button icon={<ArrowRightOutlined />} variant="primary">
-                  {entry.label}
-                </Button>
-              </Link>
-            </Tooltip>
-          ) : stopped ? null : (
-            <Tooltip content={executeHint}>
-              <span style={{ display: 'inline-flex' }}>
-                <Button
-                  variant="primary"
-                  icon={<PlayCircleOutlined />}
-                  loading={running}
-                  disabled={executeDisabled}
-                  onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
-                  style={executeDisabled ? { pointerEvents: 'none' } : undefined}
-                >
-                  {running
-                    ? 'Running'
-                    : completionOwned
-                      ? verificationSubjectAction(q.data?.status, q.data?.verificationState).label
-                      : entry.kind === 'RETRY'
-                        ? entry.label
-                        : 'Run now'}
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-        </div>
-        {/* The panel's own two window buttons, siblings of the actions rather than part of them:
-            a phone has no room for four presses on one line, and the narrow-screen rule in
-            index.css keeps exactly these two beside the title while the actions drop below it.
-            The row's trash is hover-only, so without this a touch screen has no way to delete. */}
-        {/* Two words for two links (docs/share-links-design.md §8): Copy link is the signed-in
-            address, for yourself; Share… is the public one. Copy as Markdown needs neither. */}
+  // Pieces both arrangements draw: the ⋯ menu, the Now card, Done means in full, and Runs with.
+  const moreMenu = (
         <Menu
           open={menuOpen}
           onOpenChange={setMenuOpen}
@@ -2033,38 +1989,8 @@ export function TaskDetailPanel({
           ]}
           trigger={<Button ref={moreButton} variant="text" icon={<MoreOutlined />} aria-label="More actions" />}
         />
-        <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
-      </div>
-
-      {q.isLoading ? (
-        <div className="tdp-loading">
-          <Spinner />
-        </div>
-      ) : q.isError ? (
-        <div className="tdp-empty">Failed to load task details.</div>
-      ) : (
-        <div className="tdp-body">
-          {showVerifierCard && (
-            <section className="tdp-verifier">
-              <div className="tdp-verifier-head">{VERIFIER_CARD_HEADING}</div>
-              {verifier ? (
-                <div className="tdp-verifier-row">
-                  <span className="tdp-verifier-title">{verifier.title}</span>
-                  <span className={`tdp-badge tone-${verifierOutcome(verifier).tone}`}>
-                    {verifierOutcome(verifier).label}
-                  </span>
-                  <Button size="small" onClick={() => onOpenTask(verifier.id)}>
-                    {VERIFIER_CARD_ENTRY}
-                  </Button>
-                </div>
-              ) : (
-                <div className="tdp-verifier-empty">{VERIFIER_CARD_EMPTY}</div>
-              )}
-            </section>
-          )}
-          {/* What the agent is doing now: the run that is going, and the position it last reported
-              (task_progress_report). A run that never reported shows its first line alone. */}
-          {liveRun && (
+  );
+  const nowSection = liveRun ? (
             <section className="tdp-section" aria-label="Now">
               <div className="tdp-section-title">Now</div>
               <div className="tdp-now">
@@ -2113,61 +2039,9 @@ export function TaskDetailPanel({
                 ) : null}
               </div>
             </section>
-          )}
-          {/* What the work delivered, and on what grounds: the newest evidence version and its
-              decision. The header's "Judged by · submitted evidence" points here. */}
-          {latestEvidence && (
-            <section className="tdp-section" aria-label="Evidence">
-              <div className="tdp-section-title">{q.data?.status === 'DONE' ? 'Delivered' : 'Evidence'}</div>
-              <div className={`tdp-evidence tone-${evidenceOutcome(latestEvidence).tone}`}>
-                <div className="tdp-evidence-head">
-                  <span className={`tdp-badge tone-${evidenceOutcome(latestEvidence).tone}`}>
-                    {evidenceOutcome(latestEvidence).label}
-                  </span>
-                  <span className="tdp-evidence-meta">{evidenceMeta(latestEvidence, fmt)}</span>
-                </div>
-                {latestEvidence.evidence?.claim?.trim() ? (
-                  <div className="tdp-evidence-claim">{latestEvidence.evidence.claim.trim()}</div>
-                ) : null}
-                {(latestEvidence.evidence?.checks ?? []).length > 0 && (
-                  <ul className="tdp-evidence-checks">
-                    {(latestEvidence.evidence?.checks ?? []).map((check, i) => (
-                      <li key={`${check.kind}-${check.ref}-${i}`}>
-                        <span className={`tdp-evidence-mark${check.succeeded === false ? ' is-failed' : ''}`}>
-                          {check.succeeded === false ? '✕' : check.succeeded === true ? '✓' : '•'}
-                        </span>
-                        <span>{evidenceCheckText(check)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {(latestEvidence.evidence?.gaps ?? []).length > 0 && (
-                  <div className="tdp-evidence-gaps">
-                    Not covered: {(latestEvidence.evidence?.gaps ?? []).join('; ')}
-                  </div>
-                )}
-                {latestEvidence.decision?.decision === 'SEND_BACK' && latestEvidence.decision.note ? (
-                  <div className="tdp-evidence-note">{latestEvidence.decision.note}</div>
-                ) : null}
-              </div>
-            </section>
-          )}
-          {landing || q.data?.landingCheckExempt === true ? (
-            <section className="tdp-section" aria-label="Task landing">
-              <div className="tdp-section-title">Landing</div>
-              {landing ? <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} /> : null}
-              <TaskLandingExempt task={q.data} />
-              {landingSessionId ? (
-                <div className="tdp-landing-open">
-                  <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
-                </div>
-              ) : null}
-            </section>
-          ) : null}
-          {/* The contract first: what done means and who decides it, then the instructions the agent
-              was given, folded — they are written for the agent, and they are long. */}
-          <section className="tdp-section">
-            <div className="tdp-section-title">Done means</div>
+  ) : null;
+  const doneMeansDetail = (
+    <>
             <TaskAcceptance taskId={taskId} task={q.data} projectId={q.data?.projectId} />
             {q.data?.description && (
               <div className="tdp-brief">
@@ -2186,139 +2060,9 @@ export function TaskDetailPanel({
                 </div>
               </div>
             )}
-          </section>
-
-          {/* Where the task sits in the plan: a sentence first, the graph on demand. A task with no
-              relations has no section; ⋯ → Add a prerequisite opens it. */}
-          {(hasDependencyRelations || addingPrereq) && (
-            <section className="tdp-section">
-              <div className="tdp-dependency-head">
-                <div className="tdp-section-title">In the plan</div>
-                {hasDependencyRelations && (
-                  <span className="tdp-dependency-summary">
-                    {connectedCount} connected{dependencyGraph.truncated ? ' loaded' : ''} · {upstreamCount} upstream ·{' '}
-                    {downstreamCount} downstream
-                  </span>
-                )}
-                {hasDependencyRelations && (
-                  <button type="button" className="tdp-link-button" aria-expanded={planOpen} onClick={() => setPlanOpen(!planOpen)}>
-                    {planOpen ? 'Hide graph' : 'Show graph'}
-                  </button>
-                )}
-              </div>
-              {blocked && (
-                <div className={`tdp-dependency-notice${dependencyState === 'BLOCKED_FAILED' ? ' is-failed' : ''}`}>
-                  {dependencyState === 'BLOCKED_FAILED'
-                    ? failedDirectPrerequisites === 1
-                      ? 'A direct prerequisite failed or was cancelled — resolve it before running.'
-                      : `${failedDirectPrerequisites} direct prerequisites failed or were cancelled — resolve them before running.`
-                    : `${completedDirectPrerequisites} of ${dependsOn.length} direct prerequisites complete. All are required.`}
-                </div>
-              )}
-
-              {hasDependencyRelations && planSentenceText && <div className="tdp-plan-say">{planSentenceText}</div>}
-              {planOpen && (
-                <>
-                  <Segmented<'graph' | 'list'>
-                    size="small"
-                    className="tdp-dependency-view"
-                    value={dependencyView}
-                    options={[
-                      { label: 'Graph', value: 'graph' },
-                      { label: 'List', value: 'list' },
-                    ]}
-                    onValueChange={setDependencyViewOverride}
-                    aria-label="Dependency view"
-                  />
-
-                  {dependencyGraphQ.isError && hasDependencyRelations && (
-                    <div className="tdp-dependency-graph-error" role="alert">
-                      The complete dependency graph could not be loaded. Showing direct relationships.
-                    </div>
-                  )}
-                  {!hasDependencyRelations ? (
-                    <div className="tdp-muted">No dependencies</div>
-                  ) : dependencyView === 'graph' ? (
-                    dependencyGraphQ.isLoading ? (
-                      <div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>
-                    ) : (
-                      <LazyBoundary fallback={<div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>} failed={null}>
-                        <LazyTaskDependencyGraph
-                          graph={dependencyGraph}
-                          title={task?.title ?? 'Current task'}
-                          onOpenTask={onOpenTask}
-                          onRemoveDependency={(id) => removeDependency.mutate(id)}
-                          onExpandBranch={async (aggregate) => {
-                            await expandDependencyBranch.mutateAsync({
-                              aggregate,
-                              focusTaskId: taskId,
-                              baseStructureKey: dependencyGraphBaseStructureKey,
-                            });
-                          }}
-                          expandingBranchKey={
-                            expandDependencyBranch.isPending
-                              ? expandDependencyBranch.variables?.aggregate.branchKey ?? null
-                              : null
-                          }
-                          removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
-                        />
-                      </LazyBoundary>
-                    )
-                  ) : (
-                    <TaskDependencyList
-                      graph={dependencyGraph}
-                      onOpenTask={onOpenTask}
-                      onRemoveDependency={(id) => removeDependency.mutate(id)}
-                      removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
-                    />
-                  )}
-                  {dependencyTruncationState && (
-                    <div className="tdp-dependency-truncated">
-                      {dependencyTruncationState === 'expandable'
-                        ? `The initial snapshot is limited to ${dependencyGraph.limits?.maxDepth ?? 8} hops or ${dependencyGraph.limits?.maxNodes ?? 100} tasks${dependencyGraph.limits?.maxEdges ? ` or ${dependencyGraph.limits.maxEdges} relationships` : ''}. Expand a collapsed branch to load the next batch.`
-                        : 'Graph expansion limit reached. Some branch connections remain collapsed.'}
-                    </div>
-                  )}
-
-                </>
-              )}
-              {(planOpen || addingPrereq) && (
-                <>
-                  <Combobox
-                    style={{ width: '100%', marginTop: 8 }}
-                    placeholder="Add a prerequisite…"
-                    value={null}
-                    filter={false}
-                    onSearch={setDependencyQuery}
-                    loading={dependencyTasksQ.isLoading || addDependency.isPending}
-                    matchTriggerWidth={false}
-                    options={dependencyOptions}
-                    onValueChange={(val) => {
-                      if (val) addDependency.mutate(val);
-                      setDependencyQuery('');
-                    }}
-                  />
-
-                </>
-              )}
-              {dependsOn.length > 0 && (
-                <div
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13 }}
-                >
-                  <Switch
-                    size="small"
-                    checked={task?.autoRunWhenReady ?? true}
-                    loading={setAutoRun.isPending}
-                    onCheckedChange={(v) => setAutoRun.mutate(v)}
-                  />
-                  <span>Auto-run when all prerequisites finish</span>
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* The envelope a person sets once: who runs the task and on what. One line at rest; Edit
-              opens every field it had before. */}
+    </>
+  );
+  const runsWithSection = (
           <section className="tdp-section">
             <div className="tdp-dependency-head">
               <div className="tdp-section-title">Runs with</div>
@@ -2564,6 +2308,701 @@ export function TaskDetailPanel({
               </>
             )}
           </section>
+  );
+
+  // ── The task run sidebar (docs/task-run-sidebar-design.md) ───────────────────────────────────
+  // Docked beside a conversation, the same panel in a compact arrangement: head, what it is now and
+  // what it needs, Branch, Done means as a checklist, Runs, then Runs with and Activity on a line each.
+  // The full arrangement above stays the Tasks and project pages' panel and the full task page.
+  const hereRun: any = hereSessionId != null
+    ? sessions.find((s: any) => encodeId(s.id) === encodeId(hereSessionId)) ?? null
+    : null;
+  // The run this column speaks for: the conversation it sits beside, else the newest.
+  const currentRun: any = hereRun ?? sessions[0] ?? null;
+  const compactState = compactTaskState({
+    status: String(task?.status ?? ''),
+    needsYou: ownerWaiting != null || confirmHere,
+    running: liveRun != null,
+  });
+  const failure = compactState === 'FAILED' ? taskFailureReason(currentRun) : null;
+  const pill = compactState === 'FAILED'
+    ? { label: ['Failed', failure ? taskStatusReasonText(failure) : null].filter(Boolean).join(' · '), tone: 'red' }
+    : compactState === 'NEEDS_YOU'
+      ? { label: latestEvidence ? `Needs you · evidence r${latestEvidence.revision}` : 'Needs you', tone: 'amber' }
+      : headline;
+  const compactMeta = compactState === 'RUNNING'
+    ? (costLabel(liveRun?.costUsd) ? `${costLabel(liveRun?.costUsd)} so far` : null)
+    : [currentRun ? shortDay(currentRun.createdAt) : null, totalCost].filter(Boolean).join(' · ') || null;
+  // This run's acceptance rounds, newest first (migration 1672); the newest across runs judges the command row.
+  const rounds: TaskAcceptanceRound[] = currentRun?.acceptanceRounds ?? [];
+  const newestRound: TaskAcceptanceRound | null = rounds[0]
+    ?? sessions.flatMap((s: any) => (s.acceptanceRounds ?? []) as TaskAcceptanceRound[])
+      .sort((a: TaskAcceptanceRound, b: TaskAcceptanceRound) => b.finishedAt.localeCompare(a.finishedAt))[0]
+    ?? null;
+  const executable = q.data?.completionCriterion === 'EXECUTABLE' && Boolean(q.data?.acceptanceCommand);
+  const newestComment: any = comments.length > 0 ? comments[comments.length - 1] : null;
+  const [doneMeansShown, setDoneMeansShown] = useState(false);
+  const [activityShown, setActivityShown] = useState(false);
+  const [noteShown, setNoteShown] = useState(false);
+  const [outputShown, setOutputShown] = useState<string | null>(null);
+  useEffect(() => {
+    setDoneMeansShown(false);
+    setActivityShown(false);
+    setNoteShown(false);
+    setOutputShown(null);
+  }, [taskId]);
+  // The branch the conversation works on: its own detail, the read the session page already holds.
+  const branchQ = useQuery({ ...sessionQuery(hereRun ? routeId(hereSessionId) : null), enabled: compact && hereRun != null });
+  const branchSession: any = branchQ.data ?? null;
+  const rerunCheck = useMutation({
+    mutationFn: () => api(`/tasks/${encodeURIComponent(taskId)}/rerun-check`, { method: 'POST' }),
+    onSuccess: () => {
+      message.success('The check runs again in this conversation');
+      return qc.invalidateQueries({ queryKey: ['task', taskId] });
+    },
+    onError: (e: Error) => message.error("Couldn't re-run the check", e.message),
+  });
+  const closeNotNeeded = useMutation({
+    mutationFn: () => api(`/tasks/${encodeURIComponent(taskId)}`, { method: 'PATCH', body: { status: 'CANCELLED' } }),
+    onSuccess: () => {
+      message.success('Closed as not needed');
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: ['task', taskId] }),
+        qc.invalidateQueries({ queryKey: ['tasks'] }),
+      ]);
+    },
+    onError: (e: Error) => message.error("Couldn't close the task", e.message),
+  });
+  // Accept answers the run waiting on you from here when nothing else has to be answered with it; a report
+  // under review has questions of its own, which its card in the conversation asks.
+  const acceptHere = useMutation({
+    mutationFn: () => sendOwnerDecision(taskId, ownerWaiting?.requestId ?? null, 'CONFIRM', undefined, { reviewRecordId: null, answers: [] }),
+    onSuccess: () => {
+      message.success('Confirmed done');
+      return refreshOwnerConfirmationViews(qc, taskId);
+    },
+    onError: (e: Error) => message.error("Couldn't confirm the task", e.message),
+  });
+  const openConfirmationCard = () => {
+    if (ownerWaiting && (!hereRun || encodeId(ownerWaiting.sessionId) !== encodeId(hereRun.id))) {
+      navigate(`/sessions/${encodeId(ownerWaiting.sessionId)}`, { state: { revealOwnerConfirmation: true } });
+      return;
+    }
+    revealOwnerConfirmationCard();
+  };
+  const accept = () => {
+    if (confirmHere) confirmDone.mutate();
+    else if (ownerWaiting && !ownerWaiting.review) acceptHere.mutate();
+    else openConfirmationCard();
+  };
+  // Output scrolls the conversation to the round's shell turn; a turn not drawn on this page shows its tail here.
+  const showOutput = (round: TaskAcceptanceRound) => {
+    const turn = document.querySelector<HTMLElement>(`[data-turn-id="${CSS.escape(round.turnId)}"]`);
+    if (turn) {
+      turn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
+    setOutputShown(outputShown === round.id ? null : round.id);
+  };
+  const fullPagePath = q.data?.projectId ? projectTaskPath(q.data.projectId, taskId) : `/tasks/${encodeId(taskId)}`;
+  const doneMeansRows = doneMeansChecklist({
+    criteria: q.data?.acceptanceCriteria ?? null,
+    command: executable ? q.data.acceptanceCommand : null,
+    round: newestRound,
+    status: String(task?.status ?? ''),
+    evidenceDecision: latestEvidence?.decision?.decision ?? null,
+  });
+  const branchCommits: any[] = branchSession?.branchCommits ?? [];
+  const landingLine = landing?.label
+    ?? (branchSession?.mergeStatus === 'merged' ? `Merged into ${branchSession.mergeTarget ?? mainBranch}` : null)
+    ?? (compactState === 'DONE' || compactState === 'FAILED' ? 'Not landed'
+      : compactState === 'NEEDS_YOU' ? 'After you accept' : "After it's done");
+  const runsWithLine = [
+    task?.assignee?.name ?? 'Unassigned',
+    q.data?.model ? modelLabel(q.data.model) : latestModel ? modelLabel(latestModel) : null,
+    ENGINE_CLI_NAMES[runEngine],
+  ].filter(Boolean).join(' · ');
+
+  const compactHead = (
+    <div className="tdp-compact-head">
+      <div className="tdp-compact-bar">
+        <span className="tdp-compact-kicker">Task</span>
+        <Tooltip content="Open the full task page">
+          <Button variant="text" icon={<ExpandAltOutlined />} aria-label="Open the full task page" onClick={() => navigate(fullPagePath)} />
+        </Tooltip>
+        {moreMenu}
+        <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
+      </div>
+      <div className="tdp-title tdp-compact-title">{task?.title ?? 'Loading…'}</div>
+      <div className="tdp-meta">
+        <span className={`tdp-badge tone-${pill.tone}`} data-status-pill="">{pill.label}</span>
+        {compactState === 'DONE' && landing && (
+          <span className={`tdp-badge tone-${landing.tone}`} data-landing-badge="">{landing.label}</span>
+        )}
+        {compactMeta && <span className="tdp-meta-item muted">{compactMeta}</span>}
+      </div>
+    </div>
+  );
+
+  const compactStateBlock =
+    compactState === 'RUNNING' ? (
+      <div className="tdp-state is-running" data-block="state">{nowSection}</div>
+    ) : compactState === 'NEEDS_YOU' ? (
+      <section className="tdp-state is-needs-you" data-block="state" aria-label="Review the evidence">
+        <div className="tdp-state-title">Review the evidence</div>
+        {latestEvidence?.evidence?.claim?.trim() ? (
+          <div className="tdp-state-claim">{latestEvidence.evidence.claim.trim()}</div>
+        ) : null}
+        {(latestEvidence?.evidence?.checks ?? []).length > 0 && (
+          <ul className="tdp-checklist">
+            {(latestEvidence?.evidence?.checks ?? []).map((check, i) => (
+              <li key={`${check.kind}-${check.ref}-${i}`} className={check.succeeded === false ? 'is-failed' : 'is-passed'}>
+                <span className="tdp-check-mark">{check.succeeded === false ? '✕' : '✓'}</span>
+                <span>{evidenceCheckText(check)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="tdp-state-actions">
+          <Button variant="primary" loading={acceptHere.isPending || confirmDone.isPending} onClick={accept}>Accept</Button>
+          <Button onClick={openConfirmationCard}>Send back</Button>
+        </div>
+      </section>
+    ) : compactState === 'DONE' ? (
+      <section className="tdp-state is-done" data-block="state" aria-label="Delivered">
+        <div className="tdp-state-title">Delivered</div>
+        <ul className="tdp-checklist">
+          <li className="is-passed">
+            <span className="tdp-check-mark">✓</span>
+            <span>
+              {latestEvidence?.decision?.decision === 'CONFIRM'
+                ? `Evidence r${latestEvidence.revision} accepted · ${clock(latestEvidence.decision.decidedAt)}`
+                : newestRound && newestRound.exitCode === newestRound.expectedExitCode
+                  ? `Check exited ${newestRound.exitCode} · ${clock(newestRound.finishedAt)}`
+                  : 'Done'}
+            </span>
+          </li>
+          <li className={landing && landing.tone === 'green' ? 'is-passed' : 'is-pending'}>
+            <span className="tdp-check-mark">{landing && landing.tone === 'green' ? '✓' : '○'}</span>
+            <span>
+              {landingLine}
+              {landingSessionId ? (
+                <>
+                  {' · '}
+                  <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
+                </>
+              ) : null}
+            </span>
+          </li>
+        </ul>
+      </section>
+    ) : compactState === 'FAILED' ? (
+      <section className="tdp-state is-failed" data-block="state" aria-label="Why it failed">
+        <div className="tdp-state-title">Why it failed</div>
+        {rounds.length > 0 ? (
+          <ul className="tdp-checklist tdp-rounds">
+            {rounds.map((round) => {
+              const passed = round.exitCode === round.expectedExitCode;
+              return (
+                <li key={round.id} className={passed ? 'is-passed' : 'is-failed'}>
+                  <span className="tdp-check-mark">{passed ? '✓' : '✕'}</span>
+                  <span>
+                    {`Acceptance check · exit ${round.exitCode ?? 'none'}, expected ${round.expectedExitCode} · ${clock(round.finishedAt)}`}
+                    {round.branchSha ? <> on <code>{round.branchSha.slice(0, 7)}</code></> : null}
+                    {' · '}
+                    <button type="button" className="tdp-link-button" onClick={() => showOutput(round)}>Output</button>
+                    {outputShown === round.id && (
+                      <pre className="tdp-round-output">{round.outputTail || 'It printed nothing.'}</pre>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : currentRun?.error ? (
+          <div className="tdp-state-claim">{currentRun.error}</div>
+        ) : null}
+        {newestComment && (
+          <div className="tdp-state-note">
+            <span className="tdp-state-note-mark">↳</span>
+            <span>
+              {`Latest note (${newestComment.authorName ?? 'Unknown'}, ${shortDay(newestComment.createdAt)}): `}
+              {noteShown ? (
+                <span className="tdp-comment-text md"><MD breaks>{newestComment.body}</MD></span>
+              ) : (
+                firstLine(newestComment.body)
+              )}
+              {' '}
+              <button type="button" className="tdp-link-button" aria-expanded={noteShown} onClick={() => setNoteShown(!noteShown)}>
+                {noteShown ? 'Show less' : 'Read'}
+              </button>
+            </span>
+          </div>
+        )}
+        <div className="tdp-state-actions">
+          {executable && (
+            <Button variant="primary" loading={rerunCheck.isPending} onClick={() => rerunCheck.mutate()}>Re-run the check</Button>
+          )}
+          <Button
+            variant={executable ? undefined : 'primary'}
+            loading={execute.isPending}
+            disabled={executeDisabled}
+            onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
+          >
+            Retry the task
+          </Button>
+          <Button loading={closeNotNeeded.isPending} onClick={() => closeNotNeeded.mutate()}>Close as not needed</Button>
+        </div>
+      </section>
+    ) : null;
+
+  const compactBody = (
+    <div className="tdp-body tdp-compact-body">
+      {compactStateBlock}
+      {branchSession?.branch ? (
+        <section className="tdp-section" data-block="branch" aria-label="Branch">
+          <div className="tdp-section-title">Branch</div>
+          <dl className="tdp-kv">
+            <dt>Branch</dt>
+            <dd><code className="tdp-kv-mono">{branchSession.branch}</code></dd>
+            <dt>vs {mainBranch}</dt>
+            <dd>{branchSession.branchMerged ? `In ${mainBranch}` : `${branchCommits.length} ahead`}</dd>
+            {branchCommits.length > 0 && !branchSession.branchMerged ? (
+              <>
+                <dt>Left</dt>
+                <dd>
+                  {branchCommits.slice(0, 3).map((c: any) => (
+                    <div key={c.sha} className="tdp-kv-commit"><code>{c.sha.slice(0, 7)}</code> {c.subject}</div>
+                  ))}
+                  {branchCommits.length > 3 && <div className="tdp-muted">{branchCommits.length - 3} more</div>}
+                </dd>
+              </>
+            ) : null}
+            <dt>Landing</dt>
+            <dd>{landingLine}</dd>
+          </dl>
+        </section>
+      ) : null}
+      <section className="tdp-section" data-block="done-means" aria-label="Done means">
+        <div className="tdp-section-title">Done means</div>
+        <ul className="tdp-checklist">
+          {doneMeansRows.map((row) => (
+            <li key={row.key} className={`is-${row.mark}`}>
+              <span className="tdp-check-mark">{row.mark === 'passed' ? '✓' : row.mark === 'failed' ? '✕' : '○'}</span>
+              {row.code ? <code>{row.text}</code> : <span>{row.text}</span>}
+            </li>
+          ))}
+        </ul>
+        <div className="tdp-line-row">
+          <span className="tdp-muted">Criteria text · Brief</span>
+          <button type="button" className="tdp-link-button" aria-expanded={doneMeansShown} onClick={() => setDoneMeansShown(!doneMeansShown)}>
+            {doneMeansShown ? 'Hide' : 'Show'}
+          </button>
+        </div>
+        {doneMeansShown && doneMeansDetail}
+      </section>
+      {sessions.length > 0 && (
+        <section className="tdp-section" data-block="runs" aria-label="Runs">
+          <div className="tdp-section-title">Runs</div>
+          {sessions.map((s: any, i: number) => {
+            const here = hereRun != null && s.id === hereRun.id;
+            const sub = [shortDay(s.createdAt), costLabel(s.costUsd)].filter(Boolean).join(' · ');
+            const row = (
+              <>
+                <span className={`tdp-dot ${sessionDisplayState(s)?.phase ?? sessionRunStateOf(s)}`} />
+                <span>
+                  <strong>Run {sessions.length - i}</strong>
+                  {sub && ` · ${sub}`}
+                  {here && <span className="tdp-muted"> · this conversation</span>}
+                </span>
+              </>
+            );
+            return here ? (
+              <div key={s.id} className="tdp-compact-run is-here" aria-current="page">{row}</div>
+            ) : (
+              <Link key={s.id} className="tdp-compact-run" to={`/sessions/${encodeId(s.id)}`}>{row}</Link>
+            );
+          })}
+        </section>
+      )}
+      <section className="tdp-section" data-block="runs-with" aria-label="Runs with">
+        {envelopeOpen ? (
+          runsWithSection
+        ) : (
+          <div className="tdp-line-row">
+            <span className="tdp-muted">{runsWithLine}</span>
+            <button type="button" className="tdp-link-button" aria-expanded={false} onClick={() => setEnvelopeOpen(true)}>Edit</button>
+          </div>
+        )}
+      </section>
+      <section className="tdp-section" data-block="activity" aria-label="Activity">
+        <button type="button" className="tdp-line-row tdp-line-button" aria-expanded={activityShown} onClick={() => setActivityShown(!activityShown)}>
+          <span className="tdp-muted">
+            {`Activity · ${activity.length}`}
+            {q.data?.creatorSession ? ` · Filed from ${q.data.creatorSession.title || 'Untitled session'}` : ''}
+          </span>
+          <RightOutlined className={activityShown ? 'is-open' : undefined} aria-hidden />
+        </button>
+        {activityShown && activity.map((item) => <Fragment key={item.key}>{item.node}</Fragment>)}
+      </section>
+    </div>
+  );
+
+  return (
+    <aside
+      ref={asideRef}
+      className={`task-detail-panel${docked ? ' is-docked' : ''}${compact ? ' is-compact' : ''}`}
+      style={width != null && !docked ? { width } : undefined}
+    >
+      {!docked && (
+        <div
+          className={`tdp-resizer${resizing ? ' resizing' : ''}`}
+          onMouseDown={startResize}
+        />
+      )}
+      {compact ? compactHead : (
+      <div className="tdp-head">
+        <div className="tdp-head-main">
+          {/* The project it is filed under. Its tasks are not listed on the Tasks page, so a task
+              opened from a link names the project, and says so when the project was cancelled. */}
+          {q.data?.project && (
+            <div className="tdp-project-line">
+              <ProjectOutlined />
+              <Link to={`/projects/${q.data.project.id}`}>{q.data.project.title}</Link>
+              {q.data.project.status === 'CANCELLED' && (
+                <span className="tdp-badge tone-muted">Cancelled</span>
+              )}
+            </div>
+          )}
+          {q.data?.project?.status === 'CANCELLED' && (
+            <div className="tdp-project-note">{PROJECT_CANCELLED_NOTE}</div>
+          )}
+          <div className="tdp-title">{task?.title ?? 'Loading…'}</div>
+          <div className="tdp-meta">
+            <span className={`tdp-badge tone-${headline.tone}`}>{headline.label}</span>
+            {/* DONE is not landed: the landing gets its own badge beside the status, never in it. */}
+            {landing && (
+              <span className={`tdp-badge tone-${landing.tone}`} data-landing-badge="">{landing.label}</span>
+            )}
+            {task?.id && <WaitingOnYouTaskBadge taskId={task.id} />}
+            {supersession && <span className="tdp-meta-item muted">· {supersession}</span>}
+            {task?.assignee && (
+              <span className="tdp-meta-item">
+                <Avatar size={18} style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 10 }}>
+                  {initial(task.assignee.name)}
+                </Avatar>
+                {task.assignee.name}
+              </span>
+            )}
+            {latestModel && <span className="tdp-meta-item muted">· {modelLabel(latestModel)}</span>}
+            {totalCost && <span className="tdp-meta-item muted">· {totalCost}</span>}
+          </div>
+          {/* A task forked from a session says where its checkout came from, in the server's own
+              words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
+          {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
+          {/* No account that could run it can run now (§7.5): the provider's words, the next try, and where to look. */}
+          {q.data?.accountHold && <div className="tdp-account-hold"><TaskAccountHoldNote hold={q.data.accountHold} /></div>}
+          {/* A task that starts when its condition holds says what it waits for (condition-triggers design §6.2):
+              "Waiting for: 3 or more OSDs are in", in the server's own words, while the condition has not fired. */}
+          {q.data?.startWhen?.waitingLine && (
+            <div className="tdp-start-when" data-start-when="">
+              <GaugeIcon />
+              <span>{q.data.startWhen.waitingLine}</span>
+            </div>
+          )}
+          {/* How this row is judged, which nothing else on the page said: a row whose completion
+              is owned by a check has no work of its own, and every other row names the method
+              that settles it. */}
+          {judgment && (
+            <div className={`tdp-judgment is-${judgment.icon}`}>
+              {judgment.icon === 'gate' ? <SafetyOutlined /> : <CheckOutlined />}
+              <span>{judgment.text}</span>
+            </div>
+          )}
+        </div>
+        <div className="tdp-head-actions">
+          {ownerWaiting ? (
+            // A run is waiting on the owner: its card in that session is where this is answered,
+            // so the panel only takes the reader there. While its report is still with its reviewer
+            // the pointer says so, in the quieter tone, as the session's row does (contract §5 N3).
+            <Link
+              className={`tdp-owner-confirmation-pointer${
+                ownerWaiting.review?.state === 'UNDER_REVIEW' ? ' is-under-review' : ''}`}
+              to={`/sessions/${encodeId(ownerWaiting.sessionId)}`}
+              state={{ revealOwnerConfirmation: true }}
+            >
+              {ownerWaiting.review?.state === 'UNDER_REVIEW' ? UNDER_REVIEW : WAITING_FOR_CONFIRMATION}
+            </Link>
+          ) : confirmHere ? (
+            <Button loading={confirmDone.isPending} onClick={() => confirmDone.mutate()}>
+              {OWNER_CONFIRM_ACTION}
+            </Button>
+          ) : null}
+          {/* A run of this task is going and this panel knows which one, so the header's press is
+              the way into it. It replaces a disabled button reading "Running" — true, and the one
+              thing a reader who wants to see it cannot act on. */}
+          {entry.kind === 'OPEN_RUN' && entry.href ? (
+            <Tooltip content={entry.hint}>
+              <Link to={entry.href}>
+                <Button icon={<ArrowRightOutlined />} variant="primary">
+                  {entry.label}
+                </Button>
+              </Link>
+            </Tooltip>
+          ) : stopped ? null : (
+            <Tooltip content={executeHint}>
+              <span style={{ display: 'inline-flex' }}>
+                <Button
+                  variant="primary"
+                  icon={<PlayCircleOutlined />}
+                  loading={running}
+                  disabled={executeDisabled}
+                  onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
+                  style={executeDisabled ? { pointerEvents: 'none' } : undefined}
+                >
+                  {running
+                    ? 'Running'
+                    : completionOwned
+                      ? verificationSubjectAction(q.data?.status, q.data?.verificationState).label
+                      : entry.kind === 'RETRY'
+                        ? entry.label
+                        : 'Run now'}
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+        </div>
+        {/* The panel's own two window buttons, siblings of the actions rather than part of them:
+            a phone has no room for four presses on one line, and the narrow-screen rule in
+            index.css keeps exactly these two beside the title while the actions drop below it.
+            The row's trash is hover-only, so without this a touch screen has no way to delete. */}
+        {/* Two words for two links (docs/share-links-design.md §8): Copy link is the signed-in
+            address, for yourself; Share… is the public one. Copy as Markdown needs neither. */}
+        {moreMenu}
+        <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
+      </div>
+      )}
+
+      {q.isLoading ? (
+        <div className="tdp-loading">
+          <Spinner />
+        </div>
+      ) : q.isError ? (
+        <div className="tdp-empty">Failed to load task details.</div>
+      ) : compact ? (
+        compactBody
+      ) : (
+        <div className="tdp-body">
+          {showVerifierCard && (
+            <section className="tdp-verifier">
+              <div className="tdp-verifier-head">{VERIFIER_CARD_HEADING}</div>
+              {verifier ? (
+                <div className="tdp-verifier-row">
+                  <span className="tdp-verifier-title">{verifier.title}</span>
+                  <span className={`tdp-badge tone-${verifierOutcome(verifier).tone}`}>
+                    {verifierOutcome(verifier).label}
+                  </span>
+                  <Button size="small" onClick={() => onOpenTask(verifier.id)}>
+                    {VERIFIER_CARD_ENTRY}
+                  </Button>
+                </div>
+              ) : (
+                <div className="tdp-verifier-empty">{VERIFIER_CARD_EMPTY}</div>
+              )}
+            </section>
+          )}
+          {/* What the agent is doing now: the run that is going, and the position it last reported
+              (task_progress_report). A run that never reported shows its first line alone. */}
+          {nowSection}
+          {/* What the work delivered, and on what grounds: the newest evidence version and its
+              decision. The header's "Judged by · submitted evidence" points here. */}
+          {latestEvidence && (
+            <section className="tdp-section" aria-label="Evidence">
+              <div className="tdp-section-title">{q.data?.status === 'DONE' ? 'Delivered' : 'Evidence'}</div>
+              <div className={`tdp-evidence tone-${evidenceOutcome(latestEvidence).tone}`}>
+                <div className="tdp-evidence-head">
+                  <span className={`tdp-badge tone-${evidenceOutcome(latestEvidence).tone}`}>
+                    {evidenceOutcome(latestEvidence).label}
+                  </span>
+                  <span className="tdp-evidence-meta">{evidenceMeta(latestEvidence, fmt)}</span>
+                </div>
+                {latestEvidence.evidence?.claim?.trim() ? (
+                  <div className="tdp-evidence-claim">{latestEvidence.evidence.claim.trim()}</div>
+                ) : null}
+                {(latestEvidence.evidence?.checks ?? []).length > 0 && (
+                  <ul className="tdp-evidence-checks">
+                    {(latestEvidence.evidence?.checks ?? []).map((check, i) => (
+                      <li key={`${check.kind}-${check.ref}-${i}`}>
+                        <span className={`tdp-evidence-mark${check.succeeded === false ? ' is-failed' : ''}`}>
+                          {check.succeeded === false ? '✕' : check.succeeded === true ? '✓' : '•'}
+                        </span>
+                        <span>{evidenceCheckText(check)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {(latestEvidence.evidence?.gaps ?? []).length > 0 && (
+                  <div className="tdp-evidence-gaps">
+                    Not covered: {(latestEvidence.evidence?.gaps ?? []).join('; ')}
+                  </div>
+                )}
+                {latestEvidence.decision?.decision === 'SEND_BACK' && latestEvidence.decision.note ? (
+                  <div className="tdp-evidence-note">{latestEvidence.decision.note}</div>
+                ) : null}
+              </div>
+            </section>
+          )}
+          {landing || q.data?.landingCheckExempt === true ? (
+            <section className="tdp-section" aria-label="Task landing">
+              <div className="tdp-section-title">Landing</div>
+              {landing ? <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} /> : null}
+              <TaskLandingExempt task={q.data} />
+              {landingSessionId ? (
+                <div className="tdp-landing-open">
+                  <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+          {/* The contract first: what done means and who decides it, then the instructions the agent
+              was given, folded — they are written for the agent, and they are long. */}
+          <section className="tdp-section">
+            <div className="tdp-section-title">Done means</div>
+            {doneMeansDetail}
+          </section>
+
+          {/* Where the task sits in the plan: a sentence first, the graph on demand. A task with no
+              relations has no section; ⋯ → Add a prerequisite opens it. */}
+          {(hasDependencyRelations || addingPrereq) && (
+            <section className="tdp-section">
+              <div className="tdp-dependency-head">
+                <div className="tdp-section-title">In the plan</div>
+                {hasDependencyRelations && (
+                  <span className="tdp-dependency-summary">
+                    {connectedCount} connected{dependencyGraph.truncated ? ' loaded' : ''} · {upstreamCount} upstream ·{' '}
+                    {downstreamCount} downstream
+                  </span>
+                )}
+                {hasDependencyRelations && (
+                  <button type="button" className="tdp-link-button" aria-expanded={planOpen} onClick={() => setPlanOpen(!planOpen)}>
+                    {planOpen ? 'Hide graph' : 'Show graph'}
+                  </button>
+                )}
+              </div>
+              {blocked && (
+                <div className={`tdp-dependency-notice${dependencyState === 'BLOCKED_FAILED' ? ' is-failed' : ''}`}>
+                  {dependencyState === 'BLOCKED_FAILED'
+                    ? failedDirectPrerequisites === 1
+                      ? 'A direct prerequisite failed or was cancelled — resolve it before running.'
+                      : `${failedDirectPrerequisites} direct prerequisites failed or were cancelled — resolve them before running.`
+                    : `${completedDirectPrerequisites} of ${dependsOn.length} direct prerequisites complete. All are required.`}
+                </div>
+              )}
+
+              {hasDependencyRelations && planSentenceText && <div className="tdp-plan-say">{planSentenceText}</div>}
+              {planOpen && (
+                <>
+                  <Segmented<'graph' | 'list'>
+                    size="small"
+                    className="tdp-dependency-view"
+                    value={dependencyView}
+                    options={[
+                      { label: 'Graph', value: 'graph' },
+                      { label: 'List', value: 'list' },
+                    ]}
+                    onValueChange={setDependencyViewOverride}
+                    aria-label="Dependency view"
+                  />
+
+                  {dependencyGraphQ.isError && hasDependencyRelations && (
+                    <div className="tdp-dependency-graph-error" role="alert">
+                      The complete dependency graph could not be loaded. Showing direct relationships.
+                    </div>
+                  )}
+                  {!hasDependencyRelations ? (
+                    <div className="tdp-muted">No dependencies</div>
+                  ) : dependencyView === 'graph' ? (
+                    dependencyGraphQ.isLoading ? (
+                      <div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>
+                    ) : (
+                      <LazyBoundary fallback={<div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>} failed={null}>
+                        <LazyTaskDependencyGraph
+                          graph={dependencyGraph}
+                          title={task?.title ?? 'Current task'}
+                          onOpenTask={onOpenTask}
+                          onRemoveDependency={(id) => removeDependency.mutate(id)}
+                          onExpandBranch={async (aggregate) => {
+                            await expandDependencyBranch.mutateAsync({
+                              aggregate,
+                              focusTaskId: taskId,
+                              baseStructureKey: dependencyGraphBaseStructureKey,
+                            });
+                          }}
+                          expandingBranchKey={
+                            expandDependencyBranch.isPending
+                              ? expandDependencyBranch.variables?.aggregate.branchKey ?? null
+                              : null
+                          }
+                          removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
+                        />
+                      </LazyBoundary>
+                    )
+                  ) : (
+                    <TaskDependencyList
+                      graph={dependencyGraph}
+                      onOpenTask={onOpenTask}
+                      onRemoveDependency={(id) => removeDependency.mutate(id)}
+                      removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
+                    />
+                  )}
+                  {dependencyTruncationState && (
+                    <div className="tdp-dependency-truncated">
+                      {dependencyTruncationState === 'expandable'
+                        ? `The initial snapshot is limited to ${dependencyGraph.limits?.maxDepth ?? 8} hops or ${dependencyGraph.limits?.maxNodes ?? 100} tasks${dependencyGraph.limits?.maxEdges ? ` or ${dependencyGraph.limits.maxEdges} relationships` : ''}. Expand a collapsed branch to load the next batch.`
+                        : 'Graph expansion limit reached. Some branch connections remain collapsed.'}
+                    </div>
+                  )}
+
+                </>
+              )}
+              {(planOpen || addingPrereq) && (
+                <>
+                  <Combobox
+                    style={{ width: '100%', marginTop: 8 }}
+                    placeholder="Add a prerequisite…"
+                    value={null}
+                    filter={false}
+                    onSearch={setDependencyQuery}
+                    loading={dependencyTasksQ.isLoading || addDependency.isPending}
+                    matchTriggerWidth={false}
+                    options={dependencyOptions}
+                    onValueChange={(val) => {
+                      if (val) addDependency.mutate(val);
+                      setDependencyQuery('');
+                    }}
+                  />
+
+                </>
+              )}
+              {dependsOn.length > 0 && (
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13 }}
+                >
+                  <Switch
+                    size="small"
+                    checked={task?.autoRunWhenReady ?? true}
+                    loading={setAutoRun.isPending}
+                    onCheckedChange={(v) => setAutoRun.mutate(v)}
+                  />
+                  <span>Auto-run when all prerequisites finish</span>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* The envelope a person sets once: who runs the task and on what. One line at rest; Edit
+              opens every field it had before. */}
+          {runsWithSection}
 
           {/* The files the WORK needs. Shown when there are some, or while the envelope is open. */}
           {(envelopeOpen || (q.data?.attachments ?? []).length > 0) && (
@@ -2588,6 +3027,8 @@ export function TaskDetailPanel({
         </div>
       )}
 
+      {/* Docked beside a conversation, the conversation's own composer is the one to write in. */}
+      {!compact && (
       <div className="tdp-compose">
         {showMention && (
           <div className="tdp-mention-menu">
@@ -2673,6 +3114,7 @@ export function TaskDetailPanel({
           Send
         </Button>
       </div>
+      )}
 
       <Dialog
         open={reopening}
