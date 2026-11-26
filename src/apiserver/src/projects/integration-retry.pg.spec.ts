@@ -2326,7 +2326,8 @@ for (const door of ['coordinator', 'owner'] as const) {
         const again = await denied(() => (door === 'owner'
           ? ownerRetry(stack, w, fix.taskId, reason)
           : retry(stack, w, fix.taskId, reason)));
-        assert.equal(again.status, door === 'owner' ? 403 : 409, 'a second press queues nothing beside it');
+        assert.equal(again.status, 409, 'a second press queues nothing beside it');
+        assert.equal(again.code, 'INTEGRATION_RETRY_IN_FLIGHT');
         assert.equal((await landings(stack.db, fix.taskId)).length, 2);
 
         const [resumed] = await claim(stack, w, 'fix-rerun');
