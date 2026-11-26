@@ -23,7 +23,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { CreatorType, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { CreatorType, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -128,10 +128,13 @@ test('Re-run the check queues one acceptance round on a FAILED EXECUTABLE task, 
       data: {
         id, ownerId, creatorId: ownerId, taskId, workspaceId: ended?.workspace ?? workspaceId,
         assignedRunnerId: ended?.runner ?? runnerId, title: `${label} ${RUN}`, prompt: 'do the task', provider: 'claude',
-        providerBuiltin: true, engine: 'claude', status: ended ? RunStatus.FAILED : RunStatus.RUNNING,
+        // Facts only (deploy D3): a running turn is IN_FLIGHT; a run its round failed is released with a failed last turn.
+        providerBuiltin: true, engine: 'claude', turnState: ended ? null : 'IN_FLIGHT',
         engineTurnActive: !ended, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt,
         createdAt: startedAt, runtimeSessionId: randomUUID(), numTurns: 1,
-        ...(ended ? { finishedAt: new Date(), error: 'acceptance command exited 1; expected 0' } : {}),
+        ...(ended
+          ? { finishedAt: new Date(), lastTurnOutcome: 'FAILED', error: 'acceptance command exited 1; expected 0' }
+          : {}),
         inboxLeaseOwner: lease.owner, inboxLeaseGeneration: lease.generation,
       },
     });
@@ -193,8 +196,16 @@ test('Re-run the check queues one acceptance round on a FAILED EXECUTABLE task, 
 
   const taskStatus = async (taskId: string) =>
     (await sql.query<{ status: string }>(`SELECT "status" FROM "task" WHERE "id" = $1::uuid`, [taskId])).rows[0].status;
-  const sessionStatus = async (sessionId: string) =>
-    (await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
+  /**
+   * Where a run stands, read from its facts rather than a stored word (deploy D3): `released:<last turn outcome>` once
+   * it has ended, `held:<turn state>` while it is live (`held:parked` with no turn queued or running).
+   */
+  const sessionState = async (sessionId: string) => {
+    const { rows: [row] } = await sql.query<{ finished: boolean; turn_state: string | null; outcome: string | null }>(
+      `SELECT "finished_at" IS NOT NULL AS "finished", "turn_state", "last_turn_outcome" AS "outcome"
+         FROM "session" WHERE "id" = $1::uuid`, [sessionId]);
+    return row.finished ? `released:${row.outcome ?? 'none'}` : `held:${row.turn_state ?? 'parked'}`;
+  };
   const rounds = async (taskId: string) => (await sql.query<{ id: string; turn_id: string; exit_code: number | null }>(
     `SELECT "id", "turn_id", "exit_code" FROM "task_acceptance_round" WHERE "task_id" = $1::uuid ORDER BY "finished_at", "id"`,
     [taskId])).rows;
@@ -214,7 +225,7 @@ test('Re-run the check queues one acceptance round on a FAILED EXECUTABLE task, 
     const failed = await complete(runA, firstRound, { shellExitCode: 1, shellOutput: 'not ok 1\n', branchSha: 'a'.repeat(40) });
     assert.equal(failed.status, 200, failed.text);
     assert.equal(await taskStatus(taskA), 'FAILED', 'exit 1 against an expected 0 is FAILED');
-    assert.equal(await sessionStatus(runA.id), 'FAILED', 'the round ended its run');
+    assert.equal(await sessionState(runA.id), 'released:FAILED', 'the round ended its run');
     const [recorded] = await rounds(taskA);
     assert.equal(recorded.exit_code, 1);
     const before = await turns(runA.id);
@@ -246,7 +257,7 @@ test('Re-run the check queues one acceptance round on a FAILED EXECUTABLE task, 
     rerunTurnA = added[0].id;
     assert.equal(toUuid(String(three.json.turnId)), rerunTurnA);
     assert.equal(await taskStatus(taskA), 'IN_PROGRESS', 'the task is pending again');
-    assert.equal(await sessionStatus(runA.id), 'PENDING', 'the run is revived for a claim');
+    assert.equal(await sessionState(runA.id), 'held:QUEUED', 'the run is revived, queued for a claim');
   });
 
   await t.test('(2) the runner is handed that shell turn and nothing after it; exit 0 settles DONE with a new round', async () => {
@@ -335,7 +346,7 @@ test('Re-run the check queues one acceptance round on a FAILED EXECUTABLE task, 
     const refusals: unknown[] = [];
     for (const [taskId, code, sessionId, status] of cases) {
       const before = sessionId ? await turns(sessionId) : [];
-      const sessionBefore = sessionId ? await sessionStatus(sessionId) : null;
+      const sessionBefore = sessionId ? await sessionState(sessionId) : null;
       const reply = await press(taskId);
       refusals.push({ code: reply.json?.code, status: reply.status, message: reply.json?.message });
       assert.equal(reply.status, 409, reply.text);
@@ -345,7 +356,7 @@ test('Re-run the check queues one acceptance round on a FAILED EXECUTABLE task, 
       assert.equal(await taskStatus(taskId), status, 'the task is where it was');
       if (sessionId) {
         assert.deepEqual(await turns(sessionId), before, 'nothing was queued');
-        assert.equal(await sessionStatus(sessionId), sessionBefore, 'the run was not revived');
+        assert.equal(await sessionState(sessionId), sessionBefore, 'the run was not revived');
       }
     }
     t.diagnostic(`refusals: ${JSON.stringify(refusals)}`);
