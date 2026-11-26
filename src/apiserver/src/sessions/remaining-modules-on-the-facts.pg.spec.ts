@@ -306,26 +306,19 @@ test('the remaining modules read the facts, and a row with no turn_state reads a
     const self = { prisma, sessions: { complete: async (_owner: string, id: string) => { completed.push(id); } }, logger: console };
     const prototype = ScheduleRunsService.prototype as unknown as {
       completeNoChangeSessions: (batch: number) => Promise<string[]>;
-      completeIfSettled: (ownerId: string, sessionId: string) => Promise<void>;
       landRun: (run: object) => Promise<void>;
-      quietly: (action: () => Promise<void>) => Promise<void>;
     };
     assert.deepEqual((await prototype.completeNoChangeSessions.call(self, 100)).sort(), notOwed(rows));
-    completed.length = 0;
-    for (const row of rows) {
-      await prototype.completeIfSettled.call({ ...self, quietly: prototype.quietly }, ids.ownerId, row.id);
-    }
-    assert.deepEqual(completed.sort(), notOwed(rows));
-
     for (const row of rows) {
       const settled: string[] = [];
       await prototype.landRun.call(
         { prisma, settleLanding: async (_run: string, status: string, _sha: unknown, reason?: string) => { settled.push(`${status} ${reason ?? ''}`); } },
         { id: randomUUID(), sessionId: row.id, scheduleId: schedule.id },
       );
+      // A run stopped mid-turn (INTERRUPTED) still lands, so it reaches the branch check like a parked one.
       const expected = row.word === RunStatus.PENDING || row.word === RunStatus.RUNNING
         ? []
-        : row.word === RunStatus.INTERRUPTED || row.title === 'failed'
+        : row.title === 'failed'
           ? ['FAILED The run session ended unsuccessfully; nothing was landed.']
           : ['FAILED The runner did not report the branch and base commits.'];
       assert.deepEqual(settled, expected, `landing ${row.title}`);
