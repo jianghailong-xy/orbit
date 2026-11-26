@@ -11279,7 +11279,9 @@ export function WorkspaceView({
                   {titleBarSessionCount ?? undefined}
                 </Button>
               )}
-              {/* docs/mocks/session-header-share-more: ⋯ then Share, one tight pair at the header's right edge. */}
+              {/* docs/mocks/session-header-share-more: ⋯ then Share, one tight pair at the header's right edge. Their own
+                  group, so the focus guards the open menu puts after its trigger take no gap and move nothing. */}
+              <div className="workspace-header-actions">
               <Menu
                 side="bottom"
                 align="end"
@@ -11503,6 +11505,7 @@ export function WorkspaceView({
                   onClick={() => setShareOpen(true)}
                 />
               )}
+              </div>
             </>
           )}
         </div>}

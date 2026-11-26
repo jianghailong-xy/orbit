@@ -5035,9 +5035,8 @@ button.toast--pill:focus-visible {
    live link's green, with a dot, while the session is shared. */
 .workspace-header .workspace-header-more,
 .workspace-header .workspace-header-share { flex: none; width: 30px; height: 30px; color: var(--text-1); font-size: 18px; }
-.workspace-header .workspace-header-more + .workspace-header-share { margin-left: -8px; }
-.workspace-header .workspace-header-more:last-child,
-.workspace-header .workspace-header-share { margin-right: -6px; }
+.workspace-header-actions { display: flex; align-items: center; flex: none; margin-right: -6px; }
+.workspace-header-actions .workspace-header-share { margin-left: 2px; }
 .workspace-header .workspace-header-share.is-live,
 .workspace-header .workspace-header-share.is-live:hover:where(:not(:disabled)) { color: var(--success); }
 .workspace-header .workspace-header-share.is-live::after {
