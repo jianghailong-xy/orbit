@@ -107,6 +107,7 @@
   width: 8px;
   height: 8px;
   border: 0;
+  border-radius: 2px;
   background: var(--orbit-control-primary);
   opacity: 1;
   transform: translate(-50%, -50%);
