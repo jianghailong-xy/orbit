@@ -17,11 +17,11 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import type { ProjectStartedCard } from '@orbit/shared';
@@ -184,7 +184,7 @@ test('Pause and Resume tell the coordinator once per changed pause episode', {
           title: `Coordinate ${label}`,
           prompt: `Coordinate ${label}`,
           provider: 'claude',
-          status: RunStatus.AWAITING_INPUT,
+          turnState: null,
           dispatchOrigin: SessionDispatchOrigin.USER,
           startedAt: new Date(),
           runtimeSessionId: randomUUID(),
@@ -354,7 +354,7 @@ test('Pause and Resume tell the coordinator once per changed pause episode', {
     const f = await fixture('ended');
     await db.session.update({
       where: { id: f.sessionId! },
-      data: { status: RunStatus.FAILED, finishedAt: new Date(), completedAt: new Date() },
+      data: { turnState: null, finishedAt: new Date(), completedAt: new Date() },
     });
     const before = await db.conversationTurn.count({ where: { sessionId: f.sessionId! } });
     assert.equal((await press(f.id, 'pause')).status, 201);

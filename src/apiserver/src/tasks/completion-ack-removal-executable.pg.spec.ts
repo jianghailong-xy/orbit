@@ -4,11 +4,11 @@ import test from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -137,7 +137,7 @@ async function fixture(
     data: {
       id: sessionId, ownerId, creatorId: ownerId, taskId: declared.id, workspaceId,
       assignedRunnerId: runnerId, title: label, prompt: label, provider: 'claude',
-      status: RunStatus.RUNNING, engineTurnActive: true,
+      turnState: 'IN_FLIGHT', engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });

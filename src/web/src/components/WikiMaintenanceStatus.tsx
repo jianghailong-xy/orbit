@@ -4,6 +4,7 @@ import type { WikiSpaceHealth } from '@orbit/shared';
 import { wikiStatusParts, type WikiStatusPart } from '../lib/wikiHealth';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
 import { wikiActivityRunPath } from '../lib/wikiRuns';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * The maintenance part of the status row, after the anchors (mocks 11 ② and 12 ④): each part behind its
@@ -48,13 +49,14 @@ export function WikiMaintenanceStatus({
 function StatusPart({ part, health, spaceSlug }: { part: WikiStatusPart; health: WikiSpaceHealth; spaceSlug: string }) {
   if (part.link === 'settings') {
     return (
-      <Link
-        className={part.tone === 'muted' ? 'wk-maint-link wk-maint-link--muted' : 'wk-maint-link'}
-        to={wikiSettingsPath(spaceSlug)}
-        title={part.hint}
-      >
-        {part.text}
-      </Link>
+      <Tooltip content={part.hint} side="bottom">
+        <Link
+          className={part.tone === 'muted' ? 'wk-maint-link wk-maint-link--muted' : 'wk-maint-link'}
+          to={wikiSettingsPath(spaceSlug)}
+        >
+          {part.text}
+        </Link>
+      </Tooltip>
     );
   }
   const lastRun = health.maintenance.lastRun;

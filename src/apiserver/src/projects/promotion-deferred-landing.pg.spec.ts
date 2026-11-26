@@ -6,11 +6,11 @@ import type { IntegrationCheckResult, IntegrationJobResultRequest } from '@orbit
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -36,6 +36,7 @@ import { INTEGRATION_JOB_CLAIM, INTEGRATION_PROGRESS_V2 } from './project-integr
 import { landingDeferred } from './project-looks-finished';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * No promotion candidate while a DONE task's landing is deferred (§12.15 P-M1, M-F1, J-T1a of
@@ -194,7 +195,7 @@ async function world(stack: Stack, label: string): Promise<World> {
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(),
       runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -255,7 +256,7 @@ async function workSession(
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${s.branch}`, prompt: 'work', provider: 'claude',
-      status: s.finished ? RunStatus.SUCCEEDED : RunStatus.AWAITING_INPUT,
+      turnState: turnStateOfWord(s.finished ? RunStatus.SUCCEEDED : RunStatus.AWAITING_INPUT),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch: s.branch, branchSha: s.branchSha, baseSha: s.baseSha,
       changedFiles: (s.changedFiles ?? []) as Prisma.InputJsonValue,

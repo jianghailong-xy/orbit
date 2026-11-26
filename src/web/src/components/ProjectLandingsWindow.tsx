@@ -116,6 +116,7 @@ import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Spinner } from './ui/Spinner';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** How long a landing the window was opened on stays outlined (board 03 f). */
 const FOCUS_OUTLINE_MS = 1_500;
@@ -323,8 +324,9 @@ export function ProjectLandingsWindow({
         <Menu
           side="bottom"
           align="end"
+          tooltip="More actions"
           trigger={(
-            <button type="button" className="landing-page-more" aria-label="More actions" title="More actions">
+            <button type="button" className="landing-page-more" aria-label="More actions">
               <MoreOutlined />
             </button>
           )}
@@ -401,23 +403,24 @@ export function ProjectLandingsWindow({
         {/* What this window is and the way to who decides: nothing to type here (LS6). One plain line on
             the window's bottom edge — a lock and the sentence's first half, the coordinator's door at
             the end (docs/mocks/landings-ui-polish ③). */}
-        <span className={`landing-page-foot-line${cards.some((card) => card.state === 'FIXING') ? ' has-decisions' : ''}`}
-          title={SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}>
-          <LockOutlined aria-hidden="true" />
-          <span className="sr-only">{SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}</span>
-          <span className="landing-page-foot-words" aria-hidden="true">{runs}</span>
-          {/* A landing in its own task's session's hands is decided there first (web b ③). */}
-          {cards.some((card) => card.state === 'FIXING') ? (
-            <span className="landing-page-foot-decisions">{LANDING_FIX_COPY.DECISIONS_SESSION_FIRST}</span>
-          ) : null}
-        </span>
+        <Tooltip content={SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS} delay={TEXT_TOOLTIP_DELAY_MS} align="start">
+          <span className={`landing-page-foot-line${cards.some((card) => card.state === 'FIXING') ? ' has-decisions' : ''}`}>
+            <LockOutlined aria-hidden="true" />
+            <span className="sr-only">{SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}</span>
+            <span className="landing-page-foot-words" aria-hidden="true">{runs}</span>
+            {/* A landing in its own task's session's hands is decided there first (web b ③). */}
+            {cards.some((card) => card.state === 'FIXING') ? (
+              <span className="landing-page-foot-decisions">{LANDING_FIX_COPY.DECISIONS_SESSION_FIRST}</span>
+            ) : null}
+          </span>
+        </Tooltip>
         {coordinatorId ? (
-          <Button className="landing-page-foot-open" icon={<UserOutlined />}
-            title={cards.some((card) => card.state === 'FIXING')
-              ? LANDING_FIX_COPY.DECISIONS_SESSION_FIRST : LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR}
-            onClick={() => onOpenSession(coordinatorId)}>
-            {LANDING_PAGE_COPY.OPEN_COORDINATOR_LINK}
-          </Button>
+          <Tooltip content={cards.some((card) => card.state === 'FIXING') ? LANDING_FIX_COPY.DECISIONS_SESSION_FIRST : LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR} align="end">
+            <Button className="landing-page-foot-open" icon={<UserOutlined />}
+              onClick={() => onOpenSession(coordinatorId)}>
+              {LANDING_PAGE_COPY.OPEN_COORDINATOR_LINK}
+            </Button>
+          </Tooltip>
         ) : null}
       </div>
     </div>
@@ -590,8 +593,9 @@ function LandingMore({
       align="end"
       open={open}
       onOpenChange={onOpenChange}
+      tooltip="Landing actions"
       trigger={(
-        <button type="button" className="landings-window-more" aria-label="Landing actions" title="Landing actions">
+        <button type="button" className="landings-window-more" aria-label="Landing actions">
           <MoreOutlined />
         </button>
       )}

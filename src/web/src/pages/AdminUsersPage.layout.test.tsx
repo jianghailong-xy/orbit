@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignInMethods } from '../lib/queries';
 import { PHONE_QUERY } from '../lib/useMediaQuery';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Admin → Users, one row an account (docs/mocks/admin-users-redesign, direction A): who it is — a mark for
@@ -180,6 +181,13 @@ afterEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
+/** The tip on an account's Last active cell, read off the popup it describes: one opened before may still be closing. */
+async function activeTip(email: string): Promise<string | null | undefined> {
+  const said = cellOf(email, 'Last active')!.querySelector('.admin-users-active')!;
+  await hoverTooltip(said);
+  return document.getElementById(said.getAttribute('aria-describedby')!)?.textContent;
+}
+
 describe('Admin → Users · one row an account', { timeout: 60_000 }, () => {
   it('says how many accounts there are, who each is, and when each last used Orbit', async () => {
     await open();
@@ -191,11 +199,11 @@ describe('Admin → Users · one row an account', { timeout: 60_000 }, () => {
     expect(rowOf('dev@example.test')?.querySelector('.admin-users-name')?.textContent).toBe('Dev');
     // Lately as how long ago, a month back as the date, and an account that never has.
     expect(cellOf('admin@example.test', 'Last active')?.textContent).toBe('3h ago');
-    expect(cellOf('admin@example.test', 'Last active')?.querySelector('[title]')?.getAttribute('title')).toMatch(/ · Web$/);
+    expect(await activeTip('admin@example.test')).toMatch(/ · Web$/);
     expect(cellOf('ops@example.test', 'Last active')?.textContent).toBe('1d 2h ago');
-    expect(cellOf('ops@example.test', 'Last active')?.querySelector('[title]')?.getAttribute('title')).toMatch(/ · iOS app$/);
+    expect(await activeTip('ops@example.test')).toMatch(/ · iOS app$/);
     expect(cellOf('dev@example.test', 'Last active')?.textContent).toBe('Jan 2, 2026');
-    expect(cellOf('dev@example.test', 'Last active')?.querySelector('[title]')?.getAttribute('title')).toMatch(/^Jan 2, 2026, .* · Access token$/);
+    expect(await activeTip('dev@example.test')).toMatch(/^Jan 2, 2026, .* · Access token$/);
     expect(cellOf('gone@example.test', 'Last active')?.textContent).toBe('Never');
     expect(rowOf('gone@example.test')?.className).toBe('admin-users-off');
   });

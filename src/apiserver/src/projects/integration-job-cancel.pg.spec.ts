@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -234,7 +235,7 @@ async function doneTask(
       branch,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
-      status: RunStatus.SUCCEEDED, 
+      turnState: null, 
       startsTaskWork: true,
       finishedAt: new Date(Date.now() - 60_000),
       worktreeBranch: branch,
@@ -671,7 +672,7 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
         ownerId: w.ownerId, creatorId: w.ownerId, taskId: work.taskId, workspaceId: w.workspaceId,
         assignedRunnerId: w.runnerId, title: 'still working', prompt: 'still working',
         branch: `orbit/still-${randomUUID().slice(0, 6)}`, isolationStatus: 'worktree',
-        status: RunStatus.RUNNING, startsTaskWork: true, startedAt: new Date(),
+        turnState: 'IN_FLIGHT', startsTaskWork: true, startedAt: new Date(),
       },
     });
     const early = await report(stack, w, first, {
@@ -692,7 +693,7 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
     await stack.db.$transaction(async (tx) => {
       const finished = await tx.session.update({
         where: { id: stillWorking.id },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+        data: { turnState: null, finishedAt: new Date()},
         select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
       });
       await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -901,7 +902,7 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
         ownerId: w.ownerId, creatorId: w.ownerId, taskId: work.taskId, workspaceId: w.workspaceId,
         assignedRunnerId: w.runnerId, title: 'still working', prompt: 'still working',
         branch: `orbit/still-${randomUUID().slice(0, 6)}`, isolationStatus: 'worktree',
-        status: RunStatus.RUNNING, startsTaskWork: true, startedAt: new Date(),
+        turnState: 'IN_FLIGHT', startsTaskWork: true, startedAt: new Date(),
       },
     });
     const tooEarly = await report(stack, w, job, { state: 'ALREADY_LANDED', phase: 'FETCH', sourceSha: sha('a') });

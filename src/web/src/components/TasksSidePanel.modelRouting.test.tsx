@@ -117,11 +117,11 @@ const routingRow = () =>
   );
 
 describe('Model routing in the account menu', () => {
-  it('sits right above Settings, saying the mode it routes by, Balance for an account that never chose', async () => {
+  it('sits right above Help center and Settings, saying the mode it routes by, Balance for an account that never chose', async () => {
     serve({});
     await visit('/projects');
     await openAccountMenu();
-    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Settings', 'Help center', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Model routingBalance', 'Help center', 'Settings', 'Log out']);
   });
 
   it('says the Optimize For the account chose, and Off while Route by tier is off', async () => {

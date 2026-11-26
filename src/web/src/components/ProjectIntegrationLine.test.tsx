@@ -2,8 +2,18 @@ import type { LandTaskIntegrationView, ProjectIntegrationView, TaskIntegrationVi
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ProjectIntegrationLine } from './ProjectIntegrationLine';
+
+// Static markup draws no popup: the tip's words ride on the element as data-tip, so the full ref stays asserted.
+vi.mock('./ui/Tooltip', async (importOriginal) => {
+  const { cloneElement } = await import('react');
+  return {
+    ...(await importOriginal<typeof import('./ui/Tooltip')>()),
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content: unknown }) =>
+      cloneElement(children, { 'data-tip': typeof content === 'string' ? content : undefined } as object),
+  };
+});
 import { encodeId } from '../lib/idCodec';
 import { projectTaskPath } from '../lib/projectTaskRoute';
 
@@ -89,7 +99,7 @@ describe('the project integration view’s current LAND_TASKs (§2.7a)', () => {
     expect(list).toContain(`data-land-task-state="${state}"`);
     expect(list).toContain(`>${label}</span>`);
     expect(list).toContain('generation 9007199254740993');
-    expect(list).toContain(`<code title="${TARGET}">project/landing-visibility</code>`);
+    expect(list).toContain(`<code data-tip="${TARGET}">project/landing-visibility</code>`);
     expect(list).toContain('<dt>Queue wait</dt><dd>2m</dd>');
     expect(list).toContain(`dateTime="${QUEUED}"`);
     expect(list).not.toContain('<button');
@@ -234,7 +244,7 @@ describe('a current landing’s title', () => {
 
   it('opens the landing session when the generation names one', () => {
     const html = render(view({ landTasks: landings(LANDING) }));
-    expect(html).toContain(`class="project-land-task-title" href="/sessions/${encodeId(LANDING)}"`);
+    expect(html).toMatch(new RegExp(`class="project-land-task-title"[^>]* href="/sessions/${encodeId(LANDING)}"`));
   });
 
   it('opens the task when it names none', () => {

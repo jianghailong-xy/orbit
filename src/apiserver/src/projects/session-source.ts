@@ -704,7 +704,6 @@ export async function freezeSessionSourcePin(
       const closed = await tx.session.updateMany({
         where: { id: actor.sessionId, ...heldFilter() },
         data: {
-          status: RunStatus.FAILED,
           // Released: no turn (plan §2.2 #4).
           turnState: null,
           error,

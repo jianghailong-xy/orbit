@@ -73,6 +73,7 @@ object TranslationCopy {
     const val SEND_FAILED = "Couldn't translate, so it wasn't sent"
     const val RETRY = "Retry"
     const val SEND_AS_WRITTEN = "Send as written"
+    const val CANCEL = "Cancel"
     const val REPLY_PENDING = "Translates when the reply is done"
     const val REPLY_FAILED = "Couldn't translate this reply"
     // Both languages in a conversation (frames 2–4).
@@ -324,11 +325,12 @@ fun TranslationChip(text: String) {
 /**
  * The owner's message (board frames 4–6, web `UserTranslationFoot`): "Show original" ↔ "Show translation" once delivered, the press
  * alone (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation failed (1A), why
- * ([TranslationFailureCopy.message], e.g. "The translator didn't answer in time, so it wasn't sent") · Retry · Send as written. A message sent as written has no foot.
+ * ([TranslationFailureCopy.message], e.g. "The translator didn't answer in time, so it wasn't sent") · Retry · Send as written · Cancel
+ * (only where [cancel] can withdraw it). A message sent as written has no foot.
  */
 @Composable
 fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?, sendAsWritten: (() -> Unit)?,
-    modifier: Modifier = Modifier, bilingual: Boolean = false, originalHidden: Boolean = false, onHideOriginal: (() -> Unit)? = null) {
+    modifier: Modifier = Modifier, bilingual: Boolean = false, originalHidden: Boolean = false, onHideOriginal: (() -> Unit)? = null, cancel: (() -> Unit)? = null) {
     val muted = footColor()
     // Both languages on: the English is in the message, so there is nothing to flip to (mark C); "Hide original" hides it.
     if (bilingual && turn.state == Translation.TurnState.DONE) {
@@ -343,11 +345,12 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
         Translation.TurnState.FAILED -> {
             val error = MaterialTheme.colorScheme.error
             Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                // The reason's sentence wraps on a narrow phone; Retry and Send as written keep their width beside it.
+                // The reason's sentence wraps on a narrow phone; the presses keep their width beside it.
                 Text(TranslationFailureCopy.message(turn.failureReason, turn.httpStatus) ?: TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false),
                     color = error, style = MaterialTheme.typography.labelSmall)
                 Sep(error); FootAction(TranslationCopy.RETRY, error, retry)
                 Sep(error); FootAction(TranslationCopy.SEND_AS_WRITTEN, error, sendAsWritten)
+                cancel?.let { Sep(error); FootAction(TranslationCopy.CANCEL, error, it) }
             }
         }
         Translation.TurnState.DONE -> Row(modifier.testTag("translation-foot"), verticalAlignment = Alignment.CenterVertically) {

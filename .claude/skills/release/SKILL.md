@@ -54,8 +54,8 @@ Then:
    `origin/main` with nothing uncommitted. Read the notes, then merge the release commit into `main`.
 2. **Tag and watch**, in the background: `delegate({ description: "Tag and watch release <version>", size: "S",
    background: true, prompt: <the tag brief> })`. End the turn: Orbit wakes this session with the result.
-3. **Publish the Orbit Cloud runner image** on orbit-ws04, in the background, once the tag is pushed (see
-   [Orbit Cloud runner image](#orbit-cloud-runner-image)).
+3. **Publish the Orbit Cloud runner image** on orbit-ws04, in the background, once the tag is pushed, then pull it
+   onto the k3s node through orbit-ws03 (see [Orbit Cloud runner image](#orbit-cloud-runner-image)).
 4. **Report** the tag, the run's link, each job's outcome, the TestFlight and Android state, the Orbit Cloud runner
    image, and any job that failed with its log lines. A failed job is reported, not retried: re-running or deleting a tag is the
    session's decision (see Notes).
@@ -132,6 +132,28 @@ the first step that fails; do not improvise around a guard. Never push to git, n
    must end with a line starting `✓ 10.66.0.1:5000/orbit-cloud-runner:<version> is in 10.66.0.1:5000`.
 4. `git -C /root/orbit worktree remove --force "$W"`.
 5. Hand back: whether it was built or already there, the digest it printed, and on failure the last 40 lines.
+```
+
+**Then pull it onto the node.** Once the publish brief hands back its `✓` line, take the reference by digest from it
+(`10.66.0.1:5000/orbit-cloud-runner@sha256:<64 hex>`, the one a deploy writes into the profile) and pull it onto
+production's k3s node, workspace **orbit-ws03** (`workstation`), in the background:
+`delegate({ description: "Pull Orbit Cloud runner <version> onto the node", size: "S", workspace: "orbit-ws03",
+background: true, prompt: <the pre-pull brief> })`. A runner's Pod pulls its image only as it starts, so without this
+the first runner to start after the deploy waits for the 1.5 GB pull first: 116 s on 2026-11-25, against about 9 s for
+the ones after it. It is idempotent, and a failed pull costs nothing but that wait: report it with the release's
+result, and do not hold the release for it.
+
+The pre-pull brief: fill in `<version>` and `<ref>`.
+
+```text
+Pull the Orbit Cloud runner image of release v<version> onto this k3s node, so that the first runner to start on it
+does not wait for the pull. Answer in English. Run as root. Change nothing else on the node: no Pod, no other image,
+no k3s setting. Stop and report at the first step that fails.
+
+1. `git -C /root/orbit fetch --quiet origin "refs/tags/v<version>:refs/tags/v<version>"`.
+2. `git -C /root/orbit show "v<version>:deploy/managed-runner/prepull-runner-image.sh" | bash -s -- <ref>`. It takes a
+   minute or two. It must end with a line starting `✓ <ref> is on this node`.
+3. Hand back its last lines.
 ```
 
 ## How to use

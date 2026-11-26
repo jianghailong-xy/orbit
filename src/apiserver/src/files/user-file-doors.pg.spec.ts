@@ -116,8 +116,8 @@ const doorCases = (sql: Client, scratch: string, storage: 'local' | 's3', env: R
   );
   const changedFiles = KINDS.map((kind) => ({ path: `shots/${kind.name}`, status: 'M' }));
   await sql.query(
-    `INSERT INTO session (id, owner_id, creator_id, workspace_id, title, prompt, status, dispatch_origin, assigned_runner_id, changed_files, updated_at)
-     VALUES ($1, $2, $2, $3, 'Doors', 'Doors', 'AWAITING_INPUT', 'USER', $4, $5::jsonb, now())`,
+    `INSERT INTO session (id, owner_id, creator_id, workspace_id, title, prompt, turn_state, dispatch_origin, assigned_runner_id, changed_files, updated_at)
+     VALUES ($1, $2, $2, $3, 'Doors', 'Doors', NULL, 'USER', $4, $5::jsonb, now())`,
     [sessionId, owner.id, workspaceId, runner.id, JSON.stringify(changedFiles)],
   );
   const scratchPath = (kind: Kind) => `/root/.orbit/uploads/${sessionId}/${kind.name}`;

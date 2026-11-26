@@ -1014,11 +1014,15 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'POST /runners/:id/browser/sign-in':
     "behind the browser switch, which the census server leaves off. The owner's managed runner is read by (runnerId, ownerId) "
     + 'before its sign-in is read or updated (managed-runners/browser-state.ts:177); login-runner-browser.pg.spec.ts sends it as another account.',
-  // ── Still stuck (help center board 02 ②): the id is an Ask, which the census's fixture account has none of ──
+  // ── The help center's Ask (board 02): the id is an Ask, which the census's fixture account has none of ──
+  'GET /help/ask/:id':
+    'the Ask is read by (id, the caller) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:158, :260); help-ask.pg.spec.ts "another account" sends it with the owner\'s Ask',
+  'POST /help/ask/:id/messages':
+    'the follow-up is written by one UPDATE keyed by (id, the caller), and when it matches nothing the Ask is read by (id, the caller), so another account\'s Ask answers 404 and nothing is written or asked (help/help-ask.ts:142, :146, :260); help-ask.pg.spec.ts "another account" sends it and reads the owner\'s Ask unchanged',
   'GET /help/ask/:id/stuck':
-    'the Ask is read by (id, the caller, help_ask set, not deleted) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:207, :238); help-ask-stuck.pg.spec.ts "another account" sends it with the owner\'s Ask',
+    'the Ask is read by (id, the caller) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:282, :260); help-ask.pg.spec.ts "another account" sends it with the owner\'s Ask',
   'POST /help/ask/:id/admin':
-    'the Ask is read by (id, the caller, help_ask set, not deleted) before the admin is looked up or the task made, so another account\'s Ask answers 404 and no task or hand-off row is written (help/help-ask.ts:207, :271); help-ask-stuck.pg.spec.ts "another account" sends it and counts both',
+    'the Ask is read by (id, the caller) before the admin is looked up or the task made, so another account\'s Ask answers 404 and no task is made or Ask marked sent (help/help-ask.ts:300, :260); help-ask.pg.spec.ts "another account" sends it and counts both',
   'GET /integrations/github/repos/:id/branches':
     '`:id` is GitHub\'s repository id, not an Orbit object: the repository is looked up only in the caller\'s own listing, '
     + 'read from GitHub with the caller\'s own user-to-server token (github/github-connection.service.ts:241), and '
@@ -1616,10 +1620,6 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   // The probe of another account's workspace: no such workspace for this one, and no runner is asked.
   'POST /wiki/spaces/:id/maintenance/probe body workspaceId': {
     request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { workspaceId: of.workspaceId } }),
-  },
-  // An Ask on another account's machine: no such machine for this one (HelpAsk.create).
-  'POST /help/ask body runnerId': {
-    request: (of) => ({ params: {}, body: { content: 'from the census', runnerId: of.runnerId, engine: 'claude' } }),
   },
   // A chat named into another account's workspace: no such workspace for this one (WikiChat.chosenWorkspace).
   'POST /wiki/spaces/:id/chats body workspaceId': {

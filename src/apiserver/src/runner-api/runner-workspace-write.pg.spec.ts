@@ -21,7 +21,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -88,7 +89,7 @@ test('a session writes what decides a workspace\'s next session only on the owne
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id, title: `${mode} session`,
-        prompt: 'configure the workspace', provider: 'claude', providerBuiltin: true, status: RunStatus.AWAITING_INPUT,
+        prompt: 'configure the workspace', provider: 'claude', providerBuiltin: true, turnState: null,
         runtimeSessionId: randomUUID(), startedAt: new Date(), runClaimedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
         permissionMode: mode as never,
       },

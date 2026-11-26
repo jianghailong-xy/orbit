@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE } from '../common/session-working';
 import { BG_JOB_ACTIVITY_STALE_AFTER_MS } from './background-job-activity';
 import { SessionsService } from './sessions.service';
@@ -39,7 +39,14 @@ test('workspace counts separate queued activity from Session-list spinner work',
       runningBgJobActivity: { bgj_up: now - 5_000 },
     },
   ];
+  const rawCalls: any[] = [];
   const prisma = {
+    // The fold read: which failures the list folds into a project row. `s-failed-member` is a task run
+    // in a project whose coordinator shares its workspace.
+    $queryRaw: async (sql: any) => {
+      rawCalls.push(sql);
+      return [{ id: 's-failed-member' }];
+    },
     session: {
       groupBy: async (args: any) => {
         groupByCalls.push(args);
@@ -62,6 +69,15 @@ test('workspace counts separate queued activity from Session-list spinner work',
         // cannot see, since there need not be a live turn at all — the fourth is the spinner
         // population, and the fifth resolves the conversations an owner DECISION is waiting on
         // (`projects/owner-decision-signal.ts`) to the workspaces they run in.
+        if (args?.where?.lastTurnOutcome) {
+          // Failures nobody is retrying: one alone in its workspace, and one beside a blocked turn
+          // in `w-needs-you` — still one place to go, so it adds nothing there.
+          return [
+            { id: 's-failed', workspaceId: 'w-failed' },
+            { id: 's-needs-you', workspaceId: 'w-needs-you' },
+            { id: 's-failed-member', workspaceId: 'w-failed-member' },
+          ];
+        }
         if (args?.where?.runningBgJobs && !args?.where?.OR) {
           return sessionsWithJobs;
         }
@@ -241,6 +257,27 @@ test('workspace counts separate queued activity from Session-list spinner work',
     stalledJobs: 0,
     needsYou: 1,
   });
+  // A failed session with no retry armed sits in the Session list's Needs you section, so the rail
+  // counts it there too, by the failure facts (common/session-release.ts) over the same Open scope.
+  assert.deepEqual(byWorkspace.get('w-failed'), {
+    workspaceId: 'w-failed',
+    active: 0,
+    running: 0,
+    jobs: 0,
+    stalledJobs: 0,
+    needsYou: 1,
+  });
+  // A failed member of a project is folded into its project's row, which a failure does not light,
+  // so the list has no Needs you row for it and the rail counts nothing.
+  assert.equal(byWorkspace.get('w-failed-member'), undefined);
+  assert.equal(rawCalls.length, 1);
+  assert.deepEqual(rawCalls[0].values.find(Array.isArray), ['s-failed', 's-needs-you', 's-failed-member']);
+  const failedQuery = findManyCalls.find((call) => call?.where?.lastTurnOutcome);
+  assert.deepEqual(failedQuery.where.finishedAt, { not: null });
+  assert.equal(failedQuery.where.endReason, null);
+  assert.equal(failedQuery.where.retryAt, null);
+  assert.equal(failedQuery.where.completedAt, null);
+  assert.equal(failedQuery.where.deletedAt, null);
   // And it is scoped to the Open list the same way the blocked query is, so a decision waiting on
   // a conversation the owner filed away does not light a workspace they are not looking at.
   const decisionQuery = findManyCalls.find(
@@ -248,6 +285,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
       !call?.where?.approvals &&
       !call?.where?.runningBgJobs &&
       !call?.where?.runningBgShells &&
+      !call?.where?.lastTurnOutcome &&
       !call?.where?.OR,
   );
   assert.equal(decisionQuery.where.completedAt, null);

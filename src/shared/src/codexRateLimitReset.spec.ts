@@ -7,7 +7,11 @@ import {
   CODEX_ACCOUNT_FINGERPRINT_MESSAGE_PREFIX,
   CODEX_ACCOUNT_FINGERPRINT_PATTERN,
   CODEX_ACCOUNT_READ_METHOD,
+  CODEX_ACCOUNT_SLOT_ID_PATTERN,
+  CODEX_DEFAULT_ACCOUNT_SLOT,
+  CODEX_RATE_LIMIT_RESET_ACCOUNT_OVERRIDE,
   CODEX_RATE_LIMIT_RESET_CAPABILITY_V1,
+  CODEX_RATE_LIMIT_RESET_CAPABILITY_V2,
   CODEX_RATE_LIMIT_RESET_CONSUME_METHOD,
   CODEX_RATE_LIMIT_RESET_CONSUME_OUTCOMES,
   CODEX_RATE_LIMIT_RESET_ELIGIBILITY_ORDER,
@@ -17,6 +21,7 @@ import {
   CODEX_RATE_LIMIT_RESET_LIMITS,
   CODEX_RATE_LIMIT_RESET_OUTCOME_EFFECTS,
   CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION,
+  CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSIONS,
   CODEX_RATE_LIMIT_RESET_RESULT_KINDS,
   CODEX_RATE_LIMIT_RESET_TIMING,
   CODEX_RATE_LIMIT_RESET_TRANSITIONS,
@@ -26,7 +31,9 @@ import {
   codexRateLimitResetViolations,
   codexResetAccountOverride,
   codexResetCommand,
+  codexResetCommandVersion,
   codexResetCommandViolations,
+  codexResetContextSlot,
   codexResetCreateReplay,
   codexResetCreditDetails,
   codexResetOperationStatus,
@@ -233,6 +240,157 @@ describe('the contract file is what the code enforces', () => {
         }
       }
     }
+  });
+});
+
+describe('contract v2: a reset block per Codex account', () => {
+  const WORK = '3fa91c2e';
+  const SPARE = '7b04d1e9';
+  const fingerprintOf = (accountId: string): string =>
+    FIXTURES.fingerprints.find((entry: { accountId: string }) => entry.accountId === accountId).fingerprint;
+  const WORK_FP = fingerprintOf('acct_fixture_work');
+  const SPARE_FP = fingerprintOf('acct_fixture_spare');
+  const V2 = [CODEX_RATE_LIMIT_RESET_CAPABILITY_V1, CODEX_RATE_LIMIT_RESET_CAPABILITY_V2];
+  const onSlot = (accountSlot: string, accountFingerprint = WORK_FP) =>
+    newCodexResetOperation({
+      id: OPERATION_ID,
+      ownerId: OWNER,
+      runnerId: RUNNER,
+      accountFingerprint,
+      accountSlot,
+      clientRequestId: CLIENT_REQUEST,
+      providerIdempotencyKey: PROVIDER_KEY,
+      now: at(0),
+    });
+
+  it('names the versions, the v2 capability, the slot format and the override rule the code uses', () => {
+    expect(CONTRACT.protocolVersion).toBe(2);
+    expect(CONTRACT.protocolVersions).toEqual(CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSIONS);
+    expect(CONTRACT.capabilityV2).toBe(CODEX_RATE_LIMIT_RESET_CAPABILITY_V2);
+    expect(CONTRACT.accountSlot).toEqual({
+      default: CODEX_DEFAULT_ACCOUNT_SLOT,
+      pattern: CODEX_ACCOUNT_SLOT_ID_PATTERN.source,
+      snapshotAccountsField: 'accounts',
+      commandSlotFromProtocolVersion: 2,
+      addedSlotCapability: CODEX_RATE_LIMIT_RESET_CAPABILITY_V2,
+    });
+    expect(CONTRACT.accountOverride).toEqual({ ...CODEX_RATE_LIMIT_RESET_ACCOUNT_OVERRIDE, chosenAccountIsOverride: false });
+  });
+
+  it('still decodes every v1 heartbeat unchanged: Default\'s block where it was, no added slot\'s', () => {
+    expect(codexRateLimitResetOf(FIXTURES.heartbeats.legacy.planUsage)).toBeUndefined();
+    for (const name of ['nestedReset', 'flatReset']) {
+      const usage = FIXTURES.heartbeats[name].planUsage;
+      const block = usage.codex?.rateLimitReset ?? usage.rateLimitReset;
+      expect(codexRateLimitResetOf(usage), name).toEqual(block);
+      expect(codexRateLimitResetOf(usage, CODEX_DEFAULT_ACCOUNT_SLOT), name).toEqual(block);
+      expect(codexRateLimitResetViolations(block), name).toEqual([]);
+      expect(codexRateLimitResetOf(usage, WORK), name).toBeUndefined();
+    }
+  });
+
+  it('reads Default\'s block and each added slot\'s own from one per-account heartbeat', () => {
+    const beat = FIXTURES.heartbeats.perAccount;
+    const usage: PlanUsage = beat.planUsage;
+    const expected: Array<[string, string]> = [
+      [CODEX_DEFAULT_ACCOUNT_SLOT, FP],
+      [WORK, WORK_FP],
+      [SPARE, SPARE_FP],
+    ];
+    for (const [slot, fingerprint] of expected) {
+      const block = codexRateLimitResetOf(usage, slot);
+      expect(block, slot).toBeDefined();
+      expect(codexRateLimitResetViolations(block), slot).toEqual([]);
+      expect(block!.accountFingerprint, slot).toBe(fingerprint);
+      expect(block!.generation, slot).toBe(beat.leaseOwner);
+      expect(orderCodexResetSnapshot(null, block, beat.leaseOwner, new Date(block!.fetchedAt)), slot).toBe('ACCEPT_FIRST');
+    }
+    expect(Object.keys(usage.codex!.accounts!).every((slot) => CODEX_ACCOUNT_SLOT_ID_PATTERN.test(slot))).toBe(true);
+    expect(codexResetCreditDetails(codexRateLimitResetOf(usage, WORK))).toMatchObject({ availableCount: 2, details: 'TRUNCATED' });
+    expect(codexResetCreditDetails(codexRateLimitResetOf(usage, SPARE)).availableCount).toBeNull();
+    // Only an 8-hex key under the Codex snapshot is a slot: no other engine's entries, no made-up names.
+    expect(codexRateLimitResetOf(usage, 'ffffffff')).toBeUndefined();
+    expect(codexRateLimitResetOf(usage, 'accounts')).toBeUndefined();
+    expect(codexRateLimitResetOf(usage, '__proto__')).toBeUndefined();
+    const claudeAccounts: PlanUsage = { claude: { accounts: { [WORK]: { rateLimitReset: block() } } } };
+    expect(codexRateLimitResetOf(claudeAccounts, WORK)).toBeUndefined();
+  });
+
+  it('orders each account\'s block on its own', () => {
+    const usage: PlanUsage = FIXTURES.heartbeats.perAccount.planUsage;
+    const now = new Date('2026-09-11T04:22:00.000Z');
+    const spare = codexRateLimitResetOf(usage, SPARE)!;
+    const defaults = codexRateLimitResetOf(usage)!;
+    // The process's next read of the spare slot: later than the spare's stored read, earlier than
+    // Default's, with a lower sequence than Default's. Against its own slot it is newer.
+    const next = { ...spare, fetchedAt: '2026-09-11T04:20:00.000Z', sequence: 42 };
+    expect(orderCodexResetSnapshot(spare, next, A, now)).toBe('ACCEPT_NEWER');
+    expect(orderCodexResetSnapshot(defaults, next, A, now)).toBe('REJECT_OLDER');
+    expect(orderCodexResetSnapshot(spare, { ...spare }, A, now)).toBe('REJECT_DUPLICATE');
+  });
+
+  it('accepts a command naming its slot from protocol 2 on, and none naming one before it', () => {
+    const consume = FIXTURES.heartbeatResponses.consumeAddedSlot.codexRateLimitResetRequest;
+    expect(consume).toMatchObject({ protocolVersion: 2, phase: 'CONSUME', accountSlot: WORK, accountFingerprint: WORK_FP });
+    expect(codexResetCommandViolations(consume)).toEqual([]);
+    expect(consume.providerIdempotencyKey).toBe(PROVIDER_KEY);
+    const refresh = FIXTURES.heartbeatResponses.refreshAddedSlot.codexRateLimitResetRequest;
+    expect(refresh).toMatchObject({ protocolVersion: 2, phase: 'REFRESH', accountSlot: WORK });
+    expect(codexResetCommandViolations(refresh)).toEqual([]);
+    expect(refresh).not.toHaveProperty('providerIdempotencyKey');
+    expect(codexResetCommandViolations({ ...consume, protocolVersion: 1 }).length).toBeGreaterThan(0);
+    const { accountSlot: _slot, ...unnamed } = consume;
+    expect(codexResetCommandViolations(unnamed).length).toBeGreaterThan(0);
+    expect(codexResetCommandViolations({ ...unnamed, protocolVersion: 1 })).toEqual([]);
+  });
+
+  it('hands an added slot\'s operation only to a v2 runner, as the v2 command the fixture shows', () => {
+    const op = onSlot(WORK);
+    const v1Only = decideCodexResetDispatch(op, heartbeat({ rateLimitReset: block({ accountFingerprint: WORK_FP }) }));
+    expect(v1Only).toEqual({ kind: 'NONE', reason: 'CAPABILITY_MISSING' });
+    const decision = delivered(op, { capabilities: V2, rateLimitReset: block({ accountFingerprint: WORK_FP }) });
+    expect(decision.command).toEqual(FIXTURES.heartbeatResponses.consumeAddedSlot.codexRateLimitResetRequest);
+    expect(() => codexResetCommand(decision.operation, 1)).toThrow();
+    // A v2 runner gets v2 commands for Default too; a v1 runner keeps getting the v1 command.
+    expect(delivered(created(), { capabilities: V2 }).command).toMatchObject({ protocolVersion: 2, accountSlot: CODEX_DEFAULT_ACCOUNT_SLOT });
+    expect(delivered(created()).command).toEqual(FIXTURES.heartbeatResponses.consume.codexRateLimitResetRequest);
+    expect(codexResetCommandVersion([CODEX_RATE_LIMIT_RESET_CAPABILITY_V1], WORK)).toBeNull();
+    expect(codexResetCommandVersion([], CODEX_DEFAULT_ACCOUNT_SLOT)).toBeNull();
+  });
+
+  it('takes a v2 result for an added slot and completes its refresh with that slot\'s block', () => {
+    const { operation, command } = delivered(onSlot(WORK), { capabilities: V2, rateLimitReset: block({ accountFingerprint: WORK_FP }) });
+    const consumed = applied(operation, { ...report(command, { kind: 'CONSUME_OUTCOME', outcome: 'reset' }), protocolVersion: 2 });
+    expect(consumed.response.next).toBe('REFRESH');
+    const refreshed = FIXTURES.results.valid.find((f: { name: string }) => f.name === 'v2-refreshed-on-an-added-slot').value;
+    expect(applied(consumed.operation, refreshed, at(3_000)).operation.refreshState).toBe('SUCCEEDED');
+  });
+
+  it('refuses an added slot on a v1-only runner and checks the slot\'s own block', () => {
+    const slotBlock = block({ accountFingerprint: WORK_FP });
+    const onWork = { accountSlot: WORK, rateLimitReset: slotBlock, expectedAccountFingerprint: WORK_FP };
+    expect(codexResetRefusal(eligible(onWork))).toBe('CAPABILITY_MISSING');
+    expect(codexResetRefusal(eligible({ ...onWork, runnerCapabilities: V2 }))).toBeNull();
+    expect(codexResetRefusal(eligible({ ...onWork, runnerCapabilities: V2, rateLimitReset: block() }))).toBe('ACCOUNT_MISMATCH');
+    expect(codexResetRefusal(eligible({ ...onWork, runnerCapabilities: V2, rateLimitReset: undefined }))).toBe('SNAPSHOT_MISSING');
+    expect(codexResetRefusal(eligible({ runnerCapabilities: V2 }))).toBeNull();
+  });
+
+  it('binds an operation to its slot for good, and shows the slot only on an added slot\'s view', () => {
+    const op = onSlot(WORK);
+    expect(op.accountSlot).toBe(WORK);
+    expect(created().accountSlot).toBe(CODEX_DEFAULT_ACCOUNT_SLOT);
+    for (const accountSlot of ['', 'work', '3FA91C2E', '3fa91c2']) expect(() => onSlot(accountSlot), accountSlot).toThrow();
+    expect(codexResetOperationView(op)).toEqual(FIXTURES.operationViews.valid.find((f: { name: string }) => f.name === 'pending-on-an-added-slot').value);
+    expect(codexResetOperationView(created())).not.toHaveProperty('accountSlot');
+    expect(codexResetTransitionViolations(op, { ...op, accountSlot: SPARE })).toContain('accountSlot is immutable');
+    expect(codexResetCreateReplay(op, { runnerId: RUNNER, accountFingerprint: WORK_FP, accountSlot: WORK })).toBe('REPLAY');
+    expect(codexResetCreateReplay(op, { runnerId: RUNNER, accountFingerprint: WORK_FP })).toBe('REQUEST_ID_REUSED');
+    expect(codexResetCreateReplay(created(), { runnerId: RUNNER, accountFingerprint: FP })).toBe('REPLAY');
+    const body = { clientRequestId: CLIENT_REQUEST, accountFingerprint: WORK_FP };
+    expect(createCodexResetRequestViolations({ ...body, accountSlot: WORK })).toEqual([]);
+    expect(createCodexResetRequestViolations({ ...body, accountSlot: CODEX_DEFAULT_ACCOUNT_SLOT })).toEqual([]);
+    expect(createCodexResetRequestViolations({ ...body, accountSlot: 'work' }).length).toBeGreaterThan(0);
   });
 });
 
@@ -445,17 +603,20 @@ describe('creating an operation', () => {
     expect(codexResetRefusal(eligible({ readRequiredAfter: 'not a time' }))).toBe('SNAPSHOT_STALE');
   });
 
-  it('refuses reset from a context that does not run on the runner\'s default Codex account', () => {
+  it('refuses reset from a context whose Codex login no runner slot holds', () => {
     expect(codexResetAccountOverride({})).toBe(false);
     expect(codexResetAccountOverride({ provider: 'codex', env: { PATH: '/usr/bin', CODEX_HOME: '  ' } })).toBe(false);
     expect(codexResetAccountOverride({ provider: 'codex', env: { CODEX_HOME: '/srv/other-codex' } })).toBe(true);
     expect(codexResetAccountOverride({ env: { OPENAI_BASE_URL: 'https://example.invalid/v1' } })).toBe(true);
     expect(codexResetAccountOverride({ env: { CODEX_API_KEY: 'sk-fixture' } })).toBe(true);
     expect(codexResetAccountOverride({ provider: 'deepseek' })).toBe(true);
-    // A workspace that picked another Codex account on the machine: reset v1 spends Default's.
-    expect(codexResetAccountOverride({ provider: 'codex', codexAccount: '3fa91c2e' })).toBe(true);
-    expect(codexResetAccountOverride({ provider: 'codex', codexAccount: 'default' })).toBe(false);
-    expect(codexResetAccountOverride({ provider: 'codex', codexAccount: null })).toBe(false);
+    // Contract v2: a workspace that picked another Codex account on the machine is no override; that
+    // account is the slot its reset is for.
+    expect(codexResetContextSlot({ codexAccount: '3fa91c2e' })).toBe('3fa91c2e');
+    expect(codexResetContextSlot({ codexAccount: 'default' })).toBe(CODEX_DEFAULT_ACCOUNT_SLOT);
+    expect(codexResetContextSlot({ codexAccount: '  ' })).toBe(CODEX_DEFAULT_ACCOUNT_SLOT);
+    expect(codexResetContextSlot({ codexAccount: null })).toBe(CODEX_DEFAULT_ACCOUNT_SLOT);
+    expect(codexResetContextSlot({})).toBe(CODEX_DEFAULT_ACCOUNT_SLOT);
   });
 
   it('accepts a create body of a UUID clientRequestId and a fingerprint, and nothing provider-facing', () => {
@@ -480,7 +641,10 @@ describe('two idempotency keys with two jobs', () => {
     const op = created();
     expect(op).toMatchObject({ consumeState: 'PENDING', refreshState: 'NONE', claimGeneration: 0, claimsWithUnknownCall: 0 });
     const view = codexResetOperationView(op);
-    expect(Object.keys(view).sort()).toEqual(Object.keys(CODEX_RATE_LIMIT_RESET_WIRE.CodexRateLimitResetOperationView).sort());
+    // Every view field but accountSlot, which only an added slot's view carries.
+    expect(Object.keys(view).sort()).toEqual(
+      Object.keys(CODEX_RATE_LIMIT_RESET_WIRE.CodexRateLimitResetOperationView).filter((key) => key !== 'accountSlot').sort(),
+    );
     expect(JSON.stringify(view)).not.toContain(PROVIDER_KEY);
     expect(codexResetOperationViewViolations(view)).toEqual([]);
     const base = { id: OPERATION_ID, ownerId: OWNER, runnerId: RUNNER, accountFingerprint: FP, clientRequestId: CLIENT_REQUEST, now: at(0) };

@@ -37,8 +37,14 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import {
-  CreatorType, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource, TaskStatus,
+  CreatorType,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
+  TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, SESSION_RELEASE_V1, SessionEndReason } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -53,6 +59,8 @@ import { AutoRetryService } from '../sessions/auto-retry.service';
 import { SessionsService } from '../sessions/sessions.service';
 import type { BackgroundWakeDto } from './background-job-wake';
 import { RunnerApiController } from './runner-api.controller';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -136,7 +144,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
   await db.session.create({
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
-      title: 'a conversation', prompt: 'Explain the error in the log', status,
+      title: 'a conversation', prompt: 'Explain the error in the log', turnState: turnStateOfWord(status),
       engineTurnActive: status === RunStatus.RUNNING, provider: 'claude', providerBuiltin: true, engine: 'claude',
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL, startedAt: new Date(),
       runClaimedAt: new Date(), runtimeSessionId: randomUUID(), numTurns: 1, ...data,
@@ -323,8 +331,8 @@ test('one server serves the old and the new runner protocol (plan step 6.1)', {
     assert.equal(await wake(holding), JSON.stringify({ outcome: 'DROPPED' }));
 
     await s.autoRetry.sweep(new Date());
-    const after = await s.db.session.findUniqueOrThrow({ where: { id: holding }, select: { status: true, finishedAt: true, retryAt: true } });
-    assert.equal(after.status, RunStatus.RUNNING, 'the retry sweep does not revive a held session');
+    const after = await s.db.session.findUniqueOrThrow({ where: { id: holding }, select: { ...WORD_SELECT, finishedAt: true, retryAt: true } });
+    assert.equal(wordOf(after), RunStatus.RUNNING, 'the retry sweep does not revive a held session');
     assert.equal(after.finishedAt, null);
     assert.ok(after.retryAt, 'and its armed retry waits for the release');
   });
@@ -334,10 +342,10 @@ test('one server serves the old and the new runner protocol (plan step 6.1)', {
     await s.api.turnComplete({ id: r.w.runnerId }, r.id, { turnId: r.failing, ...FAILED_TURN } as never, NEW);
     // The person ends it while the runner tears down: the end in flight is the teardown's, as in the old cancel window.
     await s.sessions.complete(r.w.ownerId, r.id);
-    const filed = await s.db.session.findUniqueOrThrow({ where: { id: r.id }, select: { completedAt: true, endReason: true, status: true } });
+    const filed = await s.db.session.findUniqueOrThrow({ where: { id: r.id }, select: { completedAt: true, ...WORD_SELECT } });
     assert.ok(filed.completedAt, 'Complete files it');
     assert.equal(filed.endReason, null, 'and records no end reason: the end in flight is the teardown\'s');
-    assert.equal(filed.status, RunStatus.RUNNING, 'still held until the release');
+    assert.equal(wordOf(filed), RunStatus.RUNNING, 'still held until the release');
     await s.api.release({ id: r.w.runnerId }, r.id, {} as never, NEW);
     const f = await facts(sql, r.id, r.failing);
     assert.equal(f.status, 'FAILED');
@@ -377,9 +385,9 @@ test('one server serves the old and the new runner protocol (plan step 6.1)', {
 
     await s.sessions.resume(w.ownerId, id, { content: 'try again', clientTurnId: randomUUID() } as never);
     const revived = await s.db.session.findUniqueOrThrow({
-      where: { id }, select: { status: true, finishedAt: true, cancelRequestedAt: true, lastTurnOutcome: true, endReason: true },
+      where: { id }, select: { ...WORD_SELECT, finishedAt: true, cancelRequestedAt: true, lastTurnOutcome: true, endReason: true },
     });
-    assert.equal(revived.status, RunStatus.PENDING);
+    assert.equal(wordOf(revived), RunStatus.PENDING);
     assert.equal(revived.finishedAt, null);
     assert.equal(revived.cancelRequestedAt, null, 'the revive clears the teardown cancel');
     assert.equal(revived.lastTurnOutcome, 'FAILED', 'and keeps the last outcome until a turn completes');
@@ -449,8 +457,8 @@ test('one server serves the old and the new runner protocol (plan step 6.1)', {
     assert.match(await refusal(s.api.release({ id: w.runnerId }, other, {} as never, 'codex-account-remove/v1')), /BadRequestException/);
     assert.match(await refusal(s.api.release({ id: w.runnerId }, other, { cutOffTurnOutcome: 'CANCELLED' } as never, NEW)),
       /BadRequestException: cutOffTurnOutcome may only be 'FAILED'/);
-    const untouched = await s.db.session.findUniqueOrThrow({ where: { id: other }, select: { status: true, finishedAt: true } });
-    assert.equal(untouched.status, RunStatus.RUNNING, 'a refused release changes nothing');
+    const untouched = await s.db.session.findUniqueOrThrow({ where: { id: other }, select: { ...WORD_SELECT, finishedAt: true } });
+    assert.equal(wordOf(untouched), RunStatus.RUNNING, 'a refused release changes nothing');
     assert.equal(untouched.finishedAt, null);
   });
 
@@ -477,8 +485,8 @@ test('one server serves the old and the new runner protocol (plan step 6.1)', {
     const at = new Date(armed.retryAt!.getTime() + 1_000);
     await s.db.runner.update({ where: { id: w.runnerId }, data: { lastHeartbeatAt: at } });
     await s.autoRetry.sweep(at);
-    const after = await s.db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAt: true, retryAttempts: true, finishedAt: true } });
-    assert.equal(after.status, RunStatus.PENDING, 'the armed retry fires: the session is revived');
+    const after = await s.db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, retryAt: true, retryAttempts: true, finishedAt: true } });
+    assert.equal(wordOf(after), RunStatus.PENDING, 'the armed retry fires: the session is revived');
     assert.equal(after.finishedAt, null);
     assert.equal(after.retryAt, null);
     assert.equal(after.retryAttempts, armed.retryAttempts + 1);

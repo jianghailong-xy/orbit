@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
@@ -166,7 +166,7 @@ function world(opts: {
         id: SESSION_ID,
         taskId: null,
         assignedRunnerId: RUNNER_ID,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
         provider: 'claude',
         providerBuiltin: true,
         engine: 'claude',

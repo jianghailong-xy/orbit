@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type AriaAttributes, type ReactNode } from 'react';
 import { Radio as BaseRadio } from '@base-ui/react/radio';
 import { RadioGroup as BaseRadioGroup } from '@base-ui/react/radio-group';
+import { Tooltip } from './Tooltip';
 import './Segmented.css';
 
 export interface SegmentedOption<Value extends string = string> {
@@ -60,9 +61,10 @@ export function Segmented<Value extends string>({ value, onValueChange, options,
         {motion && <div ref={thumb} className="orbit-segmented-thumb" aria-hidden />}
         {options.map((option) => (
           <BaseRadio.Root key={option.value} value={option.value} disabled={option.disabled} className="orbit-segmented-item">
-            <span className="orbit-segmented-label" title={typeof option.label === 'string' ? option.label : undefined}>
-              {option.label}
-            </span>
+            {/* A label too long for its segment shows whole in the app's tip, and only then (docs/mocks/web-tooltips-c). */}
+            <Tooltip content={typeof option.label === 'string' ? option.label : undefined} truncatedOnly>
+              <span className="orbit-segmented-label">{option.label}</span>
+            </Tooltip>
           </BaseRadio.Root>
         ))}
       </div>

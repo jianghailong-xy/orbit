@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type AccessToken, type IssuedAccessToken } from '../api';
 import { ALL_SCOPES, NEVER_EXPIRES, NEVER_EXPIRES_WARNING, READ_SCOPES, fullDate, untilLine } from '../lib/accessTokens';
 import { ago } from '../lib/watches';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Settings → Access tokens (docs/personal-access-token-design.md §9), in a real document over what
@@ -271,7 +272,8 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     // The mark is a tag of its own, on the token that never expires and on no other.
     expect([...page().querySelectorAll('.access-token-never')].map((tag) => tag.textContent)).toEqual([NEVER_EXPIRES]);
     // Where the last use came from carries what made it.
-    expect(page().querySelector('[title="orbit-cli/0.1.220"]')?.textContent).toBe('203.0.113.7');
+    const address = [...page().querySelectorAll('.access-token-sub')].find((line) => line.textContent === '203.0.113.7');
+    expect(await hoverTooltip(address!)).toBe('orbit-cli/0.1.220');
 
     await click(page().querySelectorAll('[role="tab"]')[1], 'Revoked & expired');
     expect(rows().map((row) => [row[0], row[3], row.length])).toEqual([

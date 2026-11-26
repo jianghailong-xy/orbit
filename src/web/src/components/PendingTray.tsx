@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { AttachmentImage, ChatImage, type TurnImage } from './Transcript';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * The messages the reader sent that nothing has read yet, one row each (docs/mocks/steer-tray,
@@ -95,21 +96,24 @@ function Row({ row }: { row: PendingTrayRow }) {
       {!row.busy && (row.onSteer || row.onWithdraw) && (
         <span className="pending-tray-actions">
           {row.onSteer && (
-            <button type="button" className="pending-tray-btn" onClick={row.onSteer} title="Send into the current turn now">
-              {STEER_ICON}
-              Steer
-            </button>
+            <Tooltip content="Send into the current turn now" align="end">
+              <button type="button" className="pending-tray-btn" onClick={row.onSteer}>
+                {STEER_ICON}
+                Steer
+              </button>
+            </Tooltip>
           )}
           {row.onWithdraw && (
-            <button
-              type="button"
-              className="pending-tray-btn is-icon"
-              onClick={row.onWithdraw}
-              aria-label="Withdraw"
-              title="Withdraw — back to the composer"
-            >
-              {WITHDRAW_ICON}
-            </button>
+            <Tooltip align="end" content="Withdraw — back to the composer">
+              <button
+                type="button"
+                className="pending-tray-btn is-icon"
+                onClick={row.onWithdraw}
+                aria-label="Withdraw"
+              >
+                {WITHDRAW_ICON}
+              </button>
+            </Tooltip>
           )}
         </span>
       )}

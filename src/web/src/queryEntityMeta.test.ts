@@ -79,7 +79,8 @@ const EXEMPT: Record<string, string> = {
   'src/lib/githubIntegration.ts#2': "the repositories the GitHub App reaches, read from GitHub; no control-plane event announces them",
   'src/lib/githubIntegration.ts#3': "a repository's branches, read from GitHub; no control-plane event announces them",
   'src/lib/googleLink.ts#1': "sign-in configuration read once; no control-plane event announces it",
-  'src/lib/help/helpAsk.ts#1': "the machines an Ask can run on are runner state, which no control-plane event announces, and the pick is written from this tab",
+  'src/lib/help/helpAsk.ts#1': "an Ask is answered off the request by the server's DeepSeek call, which no control-plane event announces; it is read again while working",
+  'src/lib/help/helpAsk.ts#2': "Your questions lists Asks, which no control-plane event announces; it is read again while one is working, and after this tab asks",
   'src/lib/help/helpFeedback.ts#1': "help feedback votes come from every reader; no control-plane event announces them",
   'src/lib/help/helpQueries.ts#1': "the help index ships with the server; no control-plane event announces it",
   'src/lib/help/helpQueries.ts#2': "a help article ships with the server; no control-plane event announces it",
@@ -108,6 +109,8 @@ const EXEMPT: Record<string, string> = {
   'src/pages/AdminUsersPage.tsx#4': "access tokens are written from this tab; no control-plane event announces them",
   'src/pages/FeishuConnectGroupPage.tsx#1': "Feishu chat routing is integration configuration; no control-plane event announces it",
   'src/pages/FeishuIntegrationPage.tsx#1': "Feishu integration settings are written from this tab; no control-plane event announces them",
+  'src/pages/settings/NotificationsPage.tsx#1': "the server's web push key, set in its environment; no control-plane event announces it",
+  'src/components/settings/SettingsLayout.tsx#2': "the server's web push key, which only decides whether search lists This browser's row; no control-plane event announces it",
 };
 
 /** Calls whose first argument is a query options object (useQueries names its queries property). */

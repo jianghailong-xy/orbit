@@ -66,6 +66,9 @@ output into a public report: expanded values can contain secrets.
 | `FCM_PROJECT_ID` | `string` | Optional; empty disables Android push | Target Firebase project with Cloud Messaging HTTP v1 enabled, independent of the APNs values. | No; redact in public diagnostics | Recreate API |
 | `FCM_CLIENT_EMAIL` | `string` | Required when FCM is enabled; otherwise empty | Service-account `client_email` authorized for that project. | No; redact in public diagnostics | Recreate API |
 | `FCM_PRIVATE_KEY` | `secret` (base64) | Required when FCM is enabled; otherwise empty | Base64 of the service account's PEM `private_key`, not of the whole JSON file. | Yes | Recreate API |
+| `WEB_PUSH_PUBLIC_KEY` | `string` (base64url) | Optional; empty disables browser notifications | VAPID public key (uncompressed P-256) browsers subscribe with. Keep it: a new key pair makes every browser subscribe again. Needs HTTPS and outbound internet to the browsers' push services. | No | Recreate API |
+| `WEB_PUSH_PRIVATE_KEY` | `secret` (base64url) | Required when `WEB_PUSH_PUBLIC_KEY` is set | The matching 32-byte VAPID private key that signs every push. | Yes | Recreate API |
+| `WEB_PUSH_SUBJECT` | `string` (URL or `mailto:`) | Optional; `https://orbitd.io` | How the push services can reach the sender, sent in each push's VAPID claim. | No | Recreate API |
 | `FCM_ANDROID_PACKAGE` | `string` | Optional; `io.orbitd.android` | Exact Android application ID permitted to receive push. Use `io.orbitd.android.debug` for the debug client. | No | Recreate API |
 | `ORBIT_SOURCE_SHA` | `string` (40 lowercase hex) | Optional in a Git checkout; required without Git metadata | Source commit stamped into downloadable runner binaries and their advertised capability revision at web-image build time. | No | Rebuild web for each source revision |
 | `ORBIT_RUNNER_SOURCE` | `string` (path in the build context) | Optional; `.` | The tree the web image builds the downloadable runner from. The upgrade skill sets it to `.runner-release`, the newest `v*` release tag's tree it unpacks there, so `/dl` serves the released runner and not the deployed tree's ([Runner binaries come from the release tag](release-process.md#runner-binaries-come-from-the-release-tag)). | No | Rebuild web |
@@ -121,7 +124,7 @@ Two deployment values matter to it:
 
 See [Google sign-in](self-hosting.md#google-sign-in) for the Google Cloud console steps and who can sign in.
 
-### Drive
+### Drive storage
 
 Attachment bytes live outside PostgreSQL: one copy per content, named by its sha256 ([design](drive-design.md)).
 `local` keeps them under `./data/files`, which Compose mounts at `/var/lib/orbit/files`; `s3` keeps them in an

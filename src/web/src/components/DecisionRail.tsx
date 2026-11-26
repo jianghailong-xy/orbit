@@ -19,6 +19,7 @@ import './ui/Typography.css';
 import { streamPoll } from '../lib/listBudget';
 import type { CrossingPointer } from './CrossingDecisionCard';
 import { EvidenceRestartAction, RESTART_TASK_OWNER_ACTION } from './EvidenceRestartAction';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -984,28 +985,29 @@ export function DecisionStrip({
           it stands among the rest, and the way to its card — with no control that answers anything.
           The count is said to a screen reader, which cannot glance down at the cards. */}
       {shown === undefined || part === 'fold' ? null : (
-        <button
-          className="decision-strip-line"
-          type="button"
-          aria-label={`${ownerExceptions.length + ownerRequests.length + questions.length > 0 ? `${ownerExceptions.length + ownerRequests.length + questions.length} waiting` : needsDecisionCount(ways.length)}: ${shown.label}`}
-          title={here < 0 || ways.length < 2 ? GO_TO_CARD_HINT : GO_TO_NEXT_CARD_HINT}
-          onClick={step}
-        >
-          <span className="decision-strip-dot" aria-hidden="true" />
-          <span className="decision-strip-title">{shown.label}</span>
-          {shown.ageSeconds === null ? null : (
-            <span className="decision-strip-quiet">{formatAge(shown.ageSeconds)}</span>
-          )}
-          {ways.length < 2 ? null : (
-            <>
-              <span className="decision-strip-sep" aria-hidden="true">·</span>
-              <span className="decision-strip-quiet">
-                {wayPosition(Math.max(here, 0) + 1, ways.length)}
-              </span>
-            </>
-          )}
-          {caret === null ? null : <span className="decision-strip-caret" aria-hidden="true">{caret}</span>}
-        </button>
+        <Tooltip content={here < 0 || ways.length < 2 ? GO_TO_CARD_HINT : GO_TO_NEXT_CARD_HINT}>
+          <button
+            className="decision-strip-line"
+            type="button"
+            aria-label={`${ownerExceptions.length + ownerRequests.length + questions.length > 0 ? `${ownerExceptions.length + ownerRequests.length + questions.length} waiting` : needsDecisionCount(ways.length)}: ${shown.label}`}
+            onClick={step}
+          >
+            <span className="decision-strip-dot" aria-hidden="true" />
+            <span className="decision-strip-title">{shown.label}</span>
+            {shown.ageSeconds === null ? null : (
+              <span className="decision-strip-quiet">{formatAge(shown.ageSeconds)}</span>
+            )}
+            {ways.length < 2 ? null : (
+              <>
+                <span className="decision-strip-sep" aria-hidden="true">·</span>
+                <span className="decision-strip-quiet">
+                  {wayPosition(Math.max(here, 0) + 1, ways.length)}
+                </span>
+              </>
+            )}
+            {caret === null ? null : <span className="decision-strip-caret" aria-hidden="true">{caret}</span>}
+          </button>
+        </Tooltip>
       )}
 
       {/* The submissions this session is the one to fix, and the only undecidable rows that reach

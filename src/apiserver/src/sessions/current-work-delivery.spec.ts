@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   acknowledgedRuntimeTurnIds,
   CURRENT_WORK_INTERRUPTED,

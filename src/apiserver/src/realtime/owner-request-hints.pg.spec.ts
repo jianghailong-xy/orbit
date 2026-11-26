@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { Prisma, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -57,7 +58,7 @@ test('the version statement reads only the pending rows through the owner/state 
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: 'orh', prompt: 'orh',
-      provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, startedAt: new Date(),
+      provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', startedAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

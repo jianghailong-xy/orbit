@@ -34,7 +34,8 @@ import test from 'node:test';
 
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { DisabledAccounts } from '../auth/disabled-accounts';
@@ -194,7 +195,7 @@ suite('Claude Code on an OpenAI-compatible key: engines, claim, and a real CLI t
       prompt: 'Run `echo hi` with the Bash tool, then say whether it worked.', title: 'relay', workspaceId,
       provider: key.slug, engine: 'claude', model: MODEL,
     } as never)).id;
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED', cancelRequestedAt: null } });
     const claimed = await queue.claimSessionForRunner({ id: runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
@@ -204,7 +205,7 @@ suite('Claude Code on an OpenAI-compatible key: engines, claim, and a real CLI t
     token = env.ANTHROPIC_AUTH_TOKEN;
     assert.ok(!Object.values(env).includes(secret), 'the key is in no variable the engine gets');
     assert.equal(env.ANTHROPIC_MODEL, MODEL);
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
 
     // The CLI as the runner spawns it (claude_spawn.go's flags) with the environment the claim handed it; only the
     // gateway's origin is this spec's.

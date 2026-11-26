@@ -3,9 +3,10 @@ import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-r
 import { useQuery } from '@tanstack/react-query';
 import { getToken } from './api';
 import { encodeId, routeId } from './lib/idCodec';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useManagedRunner } from './lib/managedRunner';
 import { useDriveEnabled } from './lib/driveSwitch';
+import { resyncWebPush } from './lib/webPush';
 import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
@@ -239,6 +240,10 @@ export function App() {
   const authed = !!getToken();
   // Where Settings' Back to Orbit returns to.
   useRememberOutsideSettings();
+  // This browser's notification subscription, registered again on each signed-in load (lib/webPush.ts).
+  useEffect(() => {
+    if (authed) void resyncWebPush();
+  }, [authed]);
   const notFound = (
     <DocView>
       <NotFoundPage />

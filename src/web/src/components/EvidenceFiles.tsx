@@ -79,6 +79,7 @@ import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Drawer } from './ui/Drawer';
 import { ImagePreview } from './ui/ImagePreview';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import './EvidenceFiles.css';
 
 /**
@@ -241,7 +242,9 @@ function ReportLine({ report, quiet }: { report: EvidenceTestReport; quiet: bool
         {` · ${evidenceReportCounts(report)}`}
       </span>
       {names.map((name, k) => (
-        <span key={k} className="evidence-report-name" title={name}>{name}</span>
+        <Tooltip key={k} content={name} truncatedOnly>
+          <span className="evidence-report-name">{name}</span>
+        </Tooltip>
       ))}
       {names.length > 0 && rest > 0 ? (
         <span className="evidence-report-name">{evidenceReportNamesMore(rest)}</span>
@@ -287,9 +290,11 @@ export function EvidenceFilesArea({ taskId, revision, citations }: {
         {list ? (
           <span className="evidence-files-row">
             {onCard.shown.map((file) => (
-              <span key={file.id} className="evidence-tile" title={evidenceFileName(file)}>
-                <TileFace file={file} files={urls} />
-              </span>
+              <Tooltip key={file.id} content={evidenceFileName(file)} delay={TEXT_TOOLTIP_DELAY_MS}>
+                <span aria-label={isEvidencePicture(file) && !urls.failed.has(file.id) ? evidenceFileName(file) : undefined} className="evidence-tile">
+                  <TileFace file={file} files={urls} />
+                </span>
+              </Tooltip>
             ))}
             {onCard.rest > 0 ? (
               <span className="evidence-tile evidence-tile-more">{evidenceFilesMore(onCard.rest)}</span>
@@ -396,17 +401,18 @@ function PinButton({ file, pins }: { file: EvidenceFile; pins: FilePins }): JSX.
   const pinned = evidenceFileIsPinned(file);
   const label = pinned ? EVIDENCE_FILE_UNPIN : EVIDENCE_FILE_PIN;
   return (
-    <button
-      type="button"
-      className={`evidence-tile-pin${pinned ? ' is-pinned' : ''}`}
-      aria-label={label}
-      aria-pressed={pinned}
-      title={label}
-      disabled={pins.pinning.has(file.id)}
-      onClick={() => pins.press(file)}
-    >
-      {pinned ? <PushpinFilled aria-hidden /> : <PushpinOutlined aria-hidden />}
-    </button>
+    <Tooltip content={label}>
+      <button
+        type="button"
+        className={`evidence-tile-pin${pinned ? ' is-pinned' : ''}`}
+        aria-label={label}
+        aria-pressed={pinned}
+        disabled={pins.pinning.has(file.id)}
+        onClick={() => pins.press(file)}
+      >
+        {pinned ? <PushpinFilled aria-hidden /> : <PushpinOutlined aria-hidden />}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -449,13 +455,17 @@ function PageTile({ file, files, pins, onView, onSave }: {
       )}
       {picture ? null : evidenceFileCanPin(file) ? <PinButton file={file} pins={pins} /> : null}
       {picture && evidenceFileIsPinned(file) ? (
-        <span className="evidence-tile-pin is-pinned" role="img" aria-label={EVIDENCE_FILE_PINNED} title={EVIDENCE_FILE_PINNED}>
-          <PushpinFilled aria-hidden />
-        </span>
+        <Tooltip content={EVIDENCE_FILE_PINNED} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="evidence-tile-pin is-pinned" role="img" aria-label={EVIDENCE_FILE_PINNED}>
+            <PushpinFilled aria-hidden />
+          </span>
+        </Tooltip>
       ) : null}
       {picture ? null : (
         <div className="evidence-tile-caption">
-          <div className="evidence-tile-name" title={name}>{evidenceFileSaveName(file)}</div>
+          <Tooltip content={name} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <div className="evidence-tile-name">{evidenceFileSaveName(file)}</div>
+          </Tooltip>
           <div className="evidence-tile-facts">{evidenceFileFacts(file)}</div>
           {keep === null ? null : <div className="evidence-tile-facts">{keep}</div>}
         </div>

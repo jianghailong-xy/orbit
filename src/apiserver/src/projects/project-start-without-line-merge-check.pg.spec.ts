@@ -25,11 +25,11 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import {
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { type ProjectStartRequestFiled } from '@orbit/shared';
 import { Client } from 'pg';
@@ -133,7 +133,7 @@ for (const c of CASES) test(`a start with no line keeps its merge check until th
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId: coordinationWorkspaceId,
       assignedRunnerId: runnerId, title: 'coordinator', prompt: 'coordinator', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(),
       runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -245,7 +245,7 @@ for (const c of CASES) test(`a start with no line keeps its merge check until th
     data: {
       id: sessionId, ownerId, creatorId: ownerId, taskId: first, workspaceId: workWorkspaceId,
       assignedRunnerId: runnerId, title: 'work', prompt: 'work', provider: 'claude',
-      status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: 'orbit/first', branchSha: sha('c'), baseSha: sha('b'),
       changedFiles: TOUCHED, numTurns: 1, startedAt: new Date(Date.now() - 600_000),
       createdAt: new Date(Date.now() - 600_000), finishedAt: new Date(Date.now() - 60_000),

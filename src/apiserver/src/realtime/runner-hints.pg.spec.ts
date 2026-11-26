@@ -33,7 +33,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -271,7 +272,7 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
       data: {
         id: idle, ownerId: owner.id, creatorId: owner.id, workspaceId: a.workspaceId, assignedRunnerId: a.id,
         title: 'between turns on A', prompt: 'the first turn', provider: 'claude', engine: 'claude',
-        status: RunStatus.AWAITING_INPUT, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+        turnState: null, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       },
     });
     let mark = nats.published.length;

@@ -121,11 +121,12 @@ export const SITUATIONS: Record<string, Payload> = {
     id: 's', status: 'SUCCEEDED', runStatus: 'SUCCEEDED', runState: 'SUCCEEDED', startedAt: '2026-11-22T00:00:00Z',
     phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: resumable,
   },
-  // A failed release with an automatic retry armed: released, and something will wake it.
+  // A failed release with an automatic retry armed: released, and something will wake it. Waiting for that retry
+  // counts as running (the owner, 2026-11-26): RUNNING, still waiting on the wake.
   'released with a retry armed': {
     id: 's', status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED', retryAt: '2099-01-01T00:00:00Z',
     startedAt: '2026-11-22T00:00:00Z',
-    phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED', waitingOn: 'WAKE', capabilities: resumable,
+    phase: 'RUNNING', released: true, lastTurnOutcome: 'FAILED', waitingOn: 'WAKE', capabilities: resumable,
   },
 };
 

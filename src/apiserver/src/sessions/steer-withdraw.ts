@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { STEER_WITHDRAW_ERRORS, type SteerWithdrawOutcome } from '@orbit/shared';
 import { TransactionSurface } from '../common/prisma-transaction-surface';
+import { deleteTurnsKeepingAttachments } from './withdrawn-turn-attachments';
 
 /**
  * Taking back a steer the engine has not read yet.
@@ -70,14 +71,15 @@ export function steerWithdrawOutcome(result: string | undefined): SteerWithdrawO
 }
 
 export type SteerWithdrawalTransaction = TransactionSurface<{
-  conversationTurn: ['deleteMany', 'updateMany'];
+  conversationTurn: ['findMany', 'deleteMany', 'updateMany'];
+  attachment: ['findMany', 'updateMany'];
 }>;
 
 /**
  * Settle one `withdraw` turn's completion, inside turnComplete's Session transaction.
  *
  * `withdrawn` means the engine dropped the message unread, so the steer's row goes — the way a
- * cancelled queued message's does, its attachments with it — while it is still the in-flight,
+ * cancelled queued message's does, its files kept for the composer — while it is still the in-flight,
  * unacknowledged steer the withdrawal was filed against. Every other outcome leaves the steer
  * exactly where it was. Either way the outcome is written back onto the withdraw turn, once: a
  * completion retried after its answer was lost finds it settled and changes nothing.
@@ -92,8 +94,12 @@ export async function settleSteerWithdrawal(
   if (!request || request.outcome) return false;
   const outcome = steerWithdrawOutcome(report.result);
   if (outcome === 'withdrawn') {
-    await tx.conversationTurn.deleteMany({
-      where: { id: request.turnId, sessionId, kind: 'steer', status: 'IN_FLIGHT', deliveryStatus: null },
+    await deleteTurnsKeepingAttachments(tx, {
+      id: request.turnId,
+      sessionId,
+      kind: 'steer',
+      status: 'IN_FLIGHT',
+      deliveryStatus: null,
     });
   }
   const reason = report.error?.trim();

@@ -1,0 +1,66 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Composer edge in the whole window</title>
+<style>
+body{margin:0;background:#e9ebee;font:14px/1.5 -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#1f2329}
+.board{width:1840px;padding:36px;box-sizing:border-box}
+h1{font-size:26px;margin:0 0 4px}.sub{color:#646a73;margin:0 0 22px}
+h2{font-size:18px;margin:30px 0 12px}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.colh{font-weight:600;font-size:17px;margin-bottom:6px}.colh small{display:block;font-weight:400;color:#646a73;font-size:12.5px;font-family:'JetBrains Mono',monospace}
+.f{background:#fff;border-radius:10px;padding:6px;box-shadow:0 0 0 1px #dee0e3}.f img{width:100%;display:block;border-radius:6px}
+.pick{box-shadow:0 0 0 3px #3370ff}
+.tag{display:inline-block;margin-left:6px;padding:0 8px;border-radius:10px;background:#3370ff;color:#fff;font-size:12px;vertical-align:2px}
+.rowh{font-weight:600;color:#646a73;font-size:13px;margin:12px 0 4px}
+.cap{font-size:12.5px;color:#646a73;margin-top:6px}
+.card{background:#fff;border-radius:12px;padding:18px 22px;box-shadow:0 0 0 1px #dee0e3}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #eceef1;padding:7px 10px;text-align:left;vertical-align:top}th{color:#646a73;font-weight:600}
+td.bad{color:#d83931;font-weight:600}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#f2f3f5;padding:1px 5px;border-radius:4px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+.two{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-top:22px}
+.ask{background:#fff7e8;box-shadow:0 0 0 1px #ffd591}
+</style></head><body><div class="board">
+<h1>Composer 圆角 · 与面板、条协调</h1>
+<p class="sub">接着 ③（已提交 1c9fc6fbff：composer 用面板的描边和阴影）。真实会话页，本分支 build，1440×820，2x。三列只换圆角，其它一律不动。</p>
+<div class="card"><b>今天三档圆角：</b>
+<table style="margin-top:8px">
+<tr><th>元素</th><th>今天</th><th>② composer 跟面板</th><th>③ 全部跟面板</th></tr>
+<tr><td>面板（列表+对话、右栏）<code>--panel-radius</code></td><td>12px</td><td>12px</td><td>12px</td></tr>
+<tr><td>Composer</td><td class="bad">24px</td><td>12px</td><td>12px</td></tr>
+<tr><td>Tasks / Agents 条（<code>.bg-tray</code>）</td><td class="bad">8px</td><td>8px</td><td>12px</td></tr>
+<tr><td>待读消息托盘（<code>.pending-tray</code>，同一带）</td><td>12px</td><td>12px</td><td>12px</td></tr>
+</table>
+<p class="cap">2cd162c3c4 定了"一个圆角"；composer 的 24px 和条的 8px 都早于它。composer 内容的 24px 起始线（文字、缩略图、+ 号）这次不动，只改圆角。</p></div>
+
+<h2>A · 整窗</h2>
+<div class="cols">
+  <div><div class="colh">① 今天<small>composer 24 · 条 8 · 面板 12</small></div><div class="f"><img src="frames/corners/r-today-full.png"></div></div>
+  <div><div class="colh">② composer 跟面板<small>composer 12 · 条 8 · 面板 12</small></div><div class="f"><img src="frames/corners/r-composer-full.png"></div></div>
+  <div><div class="colh">③ 一个圆角<span class="tag">推荐</span><small>composer 12 · 条 12 · 面板 12</small></div><div class="f pick"><img src="frames/corners/r-all-full.png"></div></div>
+</div>
+<h2>B · 下半部（条、composer、面板底边、右栏）</h2>
+<div class="cols">
+  <div class="f"><img src="frames/corners/r-today-band.png"></div>
+  <div class="f"><img src="frames/corners/r-composer-band.png"></div>
+  <div class="f pick"><img src="frames/corners/r-all-band.png"></div>
+</div>
+<div class="cols"><div class="cap">上面两条是小方角，下面突然一个胶囊；三个叠着的盒子三种形状。</div>
+<div class="cap">composer 和面板一致了，但条仍比它方一档，叠在一起能看出差别。</div>
+<div class="cap">条、composer、面板、右栏同一个角；这一带读成一组卡片。</div></div>
+<h2>C · 左边缘放大 3×</h2>
+<div class="cols">
+  <div class="f"><img src="frames/corners/r-today-zoom.png" style="width:330px;image-rendering:pixelated"></div>
+  <div class="f"><img src="frames/corners/r-composer-zoom.png" style="width:330px;image-rendering:pixelated"></div>
+  <div class="f pick"><img src="frames/corners/r-all-zoom.png" style="width:330px;image-rendering:pixelated"></div>
+</div>
+<div class="two">
+  <div class="card"><h3 style="margin:0 0 8px">③ 的改动范围</h3>
+  <code>src/web/src/index.css</code>：<br>
+  · <code>.composer-box</code> <code>border-radius: 24px</code> → <code>var(--panel-radius, 12px)</code><br>
+  · <code>.bg-tray</code> <code>8px</code> → <code>var(--panel-radius, 12px)</code>（Tasks、Agents、后台 shell 条共用这一个类）<br>
+  · 注释里"24px 圆角 = 24px 起始线"那句改成只说起始线<br>
+  窄屏没有 <code>--panel-radius</code>，取 12px 兜底，所以窄屏也一样。</div>
+  <div class="card ask"><h3 style="margin:0 0 8px">待你定</h3>
+  ③ 一个圆角（推荐）、② 只改 composer，还是 ① 保留 24px 胶囊？<br>
+  <span class="cap">注意：iOS 的 composer 也是大圆角胶囊；如果 web 改 12px，iOS / Android 要不要跟，另行决定，这次只动 web。</span></div>
+</div>
+</div></body></html>

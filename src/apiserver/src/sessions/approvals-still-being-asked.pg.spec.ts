@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -13,6 +14,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * A card nobody can answer any more stops being offered as the live question.
@@ -157,7 +159,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       prompt: `${label} 会话`,
       provider: 'claude',
       providerBuiltin: true,
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -203,7 +205,7 @@ const QUESTION = {
 async function theRunnerTakesTheTurn(db: PrismaClient, f: Fixture): Promise<void> {
   await db.session.update({
     where: { id: f.sessionId },
-    data: { status: RunStatus.RUNNING, engineTurnActive: true },
+    data: { turnState: 'IN_FLIGHT', engineTurnActive: true },
   });
 }
 
@@ -264,7 +266,7 @@ async function theEngineAbandonsTheCall(db: PrismaClient, f: Fixture): Promise<v
 async function theTurnIsReclaimed(db: PrismaClient, f: Fixture): Promise<void> {
   await db.session.update({
     where: { id: f.sessionId },
-    data: { status: RunStatus.AWAITING_INPUT, engineTurnActive: false },
+    data: { turnState: null, engineTurnActive: false },
   });
 }
 
@@ -360,7 +362,7 @@ test('the engine abandons the card: it stops being offered, and the row is left 
       assert.equal(row.status, 'PENDING');
       assert.equal(row.decidedAt, null);
       assert.equal(
-        (await stack.db.session.findUniqueOrThrow({ where: { id: f.sessionId } })).status,
+        wordOf((await stack.db.session.findUniqueOrThrow({ where: { id: f.sessionId } }))),
         RunStatus.RUNNING,
       );
       assert.deepEqual(

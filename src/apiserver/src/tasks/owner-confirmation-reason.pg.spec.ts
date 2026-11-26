@@ -114,8 +114,8 @@ suite('outside an Automatic project a session names why only the owner can settl
       const id = randomUUID();
       await sql.query(
         `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-           "provider","status","dispatch_origin","updated_at")
-         VALUES ($1,$2,$3,$4,'work',$2,'claude','RUNNING'::"run_status",
+           "provider","turn_state","dispatch_origin","updated_at")
+         VALUES ($1,$2,$3,$4,'work',$2,'claude','IN_FLIGHT',
            'USER'::"session_dispatch_origin",now())`,
         [id, ownerId, workspaceId, title],
       );

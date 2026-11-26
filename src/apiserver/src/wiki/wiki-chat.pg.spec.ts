@@ -526,9 +526,9 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
       /SOURCE_PIN_IMMUTABLE/u, 'and its selector is frozen like every other');
     // The CHECKs: the chat's is the one SOURCE shape with no codebase, and it is a ref.
     const insert = (columns: Record<string, unknown>) => sql.query(
-      `INSERT INTO "session" (id, title, prompt, owner_id, creator_id, workspace_id, status, dispatch_origin, updated_at, source_state,
+      `INSERT INTO "session" (id, title, prompt, owner_id, creator_id, workspace_id, turn_state, dispatch_origin, updated_at, source_state,
          source_kind, source_codebase_id, source_repo_url, source_ref, source_revision_sha, source_config_revision, source_ref_authority)
-       VALUES ($1, 'shape', 'p', $2, $2, $3, 'PENDING', 'USER', now(), 'SELECTED', 'CHAT_UPSTREAM', $4, $5, $6, $7, $8, 'REMOTE')`,
+       VALUES ($1, 'shape', 'p', $2, $2, $3, 'QUEUED', 'USER', now(), 'SELECTED', 'CHAT_UPSTREAM', $4, $5, $6, $7, $8, 'REMOTE')`,
       [randomUUID(), owner.id, wsDelivery, columns.codebase ?? null, REPO_URL, columns.ref === undefined ? 'refs/heads/main' : columns.ref,
         columns.revision ?? null, columns.config ?? null],
     );

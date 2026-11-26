@@ -49,7 +49,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { Prisma, RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { Prisma, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobCommand, IntegrationJobResultRequest } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -65,6 +66,7 @@ import {
   INTEGRATION_JOB_STATES,
   enqueueForDoneTask,
 } from './project-integration-job';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -219,7 +221,7 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
         prompt: 'do the work',
         branch,
         isolationStatus: 'worktree',
-        status: finish.status ?? RunStatus.SUCCEEDED,
+        turnState: turnStateOfWord(finish.status ?? RunStatus.SUCCEEDED),
         baseSha: finish.baseSha ?? sha('1'),
         // A session that reported no work is written as one that reported no list at all: J8 reads the
         // two alike, and these cases are about what the LINE answers for such a branch. An EMPTY list

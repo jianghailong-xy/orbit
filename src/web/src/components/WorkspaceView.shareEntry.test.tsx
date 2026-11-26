@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Where a session says it is public, and the three ways out of its ⋯ menu
@@ -156,7 +157,7 @@ const listRow = (title: string): HTMLElement => {
 
 /** Opens the conversation header's ⋯ menu and hands back the popup the menu mounted. */
 async function openHeaderMenu(): Promise<HTMLElement> {
-  await click(mounted().querySelector('.workspace-header button[title="More actions"]'), 'the header ⋯ button');
+  await click(mounted().querySelector('.workspace-header button[aria-label="More actions"]'), 'the header ⋯ button');
   await act(async () => {
     await vi.waitFor(() => expect(document.querySelector('[role="menu"]:not([data-closed])')).not.toBeNull(), {
       timeout: 10_000,
@@ -266,12 +267,12 @@ describe('a shared session in the session list and its conversation', { timeout:
 
     const globe = listRow(SHARED.title).querySelector<HTMLElement>('.session-title-row .session-shared');
     expect(globe, 'the shared row has no globe').not.toBeNull();
-    expect(globe!.getAttribute('title')).toBe('Shared · anyone with the link');
-    expect(globe!.getAttribute('title')).toBe(SESSION_SHARED_TIP);
+    expect(SESSION_SHARED_TIP).toBe('Shared · anyone with the link');
     expect(globe!.querySelector('.anticon-global')).not.toBeNull();
     // Beside the time: the globe is the element right before it.
     expect(globe!.nextElementSibling?.classList.contains('session-time')).toBe(true);
     expect(listRow(PLAIN.title).querySelector('.session-shared')).toBeNull();
+    expect(await hoverTooltip(globe!)).toBe(SESSION_SHARED_TIP);
   });
 
   it('says "Shared · Live" on the header\'s Share button of a shared conversation, and plain Share… in one nobody shared', async () => {
@@ -287,6 +288,9 @@ describe('a shared session in the session list and its conversation', { timeout:
     container?.remove();
     await mount(PLAIN_PUBLIC);
     expect(mounted().querySelector('.workspace-header-share')?.getAttribute('aria-label')).toBe('Share…');
+    // The header's two icons use the app's Tooltip, not the browser's own tip.
+    expect(mounted().querySelector('.workspace-header-share')?.hasAttribute('title')).toBe(false);
+    expect(mounted().querySelector('.workspace-header-more')?.hasAttribute('title')).toBe(false);
     expect(mounted().querySelector('.workspace-header-share.is-live')).toBeNull();
   });
 

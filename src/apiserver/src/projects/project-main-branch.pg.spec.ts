@@ -58,7 +58,8 @@ import {
   type StartProjectRequestBody,
   uuidToBase62,
 } from '@orbit/shared';
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -266,7 +267,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
         title: label,
         prompt: label,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -552,7 +553,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
         title: 'first-integration work',
         prompt: 'first-integration work',
         provider: 'claude',
-        status: RunStatus.SUCCEEDED, 
+        turnState: null, 
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         isolationStatus: 'worktree',
@@ -690,7 +691,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
           title: label,
           prompt: label,
           provider: 'claude',
-          status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+          turnState: null, finishedAt: new Date(), 
           dispatchOrigin: SessionDispatchOrigin.USER,
           mergeTargets,
           ...extra,

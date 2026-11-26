@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>DashScope 406 gateway timeout: retried instead of a dead red line</title>
+<style>
+  body { margin: 0; background: #f4f4f6; color: #1d1d1f; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; padding: 32px 40px; width: 1520px; box-sizing: border-box; background: #fff; margin-bottom: 16px; }
+  .b-part h1 { font-size: 26px; margin: 0 0 6px; }
+  .b-part h2 { font-size: 19px; margin: 0 0 14px; }
+  .b-sub { color: #6e6e73; margin: 0 0 18px; }
+  .b-row { display: flex; gap: 28px; align-items: flex-start; }
+  .b-fig { margin: 0; flex: none; }
+  .b-fig figcaption { font-weight: 600; margin-bottom: 8px; }
+  .b-fig figcaption small { font-weight: 400; color: #6e6e73; margin-left: 6px; }
+  /* Conversation pane cut out of a 1360×860 desktop shot (2×): x 621 → 1360, y 0 → 470 css px. */
+  .b-crop { width: 700px; height: 445px; border: 1px solid #d2d2d7; border-radius: 10px; overflow: hidden; position: relative;
+    background-repeat: no-repeat; background-size: 1288px auto; background-position: -572px 0; }
+  .b-phone { width: 300px; border: 1px solid #d2d2d7; border-radius: 22px; overflow: hidden; display: block; }
+  .b-pin { position: absolute; width: 26px; height: 26px; border-radius: 50%; background: #e5484d; color: #fff;
+    font: 700 14px/26px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 3px #fff; }
+  .b-notes { margin: 18px 0 0; padding-left: 0; list-style: none; }
+  .b-notes li { margin: 6px 0; }
+  .b-n { display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #e5484d; color: #fff; font: 700 12px/22px Inter, sans-serif; text-align: center; margin-right: 8px; }
+  code { font: 13px "JetBrains Mono", "DejaVu Sans Mono", monospace; background: #f2f2f5; padding: 1px 5px; border-radius: 4px; }
+  .b-opt { border: 1px solid #d2d2d7; border-radius: 10px; padding: 14px 18px; flex: 1; }
+  .b-opt.b-rec { border-color: #3478f6; box-shadow: 0 0 0 2px #3478f622; }
+  .b-tag { display: inline-block; font-size: 12px; padding: 0 8px; border-radius: 10px; background: #3478f6; color: #fff; margin-left: 8px; }
+  table.b-land { border-collapse: collapse; width: 100%; }
+  table.b-land td { border-top: 1px solid #e5e5ea; padding: 8px 10px; vertical-align: top; }
+  table.b-land td:first-child { white-space: nowrap; color: #6e6e73; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>DashScope 406 网关超时：从「红字死掉」改成「自动重试」</h1>
+  <p class="b-sub">真实 web 构建截图，同一会话、同一事件、同一时钟（Asia/Shanghai 11-13 09:14）。左 = main <code>1668e157f3</code>，右 = 本分支 <code>b3365aceba</code>。不新造外观：右边是已有的「Provider unavailable」卡片。</p>
+  <div class="b-row">
+    <figure class="b-fig">
+      <figcaption>① 今天 <small>你截图里的那条</small></figcaption>
+      <div class="b-crop" style="background-image:url(shots/before-light-desktop.png)">
+        <span class="b-pin" style="left:520px;top:142px">1</span>
+      </div>
+    </figure>
+    <figure class="b-fig">
+      <figcaption>② 改后 <small>同一条报错</small></figcaption>
+      <div class="b-crop" style="background-image:url(shots/after-light-desktop.png)">
+        <span class="b-pin" style="left:6px;top:140px">2</span>
+        <span class="b-pin" style="left:6px;top:244px">3</span>
+        <span class="b-pin" style="left:6px;top:302px">4</span>
+      </div>
+    </figure>
+  </div>
+  <ol class="b-notes">
+    <li><span class="b-n">1</span>开头的 <code>406</code> 被当成「请求本身的问题」，不在可重试状态码里 → 只画一行红字，回合就此结束，要你手动重发。</li>
+    <li><span class="b-n">2</span>406 其实是 DashScope 自己的网关转发超时（正文是 Go 的 <code>read tcp …: read: connection timed out</code>）。现在 <code>read: connection timed out</code> 与 ECONNRESET 同归「连接失败」，优先于状态码 → 走已有的自动重试卡片，原始报错原样保留在灰框里。</li>
+    <li><span class="b-n">3</span>服务端已排好重试：30 秒 → 2 分钟 → 5 分钟（带抖动），关掉页面也会跑。</li>
+    <li><span class="b-n">4</span>开关可关；「Retry now anyway」立即重发。三次都失败才变成「Auto-retry gave up」，交还给你。</li>
+  </ol>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>手机宽度（390pt）· 今天 vs 改后 · 浅色 / 深色</h2>
+  <div class="b-row">
+    <figure class="b-fig"><figcaption>① 今天 · 浅色</figcaption><img class="b-phone" src="shots/before-light-phone.png"></figure>
+    <figure class="b-fig"><figcaption>② 改后 · 浅色</figcaption><img class="b-phone" src="shots/after-light-phone.png"></figure>
+    <figure class="b-fig"><figcaption>② 改后 · 深色</figcaption><img class="b-phone" src="shots/after-dark-phone.png"></figure>
+    <figure class="b-fig"><figcaption>① 今天 · 深色</figcaption><img class="b-phone" src="shots/before-dark-phone.png"></figure>
+  </div>
+  <p class="b-sub" style="margin-top:14px">macOS / iOS / Android 的判定词表同步加了这一条（EngineErrors 三端 + runner），卡片是各端已有的同一张。</p>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>已定 · 方案 B：卡片用显示名，不用 slug</h2>
+  <p class="b-sub">「The qwen API」→「The <b>Qwen (Model Studio)</b> API could not answer…」；自家登录的引擎写 CLI 名（「The Claude Code API」，原来是「The claude API」）。额度卡同理（「The 5-hour quota for Claude Code…」）。三端各用 composer 已有的同一个取名函数：web <code>providerNameOn</code>、Apple <code>SessionProviderChoices.providerName(on:)</code>、Android <code>catalog.providerName</code>。图 ①② 已是改后实拍。</p>
+
+  <h2 style="margin-top:26px">等待重试时，会话是什么状态 <small style="font-weight:400;color:#6e6e73">· 已定：算 Running（服务端 phase）</small></h2>
+  <div class="b-row">
+    <figure class="b-fig"><figcaption>⑤ 会话列表的行 <small>归在 Working</small></figcaption>
+      <div class="b-crop" style="width:300px;height:100px;background-image:url(shots/after-light-desktop.png);background-position:-248px -128px"></div></figure>
+    <figure class="b-fig"><figcaption>⑥ 会话头 <small>手机</small></figcaption>
+      <div class="b-crop" style="width:300px;height:62px;background-image:url(shots/after-light-phone.png);background-size:300px auto;background-position:0 0"></div></figure>
+    <figure class="b-fig"><figcaption>⑦ 对话底部一行</figcaption>
+      <div class="b-crop" style="width:640px;height:52px;background-image:url(shots/after-light-desktop.png);background-position:-580px -452px"></div></figure>
+  </div>
+  <table class="b-land" style="margin-top:16px">
+    <tr><td>服务端写的</td><td><code>status/runState FAILED</code> · <code>released: true</code>（回合结束、runner 名额已还）· <code>phase RUNNING</code>（原为 IDLE，迁移 1667）· <code>lastTurnOutcome FAILED</code> · <code>waitingOn WAKE</code> · <code>retryAt</code> = 30 秒后（第一档），<code>retryAttempts 0</code>。</td></tr>
+    <tr><td>界面读成</td><td>「Running · ↻ Retrying」：三端状态词直接读 phase，Retrying 标记照旧（released 失败 + WAKE）。列表归 Working，不进 Needs you；底部「Retrying automatically.」替换掉「Session failed.」。run state 仍是 FAILED：没有 Stop，发消息走 resume，不会当成插话塞进不存在的回合。</td></tr>
+    <tr><td>之后</td><td>到点 AutoRetryService 认领（清 <code>retryAt</code>、次数 +1）并重发 → RUNNING。三次都失败（30 秒 / 2 分 / 5 分）就清掉 <code>retryAt</code>：变回普通 FAILED，进 Needs you，卡片「Auto-retry gave up」。<code>retryAt</code> 过期 2 分钟没人来认领，也自动回落成 FAILED，不会一直挂着「Retrying」。</td></tr>
+    <tr><td>没变的</td><td>只管已 released 的失败重试。停在 AWAITING_INPUT 的额度重试（held + retryAt）仍是 Idle：held 行读 RUNNING 会被三端当成回合在跑。watch / <code>session_await</code> / 侧栏计数不读 phase，行为不变；分享页仍按等待节奏轮询。</td></tr>
+    <tr><td>你插手</td><td>这期间直接发消息 = 正常续上，armed 的重试被你的消息顶掉，不会重复发。</td></tr>
+  </table>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>落地（按代价排）</h2>
+  <table class="b-land">
+    <tr><td>已提交</td><td><code>23a7b838b2</code> 判定：<code>CONNECTION_TIMED_OUT_MARKERS = ['read: connection timed out']</code>，shared / runner-go / Android / Swift。<br><code>b3365aceba</code> 显示名：web / macOS·iOS / Android 卡片调用处各一行。<br><code>42bf9e7857</code> 等待重试 = RUNNING：<code>deriveSessionPhase</code> + 迁移 1667（trigger 加 <code>retry_at</code>、回填只写 phase）+ 契约文字 + census/backfill 脚本。</td></tr>
+    <tr><td>已验证</td><td>shared vitest 58；runner Go 失败分类；Android <code>AutoRetry*</code> + <code>EngineErrors*</code>；web <code>WorkspaceView.retryMessage</code> + <code>Transcript</code> 158、会话显示 153 通过；apiserver <code>session-phase</code> 单测；<b>真 PostgreSQL 16</b> 上 <code>session-turn-state-phase.pg.spec</code> 5/5（每种形状 set/clear <code>retry_at</code>）。纯 <code>API Error: 406 Not Acceptable</code> 仍不重试。</td></tr>
+    <tr><td>未验证</td><td>macOS/iOS 的 Swift 编译与测试（只能在 Mac mini 上跑）。</td></tr>
+    <tr><td>部署前</td><td>遇到这条手动发「continue」；频繁出现说明 dashscope-intl 端点本身不稳，可换北京端点 <code>dashscope.aliyuncs.com</code>。</td></tr>
+  </table>
+</section>
+
+</body>
+</html>

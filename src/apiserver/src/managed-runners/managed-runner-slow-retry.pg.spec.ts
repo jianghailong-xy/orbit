@@ -70,7 +70,7 @@ test('managed runner slow retry: a crash loop keeps being tried on a growing bac
   async function queueTurn(m: ManagedRunner): Promise<string> {
     const workspace = await db.workspace.create({ data: { ownerId: m.ownerId, runnerId: m.runnerId, targetRunnerId: m.runnerId, name: `w-${randomUUID().slice(0, 6)}`, workDir: '/home/orbit/w' } });
     const session = await db.session.create({
-      data: { ownerId: m.ownerId, creatorId: m.ownerId, workspaceId: workspace.id, assignedRunnerId: m.runnerId, title: 'Waiting', prompt: 'hello', provider: 'claude', status: 'PENDING' },
+      data: { ownerId: m.ownerId, creatorId: m.ownerId, workspaceId: workspace.id, assignedRunnerId: m.runnerId, title: 'Waiting', prompt: 'hello', provider: 'claude', turnState: 'QUEUED' },
     });
     return session.id;
   }

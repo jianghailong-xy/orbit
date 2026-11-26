@@ -31,11 +31,11 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
@@ -50,6 +50,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE } from './reclaim-stalled-task';
 import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -161,7 +162,7 @@ async function fixture(
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },
@@ -451,7 +452,7 @@ suite('a different exit code derives FAILED, and records nothing either', async 
   // Where the failure IS legible, and the only place either number is written: the run's own
   // error string. That is the "diagnosis moves to the session" the owner accepted.
   const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
-  assert.equal(session.status, RunStatus.FAILED);
+  assert.equal(wordOf(session), RunStatus.FAILED);
   assert.equal(session.error, 'acceptance command exited 7; expected 0');
   // And the run's end takes its running work with it, in the write that ends it. The session is
   // not live any more, so it has no live background process — the same rule the tray derives from

@@ -20,11 +20,17 @@ import (
 // mirrors are tested against contracts/codex-rate-limit-reset.contract.json and its fixtures.
 // The heartbeat relay (codex_rate_limit_reset_relay.go) takes the command and reports results, the
 // consume (codex_rate_limit_reset_consume.go) carries it out, and runnerCapabilitiesV1 declares
-// codexRateLimitResetCapabilityV1 for the two together.
+// codexRateLimitResetCapabilityV1 and codexRateLimitResetCapabilityV2 for the two together.
 
 const (
+	// The block format, and the version of a command that names no account slot (Default's). The relay
+	// carries out version 1 and version 2 commands, and answers each in its own version (§12.3).
 	codexRateLimitResetProtocolVersion = 1
-	codexRateLimitResetCapabilityV1    = "codex-rate-limit-reset-v1"
+	// Contract v2 (§12): every Codex account slot has its own block, and a version 2 command names the
+	// slot it runs in. Block format stays version 1 (codexRateLimitResetProtocolVersions).
+	codexRateLimitResetProtocolVersionV2 = 2
+	codexRateLimitResetCapabilityV1      = "codex-rate-limit-reset-v1"
+	codexRateLimitResetCapabilityV2      = "codex-rate-limit-reset-v2"
 
 	codexAccountReadMethod           = "account/read"
 	codexRateLimitsReadMethod        = "account/rateLimits/read"
@@ -86,6 +92,13 @@ var codexRateLimitResetEnums = map[string][]string{
 	"nextStep":          {"REFRESH", "RETRY_CONSUME", "RETRY_REFRESH", "STOP"},
 }
 
+// The versions each wire object may carry, as @orbit/shared CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSIONS.
+var codexRateLimitResetProtocolVersions = map[string][]int{
+	"block":   {codexRateLimitResetProtocolVersion},
+	"command": {codexRateLimitResetProtocolVersion, codexRateLimitResetProtocolVersionV2},
+	"result":  {codexRateLimitResetProtocolVersion, codexRateLimitResetProtocolVersionV2},
+}
+
 // The provider's consume outcomes, spelled as it spells them.
 var codexRateLimitResetConsumeOutcomes = []string{"reset", "nothingToReset", "noCredit", "alreadyRedeemed"}
 
@@ -142,8 +155,9 @@ var (
 	codexAccountFingerprintPattern    = regexp.MustCompile(`^cxa1_[0-9a-f]{32}$`)
 )
 
-// PlanUsageRateLimitReset mirrors @orbit/shared PlanUsageRateLimitReset: the default Codex
-// account's earned reset state inside the Codex plan-usage snapshot.
+// PlanUsageRateLimitReset mirrors @orbit/shared PlanUsageRateLimitReset: one Codex account's earned
+// reset state inside that account's plan-usage snapshot — Default's beside its windows, an added
+// slot's in its PlanUsage.Accounts entry (contract v2 §12). Each slot's block is ordered on its own.
 type PlanUsageRateLimitReset struct {
 	ProtocolVersion int    `json:"protocolVersion"`
 	Support         string `json:"support"`
@@ -187,6 +201,9 @@ type CodexRateLimitResetCommand struct {
 	ClaimGeneration    int64  `json:"claimGeneration"`
 	Phase              string `json:"phase"`
 	AccountFingerprint string `json:"accountFingerprint"`
+	// The Codex login to read and consume in: "default" (this process's CODEX_HOME) or an added slot's
+	// 8-hex id. Present exactly on protocol version 2; a version 1 command is Default's.
+	AccountSlot string `json:"accountSlot,omitempty"`
 	// The operation's persisted provider key, exactly on CONSUME. Never generated or replaced here.
 	ProviderIdempotencyKey string `json:"providerIdempotencyKey,omitempty"`
 	RequestedAt            string `json:"requestedAt"`
@@ -229,6 +246,7 @@ type CodexRateLimitResetOperationView struct {
 	RunnerID           string  `json:"runnerId"`
 	ClientRequestID    string  `json:"clientRequestId"`
 	AccountFingerprint string  `json:"accountFingerprint"`
+	AccountSlot        string  `json:"accountSlot,omitempty"` // an added slot's id; absent for Default
 	Status             string  `json:"status"`
 	ConsumeState       string  `json:"consumeState"`
 	ConsumeOutcome     *string `json:"consumeOutcome"`
@@ -384,12 +402,12 @@ func codexResetConsumeParams(cmd CodexRateLimitResetCommand) (map[string]interfa
 // codexResetCommandDisposition decides what the process `leaseOwner` does with a command from the
 // heartbeat it sent at `sent`: act on it; ignore it (another process's claim, a heartbeat older than
 // the freshness window, or a malformed command — nothing is reported, and the control plane redelivers
-// or reassigns); or refuse a consume of a protocol it does not speak.
+// or reassigns); or refuse a consume of a protocol it does not speak (neither 1 nor 2).
 func codexResetCommandDisposition(cmd CodexRateLimitResetCommand, leaseOwner string, sent, now time.Time) string {
 	if cmd.LeaseOwner != leaseOwner || now.Sub(sent) > codexRateLimitResetCommandFreshness {
 		return codexResetCommandIgnore
 	}
-	if cmd.ProtocolVersion != codexRateLimitResetProtocolVersion {
+	if !codexResetVersionIn("command", cmd.ProtocolVersion) {
 		if cmd.Phase == codexResetPhaseConsume && codexResetUUIDPattern.MatchString(cmd.OperationID) && cmd.ClaimGeneration >= 1 {
 			return codexResetCommandRefuseProtocol
 		}
@@ -493,7 +511,7 @@ func codexResetNilable(t reflect.Type) bool {
 
 func codexRateLimitResetBlockViolations(b PlanUsageRateLimitReset) []string {
 	var out []string
-	if b.ProtocolVersion != codexRateLimitResetProtocolVersion {
+	if !codexResetVersionIn("block", b.ProtocolVersion) {
 		out = append(out, "protocolVersion must be 1")
 	}
 	if !codexResetOneOf(codexRateLimitResetEnums["support"], b.Support) {
@@ -538,10 +556,24 @@ func codexRateLimitResetBlockViolations(b PlanUsageRateLimitReset) []string {
 	return out
 }
 
-func codexResetEnvelopeViolations(protocolVersion int, operationID, leaseOwner string, claimGeneration int64, phase string) []string {
+func codexResetVersionIn(object string, version int) bool {
+	for _, v := range codexRateLimitResetProtocolVersions[object] {
+		if v == version {
+			return true
+		}
+	}
+	return false
+}
+
+// codexResetAccountSlotValid is "default" or an added slot's 8-hex id.
+func codexResetAccountSlotValid(slot string) bool {
+	return slot == accountSlotDefaultID || accountSlotIDPattern.MatchString(slot)
+}
+
+func codexResetEnvelopeViolations(object string, protocolVersion int, operationID, leaseOwner string, claimGeneration int64, phase string) []string {
 	var out []string
-	if protocolVersion != codexRateLimitResetProtocolVersion {
-		out = append(out, "protocolVersion must be 1")
+	if !codexResetVersionIn(object, protocolVersion) {
+		out = append(out, "protocolVersion must be 1 or 2")
 	}
 	if !codexResetUUIDPattern.MatchString(operationID) {
 		out = append(out, "operationId must be a canonical lowercase UUID")
@@ -559,9 +591,16 @@ func codexResetEnvelopeViolations(protocolVersion int, operationID, leaseOwner s
 }
 
 func codexResetCommandViolations(c CodexRateLimitResetCommand) []string {
-	out := codexResetEnvelopeViolations(c.ProtocolVersion, c.OperationID, c.LeaseOwner, c.ClaimGeneration, c.Phase)
+	out := codexResetEnvelopeViolations("command", c.ProtocolVersion, c.OperationID, c.LeaseOwner, c.ClaimGeneration, c.Phase)
 	if !codexAccountFingerprintPattern.MatchString(c.AccountFingerprint) {
 		out = append(out, "accountFingerprint must match cxa1_ + 32 lowercase hex")
+	}
+	if c.ProtocolVersion == codexRateLimitResetProtocolVersionV2 {
+		if !codexResetAccountSlotValid(c.AccountSlot) {
+			out = append(out, "accountSlot must be default or an 8-hex slot id on protocol version 2")
+		}
+	} else if c.AccountSlot != "" {
+		out = append(out, "accountSlot must be absent on protocol version 1")
 	}
 	if !codexResetTimestamp(c.RequestedAt, true) {
 		out = append(out, "requestedAt must be RFC3339 UTC with milliseconds")
@@ -577,7 +616,7 @@ func codexResetCommandViolations(c CodexRateLimitResetCommand) []string {
 }
 
 func codexResetResultViolations(r CodexRateLimitResetResultRequest) []string {
-	out := codexResetEnvelopeViolations(r.ProtocolVersion, r.OperationID, r.LeaseOwner, r.ClaimGeneration, r.Phase)
+	out := codexResetEnvelopeViolations("result", r.ProtocolVersion, r.OperationID, r.LeaseOwner, r.ClaimGeneration, r.Phase)
 	rule, ok := codexRateLimitResetResultKinds[r.Kind]
 	if !ok {
 		return append(out, "kind is not a result kind")
@@ -641,6 +680,9 @@ func codexResetOperationViewViolations(v CodexRateLimitResetOperationView) []str
 	}
 	if !codexAccountFingerprintPattern.MatchString(v.AccountFingerprint) {
 		out = append(out, "accountFingerprint must match cxa1_ + 32 lowercase hex")
+	}
+	if v.AccountSlot != "" && !accountSlotIDPattern.MatchString(v.AccountSlot) {
+		out = append(out, "accountSlot must be an added slot's 8-hex id, or absent for Default")
 	}
 	if !codexResetOneOf(codexRateLimitResetEnums["operationStatus"], v.Status) {
 		out = append(out, "status is not an operation status")

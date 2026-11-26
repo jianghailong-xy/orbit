@@ -9,6 +9,7 @@ import type { Runner } from './TasksSidePanel';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
 import { SessionSearch } from './SessionSearch';
 import { projectSessionsQuery } from '../lib/queries';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // Exercise navigation, menus and both list scopes through the real WorkspaceView. Named API reads
 // call api() within api.ts, so stub them separately from the query factories' api export.
@@ -516,7 +517,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
   it('draws the progress tag as part of the entry, with the session-count hint', async () => {
     await mount();
     const progress = projectRow().querySelector('.session-project-progress');
-    expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
+    expect(await hoverTooltip(progress!)).toBe('2 sessions · 1 running');
     expect(progress?.closest('button')).toBeNull();
     await click(progress, 'the project progress tag');
     await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
@@ -568,6 +569,34 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await until(() => expect(projectRows()).toHaveLength(1));
     await hoverProjectMenu();
     expect(menuItem('Complete')).toBeUndefined();
+  });
+
+  const pressCompleteShortcut = async (): Promise<void> => {
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', metaKey: true, bubbles: true, cancelable: true }));
+    });
+  };
+
+  it('completes a DONE project with ⌘D while its menu is open, as the menu\'s Complete does', async () => {
+    const finished = { ...membership('COORDINATOR'), projectStatus: 'DONE' };
+    rows = [LOOSE, { ...COORDINATOR, projectMembership: finished }, { ...TASK, projectMembership: { ...finished, role: 'TASK' } }];
+    projects = [project({ status: 'DONE' })];
+    await mount();
+    await hoverProjectMenu();
+    await pressCompleteShortcut();
+    await until(() => expect(apiModule.completeProjectSessions).toHaveBeenCalledWith(PROJECT_ID));
+    expect(apiModule.completeSession).not.toHaveBeenCalled();
+    await until(() => expect(projectRows()).toHaveLength(0));
+  });
+
+  it('completes a DONE project with ⌘D from its selected coordinator', async () => {
+    const finished = { ...membership('COORDINATOR'), projectStatus: 'DONE' };
+    rows = [LOOSE, { ...COORDINATOR, projectMembership: finished }, { ...TASK, projectMembership: { ...finished, role: 'TASK' } }];
+    projects = [project({ status: 'DONE' })];
+    await mount(undefined, `/sessions/${COORDINATOR.id}`);
+    await pressCompleteShortcut();
+    await until(() => expect(apiModule.completeProjectSessions).toHaveBeenCalledWith(PROJECT_ID));
+    expect(apiModule.completeSession).not.toHaveBeenCalled();
   });
 
   it('pins and moves the coordinator from the project menu', async () => {
@@ -680,6 +709,23 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     expect(coordinatorRow.querySelector('.session-title')?.textContent).toBe(COORDINATOR.title);
     expect(coordinatorRow.classList.contains('active')).toBe(true);
     expect(column()!.querySelectorAll('.session-row.active')).toHaveLength(1);
+  });
+
+  it('keeps the list on the coordinator’s folder, its project row selected, when the column opens a member filed elsewhere', async () => {
+    folders = [FOLDER];
+    rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, TASK];
+    await mount(undefined, `/workspaces/${WORKSPACE_ID}?folder=${FOLDER.id}`);
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    const listTitle = () => mounted().querySelector('aside.session-col:not(.session-project-column) .session-folder-title')?.textContent;
+    expect(listTitle()).toBe(FOLDER.name);
+    const member = [...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title);
+    await click(member, 'the member in the column');
+    await until(() => expect(shown()).toContain(`/sessions/${TASK.id}`));
+    await settle();
+    const listCol = mounted().querySelector('aside.session-col:not(.session-project-column)')!;
+    expect(listCol.querySelector('.session-folder-title')?.textContent).toBe(FOLDER.name);
+    expect(projectRow().classList.contains('active')).toBe(true);
   });
 
   it('folds with its ✕, which keeps ?project= on the address so the title bar’s button brings it back', async () => {
@@ -910,19 +956,20 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     await click(projectRow(), 'the project row');
     await until(() => expect(column()).not.toBeNull());
     await until(() => expect(button().textContent).toBe('2'));
-    expect(button().getAttribute('title')).toBe('Project sessions');
+    expect(await hoverTooltip(button())).toBe('Project sessions');
     expect(button().classList.contains('orbit-button')).toBe(true);
     expect(button().querySelector('.orbit-button-icon svg, .orbit-button-icon .anticon, .orbit-button-icon img, .orbit-button-icon *')).not.toBeNull();
     // Left of the ⋯ More actions button and Share (docs/mocks/session-header-share-more).
-    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
-    expect(button().nextElementSibling?.nextElementSibling?.classList.contains('workspace-header-share')).toBe(true);
+    expect(button().nextElementSibling?.classList.contains('workspace-header-actions')).toBe(true);
+    expect(button().nextElementSibling?.firstElementChild?.getAttribute('aria-label')).toBe('More actions');
+    expect(button().nextElementSibling?.lastElementChild?.classList.contains('workspace-header-share')).toBe(true);
     // The column header counts the same sessions.
     expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     // A member of the project carries it too.
     await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(TASK.title));
     expect(button().textContent).toBe('2');
-    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    expect(button().nextElementSibling?.firstElementChild?.getAttribute('aria-label')).toBe('More actions');
     // A session in no project has none.
     await act(async () => routerNavigate(`/sessions/${LOOSE.id}`));
     await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(LOOSE.title));
@@ -1073,7 +1120,7 @@ describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
     expect(mounted().querySelector('.workspace-split')?.classList.contains('show-conversation')).toBe(true);
     // The title bar carries the button, left of ⋮, unpressed, with no sheet up yet.
     await until(() => expect(button().textContent).toBe('2'));
-    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    expect(button().nextElementSibling?.firstElementChild?.getAttribute('aria-label')).toBe('More actions');
     expect(button().getAttribute('aria-pressed')).toBe('false');
     expect(sheet()).toBeNull();
   });

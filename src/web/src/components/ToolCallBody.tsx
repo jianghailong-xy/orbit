@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import { copyText } from '../lib/clipboard';
 import { Diff, KeyVals, Pre, relPath } from './ToolBlocks';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The body of a plain tool-call approval: what the call does, not its input as JSON
@@ -82,10 +83,12 @@ function PathLine({ path }: { path: string }): JSX.Element {
   const shown = relPath(path);
   const cut = shown.lastIndexOf('/');
   return (
-    <div className="approval-path" title={path}>
-      {cut >= 0 && <span className="approval-path-dir">{shown.slice(0, cut + 1)}</span>}
-      {shown.slice(cut + 1)}
-    </div>
+    <Tooltip content={path} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+      <div className="approval-path">
+        {cut >= 0 && <span className="approval-path-dir">{shown.slice(0, cut + 1)}</span>}
+        {shown.slice(cut + 1)}
+      </div>
+    </Tooltip>
   );
 }
 

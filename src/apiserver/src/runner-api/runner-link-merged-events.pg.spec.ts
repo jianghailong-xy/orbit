@@ -67,7 +67,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { type INestApplication, Logger, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { type PrismaClient, RunStatus } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { PermissionMode, RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import { Client } from 'pg';
@@ -105,6 +106,7 @@ import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer
 import { resetRunEventSeqConflictMetrics, runEventSeqConflictsSnapshot } from './run-event-seq-conflicts';
 import { WATCH_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -353,7 +355,7 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status,
+        turnState: turnStateOfWord(status),
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
         } : {}),

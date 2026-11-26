@@ -61,8 +61,8 @@ test('0372 moves the Gemini preset onto Antigravity', { skip, concurrency: 1, ti
   const newSession = async (provider: string, runtimeSessionId: string | null, status = 'AWAITING_INPUT') => {
     const id = randomUUID();
     await sql.query(
-      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, runtime_session_id, status, updated_at)
-       VALUES ($1, 'gemini', 'gemini', $2, $2, $3, $4, $5::run_status, now())`,
+      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, runtime_session_id, turn_state, updated_at)
+       VALUES ($1, 'gemini', 'gemini', $2, $2, $3, $4, (CASE ($5)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), now())`,
       [id, owner, provider, runtimeSessionId, status],
     );
     return id;
@@ -132,7 +132,7 @@ test('0372 moves the Gemini preset onto Antigravity', { skip, concurrency: 1, ti
       try {
         if (settings) await sql.query(`SELECT ${settings}`);
         const claimed = await sql.query(
-          `UPDATE session SET status = 'RUNNING' WHERE id = $1 AND status = 'PENDING' RETURNING id`,
+          `UPDATE session SET "turn_state" = 'IN_FLIGHT' WHERE id = $1 AND "turn_state" = 'QUEUED' RETURNING id`,
           [id],
         );
         await sql.query('COMMIT');

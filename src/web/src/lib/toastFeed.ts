@@ -34,8 +34,11 @@ export interface ToastItem {
   icon?: ToastGlyph;
   /** The session it reports on: the toast doubles as the way into it. */
   sessionId?: string;
-  /** The one thing you might do about it — Undo. */
+  /** The one thing you might do about it — Undo. On a failure it is no button: it is what a press on
+   *  the card does (the page that didn't load is reloaded). */
   action?: ToastAction;
+  /** The route it was raised on: a failure that names no session goes back there when clicked. */
+  origin?: string;
   /** One operation's toasts share a key, so its result takes its progress toast's place. */
   key?: string;
   /** Work under way: a spinner until its result replaces it. */

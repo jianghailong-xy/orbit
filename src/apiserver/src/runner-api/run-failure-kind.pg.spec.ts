@@ -22,7 +22,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunFailureKind, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -116,7 +117,7 @@ async function runningSession(db: PrismaClient, w: World, data: Record<string, u
       assignedRunnerId: w.runnerId,
       title: 'a conversation',
       prompt: 'Explain the error in the log',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       engineTurnActive: true,
       provider: 'cursor',
       providerBuiltin: true,
@@ -288,7 +289,7 @@ test('a failed run stores its failure kind with its error, and a revive clears b
       await s.db.session.create({
         data: {
           id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: row.name, prompt: 'x',
-          status: RunStatus.FAILED, finishedAt: new Date(), error: row.error, failureKind: row.failureKind,
+          turnState: null, finishedAt: new Date(), error: row.error, failureKind: row.failureKind,
           dispatchOrigin: SessionDispatchOrigin.USER,
         },
       });

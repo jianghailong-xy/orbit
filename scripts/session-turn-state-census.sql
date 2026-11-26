@@ -14,7 +14,8 @@
 --   turn_state_disagrees    0 after the backfill. turn_state is not the word's (PENDING = QUEUED, RUNNING = IN_FLIGHT,
 --                           INTERRUPTED = ABANDONED, any other word = null). Not 0: the backfill has not finished, or
 --                           something wrote turn_state against the word; deploy 2 refuses to run on such a row.
---   phase_disagrees         0 after the backfill. phase is not deriveSessionPhase of the row: released = IDLE; RUNNING,
+--   phase_disagrees         0 after the backfill. phase is not deriveSessionPhase of the row: released = IDLE (RUNNING
+--                           while retry_at is set, migration 1667); RUNNING,
 --                           or a held word with the engine's turn, a sub-agent or a background job = RUNNING; PENDING
 --                           = PENDING; else IDLE.
 --   phase_null              0 after the backfill (deploy 2 sets phase NOT NULL). Before it, the rows not yet written.
@@ -41,7 +42,7 @@ WITH s AS (
            WHEN 'INTERRUPTED' THEN 'ABANDONED'
          END AS word_turn_state,
          CASE
-           WHEN x."finished_at" IS NOT NULL THEN 'IDLE'
+           WHEN x."finished_at" IS NOT NULL THEN CASE WHEN x."retry_at" IS NOT NULL THEN 'RUNNING' ELSE 'IDLE' END
            WHEN x."status"::text = 'RUNNING' THEN 'RUNNING'
            WHEN x."status"::text IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
             AND (x."engine_turn_active" OR cardinality(x."running_subagents") > 0

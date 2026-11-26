@@ -155,7 +155,7 @@ object ProviderEngines {
     /** A vendor's name, as its keys are called in a sentence: one key runs on several engines, so it is never named after one. */
     private val KEY_VENDORS = mapOf("anthropic" to "Anthropic", "openai" to "OpenAI", "gemini" to "Google Gemini", "deepseek" to "DeepSeek",
         "deepseek-harness" to "DeepSeek", "moonshot" to "Moonshot", CursorRuntime.KEY_PRESET to "Cursor", "glm" to "Z.AI", "minimax" to "MiniMax",
-        "qwen" to "Qwen")
+        "qwen" to "Qwen", "qwen-coding-plan" to "Qwen")
 
     /** A key as a sentence names it, for the middle of one: `the DeepSeek key “DeepSeek 2”` — its vendor and the name its owner gave
      * it, never its slug; a custom endpoint is DeepSeek's when DeepSeek Harness runs it (`engines`, which only the server can tell).

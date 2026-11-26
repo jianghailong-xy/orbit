@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RUNNER_REAP_AFTER_MS, ReaperService } from './reaper.service';
 
 /**
@@ -43,7 +43,7 @@ function reaperFor(runner: { managed: boolean; beatAgoMs: number }) {
         id: SESSION_ID,
         taskId: null,
         assignedRunnerId: RUNNER_ID,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
         provider: 'deepseek',
         providerBuiltin: false,
         runtimeSessionId: null,

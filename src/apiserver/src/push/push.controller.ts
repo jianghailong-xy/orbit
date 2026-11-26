@@ -1,4 +1,5 @@
-import { BadRequestException, Body, ConflictException, Controller, Logger, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, Logger, Optional, Post, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -6,13 +7,24 @@ import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDeviceTokenDto, UnregisterDeviceTokenDto } from './dto';
+import { isPushServiceEndpoint, WebPushTransport } from './web-push-transport';
 
-/** Authenticated APNs/FCM registration. Sending is independently configured in PushService. */
+/** Authenticated APNs/FCM/Web Push registration. Sending is independently configured in PushService. */
 @PatForbidden('ACCOUNT')
 @Controller('push')
 export class PushController {
   private readonly log = new Logger(PushController.name);
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly webPushPublicKey: string | null;
+  constructor(private readonly prisma: PrismaService, @Optional() config?: ConfigService) {
+    this.webPushPublicKey = config ? new WebPushTransport(config).publicKey : null;
+  }
+
+  /** The VAPID key a browser subscribes with; null when this server sends no web push, and the client hides its switch. */
+  @UseGuards(JwtAuthGuard)
+  @Get('web-config')
+  webConfig() {
+    return { publicKey: this.webPushPublicKey };
+  }
 
   /**
    * Register the current owner's device. APNs refreshes by token; Android also atomically
@@ -32,6 +44,14 @@ export class PushController {
     if (data.platform === 'android' && (!dto.installationId || data.environment !== 'production')) {
       throw new BadRequestException('Android requires installationId and environment=production');
     }
+    if (data.platform === 'web') {
+      if (!dto.webKeys || data.environment !== 'production' || data.bundleId !== 'web') {
+        throw new BadRequestException('Web requires webKeys, bundleId=web and environment=production');
+      }
+      // The endpoint is where the server will POST: only a browser's own push service.
+      if (!isPushServiceEndpoint(dto.token)) throw new BadRequestException('Web token must be a browser push service endpoint');
+    }
+    const webKeys = data.platform === 'web' && dto.webKeys ? { p256dh: dto.webKeys.p256dh, auth: dto.webKeys.auth } : undefined;
     // Both unique identities (token and installation) move atomically, including across accounts.
     // A new Android row is also a fresh binding key: queued pushes/logout from the old login expire.
     try {
@@ -57,8 +77,8 @@ export class PushController {
         }
         await tx.deviceToken.upsert({
           where: { token: dto.token },
-          create: { userId: user.userId, token: dto.token, ...data },
-          update: { userId: user.userId, ...data },
+          create: { userId: user.userId, token: dto.token, ...data, ...(webKeys ? { webKeys } : {}) },
+          update: { userId: user.userId, ...data, ...(webKeys ? { webKeys } : {}) },
         });
         return { ok: true };
       }, loggedRetry(this.log, 'push.register', {

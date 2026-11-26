@@ -39,6 +39,7 @@ import { ownerStarted, settleAlert } from './settle-alert';
 import { crossingRequestAlert } from './crossing-request-alert';
 import { CARD_SESSION_SELECT, crossingCardSessionId } from '../projects/project-handoff.service';
 import { FcmTransport } from './fcm-transport';
+import { WebPushTransport, webPushMessage, type WebPushKeys } from './web-push-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
 import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
@@ -187,6 +188,7 @@ export class PushService {
   private readonly apnsCredentials: Partial<Record<ApnsEnvironment, ApnsCredentials>> = {};
   private readonly blockedApnsEnvironments = new Set<ApnsEnvironment>();
   private readonly fcm: FcmTransport;
+  private readonly web: WebPushTransport;
   // Per-owner "needs you" state last pushed to that user's devices, so a reconcile pushes only on a
   // real change and can tell iOS which sessions' banners to clear. In-memory/per-replica; pushes are
   // idempotent so a rare cross-replica double-send is harmless. See docs/cross-platform-badge-sync.md.
@@ -219,12 +221,19 @@ export class PushService {
       }
     }
     this.fcm = new FcmTransport(config);
+    this.web = new WebPushTransport(config);
     if (!this.apnsEnabled) this.log.warn('APNs not configured — iOS pushes disabled');
     if (!this.fcm.enabled) this.log.warn('FCM not configured — Android pushes disabled');
+    if (!this.web.enabled) this.log.warn('Web Push not configured — browser pushes disabled');
   }
 
   private get apnsEnabled(): boolean {
     return Object.keys(this.apnsCredentials).length > 0;
+  }
+
+  /** Some device transport (APNs, FCM or Web Push) is configured. */
+  private get devicePushEnabled(): boolean {
+    return this.apnsEnabled || this.fcm.enabled || this.web.enabled;
   }
 
   /**
@@ -245,7 +254,7 @@ export class PushService {
 
   /** APNs, FCM or Feishu can carry an alert (§6.1). Whether this account has a device or a bound app is `channels`'. */
   private get enabled(): boolean {
-    return this.apnsEnabled || this.fcm.enabled || Boolean(this.feishu);
+    return this.devicePushEnabled || Boolean(this.feishu);
   }
 
   /** The account's registered devices, and its Feishu app when alerts reach its owner there. */
@@ -308,12 +317,13 @@ export class PushService {
   }
 
   private async targets(ownerId: string): Promise<DeviceToken[]> {
-    if (!this.apnsEnabled && !this.fcm.enabled) return [];
+    if (!this.devicePushEnabled) return [];
     return this.withLiveSession(await this.prisma.deviceToken.findMany({ where: { userId: ownerId, OR: [
       ...(this.apnsEnabled ? [{ platform: 'ios', bundleId: this.bundleId,
         environment: { in: ['production', 'sandbox'] } }] : []),
       ...(this.fcm.enabled ? [{ platform: 'android', bundleId: this.fcm.packageName,
         environment: 'production' }] : []),
+      ...(this.web.enabled ? [{ platform: 'web', bundleId: 'web', environment: 'production' }] : []),
     ] } }));
   }
 
@@ -893,7 +903,7 @@ export class PushService {
       if (tokens.length === 0 && !feishu) {
         // Nothing to reach this account through. Without device push on this server that is the
         // server's answer, not the account's: registering a device would change nothing.
-        return this.apnsEnabled || this.fcm.enabled
+        return this.devicePushEnabled
           ? { delivered: false, reason: 'no devices are registered for this account' }
           : { delivered: false, reason: 'push is not configured on this server' };
       }
@@ -951,7 +961,7 @@ export class PushService {
    * device that did not accept it, so this answers rather than throws.
    */
   async notifyOwner(ownerId: string, input: { title: string; message: string; priority: NotifyPriority; url?: string }): Promise<OwnerNotificationResult> {
-    if (!this.apnsEnabled && !this.fcm.enabled) return { delivered: false, reason: 'PUSH_NOT_CONFIGURED' };
+    if (!this.devicePushEnabled) return { delivered: false, reason: 'PUSH_NOT_CONFIGURED' };
     const tokens = await this.targets(ownerId);
     if (tokens.length === 0) return { delivered: false, reason: 'NO_DEVICES' };
     const body = JSON.stringify({
@@ -1912,6 +1922,14 @@ export class PushService {
           const res = await this.fcm.send(t.token, { ...data, registrationKey: t.id }, isCurrent);
           if (res.invalidToken) await this.prisma.deviceToken.deleteMany({ where });
           else if (!res.accepted) this.log.warn(`FCM ${res.reason}`);
+          return res.accepted;
+        }
+        if (t.platform === 'web' && this.web.enabled && t.bundleId === 'web' && t.environment === 'production') {
+          const message = webPushMessage(body, pushType, collapseId);
+          if (!message) return false;
+          const res = await this.web.send(t.token, t.webKeys as unknown as WebPushKeys, message, isCurrent);
+          if (res.invalidToken) await this.prisma.deviceToken.deleteMany({ where });
+          else if (!res.accepted) this.log.warn(`Web Push ${res.reason}`);
           return res.accepted;
         }
         if (t.platform !== 'ios' || !this.apnsEnabled || t.bundleId !== this.bundleId

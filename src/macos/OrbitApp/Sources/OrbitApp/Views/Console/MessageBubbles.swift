@@ -431,11 +431,12 @@ struct UserBubbleView: View {
 
     /// Settings › Translation: "Show original" and its flip (in the meta row, `delivered`), or on a line
     /// of its own the "Translating…" chip or "Couldn't translate, so it wasn't sent · Retry · Send as
-    /// written" (`SessionTranslation.userFoot`).
+    /// written · Cancel" (`SessionTranslation.userFoot`).
     @ViewBuilder
     private var translationFoot: some View {
         let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage,
-                                                originalHidden: originalHidden)
+                                                originalHidden: originalHidden,
+                                                cancellable: translationActions != nil && SessionTranslation.offersCancel(bubble))
         if !parts.isEmpty {
             TranslationFootView(parts: parts, alignment: .trailing) { action in
                 switch action {
@@ -443,6 +444,7 @@ struct UserBubbleView: View {
                 case .hideOriginal: originalHidden.toggle()
                 case .retryTurn: if let id = bubble.turnId { translationActions?.retryTurn(id) }
                 case .sendAsWritten: if let id = bubble.turnId { translationActions?.sendAsWritten(id) }
+                case .cancelTurn: translationActions?.cancelTurn(bubble)
                 case .retryReply: break
                 }
             }
@@ -540,7 +542,7 @@ struct AssistantBubbleView: View {
                     case .flip: flipped.toggle()
                     case .hideOriginal: originalHidden.toggle()
                     case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }
-                    case .retryTurn, .sendAsWritten: break
+                    case .retryTurn, .sendAsWritten, .cancelTurn: break
                     }
                 }
             }

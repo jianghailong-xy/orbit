@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, before, beforeEach, test } from 'node:test';
 import { resetTranslationBreaker } from './translation';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
 import { Logger } from '@nestjs/common';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -14,6 +14,8 @@ import { QueueService } from '../queue/queue.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateFilter, turnStateOfWord } from './session-turn-state';
+import { sessionWord } from '../test-support/session-word';
 
 // The translator's circuit breaker is the process's: each test starts with it closed and nothing counted.
 beforeEach(() => resetTranslationBreaker());
@@ -135,7 +137,7 @@ async function liveSession(status: RunStatus): Promise<string> {
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: 'translation', prompt: 'opening', provider: 'claude', providerBuiltin: true, engine: 'claude',
-      status, numTurns: 1, dispatchOrigin: 'USER', startsTaskWork: false,
+      turnState: turnStateOfWord(status), numTurns: 1, dispatchOrigin: 'USER', startsTaskWork: false,
       ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
         ? { finishedAt: new Date()}
         : {}),
@@ -246,7 +248,7 @@ scenario('a held message can be withdrawn like a queued one', async () => {
   await sessions.translationsSettled();
   await sessions.cancelQueuedTurn(ownerId, sessionId, sent.turnId);
   assert.equal(await prisma.conversationTurn.count({ where: { id: sent.turnId } }), 0);
-  const { status } = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true } });
+  const status = await sessionWord(prisma, sessionId);
   assert.equal(status, RunStatus.AWAITING_INPUT, 'a held message never moved the session');
 });
 
@@ -310,8 +312,8 @@ scenario('skipTranslation (the prompt optimizer\'s English): an opening message 
   // The scenarios above leave sessions running on this one runner; settle them so its capacity is free
   // and the claim answers only whether this session's work is held.
   await prisma.session.updateMany({
-    where: { ownerId, id: { not: created.id }, status: { in: [RunStatus.RUNNING, RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+    where: { ownerId, id: { not: created.id }, ...turnStateFilter(['IN_FLIGHT', 'QUEUED', null]) },
+    data: { turnState: null, finishedAt: new Date()},
   });
   const claimed = await queue.claimSessionForRunner({ id: runnerId });
   assert.equal(claimed?.sessionId, created.id, 'not held: the claim hands it out');

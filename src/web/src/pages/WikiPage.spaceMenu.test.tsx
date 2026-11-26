@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WikiSpaceWithUsage } from '../lib/wiki';
 import { WikiPage } from './WikiPage';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The space menu the Wiki's name opens among several spaces (board docs/mocks/wiki-space-menu B): the console's own
@@ -106,7 +107,7 @@ describe('the Wiki’s space menu', () => {
     ]);
     // A reader that cannot see the amber hears what waits.
     expect(rows()[0].getAttribute('aria-label') ?? rows()[0].textContent).toContain('orbit');
-    expect(rows()[0].querySelector('.needs-you')?.getAttribute('title')).toBe('2 waiting on you');
+    expect(await hoverTooltip(rows()[0].querySelector('.needs-you')!)).toBe('2 waiting on you');
   });
 
   it('opens another space at its home, and Manage spaces into Wiki settings', async () => {

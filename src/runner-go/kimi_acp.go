@@ -2420,6 +2420,13 @@ func (a *kimiACPClient) bridgeKimiPermission(ctx context.Context, t *Transport, 
 				"options":  questionOptions,
 			}},
 		}
+		// One plan to approve is Orbit's plan card, which renders the plan as Markdown: its Approve is
+		// Kimi's allow_once plan_approve and its Keep planning the first reject_once, plan_revise
+		// (kimiPermissionOption). A choice between plans (plan_opt_*) stays a question.
+		if kimiHasOption(options, "plan_approve") {
+			toolName = "ExitPlanMode"
+			input = map[string]interface{}{"plan": question}
+		}
 	}
 	if ctx.Err() != nil {
 		return kimiCancelledPermissionResult()
@@ -2565,6 +2572,13 @@ func kimiQuestionFromPermission(toolCall map[string]interface{}, options []inter
 			}
 		}
 	}
+	// Kimi heads a plan review with where it saved the plan, a path in the engine's own home that
+	// nobody reading the card can open.
+	if strings.HasPrefix(question, "Plan saved to: ") {
+		if _, plan, ok := strings.Cut(question, "\n\n"); ok {
+			question = strings.TrimSpace(plan)
+		}
+	}
 	questionOptions := []map[string]interface{}{}
 	for _, optionValue := range options {
 		option := mapValue(optionValue)
@@ -2580,6 +2594,15 @@ func kimiQuestionFromPermission(toolCall map[string]interface{}, options []inter
 		return "", nil
 	}
 	return question, questionOptions
+}
+
+func kimiHasOption(options []interface{}, optionID string) bool {
+	for _, optionValue := range options {
+		if firstString(mapValue(optionValue), "optionId", "option_id") == optionID {
+			return true
+		}
+	}
+	return false
 }
 
 func kimiPermissionOption(options []interface{}, decision *ApprovalDecisionResponse, question string) string {

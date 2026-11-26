@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { performance } from 'node:perf_hooks';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -12,6 +13,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { readOpenListVersion } from './open-list-version';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * What one `since=` read of a workspace column costs when the account's version has moved, on a
@@ -109,7 +111,7 @@ test(`a since= read of a ${ROWS}-row column builds only the rows that moved`, { 
       data: {
         ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: `olc ${n}`, prompt: 'olc',
         provider: 'claude', providerBuiltin: true, startedAt: new Date(), taskId,
-        status: n % 50 === 0 ? RunStatus.RUNNING : RunStatus.AWAITING_INPUT,
+        turnState: turnStateOfWord(n % 50 === 0 ? RunStatus.RUNNING : RunStatus.AWAITING_INPUT),
         lastAssistantText: 'x'.repeat(2_000), dispatchOrigin: SessionDispatchOrigin.USER,
       },
     })).id;

@@ -42,6 +42,7 @@ import {
   updateSessionConfig,
 } from '../api';
 import { Menu } from './ui/Menu';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import { ApprovalPanel } from './ApprovalPanel';
 import { PendingTray } from './PendingTray';
 import { SessionConversation } from './SessionConversation';
@@ -241,32 +242,38 @@ export function WikiChatPanel({
         </button>
       )}
       <div className="wk-chat-head">
-        <button
-          type="button"
-          className="wk-chat-title"
-          aria-expanded={history}
-          title={WIKI_CHAT_HISTORY}
-          onClick={() => setHistory((open) => !open)}
-        >
-          <span className="t">{title}</span>
-          <CaretDownOutlined className="caret" />
-        </button>
-        <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_NEW} title={WIKI_CHAT_NEW} onClick={() => onChat(WIKI_CHAT_NEW_PARAM)}>
-          <PlusOutlined />
-        </button>
-        <button
-          type="button"
-          className="wk-chat-ib"
-          aria-label={WIKI_CHAT_OPEN_SESSION}
-          title={WIKI_CHAT_OPEN_SESSION}
-          disabled={fresh || history}
-          onClick={() => navigate(`/sessions/${encodeId(sessionId!)}`)}
-        >
-          <ArrowRightOutlined />
-        </button>
-        <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_CLOSE} title={WIKI_CHAT_CLOSE} onClick={onClose}>
-          <CloseOutlined />
-        </button>
+        <Tooltip content={WIKI_CHAT_HISTORY} side="bottom" align="start">
+          <button
+            type="button"
+            className="wk-chat-title"
+            aria-expanded={history}
+            onClick={() => setHistory((open) => !open)}
+          >
+            <span className="t">{title}</span>
+            <CaretDownOutlined className="caret" />
+          </button>
+        </Tooltip>
+        <Tooltip content={WIKI_CHAT_NEW} side="bottom">
+          <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_NEW} onClick={() => onChat(WIKI_CHAT_NEW_PARAM)}>
+            <PlusOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip content={WIKI_CHAT_OPEN_SESSION} side="bottom">
+          <button
+            type="button"
+            className="wk-chat-ib"
+            aria-label={WIKI_CHAT_OPEN_SESSION}
+            disabled={fresh || history}
+            onClick={() => navigate(`/sessions/${encodeId(sessionId!)}`)}
+          >
+            <ArrowRightOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip content={WIKI_CHAT_CLOSE} side="bottom" align="end">
+          <button type="button" className="wk-chat-ib" aria-label={WIKI_CHAT_CLOSE} onClick={onClose}>
+            <CloseOutlined />
+          </button>
+        </Tooltip>
       </div>
       {history && (
         <WikiChatHistory
@@ -744,17 +751,18 @@ function wikiChatChips(attachments: WikiChatAttachments, dispatch: Dispatch<Wiki
         </span>
       )}
       {quote && (
-        <span
-          className="composer-pill composer-file wk-chat-chip q"
-          data-kind="quote"
-          title={quote.selected > quote.sentenceIds.length ? wikiChatCapped(quote.selected) : undefined}
-        >
-          <span className="composer-file-name q1">{quote.first}</span>
-          <span className="composer-file-size sub">{wikiChatQuoteCounts(quote.sentenceIds.length, quote.sources)}</span>
-          <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(quote.first)} onClick={() => dispatch({ type: 'crossQuote' })}>
-            <CloseOutlined />
-          </button>
-        </span>
+        <Tooltip content={quote.selected > quote.sentenceIds.length ? wikiChatCapped(quote.selected) : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span
+            className="composer-pill composer-file wk-chat-chip q"
+            data-kind="quote"
+          >
+            <span className="composer-file-name q1">{quote.first}</span>
+            <span className="composer-file-size sub">{wikiChatQuoteCounts(quote.sentenceIds.length, quote.sources)}</span>
+            <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(quote.first)} onClick={() => dispatch({ type: 'crossQuote' })}>
+              <CloseOutlined />
+            </button>
+          </span>
+        </Tooltip>
       )}
     </>
   );
@@ -1069,17 +1077,19 @@ function WikiChatPick({
   onChange: (value: string) => void;
 }) {
   return (
-    <span className="wk-chat-pick" title={label}>
-      <span className="v">{shown}</span>
-      <DownOutlined className="ic" />
-      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </span>
+    <Tooltip content={label}>
+      <span className="wk-chat-pick">
+        <span className="v">{shown}</span>
+        <DownOutlined className="ic" />
+        <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </span>
+    </Tooltip>
   );
 }
 

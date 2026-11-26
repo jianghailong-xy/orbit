@@ -1,9 +1,9 @@
 /**
  * THE REMAINING MODULES' READERS ON THE FACTS, AGAINST POSTGRESQL (task T12 of
  * docs/session-status-retirement-plan.md, §2.3 and §2.5): feishu, github, help, link previews, providers, push,
- * schedules, watches and wiki. Each reader is called as the server calls it, over one session of every held word
- * with turn_state as migration 1611's trigger keeps it AND with turn_state NULL, as a held row nothing has written
- * since that migration has until the backfill (task T3), and over released rows. The expected answers are today's,
+ * schedules, watches and wiki. Each reader is called as the server calls it, over one session of every held word,
+ * written as its turn state, and over released rows. (The held rows with no turn_state that the NULL fallback read
+ * until task T14 no longer exist: 1652 validated the CHECK.) The expected answers are today's,
  * spelled from the stored word each row was written with; the one exception is a row kind of plan §3.4, whose
  * observation carries the derived word.
  *
@@ -19,7 +19,6 @@ import { RunStatus } from '@orbit/shared';
 import { FeishuGroupService } from '../feishu/feishu-group.service';
 import { reserveOpenSlot } from '../feishu/feishu-open-limits';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
-import { HelpAsk } from '../help/help-ask';
 import { readSessions } from '../help/help-ask-reads';
 import { LinkPreviewsService } from '../link-previews/link-previews.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -34,7 +33,7 @@ import { WatchEvaluatorService } from '../watches/watch-evaluator.service';
 import { WatchesService } from '../watches/watches.service';
 import { loadDossierRecords } from '../wiki/wiki-dossier';
 import { wikiSessionsOfSpace } from '../wiki/wiki-maintenance';
-import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -67,35 +66,32 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   return { ownerId, runnerId, workspaceId: workspace.id };
 }
 
-/** A session stored with `word`. `unfilled`: turn_state cleared afterwards, as on a row not yet backfilled. */
+/** A session at `word`: its turn state, or its release. */
 async function session(
   db: PrismaClient,
   ids: World,
   title: string,
   word: RunStatus,
-  options: { unfilled?: boolean; data?: Partial<Prisma.SessionUncheckedCreateInput> } = {},
+  options: { data?: Partial<Prisma.SessionUncheckedCreateInput> } = {},
 ): Promise<Row> {
   const released = word === RunStatus.SUCCEEDED || word === RunStatus.FAILED || word === RunStatus.CANCELLED;
   const { id } = await db.session.create({
     data: {
-      ownerId: ids.ownerId, creatorId: ids.ownerId, title, prompt: title, status: word,
+      ownerId: ids.ownerId, creatorId: ids.ownerId, title, prompt: title, turnState: turnStateOfWord(word),
       dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude', providerBuiltin: true,
       workspaceId: ids.workspaceId, assignedRunnerId: ids.runnerId, startedAt: new Date(), lastTurnAt: new Date(),
       ...(released ? { finishedAt: new Date(), lastTurnOutcome: word === RunStatus.FAILED ? 'FAILED' : 'ANSWERED' } : {}),
       ...options.data,
     },
   });
-  // The word trigger fires on `status` alone, so this leaves the row as one nothing has written since 1611.
-  if (options.unfilled) await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', id);
   return { id, title, word };
 }
 
-/** One session of every held word filled and unfilled, and a finished and a failed release. */
+/** One session of every held word, and a finished and a failed release. */
 async function everyRow(db: PrismaClient, ids: World, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<Row[]> {
   const rows: Row[] = [];
   for (const word of HELD_WORDS) {
-    rows.push(await session(db, ids, `${word} filled`, word, { data }));
-    rows.push(await session(db, ids, `${word} unfilled`, word, { unfilled: true, data }));
+    rows.push(await session(db, ids, word, word, { data }));
   }
   rows.push(await session(db, ids, 'finished', RunStatus.SUCCEEDED, { data: { ...data, endReason: 'task_done' } }));
   rows.push(await session(db, ids, 'failed', RunStatus.FAILED, { data }));
@@ -106,10 +102,9 @@ const of = (rows: Row[], ...words: RunStatus[]): string[] => rows.filter((row) =
 const owed = (rows: Row[]): string[] => of(rows, RunStatus.PENDING, RunStatus.RUNNING);
 const notOwed = (rows: Row[]): string[] => rows.map((row) => row.id).filter((id) => !owed(rows).includes(id)).sort();
 
-test('the remaining modules read the facts, and a row with no turn_state reads as today', { skip, timeout: 600_000 }, async (t) => {
+test('the remaining modules read the facts, and answer as the stored word did', { skip, timeout: 600_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
-  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   const prisma = db as unknown as PrismaService;
   t.after(() => db.$disconnect());
 
@@ -226,7 +221,7 @@ test('the remaining modules read the facts, and a row with no turn_state reads a
     }
   });
 
-  await t.test('help: the Ask list and the account read', async () => {
+  await t.test('help: the account read an Ask answers from', async () => {
     const ids = await world(db, 'help');
     const rows = await everyRow(db, ids);
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -237,31 +232,19 @@ test('the remaining modules read the facts, and a row with no turn_state reads a
       assert.equal(answer.paused, row.word === RunStatus.INTERRUPTED, `${row.title}: paused`);
     }
     assert.equal(read.sessions.length, rows.length);
-    // A session is an Ask from its creation or never, so the Ask list has rows of its own.
-    const asker = await world(db, 'asks');
-    const asks = await everyRow(db, asker, { helpAsk: { page: null } });
-    const asked = new Map(asks.map((row) => [row.id, row]));
-    const list = await HelpAsk.prototype.list.call({ prisma } as never, asker.ownerId);
-    const outcomes = Object.fromEntries(list.questions.map((question) => [asked.get(question.sessionId)!.title, question.outcome]));
-    for (const row of asks) {
-      const expected = owed([row]).length ? 'working' : row.title === 'failed' ? 'failed' : 'answered';
-      assert.equal(outcomes[row.title], expected, row.title);
-    }
   });
 
   await t.test('link previews: a task card\'s last run carries the word', async () => {
     const ids = await world(db, 'links');
     const tasks: Array<{ taskId: string; row: Row }> = [];
     for (const word of HELD_WORDS) {
-      for (const unfilled of [false, true]) {
-        const task = await db.task.create({
-          data: {
-            ownerId: ids.ownerId, creatorType: 'USER', creatorId: ids.ownerId, title: `${word} ${unfilled}`,
-            assigneeId: ids.workspaceId, completionCriterion: 'EVIDENCE_JUDGMENT', autoRunWhenReady: false,
-          },
-        });
-        tasks.push({ taskId: task.id, row: await session(db, ids, `${word} ${unfilled}`, word, { unfilled, data: { taskId: task.id } }) });
-      }
+      const task = await db.task.create({
+        data: {
+          ownerId: ids.ownerId, creatorType: 'USER', creatorId: ids.ownerId, title: word,
+          assigneeId: ids.workspaceId, completionCriterion: 'EVIDENCE_JUDGMENT', autoRunWhenReady: false,
+        },
+      });
+      tasks.push({ taskId: task.id, row: await session(db, ids, word, word, { data: { taskId: task.id } }) });
     }
     const taskCards = (LinkPreviewsService.prototype as unknown as {
       taskCards: (ownerId: string, ids: string[]) => Promise<Map<string, { lastRun: { status: string } | null }>>;
@@ -301,7 +284,6 @@ test('the remaining modules read the facts, and a row with no turn_state reads a
       const run = await db.scheduleRun.create({
         data: { scheduleId: schedule.id, scheduleRevision: 1, plannedAt: new Date(), trigger: 'MANUAL', state: 'NO_CHANGE', sessionId: row.id },
       });
-      // Names no status: an unfilled row stays unfilled.
       await db.session.update({ where: { id: row.id }, data: { runSource: 'SCHEDULE', scheduleRunId: run.id } });
     }
     const completed: string[] = [];
@@ -357,9 +339,9 @@ test('the remaining modules read the facts, and a row with no turn_state reads a
     const named = created.targets.find((target) => target.targetResourceId === unhonoured.id)!;
     assert.equal((named.targetStatus as { status: string }).status, 'ENDED');
 
-    // The evaluator's own read: nothing settled at create, then one unfilled row parks.
-    const turning = await session(db, ids, 'turning', RunStatus.RUNNING, { unfilled: true });
-    const queued = await session(db, ids, 'queued', RunStatus.PENDING, { unfilled: true });
+    // The evaluator's own read: nothing settled at create, then one row's turn is abandoned.
+    const turning = await session(db, ids, 'turning', RunStatus.RUNNING);
+    const queued = await session(db, ids, 'queued', RunStatus.PENDING);
     const filled = await session(db, ids, 'filled', RunStatus.RUNNING);
     const waiting = await watches.create(ids.ownerId, {
       predicateVersion: 1,
@@ -368,8 +350,7 @@ test('the remaining modules read the facts, and a row with no turn_state reads a
       action: 'NOTIFY_USER',
     });
     assert.equal(await db.watchMatch.count({ where: { watchId: waiting.id } }), 0);
-    await db.session.update({ where: { id: turning.id }, data: { status: RunStatus.INTERRUPTED } });
-    await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', turning.id);
+    await db.session.update({ where: { id: turning.id }, data: { turnState: 'ABANDONED' } });
     const evaluator = new WatchEvaluatorService(prisma, { publishWatchChanged: () => undefined } as never);
     await evaluator.evaluate(waiting.id);
     const evaluated = await snapshotOf(waiting.id);

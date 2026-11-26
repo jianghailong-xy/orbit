@@ -12,6 +12,7 @@ import { deepseekBalanceKey } from '../lib/deepseekBalance';
 import { PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { DeepSeekBalanceLine, DeepSeekBalanceSection } from './DeepSeekBalance';
 import { SettingsKeysPage } from './settings/SettingsProviderPages';
+import { hoverTooltip } from '../test/tooltipHover';
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
 const apiMock = vi.mocked(api);
@@ -177,7 +178,7 @@ describe('the DeepSeek account balance', () => {
       await show(<DeepSeekBalanceLine row={row()} />);
       expect(text()).toBe(line);
       expectNoAmount(text());
-      expect(container.querySelector('.dsb-line.fail')?.getAttribute('title')).toBe((answer as { message: string }).message);
+      expect(await hoverTooltip(container.querySelector('.dsb-line.fail')!)).toBe((answer as { message: string }).message);
     });
 
     it('fails the same way when the request never reached the server', async () => {

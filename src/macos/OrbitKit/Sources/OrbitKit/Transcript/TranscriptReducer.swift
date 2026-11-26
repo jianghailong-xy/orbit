@@ -163,6 +163,9 @@ public struct TranscriptReducer: Sendable, Codable {
     /// seam for free. Transient like `bgLaunch`; the results are capped, since one whose call never
     /// comes (its call trimmed for good, a duplicate) must not pile up.
     private var strayResults: [RunEvent] = []
+    /// The same for a sub-agent's results (`applySubagent`): a workflow agent's call and the result it
+    /// handed back are often pages apart, and dropping the result left its card running for good.
+    private var straySubagentResults: [RunEvent] = []
     private var strayDeliveries: [String: (delivery: String, seq: Int)] = [:]
     private static let strayResultCap = 256
     /// Where each steer held unread would have been drawn when it was sent (an index into `items`): a
@@ -713,6 +716,13 @@ public struct TranscriptReducer: Sendable, Codable {
         for (parent, older) in sub.state.subagentItems {
             state.subagentItems[parent] = older + (state.subagentItems[parent] ?? [])
         }
+        // A sub-agent's results this window could not match settle the calls the page brought; the
+        // rest wait for a later page again.
+        let pendingSubagentResults = straySubagentResults
+        straySubagentResults = []
+        for ev in pendingSubagentResults {
+            if let parent = str(ev, "parentToolUseId") { applySubagent(ev, parent: parent) }
+        }
         for (id, progress) in sub.state.taskProgress where state.taskProgress[id] == nil {
             state.taskProgress[id] = progress
         }
@@ -967,7 +977,7 @@ public struct TranscriptReducer: Sendable, Codable {
     /// (`applyUserDelivery`); the console that asked calls it the moment the server confirms, ahead
     /// of that event, because the words have already gone back to its composer (web parity:
     /// `withdrawnSteers`). A turn drawn nowhere is a no-op, so the two arriving in either order
-    /// make one removal.
+    /// make one removal. A held message that failed to translate, cancelled, leaves the same way.
     public mutating func removeWithdrawnSteer(turnId: String) {
         state.queued.removeAll { $0.turnId == turnId }
         state.accepted.removeAll { $0.turnId == turnId }
@@ -1143,6 +1153,8 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.cards = turn.cards
                 bubble.translation = turn.turnTranslation
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
+                // A held opening is listed as queued: its failed line offers no Cancel.
+                bubble.opening = turn.opening == true
                 reconciled.append(bubble)
             } else {
                 var bubble = UserBubble(id: "server-\(turn.turnId)", text: turn.content,
@@ -1153,6 +1165,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                         shell: turn.kind == "shell")
                 bubble.cards = turn.cards
                 bubble.translation = turn.turnTranslation
+                bubble.opening = turn.opening == true
                 reconciled.append(bubble)
             }
         }
@@ -2385,7 +2398,14 @@ public struct TranscriptReducer: Sendable, Codable {
             guard let idx = list.lastIndex(where: {
                 if case .toolCall(let c) = $0 { return c.status == .running && (id == nil || c.id == id) }
                 return false
-            }), case .toolCall(var card) = list[idx] else { return }
+            }), case .toolCall(var card) = list[idx] else {
+                // Its call may be in an older page not loaded yet (`straySubagentResults`).
+                if id != nil {
+                    straySubagentResults.append(ev)
+                    if straySubagentResults.count > Self.strayResultCap { straySubagentResults.removeFirst() }
+                }
+                return
+            }
             card.result = result
             card.resultImages = ToolResultContent.images(ev.payload["content"])
             card.resultHasImage = ToolResultContent.hasImage(ev.payload["content"])

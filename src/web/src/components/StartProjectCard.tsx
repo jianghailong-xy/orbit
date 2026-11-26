@@ -125,6 +125,7 @@ import { Switch } from './ui/Switch';
 import { Textarea } from './ui/Textarea';
 import { streamPoll } from '../lib/listBudget';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * "Start this project?" — the one card on which the account owner starts a project: the criteria
@@ -456,9 +457,11 @@ export function StartProjectCard({
     <div ref={ref} className="approval-card settlement-card start-card">
       <div className="approval-head settlement-card-head">
         <span className="settlement-card-heading">{START_PROJECT_TITLE}</span>
-        <span className="criteria-provenance prov-brand" title={ACCEPTANCE_PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={ACCEPTANCE_PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance prov-brand">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-questions settlement-card-body">
         {/* Who is asking, and in their own words: the card is the coordinator asking to begin. */}

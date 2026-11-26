@@ -52,11 +52,11 @@ import {
   type Prisma,
   type PrismaClient,
   type Runner,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -99,6 +99,8 @@ import { SessionsService } from './sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from './session-turn-state';
+import { type SessionFixture, wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -172,16 +174,16 @@ test('one session’s message to another is signed, delivered as such, and bound
   const runner = { id: runnerId, ownerId } as Runner;
 
   /** A session on this runner, parked between turns — the shape a live orchestrating caller has. */
-  async function session(title: string, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
+  async function session(title: string, data: SessionFixture = {}): Promise<string> {
     const id = randomUUID();
-    const fixtureStatus = data.status ?? RunStatus.AWAITING_INPUT;
+    const { status: fixtureStatus = RunStatus.AWAITING_INPUT, ...dataFacts } = data;
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: workerWorkspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: turnStateOfWord(fixtureStatus),
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
-        ...data,
+        ...dataFacts,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: data.finishedAt ?? new Date(),
         } : {}),
@@ -276,7 +278,7 @@ test('one session’s message to another is signed, delivered as such, and bound
   }
 
   /** A project whose coordinator conversation is `coordinatorStatus`, ready to be addressed. */
-  async function project(label: string, coordinator: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
+  async function project(label: string, coordinator: SessionFixture = {}) {
     const projectId = randomUUID();
     await prisma.project.create({
       data: {
@@ -360,7 +362,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     // (migration 0414's acquisition guard drops the claim of any replica that does not).
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
     const delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
     assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
@@ -442,7 +444,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     const revived = await projectSend(worker, parked.projectId, 'the landing needs a decision', 'project-revive');
     assert.equal(revived.sessionId, parked.coordinatorSessionId, 'the ended coordinator was replaced, not revived');
     const standing = await prisma.session.findUniqueOrThrow({ where: { id: parked.coordinatorSessionId } });
-    assert.equal(standing.status, RunStatus.PENDING, 'the coordinator was not revived by the message');
+    assert.equal(wordOf(standing), RunStatus.PENDING, 'the coordinator was not revived by the message');
     assert.equal(await senderOf(parked.coordinatorSessionId, 'project-revive'), worker, 'the revive dropped the sender');
   });
 
@@ -497,7 +499,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     });
 
     // The owner's message beside it: no block, no card — and one the runner claims for it is dropped.
-    await prisma.session.update({ where: { id: recipient }, data: { status: RunStatus.AWAITING_INPUT } });
+    await prisma.session.update({ where: { id: recipient }, data: { turnState: null } });
     await prisma.conversationTurn.updateMany({ where: { sessionId: recipient }, data: { status: 'ANSWERED' } });
     await ownerSend(recipient, 'and this one is mine');
     const mine = await claimAndPoll(recipient);
@@ -626,7 +628,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     await prisma.session.update({
       where: { id: sessionId },
       data: {
-        status: parkedAs, retryAt: armedAt, retryAttempts: 0,
+        turnState: turnStateOfWord(parkedAs), retryAt: armedAt, retryAttempts: 0,
         // A provider error settles the run FAILED and asks the process to stop (`sweep`'s own note).
         // The settled turn's FAILED is copied to the session (removal step R2), which is what reads it as failed (R7).
         ...(parkedAs === RunStatus.FAILED
@@ -696,7 +698,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     await autoRetry.sweep(await failAndArm(recipient, RunStatus.FAILED));
 
     const standing = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
-    assert.equal(standing.status, RunStatus.PENDING, `the failed session was not revived: ${standing.status}`);
+    assert.equal(wordOf(standing), RunStatus.PENDING, `the failed session was not revived: ${wordOf(standing)}`);
     const [resent] = await resentOn(recipient);
     assert.ok(resent, 'the sweep re-sent nothing');
     assert.equal(resent.senderSessionId, worker, 'the revive dropped the sender');
@@ -829,7 +831,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     // Read and answered, so the interrupt below has nothing of the worker's left to drop: what is
     // counted is what was sent.
     await prisma.conversationTurn.updateMany({ where: { sessionId: busy }, data: { status: 'ANSWERED', answeredAt: new Date() } });
-    await prisma.session.update({ where: { id: busy }, data: { status: RunStatus.AWAITING_INPUT } });
+    await prisma.session.update({ where: { id: busy }, data: { turnState: null } });
 
     // The last within the limit is an interrupt's, counted with the sends before it.
     const last = await sessionInterrupt(chatty, busy, `stop and do this instead (${SESSION_MESSAGES_PER_PAIR_PER_WINDOW})`, `interrupt-${SESSION_MESSAGES_PER_PAIR_PER_WINDOW}`);
@@ -1023,7 +1025,7 @@ test('one session’s message to another is signed, delivered as such, and bound
       const resentTurn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: resent.turnId } });
       assert.equal(await senderOf(recipient, resentTurn.clientTurnId), worker);
       assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).turnId, resent.turnId);
-      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.PENDING);
+      assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: recipient } }))), RunStatus.PENDING);
     }
   });
 
@@ -1085,7 +1087,7 @@ test('one session’s message to another is signed, delivered as such, and bound
       assert.equal(handed.json.turnId, first.turnId);
       await refusedBeforeWritten(recipient, 2, first.turnId);
       const failed = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
-      assert.equal(failed.status, RunStatus.FAILED);
+      assert.equal(wordOf(failed), RunStatus.FAILED);
       assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: requestId } })).state, 'OPEN');
 
       const second = await press(recipient);
@@ -1119,7 +1121,7 @@ test('one session’s message to another is signed, delivered as such, and bound
         { seq: 3, type: 'assistant', turnId: first.turnId, payload: { text: 'Shipping it.' } },
       ]);
       await complete(recipient, { turnId: first.turnId, status: 'SUCCEEDED', subtype: 'success', numTurns: 1, costUsd: 0 });
-      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.AWAITING_INPUT);
+      assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: recipient } }))), RunStatus.AWAITING_INPUT);
 
       assert.equal((await press(recipient)).turnId, first.turnId, 'a press after the re-send went through re-sent it again');
       assert.equal((await copiesOf(recipient, words)).length, 2, 'the failed turn and its one re-send');

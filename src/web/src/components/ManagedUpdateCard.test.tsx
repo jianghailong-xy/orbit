@@ -88,13 +88,18 @@ beforeEach(() => {
   }));
 });
 
-afterEach(async () => {
+/** One page at a time: a root left mounted keeps its portals, which clearing the body would pull from under it. */
+async function unmount() {
   if (root) {
     const mounted = root;
     root = null;
     await act(async () => mounted.unmount());
   }
   host?.remove();
+}
+
+afterEach(async () => {
+  await unmount();
   document.body.innerHTML = '';
   vi.unstubAllGlobals();
   apiMock.mockReset();
@@ -104,6 +109,7 @@ async function settle() {
   for (let i = 0; i < 8; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 }
 async function render(node: React.ReactNode, at: string): Promise<HTMLDivElement> {
+  await unmount();
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);

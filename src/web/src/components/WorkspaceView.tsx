@@ -550,7 +550,7 @@ import { runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
-import { Tooltip } from './ui/Tooltip';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import type {
   SessionSourceLanding,
   SessionTurnIntent,
@@ -1544,9 +1544,11 @@ export function projectBackLink(session: any): { path: string; title: string | n
 export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
   if (!projectId) return null;
   return (
-    <span className="coordinator-badge" title="This session coordinates a project">
-      Coordinator
-    </span>
+    <Tooltip content="This session coordinates a project" align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="coordinator-badge">
+        Coordinator
+      </span>
+    </Tooltip>
   );
 }
 
@@ -1587,17 +1589,21 @@ export function SessionTitleRow({
           <span className="session-merge-badge">⚠</span>
         </Tooltip>
       )}
-      {/* The list row's `shared` (docs/share-links-design.md §8). A native title rather than a
-          Tooltip: nothing to linger on a touch screen, where a tap opens the row. */}
+      {/* The list row's `shared` (docs/share-links-design.md §8). The tip is hover only: on a touch screen
+          a tap opens the row. */}
       {s.shared === true && (
-        <span className="session-shared" title={SESSION_SHARED_TIP} aria-label={SESSION_SHARED_TIP}>
-          <GlobalOutlined />
-        </span>
+        <Tooltip content={SESSION_SHARED_TIP} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="session-shared" aria-label={SESSION_SHARED_TIP}>
+            <GlobalOutlined />
+          </span>
+        </Tooltip>
       )}
       {s.hasGuests === true && (
-        <span className="session-guests" title={SESSION_GUESTS_TIP} aria-label={SESSION_GUESTS_TIP}>
-          <TeamOutlined />
-        </span>
+        <Tooltip content={SESSION_GUESTS_TIP} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="session-guests" aria-label={SESSION_GUESTS_TIP}>
+            <TeamOutlined />
+          </span>
+        </Tooltip>
       )}
       <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
@@ -1657,10 +1663,12 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
           <span>{SESSION_PROJECT_COPY.startNotAsked}</span>
         </div>
       )}
-      <button type="button" className={`session-project-start-press${asked ? ' is-primary' : ''}`}
-        title={SESSION_PROJECT_COPY.startHint} onClick={() => setOpen(true)}>
-        {asked ? SESSION_PROJECT_COPY.startReview : START_ROW_OWN}
-      </button>
+      <Tooltip content={SESSION_PROJECT_COPY.startHint}>
+        <button type="button" className={`session-project-start-press${asked ? ' is-primary' : ''}`}
+          onClick={() => setOpen(true)}>
+          {asked ? SESSION_PROJECT_COPY.startReview : START_ROW_OWN}
+        </button>
+      </Tooltip>
       <ProjectStartDialog projectId={projectId} asked={asked !== null} open={open} onClose={() => setOpen(false)}
         onViewTasks={() => {
           setOpen(false);
@@ -1738,24 +1746,26 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
           <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
         </div>
         <div className="session-sub">
-          <span
-            className={`session-project-progress${project.status === 'DONE' ? ' done' : ''}${project.pause ? ' paused' : ''}`}
-            title={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)}
-          >
-            {counts ? (
-              <>
-                <SessionProjectProgressBar counts={counts} runningCount={project.runningCount} />
-                {SESSION_PROJECT_COPY.progress(counts.done, counts.total)}
-              </>
-            ) : project.status}
-          </span>
-          <div
-            className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
-            title={project.line.text}
-          >
-            {project.line.glyph === 'pause' && <PauseOutlined className="session-project-pause-glyph" aria-hidden="true" />}
-            {project.line.text}
-          </div>
+          <Tooltip content={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span
+              className={`session-project-progress${project.status === 'DONE' ? ' done' : ''}${project.pause ? ' paused' : ''}`}
+            >
+              {counts ? (
+                <>
+                  <SessionProjectProgressBar counts={counts} runningCount={project.runningCount} />
+                  {SESSION_PROJECT_COPY.progress(counts.done, counts.total)}
+                </>
+              ) : project.status}
+            </span>
+          </Tooltip>
+          <Tooltip content={project.line.text} truncatedOnly align="start">
+            <div
+              className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
+            >
+              {project.line.glyph === 'pause' && <PauseOutlined className="session-project-pause-glyph" aria-hidden="true" />}
+              {project.line.text}
+            </div>
+          </Tooltip>
         </div>
       </div>
     </>
@@ -2448,17 +2458,19 @@ export function QueuedTurnMeta({
       : 'Queued for next turn';
   const why = delivery != null ? deliveryFailureExplanation(deliveryCode, deliveryReason) : undefined;
   return (
-    <span className="chat-queued-meta" title={deliveryReason}>
-      {held && queuedTurnWaitsItsTurn({ placement, delivery }) ? held : (
-        <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
-          {label}
-        </span>
-      )}
-      {why && <span className="chat-queued-why">{why}</span>}
-      {delivery == null
-        ? placement === 'queued' && <a onClick={onCancel}>{wake ? 'Withdraw wake' : 'Cancel'}</a>
-        : onPutBack && <a onClick={onPutBack}>Put back in the composer</a>}
-    </span>
+    <Tooltip content={deliveryReason} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="chat-queued-meta">
+        {held && queuedTurnWaitsItsTurn({ placement, delivery }) ? held : (
+          <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
+            {label}
+          </span>
+        )}
+        {why && <span className="chat-queued-why">{why}</span>}
+        {delivery == null
+          ? placement === 'queued' && <a onClick={onCancel}>{wake ? 'Withdraw wake' : 'Cancel'}</a>
+          : onPutBack && <a onClick={onPutBack}>Put back in the composer</a>}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -2924,25 +2936,27 @@ export function WorkspaceView({
   const jumpUpPill = () => (lastMine && !atBottom ? (
     // The person's last message first, the way back to the beginning beside it as an icon.
     <span className="chat-older-pill chat-older-split">
-      <button
-        type="button"
-        className="chat-older-mine"
-        title={lastMine.text}
-        onClick={revealLastMine}
-      >
-        {lastMine.text}
-      </button>
-      <button
-        type="button"
-        className="chat-jump-start chat-older-start"
-        title="Jump to the beginning"
-        aria-label="Jump to the beginning"
-        onClick={() => void jumpToStart()}
-      >
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
-        </svg>
-      </button>
+      <Tooltip content={lastMine.text} truncatedOnly side="bottom">
+        <button
+          type="button"
+          className="chat-older-mine"
+          onClick={revealLastMine}
+        >
+          {lastMine.text}
+        </button>
+      </Tooltip>
+      <Tooltip side="bottom" content="Jump to the beginning">
+        <button
+          type="button"
+          className="chat-jump-start chat-older-start"
+          aria-label="Jump to the beginning"
+          onClick={() => void jumpToStart()}
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
+          </svg>
+        </button>
+      </Tooltip>
     </span>
   ) : (
     <button type="button" className="chat-older-pill chat-jump-start" onClick={() => void jumpToStart()}>
@@ -3542,17 +3556,8 @@ export function WorkspaceView({
             event: 'merge-result',
             headline: `Couldn't merge into ${target}`,
             detail: d.mergeError ?? 'Merge aborted; your branch is unchanged.',
+            // The card opens the session, whose merge bar offers Resolve in session.
             tone: 'error',
-            action: d.branch ? {
-              label: 'Resolve in session',
-              ariaLabel: `Resolve the conflict in ${operation.title}`,
-              onClick: () => resolveMut.mutate({
-                id: operation.id,
-                title: operation.title,
-                branch: d.branch!,
-                target,
-              }),
-            } : undefined,
           });
         } else {
           message.sessionNotice({
@@ -3912,7 +3917,8 @@ export function WorkspaceView({
   );
   // A conversation the list's page does not show — a pasted link, a search pick, a notification — takes
   // the list to where it is filed: its folder's page, Scheduled runs for a scheduled run, or the
-  // workspace's own list. One opened from the page leaves the page as it is. Decided once a conversation,
+  // workspace's own list. One opened from the page leaves the page as it is, and so does a member of a
+  // project whose row the page shows: that row is the one selected for it. Decided once a conversation,
   // when its row and this workspace's list and folders are in.
   const placedSessionId = useRef<string | null>(null);
   useEffect(() => {
@@ -3921,11 +3927,13 @@ export function WorkspaceView({
     if (!sessionsQ.isSuccess || sessionsQ.isPlaceholderData || !foldersQ.isSuccess) return;
     placedSessionId.current = selectedId;
     if (listProjectId || listedSessions.some((s) => s.id === selectedId)) return;
+    const memberOf = selectedSession.projectMembership?.projectId;
+    if (memberOf && folderListing.entries.some((entry) => entry.kind === 'project' && entry.projectId === memberOf)) return;
     const place = selectedSession.runSource === 'SCHEDULE' ? SCHEDULED_RUNS_FOLDER
       : selectedSession.folderId ? encodeId(selectedSession.folderId) : null;
     if (place !== folderParam) setConversationPage(place);
   }, [selectedId, selectedSession, scopeWorkspaceId, resolvedWorkspaceId, sessionsQ.isSuccess,
-    sessionsQ.isPlaceholderData, foldersQ.isSuccess, listProjectId, listedSessions, folderParam]);
+    sessionsQ.isPlaceholderData, foldersQ.isSuccess, listProjectId, listedSessions, folderListing, folderParam]);
   // The list's page on a list's own address (a workspace's list, its New session), so a reload keeps it.
   const folderSearch = openFolder
     ? `?folder=${encodeId(openFolder.id)}`
@@ -4993,17 +5001,18 @@ export function WorkspaceView({
   const [decisionWaiting, setDecisionWaiting] = useState(false);
   const topPillShown = decisionWaiting || loadingOlderShown || jumpUpOffered;
   const jumpStartIcon = (
-    <button
-      type="button"
-      className="chat-jump-start chat-older-start"
-      title="Jump to the beginning"
-      aria-label="Jump to the beginning"
-      onClick={() => void jumpToStart()}
-    >
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
-      </svg>
-    </button>
+    <Tooltip side="bottom" content="Jump to the beginning">
+      <button
+        type="button"
+        className="chat-jump-start chat-older-start"
+        aria-label="Jump to the beginning"
+        onClick={() => void jumpToStart()}
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 11.5l6-6 6 6M6 18.5l6-6 6 6" />
+        </svg>
+      </button>
+    </Tooltip>
   );
   // The top capsule. The strip's line is always its first child, mounted whether or not anything
   // waits, so it can say when something does: a pill of its own then, and otherwise a wrapper that
@@ -5030,6 +5039,8 @@ export function WorkspaceView({
   const translationBilingual = bilingualOn(me.data);
   const translationAgentLanguage = agentLanguageOf(me.data);
   const questionTranslations = useQuestionTranslations(selectedId ?? null, approvals, translationIsOn);
+  // Declared further down (it needs the composer); the failed message's Cancel reads it when pressed.
+  const restoreUndeliveredRef = useRef<typeof restoreUndelivered>(null);
   const translationActions = useMemo<TranslationActions>(() => {
     const settle = (res: TranslationActionResponse) =>
       setQueued((current) =>
@@ -5049,12 +5060,24 @@ export function WorkspaceView({
         selectedId
           ? sendTurnAsWritten(selectedId, turnId).then(settle, failed("Couldn't send the message"))
           : Promise.resolve(),
+      // Withdraw a message held because its translation failed: gone from the conversation, and what
+      // the owner wrote (not a translation) goes back into the composer, as a withdrawn queued message does.
+      cancelTurn: (turnId) => {
+        if (!selectedId) return Promise.resolve();
+        const held = queued.find((turn) => turn.turnId === turnId);
+        return cancelQueuedTurn(selectedId, turnId).then(() => {
+          setQueued((current) => current.filter((turn) => turn.turnId !== turnId));
+          const body = held ? (held.translation?.original ?? held.content) : '';
+          restoreUndeliveredRef.current?.(held?.shell ? `!${body}` : body, held?.attachments);
+        }, failed("Couldn't cancel the message"));
+      },
+      canCancelTurn: (turnId) => queued.some((turn) => turn.turnId === turnId && !turn.opening),
       retryReply: (seq) =>
         selectedId
           ? retryReplyTranslation(selectedId, seq).catch(failed("Couldn't retry the translation"))
           : Promise.resolve(),
     };
-  }, [translationIsOn, translationBilingual, translationAgentLanguage, selectedId, setQueued, message]);
+  }, [translationIsOn, translationBilingual, translationAgentLanguage, selectedId, queued, setQueued, message]);
   // Walk the pages back until the session's first message is loaded, then sit at the top.
   //
   // Scrolling up alone can't get there: each page lands with the reader's position anchored
@@ -7071,9 +7094,21 @@ export function WorkspaceView({
         e.preventDefault();
         return;
       }
+      // A finished project's row completes as its menu's Complete does: the coordinator and the
+      // members still open, together. Its menu is keyed by the project's id, not a session's.
+      const completeFinishedProject = (project: (typeof folderListing.projects)[number] | undefined): boolean => {
+        if (!project || projectStateAction(project, effectiveView) !== 'complete') return false;
+        completeProjectMut.mutate({ projectId: project.projectId, memberIds: project.members.map((m: any) => m.id) });
+        return true;
+      };
       if (menuOpenId) {
         e.preventDefault();
         e.stopPropagation();
+        const project = folderListing.projects.find((p) => p.id === menuOpenId);
+        if (project) {
+          if (completeFinishedProject(project)) setMenuOpenId(null);
+          return;
+        }
         const row = orderedSessions.find((s) => s.id === menuOpenId);
         const source = selectedSession?.id === menuOpenId ? selectedSession : row;
         const sourceView = source ? sessionRowView(source) : rowView;
@@ -7083,6 +7118,17 @@ export function WorkspaceView({
         ) return;
         setMenuOpenId(null);
         requestComplete(row);
+        return;
+      }
+      // The coordinator stands for its project's row, which may stay in Open after the coordinator
+      // itself is completed, while members are still open.
+      const coordinated = selectedSession?.projectMembership?.role === 'COORDINATOR'
+        ? folderListing.projects.find((p) => p.coordinator?.id === selectedSession.id)
+        : undefined;
+      if (coordinated && projectStateAction(coordinated, effectiveView) === 'complete') {
+        e.preventDefault();
+        setHeaderMenuOpen(false);
+        completeFinishedProject(coordinated);
         return;
       }
       if (
@@ -7096,7 +7142,8 @@ export function WorkspaceView({
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [menuOpenId, orderedSessions, rowView, sessionRowView, selected, selectedSession, selectedLifecycleState, requestComplete]);
+  }, [menuOpenId, orderedSessions, rowView, sessionRowView, selected, selectedSession, selectedLifecycleState, requestComplete,
+    folderListing.projects, effectiveView, completeProjectMut]);
   useEffect(() => {
     if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId) &&
       !folderListing.projects.some((p) => p.id === menuOpenId) &&
@@ -8647,6 +8694,7 @@ export function WorkspaceView({
           },
     [selectedTrashed, selectedMissing],
   );
+  restoreUndeliveredRef.current = restoreUndelivered;
   // The main checkout behind this console (docs/main-checkout-git-contract.md): its card and result lines in the
   // conversation, its bar above the worktree bar, and the review drawer they open.
   const consoleWorkspace = workspacesForRunner.find((a) => a.id === consoleWorkspaceId);
@@ -8777,6 +8825,8 @@ export function WorkspaceView({
   // failed, so a card about claude's spent window read as deepseek's. `detailForSelected` first,
   // because a pick just made is the stale thing here, not the detail.
   const outageProvider = detailForSelected?.provider ?? selected?.provider ?? 'claude';
+  // The card names it as the composer does: "Qwen (Model Studio)", "Claude Code" — never the slug.
+  const outageProviderName = providerNameOn(shownEngine, shownProviderChoice(outageProvider));
   // A Cursor CLI session's quota card speaks of the account it ran on — or the key — by its name, with
   // the plan Cursor reported and when its usage comes back, and offers another signed-in account with
   // room for a new session: the conversation can't move there yet (D5).
@@ -8814,7 +8864,7 @@ export function WorkspaceView({
   })();
   const autoRetryHelp: AutoRetryHelp = useMemo(
     () => ({
-      provider: outageProvider,
+      provider: outageProviderName,
       cursor: cursorQuotaHelp,
       runnerName: runnerShownName,
       retryAt: detailForSelected?.retryAt ?? null,
@@ -8885,7 +8935,7 @@ export function WorkspaceView({
         : undefined,
     }),
     [
-      outageProvider,
+      outageProviderName,
       // Rebuilt each render, so compared by what it says; its press only opens a draft.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       JSON.stringify(cursorQuotaHelp),
@@ -9287,16 +9337,22 @@ export function WorkspaceView({
         <span className="session-icon session-folder-icon">
           <FolderOutlined />
           {row.running ? (
-            <span className="session-folder-activity" title="Running" />
+            <Tooltip content="Running" align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+              <span className="session-folder-activity" aria-label="Running" />
+            </Tooltip>
           ) : row.jobs ? (
-            <span className="session-folder-activity jobs" title="Background job running" />
+            <Tooltip content="Background job running" align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+              <span className="session-folder-activity jobs" aria-label="Background job running" />
+            </Tooltip>
           ) : null}
         </span>
         <span className="session-folder-name">{row.folder.name}</span>
         {row.needsYou > 0 ? (
-          <span className="session-folder-needs" title={waiting} aria-label={waiting}>
-            {row.needsYou}
-          </span>
+          <Tooltip content={waiting} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span className="session-folder-needs" aria-label={waiting}>
+              {row.needsYou}
+            </span>
+          </Tooltip>
         ) : (
           <span className="session-folder-count">{row.sessionCount}</span>
         )}
@@ -9310,12 +9366,12 @@ export function WorkspaceView({
             open={folderMenuOpenId === row.folder.id}
             onOpenChange={(open) => setFolderMenuOpenId(open ? row.folder.id : null)}
             items={folderMenuItems(row.folder)}
+            tooltip={FOLDER_COPY.more}
             trigger={
               <span
                 className="session-kebab session-folder-more"
                 role="button"
                 aria-label={FOLDER_COPY.more}
-                title={FOLDER_COPY.more}
               >
                 <MoreOutlined />
               </span>
@@ -9345,13 +9401,19 @@ export function WorkspaceView({
       >
         <span className="session-icon session-folder-icon">
           <FieldTimeOutlined />
-          {running && <span className="session-folder-activity" title="Running" />}
+          {running && (
+            <Tooltip content="Running" align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+              <span className="session-folder-activity" aria-label="Running" />
+            </Tooltip>
+          )}
         </span>
         <span className="session-folder-name">{SCHEDULED_RUNS_COPY.title}</span>
         {needsYou > 0 ? (
-          <span className="session-folder-needs" title={waiting} aria-label={waiting}>
-            {needsYou}
-          </span>
+          <Tooltip content={waiting} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span className="session-folder-needs" aria-label={waiting}>
+              {needsYou}
+            </span>
+          </Tooltip>
         ) : (
           <span className="session-folder-count">{scheduledRuns.length}</span>
         )}
@@ -10159,11 +10221,11 @@ export function WorkspaceView({
       nativeButton={false}
       popupClassName="session-scope-popup"
       items={scopeItems}
+      tooltip="Switch view, filter and group"
       trigger={
         <span
           ref={scopeTrigger}
           className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
-          title="Switch view, filter and group"
         >
           {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
           <DownOutlined />
@@ -10339,9 +10401,11 @@ export function WorkspaceView({
   // conversation's right edge (owner 2026-11-11), where its back chevron is a ✕ that closes the column.
   const projectPageHead = (onClose: () => void, closeLabel: string, closeIcon: ReactNode): ReactNode => openProjectId && (
     <div className="session-col-head session-folder-head session-project-page-header">
-      <button type="button" className="session-folder-back" aria-label={closeLabel} title={closeLabel} onClick={onClose}>
-        {closeIcon}
-      </button>
+      <Tooltip side="bottom" align="start" content={closeLabel}>
+        <button type="button" className="session-folder-back" aria-label={closeLabel} onClick={onClose}>
+          {closeIcon}
+        </button>
+      </Tooltip>
       <span className="session-folder-titles">
         <span className="session-folder-title">{pageProjectTitle}</span>
         <span className="session-folder-workspace">
@@ -10352,11 +10416,13 @@ export function WorkspaceView({
       </span>
       {/* The page's one action, as iOS's toolbar has it: the project's own page. The
           coordinator is the first row below, so it needs no entry of its own up here. */}
-      <button type="button" className="session-kebab session-folder-head-more session-project-page-open"
-        aria-label={SESSION_PROJECT_COPY.openProject} title={SESSION_PROJECT_COPY.openProject}
-        onClick={() => navigate(`/projects/${encodeId(openProjectId)}`)}>
-        <AppstoreOutlined />
-      </button>
+      <Tooltip side="bottom" align="end" content={SESSION_PROJECT_COPY.openProject}>
+        <button type="button" className="session-kebab session-folder-head-more session-project-page-open"
+          aria-label={SESSION_PROJECT_COPY.openProject}
+          onClick={() => navigate(`/projects/${encodeId(openProjectId)}`)}>
+          <AppstoreOutlined />
+        </button>
+      </Tooltip>
     </div>
   );
   // The project's first card and its merge into main lead the list and scroll with it, as on iOS
@@ -10751,29 +10817,31 @@ export function WorkspaceView({
                     {/* A member whose project has no row in this workspace: the project's
                         progress, which opens its sessions page (owner 2026-11-07). */}
                     {mark && (
-                      <button
-                        type="button"
-                        className={`session-project-progress${mark.status === 'DONE' ? ' done' : ''}`}
-                        title={SESSION_PROJECT_COPY.markHint(mark.title)}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (rowController.takeClick()) enterProjectSessions(mark.projectId, s.id);
-                        }}
-                      >
-                        {mark.taskCounts ? (
-                          <>
-                            <SessionProjectProgressBar counts={mark.taskCounts} runningCount={mark.runningCount} />
-                            {SESSION_PROJECT_COPY.progress(mark.taskCounts.done, mark.taskCounts.total)}
-                          </>
-                        ) : mark.status}
-                      </button>
+                      <Tooltip content={SESSION_PROJECT_COPY.markHint(mark.title)} align="start">
+                        <button
+                          type="button"
+                          className={`session-project-progress${mark.status === 'DONE' ? ' done' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (rowController.takeClick()) enterProjectSessions(mark.projectId, s.id);
+                          }}
+                        >
+                          {mark.taskCounts ? (
+                            <>
+                              <SessionProjectProgressBar counts={mark.taskCounts} runningCount={mark.runningCount} />
+                              {SESSION_PROJECT_COPY.progress(mark.taskCounts.done, mark.taskCounts.total)}
+                            </>
+                          ) : mark.status}
+                        </button>
+                      </Tooltip>
                     )}
-                    <div
-                      className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
-                      title={line.hint}
-                    >
-                      {line.text}
-                    </div>
+                    <Tooltip content={line.hint} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+                      <div
+                        className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                      >
+                        {line.text}
+                      </div>
+                    </Tooltip>
                     <SessionMarkChips marks={sessionMarks(actionSession)} />
                   </div>
                 </>
@@ -10862,15 +10930,16 @@ export function WorkspaceView({
             className={`session-col-head session-folder-head${dropHover === null ? ' drop-target' : ''}`}
             {...folderDropProps(null)}
           >
-            <button
-              type="button"
-              className="session-folder-back"
-              aria-label={FOLDER_COPY.back(headWorkspaceName)}
-              title={FOLDER_COPY.back(headWorkspaceName)}
-              onClick={() => leaveFolder()}
-            >
-              <LeftOutlined />
-            </button>
+            <Tooltip side="bottom" align="start" content={FOLDER_COPY.back(headWorkspaceName)}>
+              <button
+                type="button"
+                className="session-folder-back"
+                aria-label={FOLDER_COPY.back(headWorkspaceName)}
+                onClick={() => leaveFolder()}
+              >
+                <LeftOutlined />
+              </button>
+            </Tooltip>
             <span className="session-folder-titles">
               {folderEdit?.id === openFolder.id ? (
                 <input
@@ -10907,15 +10976,16 @@ export function WorkspaceView({
           // The Scheduled runs folder's page: back to the workspace's list, and the folder's name. It lists the view
           // it was opened from, as a folder's page does.
           <div className="session-col-head session-folder-head">
-            <button
-              type="button"
-              className="session-folder-back"
-              aria-label={FOLDER_COPY.back(headWorkspaceName)}
-              title={FOLDER_COPY.back(headWorkspaceName)}
-              onClick={() => leaveFolder()}
-            >
-              <LeftOutlined />
-            </button>
+            <Tooltip side="bottom" align="start" content={FOLDER_COPY.back(headWorkspaceName)}>
+              <button
+                type="button"
+                className="session-folder-back"
+                aria-label={FOLDER_COPY.back(headWorkspaceName)}
+                onClick={() => leaveFolder()}
+              >
+                <LeftOutlined />
+              </button>
+            </Tooltip>
             <span className="session-folder-titles">
               <span className="session-folder-title">{SCHEDULED_RUNS_COPY.title}</span>
               <span className="session-folder-workspace">{headWorkspaceName}</span>
@@ -10926,13 +10996,14 @@ export function WorkspaceView({
           <div className="session-col-head">
             {managedHeadRow ? (
               // The managed runner's dot is its shared state: grey asleep, never the dot of an offline runner.
-              <span
-                className={`workspace-status-dot managed-mark--${managedHeadRow.tone}`}
-                role="img"
-                aria-label={managedHeadRow.label}
-                title={managedHeadRow.detail ? `${managedHeadRow.label} · ${managedHeadRow.detail}` : managedHeadRow.label}
-                data-managed-kind={managedHeadRow.kind}
-              />
+              <Tooltip content={managedHeadRow.detail ? `${managedHeadRow.label} · ${managedHeadRow.detail}` : managedHeadRow.label} side="bottom" align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+                <span
+                  className={`workspace-status-dot managed-mark--${managedHeadRow.tone}`}
+                  role="img"
+                  aria-label={managedHeadRow.label}
+                  data-managed-kind={managedHeadRow.kind}
+                />
+              </Tooltip>
             ) : (
               <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
             )}
@@ -10976,17 +11047,18 @@ export function WorkspaceView({
             page's narrow head has no room to spell the tag out in the trigger. */}
         {(openFolder || onScheduledRuns) && activeTag && (
           <div className="session-tag-chips">
-            <button
-              type="button"
-              className="session-tag-chip"
-              aria-label={FOLDER_COPY.clearTag(activeTag.name)}
-              title={FOLDER_COPY.clearTag(activeTag.name)}
-              onClick={() => setTagFilter(null)}
-            >
-              <span className="session-section-dot" style={{ background: activeTag.color }} />
-              <span className="session-tag-chip-name">{activeTag.name}</span>
-              <CloseOutlined />
-            </button>
+            <Tooltip content={FOLDER_COPY.clearTag(activeTag.name)} side="bottom" align="start">
+              <button
+                type="button"
+                className="session-tag-chip"
+                aria-label={FOLDER_COPY.clearTag(activeTag.name)}
+                onClick={() => setTagFilter(null)}
+              >
+                <span className="session-section-dot" style={{ background: activeTag.color }} />
+                <span className="session-tag-chip-name">{activeTag.name}</span>
+                <CloseOutlined />
+              </button>
+            </Tooltip>
           </div>
         )}
         <div
@@ -11117,31 +11189,21 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
-            {selected?.taskId && !composing && (
-              <button
-                type="button"
-                className="workspace-header-task"
-                title={`Back to task · ${selected.taskTitle ?? ''}`}
-                onClick={() => openTaskOverPage(encodeId(selected.taskId))}
-              >
-                <ArrowLeftOutlined />
-                <span className="workspace-header-task-name">{selected.taskTitle ?? 'Back to task'}</span>
-              </button>
-            )}
             <div className="workspace-title-line">
               {selected && !selectedTrashed && !composing ? (
                 // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
                 // it is renamed there, in the Name field.
-                <button
-                  type="button"
-                  className="workspace-name workspace-name-button"
-                  title="Session settings"
-                  aria-expanded={settingsOpen}
-                  onClick={() => setSettingsOpen((open) => !open)}
-                >
-                  <span className="workspace-name-text">{selected.title}</span>
-                  <RightOutlined className="workspace-name-chevron" aria-hidden />
-                </button>
+                <Tooltip content="Session settings" side="bottom" align="start">
+                  <button
+                    type="button"
+                    className="workspace-name workspace-name-button"
+                    aria-expanded={settingsOpen}
+                    onClick={() => setSettingsOpen((open) => !open)}
+                  >
+                    <span className="workspace-name-text">{selected.title}</span>
+                    <RightOutlined className="workspace-name-chevron" aria-hidden />
+                  </button>
+                </Tooltip>
               ) : (
                 <div className="workspace-name">
                   {composing
@@ -11152,27 +11214,44 @@ export function WorkspaceView({
               {/* docs/mocks/session-header-project-link (C): a coordinator session is named after its project, so the
                   way to the project page is the Coordinator badge itself, not a second line repeating the title. */}
               {!composing && projectBack && (
-                <button
-                  type="button"
-                  className="coordinator-badge coordinator-badge-link"
-                  title={projectBack.title ? `Open project · ${projectBack.title}` : 'Open project'}
-                  aria-label={projectBack.title ? `Coordinator · Open project ${projectBack.title}` : 'Coordinator · Open project'}
-                  onClick={() => navigate(projectBack.path)}
-                >
-                  Coordinator
-                  <RightOutlined aria-hidden />
-                </button>
+                <Tooltip content={projectBack.title ? `Open project · ${projectBack.title}` : 'Open project'} side="bottom" align="start">
+                  <button
+                    type="button"
+                    className="coordinator-badge coordinator-badge-link"
+                    aria-label={projectBack.title ? `Coordinator · Open project ${projectBack.title}` : 'Coordinator · Open project'}
+                    onClick={() => navigate(projectBack.path)}
+                  >
+                    Coordinator
+                    <RightOutlined aria-hidden />
+                  </button>
+                </Tooltip>
+              )}
+              {/* As the Coordinator badge does for a project: a task's session is named after its task, so the way to
+                  the task is a Task badge beside the title, not a second line repeating it. */}
+              {!composing && selected?.taskId && (
+                <Tooltip content={selected.taskTitle ? `Open task · ${selected.taskTitle}` : 'Open task'} side="bottom">
+                  <button
+                    type="button"
+                    className="coordinator-badge coordinator-badge-link"
+                    aria-label={selected.taskTitle ? `Task · Open task ${selected.taskTitle}` : 'Task · Open task'}
+                    onClick={() => openTaskOverPage(encodeId(selected.taskId))}
+                  >
+                    Task
+                    <RightOutlined aria-hidden />
+                  </button>
+                </Tooltip>
               )}
               {/* docs/mocks/session-header-compact: a wide window says Shared on the Share button beside ⋯. */}
               {isMobile && !composing && selected && selectedShared && (
-                <button
-                  type="button"
-                  className="session-shared-pill"
-                  title="Anyone with the link can view this session — open its sharing settings"
-                  onClick={() => setShareOpen(true)}
-                >
-                  <GlobalOutlined /> Shared · Live
-                </button>
+                <Tooltip content="Anyone with the link can view this session — open its sharing settings" side="bottom">
+                  <button
+                    type="button"
+                    className="session-shared-pill"
+                    onClick={() => setShareOpen(true)}
+                  >
+                    <GlobalOutlined /> Shared · Live
+                  </button>
+                </Tooltip>
               )}
               {!composing && selectedId && !selectedTrashed && !selectedMissing && (
                 <SessionWatchBadges sessionId={selectedId} follow={isMobile} />
@@ -11183,15 +11262,16 @@ export function WorkspaceView({
               )}
               {/* Only a failed connection is said here; Connected, Starting and Not reported stay on the ⋯ row. */}
               {!composing && selected && !selectedTrashed && selectedAgentToolsStatus.tone === 'bad' && (
-                <button
-                  type="button"
-                  className="session-agent-tools-pill"
-                  title="The agent here cannot reach Orbit's tools — open Agent tools"
-                  onClick={() => setAgentToolsOpen(true)}
-                >
-                  <span className="session-agent-tools-pill-dot" aria-hidden />
-                  Agent tools {selectedAgentToolsStatus.word.toLowerCase()}
-                </button>
+                <Tooltip content="The agent here cannot reach Orbit's tools — open Agent tools" side="bottom">
+                  <button
+                    type="button"
+                    className="session-agent-tools-pill"
+                    onClick={() => setAgentToolsOpen(true)}
+                  >
+                    <span className="session-agent-tools-pill-dot" aria-hidden />
+                    Agent tools {selectedAgentToolsStatus.word.toLowerCase()}
+                  </button>
+                </Tooltip>
               )}
             </div>
             {/* docs/mocks/session-header-compact: a wide window's header is the title alone; the run word, the
@@ -11228,17 +11308,21 @@ export function WorkspaceView({
           {selected && !composing && (
             <>
               {titleBarProjectId && !selectedTrashed && (
-                <Button variant="text" className="workspace-header-project"
-                  icon={titleBarActive
-                    ? <LoadingOutlined spin style={{ color: 'var(--brand)' }} />
-                    : <SidebarNavIcon name="projects" />}
-                  title={PROJECT_COLUMN_COPY.label} aria-label={PROJECT_COLUMN_COPY.label}
-                  aria-pressed={titleBarPageShown}
-                  onClick={isMobile ? () => setSheetProjectId(titleBarProjectId) : toggleProjectColumn}>
-                  {titleBarSessionCount ?? undefined}
-                </Button>
+                <Tooltip content={PROJECT_COLUMN_COPY.label} side="bottom" align="end">
+                  <Button variant="text" className="workspace-header-project"
+                    icon={titleBarActive
+                      ? <LoadingOutlined spin style={{ color: 'var(--brand)' }} />
+                      : <SidebarNavIcon name="projects" />}
+                    aria-label={PROJECT_COLUMN_COPY.label}
+                    aria-pressed={titleBarPageShown}
+                    onClick={isMobile ? () => setSheetProjectId(titleBarProjectId) : toggleProjectColumn}>
+                    {titleBarSessionCount ?? undefined}
+                  </Button>
+                </Tooltip>
               )}
-              {/* docs/mocks/session-header-share-more: ⋯ then Share, one tight pair at the header's right edge. */}
+              {/* docs/mocks/session-header-share-more: ⋯ then Share, one tight pair at the header's right edge. Their own
+                  group, so the focus guards the open menu puts after its trigger take no gap and move nothing. */}
+              <div className="workspace-header-actions">
               <Menu
                 side="bottom"
                 align="end"
@@ -11450,18 +11534,22 @@ export function WorkspaceView({
                         },
                       ]
                 }
-                trigger={<Button ref={headerMore} variant="text" className="workspace-header-more" icon={<HeaderMoreIcon />} title="More actions" />}
+                tooltip="More actions"
+                trigger={<Button ref={headerMore} variant="text" className="workspace-header-more" icon={<HeaderMoreIcon />} aria-label="More actions" />}
               />
               {!isMobile && !selectedTrashed && (
-                <Button
-                  variant="text"
-                  className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
-                  icon={<HeaderShareIcon />}
-                  title={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}
-                  aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
-                  onClick={() => setShareOpen(true)}
-                />
+                // The app's tooltip, as on ⋯, not the browser's own (`title`).
+                <Tooltip side="bottom" align="end" content={selectedShared ? 'Shared · Live — anyone with the link can view' : 'Share…'}>
+                  <Button
+                    variant="text"
+                    className={`workspace-header-share${selectedShared ? ' is-live' : ''}`}
+                    icon={<HeaderShareIcon />}
+                    aria-label={selectedShared ? 'Shared · Live' : 'Share…'}
+                    onClick={() => setShareOpen(true)}
+                  />
+                </Tooltip>
               )}
+              </div>
             </>
           )}
         </div>}
@@ -11942,7 +12030,9 @@ export function WorkspaceView({
                       {selectedCanRestore ? (
                         <a onClick={() => requestRestore(selected)}>Restore to Open</a>
                       ) : (
-                        <span title="Restore unavailable right now">Restore unavailable</span>
+                        <Tooltip content="Restore unavailable right now" delay={TEXT_TOOLTIP_DELAY_MS}>
+                          <span>Restore unavailable</span>
+                        </Tooltip>
                       )}
                       {' · '}
                       <a onClick={() => confirmPurge({ id: selected.id, title: selected.title })}>
@@ -12337,12 +12427,12 @@ export function WorkspaceView({
                 }
               : undefined
           }
-          // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
-          // the built-in Codex runtime is offered them — on Default, whose quota this then is;
-          // the create route judges the workspace.
+          // Earned reset credits belong to the runner's own Codex sign-ins, so only a session on
+          // the built-in Codex runtime is offered them: each account's, the one whose quota this is
+          // first. The create route judges the workspace.
           planUsageReset={
-            shownProvider === 'codex' && shownCodexAccount === 'default'
-              ? { runner, workspaceId: shownWorkspaceId }
+            shownProvider === 'codex'
+              ? { runner, workspaceId: shownWorkspaceId, accountSlot: shownCodexAccount }
               : undefined
           }
           contextTokens={contextTokens}
@@ -12935,12 +13025,14 @@ export function SessionComposer({
           Only shown once the box has hit its auto-grow cap or the user set a manual
           height — an empty/short composer has nothing worth resizing. */}
       {(composerHeight != null || composerCapped) && (
-        <div
-          className="composer-resize-handle"
-          onMouseDown={startComposerResize}
-          onDoubleClick={() => setComposerHeight(null)}
-          title="Drag to resize · double-click to reset"
-        />
+        <Tooltip content="Drag to resize · double-click to reset" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div
+            className="composer-resize-handle"
+            onMouseDown={startComposerResize}
+            onDoubleClick={() => setComposerHeight(null)}
+            aria-label="Drag to resize · double-click to reset"
+          />
+        </Tooltip>
       )}
       {showSlash && (
         <div className="composer-slash-menu" role="listbox">
@@ -13076,9 +13168,11 @@ export function SessionComposer({
                 ) : (
                   <PaperClipOutlined className="composer-file-icon" />
                 )}
-                <span className="composer-file-name" title={im.name}>
-                  {im.name}
-                </span>
+                <Tooltip content={im.name} truncatedOnly>
+                  <span className="composer-file-name">
+                    {im.name}
+                  </span>
+                </Tooltip>
                 {im.size !== undefined && (
                   <span className="composer-file-size">{fmtBytes(im.size)}</span>
                 )}
@@ -13295,9 +13389,11 @@ export function SessionComposer({
       {offeredSuggestion && (
         <div className="composer-suggestion">
           {/* Drawn for the eye; a screen reader hears the box's description below instead. */}
-          <span className="composer-suggestion-text" title={offeredSuggestion} aria-hidden="true">
-            {offeredSuggestion}
-          </span>
+          <Tooltip content={offeredSuggestion} truncatedOnly align="start">
+            <span className="composer-suggestion-text" aria-hidden="true">
+              {offeredSuggestion}
+            </span>
+          </Tooltip>
           {/* The grey line itself says how to take it, and there is no button to see: Tab with a
               keyboard, a double-tap on the box on a touch screen. Which shows is CSS's call. Drawn in
               docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
@@ -13309,18 +13405,19 @@ export function SessionComposer({
           </span>
           {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
               from the eye there, and gone with a keyboard, which has Tab. */}
-          <button
-            type="button"
-            className="composer-suggestion-use"
-            // Fill without blurring the box first: the click's focus change would land the
-            // caret somewhere before the text arrives.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={acceptSuggestion}
-            aria-label={`Use suggestion: ${offeredSuggestion}`}
-            title="Use this suggestion"
-          >
-            Use
-          </button>
+          <Tooltip content="Use this suggestion" align="end">
+            <button
+              type="button"
+              className="composer-suggestion-use"
+              // Fill without blurring the box first: the click's focus change would land the
+              // caret somewhere before the text arrives.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={acceptSuggestion}
+              aria-label={`Use suggestion: ${offeredSuggestion}`}
+            >
+              Use
+            </button>
+          </Tooltip>
           <span id={suggestionHintId} className="sr-only">
             Suggested reply: {offeredSuggestion}.
             <span className="composer-suggestion-tab-hint"> Press Tab to use it.</span>
@@ -13339,16 +13436,17 @@ export function SessionComposer({
             shell mode, instead of opening the attachment menu. Nothing in that menu applies to a
             raw command anyway — and a mode you can enter needs a visible way out. */}
         {shellMode ? (
-          <Button
-            className="composer-attach-btn composer-shell-btn"
-            variant="text"
-            onClick={exitShell}
-            disabled={composerDisabled}
-            aria-label="Leave shell mode"
-            title="Leave shell mode"
-          >
-            ❯
-          </Button>
+          <Tooltip content="Leave shell mode">
+            <Button
+              className="composer-attach-btn composer-shell-btn"
+              variant="text"
+              onClick={exitShell}
+              disabled={composerDisabled}
+              aria-label="Leave shell mode"
+            >
+              ❯
+            </Button>
+          </Tooltip>
         ) : (
         <Menu
           side="top"
@@ -13619,20 +13717,21 @@ export function SessionComposer({
             nothing to optimize: a button that came and went with the draft moved every control to
             its left. Busy, the spinner takes the same slot. */}
         {optimizer.buttonShown && (
-          <button
-            type="button"
-            className="composer-optimize"
-            onClick={optimizer.press}
-            disabled={!optimizer.buttonEnabled}
-            aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
-            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · Tab · ${OPTIMIZE_SHORTCUT}`}
-          >
-            {optimizer.busy ? (
-              <span className="composer-optimize-spin" aria-hidden="true" />
-            ) : (
-              <span aria-hidden="true">✦</span>
-            )}
-          </button>
+          <Tooltip content={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · Tab · ${OPTIMIZE_SHORTCUT}`}>
+            <button
+              type="button"
+              className="composer-optimize"
+              onClick={optimizer.press}
+              disabled={!optimizer.buttonEnabled}
+              aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
+            >
+              {optimizer.busy ? (
+                <span className="composer-optimize-spin" aria-hidden="true" />
+              ) : (
+                <span aria-hidden="true">✦</span>
+              )}
+            </button>
+          </Tooltip>
         )}
         {showStop ? (
           <Button
@@ -13644,45 +13743,42 @@ export function SessionComposer({
           />
         ) : (
           <span className="composer-send-hold">
-            <Button
-              className="composer-send"
-              variant="primary"
-              icon={<ArrowUpOutlined />}
-              disabled={!canSend}
-              loading={sending}
-              onClick={() => {
-                // The press that opened the offer is not a send as well.
-                if (sendHold.current?.fired) {
+            <Tooltip content={queueOffered ? `Send into the current turn · ${IS_MAC ? '⌥' : 'Alt+'}Enter, or hold, to queue it for the next turn` : undefined}>
+              <Button
+                className="composer-send"
+                variant="primary"
+                icon={<ArrowUpOutlined />}
+                disabled={!canSend}
+                loading={sending}
+                onClick={() => {
+                  // The press that opened the offer is not a send as well.
+                  if (sendHold.current?.fired) {
+                    sendHold.current = null;
+                    return;
+                  }
+                  onSend();
+                }}
+                onPointerDown={() => {
                   sendHold.current = null;
-                  return;
-                }
-                onSend();
-              }}
-              onPointerDown={() => {
-                sendHold.current = null;
-                if (!queueOffered || !canSend) return;
-                const hold = {
-                  fired: false,
-                  timer: setTimeout(() => {
-                    hold.fired = true;
-                    setQueueOffer(true);
-                  }, QUEUE_OFFER_HOLD_MS),
-                };
-                sendHold.current = hold;
-              }}
-              onPointerUp={releaseSendHold}
-              onPointerLeave={releaseSendHold}
-              onPointerCancel={releaseSendHold}
-              onContextMenu={(e) => {
-                if (queueOffered) e.preventDefault();
-              }}
-              aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
-              title={
-                queueOffered
-                  ? `Send into the current turn · ${IS_MAC ? '⌥' : 'Alt+'}Enter, or hold, to queue it for the next turn`
-                  : undefined
-              }
-            />
+                  if (!queueOffered || !canSend) return;
+                  const hold = {
+                    fired: false,
+                    timer: setTimeout(() => {
+                      hold.fired = true;
+                      setQueueOffer(true);
+                    }, QUEUE_OFFER_HOLD_MS),
+                  };
+                  sendHold.current = hold;
+                }}
+                onPointerUp={releaseSendHold}
+                onPointerLeave={releaseSendHold}
+                onPointerCancel={releaseSendHold}
+                onContextMenu={(e) => {
+                  if (queueOffered) e.preventDefault();
+                }}
+                aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+              />
+            </Tooltip>
             {queueOffer && (
               <div ref={queueOfferRef} className="composer-queue-offer" role="menu" aria-label="Send">
                 <button

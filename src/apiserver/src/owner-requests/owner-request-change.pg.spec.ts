@@ -39,7 +39,8 @@ import { test } from 'node:test';
 import { BadRequestException, ConflictException, HttpException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { PAT_FORBIDDEN_REASONS } from '../auth/pat-scope.decorator';
@@ -388,7 +389,7 @@ test('owner request CHANGE: an agent proposes a runner\'s Max Concurrent, the ow
     await db.session.create({
       data: {
         id: sessionId, ownerId: userId, creatorId: userId, assignedRunnerId: runnerId, title: 'asker', prompt: 'asker',
-        provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+        provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
       },
     });
     const filed = await service.file(userId, sessionId, {
@@ -458,7 +459,7 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
         title,
         prompt: title,
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: `runtime-${id}`,

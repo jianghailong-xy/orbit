@@ -32,7 +32,6 @@ import { ModuleRef } from '@nestjs/core';
 import {
   type ConversationTurn,
   Prisma,
-  RunStatus,
   type Session,
   SessionDispatchOrigin,
   SessionRunSource,
@@ -54,7 +53,7 @@ import {
   LEGACY_STATUS_SELECT, legacySessionStatus, legacySessionStatusSql, readLandingSettlements, statusWordFilter, withoutWordFacts,
 } from './session-legacy-words';
 import {
-  heldWordOf, isParked, sessionTurnStateSql, type TurnState, type TurnStateFacts, TURN_STATE_SELECT, turnStateAfterTurnEnqueued,
+  isParked, sessionTurnStateSql, type TurnState, type TurnStateFacts, TURN_STATE_SELECT, turnStateAfterTurnEnqueued,
   turnStateFilter, turnStateOf,
 } from './session-turn-state';
 import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
@@ -71,6 +70,7 @@ import {
   STEER_WITHDRAW_POLL_MS,
   STEER_WITHDRAW_WAIT_MS,
 } from './steer-withdraw';
+import { deleteTurnsKeepingAttachments } from './withdrawn-turn-attachments';
 import {
   projectsMembershipCandidatesSql, readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql,
 } from './session-project-membership';
@@ -164,6 +164,7 @@ import {
   type QuestionAnswers,
   type ReplyTranslationRetryResponse,
   type TurnTranslation,
+  RunStatus,
 } from '@orbit/shared';
 import {
   ANCHOR_ROLE,
@@ -453,6 +454,7 @@ import { returnWaitingSessionsToOpen } from './return-to-open';
 import { readLandingView } from '../projects/landing-view';
 import {
   deriveSessionCapabilities,
+  type LegacyStatusWord,
   withSessionCapabilities,
   withSessionState,
 } from './session-state';
@@ -1894,8 +1896,7 @@ export class SessionsService {
         branch,
         workSubdir,
         prompt: dto.prompt,
-        status: RunStatus.PENDING,
-        // Its first turn waits for a claim (plan §2.2 #18: deploy 2 writes both).
+        // Its first turn waits for a claim (plan §2.2 #18).
         turnState: 'QUEUED',
         provider,
         providerBuiltin,
@@ -2456,7 +2457,6 @@ export class SessionsService {
             title,
             branch,
             prompt: '',
-            status: RunStatus.PENDING,
             // Its first turn waits for a claim (plan §2.2 #19).
             turnState: 'QUEUED',
             provider: AgentProvider.CLAUDE,
@@ -2824,8 +2824,8 @@ export class SessionsService {
     },
   ): Promise<{
     id: string;
-    status: RunStatus;
-    runStatus: RunStatus;
+    status: LegacyStatusWord;
+    runStatus: LegacyStatusWord;
     sessionState: SessionState;
     runState: SessionRunState;
     lifecycleState: SessionLifecycleState;
@@ -4100,7 +4100,8 @@ export class SessionsService {
    * workspace can be doing with nobody generating in it, and the one thing `running` deliberately
    * does not cover; a stalled job is still counted, as `stalledJobs`, so a surface can say "no output
    * for a while" rather than either hiding the work or vouching for a job that may be hung.
-   * `needsYou` is returned separately, and a session it counts is in none of `running`, `jobs` or
+   * `needsYou` (a person owes the session an answer, or it failed with no retry armed — the Session
+   * list's Needs you section) is returned separately, and a session it counts is in none of `running`, `jobs` or
    * `stalledJobs`:
    * the Session list draws that row with the waiting glyph, not the spinner or the breathing
    * terminal, and the expanded sidebar shows its activity dot beside the count — where a turn
@@ -4120,7 +4121,7 @@ export class SessionsService {
       // Nor does a scheduled task's run, which is in no list (docs/scheduled-tasks-design.md §7.4).
       runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] },
     } as const;
-    const [active, running, jobs, blocked, jobCards] = await Promise.all([
+    const [active, running, jobs, blocked, jobCards, failed] = await Promise.all([
       this.prisma.session.groupBy({
         by: ['workspaceId'],
         where: { ...open, ...turnStateFilter(['QUEUED', 'IN_FLIGHT']) },
@@ -4175,6 +4176,14 @@ export class SessionsService {
           },
         },
       }),
+      // A failure nobody is retrying: released by a failed turn, with no retry armed. Nothing runs
+      // there until somebody picks it up, so the Session list files it under Needs you
+      // (lib/sessionGrouping.ts `sessionNeedsOwner`, OrbitKit `SessionTimeGrouping.needsOwner`), and
+      // the rail counts it with the rest of that section — as its own row only; see `foldedFailures`.
+      this.prisma.session.findMany({
+        where: { ...open, ...releaseWasFailureFilter(), retryAt: null },
+        select: { id: true, workspaceId: true },
+      }),
     ]);
     // The other half of "needs you": decisions only the account owner can take, waiting on the
     // conversation they are asked on. Not an `Approval` row and deliberately never one — see
@@ -4218,7 +4227,14 @@ export class SessionsService {
     for (const session of blocked) {
       if (!session.taskId || (await visibleQuestions(this.prisma, session.approvals)).length) visibleBlocked.push(session);
     }
-    for (const session of [...visibleBlocked, ...awaitingDecision]) {
+    // A failed member of a project is not a row of the list: it is folded into its project's row,
+    // which a failure does not light (web lib/sessionProjects.ts, `heldBy` and the row's `waiting`),
+    // so it is in no Needs you section and the rail leaves it out too. A task run the dispatcher
+    // started, failed and left for its coordinator is the common case, and a busy project has dozens.
+    // Folded is the list's rule: in a project, unless the project's coordinator runs in another
+    // workspace, where the member stays a row of its own.
+    const folded = await this.foldedFailures(failed.map((session) => session.id));
+    for (const session of [...visibleBlocked, ...awaitingDecision, ...failed.filter((f) => !folded.has(f.id))]) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
@@ -4275,6 +4291,22 @@ export class SessionsService {
       else row(session.workspaceId).jobs += 1;
     }
     return [...counts.values()];
+  }
+
+  /** Of these sessions, the ones the workspace list folds into a project row rather than listing
+   *  (`workspaceSessionCounts`): a member of a project whose coordinator is not known to run in another
+   *  workspace than the session's own. */
+  private async foldedFailures(ids: readonly string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT m.id FROM (
+        SELECT s.id, s.workspace_id, ${sessionProjectMembershipSql('s')} ->> 'projectId' AS project_id
+          FROM session s WHERE s.id = ANY(${[...ids]}::uuid[])
+      ) m
+      JOIN project p ON p.id = m.project_id::uuid
+      LEFT JOIN session c ON c.id = p.coordinator_session_id
+      WHERE c.workspace_id IS NULL OR c.workspace_id = m.workspace_id`);
+    return new Set(rows.map((row) => row.id));
   }
 
   /** The Open list's data version; see open-list-version.ts. Only the flat list reads it, for the
@@ -7260,7 +7292,7 @@ export class SessionsService {
   }
 
   /** Whether an engine runs for the session now: the test getLive refuses with "the session has ended". */
-  private static engineLive(session: { status: RunStatus; finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
+  private static engineLive(session: { turnState: string | null; finishedAt: Date | null; cancelRequestedAt: Date | null }): boolean {
     return isHeldPastClaim(session) && !session.cancelRequestedAt;
   }
 
@@ -8229,7 +8261,6 @@ export class SessionsService {
       await tx.session.update({
         where: { id },
         data: {
-          status: heldWordOf(nextTurn),
           turnState: nextTurn,
           lastTurnAt: new Date(),
           // A person's message moves the row; anything else that queues a turn leaves it where it is.
@@ -8507,7 +8538,7 @@ export class SessionsService {
       nextTurn = turnStateAfterTurnEnqueued(turnBefore);
       if (nextTurn !== turnBefore) {
         await tx.session.update({
-          where: { id: sessionId }, data: { status: heldWordOf(nextTurn), turnState: nextTurn, lastTurnAt: new Date() },
+          where: { id: sessionId }, data: { turnState: nextTurn, lastTurnAt: new Date() },
         });
       }
       return { turn: updated };
@@ -8797,13 +8828,12 @@ export class SessionsService {
       // executable count below already assumes), and leaving them behind ran a command
       // the user had just told to stop. A queued steer goes for the same reason and one
       // more: it would be written into the very turn being stopped.
-      await tx.conversationTurn.deleteMany({
-        where: {
-          sessionId: id,
-          kind: { in: ['message', 'shell', 'steer'] },
-          status: 'PENDING',
-          ...(protectedTargetIds.length > 0 ? { id: { notIn: protectedTargetIds } } : {}),
-        },
+      // Their files stay on the session: Stop folds the words and files back into the composer.
+      await deleteTurnsKeepingAttachments(tx, {
+        sessionId: id,
+        kind: { in: ['message', 'shell', 'steer'] },
+        status: 'PENDING',
+        ...(protectedTargetIds.length > 0 ? { id: { notIn: protectedTargetIds } } : {}),
       });
       if (turnStateOf(session) === 'IN_FLIGHT') {
         const executable = await tx.conversationTurn.count({
@@ -8830,9 +8860,9 @@ export class SessionsService {
         ...(interruptPayload ? { content: interruptPayload } : {}),
       });
       if (!followUp) {
-        // Parked (plan §2.2: deploy 2 writes both).
+        // Parked (plan §2.2).
         if (idleAfterStop) {
-          await tx.session.update({ where: { id }, data: { status: RunStatus.AWAITING_INPUT, turnState: null } });
+          await tx.session.update({ where: { id }, data: { turnState: null } });
         }
         return { turn: null, wakeQueue: false, wakeInbox: true, idempotent: false, idled: idleAfterStop };
       }
@@ -8862,8 +8892,7 @@ export class SessionsService {
       await tx.session.update({
         where: { id },
         data: {
-          // Both, the unchanged value included (plan §2.2 #22).
-          status: heldWordOf(nextTurn),
+          // The unchanged value included, so the triggers on turn_state fire as they did (plan §2.2 #22).
           turnState: nextTurn,
           lastTurnAt: new Date(),
           ...(opts?.listed ? { listedAt: new Date() } : {}),
@@ -9287,9 +9316,10 @@ export class SessionsService {
       // And a request another session asked of this one, withdrawn unread: UNDELIVERED. A reply turn
       // withdrawn here leaves its outcomes held for this session's next turn (session-request.ts).
       await settleUnrunSessionRequests(tx, id, { code: 'TURN_WITHDRAWN', turnId });
-      const res = await tx.conversationTurn.deleteMany({
-        // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
-        where: {
+      // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled. Its files stay
+      // on the session: they go back to the composer with the words (withdrawn-turn-attachments.ts).
+      const res = {
+        count: await deleteTurnsKeepingAttachments(tx, {
           id: turnId,
           sessionId: id,
           kind: { in: ['message', 'shell'] },
@@ -9297,8 +9327,8 @@ export class SessionsService {
           clientTurnId: { not: SessionsService.initialTurnClientId(id) },
           // A wiki chat's opening turn is its prompt, as the seeded one is any other session's.
           ...(session.wikiChatSpaceId ? { seq: { gt: 1 } } : {}),
-        },
-      });
+        }),
+      };
       if (res.count === 0) {
         // A held message (Settings › Translation) is nobody's yet: withdrawn like a pending steer, with no
         // queue-slot bookkeeping, since it holds none. Never a held opening, which is the session's prompt.
@@ -9307,7 +9337,7 @@ export class SessionsService {
           select: { status: true, clientTurnId: true },
         });
         if (held?.status === HELD_TURN_STATUS && held.clientTurnId !== SessionsService.initialTurnClientId(id)) {
-          await tx.conversationTurn.deleteMany({ where: { id: turnId, sessionId: id, status: HELD_TURN_STATUS } });
+          await deleteTurnsKeepingAttachments(tx, { id: turnId, sessionId: id, status: HELD_TURN_STATUS });
           return null;
         }
         // A steer whose delivery already settled undelivered is the exception to that refusal.
@@ -9316,16 +9346,14 @@ export class SessionsService {
         // exit, which is how "Not delivered" ends up sitting under a conversation that moved on
         // days ago. Discarding one changes no executable count, so the queue-slot bookkeeping
         // below deliberately does not run.
-        const discarded = await tx.conversationTurn.deleteMany({
-          where: {
-            id: turnId,
-            sessionId: id,
-            kind: 'steer',
-            sendIntent: 'CURRENT_WORK',
-            deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
-          },
+        const discarded = await deleteTurnsKeepingAttachments(tx, {
+          id: turnId,
+          sessionId: id,
+          kind: 'steer',
+          sendIntent: 'CURRENT_WORK',
+          deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
         });
-        if (discarded.count > 0) return null;
+        if (discarded > 0) return null;
         const steer = await tx.conversationTurn.findFirst({
           where: { id: turnId, sessionId: id, kind: 'steer' },
           select: { status: true, deliveryStatus: true, clientTurnId: true, senderSessionId: true },
@@ -9343,9 +9371,7 @@ export class SessionsService {
         // message does. A steer occupies no executable slot, so none of the queue bookkeeping
         // below applies to it.
         if (steer.status === 'PENDING') {
-          await tx.conversationTurn.deleteMany({
-            where: { id: turnId, sessionId: id, kind: 'steer', status: 'PENDING' },
-          });
+          await deleteTurnsKeepingAttachments(tx, { id: turnId, sessionId: id, kind: 'steer', status: 'PENDING' });
           return null;
         }
         const engine = (await sessionEngine(tx, session)) ?? '';
@@ -9397,7 +9423,7 @@ export class SessionsService {
         await tx.session.update({
           where: { id },
           // Parked again (plan §2.2 #23).
-          data: { status: RunStatus.AWAITING_INPUT, turnState: null, lastTurnAt: new Date() },
+          data: { turnState: null, lastTurnAt: new Date() },
         });
       }
       return null;
@@ -10640,7 +10666,7 @@ export class SessionsService {
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
-    status: RunStatus;
+    status: LegacyStatusWord;
     lifecycleState: SessionLifecycleState;
     /** @deprecated Compatibility representation of lifecycleState. */
     filingState: SessionFilingState;
@@ -10775,7 +10801,6 @@ export class SessionsService {
         data: {
           ...lifecycleData,
           ...(requireNoProjectBinding ? { titleManagedByProject: false } : {}),
-          status: RunStatus.CANCELLED,
           // Released: no turn (plan §2.2 #24).
           turnState: null,
           endReason: reason,
@@ -12006,7 +12031,6 @@ export class SessionsService {
       await tx.session.update({
         where: { id },
         data: {
-          status: RunStatus.PENDING,
           // Held again with its turn waiting for a claim (plan §2.2 #25).
           turnState: 'QUEUED',
           // A terminal revive starts a fresh runner-supervisor epoch. Keep the

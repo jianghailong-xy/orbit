@@ -471,6 +471,7 @@ struct ConsoleView: View {
                     agentLanguage: SessionTranslation.agentLanguage(appModel.user?.preferences),
                     retryTurn: { id in Task { await console.retryTurnTranslation(id) } },
                     sendAsWritten: { id in Task { await console.sendTurnAsWritten(id) } },
+                    cancelTurn: { bubble in Task { await console.cancelUntranslated(bubble) } },
                     retryReply: { seq in Task { await console.retryReplyTranslation(seq) } }))
                 // A task link in this conversation — prose on the Mac, a card's own button —
                 // opens over the conversation on a wide shell (owner decision 2026-11-12). With

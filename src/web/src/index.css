@@ -76,8 +76,9 @@
   --scrollbar-hover: #565a62;
   --text-1: #c9ced5;
   --text-2: #a7adb6;
-  --text-3: #8b9099;
-  --text-4: #71767f;
+  /* text-4 holds 4.5:1 on --bg-base; text-3 sits a step above it (board dark-palette, item B). */
+  --text-3: #9a9fa8;
+  --text-4: #858a93;
   --dot-idle: #4a4e56;
   --brand: #5b8cff;
   --brand-strong: #7aa2ff;
@@ -138,6 +139,49 @@
 }
 :root[data-theme='dark'] .scroll-to-bottom {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+/* Board dark-palette (docs/mocks/dark-palette). The session list sits one step below the
+   conversation: sidebar --bg-sunken < list < conversation --bg-base. Its sticky section heads paint the
+   list's colour behind them, so they follow it. */
+:root[data-theme='dark'] .app-shell .workspace-split > .session-col:not(.session-project-column, .ss-column),
+:root[data-theme='dark'] .app-shell .workspace-split > .session-col:not(.session-project-column, .ss-column) .session-section-head {
+  background: #1c1c1f;
+}
+/* The composer's prompt reads in the quietest text colour rather than the field's own grey. */
+:root[data-theme='dark'] .composer-field textarea.orbit-textarea::placeholder {
+  -webkit-text-fill-color: var(--text-4);
+}
+/* New session is a plain bordered button: in dark, blue already means the selected row, your own
+   messages and links. */
+:root[data-theme='dark'] .session-new,
+:root[data-theme='dark'] .session-new.active {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-1);
+}
+:root[data-theme='dark'] .session-new:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+:root[data-theme='dark'] .session-new-kbd {
+  border-color: var(--border);
+  color: var(--text-3);
+  opacity: 1;
+}
+/* Inline code is a light chip rather than a dark hole in the text. A block's code stays bare. */
+:root[data-theme='dark'] .md code {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-subtle);
+}
+:root[data-theme='dark'] .md pre code {
+  background: transparent;
+  border: 0;
+}
+/* A needs-you count is an amber number without its pill, quieter when many workspaces carry one.
+   The collapsed rail keeps its solid badge, which has no row text to stand beside. */
+:root[data-theme='dark'] .tp-count.needs-you {
+  background: transparent;
+  padding: 1px 2px;
 }
 /* highlight.js (github.css is the light base) — recolour tokens for dark */
 :root[data-theme='dark'] .hljs {
@@ -298,7 +342,7 @@ body {
   margin: 0;
   border: 1px solid var(--border-subtle);
   background: var(--bg-raised);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
   color: var(--text-1);
   font: inherit;
   font-size: 14px;
@@ -330,7 +374,7 @@ button.toast--pill:hover {
   width: 100%;
   min-height: 56px;
   padding: 12px 12px 12px 14px;
-  border-radius: 12px;
+  border-radius: 18px;
 }
 /* ③: tinted over the raised surface (the dark theme's tints are translucent), the server's words
    in a block of their own, and selectable — the thing you read twice and paste somewhere. */
@@ -339,6 +383,13 @@ button.toast--pill:hover {
   align-items: stretch;
   gap: 10px;
   user-select: text;
+}
+/* A failure card is one press: to its session, or back to the page it was raised on. */
+.toast--attention.toast--opens {
+  cursor: pointer;
+}
+.toast--attention .toast-reason {
+  cursor: text;
 }
 .toast--error {
   border-color: var(--error-border);
@@ -424,7 +475,7 @@ button.toast--pill:hover {
   overflow: auto;
   padding: 7px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg-raised);
   color: var(--text-2);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -433,18 +484,12 @@ button.toast--pill:hover {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.toast-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-left: 32px;
-}
 .toast-action {
   flex: none;
   height: 28px;
   padding: 0 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 7px;
+  border-radius: 10px;
   background: var(--bg-raised);
   color: var(--text-1);
   font: inherit;
@@ -454,15 +499,6 @@ button.toast--pill:hover {
 }
 .toast-action:hover {
   background: var(--bg-hover);
-}
-.toast-action--primary {
-  border-color: var(--brand);
-  background: var(--brand);
-  color: #fff;
-}
-.toast-action--primary:hover {
-  border-color: var(--brand-strong);
-  background: var(--brand-strong);
 }
 /* A result card's one action — Undo — in the tint the lifecycle card's Undo always had. */
 .toast--card:not(.toast--attention) > .toast-action {
@@ -1311,9 +1347,11 @@ button.toast--pill:focus-visible {
 }
 .tp-account-menu .orbit-menu-submenu-icon {
   position: absolute;
-  top: calc(50% - 5.5px);
+  top: 50%;
   right: 8px;
+  display: flex;
   margin: 0;
+  transform: translateY(-50%);
   color: var(--text-3);
   font-size: 12px;
 }
@@ -1347,6 +1385,7 @@ button.toast--pill:focus-visible {
 }
 .tp-account-appearance-label {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
@@ -3104,7 +3143,6 @@ button.toast--pill:focus-visible {
    (owner 2026-11-11, board 5): the shared bottom drawer, rounded on top, its title kept for the
    reader only (the page head inside draws it), and a grabber that drags it between medium and full. */
 .project-sessions-sheet {
-  border-radius: 14px 14px 0 0;
   background: var(--bg-raised);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -3566,33 +3604,11 @@ button.toast--pill:focus-visible {
   outline: none;
 }
 .workspace-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); opacity: 0; }
+/* The › takes no room at rest, so a long title runs right up to the badges after it. */
+.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); display: none; }
 .workspace-name-button:hover, .workspace-name-button:focus-visible { background: var(--orbit-control-hover-bg); }
 .workspace-name-button:hover .workspace-name-chevron,
-.workspace-name-button:focus-visible .workspace-name-chevron { opacity: 1; }
-.workspace-header-task {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  margin-bottom: 3px;
-  padding: 0;
-  border: none;
-  background: none;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--text-3);
-  cursor: pointer;
-}
-.workspace-header-task:hover {
-  color: var(--brand);
-}
-.workspace-header-task-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.workspace-name-button:focus-visible .workspace-name-chevron { display: inline-flex; }
 .workspace-sub {
   font-size: 12.5px;
   color: var(--text-3);
@@ -4986,8 +5002,9 @@ button.toast--pill:focus-visible {
     padding-bottom: 4px;
     border-bottom: 0;
   }
+  /* 17px: a heading above the 14px conversation, not its first line (docs/mocks/session-title-size B). */
   .workspace-name {
-    font-size: 15px;
+    font-size: 17px;
   }
   .workspace-scroll-wrap > .workspace-sessions {
     padding-top: 16px;
@@ -5028,14 +5045,14 @@ button.toast--pill:focus-visible {
   max-width: calc(50% - 210px - 12px);
   margin-right: auto;
 }
-/* The header's ⋯ and Share (docs/mocks/session-header-share-more, A): ⋯ then Share, 28px buttons
-   2px apart with 16px glyphs in the title's colour, nudged 6px right so the last glyph sits near the
-   transcript's edge. Share takes the live link's green, with a dot, while the session is shared. */
+/* The header's ⋯ and Share (docs/mocks/session-header-share-more, A): ⋯ then Share, 30px buttons
+   14px apart (docs/mocks/session-header-share-tray) with 18px glyphs in the title's colour (docs/mocks/session-header-icon-size B, beside the
+   17px title), nudged 6px right so the last glyph sits near the transcript's edge. Share takes the
+   live link's green, with a dot, while the session is shared. */
 .workspace-header .workspace-header-more,
-.workspace-header .workspace-header-share { flex: none; width: 28px; height: 28px; color: var(--text-1); font-size: 16px; }
-.workspace-header .workspace-header-more + .workspace-header-share { margin-left: -10px; }
-.workspace-header .workspace-header-more:last-child,
-.workspace-header .workspace-header-share { margin-right: -6px; }
+.workspace-header .workspace-header-share { flex: none; width: 30px; height: 30px; color: var(--text-1); font-size: 18px; }
+.workspace-header-actions { display: flex; align-items: center; flex: none; margin-right: -6px; }
+.workspace-header-actions .workspace-header-share { margin-left: 14px; }
 .workspace-header .workspace-header-share.is-live,
 .workspace-header .workspace-header-share.is-live:hover:where(:not(:disabled)) { color: var(--success); }
 .workspace-header .workspace-header-share.is-live::after {
@@ -7440,27 +7457,24 @@ button.toast--pill:focus-visible {
    moves the `+` or Send. 24px corners, and 24px is also where everything inside starts: the
    corner's curve meets the straight edge 24px in, and the thumbnails, the text and the `+`'s left
    arm all begin on that line (see `.composer-field` and `.composer-toolbar`). Focus deepens
-   the rim instead of turning it blue: the only coloured rim a composer has is shell mode's. */
+   the rim instead of turning it blue: the only coloured rim a composer has is shell mode's.
+   Its edge is the panels' (docs/mocks/composer-shadow, option 3): the subtle rim and the panel
+   elevation, which is no shadow below the drawer breakpoint, where `--panel-shadow` is unset. */
 .composer-box {
   position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 24px;
   background: var(--bg-raised);
-  box-shadow:
-    0 2px 10px rgba(31, 35, 41, 0.05),
-    0 10px 30px rgba(31, 35, 41, 0.04);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: var(--panel-shadow);
+  transition: border-color 0.15s;
 }
 .composer-box:focus-within,
 /* Its `+`, its model control or one of its pickers open: focus is in that control's popup, still the
    box's own, so the box keeps the rim it had when the control was pressed. */
 .composer-box:has(.composer-attach-btn[data-popup-open], .composer-model-chip[data-popup-open], .orbit-select[data-open]) {
   border-color: color-mix(in srgb, var(--text-1) 28%, var(--border));
-  box-shadow:
-    0 3px 14px rgba(31, 35, 41, 0.08),
-    0 12px 34px rgba(31, 35, 41, 0.05);
 }
 /* `!cmd` shell mode: the whole box reads as a command line, not a message box. Unlike the
    focus rim above this holds whether or not the composer is focused — the mode is a property
@@ -8381,6 +8395,46 @@ button.toast--pill:focus-visible {
 .cu-pop.cu-pop-reset {
   width: min(320px, calc(100vw - 48px));
 }
+/* A card per account can be taller than the room above the composer: the body scrolls under the title.
+   The side padding, taken back by the margin, keeps focus rings inside the scroll box. */
+.cu-pop.cu-pop-accounts {
+  max-height: calc(var(--available-height, 80vh) - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  width: min(328px, calc(100vw - 40px));
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+}
+/* Scrolling, not squeezing: a flex column would otherwise shrink its parts to fit. */
+.cu-pop.cu-pop-accounts > * {
+  flex-shrink: 0;
+}
+/* Another account's reset: ruled off, its name and one line of its usage over the same card. */
+.cu-other {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.cu-other .cu-account {
+  padding-bottom: 10px;
+  border-bottom: 0;
+}
+.cu-other-usage {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.cu-other-usage b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.cu-other-usage b.spent {
+  color: var(--error-solid);
+}
+.cu-other .cu-rc {
+  padding-top: 0;
+  border-top: 0;
+}
 /* Focus lands on the popover body when a press opens it; the controls inside carry the rings. */
 .cu-pop:focus {
   outline: none;
@@ -8580,12 +8634,17 @@ button.composer-usage:focus-visible {
 }
 .cu-rc-confirm-usage {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-2);
+}
+.cu-rc-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
 }
 .cu-rc-confirm-value {
   font-weight: 600;
@@ -14713,6 +14772,61 @@ button.chat-jump-start:hover {
   line-height: 1.6;
   color: var(--text-1);
 }
+/* The pictures a question attached — the mocks it is asking the owner to choose between. Tiles
+   under the words, not in line with them: a question often IS the choice between these, and the
+   options and Send answer have to stay one look away. A tile opens the viewer on tap. */
+.coordinator-question-images-caption {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.coordinator-question-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.coordinator-question-images.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.coordinator-question-images .orbit-image {
+  display: block;
+  min-width: 0;
+}
+/* `.orbit-image .orbit-image-img` sets the height from the picture's own aspect ratio; a tile has
+   one height for every picture in the grid, so this selector carries one class more than it. */
+.coordinator-question-images .orbit-image .orbit-image-img {
+  width: 100%;
+  height: 184px;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  background: var(--bg-base);
+}
+/* One picture is drawn at its own shape, capped by the card's width or 340px of height — a tile
+   grid's fixed height would letterbox it into a box wider than the picture. */
+.coordinator-question-images.is-single .orbit-image .orbit-image-img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 340px;
+  margin: 0 auto;
+}
+.coordinator-question-images .md-image-loading {
+  display: block;
+  width: 100%;
+  height: 184px;
+}
+/* The card is the width of a phone's conversation here; one column reads better than two halves. */
+@media (max-width: 600px) {
+  .coordinator-question-images {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .coordinator-question-images .orbit-image .orbit-image-img,
+  .coordinator-question-images .md-image-loading {
+    height: 150px;
+  }
+}
 /* An option is the answer, so it is the tap target: a whole row, 44pt-ish, and the chosen one is
    outlined rather than merely ticked. */
 .coordinator-question-option {
@@ -17162,7 +17276,6 @@ button.chat-jump-start:hover {
   .workspace-header-main > .workspace-title-line {
     display: contents;
   }
-  .workspace-header-main > .workspace-header-task,
   .workspace-title-line > .workspace-name {
     flex: 0 0 100%;
   }
@@ -20351,6 +20464,31 @@ button.chat-jump-start:hover {
   margin-top: 4px;
   font-size: 12px;
   color: var(--text-3);
+}
+/* Which of a vendor's platforms the key is from, above the key field. */
+.provider-step .provider-region {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.provider-step .provider-plan-signin {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--fill-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.provider-step .provider-plan-signin b {
+  color: var(--text-1);
+}
+.provider-step .provider-region-label {
+  /* One width for both rows (Key type, Your account is on), so their switches line up. */
+  flex: 0 0 104px;
+  font-size: 12px;
+  color: var(--text-2);
 }
 
 .provider-actions {
@@ -30611,10 +30749,12 @@ td > .routing-report-tier + .model-routing-flag {
   color: var(--text-1);
 }
 
-/* A coordinator question still waiting on the owner: orange and heavier-edged, the colour of the
-   `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
+/* A coordinator question still waiting on the owner: the brand tone, solid and heavier-edged.
+   Blue is the product's "somebody is being asked" colour — the same reason the card's mark is
+   brand — and the warning tone stays for what is wrong (owner's pick, 2026-11-26; it replaced
+   the 2026-11-13 orange edge). */
 .approval-card.coordinator-question {
-  border: 1.5px solid var(--warning-solid);
+  border: 1.5px solid var(--brand);
 }
 
 /* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
@@ -31177,3 +31317,278 @@ td > .routing-report-tier + .model-routing-flag {
 .landing-pr-tip { display: flex; justify-content: space-between; gap: 8px; margin: 0; padding: 8px 10px; font-size: 12px; border-radius: 8px; background: var(--brand-tint); border: 1px solid var(--brand-border); }
 .landing-pr-tip button { border: 0; background: none; cursor: pointer; color: var(--text-secondary); }
 .landings-window-entry > .landing-pr { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-subtle); }
+
+/* ---- Panels on a canvas (owner 2026-11-26, docs/mocks/right-column-window board 02, C) ----
+   Above the phone/drawer breakpoint the window is a grey canvas that is always there; the nav sits on
+   it with no surface of its own, and what you work in is a white panel rounded on all four corners. A
+   right-hand column (project column, session settings, task detail) is a second panel of the same kind
+   beside it: one radius, one gap, one elevation, so opening it adds a panel and moves nothing else.
+   Prefixed with .app-shell so these win over the per-component rules above and in component CSS. */
+@media (min-width: 961px) {
+  .app-shell,
+  .settings-shell:not(.settings-shell--narrow) {
+    --canvas: color-mix(in srgb, var(--text-1) 5%, var(--bg-base));
+    --panel-gap: 8px;
+    --panel-radius: 12px;
+    --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --panel-float: 0 2px 6px rgba(0, 0, 0, 0.08), 0 16px 40px rgba(0, 0, 0, 0.14);
+    background: var(--canvas);
+  }
+  /* Dark: the canvas goes below the panels rather than a lighter mix. */
+  :root[data-theme='dark'] :is(.app-shell, .settings-shell:not(.settings-shell--narrow)) {
+    --canvas: var(--bg-sunken);
+  }
+  .app-shell .app-nav {
+    background: transparent;
+    border-right: 0;
+  }
+  .app-shell .tp-lists .tp-group-head {
+    background: var(--canvas);
+  }
+  .app-shell .app-main {
+    padding: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+  }
+  /* Every page's content is one panel... */
+  .app-shell .app-main > .app-view {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  /* ...except the session console, whose list + conversation is the panel and whose right column is
+     a second one, so the view itself stays bare. */
+  .app-shell .app-main > .app-view:has(> .workspace-split) {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .workspace-split > .session-col:not(.session-project-column, .ss-column) {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-right: 0;
+    border-radius: var(--panel-radius) 0 0 var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  .app-shell .workspace-split > .workspace-view {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-left: 0;
+    border-radius: 0 var(--panel-radius) var(--panel-radius) 0;
+    box-shadow: var(--panel-shadow);
+  }
+  /* A machine with no workspace shows the conversation pane alone. */
+  .app-shell .workspace-split > .workspace-view:first-child {
+    border-left: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+  }
+  .app-shell :is(.session-project-column, .ss-column),
+  .app-shell .app-main + .task-detail-panel {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  .app-shell :is(.session-project-column, .ss-column) {
+    overflow: hidden;
+  }
+  /* The task detail panel is the shell's own column, beside .app-main rather than inside it; its
+     resize handle stays on its left edge (not clipped, so its grab area reaches into the gap). */
+  .app-shell .app-main + .task-detail-panel {
+    height: auto;
+    margin: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+  }
+  .app-shell .app-main:has(+ .task-detail-panel) {
+    padding-right: var(--panel-gap);
+  }
+  /* The divider before a right column is the canvas gap between two panels: still a drag handle, no
+     line until it is hovered or dragged. */
+  .app-shell .session-resizer:has(+ :is(.session-project-column, .ss-column)) {
+    width: var(--panel-gap);
+    background: transparent;
+  }
+  .app-shell .session-resizer:has(+ :is(.session-project-column, .ss-column)):is(:hover, .resizing) {
+    background: linear-gradient(var(--brand), var(--brand)) center / 1px 100% no-repeat;
+  }
+  /* In a window too narrow for it beside the conversation the column lies over it: the same panel,
+     floating one level up. */
+  .app-shell :is(.session-project-column-over, .ss-column-over) {
+    border-left: 1px solid var(--border-subtle);
+    box-shadow: var(--panel-float);
+  }
+
+  /* Settings (and Admin, Help): the same window, its nav on the canvas and its page a panel. */
+  .settings-shell:not(.settings-shell--narrow) > .settings-nav {
+    background: transparent;
+    border-right: 0;
+  }
+  .settings-shell:not(.settings-shell--narrow) > .settings-main {
+    margin: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+
+  /* The help drawer is a column of the shell beside the page (or Settings' page): a second panel. */
+  :is(.app-shell, .settings-shell:not(.settings-shell--narrow)) > .help-drawer {
+    height: auto;
+    margin: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    overflow: hidden;
+  }
+  .app-shell .app-main:has(~ .help-drawer) {
+    padding-right: var(--panel-gap);
+  }
+
+  /* Wiki: the directory column stands the panel's height (the window's, less the gaps and the panel's border). */
+  .app-shell .wk-layout > .wk-dir-col {
+    max-height: calc(var(--app-vh, 100vh) - 48px - 2 * var(--panel-gap) - 2px);
+  }
+  .app-shell .wk-page--railed > .wk-layout > .wk-dir-col {
+    height: calc(var(--app-vh, 100vh) - 2 * var(--panel-gap) - 2px);
+    max-height: none;
+  }
+  /* Wiki: where the chat docks as a column beside the page, the page and the chat are two panels. The
+     page's own panel scrolls (it was the view's), so its sticky directory and head behave as before. */
+  .app-shell .app-main > .app-view:has(> .wk-chat-frame.is-columned > :is(.wk-chat-panel, .wk-chat-slot)) {
+    padding: 0;
+    overflow: hidden;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .wk-chat-frame.is-columned:has(> :is(.wk-chat-panel, .wk-chat-slot)) {
+    height: 100%;
+    align-items: stretch;
+  }
+  .app-shell .wk-chat-frame.is-columned:has(> :is(.wk-chat-panel, .wk-chat-slot)) > .wk-chat-host {
+    box-sizing: border-box;
+    height: 100%;
+    overflow-y: auto;
+    padding: 24px 32px;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  .app-shell .wk-chat-frame.is-columned > :is(.wk-chat-panel, .wk-chat-slot) {
+    position: relative;
+    top: auto;
+    height: auto;
+    margin: 0 0 0 var(--panel-gap);
+  }
+  .app-shell .wk-chat-frame.is-columned > .wk-chat-panel {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    overflow: hidden;
+  }
+  /* The entry drawer, and the chat where it lies over the page, float as panels inside the window. */
+  .app-shell .wk-drawer {
+    top: var(--panel-gap);
+    right: var(--panel-gap);
+    bottom: var(--panel-gap);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-float);
+  }
+  .app-shell .wk-chat-host.is-open:not(.is-sheet) .wk-drawer {
+    right: calc(var(--wk-chat-w, 400px) + 2 * var(--panel-gap));
+  }
+  .app-shell .wk-chat-host.is-open:not(.is-sheet) .wk-with-drawer .wk-scrim {
+    right: calc(var(--wk-chat-w, 400px) + var(--panel-gap));
+  }
+  .app-shell .wk-chat-panel.is-over {
+    right: var(--panel-gap);
+    bottom: var(--panel-gap);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-float);
+    overflow: hidden;
+  }
+
+  /* A task open over its project's page floats the same way. */
+  .app-shell .project-task-panel > .task-detail-panel {
+    top: var(--panel-gap);
+    right: var(--panel-gap);
+    height: calc(var(--app-vh) - 2 * var(--panel-gap));
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-float);
+  }
+
+  /* Scheduled: the list is one panel and the inspector beside it another. */
+  .app-shell .app-main > .app-view:has(> .sched-page > .sched-inspector) {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .sched-page:has(> .sched-inspector) > .sched-list,
+  .app-shell .sched-page > .sched-inspector {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  .app-shell .sched-page > .sched-resizer {
+    width: var(--panel-gap);
+    margin-right: 0;
+    background: transparent;
+  }
+  .app-shell .sched-page > .sched-resizer:hover,
+  .app-shell .sched-page.is-resizing > .sched-resizer {
+    background: linear-gradient(var(--brand), var(--brand)) center / 1px 100% no-repeat;
+  }
+
+  /* Drive: with a file's details open, the head, folders and list are one panel and the details
+     another. The body steps aside (display: contents) so the details can stand beside the head too. */
+  .app-shell .app-main > .app-view:has(> .files-page .files-pane) {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .files-page:has(.files-pane) {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .app-shell .files-page:has(.files-pane) > .files-body {
+    display: contents;
+  }
+  .app-shell .files-page:has(.files-pane) > .files-head {
+    grid-column: 1 / 3;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius) var(--panel-radius) 0 0;
+  }
+  .app-shell .files-page:has(.files-pane) .files-tree {
+    background: var(--bg-base);
+    border-left: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+    border-radius: 0 0 0 var(--panel-radius);
+  }
+  .app-shell .files-page:has(.files-pane) .files-list-wrap {
+    background: var(--bg-base);
+    border-right: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+    border-radius: 0 0 var(--panel-radius) 0;
+  }
+  .app-shell .files-page .files-pane {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    margin-left: var(--panel-gap);
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+}

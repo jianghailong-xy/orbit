@@ -28,7 +28,8 @@ import { test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { type Prisma, type PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type Prisma, type PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -57,6 +58,7 @@ import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -139,7 +141,7 @@ test('a withdrawn wake turn takes its payload with it', {
         title: 'a session parked on something that takes a while',
         prompt: 'wait for the build and tell me how it went',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
         assignedRunnerId: runnerId,
@@ -208,7 +210,7 @@ test('a withdrawn wake turn takes its payload with it', {
 
   /** What the runner's claim does to a queued session, then the inbox poll that follows it. */
   async function claimAndPoll(sessionId: string): Promise<Answer> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await prisma.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     return send('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
   }
 
@@ -268,7 +270,7 @@ test('a withdrawn wake turn takes its payload with it', {
 
     // Withdrawing the last executable turn leaves the session idle rather than holding a slot.
     const after = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(after.status, RunStatus.AWAITING_INPUT, 'the withdrawn wake left the session holding a queue slot');
+    assert.equal(wordOf(after), RunStatus.AWAITING_INPUT, 'the withdrawn wake left the session holding a queue slot');
   });
 
   await t.test('a withdrawn turn\'s job wakes do not come back with the job\'s next wake', async () => {

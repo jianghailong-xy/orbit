@@ -5,7 +5,8 @@ import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreatorType, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -216,7 +217,7 @@ const turnsOf = (db: PrismaClient, sessionId: string) => db.conversationTurn.fin
 /** A run that was claimed, did a turn, and is now parked with nothing to wake it. */
 async function pause(db: PrismaClient, sessionId: string) {
   await db.session.update({
-    where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, numTurns: 1 },
+    where: { id: sessionId }, data: { turnState: null, numTurns: 1 },
   });
 }
 
@@ -275,7 +276,7 @@ test('smart selection on: a fresh run is created on the routed model and effort,
 
       // The Agent's old switch, written on or off, is no longer read: the next fresh run is routed and applied.
       await services.db.session.update({
-        where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: sessionId }, data: { turnState: null, finishedAt: new Date() },
       });
       await services.workspaces.update(target.ownerId, target.agentId, { modelRouting: false });
       const next = await runNow(services, target, taskId, randomUUID());
@@ -285,7 +286,7 @@ test('smart selection on: a fresh run is created on the routed model and effort,
 
       // Only the account's switch turns it off: the next fresh run is the baseline, and nothing is recorded.
       await services.db.session.update({
-        where: { id: next }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: next }, data: { turnState: null, finishedAt: new Date() },
       });
       await services.db.user.update({
         where: { id: target.ownerId }, data: { preferences: { modelRouting: false, optimizeFor: 'cost' } },
@@ -648,7 +649,7 @@ test('Optimize For is frozen with CREATE; changed modes affect only later fresh 
         await setOptimizeFor(services.db, target.ownerId, 'intelligence');
         assert.equal(await runNow(services, target, taskId, press), run);
         assert.equal((await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press)).target.route.features.optimizeFor, mode);
-        await services.db.session.update({ where: { id: run }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() } });
+        await services.db.session.update({ where: { id: run }, data: { turnState: null, finishedAt: new Date() } });
       }
     } finally {
       await services.db.$disconnect();
