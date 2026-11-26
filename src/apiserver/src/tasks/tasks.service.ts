@@ -364,6 +364,7 @@ import {
 } from './task-dependencies';
 import { loadVerificationEpochGates } from './verification-epoch-read';
 import { readTaskProgress } from './task-progress.service';
+import { readTaskAcceptanceRounds } from './task-acceptance-round';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
@@ -9814,11 +9815,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The session facts of every run, from the function every other session payload reads
     // (sessions/session-phase.ts), so a run here answers as the same session does elsewhere.
     const runIds = (task.sessions ?? []).map((session) => session.id);
-    const [runFacts, runBackground, landings] = await Promise.all([
+    const [runFacts, runBackground, landings, acceptanceRounds] = await Promise.all([
       readSessionPhaseFields(this.prisma, runIds),
       // And the Background mark's inputs, activity and runningBgCount, as the list row reads them.
       readSessionBackgroundFields(this.prisma, runIds),
       readLandingSettlements(this.prisma, task.sessions ?? []),
+      // The EXECUTABLE acceptance rounds each run ran, newest first (migration 1672, tasks/task-acceptance-round.ts).
+      readTaskAcceptanceRounds(this.prisma, ownerId, task.id),
     ]);
     return {
       ...task,
@@ -9827,6 +9830,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ...runFacts.get(session.id),
         ...runBackground.get(session.id),
         route: routes.get(session.id) ?? null,
+        acceptanceRounds: acceptanceRounds.get(session.id) ?? [],
       })),
       creatorSession: task.creatorSession ? withoutWordFacts(withSessionState(task.creatorSession)) : null,
       comments: await this.resolveCommentAuthors(task.comments),
