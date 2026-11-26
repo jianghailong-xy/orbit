@@ -3621,10 +3621,11 @@ button.toast--pill:focus-visible {
   outline: none;
 }
 .workspace-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); opacity: 0; }
+/* The › takes no room at rest, so a long title runs right up to the badges after it. */
+.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); display: none; }
 .workspace-name-button:hover, .workspace-name-button:focus-visible { background: var(--orbit-control-hover-bg); }
 .workspace-name-button:hover .workspace-name-chevron,
-.workspace-name-button:focus-visible .workspace-name-chevron { opacity: 1; }
+.workspace-name-button:focus-visible .workspace-name-chevron { display: inline-flex; }
 .workspace-sub {
   font-size: 12.5px;
   color: var(--text-3);
