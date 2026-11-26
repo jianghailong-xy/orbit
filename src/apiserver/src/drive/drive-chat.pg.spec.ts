@@ -421,17 +421,18 @@ test('the Drive chat: made as a session, run where the owner last chatted, liste
       `SELECT "id"::text AS id FROM "session" WHERE "owner_id" = $1::uuid AND "opened_by" = 'DRIVE_CHAT' ORDER BY "created_at", "id"`, [owner.id],
     )).rows.map((row: { id: string }) => row.id);
     assert.ok(ids.length >= 55, `the owner's chats: ${ids.length}`);
-    // Every chat parked and spoken in a minute apart, oldest first; then the facts the order reads.
+    // Every chat parked and spoken in a minute apart, oldest first; then the facts the order reads. The facts, not the
+    // stored word: since 1671 session.status is written from turn_state by its trigger.
     const base = Date.parse('2026-11-01T00:00:00.000Z');
     for (const [i, id] of ids.entries()) {
       await sql.query(
-        `UPDATE "session" SET "status" = 'AWAITING_INPUT', "title" = $2, "last_turn_at" = $3, "completed_at" = NULL WHERE "id" = $1::uuid`,
+        `UPDATE "session" SET "turn_state" = NULL, "title" = $2, "last_turn_at" = $3, "completed_at" = NULL WHERE "id" = $1::uuid`,
         [id, `${i % 3 === 0 ? 'Invoices' : 'Photos'} chat ${i}`, new Date(base + i * 60_000).toISOString().replace('T', ' ').replace('Z', '')],
       );
     }
     const [needsYou, working, trashed, ...rest] = ids;
     const completed = rest.slice(0, 3);
-    await sql.query(`UPDATE "session" SET "status" = 'RUNNING' WHERE "id" = ANY($1::uuid[])`, [[needsYou, working]]);
+    await sql.query(`UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE "id" = ANY($1::uuid[])`, [[needsYou, working]]);
     await prisma.approval.create({ data: { sessionId: needsYou, toolName: 'Bash', input: { command: 'mv a b' }, toolUseId: `tool-${RUN}` } });
     await sql.query(`UPDATE "session" SET "completed_at" = now() WHERE "id" = ANY($1::uuid[])`, [completed]);
     await sql.query(`UPDATE "session" SET "deleted_at" = now() WHERE "id" = $1::uuid`, [trashed]);
