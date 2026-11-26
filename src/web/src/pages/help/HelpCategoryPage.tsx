@@ -39,7 +39,7 @@ export function HelpCategoryPage() {
       <p className="help-sub">{CATEGORY_BLURB[found.slug]}</p>
       <div className="help-list">
         {articles.map((article) => (
-          <Link key={article.slug} to={helpArticlePath(article)} className="help-list-row help-list-row--two">
+          <Link key={article.slug} to={helpArticlePath(article)} className="help-list-row help-list-row--two" data-row-focus="">
             <span className="help-list-text">
               <span>{article.title}</span>
               <span className="help-list-summary">{article.summary}</span>

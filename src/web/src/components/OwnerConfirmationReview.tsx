@@ -610,6 +610,7 @@ function ReviewRow({
   return (
     <div
       className={`owner-confirmation-review-row is-${line.row.toLowerCase().replace('_', '-')}`}
+      data-row-focus=""
       role="button"
       tabIndex={0}
       aria-expanded={open}

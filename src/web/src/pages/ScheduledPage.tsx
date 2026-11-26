@@ -167,6 +167,7 @@ function Row({ row, onMenu }: { row: RowView; onMenu?: (event: ReactMouseEvent, 
     <button
       type="button"
       className={`sched-row${row.cls}${row.selected ? ' is-selected' : ''}`}
+      data-row-focus=""
       aria-pressed={row.selected}
       data-row={row.key}
       onClick={row.onSelect}

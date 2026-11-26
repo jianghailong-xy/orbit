@@ -106,6 +106,7 @@ function PlaceLine({ place }: { place: NewSessionPlace }) {
       key={key}
       type="button"
       className={`np-row${on ? ' on' : ''}`}
+      data-row-focus=""
       onClick={() => {
         setOpen(null);
         if (!on) pick();
@@ -218,6 +219,7 @@ export function NewSessionProviderHero({
         key={engine.slug}
         to={fixLink(engine)}
         className="np-row np-unavailable"
+        data-row-focus=""
         title={`${engine.label}: ${engine.unavailable}${onRunner(engine)}${engine.regionBlocked ? '' : ' — fix it on the Machines & models page'}`}
         onClick={() => setOpen(false)}
       >
@@ -230,6 +232,7 @@ export function NewSessionProviderHero({
         key={engine.slug}
         type="button"
         className={`np-row${engine.slug === current.slug ? ' on' : ''}`}
+        data-row-focus=""
         onClick={() => {
           setOpen(false);
           if (engine.slug !== current.slug && engine.provider) onPick(engine.slug, engine.provider.slug);
@@ -245,7 +248,7 @@ export function NewSessionProviderHero({
     <div className="np-list">
       {displayed.map(row)}
       <div className="np-sep" />
-      <Link to="/settings/providers/new" className="np-row np-connect" onClick={() => setOpen(false)}>
+      <Link to="/settings/providers/new" className="np-row np-connect" data-row-focus="" onClick={() => setOpen(false)}>
         <span className="np-plus">+</span>
         <span className="np-row-name">Connect a provider…</span>
       </Link>

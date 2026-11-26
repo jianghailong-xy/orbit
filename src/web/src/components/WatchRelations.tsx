@@ -336,6 +336,7 @@ function StripWatch({ watch, now, listsTargets }: { watch: WatchView; now: numbe
           <Link
             key={`${t.targetKind}:${t.targetResourceId}`}
             className="ct-row"
+            data-row-focus=""
             to={targetHref(t.targetKind, t.targetResourceId)}
           >
             <span className="ct-pill">

@@ -154,6 +154,7 @@ function TreeFolder({
         aria-expanded={isOpen}
         tabIndex={0}
         className={`files-tree-row${current === folder.id ? ' active' : ''}${over ? ' drop-over' : ''}`}
+        data-row-focus=""
         style={{ paddingLeft: 6 + depth * 14 }}
         onClick={() => onOpen(folder.root ? null : folder.id)}
         onKeyDown={(event) => {

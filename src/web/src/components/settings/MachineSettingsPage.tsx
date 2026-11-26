@@ -1104,6 +1104,7 @@ export function MachineSettingsPage() {
                   key={workspace.id}
                   to={`/settings/workspaces/${workspace.id}`}
                   className="machine-workspace-row"
+                  data-row-focus=""
                   data-workspace-id={workspace.id}
                 >
                   <SettingsRow
