@@ -3529,7 +3529,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1652_session_turn_state_agrees_validate',
       '1653_session_turn_state_released_validate',
       '1654_session_phase_not_null_validate',
-      '1655_session_phase_set_not_null'],
+      '1655_session_phase_set_not_null',
+      // 1656 adds one nullable column, web_keys, to device_token; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1656_device_token_web_keys'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
