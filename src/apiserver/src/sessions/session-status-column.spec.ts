@@ -104,6 +104,8 @@ test('a planted use of each kind is reported at its line', () => {
     ["db.$executeRaw`UPDATE session s SET status = 'RUNNING', turn_state = 'IN_FLIGHT'`;", ['1:write']],
     ['db.$executeRaw`INSERT INTO "session" ("id",\n  "status") VALUES (1, 2)`;', ['2:write', '2:alone']],
     ["const sql = (session) => `${session}.\"status\" <> 'AWAITING_INPUT'`;", ['1:read']],
+    // The Run now gate as deploy D3 left it: a lateral naming no table, its PENDING a word other tables share.
+    ["const gate = sql`SELECT ${count} FROM (SELECT s.batch_max_concurrent AS batch_limit) g\n  WHERE s.status = 'PENDING' AND s.cancel_requested_at IS NULL`;", ['2:read']],
     ["const sql = (s) => `${s}.\"status\" = 'RUNNING'::\"run_status\"`;", ['1:read']],
     ["const sql = 'SELECT 1 WHERE $1 = ANY($2::run_status[])';", ['1:read']],
   ];
