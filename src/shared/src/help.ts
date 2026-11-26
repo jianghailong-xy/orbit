@@ -23,6 +23,25 @@ export const HELP_ADMIN_CATEGORY: HelpCategorySlug = 'admin-and-self-hosting';
 export const HELP_PLATFORMS = ['web', 'macos', 'ios', 'android'] as const;
 export type HelpPlatform = (typeof HELP_PLATFORMS)[number];
 
+/**
+ * The languages the help library is read in. English is the library's source, docs/help/<category>/<slug>.md; every
+ * other language ships as a translated copy beside it, docs/help/<language>/<category>/<slug>.md. A code is the one
+ * Settings › Translation uses (TRANSLATION_LANGUAGES), so an account's "Your language" can choose the help it reads.
+ * A language a server does not ship falls back to English article by article.
+ */
+export const HELP_LANGUAGES = [
+  { code: 'en', name: 'English' },
+  { code: 'zh-Hans', name: '中文' },
+] as const;
+export type HelpLanguage = (typeof HELP_LANGUAGES)[number]['code'];
+
+/** The language an article is read in when the reader has chosen none: the library's own. */
+export const DEFAULT_HELP_LANGUAGE: HelpLanguage = 'en';
+
+export function isHelpLanguage(value: unknown): value is HelpLanguage {
+  return typeof value === 'string' && (HELP_LANGUAGES as readonly { code: string }[]).some((l) => l.code === value);
+}
+
 export interface HelpCategory {
   slug: HelpCategorySlug;
   title: string;
