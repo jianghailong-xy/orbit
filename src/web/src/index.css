@@ -3151,7 +3151,6 @@ button.toast--pill:focus-visible {
    (owner 2026-11-11, board 5): the shared bottom drawer, rounded on top, its title kept for the
    reader only (the page head inside draws it), and a grabber that drags it between medium and full. */
 .project-sessions-sheet {
-  border-radius: 14px 14px 0 0;
   background: var(--bg-raised);
 }
 @media (prefers-reduced-motion: no-preference) {
