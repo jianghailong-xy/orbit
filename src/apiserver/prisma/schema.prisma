@@ -8673,6 +8673,8 @@ model CodexRateLimitResetOperation {
   runnerId               String    @map("runner_id") @db.Uuid
   runner                 Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   accountFingerprint     String    @map("account_fingerprint")
+  /// `default` or an added slot's 8-hex id: the Codex login the reset runs in (migration 1669). Immutable.
+  accountSlot            String    @default("default") @map("account_slot")
   clientRequestId        String    @map("client_request_id") @db.Uuid
   providerIdempotencyKey String    @unique @map("provider_idempotency_key") @db.Uuid
   consumeState           String    @map("consume_state")

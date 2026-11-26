@@ -50,7 +50,7 @@ runner relay 与 consume、Plan usage 快照）。本文件是任务「加固 re
 | `process` | 进程 leaseOwner 的前 8 位十六进制 | 两侧 |
 | `phase` / `kind` / `outcome` / `code` / `status` / `from` / `next` / `disposition` / `order` | 契约枚举原值 | 两侧（`from`、`order` 仅 apiserver） |
 | `claimGeneration` `attempt` `ageMs` `delayMs` | 非负整数 | 两侧（后三个仅 runner） |
-| `account` | `match` `mismatch` `unidentified` `unsupported` | runner |
+| `account` | `match` `mismatch` `unidentified` `unsupported` `slot_gone`（command 指名的新增槽已不存在，什么都没读） | runner |
 | `reason` | 小写单词 | 两侧 |
 | `error` | apiserver：错误 code 或类名；runner：`refused` `invalid_receipt` `stopped` `timeout` `http_<status>` `transport` | 两侧 |
 | `replayed` | 布尔 | apiserver |
@@ -185,9 +185,9 @@ nothingToReset / noCredit（key 未花掉），另一个进程随后的调用可
 - `codexResetRefusal` 新增可选输入 `readRequiredAfter`。服务端取同一 runner + 账户最近一次 UNRESOLVED 或
   REFRESH_FAILED 的 `completedAt`（`CodexRateLimitResetRepository.unrefreshedSpendSettledAt`）。
 - 存储块的 `fetchedAt` 不晚于它时，拒为 `SNAPSHOT_STALE`。
-- Web 入口（`codexResetCard`）从 `GET /runners/:id/codex-rate-limit-reset` 的 `latest` 取同一个值：`latest` 属于当前块的账户，
-  并且 consumeState 为 UNRESOLVED、或为 CONFIRMED 且 refreshState 为 FAILED 时，取它的 `completedAt`，传给同一个
-  `codexResetRefusal`。只看 `latest` 为什么就够、例外是什么，见 §8 R3。
+- Web 入口（`codexResetCard`）从 `GET /runners/:id/codex-rate-limit-reset?accountFingerprint=…` 的 `latest` 取同一个值：
+  `latest` 属于当前块的账户，并且 consumeState 为 UNRESOLVED、或为 CONFIRMED 且 refreshState 为 FAILED 时，取它的 `completedAt`，传给同一个
+  `codexResetRefusal`。只看 `latest` 为什么就够，见 §8 R3。
 - 入口在新读之前禁用，文案是
   "The last reset may have used a credit, and usage hasn't refreshed since. Try again once the runner refreshes it."；
   块本身超过 15 分钟或来自未来时，文案仍是 "Usage is out of date. Waiting for the runner to refresh it."。
@@ -219,7 +219,7 @@ UI 分支（`orbit/plan-usage-reset-credit-42176c`）的文案：
 - REFRESH_FAILED："used 1 credit … numbers may be out of date"。
 - 入口在结算之后的新读到达之前禁用，说明
   "The last reset may have used a credit, and usage hasn't refreshed since. Try again once the runner refreshes it."
-  （§2.4）。仍显示为可点的例外见 §8 R3。
+  （§2.4）。
 
 ---
 
@@ -393,16 +393,12 @@ bash scripts/test-codex-reset-fault-injection.sh
   - 情形：runner 超时放弃调用后，Codex 后端仍可能在稍后处理该请求。
   - 影响：同 R1，同一 key 至多扣一次。
   - 暴露方式：迟到结果被拒时计入 anomaly；若没有迟到结果，以刷新数量为准。
-- **R3 Web 入口只看列表里 runner 最近的一个 operation**
-  - 依据：Web 从 `GET /runners/:id/codex-rate-limit-reset` 的 `latest` 推出 `readRequiredAfter`（§2.4）。同一 runner + 账户的
-    operation 串行（在途唯一），每个都只在此前所有 UNRESOLVED / REFRESH_FAILED 结算之后开始的读上准入，存储块又不倒退
-    （契约 §8）。所以 `latest` 属于当前块的账户时，Web 推出的答案与服务端相同。
-  - 情形：`latest` 不分账户。账户 A 有在途 operation 时，runner 切到账户 B，在 B 上确认了一次 reset，然后切回 A 并读到 A 的块；
-    A 的 operation 撑过了 B 期间（B 上的 heartbeat 都落在它 claim 的 60 秒接管窗口内，或期间没有 heartbeat），在那次读取之后才
-    结算为 UNRESOLVED 或 REFRESH_FAILED。这时 `latest` 是 B 的 operation，入口显示为可点。
-  - 影响：API 拒为 409 `SNAPSHOT_STALE`，不会建 operation，界面显示拒绝原因。A 的下一次读取之后两边重新一致。
-  - 限界：需要切走又切回账户、切走期间在另一账户上完成一次确认，并且 A 的在途 operation 没在切走期间被结算
-    （claim 超过 60 秒没续租时，B 上的下一次 heartbeat 就会按 ACCOUNT_CHANGED 结算它）。
+- **R3 Web 入口只看列表里最近的一个 operation（按账户读后已消除）**
+  - Web 按账户读列表（`?accountFingerprint=`），`latest` 总是当前卡片账户的最近一个 operation。同一 runner + 账户的 operation
+    串行（在途唯一），每个都只在此前所有 UNRESOLVED / REFRESH_FAILED 结算之后开始的读上准入，存储块又不倒退（契约 §8），
+    所以 Web 从它推出的 `readRequiredAfter` 与服务端相同。
+  - 不带参数的读（整个 runner）仍可能把另一个账户的 operation 当作 `latest`；这时入口显示为可点而 API 拒为 409
+    `SNAPSHOT_STALE`，不会建 operation。
 - **R4 时钟偏差**
   - 情形：准入守卫比较 runner 时钟的 `fetchedAt` 与服务器时钟的 `completedAt`。
   - 影响：runner 时钟快于服务器时，结算前开始的读可能被当作结算后的读（提前放行，窗口等于偏差量）；

@@ -2,17 +2,18 @@ package main
 
 // Codex plan usage, one snapshot per account slot (codex_account_slot.go).
 //
-// Default's is the probe that has always read the runner's own login: its reads carry the rate-limit
-// reset block as well, and the reset steps read through it — reset v1 is Default's alone
-// (docs/codex-rate-limit-reset-contract.md §3). Every slot the runner added has a probe of its own,
-// which reads that slot's CODEX_HOME and nothing else (fetchCodexAccountPlanUsage) and never carries a
-// block. A session's rolling rate limits refresh the probe of the slot it runs on
-// (codexSessionAccountSlot). The heartbeat reports Default's snapshot with every other account's under
-// Accounts, so no account's numbers stand in for another's.
+// Default's is the probe that has always read the runner's own login. Every slot the runner added has a
+// probe of its own, which reads that slot's CODEX_HOME and nothing else (fetchCodexAccountPlanUsage).
+// Each probe's reads carry that slot's own rate-limit reset block, numbered by the slot's own reader
+// (docs/codex-rate-limit-reset-contract.md §12), and the reset steps for a slot read and consume
+// through that slot's probe (resetTarget). A session's rolling rate limits refresh the probe of the
+// slot it runs on (codexSessionAccountSlot). The heartbeat reports Default's snapshot with every other
+// account's under Accounts, so no account's numbers, or credits, stand in for another's.
 
 import (
 	"context"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -24,6 +25,8 @@ type codexRateLimitSink func(slot string, snapshot map[string]interface{})
 type codexAccountUsage struct {
 	// Default's probe.
 	def *planUsageProbe
+	// This process's heartbeat leaseOwner: the generation of every slot's reset blocks.
+	leaseOwner string
 
 	mu    sync.Mutex
 	slots map[string]*codexSlotUsage
@@ -42,20 +45,23 @@ type codexSlotUsage struct {
 }
 
 func newCodexAccountUsage(leaseOwner string) *codexAccountUsage {
-	return &codexAccountUsage{def: newCodexPlanUsageProbe(leaseOwner), slots: map[string]*codexSlotUsage{}}
+	return &codexAccountUsage{def: newCodexPlanUsageProbe(leaseOwner), leaseOwner: leaseOwner, slots: map[string]*codexSlotUsage{}}
 }
 
 // newCodexSlotUsage makes added slot id's entry, whose probe reads that slot and nothing else. The
-// slot is resolved on every read, so one that is gone is refused rather than read somewhere else.
-func newCodexSlotUsage(id string) *codexSlotUsage {
+// slot is resolved on every read, so one that is gone is refused rather than read somewhere else. Its
+// reader stamps the slot's reset blocks with this process's leaseOwner and the slot's own sequence,
+// from 1 (§12.2).
+func newCodexSlotUsage(id, leaseOwner string) *codexSlotUsage {
 	s := &codexSlotUsage{}
-	s.probe = &planUsageProbe{client: &http.Client{}, name: "codex plan-usage (account " + id + ")"}
+	reader := &codexResetReader{leaseOwner: leaseOwner}
+	s.probe = &planUsageProbe{client: &http.Client{}, name: "codex plan-usage (account " + id + ")", codexReset: reader}
 	s.probe.fetch = func(ctx context.Context, _ *http.Client) (*PlanUsage, error) {
 		home, err := codexAccountKind.home(id)
 		if err != nil {
 			return nil, err
 		}
-		usage, accountID, err := fetchCodexAccountPlanUsage(ctx, home)
+		usage, accountID, err := fetchCodexAccountPlanUsage(ctx, home, reader)
 		if err != nil {
 			return nil, err
 		}
@@ -101,7 +107,7 @@ func codexAccountFingerprintOf(accountID string) string {
 func (u *codexAccountUsage) slot(id string) *codexSlotUsage {
 	s := u.slots[id]
 	if s == nil {
-		s = newCodexSlotUsage(id)
+		s = newCodexSlotUsage(id, u.leaseOwner)
 		u.slots[id] = s
 	}
 	return s
@@ -118,6 +124,34 @@ func (u *codexAccountUsage) forget(id string) {
 	if s != nil && s.stop != nil {
 		s.stop()
 	}
+}
+
+// codexResetTarget is the Codex login one reset command reads and consumes in: the environment its
+// app-servers start with, and the probe whose reader numbers its blocks and whose cache keeps them.
+type codexResetTarget struct {
+	env   []string
+	probe *planUsageProbe
+}
+
+// resetTarget resolves the account slot a reset command names (contract v2 §12.3): Default is the
+// runner's own environment; an added slot is that environment with the slot's CODEX_HOME, and must
+// still be on disk. A slot that is gone is an error wrapping fs.ErrNotExist, and nothing is read for
+// it anywhere: not in Default's login, and not in a directory made up for it.
+func (u *codexAccountUsage) resetTarget(slot string) (codexResetTarget, error) {
+	if slot == accountSlotDefaultID {
+		return codexResetTarget{env: os.Environ(), probe: u.def}, nil
+	}
+	home, err := codexAccountKind.home(slot)
+	if err != nil {
+		return codexResetTarget{}, err
+	}
+	u.mu.Lock()
+	// The slot's own probe, so the step's reads carry on the slot's sequence and land in its snapshot.
+	// One the read loop has not picked up yet is made here; syncSlots starts its loop, or drops it once
+	// the slot is no longer listed.
+	probe := u.slot(slot).probe
+	u.mu.Unlock()
+	return codexResetTarget{env: envWithValue(os.Environ(), "CODEX_HOME", home), probe: probe}, nil
 }
 
 // removeCodexAccount carries out one removal of added slot id: its directory and record go, and so

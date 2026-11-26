@@ -1810,10 +1810,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	claudeActive := func() int { return activeProviderCount(providerClaude) }
 	claudeIdle := idleUsage(providerClaude, providerConfigured, engineHealth)
 	go claudeUsage.run(loopCtx, claudeActive, claudeIdle)
-	// Codex keeps one snapshot per account slot: Default's — its usage probe, which the reset steps
-	// read through too — and every added slot's own.
+	// Codex keeps one snapshot per account slot: Default's and every added slot's own, each with its
+	// own reset block, and the reset steps read and consume through the probe of the slot they name.
 	codexUsage := newCodexAccountUsage(t.leaseOwner)
-	codexUsageProbe := codexUsage.def
 	codexActive := func() int { return activeProviderCount(providerCodex) }
 	codexIdle := idleUsage(providerCodex, providerConfigured, engineHealth)
 	go codexUsage.run(loopCtx, codexActive, codexIdle)
@@ -1995,7 +1994,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// process nothing, so nothing more can be delivered to it.
 	resetCtx, stopResets := context.WithCancel(context.Background())
 	defer stopResets()
-	resetConsumer := newCodexResetConsumer(codexUsageProbe)
+	resetConsumer := newCodexResetConsumer(codexUsage)
 	resetConsumer.wakeHeartbeat = beatNow
 	resets := newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)
 	// A managed instance's side of idle sleep (managed_sleep.go); unused by a self-managed runner.
