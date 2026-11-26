@@ -8425,6 +8425,46 @@ button.toast--pill:focus-visible {
 .cu-pop.cu-pop-reset {
   width: min(320px, calc(100vw - 48px));
 }
+/* A card per account can be taller than the room above the composer: the body scrolls under the title.
+   The side padding, taken back by the margin, keeps focus rings inside the scroll box. */
+.cu-pop.cu-pop-accounts {
+  max-height: calc(var(--available-height, 80vh) - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  width: min(328px, calc(100vw - 40px));
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+}
+/* Scrolling, not squeezing: a flex column would otherwise shrink its parts to fit. */
+.cu-pop.cu-pop-accounts > * {
+  flex-shrink: 0;
+}
+/* Another account's reset: ruled off, its name and one line of its usage over the same card. */
+.cu-other {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.cu-other .cu-account {
+  padding-bottom: 10px;
+  border-bottom: 0;
+}
+.cu-other-usage {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.cu-other-usage b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.cu-other-usage b.spent {
+  color: var(--error-solid);
+}
+.cu-other .cu-rc {
+  padding-top: 0;
+  border-top: 0;
+}
 /* Focus lands on the popover body when a press opens it; the controls inside carry the rings. */
 .cu-pop:focus {
   outline: none;
@@ -8624,12 +8664,17 @@ button.composer-usage:focus-visible {
 }
 .cu-rc-confirm-usage {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-2);
+}
+.cu-rc-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
 }
 .cu-rc-confirm-value {
   font-weight: 600;

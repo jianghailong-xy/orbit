@@ -12395,12 +12395,12 @@ export function WorkspaceView({
                 }
               : undefined
           }
-          // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
-          // the built-in Codex runtime is offered them — on Default, whose quota this then is;
-          // the create route judges the workspace.
+          // Earned reset credits belong to the runner's own Codex sign-ins, so only a session on
+          // the built-in Codex runtime is offered them: each account's, the one whose quota this is
+          // first. The create route judges the workspace.
           planUsageReset={
-            shownProvider === 'codex' && shownCodexAccount === 'default'
-              ? { runner, workspaceId: shownWorkspaceId }
+            shownProvider === 'codex'
+              ? { runner, workspaceId: shownWorkspaceId, accountSlot: shownCodexAccount }
               : undefined
           }
           contextTokens={contextTokens}
