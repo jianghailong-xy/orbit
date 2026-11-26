@@ -18,7 +18,8 @@ ended FAILED, what is left on its branch, and what to do next.
   later `session-task-column` ruling (2026-11-26, `docs/mocks/session-task-column`, option A) wins, and
   the owner confirmed it for this column on 2026-11-26 (question 354PPFKSkI4Hmg66904vp): opened over
   **any session page**, the task docks beside the conversation as a column. Opened from any other page,
-  it stays the overlay that `task-link-in-place` settled.
+  it stays the overlay that `task-link-in-place` settled. The ruling also replaces this design's first
+  numbers, a 380 px column from a 1280 px window, with main's 420 px from 1640 px (below).
 - **D2 = B.** In a task's own run conversation (a session that is one of the task's runs) the sidebar
   is **open by default**. It can be closed, and the choice is remembered per session. In any other
   conversation it opens only when asked for.
