@@ -2,10 +2,9 @@
  * THE REAPER, LOST RUNNER WORK AND THE REALTIME CLAIMS, EVENTS AND HINTS ON THE FACTS, AGAINST POSTGRESQL (task T9 of
  * docs/session-status-retirement-plan.md, §2.1 and §2.3).
  *
- * Every case runs over the same rows: each held word with turn_state as migration 1611's trigger keeps it AND with
- * turn_state NULL, as a held row nothing has written since that migration has until the backfill (task T3), beside the
- * released words. What each reader selects is held to what its predicate on the stored word selected, spelled here on
- * purpose.
+ * Every case runs over the same rows: each held word, written as its turn state, beside the released words. What each
+ * reader selects is held to what its predicate on the stored word selected, spelled here on purpose. (The held rows
+ * with no turn_state that the NULL fallback read until task T14 no longer exist: 1652 validated the CHECK.)
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/realtime/realtime-turn-state-readers.pg.spec.ts
  */
@@ -25,7 +24,6 @@ import { openListTickStatement } from './open-list-hints';
 import { endIdleWorkOfDoneTask } from './parked-session-end';
 import { ReaperService } from './reaper.service';
 import { RealtimeService } from './realtime.service';
-import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 import { turnStateOfWord } from '../sessions/session-turn-state';
 import { wordOf } from '../test-support/session-word';
 
@@ -45,7 +43,6 @@ interface Row {
   id: string;
   word: RunStatus;
   held: boolean;
-  unfilled: boolean;
   workspaceId: string;
   taskId: string | null;
 }
@@ -63,20 +60,20 @@ async function world(db: PrismaClient, label: string, lastHeartbeatAt = new Date
   return { ownerId, runnerId };
 }
 
-/** One session per held word, filled and unfilled, and one per released word, each in a workspace of its own. */
+/** One session per held word and one per released word, each in a workspace of its own. */
 async function everyShape(
   db: PrismaClient,
   ids: World,
   options: { doneTask?: boolean; data?: (word: RunStatus) => Partial<Prisma.SessionUncheckedCreateInput> } = {},
 ): Promise<Row[]> {
   const shapes = [
-    ...HELD_WORDS.flatMap((word) => [{ word, unfilled: false }, { word, unfilled: true }]),
-    ...RELEASED_WORDS.map((word) => ({ word, unfilled: false })),
+    ...HELD_WORDS.map((word) => ({ word })),
+    ...RELEASED_WORDS.map((word) => ({ word })),
   ];
   const rows: Row[] = [];
-  for (const { word, unfilled } of shapes) {
+  for (const { word } of shapes) {
     const held = HELD_WORDS.includes(word);
-    const title = `${word}${unfilled ? ' unfilled' : ''}`;
+    const title = word;
     const workspace = await db.workspace.create({
       data: { ownerId: ids.ownerId, runnerId: ids.runnerId, name: `${title} ${randomUUID()}`, workDir: '/repo', enabled: true },
     });
@@ -99,9 +96,7 @@ async function everyShape(
         ...options.data?.(word),
       },
     });
-    // The word trigger fires on `status` alone, so this leaves the row as one nothing has written since 1611.
-    if (unfilled) await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', id);
-    rows.push({ title, id, word, held, unfilled, workspaceId: workspace.id, taskId });
+    rows.push({ title, id, word, held, workspaceId: workspace.id, taskId });
   }
   return rows;
 }
@@ -135,18 +130,17 @@ async function sweep(db: PrismaClient, ownerId: string, published: Map<string, R
   await (new ReaperService(scoped, realtime) as unknown as { sweep(): Promise<void> }).sweep();
 }
 
-test('the reaper and realtime read the facts, and a row with no turn_state reads as today', { skip, timeout: 600_000 }, async (t) => {
+test('the reaper and realtime read the facts, and select what the stored word selected', { skip, timeout: 600_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
-  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   const prisma = db as unknown as PrismaService;
   t.after(() => db.$disconnect());
 
   await t.test('a lost runner fails the turns in flight and nothing else', async () => {
     const ids = await world(db, 'lost', new Date(Date.now() - 10 * 60_000));
     const rows = await everyShape(db, ids);
-    assert.equal(await db.session.count({ where: { ownerId: ids.ownerId, finishedAt: null, turnState: null } }), 5,
-      'the control: the four unfilled rows and the parked one hold no turn state');
+    assert.equal(await db.session.count({ where: { ownerId: ids.ownerId, finishedAt: null, turnState: null } }), 1,
+      'the control: only the parked row holds no turn state');
     const before = await stored(db, rows);
     const published = new Map<string, Record<string, unknown>>();
     await sweep(db, ids.ownerId, published);
@@ -180,7 +174,7 @@ test('the reaper and realtime read the facts, and a row with no turn_state reads
     const after = await stored(db, rows);
 
     const released = titles(rows, (row) => after.get(row.id)!.finishedAt != null && before.get(row.id)!.finishedAt == null);
-    assert.deepEqual(released, titles(rows, (row) => row.held), 'every held row, filled and unfilled');
+    assert.deepEqual(released, titles(rows, (row) => row.held), 'every held row');
     assert.deepEqual(titles(rows, (row) => grace.published.has(row.id)), released, 'one STATUS event for each');
     for (const row of rows) {
       const now = after.get(row.id)!;
