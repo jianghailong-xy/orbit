@@ -247,7 +247,7 @@ describe('ProjectCrossingsCard — a move out to no project', () => {
   it('names the missing target no project, in the prompt as everywhere', () => {
     expect(NO_PROJECT).toBe('no project');
     expect(MOVE_TASK_OUT_APPROVE_CONSEQUENCE).toBe(
-      "Confirming takes the task out of this project; no project's acceptance counts it any more.",
+      "Confirming takes the task out of this project as soon as you answer; no project's acceptance counts it any more.",
     );
     for (const row of [moveOutRow(), moveOutRow({ toProjectPublicId: null })]) {
       expect(crossingConfirmPrompt(row, 'APPROVE')).toEqual({

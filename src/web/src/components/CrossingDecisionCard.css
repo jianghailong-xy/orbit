@@ -31,6 +31,11 @@
 }
 .crossing-decision-receipt { margin: 8px 0 0; text-align: center; font-size: 13.5px; color: var(--text-2); }
 .crossing-decision-verdict { color: var(--success); font-weight: 600; }
+/* The review sheet is a fixed 760px tall for long reviews; this card is a few lines, so it hugs them. */
+.review-card-dialog:has(.crossing-decision) { height: auto; max-height: min(760px, calc(100dvh - 48px)); }
+@media (max-width: 767px) {
+  .review-card-dialog:has(.crossing-decision) { height: auto; max-height: calc(100dvh - 16px); }
+}
 .crossing-decision-body { padding: 10px 14px 4px; }
 .crossing-decision-body > p { margin: 0 0 8px; }
 .crossing-decision-waiting { color: var(--warning); font-weight: 600; font-size: 13px; }

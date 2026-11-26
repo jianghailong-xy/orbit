@@ -3,8 +3,11 @@ import type { ProjectCrossingRow } from './attribution';
 import {
   FILE_APPROVE_CONSEQUENCE,
   MOVE_TASKS_APPROVE_CONSEQUENCE,
+  MOVE_OUT_APPROVE_CONSEQUENCE,
+  MOVE_OUT_MANY_APPROVE_CONSEQUENCE,
   anotherEndLine,
   answeredBadge,
+  answeredTitle,
   approveConsequence,
   batchReasons,
   batchVerdict,
@@ -18,11 +21,12 @@ import {
   isLive,
   moveBatches,
   notRecordedNote,
+  reasonsHead,
   requestedCriterionLine,
   waitingLine,
   withdrawnCriterionLine,
 } from './crossingBatches';
-import { MOVE_TASK_APPROVE_CONSEQUENCE } from '../components/ProjectCrossingsCard';
+import { MOVE_TASK_APPROVE_CONSEQUENCE, MOVE_TASK_OUT_APPROVE_CONSEQUENCE } from '../components/ProjectCrossingsCard';
 
 const TARGET = '0195c0de-0000-7000-8000-000000000010';
 const SOURCE = '0195c0de-0000-7000-8000-000000000020';
@@ -305,5 +309,28 @@ describe('moveBatches — a move out of every project, from the session read', (
       expect(crossingTitle(batch.kind, 1, batch.targetTitle, batch.out)).toBe('Take this task out of the project?');
       expect(decisionLabels(batch)).toEqual({ approve: 'Take it out', refuse: 'Keep it here' });
     }
+  });
+});
+
+describe('an answered card says what happened', () => {
+  it('heads it in the past tense by kind and verdict, and a mixed answer only as answered', () => {
+    expect(answeredTitle('MOVE_TASK', 1, 'APPROVED', null, true)).toBe('Task taken out of the project');
+    expect(answeredTitle('MOVE_TASK', 2, 'APPROVED', null, true)).toBe('Tasks taken out of the project');
+    expect(answeredTitle('MOVE_TASK', 1, 'REFUSED', null, true)).toBe('Task kept in the project');
+    expect(answeredTitle('MOVE_TASK', 3, 'APPROVED')).toBe('Tasks moved here');
+    expect(answeredTitle('MOVE_TASK', 1, 'APPROVED', 'Runner hardening')).toBe('Task moved to Runner hardening');
+    expect(answeredTitle('MOVE_TASK', 1, 'REFUSED')).toBe('Move refused');
+    expect(answeredTitle('FILE_TASK', 1, 'APPROVED')).toBe('Task filed here');
+    expect(answeredTitle('FILE_TASK', 2, 'REFUSED')).toBe('Filings refused');
+    expect(answeredTitle('DEPEND_ON_TASK', 2, 'APPROVED')).toBe('Dependencies allowed');
+    expect(answeredTitle('DEPEND_ON_TASK', 1, 'REFUSED')).toBe('Dependency refused');
+    expect(answeredTitle('MOVE_TASK', 2, 'MIXED')).toBe('Requests answered');
+  });
+
+  it('labels the quoted reasons as the agent\'s, and takes a task out in the project page\'s words', () => {
+    expect(reasonsHead(1)).toBe('Reason given by the requesting agent');
+    expect(reasonsHead(2)).toBe('Reasons given by the requesting agent');
+    expect(MOVE_OUT_APPROVE_CONSEQUENCE).toBe(MOVE_TASK_OUT_APPROVE_CONSEQUENCE);
+    expect(MOVE_OUT_MANY_APPROVE_CONSEQUENCE).toMatch(/^Confirming takes the tasks out of this project as soon as you answer; /);
   });
 });
