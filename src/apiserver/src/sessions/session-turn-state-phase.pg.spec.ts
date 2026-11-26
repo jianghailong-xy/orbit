@@ -311,7 +311,7 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
     // The claim on an engine row: an older replica's (no declaration) is skipped whole by the guard, so the row keeps
     // QUEUED and PENDING; the current claim's declaration lets it through, to IN_FLIGHT and RUNNING.
     const queued = await insertShape(db, w, HELD[0], none, 'claude');
-    const claim = `UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE "id" = $1::uuid`;
+    const claim = `UPDATE "session" SET "status" = 'RUNNING' WHERE "id" = $1::uuid`;
     assert.equal((await sql.query(claim, [queued])).rowCount, 0, 'the guard skips the claim');
     assert.deepEqual(await read(queued).then((r) => [r.status, r.turn_state, r.phase]), ['PENDING', 'QUEUED', 'PENDING']);
     await sql.query('BEGIN');

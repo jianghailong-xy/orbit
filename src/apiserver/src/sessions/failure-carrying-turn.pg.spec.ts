@@ -58,6 +58,7 @@ import { releaseWasFailure } from '../common/session-release';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 import { SessionsService } from './sessions.service';
 import { turnStateOfWord } from './session-turn-state';
+import { fixtureFacts } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -162,7 +163,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
       runSource: SessionRunSource.MANUAL,
       startedAt: new Date(),
       runtimeSessionId: randomUUID(),
-      ...data,
+      ...fixtureFacts(data),
     },
   });
   return id;
@@ -429,11 +430,13 @@ test('every failure writer records FAILED and the error on the turn that carries
     assert.equal(cut.error, 'cancel not honored');
     const row = await sessionRow(sql, running);
     assert.equal(row.last_turn_outcome, 'CANCELLED', 'and the session copies it: no FAILED');
-    assert.equal(row.status, 'FAILED', 'the status is written as before');
+    // An end nobody honoured (plan §3.4 C1, accepted): since deploy D3 the stored word is the facts', CANCELLED.
+    assert.equal(row.status, 'CANCELLED', 'the word the release facts give');
     assert.equal((await turnRow(sql, before)).outcome, 'ANSWERED');
     await assertDrainedUnrun(sql, queued);
     const idleRow = await sessionRow(sql, idle);
-    assert.equal(idleRow.status, 'FAILED');
+    // A delete nobody honoured (plan §3.4 C1): the stored word is the release facts', CANCELLED, since deploy D3.
+    assert.equal(idleRow.status, 'CANCELLED');
     assert.equal(idleRow.end_reason, 'deleted');
     assert.equal(idleRow.last_turn_outcome, null, 'nothing was in flight: no outcome is written');
     assert.equal((await turnRow(sql, idleLast)).outcome, 'ANSWERED', 'the last turn keeps its own');
@@ -513,7 +516,8 @@ test('every failure writer records FAILED and the error on the turn that carries
     await assertDrainedUnrun(sql, queued);
     const busyRow = await sessionRow(sql, busy);
     assert.equal(busyRow.last_turn_outcome, 'CANCELLED');
-    assert.equal(busyRow.status, 'SUCCEEDED', 'the runner\'s word, written as before');
+    // The runner's SUCCEEDED with no end asked (plan §3.4 C5): since deploy D3 the stored word is the facts', CANCELLED.
+    assert.equal(busyRow.status, 'CANCELLED', 'the word the release facts give');
 
     // Nothing in flight or queued: nothing is written, and the copy keeps the last turn's outcome.
     const idle = await session(s.db, w, { status: RunStatus.AWAITING_INPUT, lastTurnOutcome: 'ANSWERED' });
@@ -593,7 +597,8 @@ test('every failure writer records FAILED and the error on the turn that carries
              AND EXISTS (SELECT 1 FROM r2_poison WHERE session_id = NEW.session_id AND target = 'drain') THEN
             RAISE EXCEPTION 'r2: the drain is refused';
           END IF;
-        ELSIF NEW.status = 'FAILED' AND OLD.status <> 'FAILED'
+        -- The release, by its fact: writers name no word since deploy D3.
+        ELSIF NEW.finished_at IS NOT NULL AND OLD.finished_at IS NULL
           AND EXISTS (SELECT 1 FROM r2_poison WHERE session_id = NEW.id AND target = 'release') THEN
           RAISE EXCEPTION 'r2: the release is refused';
         END IF;

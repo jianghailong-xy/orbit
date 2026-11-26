@@ -21,6 +21,7 @@ import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { fixtureFacts } from '../test-support/session-word';
 
 /**
  * `GET /sessions/project-placement` (SessionsService.projectPlacement), against the migrated
@@ -133,7 +134,7 @@ async function session(o: Owner, fields: Partial<Prisma.SessionUncheckedCreateIn
   const row = await o.h.db.session.create({
     data: {
       ownerId: o.ownerId, creatorId: o.ownerId, title: 'placement session', prompt: 'p',
-      turnState: null, dispatchOrigin: 'USER', workspaceId: o.workspaceA, ...fields,
+      turnState: null, dispatchOrigin: 'USER', workspaceId: o.workspaceA, ...fixtureFacts(fields),
     },
   });
   return row.id;

@@ -87,7 +87,7 @@ import { RunnersService } from '../runners/runners.service';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
 import { turnStateOfWord } from './session-turn-state';
-import { type SessionFixture, WORD_SELECT, wordOf } from '../test-support/session-word';
+import { type SessionFixture, WORD_SELECT, wordOf, withWord } from '../test-support/session-word';
 import { RunStatus } from '@orbit/shared';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -651,7 +651,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
     const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { ...WORD_SELECT, retryAttempts: true } });
-    assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 }, 'not re-sent while Default is still spent');
+    assert.deepEqual(withWord(revived), { status: RunStatus.PENDING, retryAttempts: 1 }, 'not re-sent while Default is still spent');
 
     // The claim that picks it up starts it on Work, and the transcript says why.
     const claims = new RealQueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
@@ -753,7 +753,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
     const revived = await db.session.findUniqueOrThrow({ where: { id: refused }, select: { ...WORD_SELECT, retryAttempts: true } });
-    assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 });
+    assert.deepEqual(withWord(revived), { status: RunStatus.PENDING, retryAttempts: 1 });
     assert.deepEqual(await pending(refused), [{ kind: 'message', content: 'can it be a card instead?' }]);
     // ...and the claim that picks it up starts it on Default.
     const resumed = await claims.claimSessionForRunner({ id: m.runnerId });

@@ -38,7 +38,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { AutoRetryService } from '../sessions/auto-retry.service';
 import type { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
-import { WORD_SELECT } from '../test-support/session-word';
+import { WORD_SELECT, withWord } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -176,7 +176,7 @@ test('two sweeps meeting over one database write once', {
     const ended = await meeting('session', [sweepOf(one), sweepOf(two)]);
     assert.deepEqual(ended.map((e) => e.status), ['fulfilled', 'fulfilled']);
     const row = await one.session.findUniqueOrThrow({ where: { id: sessionId }, select: { retryAt: true, ...WORD_SELECT } });
-    assert.deepEqual(row, { retryAt: null, status: RunStatus.FAILED }, 'the retry has ended and the failure stands');
+    assert.deepEqual(withWord(row), { retryAt: null, status: RunStatus.FAILED }, 'the retry has ended and the failure stands');
     assert.deepEqual(announced, [sessionId], 'its end is announced once, not once per sweep');
   });
 });

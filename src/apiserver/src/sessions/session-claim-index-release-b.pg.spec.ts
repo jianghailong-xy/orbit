@@ -22,7 +22,7 @@ import { AutoRetryService } from './auto-retry.service';
 import { SessionsService } from './sessions.service';
 import { turnStateOfWord } from './session-turn-state';
 import type { LegacyStatusFacts } from './session-legacy-words';
-import { WORD_SELECT, sessionWord, wordOf } from '../test-support/session-word';
+import { WORD_SELECT, sessionWord, wordOf, fixtureFacts } from '../test-support/session-word';
 
 /**
  * ONE LIVE RUN PER TASK, RELEASE B: the rehearsal before 1444 drops 0130's index, and the drop itself.
@@ -274,7 +274,7 @@ async function populate(db: PrismaClient, tasksN: number): Promise<Population> {
       free.push(taskId);
     }
   });
-  for (let at = 0; at < rows.length; at += 500) await db.session.createMany({ data: rows.slice(at, at + 500) as never });
+  for (let at = 0; at < rows.length; at += 500) await db.session.createMany({ data: rows.slice(at, at + 500).map(fixtureFacts) as never });
   return { w, free, held, heldRuns, failed };
 }
 
@@ -550,8 +550,8 @@ test('one live run per task, release B (migration 1444): rehearsal before and af
     // While it is so: a second live run is still refused, by the index that enforces the claim.
     const w = await world(a.db, 'between', false);
     const [taskId] = await tasks(a.db, w, 1, 'between');
-    await a.db.session.create({ data: ran(w, taskId, RunStatus.RUNNING) as never });
-    const second = await a.db.session.create({ data: ran(w, taskId, RunStatus.PENDING) as never }).then(() => null, (e: unknown) => e);
+    await a.db.session.create({ data: fixtureFacts(ran(w, taskId, RunStatus.RUNNING)) as never });
+    const second = await a.db.session.create({ data: fixtureFacts(ran(w, taskId, RunStatus.PENDING)) as never }).then(() => null, (e: unknown) => e);
     assert.equal((second as { code?: string })?.code, 'P2002', 'a second live run is refused while the old index is INVALID');
 
     const stopped = await prisma(url, ['migrate', 'deploy']);

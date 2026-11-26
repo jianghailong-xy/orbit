@@ -402,11 +402,16 @@ test('the session triggers and functions read the facts and answer as before (16
       }
       return seen;
     });
-    // The one kind 1641 named, a row stored FAILED that the projector reads otherwise (plan §3.4 C1-C3, C6), is stored
-    // as the projector reads it since 1671 (deploy D3): CANCELLED, so the definitions before 1641 move listed_at too.
-    const C1 = 'an import fails over C1 (FAILED, an end not honoured)';
-    assert.deepEqual(after, before);
-    assert.deepEqual([before[C1], after[C1]], [true, true]);
+    // A failed import over a released row with an end recorded: since 1671 (deploy D3) the stored word is the facts',
+    // which the import's FAILED does not move (P2 needs no end), so the definitions before 1641, which read the word,
+    // see no move there. 1641's, which read the release, move listed_at for every row that did not read FAILED: the
+    // ended and the finished row, and the kind 1641 named (plan §3.4 C1), stored FAILED until D3.
+    const OVER_AN_END = ['an import fails over an ended row', 'an import fails over a finished row',
+      'an import fails over C1 (FAILED, an end not honoured)'];
+    const rest = (answers: Record<string, boolean>) =>
+      Object.fromEntries(Object.entries(answers).filter(([name]) => !OVER_AN_END.includes(name)));
+    assert.deepEqual(rest(after), rest(before));
+    assert.deepEqual(OVER_AN_END.map((name) => after[name]), [true, true, true]);
     assert.equal(after['an import fails over an ended row'], true);
     assert.equal(after['an import fails over a failed row'], false);
   });

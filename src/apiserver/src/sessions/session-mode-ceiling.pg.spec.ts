@@ -71,6 +71,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
 import '../test-support/daemon-routes-over-http';
+import { fixtureFacts } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -273,7 +274,7 @@ test('a session cannot start a session wider than itself', {
         turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
-        ...extra,
+        ...fixtureFacts(extra),
       },
     });
     return id;

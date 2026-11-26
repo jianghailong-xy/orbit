@@ -177,7 +177,8 @@ async function fixture(
       ...common,
       id: replaced,
       title: `${label}-replaced`,
-      turnState: null, 
+      // Released by a failure: the turn outcome records it (design §12.1), which is what makes its word FAILED.
+      turnState: null, lastTurnOutcome: 'FAILED',
       finishedAt: new Date(),
     },
   });

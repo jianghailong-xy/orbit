@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -13,7 +14,6 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { pgAdapterFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { DispatchPauseService } from '../queue/dispatch-pause.service';
-import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   conflictingUniqueKey,
   isExecutionClaimConflict,
@@ -47,6 +47,8 @@ import { WORD_SELECT } from '../test-support/session-word';
  * Not destructive beyond its own database: run-pg-spec.sh gives the spec a clone, and (2) and (3) drop and build
  * indexes on `session`, which they put back.
  */
+/** Migration 1671's rollback (deploy D3), for the case below that writes the word. */
+const D3_DOWN = readFileSync(join(__dirname, '..', '..', '..', '..', 'scripts', 'session-status-from-facts-down.sql'), 'utf8');
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
@@ -380,6 +382,9 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
       const drop = only === NEW_INDEX ? OLD_INDEX : NEW_INDEX;
       await sql.query('BEGIN');
       try {
+        // Every label as the stored word, PARKED among them: the database deploy D2 left, where the word was
+        // written and the facts followed it (1671's down script, rolled back with the rest of this transaction).
+        await sql.query(D3_DOWN);
         await sql.query(`DROP INDEX "${drop}"`);
         const [taskId] = (await sql.query(
           `INSERT INTO task (id, title, owner_id, creator_type, creator_id, updated_at, completion_criterion)
@@ -387,14 +392,14 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
            RETURNING id::text AS id`, [me],
         )).rows as Array<{ id: string }>;
         await sql.query(
-          `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, turn_state)
-           VALUES (gen_random_uuid(), 'holder', 'p', $1::uuid, $1::uuid, now(), $2::uuid, 'IN_FLIGHT')`, [me, taskId.id],
+          `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status)
+           VALUES (gen_random_uuid(), 'holder', 'p', $1::uuid, $1::uuid, now(), $2::uuid, 'RUNNING')`, [me, taskId.id],
         );
         await sql.query('SAVEPOINT shape');
         try {
           await sql.query(
-            `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, turn_state, finished_at)
-             VALUES (gen_random_uuid(), 'shape', 'p', $1::uuid, $1::uuid, now(), $2::uuid, (CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), $4)`,
+            `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status, finished_at)
+             VALUES (gen_random_uuid(), 'shape', 'p', $1::uuid, $1::uuid, now(), $2::uuid, $3::run_status, $4)`,
             [me, taskId.id, label, released ? new Date() : null],
           );
           return 'admitted';
@@ -515,14 +520,16 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
           taskId: busy, deletedAt: null, ...status, ...(not ? { NOT: { id: randomUUID() } } : {}),
         });
         const pick = (s: Statement) => /FROM "public"\."session"/.test(s.query);
+        const after = one(await capture(() => logged.session.findFirst({
+          where: where(heldFilter()), select: holderSelect,
+        })), pick, `${name} after`);
+        // Before: the held statuses where the release column is now. Spelled in SQL, the field having left the Prisma
+        // model (deploy D3); the stored word is still there, kept by migration 1671's trigger, until deploy D4.
+        const held = `"public"."session"."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')`;
+        assert.match(after.query, /"public"\."session"\."finished_at" IS NULL/, `${name}: the release column`);
         readers.push({
-          name, claim: true,
-          before: one(await capture(() => logged.session.findFirst({
-            where: where({ finishedAt: null }), select: holderSelect,
-          })), pick, `${name} before`),
-          after: one(await capture(() => logged.session.findFirst({
-            where: where(heldFilter()), select: holderSelect,
-          })), pick, `${name} after`),
+          name, claim: true, after,
+          before: { ...after, query: after.query.replace(/"public"\."session"\."finished_at" IS NULL/, held) },
         });
       }
       // (d), (e) the dispatch pause's two reads of held sessions, as DispatchPauseService sends them.

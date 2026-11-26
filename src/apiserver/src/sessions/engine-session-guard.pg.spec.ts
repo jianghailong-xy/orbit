@@ -47,7 +47,7 @@ import {
   ENGINE_SESSION_DOORS,
   ENGINE_SESSION_FIELD_CASES,
 } from './engine-session-cases';
-import { WORD_SELECT, wordOf } from '../test-support/session-word';
+import { fixtureFacts, sessionWord, storedWord, WORD_SELECT, withWord, wordOf } from '../test-support/session-word';
 
 /**
  * The engine-path guard and the kind census, against a real PostgreSQL (contract §2.9 LS1, LS6;
@@ -228,7 +228,7 @@ async function landingRow(stack: Stack, w: World, overrides: Record<string, unkn
       engine: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       runSource: SessionRunSource.MANUAL,
-      ...overrides,
+      ...fixtureFacts(overrides),
     },
   });
   return id;
@@ -253,7 +253,7 @@ async function conversationRow(stack: Stack, w: World, overrides: Record<string,
       engine: 'claude',
       dispatchOrigin: SessionDispatchOrigin.USER,
       runSource: SessionRunSource.MANUAL,
-      ...overrides,
+      ...fixtureFacts(overrides),
     },
   });
   return id;
@@ -447,7 +447,7 @@ test('every user door refuses a LANDING session with 409 SESSION_IS_PLATFORM_DRI
         where: { id: landing },
         select: { ...WORD_SELECT, title: true, deletedAt: true, completedAt: true, prompt: true },
       });
-      assert.deepEqual(after, {
+      assert.deepEqual(withWord(after), {
         status: RunStatus.AWAITING_INPUT,
         title: 'Land · a task',
         deletedAt: null,
@@ -560,7 +560,7 @@ test('the queue and the reaper do not touch a LANDING row', { skip }, async () =
       where: { id: parked },
       select: { ...WORD_SELECT, error: true, retryAt: true, cancelRequestedAt: true },
     });
-    assert.deepEqual(after, {
+    assert.deepEqual(withWord(after), {
       status: RunStatus.AWAITING_INPUT, error: null, retryAt: null, cancelRequestedAt: null,
     }, 'the reaper touched the landing row');
   } finally {
@@ -766,10 +766,13 @@ test('only a claimed subject gets a session row, and the compensation points ins
     await stack.api.integrationJobProgress({ id: f.runnerId } as never, queued, {
       claimGeneration: '1', leaseOwner: 'lease', phase: 'FETCH',
     } as never);
-    const inserted = await stack.db.session.findUnique({
-      where: { id: await preGeneratedId(stack, f) },
-      select: { provider: true, startsTaskWork: true, ...WORD_SELECT },
-    });
+    const insertedId = await preGeneratedId(stack, f);
+    const inserted = {
+      ...await stack.db.session.findUnique({
+        where: { id: insertedId }, select: { sessionKind: true, provider: true, startsTaskWork: true },
+      }),
+      status: await sessionWord(stack.db, insertedId),
+    };
     assert.deepEqual(inserted, {
       sessionKind: 'LANDING', provider: 'orbit', startsTaskWork: false, status: RunStatus.AWAITING_INPUT,
     });
@@ -784,11 +787,12 @@ test('only a claimed subject gets a session row, and the compensation points ins
       capabilities: [INTEGRATION_JOB_CLAIM],
     });
     assert.ok(commands.some((command) => command.jobId === dispatched), 'the fixture job was not dispatched');
+    const dispatchedId = await preGeneratedId(stack, d);
     assert.deepEqual(
-      await stack.db.session.findUnique({
-        where: { id: await preGeneratedId(stack, d) },
-        select: { ...WORD_SELECT },
-      }),
+      {
+        ...await stack.db.session.findUnique({ where: { id: dispatchedId }, select: { sessionKind: true } }),
+        status: await sessionWord(stack.db, dispatchedId),
+      },
       { sessionKind: 'LANDING', status: RunStatus.AWAITING_INPUT },
       'the heartbeat claim did not insert the landing row',
     );
@@ -805,12 +809,15 @@ test('only a claimed subject gets a session row, and the compensation points ins
       testedSha: 'c'.repeat(40), testedTreeSha: 'd'.repeat(40),
       landedSha: 'c'.repeat(40), landedTreeSha: 'd'.repeat(40), aheadOfUpstream: 1,
     } as never);
+    const resultId = await preGeneratedId(stack, r);
     assert.deepEqual(
-      await stack.db.session.findUnique({
-        where: { id: await preGeneratedId(stack, r) },
-        select: { ...WORD_SELECT },
-      }),
-      { sessionKind: 'LANDING', status: RunStatus.SUCCEEDED },
+      {
+        ...await stack.db.session.findUnique({ where: { id: resultId }, select: { sessionKind: true } }),
+        status: await sessionWord(stack.db, resultId),
+        // The word migration 1671's trigger stored: the result settled the landing before it inserted the row.
+        stored: await storedWord(stack.db, resultId),
+      },
+      { sessionKind: 'LANDING', status: RunStatus.SUCCEEDED, stored: RunStatus.SUCCEEDED },
       'the result did not insert the landing row',
     );
 
@@ -826,7 +833,8 @@ test('only a claimed subject gets a session row, and the compensation points ins
     const settledRow = await stack.db.session.findUniqueOrThrow({
       where: { id: settled!.sessionId }, select: { ...WORD_SELECT, finishedAt: true},
     });
-    assert.equal(wordOf(settledRow), RunStatus.SUCCEEDED);
+    assert.equal(await sessionWord(stack.db, settled!.sessionId), RunStatus.SUCCEEDED);
+    assert.equal(await storedWord(stack.db, settled!.sessionId), RunStatus.SUCCEEDED, 'settled first: the stored word too');
     // Released from the start, at the moment its landing settled (plan step 3.1).
     const settledAt = (await stack.db.projectLanding.findUniqueOrThrow({ where: { id: g.landingId } })).settledAt;
     assert.equal(settledRow.finishedAt?.getTime(), settledAt?.getTime(), 'the release column is the settlement time');
@@ -884,10 +892,10 @@ test("another account's landing id is answered exactly like an id that names not
     ) as { cancelSessionIds?: string[] };
     assert.ok(!(beat.cancelSessionIds ?? []).includes(foreignLanding));
     assert.deepEqual(
-      await stack.db.session.findUniqueOrThrow({
+      withWord(await stack.db.session.findUniqueOrThrow({
         where: { id: foreignLanding },
         select: { ...WORD_SELECT, cancelRequestedAt: true },
-      }),
+      }), 'sessionKind'),
       { sessionKind: 'LANDING', status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
     );
   } finally {

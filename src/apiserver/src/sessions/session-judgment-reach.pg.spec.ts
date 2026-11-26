@@ -714,8 +714,9 @@ test('what a session answers about a run reaches the run only as the table says'
 
   // ── SEND_BACK: only the session it would give a turn to is asked ─────────────────────────────
   const NO_TURN: Record<string, Shape> = {
-    'SUCCEEDED': { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
-    'FAILED': { status: RunStatus.FAILED, finishedAt: new Date() },
+    // Released with its work finished: its task ended DONE (`task_done`), the end that reads SUCCEEDED (plan §3.1 P4).
+    'SUCCEEDED': { status: RunStatus.SUCCEEDED, finishedAt: new Date(), endReason: 'task_done' },
+    'FAILED': { status: RunStatus.FAILED, finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
     'CANCELLED': { status: RunStatus.CANCELLED, finishedAt: new Date() },
     'asked to stop': { cancelRequestedAt: new Date() },
     'in Trash': { deletedAt: new Date() },

@@ -15,6 +15,7 @@ import {
   type LegacyStatusFacts,
   readLandingSettlements,
 } from '../sessions/session-legacy-words';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /** The columns wordOf reads. */
 export const WORD_SELECT = LEGACY_STATUS_SELECT;
@@ -71,4 +72,39 @@ export function writtenWord(data: Record<string, unknown> | null | undefined): `
 export async function storedWord(db: Pick<Prisma.TransactionClient, '$queryRaw'>, id: string): Promise<string | null> {
   const rows = await db.$queryRaw<Array<{ word: string }>>`SELECT "status"::text AS word FROM "session" WHERE "id" = ${id}::uuid`;
   return rows[0]?.word ?? null;
+}
+
+const RELEASED_WORDS: ReadonlySet<string> = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+
+/**
+ * A session helper's `data` with its fixture word (`status`) turned into the facts a writer stores for it, and the
+ * word taken out: the turn state of a held word; for a released one the release (`finishedAt`), and for FAILED with
+ * no end asked the failed turn that records it (every failure writer does, design §12.1). What `data` names itself
+ * wins. Data with no word is returned as it is.
+ */
+export function fixtureFacts<T extends object>(data: T): Omit<T, 'status'> {
+  const { status, ...rest } = data as T & { status?: unknown };
+  if (status === undefined || status === null) return rest as Omit<T, 'status'>;
+  const word = String(status);
+  const named = rest as Record<string, unknown>;
+  return {
+    turnState: turnStateOfWord(word),
+    ...(RELEASED_WORDS.has(word) && named.finishedAt === undefined ? { finishedAt: new Date() } : {}),
+    ...(word === 'FAILED' && named.lastTurnOutcome === undefined && !named.endReason ? { lastTurnOutcome: 'FAILED' } : {}),
+    ...rest,
+  } as unknown as Omit<T, 'status'>;
+}
+
+/**
+ * A row read with WORD_SELECT, shaped as it read when it selected `status`: the word under `status`, and the fact
+ * columns WORD_SELECT added taken back out, but for the ones the caller selected itself (`kept`). For the specs that
+ * compare a whole row with what they expect of it.
+ */
+export function withWord<T extends LegacyStatusFacts>(row: T, ...kept: Array<keyof LegacyStatusFacts>): Record<string, unknown> {
+  const out: Record<string, unknown> = { status: wordOf(row) };
+  for (const [key, value] of Object.entries(row)) {
+    if (key in WORD_SELECT && !kept.includes(key as keyof LegacyStatusFacts)) continue;
+    out[key] = value;
+  }
+  return out;
 }

@@ -22,7 +22,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { reclaimStalledTask } from './reclaim-stalled-task';
 import { TasksService } from './tasks.service';
 import { turnStateOfWord } from '../sessions/session-turn-state';
-import { wordOf, WORD_SELECT } from '../test-support/session-word';
+import { wordOf, WORD_SELECT, withWord } from '../test-support/session-word';
 
 /**
  * A project's "At most N tasks at a time" is spent on work that is moving, not on a task session
@@ -272,7 +272,7 @@ test('(1) the 2026-10-26 incident: a session parked with nothing to wake it free
     const waiting = await s.db.session.findUniqueOrThrow({
       where: { id: c1b.sessionId }, select: { ...WORD_SELECT, endReason: true },
     });
-    assert.deepEqual(waiting, { status: RunStatus.AWAITING_INPUT, endReason: null },
+    assert.deepEqual(withWord(waiting, 'endReason'), { status: RunStatus.AWAITING_INPUT, endReason: null },
       'the waiting session was ended or woken to make room');
     for (const held of [o3, a6, c1b]) {
       assert.equal(await runs(s.db, held.taskId), 1, 'a slot holder was given a second run');

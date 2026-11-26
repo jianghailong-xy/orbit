@@ -42,7 +42,7 @@ import {
 import { CURSOR_ACCOUNT_MOVE_V1, CURSOR_CONVERSATION_MOVE_REFUSAL } from '../providers/account-move-capability';
 import { ProvidersService } from '../providers/providers.service';
 import { SessionsService } from './sessions.service';
-import { WORD_SELECT, wordOf } from '../test-support/session-word';
+import { WORD_SELECT, wordOf, fixtureFacts, type SessionFixture } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -131,7 +131,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
   }
 
   /** The states a session can be in, as far as its conversation goes — each with its own ids. */
-  type Facts = () => Partial<Prisma.SessionUncheckedCreateInput>;
+  type Facts = () => SessionFixture;
   const TALKED = {
     /** Idle after a turn, Cursor's conversation id known. */
     idle: () => ({ status: RunStatus.AWAITING_INPUT, numTurns: 1, runtimeSessionId: randomUUID() }),
@@ -174,8 +174,8 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         ...(onKey ? {} : { cursorAccount: 'default', cursorAccountPinned: false }),
-        ...facts(),
-        ...extra,
+        ...fixtureFacts(facts()),
+        ...fixtureFacts(extra),
       },
     });
     return id;

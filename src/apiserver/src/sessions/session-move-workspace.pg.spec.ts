@@ -62,6 +62,7 @@ import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { fixtureFacts } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -276,7 +277,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
         mergeTargets: ['develop', 'main'],
         mergeStatus: 'conflict', mergeError: 'CONFLICT (content): Merge conflict in src/a.ts',
         mergeRequestedAt: new Date(), mergeOperationId: randomUUID(), mergeRecoveryAction: 'preview',
-        ...extra,
+        ...fixtureFacts(extra),
       } as never,
     });
     return id;

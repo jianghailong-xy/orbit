@@ -41,6 +41,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { ReaperService } from '../realtime/reaper.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
+import { fixtureFacts } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -132,7 +133,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
       runSource: SessionRunSource.MANUAL,
       startedAt: new Date(),
       runtimeSessionId: randomUUID(),
-      ...data,
+      ...fixtureFacts(data),
     },
   });
   return id;

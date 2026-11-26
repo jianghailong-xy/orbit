@@ -13,6 +13,7 @@ import {
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { readOpenListVersionParts } from './open-list-version';
+import { fixtureFacts } from '../test-support/session-word';
 
 /**
  * Migration 1464 (docs/list-freshness-scope-hints.md §5.1, §8.2): the Open-list counters of the sources that hang
@@ -73,7 +74,7 @@ async function session(
     data: {
       id, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId, assignedRunnerId: f.runnerId, title: `olsk ${id}`,
       prompt: 'olsk', provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', startedAt: new Date(),
-      dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
+      dispatchOrigin: SessionDispatchOrigin.USER, ...fixtureFacts(extra),
     },
   });
   return id;
