@@ -41,4 +41,4 @@ orbit doctor    # 引擎、登录状态、服务的 PATH
 
 记录操作系统、Orbit 版本（`orbit status` 的第一行）、哪个检查失败以及时间。先移除令牌、验证码、私有地址和文件内容。
 
-完整指南：[Runner troubleshooting](../../runner-troubleshooting.md)。
+完整指南：[Runner troubleshooting](../../../runner-troubleshooting.md)。

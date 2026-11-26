@@ -29,4 +29,4 @@ Orbit 只发送一种邮件：给每个新账户的欢迎邮件，通过 [Resend
 | `401 — API key is invalid` | 创建一个新密钥并粘贴。 |
 | `403 — You can only send testing emails to your own email address` | 验证一个域名并在 From 中使用它。 |
 
-完整指南：[Self-hosting: configure outgoing email](../../self-hosting.md#configure-outgoing-email)。
+完整指南：[Self-hosting: configure outgoing email](../../../self-hosting.md#configure-outgoing-email)。

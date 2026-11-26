@@ -33,4 +33,4 @@ orbit engine-update
 
 引擎可能已安装到你的 shell，但没有出现在 Runner 服务的 PATH 中，或者安装在另一个用户账户下。以 Runner 的用户身份运行 `orbit doctor` 并对比。
 
-完整指南：[Runner troubleshooting, section C](../../runner-troubleshooting.md#c-runner-is-online-but-a-task-cannot-start-its-runtime)。
+完整指南：[Runner troubleshooting, section C](../../../runner-troubleshooting.md#c-runner-is-online-but-a-task-cannot-start-its-runtime)。

@@ -24,4 +24,4 @@ summary: 机器离线或账户额度用尽时，会话会等待而不是失败�
 
 移到回收站的会话会保留 30 天。打开它并按 **Restore to Open**。
 
-完整指南：[Onboarding, step 7](../../onboarding.md#7-recovery-when-a-run-stops)。
+完整指南：[Onboarding, step 7](../../../onboarding.md#7-recovery-when-a-run-stops)。

@@ -22,4 +22,4 @@ summary: 一个目标，带有任务图、推进任务的协调者，以及说�
 
 来自协调者的问题和它需要的确认会出现在项目页顶部，也会作为卡片出现在提出请求的会话里。把任务移入本项目的请求会在其协调者会话中的一张卡片上批准。参见 [找到需要你处理的事](orbit:/help/projects-and-tasks/find-what-needs-you)。
 
-完整指南：[Onboarding, step 5](../../onboarding.md#5-organize-work-as-a-project-and-read-its-task-graph)。
+完整指南：[Onboarding, step 5](../../../onboarding.md#5-organize-work-as-a-project-and-read-its-task-graph)。

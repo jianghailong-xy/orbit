@@ -29,4 +29,4 @@ Android 应用显示与 Web 相同的账户：工作区和会话、项目和任�
 
 应用会保留上次加载的列表和会话，所以没有连接时也能阅读。更改需要连接。
 
-完整指南：[Onboarding, step by step](../../onboarding.md)。
+完整指南：[Onboarding, step by step](../../../onboarding.md)。

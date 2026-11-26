@@ -26,4 +26,4 @@ summary: 从一个请求到 main 上的一处改动，以及途中会问你什�
 
 如果合入失败，参见 [合并失败时](orbit:/help/projects-and-tasks/when-a-merge-fails)。
 
-完整指南：[Clean-machine first-run checklist, step 5](../../first-run.md#5-complete-a-small-task)。
+完整指南：[Clean-machine first-run checklist, step 5](../../../first-run.md#5-complete-a-small-task)。

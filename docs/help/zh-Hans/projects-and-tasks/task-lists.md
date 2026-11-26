@@ -25,4 +25,4 @@ summary: 项目之外的任务，按 Agent 掌控的列表分组，以及如何�
 
 打开任务可以看到它的描述、完成定义、运行过它的会话、证据和评论。
 
-完整指南：[Runner CLI: tasks and task lists](../../runner-cli.md#tasks-and-task-lists)。
+完整指南：[Runner CLI: tasks and task lists](../../../runner-cli.md#tasks-and-task-lists)。

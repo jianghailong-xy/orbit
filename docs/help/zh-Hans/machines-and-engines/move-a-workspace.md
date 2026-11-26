@@ -25,4 +25,4 @@ summary: 一个工作区属于一台机器；下面说明如何在别处继续�
 
 当它上面不再运行任何东西时，打开机器的 **Actions** 菜单并选择 **Delete**。
 
-完整指南：[Onboarding, step 3](../../onboarding.md#3-create-the-first-workspace)。
+完整指南：[Onboarding, step 3](../../../onboarding.md#3-create-the-first-workspace)。

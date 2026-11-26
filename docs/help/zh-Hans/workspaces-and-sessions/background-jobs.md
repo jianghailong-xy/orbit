@@ -24,4 +24,4 @@ Agent 可以把长时间命令作为后台作业启动，例如构建、测试�
 
 让 Agent 停止它。结束会话也会停止它的作业。
 
-完整指南：[Runner CLI: permission modes, shell commands and background jobs](../../runner-cli.md#permission-modes-shell-commands-and-background-jobs)。
+完整指南：[Runner CLI: permission modes, shell commands and background jobs](../../../runner-cli.md#permission-modes-shell-commands-and-background-jobs)。

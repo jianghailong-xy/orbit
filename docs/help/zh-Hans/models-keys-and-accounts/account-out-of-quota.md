@@ -23,4 +23,4 @@ summary: 5 小时和每周限制意味着什么，以及会话如何自行恢复
 
 **Provider unavailable** 是另一张卡片：供应商的 API 失败，而不是你的额度。它也会以同样方式重试。
 
-完整指南：[Onboarding, step 7](../../onboarding.md#7-recovery-when-a-run-stops)。
+完整指南：[Onboarding, step 7](../../../onboarding.md#7-recovery-when-a-run-stops)。

@@ -24,4 +24,4 @@ summary: 打开工作区，按 New session，描述你想完成的事。
 
 会话列表有三个视图：**Open**、**Completed** 和 **Trash**。会话会一直留在 Open 下，直到你把它标记完成或移到回收站。回收站中的会话会在 30 天后删除；打开它并按 **Restore to Open** 即可恢复。
 
-完整指南：[Onboarding, step 4](../../onboarding.md#4-start-a-session-and-watch-a-turn)。
+完整指南：[Onboarding, step 4](../../../onboarding.md#4-start-a-session-and-watch-a-turn)。

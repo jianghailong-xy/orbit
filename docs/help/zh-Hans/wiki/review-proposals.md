@@ -27,4 +27,4 @@ summary: 接受、编辑或拒绝会话对 Wiki 的提议，并选择多少内�
 
 使用 Automatic 时，**Spot-check Automatic** 会把它已应用的改动中每 200 条里的 1 条送到 Review，让你看到它放行了什么。
 
-完整指南：[Self-hosting: Wiki System model](../../self-hosting.md#wiki-system-model)。
+完整指南：[Self-hosting: Wiki System model](../../../self-hosting.md#wiki-system-model)。

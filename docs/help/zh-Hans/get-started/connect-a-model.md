@@ -33,4 +33,4 @@ Agent 需要一个模型来思考。有两种方式给它模型，而且可以�
 
 `orbit doctor` 列出每个引擎及其登录状态，并为已退出的引擎打印登录命令。
 
-完整指南：[Onboarding, step 2](../../onboarding.md#2-connect-the-first-runner)。
+完整指南：[Onboarding, step 2](../../../onboarding.md#2-connect-the-first-runner)。

@@ -25,4 +25,4 @@ Mac 应用是你 Orbit 账户的原生窗口：项目、任务、工作区和会
 Mac 上的 Runner 是一个名为 `com.orbit.runner` 的 launchd 服务；它的日志是 `~/.orbit/runner.log`。
 :::
 
-完整指南：[Runner troubleshooting](../../runner-troubleshooting.md#find-the-runner-logs)。
+完整指南：[Runner troubleshooting](../../../runner-troubleshooting.md#find-the-runner-logs)。

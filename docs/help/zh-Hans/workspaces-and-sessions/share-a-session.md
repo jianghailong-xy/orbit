@@ -28,4 +28,4 @@ summary: 创建一个会话的只读链接，选择它包含什么，并随时�
 
 把被分享的会话移到回收站会暂停它的链接。**Restore to Open** 会重新开启链接。
 
-完整指南：[Onboarding, step 4](../../onboarding.md#4-start-a-session-and-watch-a-turn)。
+完整指南：[Onboarding, step 4](../../../onboarding.md#4-start-a-session-and-watch-a-turn)。

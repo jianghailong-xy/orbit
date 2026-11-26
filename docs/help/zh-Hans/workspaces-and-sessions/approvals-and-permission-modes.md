@@ -36,4 +36,4 @@ summary: 哪些操作无需询问就运行，哪些会停下来等你审批，�
 
 有些操作在任何模式下都会询问你：创建任务或项目、连接供应商、更换 Agent。这些卡片来自 Orbit，而不是引擎。
 
-完整指南：[Onboarding, step 6](../../onboarding.md#6-answer-an-approval)。
+完整指南：[Onboarding, step 6](../../../onboarding.md#6-answer-an-approval)。

@@ -42,4 +42,4 @@ orbit upgrade
 
 Mac 应用自行更新；Android 应用会提供新版本；iPhone 应用通过 TestFlight 更新。
 
-完整指南：[Self-hosting: upgrading](../../self-hosting.md#upgrading)。
+完整指南：[Self-hosting: upgrading](../../../self-hosting.md#upgrading)。

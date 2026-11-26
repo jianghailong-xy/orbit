@@ -27,4 +27,4 @@ summary: 把多个账户放在一个名字下，每个会话从还有额度的�
 
 选择 **Me and people I add** 时，你添加的人可以在池的账户上运行他们自己的会话。
 
-完整指南：[Runner CLI: providers](../../runner-cli.md#providers)。
+完整指南：[Runner CLI: providers](../../../runner-cli.md#providers)。

@@ -39,4 +39,4 @@ orbit logout                      # 撤销令牌，然后忘记它
 
 `401` 表示令牌无效、已撤销或已过期。创建一个新的，或者重新运行 `orbit login`。
 
-完整指南：[Runner CLI: personal access tokens](../../runner-cli.md#personal-access-tokens)。
+完整指南：[Runner CLI: personal access tokens](../../../runner-cli.md#personal-access-tokens)。

@@ -36,4 +36,4 @@ orbit api /api/tasks/page --paginate --json
 
 完整参考是从服务器代码生成的，所以始终与你运行的版本一致。它说明谁可以调用每条路由，以及它接收和返回什么。
 
-完整指南：[External HTTP API reference](../../api-reference.md)。
+完整指南：[External HTTP API reference](../../../api-reference.md)。

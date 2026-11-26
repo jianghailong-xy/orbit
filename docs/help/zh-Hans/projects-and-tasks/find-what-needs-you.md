@@ -37,4 +37,4 @@ summary: 问题、确认、任务移动、终端审批和定时运行在哪里�
 
 打开通知，就能在不一直开着 Orbit 的情况下得知新请求。参见 [通知](orbit:/help/phone-and-desktop-apps/notifications)。
 
-完整指南：[Onboarding, step 6](../../onboarding.md#6-answer-an-approval)。
+完整指南：[Onboarding, step 6](../../../onboarding.md#6-answer-an-approval)。

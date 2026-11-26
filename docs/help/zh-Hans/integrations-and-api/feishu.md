@@ -33,4 +33,4 @@ summary: 用你自己的飞书或 Lark 应用作为 Orbit 的机器人，用于�
 
 页面上的 **Remove app** 会断开机器人与 Orbit 的连接。
 
-完整指南：[Feishu bot design](../../feishu-bot-design.md)。
+完整指南：[Feishu bot design](../../../feishu-bot-design.md)。

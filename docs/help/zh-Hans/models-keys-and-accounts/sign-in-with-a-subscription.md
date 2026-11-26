@@ -27,4 +27,4 @@ summary: 使用你的 Claude 或 ChatGPT 方案而不是 API 密钥；登录状�
 在用户只通过 SSH 登录的 Mac 上，Claude Code 无法从 Runner 的服务中读取登录 Keychain，所以会显示为已退出。用机器的 **Sign in** 按钮重新登录；之后 Claude Code 会把登录信息保存在服务能读取的文件中。
 :::
 
-完整指南：[Runner troubleshooting, section C](../../runner-troubleshooting.md#c-runner-is-online-but-a-task-cannot-start-its-runtime)。
+完整指南：[Runner troubleshooting, section C](../../../runner-troubleshooting.md#c-runner-is-online-but-a-task-cannot-start-its-runtime)。

@@ -32,4 +32,4 @@ summary: 添加账户、重置密码、设置管理员，以及打开 Google 登
 
 Google 需要公网域名上的 `https` 地址；`http://localhost` 是唯一的例外。
 
-完整指南：[Self-hosting: Google sign-in](../../self-hosting.md#google-sign-in)。
+完整指南：[Self-hosting: Google sign-in](../../../self-hosting.md#google-sign-in)。

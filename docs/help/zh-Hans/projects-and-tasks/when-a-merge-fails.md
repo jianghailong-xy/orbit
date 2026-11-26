@@ -27,4 +27,4 @@ summary: 合入冲突或合并检查失败意味着什么，以及如何让工�
 
 打开 **Automatic** 时，协调者会自己处理冲突和失败的检查；你会看到 **Coordinator is resolving it**。它处理不了时，卡片会显示 **It is yours**。
 
-完整指南：[合并到 main](orbit:/help/projects-and-tasks/merging-to-main) 和 [Onboarding, step 7](../../onboarding.md#7-recovery-when-a-run-stops)。
+完整指南：[合并到 main](orbit:/help/projects-and-tasks/merging-to-main) 和 [Onboarding, step 7](../../../onboarding.md#7-recovery-when-a-run-stops)。

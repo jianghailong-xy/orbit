@@ -40,4 +40,4 @@ orbit doctor    # 找到的引擎、登录状态，以及服务的 PATH
 
 管理员可以先用 `orbit host setup --server <url>`（以 root 身份）把机器设置一次；之后每个人在它上面注册自己的 Runner。参见长文指南。
 
-完整指南：[Self-hosting: register a runner](../../self-hosting.md#4-register-a-runner)。
+完整指南：[Self-hosting: register a runner](../../../self-hosting.md#4-register-a-runner)。

@@ -26,4 +26,4 @@ summary: 已完成任务的工作如何合入，以及什么时候合并到 main
 
 如果合入失败，参见 [合并失败时](orbit:/help/projects-and-tasks/when-a-merge-fails)。
 
-完整指南：[Onboarding, step 5](../../onboarding.md#5-organize-work-as-a-project-and-read-its-task-graph)。
+完整指南：[Onboarding, step 5](../../../onboarding.md#5-organize-work-as-a-project-and-read-its-task-graph)。

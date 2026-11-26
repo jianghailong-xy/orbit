@@ -26,4 +26,4 @@ summary: 让 Orbit 指向你某台机器上的文件夹，这样 Agent 就有地
 - Agent 以机器上 Runner 账户的权限运行，所以只给那个账户它应该接触的文件。
 - 一个工作区位于一台机器上。要换机器，参见 [移动工作区](orbit:/help/machines-and-engines/move-a-workspace)。
 
-完整指南：[Onboarding, step 3](../../onboarding.md#3-create-the-first-workspace)。
+完整指南：[Onboarding, step 3](../../../onboarding.md#3-create-the-first-workspace)。

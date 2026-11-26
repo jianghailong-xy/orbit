@@ -21,4 +21,4 @@ summary: Agent 对代码库的了解被写下来，让下一次会话一开始�
 
 会话在工作时会提议新的条目和改动。取决于空间的审阅模式，提议会立即应用，或在 **Review** 里等你。参见 [审阅提议](orbit:/help/wiki/review-proposals)。你也可以通过与页面对话来自己修改：参见 [在 Wiki 页面上对话](orbit:/help/wiki/chat-on-a-wiki-page)。
 
-完整指南：[Self-hosting: Wiki System model](../../self-hosting.md#wiki-system-model)。
+完整指南：[Self-hosting: Wiki System model](../../../self-hosting.md#wiki-system-model)。

@@ -22,4 +22,4 @@ summary: Agent 如何证明任务已完成，以及你如何确认或退回。
 
 确认任务可以解除等待它的任务的阻塞，并启动它的合入。如果你不确定，就退回：Agent 会再试一次，下游什么都不会开始。
 
-完整指南：[Onboarding, step 5](../../onboarding.md#5-organize-work-as-a-project-and-read-its-task-graph)。
+完整指南：[Onboarding, step 5](../../../onboarding.md#5-organize-work-as-a-project-and-read-its-task-graph)。

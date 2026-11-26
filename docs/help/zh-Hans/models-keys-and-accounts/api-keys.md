@@ -28,4 +28,4 @@ API 密钥让会话使用模型供应商的 API，并按 token 付费。密钥�
 
 从 **API keys** 打开密钥进行编辑并按 **Save**，或用 **Delete key** 删除。Orbit 会先询问，并说明有什么在使用这个密钥。
 
-完整指南：[Runner CLI: providers](../../runner-cli.md#providers)。
+完整指南：[Runner CLI: providers](../../../runner-cli.md#providers)。

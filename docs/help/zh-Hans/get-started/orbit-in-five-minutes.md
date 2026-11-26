@@ -27,4 +27,4 @@ Orbit 给编码 Agent 一台电脑和一个任务，并把对话及其结果保�
 - [找到需要你处理的事](orbit:/help/projects-and-tasks/find-what-needs-you) 列出了所有类型。
 - 手机可以通知你；参见通知那篇文章。
 
-完整指南：[Onboarding, step by step](../../onboarding.md)。
+完整指南：[Onboarding, step by step](../../../onboarding.md)。

@@ -31,4 +31,4 @@ iPhone 和 iPad 应用显示与 Web 相同的账户：你的项目、任务、�
 
 iPad 使用同一个应用，一屏可以显示更多内容。
 
-完整指南：[Onboarding, step by step](../../onboarding.md)。
+完整指南：[Onboarding, step by step](../../../onboarding.md)。

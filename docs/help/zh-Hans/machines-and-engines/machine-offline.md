@@ -45,4 +45,4 @@ Runner 作为服务运行。要重启它：
 
 [打开机器](orbit:/settings/machines/:id)
 
-完整指南：[Runner troubleshooting, section B](../../runner-troubleshooting.md#b-enrolled-runner-stays-offline-or-heartbeats-stop)。
+完整指南：[Runner troubleshooting, section B](../../../runner-troubleshooting.md#b-enrolled-runner-stays-offline-or-heartbeats-stop)。

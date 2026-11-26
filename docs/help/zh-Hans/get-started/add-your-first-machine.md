@@ -37,4 +37,4 @@ orbit doctor
 
 参见 [机器显示为离线](orbit:/help/machines-and-engines/machine-offline) 或下面的长文指南。
 
-完整指南：[Clean-machine first-run checklist](../../first-run.md#4-enroll-a-runner-and-authenticate-one-runtime)。
+完整指南：[Clean-machine first-run checklist](../../../first-run.md#4-enroll-a-runner-and-authenticate-one-runtime)。
