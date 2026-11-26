@@ -602,7 +602,7 @@ public enum Approvals {
         "cp", "mv", "rm", "rmdir", "ln", "chmod", "chown", "chgrp", "tee", "dd", "touch", "truncate",
         "mkdir", "install", "rsync", "unlink", "shred",
         "export", "env", "set", "unset", "declare", "typeset", "readonly", "local", "alias", "source", ".",
-        "eval", "exec", "sudo", "doas", "xargs",
+        "eval", "exec", "sudo", "doas", "xargs", "nohup", "timeout", "nice", "command", "builtin",
     ]
 
     /// The prefix "always allow" remembers for one sub-command (its `head`), or nil for none: leading

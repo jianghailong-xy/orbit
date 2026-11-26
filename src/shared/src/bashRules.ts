@@ -174,7 +174,7 @@ function substitutionBodyAt(cmd: string, i: number): number {
  * terminator. `readable` is false when the line can be taken two ways, which a caller deciding whether
  * a rule covers it has to read as "ask".
  */
-function scanBashLine(cmd: string): { segments: string[]; heads: string[]; readable: boolean } {
+function scanBashLine(cmd: string, forRules = false): { segments: string[]; heads: string[]; readable: boolean } {
   const segments: string[] = [];
   const heads: string[] = [];
   let cur = '';
@@ -208,10 +208,11 @@ function scanBashLine(cmd: string): { segments: string[]; heads: string[]; reada
       }
       continue;
     }
-    const body = quote === "$'" ? -1 : substitutionBodyAt(cmd, i);
+    const body = forRules && quote !== "$'" ? substitutionBodyAt(cmd, i) : -1;
     if (body >= 0) {
-      // A command substitution runs a second command to build this one: one piece of this
-      // sub-command, never split at what it holds, and no rule is taken from inside it.
+      // For a rule, a command substitution runs a second command to build this one: one piece of
+      // this sub-command, never split at what it holds, and no rule is taken from inside it. Anyone
+      // else keeps splitting inside it, so a deny pattern still sees the commands it runs.
       const end = endOfSubstitution(cmd, body, cmd[i] === '`');
       substitutions.push([cur.length, cur.length + end - i]);
       cur += cmd.slice(i, end);
@@ -403,7 +404,7 @@ const NEVER_REMEMBERED = new Set([
   'cp', 'mv', 'rm', 'rmdir', 'ln', 'chmod', 'chown', 'chgrp', 'tee', 'dd', 'touch', 'truncate',
   'mkdir', 'install', 'rsync', 'unlink', 'shred',
   'export', 'env', 'set', 'unset', 'declare', 'typeset', 'readonly', 'local', 'alias', 'source', '.',
-  'eval', 'exec', 'sudo', 'doas', 'xargs',
+  'eval', 'exec', 'sudo', 'doas', 'xargs', 'nohup', 'timeout', 'nice', 'command', 'builtin',
 ]);
 
 /**
@@ -430,7 +431,7 @@ function rememberedPrefix(head: string): string | null {
 // command is blank or no segment yields a prefix worth remembering.
 export function bashCommandRules(cmd: string): PermissionRule[] {
   if (!cmd.trim()) return [];
-  const { segments, heads } = scanBashLine(cmd);
+  const { segments, heads } = scanBashLine(cmd, true);
   // Codex sends commands as `/bin/bash -lc '…'`. Remembering the wrapper would create a
   // rule equivalent to `Bash(/bin/bash:*)`, which is a standing grant for arbitrary shell code.
   // A compound command containing a wrapper is equally unsafe to summarize by prefixes.

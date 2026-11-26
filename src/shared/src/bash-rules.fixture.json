@@ -603,7 +603,7 @@
     },
     {
       "name": "programs that run whatever they are given are never remembered",
-      "command": "sudo ls; xargs rm < list; eval \"$CMD\"; exec ls",
+      "command": "sudo ls; xargs rm < list; eval \"$CMD\"; exec ls; nohup ./run.sh; timeout 5 rm -rf x; nice make; command rm x; builtin cd /",
       "rules": []
     }
   ]

@@ -47,6 +47,11 @@ describe('bashSegments', () => {
     expect(bashSegments(cmd)).toHaveLength(1);
   });
 
+  it('still splits inside $(…) and backticks, so a deny pattern sees the commands they run', () => {
+    expect(bashSegments('echo $(true; gh pr merge 1)').map((s) => s.trim())).toEqual(['echo $(true', 'gh pr merge 1)']);
+    expect(bashSegments('echo `true; gh pr merge 1`').map((s) => s.trim())).toEqual(['echo `true', 'gh pr merge 1`']);
+  });
+
   it('splits on newlines', () => {
     expect(bashSegments('a\nb').map((s) => s.trim())).toEqual(['a', 'b']);
   });
