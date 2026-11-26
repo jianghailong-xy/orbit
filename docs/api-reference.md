@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 570 |
+| `user` | 571 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **905** |
+| **Total** | **906** |
 
 ## Public routes
 
@@ -581,6 +581,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/tasks/:id/execute` | body `RunTaskDto`; path `id` | `TasksController.execute` |
 | `GET` | `/api/tasks/:id/progress` | path `id` | `TaskProgressController.get` |
 | `POST` | `/api/tasks/:id/progress` | body `ReportTaskProgressDto`; path `id` | `TaskProgressController.report` |
+| `POST` | `/api/tasks/:id/rerun-check` | path `id` | `TaskRerunCheckController.rerun` |
 | `GET` | `/api/tasks/:id/row` | path `id` | `TasksController.listRow` |
 | `DELETE` | `/api/tasks/:id/share` | path `id` | `ShareLinksController.turnOffTaskLink` |
 | `GET` | `/api/tasks/:id/share` | path `id` | `ShareLinksController.taskLink` |
