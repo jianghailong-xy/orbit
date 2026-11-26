@@ -116,8 +116,9 @@ export interface ProviderPreset {
   /** Vendor console where the user mints an API key (rendered as a "Get your API key" link). */
   keyUrl?: string;
   /**
-   * The vendor's platforms, when it runs more than one with separate keys. The first is the one
-   * `baseUrl` and `keyUrl` above name; a provider's region is read off its own base URL.
+   * The vendor's platforms, when it runs more than one with separate keys, International first as
+   * the switch shows them. One of them is what `baseUrl` and `keyUrl` above name; a provider's
+   * region is read off its own base URL.
    */
   regions?: ProviderPresetRegion[];
 }
@@ -318,9 +319,13 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'qwen3.7-max',
     catalog: { source: 'alibaba', match: /^qwen\d/ },
-    note: 'Beijing-region endpoint; Singapore/intl uses a workspace-specific URL (see Model Studio docs).',
     brand: { mono: 'Q', from: '#7a72ff', to: '#4f46e5' },
     keyUrl: 'https://bailian.console.aliyun.com',
+    // Model Studio's Beijing and Singapore regions issue separate keys; the preset's own is Beijing's.
+    regions: [
+      { id: 'global', label: 'International', site: 'alibabacloud.com', baseUrl: 'https://dashscope-intl.aliyuncs.com/apps/anthropic', keyUrl: 'https://modelstudio.console.alibabacloud.com' },
+      { id: 'cn', label: 'China', site: 'aliyun.com', baseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic', keyUrl: 'https://bailian.console.aliyun.com' },
+    ],
   },
 ];
 

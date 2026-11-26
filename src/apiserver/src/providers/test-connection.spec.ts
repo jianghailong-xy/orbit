@@ -277,3 +277,20 @@ test('a refused key on a vendor with one platform is just invalid, with no secon
     restore();
   }
 });
+
+test('a Qwen key from Singapore, tried on Beijing, is named as the international platform\'s', async () => {
+  const { urls, restore } = stubByHost((host) => (host === 'dashscope-intl.aliyuncs.com' ? 200 : 401));
+  try {
+    const r = await svc().testConnection({
+      baseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic',
+      apiKey: 'sk-intl',
+      model: 'qwen3.7-max',
+      runtime: 'claude',
+    });
+    assert.equal(urls[1], 'https://dashscope-intl.aliyuncs.com/apps/anthropic/v1/messages');
+    assert.equal(r.region?.id, 'global');
+    assert.equal(r.message, 'This key is from the international platform (alibabacloud.com), not the China platform');
+  } finally {
+    restore();
+  }
+});

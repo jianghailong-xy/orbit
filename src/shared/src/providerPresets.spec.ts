@@ -83,12 +83,15 @@ describe('PROVIDER_PRESETS', () => {
 
   it('lists a vendor\'s platforms with its own endpoint first, and finds each by its base URL', () => {
     const regioned = PROVIDER_PRESETS.filter((p) => p.regions);
-    expect(regioned.map((p) => p.slug).sort()).toEqual(['glm', 'minimax', 'moonshot']);
+    expect(regioned.map((p) => p.slug).sort()).toEqual(['glm', 'minimax', 'moonshot', 'qwen']);
     for (const p of regioned) {
-      expect(p.regions![0]).toMatchObject({ id: 'global', baseUrl: p.baseUrl, keyUrl: p.keyUrl });
+      // The preset's own endpoint is one of its platforms, and that platform's key link is the preset's.
+      expect(presetRegionOf(p, p.baseUrl)?.keyUrl).toBe(p.keyUrl);
       expect(p.regions!.map((r) => r.id)).toEqual(['global', 'cn']);
       expect(presetRegionOf(p, p.regions![1].baseUrl + '/')?.id).toBe('cn');
     }
+    // Qwen's preset stays on Beijing, as it always was; the others default to International.
+    expect(presetRegionOf(providerPreset('qwen'), providerPreset('qwen')!.baseUrl)?.id).toBe('cn');
     expect(regionSiblings('https://API.MINIMAXI.com/anthropic')?.others.map((r) => r.baseUrl)).toEqual(['https://api.minimax.io/anthropic']);
     expect(regionSiblings('https://api.deepseek.com/anthropic')).toBeUndefined();
     expect(presetRegionOf(providerPreset('minimax'), 'https://proxy.example.com/anthropic')).toBeUndefined();

@@ -168,6 +168,16 @@ describe('a vendor with an international and a China platform', { timeout: 30_00
     expect(button('Save anyway')).not.toBeNull();
   });
 
+  it('starts Qwen on Beijing, as its preset always has, and offers Singapore', async () => {
+    await mount('/settings/providers/new/qwen');
+    expect(option('China · aliyun.com')?.getAttribute('aria-checked')).toBe('true');
+    await click(option('International · alibabacloud.com'));
+    expect(keyLink()).toBe('https://modelstudio.console.alibabacloud.com/');
+    await type(container.querySelector<HTMLInputElement>('input[type="password"]'), 'sk-test');
+    await click(button('Connect'));
+    expect(probes()).toEqual(['https://dashscope-intl.aliyuncs.com/apps/anthropic']);
+  });
+
   it('shows a saved China key as China, and has no switch for a vendor with one platform', async () => {
     rows = [
       {
