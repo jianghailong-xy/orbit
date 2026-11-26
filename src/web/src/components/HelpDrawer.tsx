@@ -2,6 +2,7 @@ import { CloseOutlined, ExportOutlined, LeftOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { HELP_PATH, useHelpDrawer, type HelpTab } from '../lib/helpDrawer';
+import { useHelpLanguage } from '../lib/help/helpLanguage';
 import { helpArticlePath, helpIndexQuery } from '../lib/help/helpQueries';
 import { HelpArticlesPane } from './help/HelpArticlesPane';
 import { HelpAskPane } from './help/HelpAsk';
@@ -27,7 +28,8 @@ const TABS: { value: HelpTab; label: string }[] = [
 export function HelpDrawer() {
   const help = useHelpDrawer();
   const navigate = useNavigate();
-  const index = useQuery({ ...helpIndexQuery(), enabled: help.open });
+  const { language } = useHelpLanguage();
+  const index = useQuery({ ...helpIndexQuery(language), enabled: help.open });
   if (!help.open) return null;
   const leaveTo = (path: string) => {
     help.closeHelp();

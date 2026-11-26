@@ -11,6 +11,7 @@ import { Menu, type MenuItem } from '../ui/Menu';
 import { useHelpDrawer } from '../../lib/helpDrawer';
 import { forThisPage, getStartedArticles, routeLabel } from '../../lib/help/drawerArticles';
 import { askAnswerId, useHelpVote } from '../../lib/help/helpFeedback';
+import { useHelpLanguage } from '../../lib/help/helpLanguage';
 import { helpArticlePath, helpIndexQuery } from '../../lib/help/helpQueries';
 import { resolveOrbitLink } from '../../lib/help/helpContent';
 import {
@@ -89,7 +90,8 @@ function NewAsk({
 }) {
   const { pathname } = useLocation();
   const errors = useVisibleHelpErrors();
-  const index = useQuery(helpIndexQuery());
+  const { language } = useHelpLanguage();
+  const index = useQuery(helpIndexQuery(language));
   const articles = index.data?.articles ?? [];
   const handed = article ? articles.find((a) => a.slug === article) : undefined;
   const [pick, setPick] = useState<{ runnerId: string; engine: string } | null>(null);
