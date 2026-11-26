@@ -1176,3 +1176,7 @@
   max-height: 120px;
   overflow: auto;
 }
+.files-row.marked.selected {
+  background: var(--brand-tint);
+  box-shadow: inset 3px 0 0 var(--success, #1a7f37);
+}
