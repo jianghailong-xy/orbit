@@ -946,15 +946,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           </svg>
         </span>
         <span className="tp-brand-name">Orbit</span>
-        <button
-          type="button"
-          className="tp-collapse-btn"
-          onClick={toggleCollapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-        </button>
+        <Tooltip side="bottom" content={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          <button
+            type="button"
+            className="tp-collapse-btn"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          </button>
+        </Tooltip>
       </div>
 
       {/* Collapsed-only icon rail: the fixed top-nav as icons. The dynamic lists (workspaces,
@@ -1570,8 +1571,9 @@ export function WikiRow({
           items={menu}
           open={menuOpen}
           onOpenChange={setMenuOpen}
+          tooltip="Actions"
           trigger={
-            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`} title="Actions">
+            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`}>
               <MoreOutlined />
             </button>
           }
@@ -1834,8 +1836,9 @@ export function WorkspaceRow({
           items={menu}
           open={menuOpen}
           onOpenChange={setMenuOpen}
+          tooltip="Actions"
           trigger={
-            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`} title="Actions">
+            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`}>
               <MoreOutlined />
             </button>
           }
@@ -1865,18 +1868,19 @@ function SortableWorkspaceRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
       {children(
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          className="tp-ico tp-workspace-handle"
-          title="Drag to reorder"
-          aria-label={`Reorder ${workspace.name}`}
-          disabled={disabled}
-          {...attributes}
-          {...listeners}
-        >
-          <HolderOutlined />
-        </button>,
+        <Tooltip content="Drag to reorder">
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            className="tp-ico tp-workspace-handle"
+            aria-label={`Reorder ${workspace.name}`}
+            disabled={disabled}
+            {...attributes}
+            {...listeners}
+          >
+            <HolderOutlined />
+          </button>
+        </Tooltip>,
       )}
     </div>
   );

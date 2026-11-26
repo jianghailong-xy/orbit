@@ -5035,9 +5035,8 @@ button.toast--pill:focus-visible {
    live link's green, with a dot, while the session is shared. */
 .workspace-header .workspace-header-more,
 .workspace-header .workspace-header-share { flex: none; width: 30px; height: 30px; color: var(--text-1); font-size: 18px; }
-.workspace-header .workspace-header-more + .workspace-header-share { margin-left: -8px; }
-.workspace-header .workspace-header-more:last-child,
-.workspace-header .workspace-header-share { margin-right: -6px; }
+.workspace-header-actions { display: flex; align-items: center; flex: none; margin-right: -6px; }
+.workspace-header-actions .workspace-header-share { margin-left: 2px; }
 .workspace-header .workspace-header-share.is-live,
 .workspace-header .workspace-header-share.is-live:hover:where(:not(:disabled)) { color: var(--success); }
 .workspace-header .workspace-header-share.is-live::after {
@@ -31209,15 +31208,17 @@ td > .routing-report-tier + .model-routing-flag {
    beside it: one radius, one gap, one elevation, so opening it adds a panel and moves nothing else.
    Prefixed with .app-shell so these win over the per-component rules above and in component CSS. */
 @media (min-width: 961px) {
-  .app-shell {
+  .app-shell,
+  .settings-shell:not(.settings-shell--narrow) {
     --canvas: color-mix(in srgb, var(--text-1) 5%, var(--bg-base));
     --panel-gap: 8px;
     --panel-radius: 12px;
     --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --panel-float: 0 2px 6px rgba(0, 0, 0, 0.08), 0 16px 40px rgba(0, 0, 0, 0.14);
     background: var(--canvas);
   }
   /* Dark: the canvas goes below the panels rather than a lighter mix. */
-  :root[data-theme='dark'] .app-shell {
+  :root[data-theme='dark'] :is(.app-shell, .settings-shell:not(.settings-shell--narrow)) {
     --canvas: var(--bg-sunken);
   }
   .app-shell .app-nav {
@@ -31296,6 +31297,181 @@ td > .routing-report-tier + .model-routing-flag {
      floating one level up. */
   .app-shell :is(.session-project-column-over, .ss-column-over) {
     border-left: 1px solid var(--border-subtle);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 16px 40px rgba(0, 0, 0, 0.14);
+    box-shadow: var(--panel-float);
+  }
+
+  /* Settings (and Admin, Help): the same window, its nav on the canvas and its page a panel. */
+  .settings-shell:not(.settings-shell--narrow) > .settings-nav {
+    background: transparent;
+    border-right: 0;
+  }
+  .settings-shell:not(.settings-shell--narrow) > .settings-main {
+    margin: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+
+  /* The help drawer is a column of the shell beside the page (or Settings' page): a second panel. */
+  :is(.app-shell, .settings-shell:not(.settings-shell--narrow)) > .help-drawer {
+    height: auto;
+    margin: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    overflow: hidden;
+  }
+  .app-shell .app-main:has(~ .help-drawer) {
+    padding-right: var(--panel-gap);
+  }
+
+  /* Wiki: the directory column stands the panel's height (the window's, less the gaps and the panel's border). */
+  .app-shell .wk-layout > .wk-dir-col {
+    max-height: calc(var(--app-vh, 100vh) - 48px - 2 * var(--panel-gap) - 2px);
+  }
+  .app-shell .wk-page--railed > .wk-layout > .wk-dir-col {
+    height: calc(var(--app-vh, 100vh) - 2 * var(--panel-gap) - 2px);
+    max-height: none;
+  }
+  /* Wiki: where the chat docks as a column beside the page, the page and the chat are two panels. The
+     page's own panel scrolls (it was the view's), so its sticky directory and head behave as before. */
+  .app-shell .app-main > .app-view:has(> .wk-chat-frame.is-columned > :is(.wk-chat-panel, .wk-chat-slot)) {
+    padding: 0;
+    overflow: hidden;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .wk-chat-frame.is-columned:has(> :is(.wk-chat-panel, .wk-chat-slot)) {
+    height: 100%;
+    align-items: stretch;
+  }
+  .app-shell .wk-chat-frame.is-columned:has(> :is(.wk-chat-panel, .wk-chat-slot)) > .wk-chat-host {
+    box-sizing: border-box;
+    height: 100%;
+    overflow-y: auto;
+    padding: 24px 32px;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  .app-shell .wk-chat-frame.is-columned > :is(.wk-chat-panel, .wk-chat-slot) {
+    position: relative;
+    top: auto;
+    height: auto;
+    margin: 0 0 0 var(--panel-gap);
+  }
+  .app-shell .wk-chat-frame.is-columned > .wk-chat-panel {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    overflow: hidden;
+  }
+  /* The entry drawer, and the chat where it lies over the page, float as panels inside the window. */
+  .app-shell .wk-drawer {
+    top: var(--panel-gap);
+    right: var(--panel-gap);
+    bottom: var(--panel-gap);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-float);
+  }
+  .app-shell .wk-chat-host.is-open:not(.is-sheet) .wk-drawer {
+    right: calc(var(--wk-chat-w, 400px) + 2 * var(--panel-gap));
+  }
+  .app-shell .wk-chat-host.is-open:not(.is-sheet) .wk-with-drawer .wk-scrim {
+    right: calc(var(--wk-chat-w, 400px) + var(--panel-gap));
+  }
+  .app-shell .wk-chat-panel.is-over {
+    right: var(--panel-gap);
+    bottom: var(--panel-gap);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-float);
+    overflow: hidden;
+  }
+
+  /* A task open over its project's page floats the same way. */
+  .app-shell .project-task-panel > .task-detail-panel {
+    top: var(--panel-gap);
+    right: var(--panel-gap);
+    height: calc(var(--app-vh) - 2 * var(--panel-gap));
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-float);
+  }
+
+  /* Scheduled: the list is one panel and the inspector beside it another. */
+  .app-shell .app-main > .app-view:has(> .sched-page > .sched-inspector) {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .sched-page:has(> .sched-inspector) > .sched-list,
+  .app-shell .sched-page > .sched-inspector {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  .app-shell .sched-page > .sched-resizer {
+    width: var(--panel-gap);
+    margin-right: 0;
+    background: transparent;
+  }
+  .app-shell .sched-page > .sched-resizer:hover,
+  .app-shell .sched-page.is-resizing > .sched-resizer {
+    background: linear-gradient(var(--brand), var(--brand)) center / 1px 100% no-repeat;
+  }
+
+  /* Drive: with a file's details open, the head, folders and list are one panel and the details
+     another. The body steps aside (display: contents) so the details can stand beside the head too. */
+  .app-shell .app-main > .app-view:has(> .files-page .files-pane) {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .files-page:has(.files-pane) {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .app-shell .files-page:has(.files-pane) > .files-body {
+    display: contents;
+  }
+  .app-shell .files-page:has(.files-pane) > .files-head {
+    grid-column: 1 / 3;
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius) var(--panel-radius) 0 0;
+  }
+  .app-shell .files-page:has(.files-pane) .files-tree {
+    background: var(--bg-base);
+    border-left: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+    border-radius: 0 0 0 var(--panel-radius);
+  }
+  .app-shell .files-page:has(.files-pane) .files-list-wrap {
+    background: var(--bg-base);
+    border-right: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+    border-radius: 0 0 var(--panel-radius) 0;
+  }
+  .app-shell .files-page .files-pane {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    margin-left: var(--panel-gap);
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
   }
 }

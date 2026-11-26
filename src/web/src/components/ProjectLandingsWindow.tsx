@@ -323,8 +323,9 @@ export function ProjectLandingsWindow({
         <Menu
           side="bottom"
           align="end"
+          tooltip="More actions"
           trigger={(
-            <button type="button" className="landing-page-more" aria-label="More actions" title="More actions">
+            <button type="button" className="landing-page-more" aria-label="More actions">
               <MoreOutlined />
             </button>
           )}
@@ -590,8 +591,9 @@ function LandingMore({
       align="end"
       open={open}
       onOpenChange={onOpenChange}
+      tooltip="Landing actions"
       trigger={(
-        <button type="button" className="landings-window-more" aria-label="Landing actions" title="Landing actions">
+        <button type="button" className="landings-window-more" aria-label="Landing actions">
           <MoreOutlined />
         </button>
       )}
