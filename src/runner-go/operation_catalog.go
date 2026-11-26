@@ -2231,10 +2231,13 @@ func buildOperationCatalog() []*operation {
 				"was repaired, the check timed out, the machinery failed). A red that belongs to the " +
 				"delivery is sent back (task_reopen) or replaced instead, and a CONFLICT is refused here: " +
 				"only a branch that changed answers one. A conflict at MAIN_SYNC (absorbing the upstream " +
-				"into the project branch) is the project line's, not the delivery's: absorb the upstream on " +
-				"the project line first, by having the task's run put a merge commit of the project branch " +
-				"tip and the upstream tip, conflicts resolved, into its source branch and do nothing else " +
-				"(task_reopen) — with both tips in it, its next landing lands by MERGE. Queues exactly " +
+				"into the project branch) is the project line's, not the delivery's, and there is nothing " +
+				"to rerun or reopen: it opens one line-sync item about the project branch that names no " +
+				"task, every DONE task stays DONE, and the landings on that line wait behind the item and " +
+				"go ahead by themselves once it closes. Resolve it by filing one sync task with task_create, " +
+				"fixesOpenItemId: that item — it starts from the project branch tip, merges the upstream, " +
+				"resolves the conflicting files and commits only that merge; its landing is the one let " +
+				"through and closes the item. Queues exactly " +
 				"one new job, which carries your reason and the failure class it reruns, and answers with " +
 				"`landingSessionId` — the LANDING session that records the new attempt, readable with " +
 				"session_get; your open items " +
