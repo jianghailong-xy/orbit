@@ -2178,8 +2178,8 @@ export function scheduleReportedText(
 
 /**
  * The card a run's session shows in place of its report and composer when the run never reached its engine there
- * (owner's B1): it did not run, it waits on a full runner, or it started on a later try. Pinned to
- * runStatusCopy in contracts/schedule.contract.json.
+ * (owner's B1): it did not run, it waits on a full runner, or it started on a later try. In
+ * contracts/schedule.contract.json as `runStatusCopy`, which OrbitKit and Android pin.
  */
 export const SCHEDULE_RUN_STATUS_COPY = {
   /** The strip of a run that did not start in this session: no start time to name. */

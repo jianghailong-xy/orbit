@@ -984,28 +984,95 @@ public struct ScheduleDraftAnswer: Decodable, Sendable {
     public let sessionId: String
 }
 
+/// One try of a run: the session it opened, and how far that session got.
+public struct ScheduleRunTry: Decodable, Sendable, Equatable {
+    public let sessionId: String
+    public let startedAt: String
+    /// Whether a runner claimed the session (its engine was started, or tried to be).
+    public let claimed: Bool
+    /// Whether the session's first turn reached its engine.
+    public let reachedEngine: Bool
+
+    public init(sessionId: String, startedAt: String, claimed: Bool, reachedEngine: Bool) {
+        self.sessionId = sessionId
+        self.startedAt = startedAt
+        self.claimed = claimed
+        self.reachedEngine = reachedEngine
+    }
+}
+
+/// The full runner, run or batch a run's current session waits behind.
+public struct ScheduleRunQueueGate: Decodable, Sendable, Equatable {
+    public let queuedReason: String
+    public let queuedActive: Int?
+    public let queuedLimit: Int?
+    public let queuedHeldByJobs: Int?
+    /// When the session went PENDING: what the wait counts from.
+    public let since: String
+    /// The run's catch-up deadline: past it, the run is MISSED.
+    public let deadline: String
+
+    public init(queuedReason: String, queuedActive: Int? = nil, queuedLimit: Int? = nil,
+                queuedHeldByJobs: Int? = nil, since: String, deadline: String) {
+        self.queuedReason = queuedReason
+        self.queuedActive = queuedActive
+        self.queuedLimit = queuedLimit
+        self.queuedHeldByJobs = queuedHeldByJobs
+        self.since = since
+        self.deadline = deadline
+    }
+}
+
+/// `runStatus` beside a run on `GET /sessions/:id/schedule-cards`: where the run stands for this session.
+public struct ScheduleRunSessionStatus: Decodable, Sendable, Equatable {
+    /// Every try the run made, oldest first.
+    public let tries: [ScheduleRunTry]
+    /// Which of `tries` this session is, from 1; nil when it is none of them.
+    public let thisTry: Int?
+    /// When a run that ended with no try reaching its engine gave up.
+    public let gaveUpAt: String?
+    public let notBeforeAt: String?
+    /// The schedule's next run.
+    public let nextDueAt: String?
+    public let queue: ScheduleRunQueueGate?
+
+    public init(tries: [ScheduleRunTry], thisTry: Int?, gaveUpAt: String? = nil, notBeforeAt: String? = nil,
+                nextDueAt: String? = nil, queue: ScheduleRunQueueGate? = nil) {
+        self.tries = tries
+        self.thisTry = thisTry
+        self.gaveUpAt = gaveUpAt
+        self.notBeforeAt = notBeforeAt
+        self.nextDueAt = nextDueAt
+        self.queue = queue
+    }
+}
+
 /// `GET /sessions/:id/schedule-cards`: the cards a conversation asked and the changes it made.
 public struct SessionScheduleCardsResponse: Decodable, Sendable, Equatable {
     /// A scheduled run's session: the run it serves, however old; nil for any other session.
     public let run: ScheduleRunView?
+    /// Beside `run`: where it stands for this session; nil from a server before it.
+    public let runStatus: ScheduleRunSessionStatus?
     public let cards: [ScheduleCard]
     public let records: [ScheduleChangeRecord]
     /// A schedule's change conversation (§8.2): Orbit's opening, as the schedule was when it was opened, for its
     /// strip and its first message. Nil on every other session (and on servers before it).
     public let change: ScheduleChangeOpening?
 
-    public init(run: ScheduleRunView? = nil, cards: [ScheduleCard], records: [ScheduleChangeRecord],
-                change: ScheduleChangeOpening? = nil) {
+    public init(run: ScheduleRunView? = nil, runStatus: ScheduleRunSessionStatus? = nil, cards: [ScheduleCard],
+                records: [ScheduleChangeRecord], change: ScheduleChangeOpening? = nil) {
         self.run = run
+        self.runStatus = runStatus
         self.cards = cards
         self.records = records
         self.change = change
     }
 
-    private enum CodingKeys: String, CodingKey { case run, cards, records, change }
+    private enum CodingKeys: String, CodingKey { case run, runStatus, cards, records, change }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         run = try? c.decodeIfPresent(ScheduleRunView.self, forKey: .run)
+        runStatus = try? c.decodeIfPresent(ScheduleRunSessionStatus.self, forKey: .runStatus)
         cards = ((try? c.decode([ScheduleLenient<ScheduleCard>].self, forKey: .cards)) ?? []).compactMap(\.value)
         records = ((try? c.decode([ScheduleLenient<ScheduleChangeRecord>].self, forKey: .records)) ?? []).compactMap(\.value)
         change = try? c.decodeIfPresent(ScheduleChangeOpening.self, forKey: .change)
