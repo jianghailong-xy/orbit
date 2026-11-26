@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Plan usage: a reset credit card for each GPT account</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="board.css">
+</head>
+<body class="cra">
+
+<section class="cra-part" id="part-1">
+  <h2>① 今天：只有 Default 有 reset 卡片</h2>
+  <p class="cra-lede">弹窗只画当前会话的那个账号。会话跑在新增账号上时没有卡片，其他账号的 credit 在任何地方都看不到。</p>
+  <div class="cra-row">
+    <div class="cra-col"><div class="cra-cap">会话在 Default 上</div><div data-frame="today-default"></div></div>
+    <div class="cra-col"><div class="cra-cap">会话在 work@example.com 上</div><div data-frame="today-added"></div></div>
+  </div>
+</section>
+
+<section class="cra-part" id="part-2">
+  <h2>② 方案 A（推荐）：每个账号一张完整卡片</h2>
+  <p class="cra-lede">沿用 iOS 弹窗的叠放顺序（账号 → 额度窗口 → reset 卡片）。当前会话的账号排最前，保持今天的样子；其后按 runner 的账号顺序列出其他有 credit 的 GPT 账号，每个账号带一行用量和同一张卡片。</p>
+  <div class="cra-row">
+    <div class="cra-col"><div class="cra-cap">会话在 Default 上，三个账号</div><div data-frame="a-default"></div></div>
+    <div class="cra-col"><div class="cra-cap">会话在 work 上：它排最前</div><div data-frame="a-added"></div></div>
+    <div class="cra-col">
+      <div class="cra-note"><b>显示谁</b>：每个报告了 reset 块的 GPT 账号。次数为 0 的账号不显示卡片（沿用现有规则）；非当前会话的账号此时整段不显示。API key、账号池、workspace 环境变量覆盖账号的会话仍然没有 reset 卡片。</div>
+      <div class="cra-note"><b>超高时</b>：弹窗最高到屏幕可用高度，内部滚动（见 ③）。</div>
+      <div class="cra-note"><b>只有一个账号的 runner</b>：和今天完全一样。</div>
+    </div>
+  </div>
+</section>
+
+<section class="cra-part" id="part-3">
+  <h2>③ 方案 A：状态、确认框、窄屏</h2>
+  <p class="cra-lede">每张卡片各自确认、轮询和显示结果，互不影响。确认框增加一行 Account，写明这次花的是哪个账号的 credit。</p>
+  <div class="cra-row">
+    <div class="cra-col"><div class="cra-cap">Default 重置中 · work 过期 · side 可用</div><div data-frame="a-states"></div></div>
+    <div style="width:360px;flex:none">
+      <div class="cra-cap">在 work 的卡片上点 Use reset credit</div><div data-frame="confirm"></div>
+      <div class="cra-cap" style="margin-top:22px">矮屏幕：弹窗内部滚动</div><div data-frame="a-scroll"></div>
+    </div>
+    <div style="flex:none"><div class="cra-cap">手机宽度</div><div class="cra-phone"><div data-frame="a-phone"></div><div class="cra-phone-comp"></div></div></div>
+  </div>
+</section>
+
+<section class="cra-part" id="part-4">
+  <h2>④ 深色，以及备选方案 B</h2>
+  <p class="cra-lede">方案 B 把其他账号压成一行小卡片，弹窗更矮，但过期时间之外的信息（更新时间、不可用原因、重置进度）要另找地方放，和 iOS 的卡片样式也不一致。</p>
+  <div class="cra-row">
+    <div class="cra-col"><div class="cra-cap">方案 A · 深色</div><div class="cra-dark" data-dark data-frame="a-default"></div></div>
+    <div class="cra-col"><div class="cra-cap">方案 B：其他账号用紧凑行</div><div data-frame="b-default"></div></div>
+  </div>
+</section>
+
+<script src="board.js"></script>
+</body>
+</html>
