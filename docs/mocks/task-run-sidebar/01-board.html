@@ -162,9 +162,8 @@
 
           <div class="d-verdict red" id="v-fail">
             <h4>Why it failed</h4>
-            <div class="d-line"><span class="ic ok">✓</span><span>Agent's own run of the check · exit 0 · 06:48</span></div>
-            <div class="d-line"><span class="ic bad">✕</span><span>Orbit's acceptance run · exit 1 · 06:53 · <span class="link">Output</span></span></div>
-            <div class="d-line"><span class="ic grey">↳</span><span class="grey">Same tree <code>432e94</code>. Latest note (orbit-ws01, Nov 26): machine load, not the code. <span class="link">Read</span></span></div>
+            <div class="d-line"><span class="ic bad">✕</span><span>Acceptance check · exit 1, expected 0 · 06:53 on <code>432e94</code> · <span class="link">Output</span></span></div>
+            <div class="d-line"><span class="ic grey">↳</span><span class="grey">Latest note (orbit-ws01, Nov 26): machine load, not the code. <span class="link">Read</span></span></div>
             <div class="d-acts"><span class="btn pri">Re-run the check</span><span class="btn">Retry the task</span><span class="btn">Close as not needed</span></div>
           </div>
 
@@ -208,7 +207,7 @@
     <div class="b-note"><span class="b-n">3</span><div><b>「为什么 Failed」埋在 Activity 最底的评论里。</b>状态 pill 只写 Failed；验收命令哪次 exit 1、和 agent 自己那次 exit 0 有何不同，要读完一段长评论才知道。</div></div>
     <div class="b-note"><span class="b-n">4</span><div><b>分支状态完全不在面板上。</b>分支还剩几个提交、比 main 领先/落后、为什么不落地——这些只在会话正文里，面板里看不到。</div></div>
     <div class="b-note"><span class="b-n blue">A</span><div><b>停靠，不覆盖。</b>宽度 ≥ 1280 时侧栏固定 380px 推开会话；更窄时退回今天的覆盖方式。<code>⤢</code> 打开完整任务页（今天的全部内容都还在那里）。</div></div>
-    <div class="b-note"><span class="b-n blue">B</span><div><b>判定放第一块，带下一步。</b>pill 写明「check exited 1」；卡片并排两次检查结果、最新一条说明的一句摘要，以及三个按钮：Re-run the check（只重跑验收，不重跑 agent）/ Retry the task / Close as not needed。</div></div>
+    <div class="b-note"><span class="b-n blue">B</span><div><b>判定放第一块，带下一步。</b>pill 写明「check exited 1」；卡片列出本次 run 的每一轮验收（exit code、时间、所在提交、Output 跳到会话里那一轮的 shell 输出）、最新一条说明的一句摘要，以及三个按钮：Re-run the check（只重跑验收，不重跑 agent）/ Retry the task / Close as not needed。</div></div>
     <div class="b-note"><span class="b-n blue">C</span><div><b>Branch 一块。</b>分支名、相对 main 的 ahead/behind、剩下的提交、Landing 一句话状态。数据来自今天已有的 integration / landing 记录，不新造。</div></div>
     <div class="b-note"><span class="b-n blue">D</span><div><b>Done means 变成检查清单。</b>每条标准一行、带 ✓/✕；全文和 Brief 折叠成一行。Runs 列出每次运行，标出「this conversation」；Runs with 与 Activity 各压成一行。</div></div>
   </div>
@@ -289,23 +288,23 @@
     </div>
   </div>
 
-  <h2 style="margin:34px 0 8px;font-size:20px">待定 · 要你拍板</h2>
+  <h2 style="margin:34px 0 8px;font-size:20px">已定（11-26）：D1 = A · D2 = B · D3 = A</h2>
   <div class="b-ab">
     <div class="b-card"><h4>D1 · 什么时候是侧栏</h4>
       <p style="margin:0"><b>A</b> 只在「任务自己的运行会话」里停靠；从别处的链接打开仍是今天的覆盖面板。<br><b>B</b> 所有会话页里打开任务都停靠（窗口够宽时）。</p>
-      <p class="b-rec" style="margin:8px 0 0">建议 A：先解决你截图这一处，别处的覆盖面板是 task-link-in-place 刚定下的。</p></div>
+      <p class="b-rec" style="margin:8px 0 0">✓ 已选 A。先解决你截图这一处，别处的覆盖面板是 task-link-in-place 刚定下的。</p></div>
     <div class="b-card"><h4>D2 · 侧栏是否常驻</h4>
       <p style="margin:0"><b>A</b> 点了才出现，记住开/关（按会话）。<br><b>B</b> 任务会话默认就开着侧栏，可收起。</p>
-      <p class="b-rec" style="margin:8px 0 0">建议 B：任务会话里，这一列就是「这次运行的结果」，默认可见才有用。</p></div>
+      <p class="b-rec" style="margin:8px 0 0">✓ 已选 B。任务会话里，这一列就是「这次运行的结果」，默认可见才有用。</p></div>
     <div class="b-card"><h4>D3 · Failed 的「Re-run the check」</h4>
       <p style="margin:0"><b>A</b> 新增：只在同一棵树上重跑验收命令，不起新 run。<br><b>B</b> 不加，只给 Retry the task。</p>
-      <p class="b-rec" style="margin:8px 0 0">建议 A：你截图这次就是负载导致的误判，重跑验收几十秒、零 agent 成本。需要服务端新接口。</p></div>
+      <p class="b-rec" style="margin:8px 0 0">✓ 已选 A。你截图这次就是负载导致的误判，重跑验收几十秒、零 agent 成本。需要服务端新接口。</p></div>
   </div>
 
   <h2 style="margin:34px 0 8px;font-size:20px">落地（按代价排）</h2>
   <table class="b-cost">
     <tr><th style="width:42px">#</th><th>改动</th><th style="width:420px">范围</th></tr>
-    <tr><td>1</td><td>侧栏内容重排：判定块（含 Failed 原因、两次检查对照）→ Branch → Done means 清单 → Runs → 一行 Runs with / Activity</td><td>web <code>TaskDetailPanel</code> 加 compact 变体；数据都已有</td></tr>
+    <tr><td>1</td><td>侧栏内容重排：判定块（含 Failed 原因、两次检查对照）→ Branch → Done means 清单 → Runs → 一行 Runs with / Activity</td><td>web <code>TaskDetailPanel</code> 加 compact 变体；验收轮次需服务端先记录（今天只留一句 error，输出被丢弃）</td></tr>
     <tr><td>2</td><td>任务会话里停靠而不覆盖（≥ 1280px），更窄时退回覆盖；<code>⤢</code> 到完整任务页</td><td>web 会话页布局 + <code>TaskOverPagePanel</code></td></tr>
     <tr><td>3</td><td>Failed pill 写明原因（check exited 1 / run stopped / over budget …）</td><td>shared 文案表 + 三端</td></tr>
     <tr><td>4</td><td>Re-run the check（D3 = A 时）</td><td>apiserver 新动作 + runner 执行验收 + 三端按钮</td></tr>
