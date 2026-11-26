@@ -225,7 +225,7 @@ internal object ProjectShell {
     private fun row(id: String, title: String, workspace: String, run: String, extra: String, lifecycle: String = "OPEN", lastTurnAt: String = ago(5),
         approvals: Int = 0) =
         """{"id":"$id","title":"$title","status":"$run","runState":"$run","lifecycleState":"$lifecycle","agent":{"id":"$workspace","name":"${if (workspace == ALPHA) "Alpha" else "Beta"}"},
-            "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
+            "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","listedAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
             "capabilities":{"canComplete":${lifecycle == "OPEN"},"canRestore":${lifecycle != "OPEN"}}$extra}"""
     private fun session(id: String) = if (id in completedMembers) openSession(id).replaceFirst("\"lifecycleState\":\"OPEN\"", "\"lifecycleState\":\"COMPLETED\"")
         .replace("\"canComplete\":true", "\"canComplete\":false").replace("\"canRestore\":false", "\"canRestore\":true") else openSession(id)
