@@ -109,7 +109,9 @@ runner tear the engine down (`runner-api.controller.ts:7810-7832`).
 | **Retry armed** | `retryAt`, unchanged, on a released session | `FAILED` + `retryAt` |
 | **Filed, trashed** | `completedAt`, `deletedAt`, unchanged | same |
 
-Invariant: a released session is always `IDLE`. Sending to it clears `releasedAt` and makes it
+Invariant: a released session is always `IDLE`. *Amended 2026-11-26 by the owner, "waiting for retry counts as the
+running state":* a released session an armed retry (`retryAt`) will re-send is `RUNNING`, and its `waitingOn` stays
+`WAKE`; a held session's armed retry (a quota parked at `AWAITING_INPUT`) stays `IDLE`. Migration 1667 stores it. Sending to it clears `releasedAt` and makes it
 `PENDING` in one write, as the revive does today.
 
 > **Superseded 2026-11-21 by decision D9 (§12).** The owner decided that the session carries no failure fact:

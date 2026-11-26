@@ -38,4 +38,6 @@ END $$;
 DROP FUNCTION IF EXISTS session_phase_from_facts();
 DROP FUNCTION IF EXISTS session_turn_state_from_status();
 DROP FUNCTION IF EXISTS session_phase_of(timestamp, text, boolean, text[], text[]);
+-- 1667's form, which reads retry_at as well.
+DROP FUNCTION IF EXISTS session_phase_of(timestamp, text, boolean, text[], text[], timestamp);
 DROP FUNCTION IF EXISTS session_turn_state_of_status(run_status);

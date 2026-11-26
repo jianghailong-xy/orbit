@@ -14,9 +14,10 @@ import type { SessionActivity } from './task-run-reason';
 /**
  * What the session is doing (`phase`; the name `activity` is taken by `SessionActivity`):
  *   - `RUNNING`: something is executing for it — a dispatched turn, a turn the engine started for itself,
- *     a sub-agent or a runner-hosted background job;
+ *     a sub-agent or a runner-hosted background job — or, on a released session, an armed retry that will re-send it
+ *     (the owner, 2026-11-26: waiting for retry counts as the running state);
  *   - `PENDING`: a turn is queued and nothing is executing;
- *   - `IDLE`: neither. A released session is always IDLE.
+ *   - `IDLE`: neither. A released session is IDLE unless an armed retry will re-send it.
  */
 export const SESSION_PHASES = ['PENDING', 'RUNNING', 'IDLE'] as const;
 export type SessionPhase = (typeof SESSION_PHASES)[number];
