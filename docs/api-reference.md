@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 569 |
+| `user` | 570 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **904** |
+| **Total** | **905** |
 
 ## Public routes
 
@@ -549,6 +549,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/sessions/import` | body `Object` | `SessionsController.importSession` |
 | `POST` | `/api/sessions/import-batch` | body `Object` | `SessionsController.importBatch` |
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
+| `GET` | `/api/sessions/listing` | query `after`, `folderId`, `limit`, `view`, `workspaceId` | `SessionsController.listing` |
 | `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
 | `GET` | `/api/sessions/search` | query `folderId`, `limit`, `q` | `SessionsController.search` |
