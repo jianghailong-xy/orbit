@@ -1,8 +1,9 @@
 import '../../pages/DrivePage.css';
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import type { DriveChatChangeGroup, DriveChatQuestion } from '@orbit/shared';
 import { Button } from '../ui/Button';
+import type { TranscriptInsert } from '../Transcript';
 import { messageOf } from '../../lib/drive';
 import {
   DRIVE_CHANGES_APPLY,
@@ -114,11 +115,6 @@ export function DriveReplaceCard({ question }: { question: DriveChatQuestion }) 
       </div>
       <QuestionFile label="Already there" file={question.existing} />
       <QuestionFile label="Incoming" file={question.moving} />
-      {open && (
-        <div className="drive-card-note">
-          Recommended: {DRIVE_REPLACE_KEEP_BOTH.toLowerCase()}. Replace keeps the old file as an earlier version.
-        </div>
-      )}
       {question.status === 'ANSWERED' && (
         <div className="drive-card-note">
           {question.choice === 'REPLACE' ? 'Replaced. The old file is in its versions.' : `Kept both${question.outcome ? ` · saved as ${question.outcome.name}` : ''}.`}
@@ -140,13 +136,41 @@ export function DriveReplaceCard({ question }: { question: DriveChatQuestion }) 
   );
 }
 
-/** A Drive chat's cards under its conversation, oldest first: its change groups and overwrite questions. */
-export function DriveChatCards({ sessionId }: { sessionId: string }) {
-  const [groups, questions] = useQueries({ queries: [driveChatGroupsQuery(sessionId, true), driveChatQuestionsQuery(sessionId, true)] });
-  const cards = [
-    ...(groups.data ?? []).map((group) => ({ at: group.createdAt, node: <DriveChangesCard key={group.id} group={group} /> })),
-    ...(questions.data ?? []).map((question) => ({ at: question.createdAt, node: <DriveReplaceCard key={question.id} question={question} /> })),
-  ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-  if (cards.length === 0) return null;
-  return <div className="drive-cards">{cards.map((card) => card.node)}</div>;
+/**
+ * A Drive chat's cards, each placed with its turn (board drive-chat 01 ③ ④, as the wiki chat's draft cards sit with
+ * theirs): the card of a turn goes right after the last event of that turn in the conversation, so a later turn's
+ * messages come after an earlier turn's card. `inserts` are what the conversation draws among its events; `rest` holds
+ * the cards whose turn is not among the events read, which go under the conversation, oldest first.
+ */
+export function useDriveChatCards(
+  sessionId: string | null,
+  events: ReadonlyArray<{ seq: number; turnId?: string | null }>,
+): { inserts: TranscriptInsert[]; rest: ReactNode } {
+  const [groups, questions] = useQueries({
+    queries: [
+      { ...driveChatGroupsQuery(sessionId ?? '', true), enabled: sessionId !== null },
+      { ...driveChatQuestionsQuery(sessionId ?? '', true), enabled: sessionId !== null },
+    ],
+  });
+  const lastSeq = events.length > 0 ? events[events.length - 1]!.seq : 0;
+  return useMemo(() => {
+    const lastOfTurn = new Map<string, number>();
+    for (const event of events) {
+      if (event.turnId) lastOfTurn.set(event.turnId, Math.max(lastOfTurn.get(event.turnId) ?? -Infinity, event.seq));
+    }
+    const cards = [
+      ...(groups.data ?? []).map((group) => ({ id: group.id, at: group.createdAt, turnId: group.turnId, node: <DriveChangesCard group={group} /> })),
+      ...(questions.data ?? []).map((question) => ({ id: question.id, at: question.createdAt, turnId: question.turnId, node: <DriveReplaceCard question={question} /> })),
+    ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    const inserts: TranscriptInsert[] = [];
+    const rest: ReactNode[] = [];
+    for (const card of cards) {
+      const anchor = lastOfTurn.get(card.turnId);
+      if (anchor === undefined) rest.push(<div key={card.id}>{card.node}</div>);
+      else inserts.push({ anchor, moment: card.at, key: `drive-card-${card.id}`, element: <div className="drive-cards">{card.node}</div> });
+    }
+    return { inserts, rest: rest.length > 0 ? <div className="drive-cards">{rest}</div> : null };
+    // `events` changes identity as the stream grows; its last seq and length say when to place again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups.data, questions.data, events.length, lastSeq]);
 }

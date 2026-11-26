@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,11 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DriveChatList, DriveChatRow } from '@orbit/shared';
 
 // The conversation is the session page's own, whose tests own it: here a stand-in that names the session shown.
+const streamState = vi.hoisted(() => ({ events: [] as Array<{ seq: number; turnId: string; text: string }> }));
 vi.mock('../lib/useSessionStream', () => ({
   useSessionStream: () => ({
     events: [],
     eventsSessionId: null,
-    transcriptEvents: [],
+    transcriptEvents: streamState.events,
     approvals: [],
     setApprovals: () => {},
     idle: true,
@@ -23,7 +25,17 @@ vi.mock('../lib/useSessionStream', () => ({
   }),
 }));
 vi.mock('../components/SessionConversation', () => ({
-  SessionConversation: ({ sessionId }: { sessionId: string }) => <div className="conversation" data-session={sessionId} />,
+  // The events as one line each, with the inserts drawn after the event they are anchored to (as Transcript does).
+  SessionConversation: ({ sessionId, inserts }: { sessionId: string; inserts: Array<{ anchor: number | 'head'; key: string; element: React.ReactNode }> }) => (
+    <div className="conversation" data-session={sessionId}>
+      {streamState.events.map((event) => (
+        <div key={event.seq}>
+          <p className="msg">{event.text}</p>
+          {inserts.filter((insert) => insert.anchor === event.seq).map((insert) => <div key={insert.key}>{insert.element}</div>)}
+        </div>
+      ))}
+    </div>
+  ),
 }));
 
 const { DrivePage } = await import('./DrivePage');
@@ -147,6 +159,7 @@ beforeEach(() => {
   me = { id: 'u1' };
   groups = [];
   questions = [];
+  streamState.events = [];
   writes = [];
   chatReads = [];
   storage = { local: new Map(), session: new Map() };
@@ -337,11 +350,53 @@ describe('the Replace a file? card (board ④ note 3)', () => {
     expect(text(card)).toContain('/Inbox/lease.pdf');
     expect(text(card)).toContain('2.4 MB · You');
     expect(text(card)).toContain('Agent in Sort leases');
-    expect(text(card)).toContain('Recommended: keep both');
+    expect(text(card), 'no advice the agent did not give').not.toMatch(/recommend/i);
     expect(buttons(card)).toEqual(['Keep both', 'Replace']);
     expect(card.querySelector('.drive-card-actions button')?.className).toContain('orbit-button-primary');
     await press([...card.querySelectorAll('button')].find((b) => b.textContent === 'Replace'));
     expect(writes.find((w) => w.path === '/api/drive/chats/S1/questions/q1')?.body).toEqual({ choice: 'REPLACE' });
+  });
+});
+
+describe('cards sit with their turn (board ③ ④)', () => {
+  it('a turn\'s card follows that turn\'s last message, and a later turn\'s messages come after an earlier turn\'s card', async () => {
+    chats.chats = [row({ sessionId: 'S1' })];
+    streamState.events = [
+      { seq: 1, turnId: 't1', text: 'Sort my receipts' },
+      { seq: 2, turnId: 't1', text: 'Done, 24 changes' },
+      { seq: 3, turnId: 't2', text: 'Move the lease' },
+      { seq: 4, turnId: 't2', text: 'It already exists' },
+      { seq: 5, turnId: 't3', text: 'Thanks' },
+    ];
+    groups = [group({ id: 'g1', turnId: 't1', createdAt: '2026-11-26T09:01:00.000Z' })];
+    questions = [{
+      id: 'q1', sessionId: 'S1', turnId: 't2', status: 'OPEN', choice: null, destination: { parentId: 'p', name: 'lease.pdf' }, outcome: null,
+      reason: null, createdAt: '2026-11-26T09:02:00.000Z', answeredAt: null,
+      moving: { entryId: 'm', path: '/Inbox/lease.pdf', sizeBytes: 1, modifiedAt: AT, lastWriter: { kind: 'OWNER' } },
+      existing: { entryId: 'x', path: '/Leases/lease.pdf', sizeBytes: 1, modifiedAt: AT, lastWriter: { kind: 'OWNER' } },
+    }];
+    await open('/drive');
+    const flow = [...document.querySelectorAll('.conversation .msg, .conversation .drive-card')].map((node) =>
+      node.classList.contains('drive-card') ? `[${text(node.querySelector('.drive-card-title'))}]` : text(node),
+    );
+    expect(flow).toEqual([
+      'Sort my receipts',
+      'Done, 24 changes',
+      '[Drive changes]',
+      'Move the lease',
+      'It already exists',
+      '[Replace a file?]',
+      'Thanks',
+    ]);
+  });
+
+  it('a card whose turn is not among the events read goes under the conversation', async () => {
+    chats.chats = [row({ sessionId: 'S1' })];
+    streamState.events = [{ seq: 1, turnId: 't9', text: 'Hello' }];
+    groups = [group({ turnId: 'older' })];
+    await open('/drive');
+    expect(document.querySelector('.conversation .drive-card')).toBeNull();
+    expect(cards()).toHaveLength(1);
   });
 });
 
@@ -387,6 +442,13 @@ describe('file links and the details rule (board ④ note 2)', () => {
     const pane = () => document.querySelector('.files-pane');
     expect(pane()?.classList.contains('is-over')).toBe(true);
     expect(document.querySelector('.files-page')?.classList.contains('details-over')).toBe(true);
+    // The overlay stands over the list's right only: inside the body, under the head, whose actions stay.
+    expect(pane()?.parentElement?.classList.contains('files-body')).toBe(true);
+    expect(pane()?.closest('.files-head')).toBeNull();
+    const head = document.querySelector('.files-head')!;
+    expect(head.contains(pane())).toBe(false);
+    expect([...head.querySelectorAll('button')].map((b) => text(b))).toEqual(expect.arrayContaining(['Upload', 'Trash', 'Storage']));
+    expect(document.querySelector('.files-tree'), 'the tree is untouched').toBeTruthy();
     await press(byLabel('Close details'));
     expect(pane()).toBeNull();
     expect(where()).toBe('/drive');
@@ -405,6 +467,14 @@ describe('file links and the details rule (board ④ note 2)', () => {
     await open('/drive?file=fb');
     await press(byLabel('Hide chat'));
     expect(pane()?.classList.contains('is-over')).toBe(false);
+  });
+});
+
+describe('the overlay\'s place in the stylesheet', () => {
+  it('is positioned against the files body (below the head), not the page', () => {
+    const css = readFileSync('src/pages/DrivePage.css', 'utf8');
+    expect(css).toMatch(/\.files-page\.details-over \.files-body\s*\{\s*position:\s*relative;/);
+    expect(css).not.toMatch(/\.files-page\.details-over\s*\{\s*position:\s*relative;/);
   });
 });
 

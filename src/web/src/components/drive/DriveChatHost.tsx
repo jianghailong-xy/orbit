@@ -24,7 +24,6 @@ import {
 import { meQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
 import { WIKI_CHAT_NO_ATTACHMENTS, wikiChatAttach, type WikiChatFiles, type WikiChatPage } from '../../lib/wikiChat';
 import { useDriveChanges } from '../../lib/useDriveChanges';
-import { DriveChatCards } from './DriveChangeCards';
 
 /**
  * Drive's chat (board docs/mocks/drive-chat/01-board.html ② ⑤, owner Q1 A, Q3 A): the Wiki's host, docked beside the
@@ -118,7 +117,7 @@ export function DriveChatHost({
         return driveContext ? { driveContext } : undefined;
       },
       choices,
-      cards: (sessionId) => <DriveChatCards sessionId={sessionId} />,
+      cards: true,
     }),
     [choices],
   );

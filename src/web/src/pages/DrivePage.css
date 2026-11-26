@@ -1063,7 +1063,7 @@
 }
 
 /* File details while the chat is open in a window under 1760 (board ④): over the list's right, with a shadow. */
-.files-page.details-over {
+.files-page.details-over .files-body {
   position: relative;
 }
 .files-page.details-over .files-pane.is-over {

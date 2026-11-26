@@ -76,6 +76,7 @@ import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptS
 import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
 import { driveChatHistoryQuery } from '../lib/driveChat';
 import { driveSelectionLabel } from '../lib/driveChanges';
+import { useDriveChatCards } from './drive/DriveChangeCards';
 import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQuery, workspacesQuery, type Me } from '../lib/queries';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import { engineTitleFor } from '../lib/sessionProviderChoices';
@@ -189,8 +190,8 @@ export interface ChatOrigin {
   /** The Wiki's space: its chats' cards open its sections, entries and Review beside the chat, and the history is its
    *  chats. Absent, the history is the Drive chats. */
   space?: WikiSpaceRow;
-  /** Drive: the chat's change cards and overwrite questions, drawn under its conversation. */
-  cards?: (sessionId: string) => ReactNode;
+  /** Drive: the chat shows its change cards and overwrite questions, each with its turn. */
+  cards?: boolean;
 }
 
 /**
@@ -1536,6 +1537,7 @@ function WikiChatSession({
   };
 
   const { decide, untranslated } = useApprovalDecisions(sessionId, setApprovals);
+  const driveCards = useDriveChatCards(origin.cards ? sessionId : null, stream.transcriptEvents);
 
   // The card the chat was opened at: one named, or the first that needs the owner (design §3).
   const focusCard = useMemo(() => {
@@ -1596,7 +1598,7 @@ function WikiChatSession({
           stream={stream}
           live={live}
           turnImages={turnImages}
-          inserts={NO_INSERTS}
+          inserts={driveCards.inserts}
           authErrorHelp={null}
           autoRetryHelp={null}
           restoreUndelivered={restoreUndelivered}
@@ -1606,7 +1608,7 @@ function WikiChatSession({
           answeredQuestions={null}
           wikiChat={wikiCards}
         />
-        {origin.cards?.(sessionId)}
+        {driveCards.rest}
         {!session?.deletedAt &&
           approvals.map((approval) => (
             <ApprovalPanel
@@ -1671,4 +1673,3 @@ function WikiChatSession({
   );
 }
 
-const NO_INSERTS: never[] = [];
