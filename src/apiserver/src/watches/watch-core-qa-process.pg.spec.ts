@@ -32,6 +32,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
 import { WATCH_PREDICATE_VERSION } from './watch-predicate';
+import { wordSql } from '../test-support/session-word';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const skip = !PG_URL;
@@ -355,7 +356,7 @@ async function wakesOf(watchId: string): Promise<Array<{ id: string; status: str
 }
 
 async function statusOf(sessionId: string): Promise<string> {
-  const { rows } = await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1`, [sessionId]);
+  const { rows } = await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1`, [sessionId]);
   return rows[0].status;
 }
 

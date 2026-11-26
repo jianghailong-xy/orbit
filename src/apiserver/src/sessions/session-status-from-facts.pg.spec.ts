@@ -25,6 +25,9 @@
  * projector; projects/landing-session.pg.spec.ts and queue/claim-slot-turn-state.pg.spec.ts also read what this
  * trigger stored, after the landing writers and the claim.
  *
+ * Since deploy D4 the column is gone from a migrated database: the file runs on the database deploy D3 left, as
+ * scripts/session-status-drop-down.sql restores it (task T15).
+ *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-status-from-facts.pg.spec.ts
  */
 import assert from 'node:assert/strict';
@@ -36,6 +39,7 @@ import { Client } from 'pg';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { legacySessionStatus, type LandingSettlement, type LegacyStatusFacts } from './session-legacy-words';
 import { WORD_SHAPES, type WordShape } from './session-legacy-words.fixture';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -99,6 +103,9 @@ test('D3: the stored word follows the facts, for rollback only (1671)', { skip, 
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
   t.after(() => sql.end().catch(() => undefined));
+  // The database deploy D3 left: since deploy D4 (migration 1691) the column is put back by its down script. So this
+  // file also holds that what the down script restores keeps the word from the facts on every write.
+  await restoreStatusColumn(sql);
   // Every row here has no engine, so the engine guards pass every claim (0414's rule) but the one (5) asks about.
 
   const owner = randomUUID();

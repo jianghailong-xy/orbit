@@ -24,9 +24,10 @@
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-turn-state-phase.pg.spec.ts
  *
- * It runs on the database deploy D2 left: migration 1671 (D3) is rolled back first, with its down script
- * (scripts/session-status-from-facts-down.sql), since D3 replaced the D1 trigger this file holds to account; what D3
- * stores is sessions/session-status-from-facts.pg.spec.ts's.
+ * It runs on the database deploy D2 left: migrations 1691 (D4) and 1671 (D3) are rolled back first, with their down
+ * scripts (scripts/session-status-drop-down.sql, scripts/session-status-from-facts-down.sql), since D4 dropped the
+ * column and D3 replaced the D1 trigger this file holds to account; what D3 stores is
+ * sessions/session-status-from-facts.pg.spec.ts's.
  *
  * Not destructive to anything but this disposable database, which it leaves at every migration: every id is fresh.
  * (4)'s census counts the whole database, which it reads as this spec's rows alone: run it on a database of its own,
@@ -48,6 +49,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { prismaClientFor } from '../prisma/prisma-client';
 import { deriveSessionPhase } from './session-phase';
 import { turnStateOfWord } from './session-turn-state';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -177,8 +179,9 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
-  // The database deploy D2 left: migration 1671 (D3) rolled back, as its down script does it. What this file holds to
+  // The database deploy D2 left: migrations 1691 (D4) and 1671 (D3) rolled back, as their down scripts do it. What this file holds to
   // account is D1's trigger, which keeps the facts from the word, and which D3 replaced with one that does the opposite.
+  await restoreStatusColumn(sql);
   await sql.query(readFileSync(join(SCRIPTS, 'session-status-from-facts-down.sql'), 'utf8'));
   const read = async (id: string): Promise<Stored> =>
     (await sql.query(`${READ} WHERE "id" = $1::uuid`, [id])).rows[0] as Stored;

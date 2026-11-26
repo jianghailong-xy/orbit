@@ -2,15 +2,14 @@
  * THE SQL TWIN OF THE LEGACY STATUS WORD PROJECTOR, AND THE ?status= CONDITION, AGAINST POSTGRESQL (task T4 of
  * docs/session-status-retirement-plan.md, §3.1 and §6):
  *
- *   (1) session_legacy_status (migration 1671's eight-argument form, and 1621's nine-argument one, which since 1671
- *       ignores the stored word it is handed) answers what legacySessionStatus answers over every combination of the
- *       facts it reads, the landing's settlement among them
+ *   (1) session_legacy_status (migration 1671's eight-argument form, the only one since deploy D4's migration 1691
+ *       dropped 1621's nine-argument one) answers what legacySessionStatus answers over every combination of the facts
+ *       it reads, the landing's settlement among them
  *   (2) a session of every shape of session-legacy-words.fixture.ts, written to the database, derives from its stored
  *       columns the word the fixture's facts derive, in TypeScript and in SQL
  *   (3) statusWordFilter(word) selects exactly the conversation sessions the projector gives that word
- *   (4) a held row with no turn_state is parked, whatever word it was written as: in TypeScript, in SQL, on the payload
- *       fields and in the stored word migration 1671's trigger keeps, and only statusWordFilter('AWAITING_INPUT')
- *       selects it (task T14 retired the NULL fallback that read the stored word)
+ *   (4) a held row with no turn_state is parked: in TypeScript, in SQL and on the payload fields, and only
+ *       statusWordFilter('AWAITING_INPUT') selects it (task T14 retired the NULL fallback that read the stored word)
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-legacy-words.pg.spec.ts
  */
@@ -53,23 +52,17 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
       (endReason) => OUTCOMES.flatMap((lastTurnOutcome) => STARTED.flatMap((startedAt) => IMPORTS.flatMap(
         (importSourceCwd) => KINDS.flatMap((sessionKind) => SETTLED.map((settledAs) => ({
           finishedAt, turnState, endReason, lastTurnOutcome, startedAt, importSourceCwd, sessionKind, settledAs,
-        })))))))))
-      // A stored word beside them, each in turn (the cycle of seven shares no factor with the others' sizes), which
-      // the nine-argument form must not read.
-      .map((combo, i) => ({ ...combo, status: WORDS[i % WORDS.length] as string }));
-    const words = await db.$queryRawUnsafe<Array<{ word: string; word8: string }>>(`
+        })))))))));
+    const words = await db.$queryRawUnsafe<Array<{ word: string }>>(`
       SELECT session_legacy_status(c."finishedAt", c."turnState", c."endReason", c."lastTurnOutcome", c."startedAt",
-                                   c."importSourceCwd", c."sessionKind", c."settledAs", c."status") AS word,
-             session_legacy_status(c."finishedAt", c."turnState", c."endReason", c."lastTurnOutcome", c."startedAt",
-                                   c."importSourceCwd", c."sessionKind", c."settledAs") AS word8
+                                   c."importSourceCwd", c."sessionKind", c."settledAs") AS word
         FROM jsonb_to_recordset($1::jsonb) AS c(
           "finishedAt" timestamp, "turnState" text, "endReason" text, "lastTurnOutcome" text, "startedAt" timestamp,
-          "importSourceCwd" text, "sessionKind" text, "settledAs" text, "status" text)`, JSON.stringify(combos));
+          "importSourceCwd" text, "sessionKind" text, "settledAs" text)`, JSON.stringify(combos));
     assert.equal(words.length, combos.length);
     const differences = combos.flatMap((c, i) => {
       const word = legacySessionStatus(c, c.settledAs === null ? null : { settledAt: AT, settledAs: c.settledAs });
-      return word === words[i].word && word === words[i].word8 ? []
-        : [`${JSON.stringify(c)}: TypeScript ${word}, SQL ${words[i].word} / ${words[i].word8}`];
+      return word === words[i].word ? [] : [`${JSON.stringify(c)}: TypeScript ${word}, SQL ${words[i].word}`];
     });
     assert.deepEqual(differences.slice(0, 10), [], `${differences.length} differences`);
   });
@@ -102,7 +95,7 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
       })
       : null;
     const { turnState: _fromTheWord, ...facts } = shape.facts;
-    // Through the stored word alone for turn_state: the D1 trigger keeps it, as every writer today leaves it.
+    // The turn state the shape's held word stands for, as every writer leaves it.
     const { id } = await db.session.create({
       data: {
         ownerId, creatorId: ownerId, title: shape.name, prompt: 'words', turnState: turnStateOfWord(shape.stored),
@@ -126,9 +119,9 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
 
   await t.test('(2) every row shape, from its stored columns, in TypeScript and SQL', async () => {
     const rows = await db.session.findMany({ where: { ownerId }, select: { id: true, ...LEGACY_STATUS_SELECT } });
-    const sql = await db.$queryRawUnsafe<Array<{ id: string; word: string; stored: string }>>(`
+    const sql = await db.$queryRawUnsafe<Array<{ id: string; word: string }>>(`
       SELECT s.id::text AS id, session_legacy_status(s.finished_at, s.turn_state, s.end_reason, s.last_turn_outcome,
-               s.started_at, s.import_source_cwd, s.kind, l.settled_as) AS word, s.status::text AS stored
+               s.started_at, s.import_source_cwd, s.kind, l.settled_as) AS word
         FROM session s LEFT JOIN project_landing l ON l.session_id = s.id
        WHERE s.owner_id = $1::uuid`, ownerId);
     const stored = new Map(rows.map((row) => [row.id, row]));
@@ -138,9 +131,6 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
       const expected = legacySessionStatus(shape.facts, shape.landing);
       assert.equal(legacySessionStatus(stored.get(id)!, shape.landing), expected, `${shape.name}: stored columns`);
       assert.equal(words.get(id), expected, `${shape.name}: SQL`);
-      // Migration 1671's trigger stored the same word, but for a LANDING container this spec inserts before its
-      // project_landing row (the product's writers write the landing first: session-status-from-facts.pg.spec.ts).
-      if (!shape.landing) assert.equal(sql.find((row) => row.id === id)!.stored, expected, `${shape.name}: stored word`);
     }
   });
 
@@ -157,7 +147,7 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
     }
   });
 
-  await t.test('(4) a held row with no turn_state is parked, whatever word it was written as', async () => {
+  await t.test('(4) a held row with no turn_state is parked', async () => {
     // Compared all at once, so a failure shows every word that is answered wrong.
     const answers: Record<string, unknown> = {};
     for (const word of HELD_WORDS) {
@@ -171,23 +161,19 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
       const row = await db.session.findUniqueOrThrow({
         where: { id }, select: { ...LEGACY_STATUS_SELECT, completedAt: true, archivedAt: true, deletedAt: true },
       });
-      // The word it was "written as" handed to the nine-argument form, which deploy 2 replicas call: not read.
-      const [sql] = await db.$queryRawUnsafe<Array<{ word: string; word9: string; stored: string }>>(`
+      const [sql] = await db.$queryRawUnsafe<Array<{ word: string }>>(`
         SELECT session_legacy_status(finished_at, turn_state, end_reason, last_turn_outcome, started_at,
-                 import_source_cwd, kind, NULL) AS word,
-               session_legacy_status(finished_at, turn_state, end_reason, last_turn_outcome, started_at,
-                 import_source_cwd, kind, NULL, $2) AS word9,
-               status::text AS stored
-          FROM session WHERE id = $1::uuid`, id, word);
+                 import_source_cwd, kind, NULL) AS word
+          FROM session WHERE id = $1::uuid`, id);
       const payload = withSessionState(row);
       answers[word] = {
-        typescript: legacySessionStatus(row), sql: sql.word, sql9: sql.word9, stored: sql.stored,
+        typescript: legacySessionStatus(row), sql: sql.word,
         status: payload.status, runStatus: payload.runStatus,
       };
     }
     const parked = RunStatus.AWAITING_INPUT;
     assert.deepEqual(answers, Object.fromEntries(HELD_WORDS.map((word) =>
-      [word, { typescript: parked, sql: parked, sql9: parked, stored: parked, status: parked, runStatus: parked }])));
+      [word, { typescript: parked, sql: parked, status: parked, runStatus: parked }])));
     // The ?status= condition matches them as parked, and no other word's condition does.
     const matched: Record<string, number> = {};
     for (const word of Object.values(RunStatus)) {

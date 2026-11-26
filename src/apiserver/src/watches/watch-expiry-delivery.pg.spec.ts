@@ -50,6 +50,7 @@ import {
 } from './watch-delivery.service';
 import { WatchEvaluatorOptions, WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -363,7 +364,7 @@ async function turnsOn(sessionId: string): Promise<TurnRow[]> {
 
 async function sessionOf(id: string) {
   const { rows } = await sql.query<{ status: string; endReason: string | null; completed: boolean; trashed: boolean; cancelling: boolean }>(
-    `SELECT "status", "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
+    `SELECT ${wordSql()} AS status, "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
             "deleted_at" IS NOT NULL AS "trashed", "cancel_requested_at" IS NOT NULL AS "cancelling"
        FROM "session" WHERE "id" = $1`,
     [id],
@@ -919,7 +920,7 @@ test('an expiry still queued when its observer\'s runner is lost is a dead lette
   await (reaper as unknown as { sweep(): Promise<void> }).sweep();
 
   const { rows: [session] } = await sql.query<{ status: string; retryArmed: boolean }>(
-    `SELECT "status", "retry_at" IS NOT NULL AS "retryArmed" FROM "session" WHERE "id" = $1`,
+    `SELECT ${wordSql()} AS status, "retry_at" IS NOT NULL AS "retryArmed" FROM "session" WHERE "id" = $1`,
     [queued.observer],
   );
   assert.deepEqual(session, { status: 'FAILED', retryArmed: true }, 'the reaper finalized the observer, with its retry armed');

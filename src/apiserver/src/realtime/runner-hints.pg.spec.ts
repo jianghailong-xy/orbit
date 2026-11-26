@@ -42,6 +42,7 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { hashPassword, sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
@@ -219,7 +220,7 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
     return toUuid(opened.json.id);
   };
   const statusOf = async (sessionId: string) =>
-    (await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
+    (await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
 
   // B asks for work the whole time. Every session B is ever handed is kept here.
   const bClaimed: string[] = [];

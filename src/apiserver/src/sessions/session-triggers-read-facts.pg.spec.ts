@@ -35,6 +35,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { prismaClientFor } from '../prisma/prisma-client';
 import { legacySessionStatus } from './session-legacy-words';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -154,6 +155,9 @@ test('the session triggers and functions read the facts and answer as before (16
   const sql = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The column session.status was dropped in deploy D4 (migration 1691): this file rehearses deploys it
+  // was part of, on the database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const db = prismaClientFor(URL!);
   t.after(async () => {
     await db.$disconnect().catch(() => undefined);

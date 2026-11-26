@@ -41,6 +41,7 @@ import { WORD_SHAPES } from '../sessions/session-legacy-words.fixture';
 import { RunnerApiController } from './runner-api.controller';
 import { readRunnerLinkHints } from './runner-link-hints';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -197,7 +198,7 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
   await t.test('(4) the runner-driven writers find their rows on the turn state, and write it beside the word', async () => {
     const of = await account('writers');
     const facts = async (id: string) =>
-      (await sql.query('SELECT status::text AS status, turn_state AS "turnState", finished_at IS NOT NULL AS released FROM "session" WHERE id = $1::uuid', [id])).rows[0];
+      (await sql.query(`SELECT ${wordSql()} AS status, turn_state AS "turnState", finished_at IS NOT NULL AS released FROM "session" WHERE id = $1::uuid`, [id])).rows[0];
     const parked: Record<string, unknown> = {};
     const released: Record<string, unknown> = {};
     for (const fill of FILLS) {

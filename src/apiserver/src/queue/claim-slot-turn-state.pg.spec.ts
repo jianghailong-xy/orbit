@@ -6,10 +6,8 @@
  * the engine's own turn, which make `phase` RUNNING without a dispatched turn; and each released word, with the same
  * stale work beside it. Every row has a runner, a batch, a spawn tree and a workspace of its own, so what a reader
  * counts or selects is that one row's answer. What each reader selects now is held to what it selected on the stored
- * word before, spelled here as the code spelled it before the change, in SQL: since deploy D3 (task T14) the stored
- * word is migration 1671's, written from the facts, so the two sides agree only if that trigger gives every row its
- * word. A row with no turn_state beside a word that names a turn no longer exists (1652 validated it, and the fallback
- * that read one went with T14).
+ * word before, spelled here as the code spelled it before the change, in SQL, with the column replaced by the word
+ * the facts give (test-support wordSql, the projector's SQL twin): the column was dropped in deploy D4 (task T15).
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/queue/claim-slot-turn-state.pg.spec.ts
  */
@@ -47,6 +45,7 @@ import { turnStateFilter } from '../sessions/session-turn-state';
 import { DispatchPauseService } from './dispatch-pause.service';
 import { QueueService } from './queue.service';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -147,12 +146,12 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
   await t.test('the slot counts: runner, batch and tree count the dispatched turns and nothing else', async () => {
     // Before (common/session-tree-sql.ts at the project tip): `status = 'RUNNING'`, the child's `status IN ('PENDING', 'RUNNING')`.
     const before = {
-      runner: (s: string) => Prisma.sql`(SELECT count(*) FROM "session" active WHERE active."assigned_runner_id" = ${Prisma.raw(s)}."assigned_runner_id" AND active."status" = 'RUNNING') > 0`,
-      batch: (s: string) => Prisma.sql`(SELECT count(*) FROM "session" ba WHERE ba."batch_id" = ${Prisma.raw(s)}."batch_id" AND ba."status" = 'RUNNING') > 0`,
-      tree: (s: string) => Prisma.sql`(SELECT count(*) FROM "session" tree WHERE tree."root_session_id" = ${Prisma.raw(s)}."root_session_id" AND tree."status" = 'RUNNING'
-        AND NOT EXISTS (SELECT 1 FROM "session" child WHERE child."parent_session_id" = tree.id AND child."status" IN ('PENDING', 'RUNNING'))) > 0`,
+      runner: (s: string) => Prisma.sql`(SELECT count(*) FROM "session" active WHERE active."assigned_runner_id" = ${Prisma.raw(s)}."assigned_runner_id" AND ${Prisma.raw(wordSql('active'))} = 'RUNNING') > 0`,
+      batch: (s: string) => Prisma.sql`(SELECT count(*) FROM "session" ba WHERE ba."batch_id" = ${Prisma.raw(s)}."batch_id" AND ${Prisma.raw(wordSql('ba'))} = 'RUNNING') > 0`,
+      tree: (s: string) => Prisma.sql`(SELECT count(*) FROM "session" tree WHERE tree."root_session_id" = ${Prisma.raw(s)}."root_session_id" AND ${Prisma.raw(wordSql('tree'))} = 'RUNNING'
+        AND NOT EXISTS (SELECT 1 FROM "session" child WHERE child."parent_session_id" = tree.id AND ${Prisma.raw(wordSql('child'))} IN ('PENDING', 'RUNNING'))) > 0`,
       background: (s: string) => Prisma.sql`(SELECT count(*) FROM "session" held WHERE held."assigned_runner_id" = ${Prisma.raw(s)}."assigned_runner_id"
-        AND held."status" IN ('PENDING', 'AWAITING_INPUT', 'INTERRUPTED')
+        AND ${Prisma.raw(wordSql('held'))} IN ('PENDING', 'AWAITING_INPUT', 'INTERRUPTED')
         AND held.id = ANY(SELECT unnest(p."background_job_session_ids") FROM "runner_presence" p WHERE p."runner_id" = ${Prisma.raw(s)}."assigned_runner_id")) > 0`,
     };
     const after = {
@@ -190,8 +189,8 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
     const counted = async (fragment: Prisma.Sql): Promise<string[]> => (await db.$queryRaw<Array<{ id: string; n: bigint }>>(Prisma.sql`
       SELECT s.id::text AS id, ${fragment} AS n FROM "session" s WHERE s.id = ANY(${parentIds}::uuid[])`))
       .filter((r) => Number(r.n) > 0).map((r) => parents.get(r.id)!).sort();
-    const before = await counted(Prisma.sql`(SELECT count(*) FROM "session" tree WHERE tree."root_session_id" = s."root_session_id" AND tree."status" = 'RUNNING'
-      AND NOT EXISTS (SELECT 1 FROM "session" child WHERE child."parent_session_id" = tree.id AND child."status" IN ('PENDING', 'RUNNING')))`);
+    const before = await counted(Prisma.sql`(SELECT count(*) FROM "session" tree WHERE tree."root_session_id" = s."root_session_id" AND ${Prisma.raw(wordSql('tree'))} = 'RUNNING'
+      AND NOT EXISTS (SELECT 1 FROM "session" child WHERE child."parent_session_id" = tree.id AND ${Prisma.raw(wordSql('child'))} IN ('PENDING', 'RUNNING')))`);
     const after = await counted(treeActiveTurns('s'));
     assert.deepEqual(after, before, 'the same parents counted');
     assert.deepEqual(after, titles(rows, (row) => !(row.word === RunStatus.PENDING || row.word === RunStatus.RUNNING)),
@@ -200,16 +199,16 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
   });
 
   await t.test('the Prisma filters the slot, generating and managed readers use select what the word selected', async () => {
-    const HELD = `s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')`;
+    const HELD = `${wordSql('s')} IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')`;
     const cases: Array<[string, Prisma.SessionWhereInput, string]> = [
-      ['queued (claim holds, hold notices)', turnStateFilter(['QUEUED']), `s."status" = 'PENDING'`],
-      ['in flight (claim undo, Update Now, draining turns, OOM stop)', turnStateFilter(['IN_FLIGHT']), `s."status" = 'RUNNING'`],
-      ['holds a slot', SESSION_HOLDS_SLOT_WHERE, `s."status" = 'RUNNING'`],
+      ['queued (claim holds, hold notices)', turnStateFilter(['QUEUED']), `${wordSql('s')} = 'PENDING'`],
+      ['in flight (claim undo, Update Now, draining turns, OOM stop)', turnStateFilter(['IN_FLIGHT']), `${wordSql('s')} = 'RUNNING'`],
+      ['holds a slot', SESSION_HOLDS_SLOT_WHERE, `${wordSql('s')} = 'RUNNING'`],
       ['held (Update Now shells)', heldFilter(), HELD],
-      ['generating', GENERATING_SESSION_FILTER, `s."status" = 'RUNNING' OR (s."status" = 'AWAITING_INPUT' AND s."engine_turn_active")`],
-      ['executing', SESSION_EXECUTING_WHERE, `s."status" = 'RUNNING' OR (${HELD}
+      ['generating', GENERATING_SESSION_FILTER, `${wordSql('s')} = 'RUNNING' OR (${wordSql('s')} = 'AWAITING_INPUT' AND s."engine_turn_active")`],
+      ['executing', SESSION_EXECUTING_WHERE, `${wordSql('s')} = 'RUNNING' OR (${HELD}
         AND (s."engine_turn_active" OR cardinality(s."running_subagents") > 0 OR cardinality(s."running_bg_jobs") > 0))`],
-      ['executing but a job', SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE, `s."status" = 'RUNNING' OR (${HELD}
+      ['executing but a job', SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE, `${wordSql('s')} = 'RUNNING' OR (${HELD}
         AND (s."engine_turn_active" OR cardinality(s."running_subagents") > 0))`],
       ['a job running', SESSION_RUNNING_BG_JOB_WHERE, `${HELD} AND cardinality(s."running_bg_jobs") > 0`],
     ];
@@ -227,8 +226,8 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
   await t.test('managed runner work, runner N-of-M counts and the drain\'s waiting work read the same rows', async () => {
     const before = await db.$queryRaw<Array<{ runnerId: string; active: boolean; queued: boolean }>>(Prisma.sql`
       SELECT r.id::text AS "runnerId",
-             EXISTS (SELECT 1 FROM "session" s WHERE s."assigned_runner_id" = r.id AND s."status" = 'RUNNING') AS active,
-             EXISTS (SELECT 1 FROM "session" s WHERE s."assigned_runner_id" = r.id AND s."status" = 'PENDING' AND s."cancel_requested_at" IS NULL) AS queued
+             EXISTS (SELECT 1 FROM "session" s WHERE s."assigned_runner_id" = r.id AND ${Prisma.raw(wordSql('s'))} = 'RUNNING') AS active,
+             EXISTS (SELECT 1 FROM "session" s WHERE s."assigned_runner_id" = r.id AND ${Prisma.raw(wordSql('s'))} = 'PENDING' AND s."cancel_requested_at" IS NULL) AS queued
         FROM "runner" r WHERE r.id = ANY(${rows.map((row) => row.runnerId)}::uuid[])`);
     for (const { runnerId, active, queued } of before) {
       const row = byRunner.get(runnerId)!;
@@ -248,12 +247,12 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
     const waiting = await drainWaitingOf(prisma, ownerId, runners.map((r) => ({ id: r.id, heartbeatDraining: true, selfUpdate: null })));
     const beforeWaiting = await db.$queryRaw<Array<{ runnerId: string; messages: number }>>(Prisma.sql`
       SELECT s.assigned_runner_id::text AS "runnerId",
-             (COALESCE(sum(m.turns) FILTER (WHERE NOT (s.status = 'PENDING' AND s.num_turns = 0)), 0)
-              + count(*) FILTER (WHERE s.status = 'PENDING' AND s.num_turns > 0 AND m.turns = 0))::int AS messages
+             (COALESCE(sum(m.turns) FILTER (WHERE NOT (${Prisma.raw(wordSql('s'))} = 'PENDING' AND s.num_turns = 0)), 0)
+              + count(*) FILTER (WHERE ${Prisma.raw(wordSql('s'))} = 'PENDING' AND s.num_turns > 0 AND m.turns = 0))::int AS messages
         FROM "session" s
         CROSS JOIN LATERAL (SELECT count(*)::int AS turns FROM "conversation_turn" t
                              WHERE t.session_id = s.id AND t.status = 'PENDING' AND t.kind = 'message') m
-       WHERE s.id = ANY(${ids}::uuid[]) AND s.status IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+       WHERE s.id = ANY(${ids}::uuid[]) AND ${Prisma.raw(wordSql('s'))} IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
        GROUP BY s.assigned_runner_id`);
     for (const row of rows) {
       const old = beforeWaiting.find((w) => w.runnerId === row.runnerId)?.messages ?? 0;
@@ -283,8 +282,8 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
 
   await t.test('the fleet gauges count what the word counted', async () => {
     const [before] = await db.$queryRaw<Array<{ queued: number; running: number }>>(Prisma.sql`
-      SELECT (SELECT count(*) FROM "session" s WHERE s."deleted_at" IS NULL AND s."status" = 'PENDING'::"run_status")::int AS queued,
-             (SELECT count(*) FROM "session" s WHERE s."deleted_at" IS NULL AND s."status" = 'RUNNING'::"run_status")::int AS running`);
+      SELECT (SELECT count(*) FROM "session" s WHERE s."deleted_at" IS NULL AND ${Prisma.raw(wordSql('s'))} = 'PENDING')::int AS queued,
+             (SELECT count(*) FROM "session" s WHERE s."deleted_at" IS NULL AND ${Prisma.raw(wordSql('s'))} = 'RUNNING')::int AS running`);
     const gauges = await readFleetGauges(db);
     assert.deepEqual(gauges.sessions, before);
     assert.ok(gauges.sessions.queued >= EXTRAS.length && gauges.sessions.running >= EXTRAS.length);
@@ -326,15 +325,16 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
       }
     }
     assert.deepEqual(claimed.sort(), titles(rows, (row) => row.word === RunStatus.PENDING), 'exactly the queued rows');
-    const after = await db.$queryRaw<Array<{ id: string; stored: string; turnState: string | null; phase: string }>>(Prisma.sql`
-      SELECT id::text AS id, status::text AS stored, turn_state AS "turnState", phase FROM "session" WHERE id = ANY(${ids}::uuid[])`);
+    const after = await db.$queryRaw<Array<{ id: string; word: string; turnState: string | null; phase: string }>>(Prisma.sql`
+      SELECT id::text AS id, ${Prisma.raw(wordSql())} AS word, turn_state AS "turnState", phase FROM "session"
+       WHERE id = ANY(${ids}::uuid[])`);
     for (const row of rows) {
       const now = after.find((a) => a.id === row.id)!;
       if (row.word === RunStatus.PENDING) {
-        // The claim writes turn_state alone; migration 1671's trigger keeps the stored word from it.
-        assert.deepEqual([now.stored, now.turnState, now.phase], ['RUNNING', 'IN_FLIGHT', 'RUNNING'], `${row.title}: claimed`);
+        // The claim writes turn_state alone, and the word follows it.
+        assert.deepEqual([now.word, now.turnState, now.phase], ['RUNNING', 'IN_FLIGHT', 'RUNNING'], `${row.title}: claimed`);
       } else {
-        assert.equal(now.stored, row.word, `${row.title}: untouched`);
+        assert.equal(now.word, row.word, `${row.title}: untouched`);
       }
     }
   });

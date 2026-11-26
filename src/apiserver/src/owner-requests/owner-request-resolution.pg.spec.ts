@@ -42,6 +42,7 @@ import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import { ownerRequestTurnClientId, type OwnerRequestFiling } from './owner-request';
 import { OwnerSecretsService } from './owner-secrets.service';
 import { OwnerRequestsService } from './owner-requests.service';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -271,7 +272,7 @@ test('owner requests: an ending starts exactly one turn in the asking session', 
     await delivery.drain();
     const turn = await theOneTurn(idle, request.id);
     assert.equal(turn.status, 'PENDING', 'queued for the next runner slot, as any sent message is');
-    const { rows: [after] } = await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1`, [idle]);
+    const { rows: [after] } = await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1`, [idle]);
     assert.equal(after.status, 'PENDING', 'the session is due to be dispatched again to run it');
 
     const ended = await session('RUNNING');

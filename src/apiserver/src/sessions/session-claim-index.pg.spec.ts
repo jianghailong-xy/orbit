@@ -21,6 +21,7 @@ import {
 } from '../tasks/task-supersession';
 import { readTaskWorkCarriers } from './task-work-carrier';
 import { WORD_SELECT } from '../test-support/session-word';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 /**
  * ONE LIVE RUN PER TASK, RELEASE A: 1426's index on the release column beside 0130's on the status set.
@@ -196,6 +197,9 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The column session.status was dropped in deploy D4 (migration 1691): this file rehearses deploys it
+  // was part of, on the database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const db = new PrismaClient({ adapter: pgAdapterFor(url) });
   t.after(async () => {
     await db.$disconnect().catch(() => undefined);
@@ -383,7 +387,7 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
       await sql.query('BEGIN');
       try {
         // Every label as the stored word, PARKED among them: the database deploy D2 left, where the word was
-        // written and the facts followed it (1671's down script, rolled back with the rest of this transaction).
+        // written and the facts followed it (1691's and 1671's down scripts, rolled back with the rest of this transaction).
         await sql.query(D3_DOWN);
         await sql.query(`DROP INDEX "${drop}"`);
         const [taskId] = (await sql.query(

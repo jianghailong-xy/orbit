@@ -73,6 +73,7 @@ import { RELEASE_SHAPES } from '../common/session-release-shapes.fixture';
 import { SessionsService } from './sessions.service';
 import { turnStateOfWord } from './session-turn-state';
 import { fixtureFacts } from '../test-support/session-word';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -145,7 +146,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
 }
 
 /** Migration 1671 (deploy D3) and its rollback: (9) and (10) rehearse migrations that read and write the stored word,
- *  on the database deploy D2 left, and put 1671 back after. */
+ *  on the database deploy D2 left (1691's column restored, then 1671 rolled back), and put 1671 back after. */
 const D3_DOWN = readFileSync(join(__dirname, '..', '..', '..', '..', 'scripts', 'session-status-from-facts-down.sql'), 'utf8');
 const D3_UP = readFileSync(join(__dirname, '..', '..', 'prisma', 'migrations', '1671_session_status_from_facts', 'migration.sql'), 'utf8');
 /** While 1671 is rolled back: the helper writes the fixture word as the stored word, as writers before deploy D3 did. */
@@ -261,6 +262,9 @@ test('every release writes the release column and its cause, and the revive clea
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The column session.status was dropped in deploy D4 (migration 1691): this file rehearses deploys it
+  // was part of, on the database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const s = stackFor(url, sql);
   t.after(async () => {
     await s.db.$disconnect().catch(() => undefined);
@@ -604,6 +608,9 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The column session.status was dropped in deploy D4 (migration 1691): this file rehearses deploys it
+  // was part of, on the database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const db = prismaClientFor(url);
   // The database deploy D2 left: what this test shows is that its guards and ended-triggers read the release fact
   // and not the word, by writing the fact alone and leaving the word as it was, which since deploy D3 follows the
