@@ -1,6 +1,6 @@
 # 设计文档：会话列表在上千条 Open 会话下不再卡
 
-状态：草案 v1 · 2026-11-26 · 起因：一个 workspace 的 `GET /sessions?runnerId=…&workspaceId=…&view=open&since=` 返回 `full: true` 共 1348 行，页面明显卡顿
+状态：v1 · 2026-11-26 · D1 = A1、D2 = 只做 Web、D3 = @tanstack/react-virtual（owner 2026-11-26） · 起因：一个 workspace 的 `GET /sessions?runnerId=…&workspaceId=…&view=open&since=` 返回 `full: true` 共 1348 行，页面明显卡顿
 影响面：`src/apiserver`（sessions）、`src/web`（WorkspaceView、BootGate、lib/sessionFolders、lib/sessionProjects）；原生端不在本期（§6 D2）
 关联：[list-freshness-design.md](./list-freshness-design.md)（Open 列表的 `since=` 增量与版本）、[session-folders-move-design.md](./session-folders-move-design.md)（文件夹行）、`docs/mocks/session-list-scale/`（架构板）
 
@@ -90,7 +90,7 @@ GET /sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limi
 | T3 | Web 虚拟化 + 每帧只算挂载行（§4） | —（与 T1 并行；与 T2 改动不同区段） | Vitest 全量；Playwright 方向键、拖动、滑动、加载更多 |
 | T4 | 端到端测量：1500 Open 会话（含文件夹和项目）的种子，改前/改后：首读字节、首屏可交互时间、一帧 watch 的提交耗时、DOM 行数 | T2、T3 | 测量脚本 + 数字表 |
 
-## 6. 待定 · 要你拍板
+## 6. 决定（owner 2026-11-26：D1 = A1，D2 = 只做 Web，D3 = @tanstack/react-virtual）
 
 **D1 · A 的形状**
 - **方案 A1（推荐）**：服务端按顶层条目分页（§3）。首读、首屏只跟一页有关，与总量无关；代价是把"谁是顶层条目、项目行怎么定位"这套规则搬到服务端，用共享夹具保证两边一致。
