@@ -36,6 +36,19 @@ type fakeSyncDrive struct {
 	failChunkTimes int
 	// onChunk runs at each chunk PUT, before it is answered.
 	onChunk func()
+
+	// legacy is a server without the held question and the batch route: they answer 404.
+	legacy bool
+	// held is the content this account holds, sha256 to size: every chunk sent, and every committed file's.
+	held map[string]int
+	// failContent answers 503 to the PUT of a chunk holding exactly this, failChunkTimes times (a batch staging names
+	// no file).
+	failContent string
+	// dropHeld, when set, makes the next batch find this content gone, as if swept after the held question.
+	dropHeld string
+
+	heldCalls, batches, chunkPuts int
+	chunkBytes                    int64
 }
 
 type fakeSyncEntry struct {
@@ -46,7 +59,7 @@ type fakeSyncEntry struct {
 }
 
 func newFakeSyncDrive(t *testing.T) (*fakeSyncDrive, *Transport) {
-	d := &fakeSyncDrive{t: t, entries: map[string]*fakeSyncEntry{"/": {id: "root", kind: "FOLDER", path: "/"}}, stagings: map[string]map[int]string{}}
+	d := &fakeSyncDrive{t: t, entries: map[string]*fakeSyncEntry{"/": {id: "root", kind: "FOLDER", path: "/"}}, stagings: map[string]map[int]string{}, held: map[string]int{}}
 	srv := newDriveTestServer(t, d.serve)
 	return d, newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)
 }
@@ -129,9 +142,28 @@ func (d *fakeSyncDrive) serve(w http.ResponseWriter, r *http.Request) {
 		e := &fakeSyncEntry{id: d.id(), kind: "FILE", path: p}
 		d.entries[p] = e
 		d.json(w, e.view())
+	case (r.Method == "POST" && (route == "/chunks/held" || route == "/batch")) && d.legacy:
+		http.NotFound(w, r)
+	case r.Method == "POST" && route == "/chunks/held":
+		body := driveTestBody(d.t, r)
+		d.heldCalls++
+		held := []string{}
+		for _, c := range body["chunks"].([]interface{}) {
+			ref := c.(map[string]interface{})
+			if size, ok := d.held[ref["sha256"].(string)]; ok && float64(size) == ref["size"].(float64) {
+				held = append(held, ref["sha256"].(string))
+			}
+		}
+		d.json(w, map[string]interface{}{"held": held})
+	case r.Method == "POST" && route == "/batch":
+		d.batch(w, driveTestBody(d.t, r))
 	case r.Method == "POST" && route == "/stagings":
 		body := driveTestBody(d.t, r)
-		id := "s-" + body["entryId"].(string) + "-" + d.id()
+		entry, _ := body["entryId"].(string)
+		if entry == "" {
+			entry = "batch"
+		}
+		id := "s-" + entry + "-" + d.id()
 		d.stagings[id] = map[int]string{}
 		d.json(w, map[string]string{"id": id})
 	case r.Method == "PUT" && strings.HasPrefix(route, "/stagings/"):
@@ -149,10 +181,19 @@ func (d *fakeSyncDrive) serve(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		if d.failContent != "" && d.failChunkTimes != 0 && string(data) == d.failContent {
+			d.failChunkTimes--
+			w.WriteHeader(503)
+			fmt.Fprint(w, `{"code":"UNAVAILABLE","message":"The store is busy."}`)
+			return
+		}
 		parts := strings.Split(route, "/")
 		var idx int
 		fmt.Sscanf(parts[4], "%d", &idx)
 		d.stagings[parts[2]][idx] = string(data)
+		d.held[sha256Hex(data)] = len(data)
+		d.chunkPuts++
+		d.chunkBytes += int64(len(data))
 		fmt.Fprint(w, `{}`)
 	case r.Method == "POST" && route == "/commit":
 		body := driveTestBody(d.t, r)
@@ -167,6 +208,9 @@ func (d *fakeSyncDrive) serve(w http.ResponseWriter, r *http.Request) {
 					e.size += int64(c.Size)
 				}
 				e.mtime = nil
+				for _, c := range e.chunks {
+					d.held[c.SHA256] = c.Size
+				}
 				d.json(w, map[string]interface{}{"entryId": e.id, "versionId": d.id(), "newVersion": true, "sizeBytes": e.size})
 				return
 			}
@@ -206,6 +250,51 @@ func (d *fakeSyncDrive) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// batch is POST /batch: each item on its own, as the server answers it.
+func (d *fakeSyncDrive) batch(w http.ResponseWriter, body map[string]interface{}) {
+	d.batches++
+	if d.dropHeld != "" {
+		delete(d.held, d.dropHeld)
+		d.dropHeld = ""
+	}
+	results := []interface{}{}
+	for _, raw := range body["items"].([]interface{}) {
+		item := raw.(map[string]interface{})
+		p := item["path"].(string)
+		var chunks []driveChunk
+		encoded, _ := json.Marshal(item["chunks"])
+		_ = json.Unmarshal(encoded, &chunks)
+		missing := false
+		for _, c := range chunks {
+			if size, ok := d.held[c.SHA256]; !ok || size != c.Size {
+				missing = true
+			}
+		}
+		if missing {
+			results = append(results, map[string]interface{}{"path": p, "ok": false, "status": 409, "code": "DRIVE_CHUNK_NOT_HELD", "message": "Part of it is not in Drive."})
+			continue
+		}
+		d.mkdir(path.Dir(p))
+		e, ok := d.entries[p]
+		if !ok {
+			e = &fakeSyncEntry{id: d.id(), kind: "FILE", path: p}
+			d.entries[p] = e
+		}
+		d.commits++
+		e.chunks, e.size = chunks, 0
+		for _, c := range chunks {
+			e.size += int64(c.Size)
+		}
+		e.mtime = nil
+		if at, err := time.Parse(time.RFC3339Nano, fmt.Sprint(item["mtime"])); err == nil {
+			mtime := at.UTC().Truncate(time.Millisecond).Format(time.RFC3339Nano)
+			e.mtime = &mtime
+		}
+		results = append(results, map[string]interface{}{"path": p, "ok": true, "entryId": e.id, "sizeBytes": e.size})
+	}
+	d.json(w, map[string]interface{}{"results": results})
+}
+
 // syncTestTree is a checkout with a small tree, the session's scope.
 func syncTestTree(t *testing.T) string {
 	t.Setenv("ORBIT_HOME", t.TempDir())
@@ -235,14 +324,26 @@ func runSyncForTest(t *testing.T, tr *Transport, source, dest string, deleteExtr
 }
 
 func TestDriveSyncCopiesOnceThenOnlyWhatChanged(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%v", legacy), func(t *testing.T) { testDriveSyncCopiesOnce(t, legacy) })
+	}
+}
+
+func testDriveSyncCopiesOnce(t *testing.T, legacy bool) {
 	out := syncTestTree(t)
 	d, tr := newFakeSyncDrive(t)
+	d.legacy = legacy
+	// A batching server sets the times in the commit; an older one is sent a utimens a file.
+	wantUtimens := 0
+	if legacy {
+		wantUtimens = 3
+	}
 
 	first := runSyncForTest(t, tr, out, "/Reports/out", false)
 	if first.Uploaded != 3 || first.Unchanged != 0 || first.FailedCount != 0 || first.Link == "" {
 		t.Fatalf("first sync = %+v", first)
 	}
-	if d.commits != 3 || d.utimens != 3 {
+	if d.commits != 3 || d.utimens != wantUtimens {
 		t.Fatalf("first sync: %d commits, %d utimens", d.commits, d.utimens)
 	}
 	for _, p := range []string{"/Reports/out/report.md", "/Reports/out/charts/q3.png", "/Reports/out/data/a.csv", "/Reports/out/empty"} {
@@ -352,6 +453,7 @@ func TestDriveSyncSkipsLinksAndGitAndRefusesPathsOutsideTheSession(t *testing.T)
 func TestDriveSyncRetriesTransientFailuresAndGoesOnPastAFileThatFails(t *testing.T) {
 	out := syncTestTree(t)
 	d, tr := newFakeSyncDrive(t)
+	d.legacy = true
 	d.failChunk, d.failChunkTimes = "a.csv", 2
 	summary := runSyncForTest(t, tr, out, "/R", false)
 	if summary.Uploaded != 3 || summary.FailedCount != 0 {
@@ -359,6 +461,7 @@ func TestDriveSyncRetriesTransientFailuresAndGoesOnPastAFileThatFails(t *testing
 	}
 
 	d2, tr2 := newFakeSyncDrive(t)
+	d2.legacy = true
 	d2.failChunk, d2.failChunkTimes = "a.csv", -1
 	summary = runSyncForTest(t, tr2, out, "/R", false)
 	if summary.Uploaded != 2 || summary.FailedCount != 1 || summary.Failed[0].Path != "data/a.csv" ||
@@ -368,6 +471,96 @@ func TestDriveSyncRetriesTransientFailuresAndGoesOnPastAFileThatFails(t *testing
 	last := d2.reports[len(d2.reports)-1]
 	if last["status"] != "DONE" || last["failedCount"] != float64(1) {
 		t.Errorf("last report = %v", last)
+	}
+}
+
+func TestDriveSyncBatchedRetriesTransientFailuresAndGoesOnPastAUnitThatFails(t *testing.T) {
+	out := syncTestTree(t)
+	d, tr := newFakeSyncDrive(t)
+	d.failContent, d.failChunkTimes = "a,b\n1,2\n", 2
+	summary := runSyncForTest(t, tr, out, "/R", false)
+	if summary.Uploaded != 3 || summary.FailedCount != 0 {
+		t.Fatalf("two transient failures were not retried: %+v", summary)
+	}
+
+	// Orbit unreachable for one batch fails the files of that batch, and the large file still goes up.
+	d2, tr2 := newFakeSyncDrive(t)
+	d2.failContent, d2.failChunkTimes = "a,b\n1,2\n", -1
+	summary = runSyncForTest(t, tr2, out, "/R", false)
+	if summary.Uploaded != 1 || summary.FailedCount != 2 || !strings.Contains(summary.Failed[0].Error, "after 3 tries") {
+		t.Fatalf("a failing batch: %+v", summary)
+	}
+	if _, ok := d2.entries["/R/charts/q3.png"]; !ok {
+		t.Error("the large file did not go up")
+	}
+}
+
+func TestDriveSyncBatchesSmallFilesIntoFewRequests(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	checkout := t.TempDir()
+	chdirForTest(t, checkout)
+	out := filepath.Join(checkout, "notes")
+	for i := 0; i < 150; i++ {
+		writeTestFile(t, filepath.Join(out, fmt.Sprintf("dir%d", i%5), fmt.Sprintf("n%03d.md", i)), fmt.Sprintf("note %d\n", i))
+	}
+	writeTestFile(t, filepath.Join(out, "empty.txt"), "")
+	d, tr := newFakeSyncDrive(t)
+	summary := runSyncForTest(t, tr, out, "/Notes", false)
+	if summary.Uploaded != 151 || summary.FailedCount != 0 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	// 151 files in batches of 64: three batches, three held questions and the probe, one chunk PUT a non-empty file.
+	if d.batches != 3 || d.heldCalls != 4 || d.chunkPuts != 150 || d.utimens != 0 {
+		t.Fatalf("%d batches, %d held questions, %d chunk PUTs, %d utimens", d.batches, d.heldCalls, d.chunkPuts, d.utimens)
+	}
+	if e := d.entries["/Notes/dir3/n003.md"]; e == nil || e.size != int64(len("note 3\n")) || e.mtime == nil {
+		t.Fatalf("n003.md = %+v", e)
+	}
+	if e := d.entries["/Notes/empty.txt"]; e == nil || e.size != 0 {
+		t.Fatalf("empty.txt = %+v", e)
+	}
+	// Run again: everything is unchanged and nothing is sent.
+	d.batches, d.chunkPuts = 0, 0
+	again := runSyncForTest(t, tr, out, "/Notes", false)
+	if again.Unchanged != 151 || d.batches != 0 || d.chunkPuts != 0 {
+		t.Fatalf("second sync = %+v, %d batches, %d PUTs", again, d.batches, d.chunkPuts)
+	}
+}
+
+func TestDriveSyncSendsOnlyContentDriveDoesNotHold(t *testing.T) {
+	out := syncTestTree(t)
+	d, tr := newFakeSyncDrive(t)
+	runSyncForTest(t, tr, out, "/A", false)
+	sent := d.chunkBytes
+
+	// The same tree to another folder: a copy, so no chunk goes up again.
+	d.chunkPuts, d.chunkBytes = 0, 0
+	copied := runSyncForTest(t, tr, out, "/B", false)
+	if copied.Uploaded != 3 || d.chunkPuts != 0 {
+		t.Fatalf("a copy sent %d chunks (%d bytes): %+v", d.chunkPuts, d.chunkBytes, copied)
+	}
+	if e := d.entries["/B/charts/q3.png"]; e == nil || e.size != int64(driveChunkSize+10) {
+		t.Fatalf("q3.png copy = %+v", e)
+	}
+
+	// A large file whose first chunk is unchanged sends only its last.
+	writeTestFile(t, filepath.Join(out, "charts", "q3.png"), strings.Repeat("p", driveChunkSize)+"changed!!!")
+	d.chunkPuts, d.chunkBytes = 0, 0
+	edited := runSyncForTest(t, tr, out, "/A", false)
+	if edited.Uploaded != 1 || d.chunkPuts != 1 || d.chunkBytes != 10 {
+		t.Fatalf("an edited tail sent %d chunks, %d bytes (of %d first): %+v", d.chunkPuts, d.chunkBytes, sent, edited)
+	}
+}
+
+func TestDriveSyncSendsAgainWhatDriveNoLongerHoldsAtTheCommit(t *testing.T) {
+	out := syncTestTree(t)
+	d, tr := newFakeSyncDrive(t)
+	runSyncForTest(t, tr, out, "/A", false)
+	d.dropHeld = sha256Hex([]byte("# Report\n"))
+	d.chunkPuts = 0
+	summary := runSyncForTest(t, tr, out, "/B", false)
+	if summary.Uploaded != 3 || summary.FailedCount != 0 || d.chunkPuts != 1 {
+		t.Fatalf("summary = %+v, %d chunk PUTs", summary, d.chunkPuts)
 	}
 }
 

@@ -410,35 +410,54 @@ func driveSyncPass(ctx context.Context, t *Transport, opts driveSyncOptions, wri
 
 	count := len(uploads)
 	progress.update(func(p *driveSyncProgress) { p.status, p.total, p.bytesTotal = "UPLOADING", &count, &total })
-	queue := make(chan driveSyncLocal)
+	// A server with the held question and the batch route is sent only what it lacks, small files together
+	// (drive_sync_batch.go); an older one, file by file.
+	var units []driveSyncUnit
+	batched := len(uploads) > 0 && driveSyncBatched(ctx, t)
+	if batched {
+		units = driveSyncUnits(uploads)
+	} else {
+		for _, local := range uploads {
+			units = append(units, driveSyncUnit{local})
+		}
+	}
+	queue := make(chan driveSyncUnit)
 	var workers sync.WaitGroup
 	var mu sync.Mutex
 	for i := 0; i < driveSyncWorkers; i++ {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			for local := range queue {
-				reason := uploadDriveSyncFile(ctx, t, opts, writer, progress, local)
-				if reason != "" && ctx.Err() != nil {
-					// Stopped: a file cut off is not one that failed; the next sync sends it.
-					continue
+			for unit := range queue {
+				var outcome map[string]string
+				if batched {
+					outcome = uploadDriveSyncUnit(ctx, t, opts, writer, progress, unit)
+				} else {
+					outcome = map[string]string{unit[0].rel: uploadDriveSyncFile(ctx, t, opts, writer, progress, unit[0])}
 				}
-				if reason != "" {
-					progress.fail(local.rel, reason)
-					continue
+				for _, local := range unit {
+					reason := outcome[local.rel]
+					if reason != "" && ctx.Err() != nil {
+						// Stopped: a file cut off is not one that failed; the next sync sends it.
+						continue
+					}
+					if reason != "" {
+						progress.fail(local.rel, reason)
+						continue
+					}
+					mu.Lock()
+					summary.Uploaded++
+					summary.Bytes += local.size
+					mu.Unlock()
 				}
-				mu.Lock()
-				summary.Uploaded++
-				summary.Bytes += local.size
-				mu.Unlock()
 			}
 		}()
 	}
-	for _, local := range uploads {
+	for _, unit := range units {
 		if ctx.Err() != nil {
 			break
 		}
-		queue <- local
+		queue <- unit
 	}
 	close(queue)
 	workers.Wait()

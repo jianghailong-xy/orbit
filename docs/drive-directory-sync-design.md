@@ -106,6 +106,31 @@ an hour later:
 `writer.sessionId` is the session that started the sync, as with `drive_put`, so the Documents page says which
 session wrote each file.
 
+### Sending what is not there yet
+
+Before a file goes up, the sync hashes its 8 MiB chunks and asks `POST /runner/drive/chunks/held`
+(`{chunks: [{sha256, size}]}`, at most 1000) which of them this account already holds. Only the others are PUT. "Held"
+is exactly what a commit accepts: a blob whose bytes are not deleted, of that size, named by one of this owner's
+staging or version chunks. So the answer never says anything about another account's content. A renamed or copied file,
+a second run after a stop, and a large file whose first chunks are unchanged send that much less. A chunk swept
+between the question and the commit is answered `DRIVE_CHUNK_NOT_HELD` for that file. The file is tried once more: it
+asks again and sends the chunk.
+
+### Many small files
+
+A file of one chunk or less goes in a batch with others: up to 64 files and 32 MiB, held in memory while the batch is
+sent. One batch is one held question, one staging bound to no entry (`POST /stagings {}`) for the missing chunks, and
+one `POST /runner/drive/batch`. The batch is `{items: [{path, commitId, chunks, mtime}], writer, stagingId?}`, at most
+100 items. The server makes the parent folders, creates or overwrites each file (a folder at that path is
+`DRIVE_NOT_A_FILE`), commits it and sets its time. So a small file takes about one request instead of seven (stat,
+create, staging, PUT, commit, utimens, mkdir). Each item is answered on its own and is idempotent by its `commitId`. The
+batch commit does not pass `stagingId` (a commit with one clears that staging's chunks, and the next item still needs
+them), so the idle-staging sweep removes it. A larger file is a unit of its own, with the same held question. The four
+workers take units, not files. When Orbit cannot be reached for a whole batch, every file of that batch fails together.
+
+A server without these routes answers the empty held question that starts every pass with 404. The sync then sends
+file by file as in step 4.
+
 ### Refactor
 
 `putDriveFile` is split into "open and check the local file" (stays in `drive_put`) and "send an open file to a
@@ -235,6 +260,13 @@ web Documents page: GET /drive/syncs on open/focus/reconnect; drive.sync re-read
     older than 24 hours.
 11. Web: the tray draws checking, uploading, finished-with-failures and stopped sync rows next to owner uploads; a
     `drive.sync` event re-reads the list; Clear finished hides a finished sync across a reload.
+
+12. Held and batch (runner-go): 151 small files go as 3 batches with one chunk PUT each and no `utimens`; a copy of a
+    synced tree to another folder PUTs nothing; an edited tail of a large file PUTs only that chunk; content swept
+    before the commit is sent again; an older server (404) gets the per-file path. Apiserver (pg spec
+    `drive-batch.pg.spec.ts`): held is owner-scoped and size-checked; a batch makes folders, overwrites with a version
+    and sets times; a replayed `commitId` is answered as the first; items fail on their own; another account cannot
+    name the staging.
 
 ## Not in this design
 

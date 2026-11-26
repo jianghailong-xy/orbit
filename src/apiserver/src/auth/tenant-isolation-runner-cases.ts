@@ -1601,6 +1601,14 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
         body: { commitId: 'census-commit-staging', entryId: mine.driveFileId, mode: 'OVERWRITE', chunks: [], stagingId: of.runner.driveCommitStagingId },
       }),
     },
+    // A batch names a staging only of the caller's runner, refused before any file of it is written.
+    'POST /runner/drive/batch body stagingId': {
+      as: RUNNER,
+      request: (of) => ({
+        params: {},
+        body: { stagingId: of.runner.driveCommitStagingId, items: [{ path: '/census batch.txt', commitId: 'census-batch-staging', chunks: [] }] },
+      }),
+    },
     'POST /runner/drive/rename body id': {
       as: RUNNER,
       request: (of) => ({ params: {}, body: { id: of.runner.driveMoveFileId, to: '/census moved by the runner.txt' } }),
@@ -1925,6 +1933,13 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'POST /runner/drive/commit body commitId':
       "the writer's own retry key, looked up and stored only by (the runner's owner, commitId) (drive/drive.service.ts:690), "
       + "so another account's commit id names nothing of anybody's here",
+    'POST /runner/drive/batch body items[].commitId':
+      "each file's retry key, passed to the same commit as the commit route's commitId and looked up and stored only by "
+      + "(the runner's owner, commitId) (drive/drive.service.ts:690), so another account's commit id names nothing of anybody's here",
+    'POST /runner/drive/batch body writer.sessionId':
+      "a drive write's attribution (docs/drive-technical-design.md §3.6), passed to the same mkdir, create, commit and "
+      + "setMtime as the routes above: kept only when it is a session of the runner's owner assigned to the calling runner, "
+      + "read by (id, owner, runner) in the write's own transaction, and stored as null otherwise (drive/drive.service.ts:1226)",
     // ── the runner drive door: who a write is recorded as coming from ─────────────────────────────
     'POST /runner/drive/create body writer.sessionId':
       "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
