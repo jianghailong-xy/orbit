@@ -98,21 +98,21 @@ export interface HelpSearchResult {
   hits: HelpSearchHit[];
 }
 
-// ── Ask (docs/mocks/help-center board 02 §1–§4, decisions on board 03) ───────────────────────────────────────────────
-// An Ask is an ordinary session marked by `session.help_ask` (migration 0850): it runs on a machine and engine the
-// person picks, belongs to no workspace, is in no workspace's session list, and is listed under /help → Your
-// questions. Its runner starts it in a scratch folder holding the article library, with no tool that writes.
+// ── Ask (docs/mocks/help-center board 02 §1–§4) ─────────────────────────────────────────────────────────────────
+// An Ask is a conversation answered by the server on its own DeepSeek key (apiserver help/help-ask.ts, migration
+// 1668): the person only sends questions. The answer draws on the help articles and on what the account reads say
+// (machines, sessions, tasks, quota), and changes nothing. Asks are listed under /help → Your questions.
+//
+// Asks made before 1668 were sessions marked by `session.help_ask` (migration 0850) on one of the person's machines;
+// the constants below the next line still describe those, as the runner starts them.
 
-/** The runner capability that says it starts an Ask read-only (runner-go help_ask.go). A machine without it is not offered. */
+/** The runner capability that says it starts a session-based Ask read-only (runner-go help_ask.go). */
 export const HELP_ASK_V1 = 'help-ask/v1';
 
-/** The engines an Ask runs on: the ones whose read-only start the runner enforces (Claude Code's tool list). */
-export const HELP_ASK_ENGINES = ['claude'] as const;
-export type HelpAskEngine = (typeof HELP_ASK_ENGINES)[number];
-
 /**
- * The account state an Ask session may read, one runner door each (GET /runner/help-ask/<name>), and nothing else.
- * The board's list: machine status and heartbeat, session status, task status, account quota.
+ * The account state an Ask may read: the server reads it for a DeepSeek Ask, and a session-based one read it through
+ * one runner door each (GET /runner/help-ask/<name>). Machine status and heartbeat, session status, task status,
+ * account quota.
  */
 export const HELP_ASK_READS = ['machines', 'sessions', 'tasks', 'quota'] as const;
 export type HelpAskRead = (typeof HELP_ASK_READS)[number];
@@ -124,35 +124,42 @@ export interface HelpAskPage {
   errors: string[];
 }
 
-/** What `session.help_ask` holds. `page` is null when the person took the page chip off. */
+/** What a session-based Ask's `session.help_ask` holds. `page` is null when the person took the page chip off. */
 export interface HelpAskMarker {
   page: HelpAskPage | null;
 }
 
-/** One machine in the Runs on picker. */
-export interface HelpAskMachine {
-  id: string;
-  name: string;
-  online: boolean;
-  /** This machine's runner starts an Ask read-only (HELP_ASK_V1). */
-  supported: boolean;
-  /** The engines it has signed in that an Ask can run on, and those it has that an Ask cannot (shown disabled). */
-  engines: { engine: string; label: string; askable: boolean; model: string | null }[];
-}
-
-/** GET /api/help/ask/choices: the Runs on picker, and the machine and engine this person last asked on. */
-export interface HelpAskChoices {
-  machines: HelpAskMachine[];
-  remembered: { runnerId: string; engine: string } | null;
-}
-
-/** POST /api/help/ask: the first question, where it runs, and the page it was asked from. */
+/** POST /api/help/ask: the first question, and the page it was asked from. */
 export interface HelpAskCreateBody {
   content: string;
-  runnerId: string;
-  engine: string;
-  model?: string;
   page?: HelpAskPage | null;
+}
+
+/** POST /api/help/ask/:id/messages: a follow-up. */
+export interface HelpAskFollowUpBody {
+  content: string;
+}
+
+/** Where an Ask stands: the server is waiting on DeepSeek, it answered, or the last question got no answer. */
+export type HelpAskStatus = 'working' | 'answered' | 'failed';
+
+/** One message of an Ask, in the order said. An assistant message with `error` is a question that got no answer. */
+export interface HelpAskMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  at: string;
+  error?: string;
+}
+
+/** GET /api/help/ask/:id: one Ask, as the drawer and /help/questions/:id draw it. */
+export interface HelpAskConversation {
+  id: string;
+  /** The first question. */
+  title: string;
+  page: HelpAskPage | null;
+  status: HelpAskStatus;
+  messages: HelpAskMessage[];
+  createdAt: string;
 }
 
 /** `with-admin`: the person pressed Still stuck → Ask your admin, and an admin has the question as a task. */
@@ -160,22 +167,18 @@ export type HelpAskOutcome = 'working' | 'answered' | 'failed' | 'with-admin';
 
 /** One row of /help → Your questions (board 02 ④). */
 export interface HelpAskRow {
-  sessionId: string;
+  id: string;
   /** The first question. */
   title: string;
   /** What the page chip called the page it was asked from, or null. */
   origin: string | null;
   outcome: HelpAskOutcome;
-  costUsd: number;
   createdAt: string;
-  runner: string | null;
-  engine: string | null;
-  model: string | null;
   /** The admin this question was sent to (Still stuck → Ask your admin), or null. */
   sentTo: string | null;
 }
 
-/** GET /api/help/ask/sessions. */
+/** GET /api/help/ask/conversations. */
 export interface HelpAskList {
   questions: HelpAskRow[];
 }
@@ -184,15 +187,6 @@ export interface HelpAskList {
 
 /** Where the release this instance runs came from, when the server is not told otherwise (ORBIT_RELEASE_REPOSITORY). */
 export const ORBIT_RELEASE_REPOSITORY_DEFAULT = 'jianghailong-xy/orbit';
-
-/** The machine an Ask ran on, as a GitHub report states it. */
-export interface HelpAskReportMachine {
-  name: string;
-  runnerVersion: string | null;
-  /** GOOS as the runner reports it: `linux`, `darwin`, `windows`; null for a runner that has not said. */
-  os: string | null;
-  lastHeartbeatAt: string | null;
-}
 
 /** GET /api/help/ask/:id/stuck: what the Still stuck card offers for this Ask. */
 export interface HelpAskStuck {
@@ -203,7 +197,6 @@ export interface HelpAskStuck {
   report: {
     /** `owner/repo` on GitHub: where the instance's release came from. */
     repository: string;
-    machine: HelpAskReportMachine | null;
     /**
      * Words a report must not carry because they name the person's code: their workspaces' names, folders and
      * repositories. Never shown; the report builder takes them out.
@@ -226,7 +219,7 @@ export interface HelpAskAdminResult {
 
 // ── Did this help? / Did this answer it? (board 03 decision 3: counts only, no text) ─────────────────────────────
 
-/** What a Yes / No is about: an article (by its slug) or one Ask answer (by `<Ask session id>:<seq>`). */
+/** What a Yes / No is about: an article (by its slug) or one Ask answer (by `<Ask id>:<message index>`). */
 export const HELP_FEEDBACK_KINDS = ['article', 'answer'] as const;
 export type HelpFeedbackKind = (typeof HELP_FEEDBACK_KINDS)[number];
 
@@ -251,18 +244,4 @@ export interface HelpFeedbackArticle {
 export interface HelpFeedbackSummary {
   articles: HelpFeedbackArticle[];
   answers: { yes: number; no: number };
-}
-
-/** The engine's name as the picker shows it. */
-export function helpAskEngineLabel(engine: string): string {
-  switch (engine) {
-    case 'claude': return 'Claude Code';
-    case 'codex': return 'Codex';
-    case 'cursor': return 'Cursor';
-    case 'kimi': return 'Kimi Code';
-    case 'antigravity': return 'Antigravity';
-    case 'opencode': return 'OpenCode';
-    case 'dsh': return 'DeepSeek Harness';
-    default: return engine;
-  }
 }
