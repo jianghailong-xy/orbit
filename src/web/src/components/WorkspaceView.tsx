@@ -3913,7 +3913,8 @@ export function WorkspaceView({
   );
   // A conversation the list's page does not show — a pasted link, a search pick, a notification — takes
   // the list to where it is filed: its folder's page, Scheduled runs for a scheduled run, or the
-  // workspace's own list. One opened from the page leaves the page as it is. Decided once a conversation,
+  // workspace's own list. One opened from the page leaves the page as it is, and so does a member of a
+  // project whose row the page shows: that row is the one selected for it. Decided once a conversation,
   // when its row and this workspace's list and folders are in.
   const placedSessionId = useRef<string | null>(null);
   useEffect(() => {
@@ -3922,11 +3923,13 @@ export function WorkspaceView({
     if (!sessionsQ.isSuccess || sessionsQ.isPlaceholderData || !foldersQ.isSuccess) return;
     placedSessionId.current = selectedId;
     if (listProjectId || listedSessions.some((s) => s.id === selectedId)) return;
+    const memberOf = selectedSession.projectMembership?.projectId;
+    if (memberOf && folderListing.entries.some((entry) => entry.kind === 'project' && entry.projectId === memberOf)) return;
     const place = selectedSession.runSource === 'SCHEDULE' ? SCHEDULED_RUNS_FOLDER
       : selectedSession.folderId ? encodeId(selectedSession.folderId) : null;
     if (place !== folderParam) setConversationPage(place);
   }, [selectedId, selectedSession, scopeWorkspaceId, resolvedWorkspaceId, sessionsQ.isSuccess,
-    sessionsQ.isPlaceholderData, foldersQ.isSuccess, listProjectId, listedSessions, folderParam]);
+    sessionsQ.isPlaceholderData, foldersQ.isSuccess, listProjectId, listedSessions, folderListing, folderParam]);
   // The list's page on a list's own address (a workspace's list, its New session), so a reload keeps it.
   const folderSearch = openFolder
     ? `?folder=${encodeId(openFolder.id)}`
