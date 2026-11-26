@@ -244,9 +244,15 @@ export function doneMeansChecklist({
   const settled = status === 'DONE' || evidenceDecision === 'CONFIRM';
   const text = criteria?.trim() ?? '';
   const items = text.split('\n').map((line) => line.trim()).filter((line) => /^([-*•]|\d+[.)])\s+/.test(line));
-  const lines = items.length >= 2 ? items.map((line) => line.replace(/^([-*•]|\d+[.)])\s+/, '')) : text ? [text.replace(/\s+/g, ' ')] : [];
+  const lines = items.length >= 1 ? items.map((line) => line.replace(/^([-*•]|\d+[.)])\s+/, '')) : text ? [text.replace(/\s+/g, ' ')] : [];
   lines.forEach((line, i) => rows.push({ key: `criterion-${i}`, text: line, code: false, mark: settled ? 'passed' : 'pending' }));
   return rows;
+}
+
+/** A criterion line with its `code` spans drawn as code, as the Markdown it was written in would. */
+function inlineCode(text: string): ReactNode {
+  const parts = text.split(/`([^`]+)`/);
+  return parts.length === 1 ? text : parts.map((part, i) => (i % 2 === 1 ? <code key={i}>{part}</code> : part));
 }
 
 const shortDay = (d?: string | null): string | null =>
@@ -2589,7 +2595,7 @@ export function TaskDetailPanel({
           {doneMeansRows.map((row) => (
             <li key={row.key} className={`is-${row.mark}`}>
               <span className="tdp-check-mark">{row.mark === 'passed' ? '✓' : row.mark === 'failed' ? '✕' : '○'}</span>
-              {row.code ? <code>{row.text}</code> : <span>{row.text}</span>}
+              {row.code ? <code>{row.text}</code> : <span>{inlineCode(row.text)}</span>}
             </li>
           ))}
         </ul>
