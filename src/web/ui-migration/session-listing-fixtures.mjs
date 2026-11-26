@@ -65,6 +65,11 @@ export function answerListing(rows, folders, searchParams, { needsYou = needsYou
       id: uuid(row.id), folderId: uuid(row.folderId ?? null), pinnedAt: date(row.pinnedAt), listedAt: date(row.listedAt),
       createdAt: date(row.createdAt), lastTurnAt: date(row.lastTurnAt), completedAt: date(row.completedAt ?? row.archivedAt),
       projectId: uuid(row.projectMembership?.projectId ?? null),
+      // The row's own fields, which place it in Open's attention sections (ListingRowFacts).
+      row: {
+        pendingApprovals: row.pendingApprovals, status: row.status ?? row.runStatus, retryAt: row.retryAt, phase: row.phase,
+        released: row.released, lastTurnOutcome: row.lastTurnOutcome, endReason: row.endReason,
+      },
     })),
     coordinators,
     folders: folders.filter((folder) => folder.workspaceId === workspaceId).map((folder) => ({ id: uuid(folder.id), name: folder.name })),

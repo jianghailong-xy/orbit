@@ -60,6 +60,7 @@ interface Case {
 }
 const FIXTURE = JSON.parse(readFileSync(path.join(ROOT, 'contracts/session-listing.fixtures.json'), 'utf8')) as {
   defaultCreatedAt: string;
+  rows: Record<string, { status: string; phase: string; released: boolean; pendingApprovals: number }>;
   cases: Case[];
 };
 
@@ -286,7 +287,11 @@ for (const c of FIXTURE.cases) {
         view: r.view,
         folderId: r.folderId ? uuidToBase62(s.ids.get(r.folderId)!) : undefined,
       };
-      const whole = await read(s, query);
+      // The first page at the default size: the list's first forty entries, the attention sections all among them.
+      const first = await read(s, query);
+      assert.deepEqual(named(s, first).entries, r.expected.entries.slice(0, 40), `${label}: the first page`);
+      assert.equal(first.next !== null, r.expected.entries.length > 40, `${label}: a next page only past forty`);
+      const whole = await read(s, { ...query, limit: '200' });
       assert.equal(whole.next, null, `${label}: one page holds it all`);
       const got = named(s, whole);
       assert.deepEqual(got.entries, r.expected.entries, `${label}: entries`);
@@ -309,6 +314,25 @@ for (const c of FIXTURE.cases) {
       } while (after && pages < 50);
       assert.deepEqual(paged, r.expected.entries, `${label}: the pages add up to the whole`);
       assert.equal(pages, Math.max(1, Math.ceil(r.expected.entries.length / 2)), `${label}: no empty trailing page`);
+    }
+
+    // What the fixture says each Open session's row carries (`rows`), the web spec's rows are built from: GET /sessions
+    // answers it for every Open session here, the ones a project entry holds too.
+    const res = await fetch(`${s.h.base}/api/sessions?view=open&workspaceId=${uuidToBase62(s.here)}`, {
+      headers: { authorization: `Bearer ${s.bearer}` },
+    });
+    assert.equal(res.status, 200);
+    const rows = await res.json() as Array<{ id: string; status: string; phase: string; released: boolean; pendingApprovals: number }>;
+    const open = c.sessions.filter((f) => (f.workspace ?? 'here') === 'here' && (f.lifecycle ?? 'open') === 'open');
+    assert.equal(rows.length, open.length);
+    for (const row of rows) {
+      const name = s.names.get(toUuid(row.id))!;
+      const fixture = open.find((f) => f.id === name)!;
+      assert.deepEqual(
+        { status: row.status, phase: row.phase, released: row.released, pendingApprovals: row.pendingApprovals },
+        FIXTURE.rows[fixture.activity ?? 'none'],
+        `${name}'s row`,
+      );
     }
   });
 }
