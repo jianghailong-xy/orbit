@@ -49,6 +49,21 @@ export interface ProviderBrand {
   to: string;
 }
 
+/**
+ * One of a vendor's separate platforms. MiniMax, Z.AI/Zhipu and Moonshot each run an international
+ * platform and a China one with their own accounts: a key made on one is refused (401) by the other,
+ * so the form asks which one the key is from rather than leaving the endpoint to be retyped.
+ */
+export interface ProviderPresetRegion {
+  id: 'global' | 'cn';
+  /** The switch's word: "International" or "China". */
+  label: string;
+  /** The site its keys are made on, as people recognise it: "minimax.io", "minimaxi.com". */
+  site: string;
+  baseUrl: string;
+  keyUrl: string;
+}
+
 export interface ProviderPreset {
   slug: string;
   label: string;
@@ -100,6 +115,11 @@ export interface ProviderPreset {
   brand: ProviderBrand;
   /** Vendor console where the user mints an API key (rendered as a "Get your API key" link). */
   keyUrl?: string;
+  /**
+   * The vendor's platforms, when it runs more than one with separate keys. The first is the one
+   * `baseUrl` and `keyUrl` above name; a provider's region is read off its own base URL.
+   */
+  regions?: ProviderPresetRegion[];
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -228,9 +248,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'kimi-k2.7-code',
     catalog: { source: 'moonshotai', match: /^kimi-/ },
-    note: 'Global endpoint; the CN platform uses https://api.moonshot.cn/v1.',
     brand: { mono: 'K', from: '#3a3a3a', to: '#111111' },
     keyUrl: 'https://platform.moonshot.ai',
+    regions: [
+      { id: 'global', label: 'International', site: 'moonshot.ai', baseUrl: 'https://api.moonshot.ai/v1', keyUrl: 'https://platform.moonshot.ai' },
+      { id: 'cn', label: 'China', site: 'moonshot.cn', baseUrl: 'https://api.moonshot.cn/v1', keyUrl: 'https://platform.moonshot.cn' },
+    ],
   },
   {
     // A Cursor User API Key, which Cursor CLI alone runs on (docs/cursor-runtime-contract.md §9): the
@@ -261,6 +284,10 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     catalog: { source: 'zai', match: /^glm-/ },
     brand: { mono: 'Z', from: '#33b6b0', to: '#1e8e8e' },
     keyUrl: 'https://z.ai',
+    regions: [
+      { id: 'global', label: 'International', site: 'z.ai', baseUrl: 'https://api.z.ai/api/anthropic', keyUrl: 'https://z.ai' },
+      { id: 'cn', label: 'China', site: 'bigmodel.cn', baseUrl: 'https://open.bigmodel.cn/api/anthropic', keyUrl: 'https://open.bigmodel.cn' },
+    ],
   },
   {
     slug: 'minimax',
@@ -275,6 +302,10 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     catalog: { source: 'minimax', match: /^MiniMax-/ },
     brand: { mono: 'M', from: '#ff5b76', to: '#e11d48' },
     keyUrl: 'https://www.minimax.io',
+    regions: [
+      { id: 'global', label: 'International', site: 'minimax.io', baseUrl: 'https://api.minimax.io/anthropic', keyUrl: 'https://www.minimax.io' },
+      { id: 'cn', label: 'China', site: 'minimaxi.com', baseUrl: 'https://api.minimaxi.com/anthropic', keyUrl: 'https://platform.minimaxi.com' },
+    ],
   },
   {
     slug: 'qwen',
@@ -296,4 +327,23 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
 /** The preset a configured provider follows, or undefined for a self-maintained one. */
 export function providerPreset(presetSlug?: string | null): ProviderPreset | undefined {
   return presetSlug ? PROVIDER_PRESETS.find((p) => p.slug === presetSlug) : undefined;
+}
+
+const sameUrl = (a: string, b: string) => a.trim().replace(/\/+$/, '').toLowerCase() === b.trim().replace(/\/+$/, '').toLowerCase();
+
+/** Which of the preset's platforms a base URL is, or undefined for a vendor with one, or a URL typed by hand. */
+export function presetRegionOf(preset: ProviderPreset | undefined, baseUrl: string): ProviderPresetRegion | undefined {
+  return preset?.regions?.find((r) => sameUrl(r.baseUrl, baseUrl));
+}
+
+/**
+ * The vendor platform a base URL belongs to and its other ones, found by the URL alone: what the
+ * connection test tries a refused key on, since the request names only the endpoint.
+ */
+export function regionSiblings(baseUrl: string): { preset: ProviderPreset; region: ProviderPresetRegion; others: ProviderPresetRegion[] } | undefined {
+  for (const preset of PROVIDER_PRESETS) {
+    const region = presetRegionOf(preset, baseUrl);
+    if (region) return { preset, region, others: preset.regions!.filter((r) => r !== region) };
+  }
+  return undefined;
 }

@@ -45,7 +45,7 @@ import { withPreset } from './preset-overlay';
 import { keyCredential, keyRowEngine, usableProviderScope } from './custom-provider';
 import { cursorKeyCheckers, cursorKeyCheckRelay } from './cursor-key-check-relay';
 import { RUNNER_BEATS } from '../runners/runner-presence';
-import { openCodeKeyModel } from '@orbit/shared';
+import { openCodeKeyModel, regionSiblings } from '@orbit/shared';
 import { storedCredential } from './engine-provider';
 import { geminiApiModel, isInternalHost } from './held-key';
 import { keyFingerprint } from './provider-engine-resolution';
@@ -1158,7 +1158,14 @@ export class ProvidersService {
       runtime?: string;
     },
     ownerId?: string,
-  ): Promise<{ ok: boolean; status?: number; message: string; keyCheck?: CursorKeyCheckOutcome }> {
+  ): Promise<{
+    ok: boolean;
+    status?: number;
+    message: string;
+    keyCheck?: CursorKeyCheckOutcome;
+    /** The vendor's other platform, when the key this one refused works there. */
+    region?: { id: string; label: string; baseUrl: string };
+  }> {
     // A Cursor key is no model API this side can probe, and is never sent anywhere from here: a runner of
     // the caller's asks Cursor CLI's `agent models` with it (checkCursorKey).
     if (dto.runtime === AgentProvider.CURSOR) {
@@ -1183,13 +1190,14 @@ export class ProvidersService {
     const isResponses = dto.runtime === 'codex';
     const isOpenAIDialect = isResponses || dto.runtime === 'kimi';
     const isAnthropic = !isGemini && !isOpenAIDialect;
-    const endpoint = isGemini
-      ? `${base}/v1beta/models/${encodeURIComponent(geminiApiModel(model))}:generateContent`
-      : isResponses
-        ? `${base}/responses`
-        : isOpenAIDialect
-          ? `${base}/chat/completions`
-          : `${base}/v1/messages`;
+    const endpointOf = (root: string) =>
+      isGemini
+        ? `${root}/v1beta/models/${encodeURIComponent(geminiApiModel(model))}:generateContent`
+        : isResponses
+          ? `${root}/responses`
+          : isOpenAIDialect
+            ? `${root}/chat/completions`
+            : `${root}/v1/messages`;
     // The Gemini API takes its key in a header of its own, which is the one agy sends.
     const headers: Record<string, string> = isGemini
       ? { 'Content-Type': 'application/json', 'x-goog-api-key': dto.apiKey }
@@ -1208,17 +1216,19 @@ export class ProvidersService {
         ? { model, input: 'ping', max_output_tokens: 16 }
         : { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] };
     if (isAnthropic) body.system = "You are Claude Code, Anthropic's official CLI for Claude.";
-    try {
-      const resp = await fetch(endpoint, {
+    const send = (root: string) =>
+      fetch(endpointOf(root), {
         method: 'POST',
         redirect: 'manual',
         headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(8000),
       });
+    try {
+      const resp = await send(base);
       if (resp.ok) return { ok: true, status: resp.status, message: 'Connected' };
       if (resp.status === 401 || resp.status === 403) {
-        return { ok: false, status: resp.status, message: 'Invalid API key' };
+        return { ok: false, status: resp.status, ...(await this.refusedKeyElsewhere(base, send)) };
       }
       if (resp.status === 404) {
         // For codex a 404 on /responses is usually not a typo in the URL: it is an OpenAI-compatible
@@ -1249,6 +1259,32 @@ export class ProvidersService {
       const timedOut = e instanceof Error && e.name === 'TimeoutError';
       return { ok: false, message: timedOut ? 'Timed out reaching the endpoint' : 'Could not reach the endpoint' };
     }
+  }
+
+  /**
+   * A vendor with separate international and China platforms (MiniMax, Z.AI/Zhipu, Moonshot) refuses
+   * a key from the other one with the same 401 as a wrong key. Before calling the key invalid, try it
+   * on the vendor's other platform — the same vendor, so the key goes nowhere it doesn't belong — and
+   * say which one it is from when it works there.
+   */
+  private async refusedKeyElsewhere(
+    base: string,
+    send: (root: string) => Promise<Response>,
+  ): Promise<{ message: string; region?: { id: string; label: string; baseUrl: string } }> {
+    const siblings = regionSiblings(base);
+    if (!siblings) return { message: 'Invalid API key' };
+    const platform = (r: { id: string }) => (r.id === 'cn' ? 'China platform' : 'international platform');
+    for (const other of siblings.others) {
+      const resp = await send(other.baseUrl.replace(/\/+$/, '')).catch(() => null);
+      if (resp?.ok) {
+        return {
+          message: `This key is from the ${platform(other)} (${other.site}), not the ${platform(siblings.region)}`,
+          region: { id: other.id, label: other.label, baseUrl: other.baseUrl },
+        };
+      }
+    }
+    const sites = [siblings.region, ...siblings.others].map((r) => r.site).join(' and ');
+    return { message: `Invalid API key — refused on both ${sites}` };
   }
 
   private async getScoped(ownerId: string | null, id: string) {
