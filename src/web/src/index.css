@@ -20373,6 +20373,8 @@ button.chat-jump-start:hover {
   color: var(--text-1);
 }
 .provider-step .provider-region-label {
+  /* One width for both rows (Key type, Your account is on), so their switches line up. */
+  flex: 0 0 104px;
   font-size: 12px;
   color: var(--text-2);
 }
