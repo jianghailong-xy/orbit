@@ -70,7 +70,8 @@ internal fun ScheduleRunStatusCard(
         }
     }
 
-    val shape = RoundedCornerShape(16.dp)
+    // iOS `ScheduleRunStatusCardView`: a 12 corner, 14 inside, 10 between lines, the times as capsules.
+    val shape = RoundedCornerShape(12.dp)
     val dot = when (kind) {
         ScheduleRunStatusKind.DIDNT_RUN -> colors.onSurfaceVariant
         ScheduleRunStatusKind.QUEUED_FULL -> scheduleWarn()
@@ -80,8 +81,8 @@ internal fun ScheduleRunStatusCard(
         Modifier.fillMaxWidth().testTag("schedule-run-status-${kind.name}")
             .background(colors.surfaceVariant.copy(alpha = 0.52f), shape)
             .border(1.dp, colors.outline.copy(alpha = 0.25f), shape)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(9.dp).background(dot, CircleShape))
@@ -91,8 +92,8 @@ internal fun ScheduleRunStatusCard(
         if (text.times.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 text.times.forEach { time ->
-                    Text(time, Modifier.background(colors.surfaceVariant, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 7.dp, vertical = 2.dp), color = colors.onSurfaceVariant, style = type.bodySmall)
+                    Text(time, Modifier.background(colors.surfaceVariant, CircleShape)
+                        .padding(horizontal = 8.dp, vertical = 3.dp), color = colors.onSurfaceVariant, style = type.bodySmall)
                 }
             }
         }
