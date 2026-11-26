@@ -37,7 +37,7 @@ type Row = {
     lastHeartbeatAt: Date | null;
   } | null;
   lastTurnAt: Date | null;
-  /** The list's order key (session.listed_at, migration 1434), and the creation it is read as where it is NULL. */
+  /** The list's order key (session.listed_at, migration 1490), and the creation it is read as where it is NULL. */
   listedAt: Date | null;
   createdAt: Date;
   workspace: { id: string; name: string | null; model: string | null; effort: string | null } | null;

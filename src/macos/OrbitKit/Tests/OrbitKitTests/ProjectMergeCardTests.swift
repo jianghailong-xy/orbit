@@ -259,4 +259,20 @@ final class ProjectMergeCardTests: XCTestCase {
         XCTAssertEqual(out.map(\.title), grouping.map(\.title))
         XCTAssertEqual(out.flatMap { $0.sessions.map(\.id) }, grouping.flatMap { $0.sessions.map(\.id) })
     }
+
+    /// A member is placed and ordered by when it was listed, as its row's time reads: output that only
+    /// moved `lastTurnAt` (a background job's) neither lifts it into Today nor ahead of a member listed later.
+    func testTheTimelinePlacesMembersByListedAtNotLastTurnAt() {
+        func member(_ id: String, listed: String, turn: String) -> Session {
+            Session(id: id, title: id, status: .awaitingInput, agentId: nil, assignedRunnerId: nil,
+                    pendingApprovals: nil, branch: nil, updatedAt: nil, pinnedAt: nil,
+                    createdAt: "2026-09-01T00:00:00Z", lastTurnAt: turn, listedAt: listed)
+        }
+        let sessions = [member("busy-old", listed: "2026-10-03T08:00:00Z", turn: "2026-10-06T04:00:00Z"),
+                        member("quiet-new", listed: "2026-10-06T03:00:00Z", turn: "2026-10-06T03:00:00Z"),
+                        member("busy-new", listed: "2026-10-06T02:00:00Z", turn: "2026-10-06T04:00:30Z")]
+        let out = ProjectTimeline.sections(sessions: sessions, now: date("2026-10-06T04:01:00Z"), calendar: utc)
+        XCTAssertEqual(out.map(\.title), ["Today", "2–7 days ago"])
+        XCTAssertEqual(out.map { $0.sessions.map(\.id) }, [["quiet-new", "busy-new"], ["busy-old"]])
+    }
 }

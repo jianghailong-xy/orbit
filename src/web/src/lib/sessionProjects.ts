@@ -19,7 +19,7 @@ import { promotionTimelineDetail, promotionTimelineTitle } from './projectMerge'
 import { DEFAULT_MAIN_BRANCH, mainBranchName, runLineMain } from './projectStart';
 import type { SessionListView } from './queries';
 import { sessionFolderListing, type FolderSessionReadings, type SessionFolderRow } from './sessionFolders';
-import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
+import { compareListed, sessionTimeSections, type GroupableSession } from './sessionGrouping';
 
 export interface SessionProjectSession extends GroupableSession {
   title?: string | null;
@@ -816,7 +816,8 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       target = { kind: 'project', id: projectId };
     }
     const latest = members.reduce((newest, session) => instant(session.listedAt ?? session.createdAt) > instant(newest.listedAt ?? newest.createdAt) ? session : newest);
-    // The member that spoke last dates the row, as on Apple and Android; `latest` only places it.
+    // `latest` places and dates the row (contracts/session-list-order.fixtures.json); the member that spoke last is
+    // carried as its liveness clock, which nothing orders or dates by.
     const spoke = members.reduce((newest, session) => instant(session.lastTurnAt ?? session.createdAt) > instant(newest.lastTurnAt ?? newest.createdAt) ? session : newest);
     const motions = opts.runnerOffline ? [] : members.map(opts.motion);
     const needsYou = members.some((session) => lines.get(session.id)?.tone === 'approval');
@@ -856,9 +857,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
   ];
   entries.sort((a, b) => {
     if (opts.view === 'open' && !!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
-    const left = instant(a.listedAt ?? a.createdAt);
-    const right = instant(b.listedAt ?? b.createdAt);
-    return left === right ? 0 : left > right ? -1 : 1;
+    return compareListed(a, b);
   });
   return { folders: opts.folderId ? [] : folderListing.folders, projects: rows, sessions: loose, entries };
 }

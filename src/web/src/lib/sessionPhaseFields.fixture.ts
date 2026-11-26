@@ -121,12 +121,25 @@ export const SITUATIONS: Record<string, Payload> = {
     id: 's', status: 'SUCCEEDED', runStatus: 'SUCCEEDED', runState: 'SUCCEEDED', startedAt: '2026-11-22T00:00:00Z',
     phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: resumable,
   },
-  // A failed release with an automatic retry armed: released, and something will wake it. Waiting for that retry
-  // counts as running (the owner, 2026-11-26): RUNNING, still waiting on the wake.
+  // A failed release with an automatic retry armed: released, and something will wake it. Waiting for that retry is
+  // PENDING (the owner, 2026-11-26), waiting on the wake.
   'released with a retry armed': {
     id: 's', status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED', retryAt: '2099-01-01T00:00:00Z',
     startedAt: '2026-11-22T00:00:00Z',
-    phase: 'RUNNING', released: true, lastTurnOutcome: 'FAILED', waitingOn: 'WAKE', capabilities: resumable,
+    phase: 'PENDING', released: true, lastTurnOutcome: 'FAILED', waitingOn: 'WAKE', capabilities: resumable,
+  },
+  // A spent quota parked at AWAITING_INPUT with the retry armed for its reset: held, no turn queued, PENDING on the wake.
+  'parked with a retry armed': {
+    id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', activity: 'WAITING',
+    retryAt: '2099-01-01T00:00:00Z',
+    phase: 'PENDING', released: false, lastTurnOutcome: 'FAILED', waitingOn: 'WAKE', capabilities: held,
+  },
+  // The same with an owner decision open (a coordinator): PERSON outranks the wake, and the armed retry still says it
+  // is no queued turn.
+  'parked with a retry armed, an answer owed': {
+    id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', activity: 'WAITING',
+    retryAt: '2099-01-01T00:00:00Z', pendingApprovals: 1,
+    phase: 'PENDING', released: false, lastTurnOutcome: 'FAILED', waitingOn: 'PERSON', capabilities: held,
   },
 };
 

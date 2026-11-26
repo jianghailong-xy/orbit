@@ -3,6 +3,7 @@ import { MenuOutlined } from '@ant-design/icons';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TasksSidePanel } from './TasksSidePanel';
 import { ImpersonationBanner } from './ImpersonationBanner';
+import { WebPushOffer } from './WebPushOffer';
 import { SessionSearch } from './SessionSearch';
 import { HelpDrawer } from './HelpDrawer';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
@@ -36,6 +37,7 @@ export function AppShell() {
     <ControlPlaneProvider>
     {/* Over the shell, which it shortens rather than covers, while an administrator views Orbit as another user. */}
     <ImpersonationBanner />
+    <WebPushOffer placement="bar" />
     <div className="app-shell">
       <header className="app-topbar">
         <button

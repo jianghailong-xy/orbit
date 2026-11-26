@@ -94,6 +94,7 @@ const PROJECT_ID = '7bV4mNc1';
 const OTHER_PROJECT_ID = '2wX8dHt5';
 /** A run of the task, as the public id the panel links by. */
 const LIVE_RUN = '34MOJw69NzKSq2X0exxf9';
+const SECOND_RUN = '34MOJw69NzKSq2X0exxf8';
 
 /** A runnable task: assigned, unblocked, nothing in flight. */
 function task(over: Record<string, unknown> = {}) {
@@ -1267,6 +1268,39 @@ describe('the task page led by the run', () => {
     expect(filed).toBeGreaterThan(-1);
     expect(filed).toBeLessThan(run);
     expect(run).toBeLessThan(comment);
+  });
+
+  it('docked beside a conversation, names that run This conversation and does not link to it', () => {
+    // docs/mocks/session-task-column: a fixed 420px column with no drag handle, beside the run it lists.
+    const data = task({
+      sessions: [
+        { id: LIVE_RUN, status: 'SUCCEEDED', createdAt: '2026-11-12T09:42:00.000Z', workspace: { name: 'Builder' } },
+        { id: SECOND_RUN, status: 'FAILED', createdAt: '2026-11-12T09:50:00.000Z', workspace: { name: 'Reviewer' } },
+      ],
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } } });
+    qc.setQueryData(['task', TASK_ID], data);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <TaskDetailPanel taskId={TASK_ID} onOpenTask={() => {}} onClose={() => {}} onDelete={() => {}} deleting={false}
+            docked hereSessionId={LIVE_RUN} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('class="task-detail-panel is-docked"');
+    expect(html).not.toContain('tdp-resizer');
+    expect(html).toContain('<div class="tdp-session-title">This conversation</div>');
+    expect(html).not.toContain('<div class="tdp-session-title">Builder</div>');
+    expect(html).toContain('<div class="tdp-session-title">Reviewer</div>');
+    expect(html).not.toContain(`href="/sessions/${encodeId(LIVE_RUN)}"`);
+    expect(html).toContain(`href="/sessions/${encodeId(SECOND_RUN)}"`);
+
+    // Over any other page, as before: every run is a link, and the panel can be dragged wider.
+    const plain = renderPanel(data);
+    expect(plain).toContain('tdp-resizer');
+    expect(plain).not.toContain('This conversation');
+    expect(plain).toContain(`href="/sessions/${encodeId(LIVE_RUN)}"`);
   });
 });
 

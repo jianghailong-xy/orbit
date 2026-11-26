@@ -111,6 +111,7 @@ const EXEMPT: Record<string, string> = {
   'src/pages/FeishuIntegrationPage.tsx#1': "Feishu integration settings are written from this tab; no control-plane event announces them",
   'src/pages/settings/NotificationsPage.tsx#1': "the server's web push key, set in its environment; no control-plane event announces it",
   'src/components/settings/SettingsLayout.tsx#2': "the server's web push key, which only decides whether search lists This browser's row; no control-plane event announces it",
+  'src/components/WebPushOffer.tsx#1': "whether this browser is offered web push: the server's key and this browser's own subscription, read once; no control-plane event announces either",
 };
 
 /** Calls whose first argument is a query options object (useQueries names its queries property). */

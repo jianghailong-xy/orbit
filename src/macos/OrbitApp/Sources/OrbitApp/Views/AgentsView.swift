@@ -984,7 +984,8 @@ struct AgentPanes: View {
     /// rendered without its title (see the list body). Over what is left after the folders take
     /// theirs — a session inside a folder is drawn behind its row, not here (§3.3).
     private static func timeSections(_ folderListing: SessionFolderListing, _ inputs: SessionListInputs) -> [SessionTimeSection] {
-        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: inputs.view == .open && inputs.tagFilter == nil)
+        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: inputs.view == .open && inputs.tagFilter == nil,
+                                     attention: inputs.view == .open)
     }
 
     /// This workspace's list, split by folder (§3.3): the folder rows the list draws at its top,

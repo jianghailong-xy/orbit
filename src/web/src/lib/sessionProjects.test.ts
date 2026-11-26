@@ -129,7 +129,7 @@ describe('sessionProjectListing', () => {
     expect(out.projects[0].lastTurnAt).toBe(ago(2));
   });
 
-  it('dates the row by the member that spoke last, not the one listed last', () => {
+  it('places and dates the row by the member listed last, carrying the one that spoke last as lastTurnAt', () => {
     const out = listing([coordinator({ listedAt: ago(30), lastTurnAt: ago(3) }), member('worker', { listedAt: ago(10), lastTurnAt: ago(10) })]);
     expect(out.projects[0]).toMatchObject({ listedAt: ago(10), lastTurnAt: ago(3) });
   });

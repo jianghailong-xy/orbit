@@ -42,7 +42,6 @@ import { MachineProtocol } from '../common/machine-protocol';
 import { isStopping, pauseUnlessStopping } from '../common/graceful-stop';
 import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
-import { answeredPerson } from '../sessions/session-listed-at';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
 import { reloadCarriesEnv } from '../sessions/session-settings';
@@ -334,6 +333,7 @@ import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   executableAcceptanceFailureReason,
 } from '../tasks/executable-acceptance-round';
+import { recordTaskAcceptanceRound } from '../tasks/task-acceptance-round';
 import {
   postExecutableAcceptanceUnavailableComment,
   postRunFailureComment,
@@ -7476,9 +7476,6 @@ export class RunnerApiController {
           ...LEGACY_STATUS_SELECT,
           taskId: true,
           startsTaskWork: true,
-          // Whose opening this session's first turn is, for `answeredPerson` below (parentSessionId is read further down).
-          openedBy: true,
-          promptByOrbit: true,
           ownerId: true,
           creatorId: true,
           workspaceId: true,
@@ -7559,7 +7556,6 @@ export class RunnerApiController {
           leaseGeneration: true,
           coordinatorContextKey: true,
           senderSessionId: true,
-          byPerson: true,
         },
       });
       // A dequeue only proposes that context was delivered. The successful top-level turn is its
@@ -8131,7 +8127,8 @@ export class RunnerApiController {
       // one comparison between the code this callback reports and the code the declaration asks
       // for. Every input is already in hand under the rank-50 task lock taken above, so this
       // reads nothing further and writes nothing but `task.status` — no attempt row, no result
-      // ledger, no evidence. The exit code exists for the length of this block.
+      // ledger, no evidence. The exit code exists for the length of this block; the round's own record
+      // (migration 1672) is written past its end, beside `recordTaskFailure`.
       //
       // The guards around it are the identity checks, not evidence: the turn must be the reserved
       // shell turn this session queued, the declaration must not have been edited since it was
@@ -8226,6 +8223,23 @@ export class RunnerApiController {
       // database exactly once. Still this transaction, so the FAILED and the project's record of
       // it commit together or not at all (contract §4.3 A).
       if (acceptanceFailure) await recordTaskFailure(tx, acceptanceFailure);
+      // The round's own record (migration 1672): the code it exited with or none, the code it was queued to expect,
+      // the branch SHA this completion reports, and the clipped, redacted tail of what it printed. Every reserved
+      // shell turn this ACK settles gets one, compared or not. Written here, past the end of the comparison, for the
+      // reason `recordTaskFailure` is: that block stays one status write and no other database touch. The task row
+      // is the one locked above, so the record cannot name a task that is gone.
+      if (taskAcceptanceTurn && lockedAcceptanceTask != null) {
+        await recordTaskAcceptanceRound(tx, {
+          ownerId: current.ownerId,
+          taskId: lockedAcceptanceTask.id,
+          sessionId,
+          turnId: dto.turnId,
+          expectedExitCode: queuedAcceptanceExpectedExitCode!,
+          shellExitCode: dto.shellExitCode,
+          shellOutput: dto.shellOutput,
+          branchSha: dto.branchSha,
+        });
+      }
       // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
       // §4.2), and the words it ended with: see turn-outcome.ts. A steer and a withdraw settled above. Decided
       // after the acceptance comparison, whose failure is this turn's (design §12.1 W1a, W1b).
@@ -8551,12 +8565,10 @@ export class RunnerApiController {
           ...branchCommitsData(dto.branchCommits),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
-          // The turn ended on its owner: a person's message answered and nothing queued behind it, so the row moves to
-          // the top of their list (session.listed_at, migration 1434). A wake-up's, a notification's or a task brief's
-          // end leaves it where it was; FAILED and every other end move it through the session_listed_at_settle trigger.
-          ...(nextStatus === RunStatus.AWAITING_INPUT && answeredPerson(current, completedTurn, sessionId)
-            ? { listedAt: new Date() }
-            : {}),
+          // The turn ended on its owner with nothing queued behind it, so the row moves to the top of their list
+          // (session.listed_at, migration 1490), whoever started the turn: a wake-up's or another session's reply is
+          // news too (owner 2026-11-26). FAILED and every other end move it through the session_listed_at_settle trigger.
+          ...(nextStatus === RunStatus.AWAITING_INPUT ? { listedAt: new Date() } : {}),
           numTurns: { increment: turnInc },
           costUsd: { increment: gatewayBooked ? 0 : turnCostUsd },
           // The totals this turn was measured to, for the next completion to be measured from.
