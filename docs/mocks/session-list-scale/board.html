@@ -200,7 +200,7 @@
     <table class="sls-t" style="margin-bottom:16px;">
       <tr><th style="width:44px;">#</th><th>内容</th><th style="width:140px;">依赖</th><th style="width:380px;">证据</th></tr>
       <tr><td>T1</td><td>服务端 <span class="sls-code">GET /sessions/listing</span>：顶层条目分页、项目条目、文件夹计数、版本 ETag；共享夹具；普查登记；api-reference</td><td>—</td><td>夹具驱动的 pg spec；1500 会话种子下首页耗时与字节</td></tr>
-      <tr><td>T2</td><td>Web 改读 listing：WorkspaceView、BootGate 的整读换成分页条目；文件夹页同读带 folderId</td><td>T1</td><td>夹具驱动的单测；Vitest 全量；Playwright 文件夹 / 项目 / 拖动 / 方向键</td></tr>
+      <tr><td>T2</td><td>Web 改读 listing：WorkspaceView、BootGate 的整读换成分页条目；文件夹页同读带 folderId</td><td>T1、T3</td><td>夹具驱动的单测；Vitest 全量；Playwright 文件夹 / 项目 / 拖动 / 方向键</td></tr>
       <tr><td>T3</td><td>Web 虚拟化 + 每帧只算挂载行</td><td>—（与 T1 并行）</td><td>Vitest 全量；Playwright 方向键、拖动、滑动、加载更多</td></tr>
       <tr><td>T4</td><td>端到端测量：1500 Open 会话种子，改前 / 改后：首读字节、首屏可交互、一帧 watch 的提交耗时、DOM 行数</td><td>T2、T3</td><td>测量脚本 + 数字表</td></tr>
     </table>
