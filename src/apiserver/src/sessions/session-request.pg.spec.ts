@@ -85,11 +85,11 @@ import {
   type Prisma,
   type PrismaClient,
   type Runner,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   RunEventType,
   RunStatus as SharedRunStatus,
@@ -130,6 +130,7 @@ import { SessionRequestWorker } from './session-request.worker';
 import { SessionsService } from './sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -195,7 +196,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: workerWorkspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
@@ -302,7 +303,7 @@ test('a session asks another for a reply, and every request comes to exactly one
   async function claimSession(sessionId: string): Promise<void> {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
   }
 
@@ -463,7 +464,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     assert.equal(replyTurns[0].content, '');
     assert.equal(replyTurns[0].sendIntent, 'NEXT_TURN');
     assert.equal(replyTurns[0].senderSessionId, null, 'a reply turn was signed and counted as a message');
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: asker } })).status, RunStatus.PENDING);
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: asker } }))), RunStatus.PENDING);
     const back = await deliver(asker);
     assert.equal(back.turnId, replyTurns[0].id);
     assert.equal(blocksFor(back.content, request.id), 1);
@@ -497,7 +498,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     const closed = await requestRow(request.id);
     assert.equal(closed.state, 'NO_REPLY');
     assert.equal(closed.excerpt, 'The gateway listens on 8443 — I checked compose.yml.');
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.AWAITING_INPUT);
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: recipient } }))), RunStatus.AWAITING_INPUT);
     // Handed back by the completion itself, after its commit.
     const back = await deliver(asker);
     assert.equal(blocksFor(back.content, request.id), 1);
@@ -722,7 +723,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     const lateRequest = await ask(asker, late, 'and which port?');
     const lateSteer = await deliverSteer(late);
     await finish(late, lateRunning, 'all done before the steer landed');
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: late } })).status, RunStatus.AWAITING_INPUT);
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: late } }))), RunStatus.AWAITING_INPUT);
     assert.equal((await requestRow(lateRequest.id)).state, 'OPEN', 'judged on the runner\'s claim, before any engine read it');
     // ...and the engine taking it after its turn's result is not a settle either: it is judged when a
     // later turn settles (or by its deadline).
@@ -766,7 +767,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       assert.equal(queued.status, 'PENDING');
       assert.equal(queued.deliveredAt, null);
       assert.notEqual(
-        (await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status,
+        wordOf((await prisma.session.findUniqueOrThrow({ where: { id: recipient } }))),
         RunStatus.AWAITING_INPUT,
         `${label}: a message is queued behind nothing`,
       );
@@ -817,7 +818,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       numTurns: 0, costUsd: 0, error: 'the engine never came up',
     } as never);
     const failed = await prisma.session.findUniqueOrThrow({ where: { id: failing } });
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'no retry was armed — that would be RECIPIENT_ENDED\'s case');
     const drainedRow = await requestRow(drained.id);
     assert.equal(drainedRow.state, 'UNDELIVERED');
@@ -970,7 +971,7 @@ test('a session asks another for a reply, and every request comes to exactly one
         numTurns: 1, costUsd: 0, error: OVERLOADED,
       } as never);
       const failed = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
-      assert.equal(failed.status, RunStatus.FAILED);
+      assert.equal(wordOf(failed), RunStatus.FAILED);
       assert.ok(failed.retryAt, `${label}: the overload armed no retry`);
       assert.equal((await requestRow(request.id)).state, 'OPEN', `${label}: a failure with a retry armed ended the run`);
       await prisma.session.update({ where: { id: recipient }, data: { retryAt: new Date(Date.now() - HOUR) } });
@@ -985,7 +986,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       await new AutoRetryService(db, sessions, realtime as never).sweep();
       const revived = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
       assert.equal(revived.retryAt, null, 'the sweep did not take this retry');
-      assert.notEqual(revived.status, RunStatus.FAILED, 'the retry was not sent');
+      assert.notEqual(wordOf(revived), RunStatus.FAILED, 'the retry was not sent');
       assert.equal((await requestRow(request.id)).state, 'OPEN', 'the claim or the revive ended the run');
     }
 
@@ -1013,7 +1014,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       await new AutoRetryService(db, abandoning, realtime as never).sweep();
       assert.equal(revives, 1, 'the sweep never claimed this retry, so it never reached the revive');
       const after = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
-      assert.equal(after.status, RunStatus.FAILED);
+      assert.equal(wordOf(after), RunStatus.FAILED);
       assert.equal(after.retryAt, null);
       assert.equal(after.retryAttempts, before.retryAttempts, 'the attempt the claim spent was not handed back');
       const ended = await requestRow(request.id);
@@ -1155,7 +1156,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     const answered = await reply(recipient, request.requestId, { message: '0348' });
     assert.equal(answered.handOff, 'HELD');
     const after = await prisma.session.findUniqueOrThrow({ where: { id: asker } });
-    assert.equal(after.status, before.status, 'the asker was revived');
+    assert.equal(wordOf(after), wordOf(before), 'the asker was revived');
     assert.ok(after.completedAt, 'the asker was taken out of Completed');
     assert.equal((await replyTurnsOf(asker)).length, 0);
     const held = await requestRow(request.id);
@@ -1248,7 +1249,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       numTurns: 1, costUsd: 0, error: overloaded,
     } as never);
     const failed = await prisma.session.findUniqueOrThrow({ where: { id: asker } });
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'the overload armed no retry');
     // The turn that carried the outcome failed, so the outcome is not taken for read: it is held for
     // the turn the retry hands the asker — not handed back to an asker that is waiting for that retry.
@@ -1260,7 +1261,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     await prisma.session.update({ where: { id: asker }, data: { retryAt: new Date(Date.now() - HOUR) } });
     await heartbeat();
     await new AutoRetryService(db, sessions, realtime as never).sweep();
-    assert.notEqual((await prisma.session.findUniqueOrThrow({ where: { id: asker } })).status, RunStatus.FAILED, 'the retry was not sent');
+    assert.notEqual(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: asker } }))), RunStatus.FAILED, 'the retry was not sent');
     const replyTurns = await replyTurnsOf(asker);
     assert.equal(replyTurns.length, 2);
     assert.equal(replyTurns[1].content, '');
@@ -1319,7 +1320,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       turnId: turn.turnId, status: SharedRunStatus.SUCCEEDED, subtype: 'success', numTurns: 1, costUsd: 0,
     } as never);
     const parked = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(parked.status, RunStatus.AWAITING_INPUT, 'a turn its quota killed did not park the session idle');
+    assert.equal(wordOf(parked), RunStatus.AWAITING_INPUT, 'a turn its quota killed did not park the session idle');
     assert.ok(parked.retryAt, 'the quota armed no retry');
     return parked;
   }
@@ -1333,7 +1334,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       numTurns: 1, costUsd: 0, error: OVERLOADED_REPLY,
     } as never);
     const failed = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'the overload armed no retry');
     return failed;
   }
@@ -1351,7 +1352,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       numTurns: 0, costUsd: 0, error: 'the runtime never started this turn',
     } as never);
     const failed = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     return failed;
   }
 
@@ -1428,7 +1429,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       await overloaded(recipient, await deliver(recipient));
       assert.equal((await requestRow(request.id)).state, 'OPEN');
       await retryComesDue(recipient);
-      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.PENDING,
+      assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: recipient } }))), RunStatus.PENDING,
         'the failed session was not revived');
       const [resent] = await resentOn(recipient);
       assert.equal(resent?.senderSessionId, asker);
@@ -1529,7 +1530,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     await retryComesDue(asker);
     const after = await prisma.session.findUniqueOrThrow({ where: { id: asker } });
     assert.equal(after.retryAt, null);
-    assert.notEqual(after.status, RunStatus.AWAITING_INPUT, 'the retry was given up as having nothing to re-send');
+    assert.notEqual(wordOf(after), RunStatus.AWAITING_INPUT, 'the retry was given up as having nothing to re-send');
     const replyTurns = await replyTurnsOf(asker);
     assert.equal(replyTurns.length, 2);
     assert.ok(replyTurns[1].clientTurnId.startsWith(`${SESSION_REPLY_TURN_PREFIX}retry:`), replyTurns[1].clientTurnId);
@@ -1578,7 +1579,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       await deliver(recipient);
       assert.equal((await reply(recipient, request.requestId, { message: 'eu-west-1' })).handOff, 'HELD');
       const waiting = await prisma.session.findUniqueOrThrow({ where: { id: asker } });
-      assert.equal(waiting.status, RunStatus.AWAITING_INPUT, 'the asker was woken ahead of its retry');
+      assert.equal(wordOf(waiting), RunStatus.AWAITING_INPUT, 'the asker was woken ahead of its retry');
       assert.equal(waiting.retryAt?.getTime(), parked.retryAt?.getTime(), 'the reply disarmed the retry');
       assert.equal((await replyTurnsOf(asker)).length, 0);
       assert.equal(await prisma.taskComment.count({ where: { taskId } }), 0);
@@ -1779,7 +1780,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       numTurns: 0, costUsd: 0, result: `message not delivered to the engine: ${why}`,
     } as never);
     const failed = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.equal(await prisma.runEvent.count({ where: { sessionId, turnId: turn.turnId, type: RunEventType.USER } }), 0,
       'the fixture echoed the message it says was never written');
     return failed;
@@ -1926,7 +1927,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const label = 'failed';
       const { taskId, asker, request, sweeping, release, ...claimed } = await claimedThenAbandoned(label, overloaded);
       const given = await leaseRunsOut(label, asker, claimed);
-      assert.equal(given.status, RunStatus.FAILED);
+      assert.equal(wordOf(given), RunStatus.FAILED);
       const told = await worker.drain();
       assert.ok(told.commented.includes(request.id), 'the task of an asker that ended was not told');
       assert.deepEqual(told.handedBack, []);
@@ -1936,7 +1937,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       release();
       await sweeping;
       assert.deepEqual(await resentOn(asker), [], 'a re-send written after its claim was given up');
-      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: asker } })).status, RunStatus.FAILED);
+      assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: asker } }))), RunStatus.FAILED);
       await worker.drain();
       assert.equal(await prisma.taskComment.count({ where: { taskId: taskId! } }), 1, 'told twice');
     }
@@ -1946,7 +1947,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const { taskId, asker, request, sweeping, release, ...claimed } = await claimedThenAbandoned(label, quotaKilled, { task: false });
       assert.equal(taskId, null);
       const given = await leaseRunsOut(label, asker, claimed);
-      assert.equal(given.status, RunStatus.AWAITING_INPUT);
+      assert.equal(wordOf(given), RunStatus.AWAITING_INPUT);
       const told = await worker.drain();
       assert.ok(told.handedBack.includes(request.id), 'the idle asker was not handed its outcome back');
       assert.deepEqual(told.commented, []);
@@ -1985,7 +1986,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       await sweeping;
       assert.deepEqual(await resentOn(asker), [], 'the re-send went out after the retry was turned off');
       const after = await prisma.session.findUniqueOrThrow({ where: { id: asker } });
-      assert.equal(after.status, RunStatus.FAILED);
+      assert.equal(wordOf(after), RunStatus.FAILED);
       assert.equal(after.retryAt, null, 'the retry the owner turned off was armed again');
       // Said once: the comment, and no turn of the asker's carrying it.
       assert.equal(await prisma.taskComment.count({ where: { taskId } }), 1);
@@ -2336,7 +2337,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       await heartbeat();
       await new AutoRetryService(db, sessions, realtime as never).sweep();
       const after = await prisma.session.findUniqueOrThrow({ where: { id: kept.recipient } });
-      assert.equal(after.status, RunStatus.FAILED);
+      assert.equal(wordOf(after), RunStatus.FAILED);
       assert.equal(after.retryAt, null, 'the sweep did not give the retry up');
       assert.deepEqual(await resentOn(kept.recipient), [], 'the sweep re-sent it anyway');
       await endedOnce('given up', kept);
@@ -2405,7 +2406,7 @@ test('a session asks another for a reply, and every request comes to exactly one
         await api.finalize({ id: lostRunnerId } as never, recipient, { status: 'FAILED', error: SESSION_LIMIT } as never);
       }
       const ended = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
-      assert.equal(ended.status, RunStatus.FAILED, `${label}: the run did not end`);
+      assert.equal(wordOf(ended), RunStatus.FAILED, `${label}: the run did not end`);
       if (ending === 'reaped') assert.equal(ended.error, 'runner offline');
       assert.ok(ended.retryAt, `${label}: no retry was armed`);
       const held = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: taken.turnId } });
@@ -2564,7 +2565,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       assert.equal(putBack.status, 'PENDING', 'the turn that produced nothing was not put back in the queue');
       assert.ok((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).retryAt, 'no retry was armed');
       await api.finalize({ id: runnerId } as never, recipient, { status: 'FAILED', error: 'the engine exited before its first turn' } as never);
-      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.FAILED);
+      assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: recipient } }))), RunStatus.FAILED);
       assert.equal((await requestRow(request.id)).state, 'OPEN', 'closed DRAINED although the retry re-sends it');
 
       await retryComesDue(recipient);
@@ -2597,7 +2598,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       assert.equal(asMessage.turnId, steer.turnId);
       await api.finalize({ id: runnerId } as never, recipient, { status: 'FAILED', error: SESSION_LIMIT } as never);
       const failed = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
-      assert.equal(failed.status, RunStatus.FAILED);
+      assert.equal(wordOf(failed), RunStatus.FAILED);
       assert.ok(failed.retryAt, 'no retry was armed');
       assert.equal((await requestRow(request.id)).state, 'OPEN', 'closed although the retry would re-send it');
 

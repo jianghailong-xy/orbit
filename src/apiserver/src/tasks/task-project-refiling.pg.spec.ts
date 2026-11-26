@@ -180,8 +180,8 @@ test('a task can be re-filed and taken out of a project, and a move cannot stran
   );
   await sql.query(
     `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-       "provider","status","dispatch_origin","updated_at")
-     VALUES ($1,$2,$3,'refile-coordinator','fixture',$2,'claude','RUNNING'::"run_status",
+       "provider","turn_state","dispatch_origin","updated_at")
+     VALUES ($1,$2,$3,'refile-coordinator','fixture',$2,'claude','IN_FLIGHT',
        'USER'::"session_dispatch_origin",now())`,
     [coordinatorSessionId, ownerId, workspaceId],
   );

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RUNNER_REAP_AFTER_MS, ReaperService } from './reaper.service';
+import { writtenWord } from '../test-support/session-word';
 
 /**
  * A claim is presence. A runner process that has just started claims at once, while its first
@@ -65,7 +66,7 @@ function reaperFor(plan: Plan) {
         id: SESSION_ID,
         taskId: null,
         assignedRunnerId: RUNNER_ID,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
         provider: 'deepseek',
         providerBuiltin: false,
         runtimeSessionId: null,
@@ -107,7 +108,7 @@ test('still reaps a run claimed longer ago than the window on a runner silent si
   const reaper = reaperFor({ claimedAgoMs: REAP_AFTER_MS + 60_000 });
   await reaper.sweep();
   assert.equal(reaper.finalized.length, 1);
-  assert.equal(reaper.finalized[0]?.status, RunStatus.FAILED);
+  assert.equal(writtenWord(reaper.finalized[0]), RunStatus.FAILED);
   assert.equal(reaper.finalized[0]?.error, 'runner offline');
 });
 

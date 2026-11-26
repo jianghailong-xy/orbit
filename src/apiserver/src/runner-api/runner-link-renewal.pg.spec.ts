@@ -43,7 +43,8 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { json } from 'express';
-import { type PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -74,6 +75,7 @@ import { readRunnerLink, RUNNER_LINK, runnerLinkCredential, signRunnerLinkToken,
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import '../test-support/daemon-routes-over-http';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -240,7 +242,7 @@ test('lockstep link-token renewals are no mass disconnection; a real simultaneou
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: id, title: `run on renewal-${i}`, prompt: 'work',
-        provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, runtimeSessionId: randomUUID(),
+        provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', runtimeSessionId: randomUUID(),
         startedAt: new Date(started - 30 * MINUTE), runClaimedAt: new Date(started - 30 * MINUTE), dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
@@ -288,7 +290,7 @@ test('lockstep link-token renewals are no mass disconnection; a real simultaneou
   const sweep = () => (new ReaperService(db as unknown as PrismaService, reaperRealtime, undefined, presence) as unknown as {
     sweep(): Promise<void>;
   }).sweep();
-  const stateOf = (m: Machine) => db.session.findUniqueOrThrow({ where: { id: m.sessionId }, select: { status: true, error: true } });
+  const stateOf = async (m: Machine) => withWord(await db.session.findUniqueOrThrow({ where: { id: m.sessionId }, select: { ...WORD_SELECT, error: true } }));
   const lostAt = async (m: Machine) => (await db.runnerPresence.findUniqueOrThrow({ where: { runnerId: m.id } })).lostAt;
   const running = { status: RunStatus.RUNNING, error: null };
   const offline = { status: RunStatus.FAILED, error: 'runner offline' };

@@ -32,7 +32,8 @@ import { test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { type Prisma, type PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type Prisma, type PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -61,6 +62,7 @@ import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -143,7 +145,7 @@ test('an interrupt takes the payload of the wake turns it deletes with it', {
         title: 'a session parked on something that takes a while',
         prompt: 'wait for the build and tell me how it went',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
         assignedRunnerId: runnerId,
@@ -162,7 +164,7 @@ test('an interrupt takes the payload of the wake turns it deletes with it', {
    * (background-wake-steer.pg.spec.ts), and only its output and a due wakeup still queue here.
    */
   async function sessionRunningATurn(): Promise<{ sessionId: string; running: string }> {
-    const sessionId = await session({ status: RunStatus.RUNNING });
+    const sessionId = await session({ turnState: 'IN_FLIGHT'});
     const running = randomUUID();
     await sql.query(
       `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","kind","content","status","delivered_at","lease_deadline_at")
@@ -236,7 +238,7 @@ test('an interrupt takes the payload of the wake turns it deletes with it', {
 
   /** What the runner's claim does to a queued session, then the inbox poll that follows it. */
   async function claimAndPoll(sessionId: string): Promise<Answer> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await prisma.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     return send('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
   }
 
@@ -284,7 +286,7 @@ test('an interrupt takes the payload of the wake turns it deletes with it', {
     assert.deepEqual(await wakeTurnsOf(sessionId), [], 'the interrupt left the wake turn queued');
     // An interrupt stops a turn; the session lives on, which is what makes the state below a choice.
     const after = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(after.status, RunStatus.RUNNING, 'the interrupt ended the session');
+    assert.equal(wordOf(after), RunStatus.RUNNING, 'the interrupt ended the session');
     const [aborted] = (await turnsOf(sessionId)).filter((row) => row.id === running);
     assert.equal(aborted?.status, 'IN_FLIGHT', 'the interrupt deleted the turn it was stopping');
 
@@ -409,7 +411,7 @@ test('an interrupt takes the payload of the wake turns it deletes with it', {
     );
     assert.equal(left[0].id, wakeTurn.id, 'the interrupt deleted the wake turn the runner had taken');
     assert.ok(!left.some((row) => row.id === message.turnId), 'the queued message was not deleted');
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: sessionId } })).status, RunStatus.RUNNING);
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: sessionId } }))), RunStatus.RUNNING);
 
     // The payload of the turn it did not delete is untouched: the engine has it.
     assert.equal((await wakeupRow(wakeupId)).state, 'DELIVERED',

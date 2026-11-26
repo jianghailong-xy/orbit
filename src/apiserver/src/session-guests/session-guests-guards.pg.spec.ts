@@ -22,7 +22,8 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { PAT_SCOPES, PatService } from '../auth/pat.service';
@@ -32,6 +33,8 @@ import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-tes
 import {
   GUEST_DAILY_CAP_REACHED, GUEST_DAILY_TURNS, GUEST_SESSION_NOT_SHARED, guestAttachmentRefused, guestFieldRefused,
 } from './session-guests.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -75,7 +78,7 @@ test('session guests: guest door refusals, the daily cap and withdraw-on-remove'
       data: {
         id, ownerId: owner.id, creatorId: owner.id, workspaceId, assignedRunnerId: runnerId, title, prompt: title,
         provider: 'claude', providerBuiltin: true, model: 'claude-opus-4-1', permissionMode: 'acceptEdits',
-        dispatchOrigin: SessionDispatchOrigin.USER, status, numTurns: 1, engineTurnActive: false,
+        dispatchOrigin: SessionDispatchOrigin.USER, turnState: turnStateOfWord(status), numTurns: 1, engineTurnActive: false,
         runtimeSessionId: randomUUID(), startedAt: new Date(),
         ...(status === RunStatus.CANCELLED ? { finishedAt: new Date(), endReason: 'USER_ENDED' } : {}),
       },
@@ -173,8 +176,8 @@ test('session guests: guest door refusals, the daily cap and withdraw-on-remove'
     assert.equal(await guestTurns(sessionId), 0, 'no turn was written');
     const after = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
     assert.deepEqual(
-      [after.status, after.permissionMode, after.model, after.provider, after.effort, after.fastMode],
-      [before.status, before.permissionMode, before.model, before.provider, before.effort, before.fastMode],
+      [wordOf(after), after.permissionMode, after.model, after.provider, after.effort, after.fastMode],
+      [wordOf(before), before.permissionMode, before.model, before.provider, before.effort, before.fastMode],
       'the session is as it was',
     );
   };
@@ -269,7 +272,7 @@ test('session guests: guest door refusals, the daily cap and withdraw-on-remove'
     const ownerTurn = withOwnerTurn
       ? toUuid(ok(await api('POST', `/sessions/${sessionId}/turns`, ownerLogin, message('the owner’s own')), 'the owner turn').json.turnId as string)
       : null;
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).status, RunStatus.PENDING);
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: sessionId } }))), RunStatus.PENDING);
     return { sessionId, ownerTurn };
   };
   const pendingOfGuest = (sessionId: string) =>
@@ -282,7 +285,7 @@ test('session guests: guest door refusals, the daily cap and withdraw-on-remove'
     assert.equal(await pendingOfGuest(sessionId), 0, "the guest's queued turns are withdrawn");
     assert.equal(await guestTurns(sessionId), 1, 'the one already delivered stays');
     assert.ok(await db.conversationTurn.findUnique({ where: { id: ownerTurn! } }), "the owner's queued turn stays");
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).status, RunStatus.PENDING, 'still waiting for the owner’s');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: sessionId } }))), RunStatus.PENDING, 'still waiting for the owner’s');
   });
 
   await t.test('queued turns withdrawn on leave, and the session waits again', async () => {
@@ -290,7 +293,7 @@ test('session guests: guest door refusals, the daily cap and withdraw-on-remove'
     ok(await api('POST', `/guest-sessions/${sessionId}/leave`, guestLogin), 'leaving');
     assert.equal(await pendingOfGuest(sessionId), 0, "the guest's queued turns are withdrawn");
     assert.equal(await guestTurns(sessionId), 1, 'the one already delivered stays');
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).status, RunStatus.AWAITING_INPUT, 'nothing left to run');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: sessionId } }))), RunStatus.AWAITING_INPUT, 'nothing left to run');
   });
 
   // ── The owner channel ──────────────────────────────────────────────────────────────────────

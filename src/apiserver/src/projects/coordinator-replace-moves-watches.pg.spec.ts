@@ -75,7 +75,7 @@ function service(db: PrismaClient, fixture: Fixture, inject?: Inject) {
       const row = await db.session.create({
         data: {
           ownerId: owner, creatorId: owner, title: dto.title, prompt: 'p', workspaceId: dto.workspaceId,
-          status: 'AWAITING_INPUT', dispatchOrigin: 'USER', titleManagedByProject: true,
+          turnState: null, dispatchOrigin: 'USER', titleManagedByProject: true,
         },
       });
       await inject?.(db, fixture, row.id);
@@ -103,7 +103,7 @@ async function fixture(): Promise<Fixture & { db: PrismaClient; sql: Client }> {
   const workspaceId = (await db.workspace.create({ data: { ownerId, name: 'home' } })).id;
   const projectId = (await db.project.create({ data: { ownerId, title: 'Ship it' } })).id;
   const mk = async (title: string) => (await db.session.create({
-    data: { ownerId, creatorId: ownerId, title, prompt: 'p', workspaceId, status: 'AWAITING_INPUT', dispatchOrigin: 'USER' },
+    data: { ownerId, creatorId: ownerId, title, prompt: 'p', workspaceId, turnState: null, dispatchOrigin: 'USER' },
   })).id;
   const outgoing = await mk('the coordinator');
   const bystander = await mk('a bystander');
@@ -214,7 +214,7 @@ test('(b) a swap that LOSES the race moves no watch', { skip, timeout: 120_000 }
   // no longer the one this call saw, and adopts the winner instead.
   const { projects, published } = service(f.db, f, async (db, fx) => {
     winner = (await db.session.create({
-      data: { ownerId: fx.ownerId, creatorId: fx.ownerId, title: 'winner', prompt: 'p', workspaceId: fx.workspaceId, status: 'AWAITING_INPUT', dispatchOrigin: 'USER' },
+      data: { ownerId: fx.ownerId, creatorId: fx.ownerId, title: 'winner', prompt: 'p', workspaceId: fx.workspaceId, turnState: null, dispatchOrigin: 'USER' },
     })).id;
     await db.project.update({ where: { id: fx.projectId }, data: { coordinatorSessionId: winner } });
   });

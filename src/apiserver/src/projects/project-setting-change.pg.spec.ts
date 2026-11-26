@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { uuidToBase62 } from '@orbit/shared';
-import { type PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -86,7 +87,7 @@ async function world(stack: Stack, label: string): Promise<World> {
   await db.session.create({
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-      title: label, prompt: label, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      title: label, prompt: label, provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });

@@ -24,6 +24,8 @@ import { MergeReceiptService } from './merge-receipt.service';
 import { sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import type { SessionFixture } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * The membership contract in docs/session-list-projects-design.md §2/§3.1/§3.2, against the migrated
@@ -145,12 +147,12 @@ async function world(label: string): Promise<World> {
   return { h, ownerId, bearer, project };
 }
 
-async function session(w: World, fields: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
-  const fixtureStatus = fields.status ?? 'AWAITING_INPUT';
+async function session(w: World, fields: SessionFixture = {}): Promise<string> {
+  const { status: fixtureStatus = 'AWAITING_INPUT', ...fieldsFacts } = fields;
   const row = await w.h.db.session.create({
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, title: 'membership session', prompt: 'p',
-      status: 'AWAITING_INPUT', dispatchOrigin: 'USER', ...fields,
+      turnState: turnStateOfWord(fixtureStatus), dispatchOrigin: 'USER', ...fieldsFacts,
       ...(isReleasedStatus(fixtureStatus) ? {
         finishedAt: fields.finishedAt ?? new Date(),
       } : {}),
@@ -537,7 +539,7 @@ test('a LANDING member is in no workspace tally', { skip }, async () => {
   // in an ordinary session is its row, and LS6 says a landing is in no workspace tally at all.
   await w.h.db.session.update({
     where: { id: sessionId },
-    data: { workspaceId: workspace.id, engineTurnActive: true, status: 'AWAITING_INPUT' },
+    data: { workspaceId: workspace.id, engineTurnActive: true, turnState: null },
   });
   const counts = await w.h.sessions.workspaceSessionCounts(w.ownerId);
   const row = counts.find((entry) => entry.workspaceId === workspace.id);

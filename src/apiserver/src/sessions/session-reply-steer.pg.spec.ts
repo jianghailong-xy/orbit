@@ -41,11 +41,11 @@ import {
   type Prisma,
   type PrismaClient,
   type Runner,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   RunEventType,
   RunStatus as SharedRunStatus,
@@ -73,6 +73,7 @@ import { SessionRequestWorker } from './session-request.worker';
 import { SessionsService } from './sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -133,7 +134,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
@@ -206,7 +207,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
   async function claimSession(sessionId: string): Promise<void> {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
   }
 
@@ -297,7 +298,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
     where: { sessionId, clientTurnId: { startsWith: SESSION_REPLY_TURN_PREFIX } },
     orderBy: { seq: 'asc' },
   });
-  const statusOf = async (sessionId: string) => (await prisma.session.findUniqueOrThrow({ where: { id: sessionId } })).status;
+  const statusOf = async (sessionId: string) => wordOf((await prisma.session.findUniqueOrThrow({ where: { id: sessionId } })));
   /** How many `<orbit-session-reply>` blocks for this request a text carries. */
   const blocksFor = (content: string, requestId: string) =>
     content.split(`<orbit-session-reply request-id="${uuidToBase62(requestId)}"`).length - 1;
@@ -714,7 +715,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
       numTurns: 1, costUsd: 0, error: overloaded,
     } as never);
     const failed = await prisma.session.findUniqueOrThrow({ where: { id: asker } });
-    assert.equal(failed.status, RunStatus.FAILED);
+    assert.equal(wordOf(failed), RunStatus.FAILED);
     assert.ok(failed.retryAt, 'the overload armed no retry');
     assert.equal((await turnRow(steer.id)).deliveryStatus, 'FAILED');
     // Held for the retry's turn: not on the steer nothing will deliver, not handed to an asker that is

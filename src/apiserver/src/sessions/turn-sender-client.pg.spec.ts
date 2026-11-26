@@ -32,11 +32,11 @@ import {
   type Prisma,
   type PrismaClient,
   type Runner,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 import { filter, map, Subject } from 'rxjs';
@@ -68,6 +68,8 @@ import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import type { SessionFixture } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -123,16 +125,17 @@ test('each turn says which client sent it, on the events page and the SSE, and n
   await prisma.workspace.create({ data: { id: workspaceId, ownerId, runnerId, name: 'shop-api', enabled: true } });
   const runner = { id: runnerId, ownerId } as Runner;
 
-  async function session(title: string, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
+  async function session(title: string, input: SessionFixture = {}): Promise<string> {
     const id = randomUUID();
+    const { status: word = RunStatus.AWAITING_INPUT, ...data } = input;
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: turnStateOfWord(word),
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
-        ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(data.status ?? RunStatus.AWAITING_INPUT)
+        ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(word)
           ? { finishedAt: data.finishedAt ?? new Date()}
           : {}),
       },
@@ -230,7 +233,7 @@ test('each turn says which client sent it, on the events page and the SSE, and n
   async function claimAndPoll(sessionId: string): Promise<Answer> {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
     const delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
     assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);

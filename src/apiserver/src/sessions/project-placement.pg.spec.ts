@@ -21,6 +21,7 @@ import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { fixtureFacts } from '../test-support/session-word';
 
 /**
  * `GET /sessions/project-placement` (SessionsService.projectPlacement), against the migrated
@@ -133,7 +134,7 @@ async function session(o: Owner, fields: Partial<Prisma.SessionUncheckedCreateIn
   const row = await o.h.db.session.create({
     data: {
       ownerId: o.ownerId, creatorId: o.ownerId, title: 'placement session', prompt: 'p',
-      status: 'AWAITING_INPUT', dispatchOrigin: 'USER', workspaceId: o.workspaceA, ...fields,
+      turnState: null, dispatchOrigin: 'USER', workspaceId: o.workspaceA, ...fixtureFacts(fields),
     },
   });
   return row.id;
@@ -161,11 +162,11 @@ async function project(o: Owner, kind: Coordinator, i: number): Promise<Fixture>
     },
   })).id;
   const ordinary = await session(o, { taskId: await task() });
-  const waitingId = await session(o, { taskId: await task(), status: 'RUNNING' });
+  const waitingId = await session(o, { taskId: await task(), turnState: 'IN_FLIGHT'});
   await o.h.db.approval.create({ data: { sessionId: waitingId, toolName: 'Bash', input: { command: 'ls' } } });
   // Released, so with finished_at and its cause (session_release_fact_chk, 1401/1402).
   await session(o, {
-    taskId: await task(), completedAt: new Date(), status: 'SUCCEEDED', finishedAt: new Date(), 
+    taskId: await task(), completedAt: new Date(), turnState: null, finishedAt: new Date(), 
   });
   let coordinatorId: string | null = null;
   if (kind !== 'absent') {

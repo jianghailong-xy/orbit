@@ -144,7 +144,7 @@ async function occupyListSlot(
       id: randomUUID(), title: `occupant-${RUN}`, prompt: 'x',
       ownerId: ids.ownerId, creatorId: ids.ownerId, workspaceId: ids.agentId,
       assignedRunnerId: ids.runnerId,
-      batchId: listId, batchMaxConcurrent: cap, status: 'PENDING',
+      batchId: listId, batchMaxConcurrent: cap, turnState: 'QUEUED',
     },
   });
 }

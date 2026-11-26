@@ -74,7 +74,7 @@ test('each row\'s status is the wire word its facts give', () => {
     const f = s.serverFacts;
     assert.equal(legacySessionStatus({
       // Read only for a held row with no turn state, which is a parked one.
-      status: 'AWAITING_INPUT', finishedAt: f.finishedAt, turnState: f.turnState, endReason: f.endReason ?? null,
+      finishedAt: f.finishedAt, turnState: f.turnState, endReason: f.endReason ?? null,
       lastTurnOutcome: f.lastTurnOutcome ?? null, startedAt: f.startedAt ?? null, importSourceCwd: null,
       sessionKind: 'CONVERSATION',
     }), s.status, s.id);

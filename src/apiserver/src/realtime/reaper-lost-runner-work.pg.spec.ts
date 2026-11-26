@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { CreatorType, type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { CreatorType, type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -14,6 +15,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { RUNNER_OFFLINE_JOB_REASON, RUNNER_OFFLINE_SUBAGENT_RESULT } from './lost-runner-work';
 import type { RealtimeService } from './realtime.service';
 import { ReaperService } from './reaper.service';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * A lost runner settles the idle-looking session that was executing on it (plan step 1.7, design §11.3 item 4), against
@@ -72,7 +74,7 @@ test('a lost runner: the idle-looking session with a job and a SubAgent is settl
         await db.session.create({
           data: {
             id: sessionId, ownerId, creatorId: ownerId, taskId, workspaceId, assignedRunnerId: runnerId, title: label,
-            prompt: 'the task brief', provider: 'claude', status: RunStatus.AWAITING_INPUT,
+            prompt: 'the task brief', provider: 'claude', turnState: null,
             dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, numTurns: 1,
             startedAt: new Date(Date.now() - 60 * 60_000), runClaimedAt: new Date(Date.now() - 60 * 60_000),
             ...data,
@@ -130,7 +132,7 @@ test('a lost runner: the idle-looking session with a job and a SubAgent is settl
         },
         { shells: [], jobs: [], activity: {}, subagents: [], turn: false, error: null },
       );
-      assert.notEqual(settled.status, RunStatus.FAILED, 'nothing the session was asked to do failed');
+      assert.notEqual(wordOf(settled), RunStatus.FAILED, 'nothing the session was asked to do failed');
       const wakes = await db.backgroundJobWake.findMany({ where: { sessionId: withJob.sessionId } });
       assert.deepEqual(
         wakes.map((w) => ({ jobId: w.jobId, trigger: w.trigger, status: w.status, reason: w.reason, command: w.command, outputPath: w.outputPath })),
@@ -143,7 +145,7 @@ test('a lost runner: the idle-looking session with a job and a SubAgent is settl
       // The session with a SubAgent: its set emptied, the run ended INTERRUPTED and its wake filed onto a turn.
       const sub = await db.session.findUniqueOrThrow({ where: { id: withSubagent.sessionId } });
       assert.deepEqual(sub.runningSubagents, []);
-      assert.notEqual(sub.status, RunStatus.FAILED);
+      assert.notEqual(wordOf(sub), RunStatus.FAILED);
       assert.equal(await db.conversationTurn.count({ where: { sessionId: withSubagent.sessionId, clientTurnId: { startsWith: 'bg-wake:' } } }), 1,
         'the SubAgent\'s wake is a queued turn of its parent');
       const run = await db.subagentRun.findUniqueOrThrow({ where: { id: subRun.id } });
@@ -161,7 +163,7 @@ test('a lost runner: the idle-looking session with a job and a SubAgent is settl
       // An engine turn alone: cleared, nothing filed, not failed.
       const engine = await db.session.findUniqueOrThrow({ where: { id: engineOnly.sessionId } });
       assert.equal(engine.engineTurnActive, false);
-      assert.equal(engine.status, RunStatus.AWAITING_INPUT);
+      assert.equal(wordOf(engine), RunStatus.AWAITING_INPUT);
       assert.equal(await db.conversationTurn.count({ where: { sessionId: engineOnly.sessionId, clientTurnId: { startsWith: 'bg-wake:' } } }), 0);
 
       // A second sweep finds nothing left to settle.

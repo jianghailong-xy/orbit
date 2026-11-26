@@ -21,7 +21,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { toUuid } from '@orbit/shared';
 import { Client } from 'pg';
@@ -33,6 +34,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -87,7 +89,7 @@ test('queuedReason runner_at_capacity: a runner full of turns and background-job
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: r.workspaceId, assignedRunnerId: r.id, title,
-        prompt: title, provider: 'claude', providerBuiltin: true, status,
+        prompt: title, provider: 'claude', providerBuiltin: true, turnState: turnStateOfWord(status),
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
         } : {}),

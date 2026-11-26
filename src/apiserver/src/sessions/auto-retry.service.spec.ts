@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { CONTINUE_MESSAGE, type PlanUsageSnapshot } from '@orbit/shared';
 import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
@@ -537,7 +537,7 @@ test('skips an idle session that is being torn down', async () => {
 });
 
 test('leaves a live session alone', async () => {
-  const { service, resumed } = makeService([row({ status: RunStatus.RUNNING })]);
+  const { service, resumed } = makeService([row({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING })]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'it is already working; nothing is waiting on us');
 });

@@ -8,11 +8,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RunStatus as SharedRunStatus, uuidToBase62, type TaskDispatchRefusal } from '@orbit/shared';
@@ -275,7 +275,7 @@ async function fixture(
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId,
       assignedRunnerId: runnerId, title: `协调：${label}`, prompt: `协调：${label}`,
-      provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER, titleManagedByProject: true,
     },
   });
@@ -355,7 +355,7 @@ async function prerequisite(
     data: {
       id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, taskId,
       workspaceId: f.workspaceId, assignedRunnerId: f.runnerId, title, prompt: title,
-      provider: 'claude', status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+      provider: 'claude', turnState: null, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch, completedAt: new Date(),
     },
@@ -431,7 +431,7 @@ interface Resolution {
 async function claimSession(db: PrismaClient, sessionId: string): Promise<void> {
   await db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-    await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
   });
 }
 

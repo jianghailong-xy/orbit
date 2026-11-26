@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -34,6 +34,7 @@ import { readDoneState } from './project-done-request';
 import { readInFlightJobs } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { readTaskIntegrationViews } from './project-task-integration';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * §12.15 P-M1 (`docs/project-integration-line-contract.md`, revision 42): a DONE task with no commit
@@ -181,7 +182,7 @@ async function world(stack: Stack, label: string, line: 'NONE' | 'PROJECT_BRANCH
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(),
       runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -250,7 +251,7 @@ async function workSession(stack: Stack, w: World, taskId: string, s: Work): Pro
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${s.branch}`, prompt: 'work', provider: 'claude',
-      status: finished ? RunStatus.SUCCEEDED : RunStatus.AWAITING_INPUT,
+      turnState: turnStateOfWord(finished ? RunStatus.SUCCEEDED : RunStatus.AWAITING_INPUT),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch: s.branch, branchSha: s.branchSha, baseSha: s.baseSha,
       changedFiles: s.changedFiles === null ? Prisma.DbNull : (s.changedFiles ?? []) as Prisma.InputJsonValue,
@@ -274,7 +275,7 @@ async function finishDispatchedWork(stack: Stack, taskId: string, s: Omit<Work, 
   await stack.db.session.update({
     where: { id: session.id },
     data: {
-      status: RunStatus.SUCCEEDED, isolationStatus: 'worktree', branch: `orbit/${taskId.slice(0, 8)}`,
+      turnState: null, isolationStatus: 'worktree', branch: `orbit/${taskId.slice(0, 8)}`,
       branchSha: s.branchSha, baseSha: s.baseSha,
       changedFiles: s.changedFiles === null ? Prisma.DbNull : (s.changedFiles ?? []) as Prisma.InputJsonValue,
       finishedAt: new Date(),

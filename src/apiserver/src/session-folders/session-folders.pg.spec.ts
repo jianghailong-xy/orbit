@@ -31,7 +31,8 @@ import { test } from 'node:test';
 import { BadRequestException, type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -56,6 +57,7 @@ import { SessionsController } from '../sessions/sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { SessionFoldersController } from './session-folders.controller';
 import { SessionFoldersService } from './session-folders.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -168,7 +170,7 @@ test('session folders: owned, unique per workspace, deleted without deleting a s
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: extra.workspaceId ?? alpha, assignedRunnerId: runnerId,
-        title, prompt: title, status,
+        title, prompt: title, turnState: turnStateOfWord(status),
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
         } : {}),

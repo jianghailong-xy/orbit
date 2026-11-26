@@ -77,6 +77,7 @@ import {
 import { DriveService } from '../drive/drive.service';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { fixtureFacts } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -162,7 +163,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     /** A session of the machine's, open and waiting, with anything more of its row set. */
     const open = async (title: string, data: Record<string, unknown> = {}) => {
       const id = await fixtures.session(ownerId, of.workspaceId, of.runnerId, `${name} ${title}`);
-      if (Object.keys(data).length > 0) await db.session.update({ where: { id }, data });
+      if (Object.keys(data).length > 0) await db.session.update({ where: { id }, data: fixtureFacts(data) });
       return id;
     };
     const turnOf = async (sessionId: string, data: Record<string, unknown>) => {

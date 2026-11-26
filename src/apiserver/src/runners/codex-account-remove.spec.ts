@@ -214,7 +214,7 @@ test('a removal refused over sessions in the account keeps their ids, and the pa
     session: {
       findMany: async (args: unknown) => {
         asked.push(args);
-        return [{ id: mine, title: 'Fix login redirect', status: 'RUNNING', assignedRunnerId: RUNNER_ID }];
+        return [{ id: mine, title: 'Fix login redirect', turnState: 'IN_FLIGHT', status: 'RUNNING', assignedRunnerId: RUNNER_ID }];
       },
     },
   } as never;

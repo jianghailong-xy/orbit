@@ -40,6 +40,7 @@ import {
 import { OWNER_INTERACTIVE_ROUTES } from '../auth/pat-owner-channel-routes';
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { TerminalCredentials } from '../auth/terminal-credentials';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -176,8 +177,8 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
 
     // Read the pending cards the TUI shows on open (terminal_tui_client.go pendingApprovals): on A, the card is there.
     // A PENDING read lists only the cards a turn in flight still asks, so A's turn is in flight for the read.
-    const before = await db.session.findUniqueOrThrow({ where: { id: onA.id }, select: { status: true, engineTurnActive: true } });
-    await db.session.update({ where: { id: onA.id }, data: { status: 'AWAITING_INPUT', engineTurnActive: true } });
+    const before = await db.session.findUniqueOrThrow({ where: { id: onA.id }, select: { ...WORD_SELECT, engineTurnActive: true } });
+    await db.session.update({ where: { id: onA.id }, data: { turnState: null, engineTurnActive: true } });
     const pending = expect(await api('GET', `/sessions/${onA.id}/approvals?status=PENDING`, terminal), 200, 'reading A\'s pending cards') as Array<{ id: string }>;
     assert.deepEqual(pending.map((a) => toUuid(a.id)), [onA.approvalId], 'A\'s pending card is listed');
     await db.session.update({ where: { id: onA.id }, data: before });
@@ -212,7 +213,7 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
       assert.equal(await db.conversationTurn.count({ where: { sessionId: other.id } }), turns, `${what}: no turn`);
       assert.equal((await db.approval.findUniqueOrThrow({ where: { id: other.approvalId } })).status, 'PENDING', `${what}: card unanswered`);
       const after = await db.session.findUniqueOrThrow({ where: { id: other.id } });
-      assert.equal(after.status, session.status, `${what}: status unchanged`);
+      assert.equal(wordOf(after), wordOf(session), `${what}: status unchanged`);
       assert.equal(after.cancelRequestedAt?.getTime(), session.cancelRequestedAt?.getTime(), `${what}: not interrupted`);
     }
     outOfScope(await api('GET', `/sessions/${randomUUID()}`, terminal), 'a session that does not exist', [':id']);

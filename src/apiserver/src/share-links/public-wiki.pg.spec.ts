@@ -32,7 +32,8 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { CreatorType, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, TaskCompletionCriterion } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskCompletionCriterion } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -155,7 +156,7 @@ test('wiki links: a space\'s written documents, read-only, with Footnotes the on
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, title: sessionTitle, prompt: 'p',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
   const taskId = randomUUID();

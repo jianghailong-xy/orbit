@@ -3552,7 +3552,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1670 restates 1667's six-argument session_phase_of (an armed retry reads PENDING, held or released) and writes
       // phase alone on the rows with retry_at set that it reads differently. Only `session` is touched; no preserved
       // relation, trigger, function of one or DONE fence changes.
-      '1670_session_phase_retry_pending'],
+      '1670_session_phase_retry_pending',
+      // 1671 (deploy D3) adds an eight-argument session_legacy_status and points the nine-argument one at it, drops the
+      // stored-word fallback from session_held_turn_state, replaces session_aa_turn_state_from_status (and its function)
+      // with session_aa_status_from_facts, which writes session.status from the facts, and re-creates nine session
+      // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1671_session_status_from_facts'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

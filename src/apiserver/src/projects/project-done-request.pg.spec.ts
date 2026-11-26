@@ -45,10 +45,10 @@ import { test } from 'node:test';
 
 import { HttpException } from '@nestjs/common';
 import {
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import {
   type DoneRequest,
@@ -82,6 +82,7 @@ import { doneReadiness, projectsReadyToClose, readDoneState, refreshProjectDone,
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -214,7 +215,7 @@ test('a coordinator asks its owner to record the project done, and the project i
         title: label,
         prompt: label,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -363,7 +364,7 @@ test('a coordinator asks its owner to record the project done, and the project i
         assignedRunnerId: runnerId,
         title: `a run of ${taskId}`,
         prompt: 'do the work',
-        status,
+        turnState: turnStateOfWord(status),
       },
     });
     return id;
@@ -389,7 +390,7 @@ test('a coordinator asks its owner to record the project done, and the project i
         prompt: 'do the work',
         branch,
         isolationStatus: 'worktree',
-        status: RunStatus.SUCCEEDED, 
+        turnState: null, 
         baseSha: sha('1'),
         createdAt: new Date(Date.now() - 10 * 60_000),
         finishedAt: new Date(Date.now() - 10 * 60_000),
@@ -612,7 +613,7 @@ test('a coordinator asks its owner to record the project done, and the project i
     assert.deepEqual(await requests(p.id), []);
 
     // The same project once its work has stopped moving is one a request can be filed about.
-    await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now()
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = now()
                       WHERE "id" = ANY($1::uuid[])`, [[rerunning, waitingRun]]);
     await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = ANY($1::uuid[])`,
       [[inProgress.id, waiting.id]]);
@@ -774,7 +775,7 @@ test('a coordinator asks its owner to record the project done, and the project i
     data: {
       id: randomUUID(), ownerId, creatorId: ownerId, taskId: branchlessTask.id, workspaceId: p.workspaceId,
       assignedRunnerId: runnerId, title: 'ran the walkthrough', prompt: 'do the work', isolationStatus: 'shared',
-      status: RunStatus.SUCCEEDED, 
+      turnState: null, 
       startsTaskWork: true, changedFiles: ['walkthrough.md'] as never,
       createdAt: new Date(Date.now() - 10 * 60_000), finishedAt: new Date(Date.now() - 10 * 60_000),
     },
@@ -976,7 +977,7 @@ test('a coordinator asks its owner to record the project done, and the project i
       'and the refused press ended nothing — the next read supersedes it');
     assert.equal((await afterRead(filed.itemId)).row.state, 'SUPERSEDED');
 
-    await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now()
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = now()
                       WHERE "id" = $1::uuid`, [started]);
   });
 

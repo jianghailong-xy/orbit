@@ -48,12 +48,12 @@ import {
   type Prisma,
   type PrismaClient,
   type Runner,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { ControlEventType, type CoordinatorDeliveryCard, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 import { EMPTY, filter, firstValueFrom, timeout } from 'rxjs';
@@ -218,7 +218,7 @@ test('a session row says when the message it previews is Orbit’s own', {
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
@@ -391,7 +391,7 @@ test('a session row says when the message it previews is Orbit’s own', {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
       // The runner here sends no process identity with its events, as a runner from before takeover
       // does: they are written while the row names none, and a revive (a retry's re-send) installs one.
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING, inboxLeaseOwner: null } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: null } });
     });
     for (let i = 0; i < 3; i++) {
       const delivered = await asRunner('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
@@ -808,7 +808,7 @@ test('a session row says when the message it previews is Orbit’s own', {
     await prisma.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.FAILED, retryAt: armedAt, retryAttempts: 0,
+        turnState: null, retryAt: armedAt, retryAttempts: 0,
         cancelRequestedAt: new Date(), finishedAt: new Date(),
         // The settled turn's FAILED, copied (removal step R2): what reads the session as failed since R7.
         lastTurnOutcome: 'FAILED',
@@ -938,7 +938,7 @@ test('a session row says when the message it previews is Orbit’s own', {
     // A session just made is waiting for a runner; the claim starts it, and a resume and the inbox read it
     // parked.
     await prisma.session.update({
-      where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT, numTurns: 0, startedAt: new Date() },
+      where: { id: sessionId }, data: { turnState: null, numTurns: 0, startedAt: new Date() },
     });
     return row.prompt;
   }

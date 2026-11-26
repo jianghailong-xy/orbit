@@ -23,10 +23,10 @@ import {
   CreatorType,
   PrismaClient,
   RunnerStatus,
-  RunStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { LINK_PREVIEW_MAX_REFS, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -46,6 +46,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { LinkPreviewsController } from './link-previews.controller';
 import { LinkPreviewsService } from './link-previews.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -146,7 +147,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
         taskId,
         title: `run of ${taskId}`,
         prompt: 'do the thing',
-        status,
+        turnState: turnStateOfWord(status),
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         ...extra,
@@ -181,7 +182,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
       provider: 'claude',
       model: 'claude-opus-5',
       numTurns: 12,
-      status: RunStatus.FAILED, finishedAt: new Date(), lastTurnOutcome: 'FAILED',
+      turnState: null, finishedAt: new Date(), lastTurnOutcome: 'FAILED',
       error: 'engine exited with code 1',
       retryAt: new Date(now + 30_000),
       startedAt: new Date(now - 2 * HOUR),
@@ -209,7 +210,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
       provider: 'claude',
       model: 'claude-opus-5',
       numTurns: 3,
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
@@ -334,7 +335,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
   await db.session.create({
     data: {
       id: theirs.session, ownerId: stranger.ownerId, creatorId: stranger.ownerId, title: 'their session',
-      prompt: 'theirs', status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      prompt: 'theirs', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
   await db.project.create({ data: { id: theirs.project, ownerId: stranger.ownerId, title: 'their project' } });
@@ -349,7 +350,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
   await db.session.create({
     data: {
       id: deleted.session, ownerId: me.ownerId, creatorId: me.ownerId, title: 'trashed session',
-      prompt: 'trashed', status: RunStatus.SUCCEEDED, finishedAt: new Date(), deletedAt: new Date(),
+      prompt: 'trashed', turnState: null, finishedAt: new Date(), deletedAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -486,7 +487,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
       await db.session.create({
         data: {
           id, ownerId: me.ownerId, creatorId: me.ownerId, title, prompt: 'p',
-          status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: false, contextTaskId: about,
         },
       });

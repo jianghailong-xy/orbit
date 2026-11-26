@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * Interrupt-and-send as one transaction.
@@ -32,6 +33,7 @@ function makeService(opts?: {
     id: SESSION_ID,
     ownerId: OWNER_ID,
     status: opts?.status ?? RunStatus.RUNNING,
+    turnState: turnStateOfWord(opts?.status ?? RunStatus.RUNNING),
     cancelRequestedAt: null,
     deletedAt: opts?.trashed ? new Date() : null,
     prompt: 'opening prompt',
