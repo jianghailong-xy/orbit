@@ -82,6 +82,7 @@ import { GENERATION_ANNOTATION, bootstrapCredentialOf, managedPodName, managedSe
 import { MANAGED_RUNNER_KUBE_CLIENT_FACTORY, MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import '../test-support/daemon-routes-over-http';
 import { wordOf } from '../test-support/session-word';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -297,6 +298,11 @@ test('managed runners wake on demand and sleep through the real application', {
       } : {}),
       ...extra,
     };
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       // started_at and updated_at by the database's clock: they are timestamps without a zone.

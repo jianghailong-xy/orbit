@@ -59,6 +59,7 @@ import {
 import { assertTripwireQuiet, bootScrubbedApiserver } from '../test-support/managed-runner-apiserver';
 import { managedPodName, managedPvcName } from './managed-runner-resources';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -110,6 +111,11 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       ...mapping,
     } as Record<string, unknown>;
     if (columns.pod_uid) columns.pod_name = managedPodName(runnerId);
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       `INSERT INTO managed_runner (${names.map((n) => `"${n}"`).join(', ')}) VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')})`,
@@ -183,6 +189,11 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       } : {}),
       ...extra,
     };
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       // started_at and updated_at by the database's clock: they are timestamps without a zone.

@@ -30,6 +30,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -152,6 +153,11 @@ const CAUSE: Record<string, string> = {
 };
 
 /** See session-release.pg.spec.ts deployAgain: forget the rows, then let prisma find the files pending and apply them. */
+/** Migration 1671 (deploy D3) and its rollback: this file rehearses deploy 3 of the release work on deploy 2's
+ *  database, whose writers wrote the word. */
+const D3_DOWN = readFileSync(join(__dirname, '..', '..', '..', '..', 'scripts', 'session-status-from-facts-down.sql'), 'utf8');
+const D3_UP = readFileSync(join(__dirname, '..', '..', 'prisma', 'migrations', '1671_session_status_from_facts', 'migration.sql'), 'utf8');
+
 async function deployAgain(sql: Client, url: string, migrations: string[]): Promise<void> {
   await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [migrations]);
   try {
@@ -243,6 +249,8 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
   await verifyCoordinatorPgIdentity(sql);
   const db = prismaClientFor(url);
   t.after(async () => {
+    // Deploy D3 back, as every migration leaves the database (1671 is re-runnable).
+    await sql.query(D3_UP).catch(() => undefined);
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
@@ -261,6 +269,8 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
   )).rows as Array<{ tgname: string; def: string }>;
 
   await t.test('(1) back to deploy 2\'s state: the column, its validated CHECK, the bridged triggers', async () => {
+    // Deploy 2's writers wrote the word, and the facts followed it: 1671 (deploy D3) rolled back, with its down script.
+    await sql.query(D3_DOWN);
     await deployAgain(sql, url, DEPLOY_2_STATE);
     assert.equal(await columnExists(), 1, 'release_cause is there again');
     const check = (await sql.query(
@@ -298,11 +308,9 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
       await db.session.create({
         data: {
           id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: row.label, prompt: shape.what,
-          turnState: turnStateOfWord(shape.status),
           ...(landing
             ? { sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, engine: null, startsTaskWork: false }
             : { provider: 'claude', providerBuiltin: true, engine: 'claude', assignedRunnerId: w.runnerId }),
-          finishedAt: shape.released ? new Date() : null,
           endReason: shape.endReason,
           ...(shape.endReason ? { cancelRequestedAt: new Date() } : {}),
           lastTurnOutcome: shape.lastTurnOutcome,
@@ -311,6 +319,14 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
           ...(shape.trashed ? { deletedAt: new Date(), importSourceCwd: '/home/someone/project' } : {}),
         },
       });
+      // The word and the release column, as deploy 2's writer wrote them (the field is not in this build's model): 1611's
+      // trigger keeps the facts from the word. Under the engine read's declaration, as a claim makes it.
+      await db.$transaction([
+        db.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`,
+        db.$executeRawUnsafe(
+          `UPDATE "session" SET "status" = $2::run_status, "finished_at" = CASE WHEN $3::boolean THEN now() END WHERE "id" = $1::uuid`,
+          id, shape.status, shape.released),
+      ]);
       // The cause column is not in this build's model: deploy 1 (or 1262) wrote it beside the status.
       if (CAUSE[row.label] || CAUSE[shape.name]) {
         await sql.query(`UPDATE "session" SET "release_cause" = $2 WHERE "id" = $1::uuid`,

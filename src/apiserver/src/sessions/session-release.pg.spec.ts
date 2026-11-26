@@ -154,34 +154,44 @@ let storedWords = false;
 /** A conversation on the world's runner, in the given state. */
 async function session(db: PrismaClient, w: World, data: Record<string, unknown> = {}): Promise<string> {
   const id = randomUUID();
-  await db.session.create({
-    data: {
-      id,
-      ownerId: w.ownerId,
-      creatorId: w.ownerId,
-      workspaceId: w.workspaceId,
-      assignedRunnerId: w.runnerId,
-      title: 'a conversation',
-      prompt: 'Explain the error in the log',
-      turnState: 'IN_FLIGHT',
-      provider: 'claude',
-      providerBuiltin: true,
-      engine: 'claude',
-      dispatchOrigin: SessionDispatchOrigin.USER,
-      runSource: SessionRunSource.MANUAL,
-      startedAt: new Date(),
-      runtimeSessionId: randomUUID(),
-      ...fixtureFacts(data),
-    },
-  });
-  if (storedWords && data.status !== undefined) {
-    // The word alone, as a writer before deploy D3 wrote it: 1611's trigger keeps the facts from it. Under the
-    // engine read's declaration, as a claim makes it, so the engine guards let a move to RUNNING through.
-    await db.$transaction([
-      db.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`,
-      db.$executeRawUnsafe(`UPDATE "session" SET "status" = $2::run_status WHERE "id" = $1::uuid`, id, String(data.status)),
-    ]);
+  const { finishedAt, ...facts } = fixtureFacts(data) as Record<string, unknown> & { finishedAt?: Date | null };
+  const row = {
+    id,
+    ownerId: w.ownerId,
+    creatorId: w.ownerId,
+    workspaceId: w.workspaceId,
+    assignedRunnerId: w.runnerId,
+    title: 'a conversation',
+    prompt: 'Explain the error in the log',
+    turnState: 'IN_FLIGHT',
+    provider: 'claude',
+    providerBuiltin: true,
+    engine: 'claude',
+    dispatchOrigin: SessionDispatchOrigin.USER,
+    runSource: SessionRunSource.MANUAL,
+    startedAt: new Date(),
+    runtimeSessionId: randomUUID(),
+    ...facts,
+  };
+  if (!storedWords) {
+    await db.session.create({ data: { ...row, finishedAt } as never });
+    return id;
   }
+  // While 1671 is rolled back: in as the default word's row (PENDING, QUEUED) with the row triggers off for the insert
+  // alone, since an insert guard such as the aggregate parent's would read that default where deploy 2's writer
+  // inserted the row as it is; then the word alone, with its release column, as that writer wrote it, 1611's trigger
+  // keeping the facts from it, under the engine read's declaration, as a claim makes it, so the engine guards let a
+  // move to RUNNING through. The helper's own word is RUNNING, the turn in flight it writes.
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SET LOCAL session_replication_role = replica`;
+    // phase too, which session_zz_phase writes when the triggers are on: a queued turn with nothing executing.
+    await tx.session.create({ data: { ...row, turnState: 'QUEUED', phase: 'PENDING' } as never });
+  });
+  await db.$transaction([
+    db.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`,
+    db.$executeRawUnsafe(`UPDATE "session" SET "status" = $2::run_status, "finished_at" = $3 WHERE "id" = $1::uuid`,
+      id, String(data.status ?? 'RUNNING'), finishedAt ?? null),
+  ]);
   return id;
 }
 
@@ -595,7 +605,14 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
   const db = prismaClientFor(url);
+  // The database deploy D2 left: what this test shows is that its guards and ended-triggers read the release fact
+  // and not the word, by writing the fact alone and leaving the word as it was, which since deploy D3 follows the
+  // facts (1671). Rolled back for it, and put back after.
+  await sql.query(D3_DOWN);
+  storedWords = true;
   t.after(async () => {
+    storedWords = false;
+    await sql.query(D3_UP).catch(() => undefined);
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
@@ -986,7 +1003,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       try {
         for (const setting of settings) await sql.query(`SELECT set_config($1, '1', true)`, [setting]);
         const out = await sql.query(
-          `UPDATE "session" SET "turn_state" = 'QUEUED', "finished_at" = NULL,
+          `UPDATE "session" SET "status" = 'PENDING', "finished_at" = NULL,
                   "inbox_lease_owner" = $2::uuid WHERE "id" = $1::uuid`, [id, marker]);
         await sql.query('COMMIT');
         return out.rowCount;
@@ -1003,7 +1020,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       const byFact = await session(db, w, { ...data, status: RunStatus.AWAITING_INPUT, finishedAt: new Date() });
       assert.equal(await revive(byFact, settings), 1, `${engine}: OLD.finished_at set is a revive`);
       // A terminal status word with no release fact: not exempt.
-      const byWord = await session(db, w, { ...data, status: RunStatus.CANCELLED });
+      const byWord = await session(db, w, { ...data, status: RunStatus.CANCELLED, finishedAt: null });
       if (engine === 'claude') {
         await assert.rejects(() => revive(byWord, settings), refusedWith(/does not read session engines/));
       } else {

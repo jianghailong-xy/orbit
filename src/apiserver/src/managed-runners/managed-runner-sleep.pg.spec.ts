@@ -61,6 +61,7 @@ import { bootstrapCredentialOf, managedPodName, managedSecretName } from './mana
 import { managedRunnerHeartbeat } from './managed-runner-sleep';
 import { recordManagedDemand } from './managed-runner-work';
 import { wordOf } from '../test-support/session-word';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -88,6 +89,11 @@ test('managed runner idle sleep and wake against a fake cluster', {
       title: 'managed work', prompt: 'work', provider: 'claude', status, num_turns: 1,
       runtime_session_id: randomUUID(), ...extra,
     };
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       // started_at and updated_at by the database's clock: they are timestamps without a zone.

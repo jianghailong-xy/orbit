@@ -52,6 +52,7 @@ import { ManagedRunnerDemandService, NOT_MANAGED } from './managed-runner-demand
 import { ManagedRunnerManager, type ReconcileOutcome } from './managed-runner-manager';
 import { buildManagedPod, managedPodName, managedSecretName } from './managed-runner-resources';
 import { recordManagedDemand, sleepingRunnersWithDemand } from './managed-runner-work';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const ON = { enabled: true, problem: null } as const;
@@ -90,6 +91,11 @@ test('a disabled account\'s managed runner is put to sleep and kept there, again
       id, owner_id: m.ownerId, creator_id: m.ownerId, workspace_id: workspace.id, assigned_runner_id: m.runnerId,
       title: 'managed work', prompt: 'work', provider: 'claude', status, num_turns: 1, runtime_session_id: randomUUID(),
     };
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       // started_at and updated_at by the database's clock: they are timestamps without a zone.

@@ -928,11 +928,14 @@ test('the owner channel refuses a personal access token door by door and field b
       [sessionId, `runtime-${RUN}`],
     );
     await db.runner.update({ where: { id: runnerId }, data: { status: 'ONLINE', lastHeartbeatAt: new Date() } });
+    // The word of a released run with no end asked (CANCELLED, plan §3.1 P5): what a refused resume leaves.
+    const ended = wordOf(await sessionRow());
+    assert.equal(ended, 'CANCELLED');
     refusedFields(
       await api('POST', `/sessions/${sessionId}/resume`, token, { clientTurnId: randomUUID(), content: 'from a token', permissionMode: 'bypassPermissions' }),
       ['permissionMode'],
     );
-    assert.deepEqual(wordOf((await sessionRow())), 'SUCCEEDED', 'the token revived nothing');
+    assert.deepEqual(wordOf((await sessionRow())), ended, 'the token revived nothing');
     ok(await api('POST', `/sessions/${sessionId}/resume`, login, { clientTurnId: randomUUID(), content: 'from a login', permissionMode: 'acceptEdits' }), 'a login reviving it');
     assert.equal((await sessionRow()).permissionMode, 'acceptEdits');
   });
