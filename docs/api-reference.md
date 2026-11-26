@@ -76,7 +76,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | Field | Meaning |
 | --- | --- |
 | `folders` | The folder rows, `{ folderId, rowCount, needsYou, running, jobs }`: only on a first page without `folderId`. |
-| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, coordinator }`, in list order. |
+| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator }`, in list order; a project's `running` / `jobs` say whether a member it holds runs / has a background job moving. |
 | `next` | The `after` of the following page, or `null` at the end. |
 | `restarted` | `true` when `after` was written under an order the list no longer has (Completed switches order on whether any session is held by a project): this is the first page again, with its `folders`, and replaces the pages already read. Absent otherwise. |
 

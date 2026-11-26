@@ -8,7 +8,7 @@
     "Without folderId: the entries in no live folder. With folderId: the entries filed in that folder, and no folder rows.",
     "Order: in the Open view, pinned entries first (a project entry is pinned when its coordinator is); then placement (listedAt, else createdAt) descending; at the same placement a session before a project; then createdAt descending; then id ascending.",
     "The Completed view has no Pinned, and its order switches on whether any session of the view in this workspace (every folder counted) is held by a project: none held, GET /sessions?view=completed's order — COALESCE(completedAt, archivedAt) descending, then createdAt descending, then id ascending; any held, the placement order above. A cursor written under one order and read under the other starts again from the first page.",
-    "A project entry's placedAt is the greatest listedAt (else createdAt) of the members it holds; its spokeAt the greatest lastTurnAt (else createdAt); memberCount how many members it holds here; its createdAt (for order) its coordinator's, else that of the member that placed it.",
+    "A project entry's placedAt is the greatest listedAt (else createdAt) of the members it holds; its spokeAt the greatest lastTurnAt (else createdAt); memberCount how many members it holds here; its createdAt (for order) its coordinator's, else that of the member that placed it; running / jobs whether any member it holds runs / has a background job moving, by workspaceSessionCounts' predicates.",
     "Folder rows (first page, no folderId): every live folder in Open, only those holding a session of the view in Completed, by name (case-insensitive, digits by value), the id settling a tie. rowCount: the rows the folder's page lists (a project is one row). needsYou: how many of its sessions (held members filed with their project) need you; running / jobs: whether any of them runs / has a background job moving — workspaceSessionCounts' predicates.",
     "Paging: each page's `next` is the sort key of its last entry; the next page lists the entries strictly after it, so no entry is skipped or repeated however many share a place."
   ],
@@ -33,7 +33,7 @@
       "projects": ["P1"],
       "sessions": [
         { "id": "c1", "project": "P1", "role": "COORDINATOR", "pinnedAt": "2026-11-20T07:00:00.000Z", "listedAt": "2026-11-20T10:00:00.000Z", "createdAt": "2026-11-18T00:00:00.000Z" },
-        { "id": "m1a", "project": "P1", "listedAt": "2026-11-20T12:00:00.000Z" },
+        { "id": "m1a", "project": "P1", "activity": "running", "listedAt": "2026-11-20T12:00:00.000Z" },
         { "id": "m1b", "project": "P1", "listedAt": "2026-11-20T09:00:00.000Z", "lastTurnAt": "2026-11-20T13:00:00.000Z" },
         { "id": "s1a", "listedAt": "2026-11-20T11:00:00.000Z" },
         { "id": "s1b", "listedAt": "2026-11-20T14:00:00.000Z" },
@@ -46,7 +46,7 @@
           "expected": {
             "folders": [],
             "entries": [
-              { "kind": "project", "id": "P1", "coordinator": "c1", "memberCount": 3, "placedAt": "2026-11-20T12:00:00.000Z", "spokeAt": "2026-11-20T13:00:00.000Z" },
+              { "kind": "project", "id": "P1", "coordinator": "c1", "memberCount": 3, "placedAt": "2026-11-20T12:00:00.000Z", "spokeAt": "2026-11-20T13:00:00.000Z", "running": true, "jobs": false },
               { "kind": "session", "id": "s1z" },
               { "kind": "session", "id": "s1b" },
               { "kind": "session", "id": "s1a" }
@@ -65,7 +65,7 @@
         { "id": "m2a", "project": "P2", "listedAt": "2026-11-20T12:00:00.000Z" },
         { "id": "m2b", "project": "P2", "listedAt": "2026-11-20T10:00:00.000Z" },
         { "id": "m3a", "project": "P3", "listedAt": "2026-11-20T11:00:00.000Z", "lastTurnAt": "2026-11-20T11:30:00.000Z" },
-        { "id": "m3b", "project": "P3", "listedAt": "2026-11-20T09:00:00.000Z", "createdAt": "2026-11-20T08:00:00.000Z" },
+        { "id": "m3b", "project": "P3", "activity": "jobs", "listedAt": "2026-11-20T09:00:00.000Z", "createdAt": "2026-11-20T08:00:00.000Z" },
         { "id": "c4", "lifecycle": "completed", "project": "P4", "role": "COORDINATOR", "listedAt": "2026-11-20T16:00:00.000Z" },
         { "id": "m4a", "project": "P4", "listedAt": "2026-11-20T08:00:00.000Z" },
         { "id": "s2a", "listedAt": "2026-11-20T10:30:00.000Z" }
@@ -78,10 +78,10 @@
             "folders": [],
             "entries": [
               { "kind": "session", "id": "m2a" },
-              { "kind": "project", "id": "P3", "coordinator": null, "memberCount": 2, "placedAt": "2026-11-20T11:00:00.000Z", "spokeAt": "2026-11-20T11:30:00.000Z" },
+              { "kind": "project", "id": "P3", "coordinator": null, "memberCount": 2, "placedAt": "2026-11-20T11:00:00.000Z", "spokeAt": "2026-11-20T11:30:00.000Z", "running": false, "jobs": true },
               { "kind": "session", "id": "s2a" },
               { "kind": "session", "id": "m2b" },
-              { "kind": "project", "id": "P4", "coordinator": "c4", "memberCount": 1, "placedAt": "2026-11-20T08:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z" }
+              { "kind": "project", "id": "P4", "coordinator": "c4", "memberCount": 1, "placedAt": "2026-11-20T08:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": false, "jobs": false }
             ]
           }
         }
@@ -128,7 +128,7 @@
           "expected": {
             "folders": null,
             "entries": [
-              { "kind": "project", "id": "P5", "coordinator": "c5", "memberCount": 3, "placedAt": "2026-11-20T12:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z" },
+              { "kind": "project", "id": "P5", "coordinator": "c5", "memberCount": 3, "placedAt": "2026-11-20T12:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": false, "jobs": false },
               { "kind": "session", "id": "f2a" }
             ]
           }
@@ -170,7 +170,7 @@
               { "kind": "session", "id": "tA" },
               { "kind": "session", "id": "tC" },
               { "kind": "session", "id": "tD" },
-              { "kind": "project", "id": "P6", "coordinator": null, "memberCount": 1, "placedAt": "2026-11-20T10:00:00.000Z", "spokeAt": "2026-11-20T09:45:00.000Z" },
+              { "kind": "project", "id": "P6", "coordinator": null, "memberCount": 1, "placedAt": "2026-11-20T10:00:00.000Z", "spokeAt": "2026-11-20T09:45:00.000Z", "running": false, "jobs": false },
               { "kind": "session", "id": "tE" }
             ]
           }
@@ -206,7 +206,7 @@
               { "folderId": "F7", "rowCount": 1, "needsYou": 0, "running": false, "jobs": false }
             ],
             "entries": [
-              { "kind": "project", "id": "P7", "coordinator": "c7", "memberCount": 1, "placedAt": "2026-11-20T11:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z" },
+              { "kind": "project", "id": "P7", "coordinator": "c7", "memberCount": 1, "placedAt": "2026-11-20T11:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": false, "jobs": false },
               { "kind": "session", "id": "k1" },
               { "kind": "session", "id": "k2" }
             ]
@@ -222,7 +222,7 @@
               { "folderId": "F8", "rowCount": 1, "needsYou": 0, "running": false, "jobs": false }
             ],
             "entries": [
-              { "kind": "project", "id": "P7", "coordinator": "c7", "memberCount": 1, "placedAt": "2026-11-20T15:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z" }
+              { "kind": "project", "id": "P7", "coordinator": "c7", "memberCount": 1, "placedAt": "2026-11-20T15:00:00.000Z", "spokeAt": "2026-11-19T00:00:00.000Z", "running": false, "jobs": false }
             ]
           }
         }

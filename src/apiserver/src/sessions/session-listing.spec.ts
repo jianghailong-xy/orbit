@@ -65,6 +65,7 @@ for (const c of FIXTURE.cases) {
         : {
             kind: 'project', id: entry.id, coordinator: entry.coordinatorId, memberCount: entry.memberCount,
             placedAt: entry.placedAtDate.toISOString(), spokeAt: entry.spokeAtDate.toISOString(),
+            running: entry.running, jobs: entry.jobs,
           }), read.expected.entries);
       assert.deepEqual(built.folders, read.expected.folders ?? []);
     });

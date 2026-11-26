@@ -52,7 +52,7 @@ GET /sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limi
     folders: Array<{ folderId, rowCount, needsYou, running, jobs }>,   // 只在首页（无 after）且无 folderId 时给
     entries: Array<
       | { kind: 'session', session: SessionListItem }
-      | { kind: 'project', projectId, placedAt, spokeAt, memberCount, coordinator: SessionListItem | null }
+      | { kind: 'project', projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator: SessionListItem | null }
     >,
     next: string | null,     // 下一页的 after；null = 到底了
     restarted?: true,        // 只在 after 失效时给：这是重新开始的首页，客户端丢掉已有的页、换成它
@@ -66,6 +66,7 @@ GET /sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limi
 - **顺序**：与今天一致，Pinned 在前，再按 `COALESCE(listed_at, created_at) DESC, created_at DESC`；项目条目的 `placedAt` 取它收走的成员里最大的 `listedAt`（无则 `createdAt`），Pinned 跟协调者。Completed 没有 Pinned，且照 `sessionProjectListing` 按"有没有会话被项目收走"切换：一个都没有时保持 `GET /sessions?view=completed` 的顺序（`COALESCE(completed_at, archived_at) DESC, created_at DESC`），有一个就全部按 `listedAt ?? createdAt` 排。
 - **游标与重新开始**：`next` 记着写它时用的是哪种顺序。两页之间顺序切换了（Completed 在收走与否之间变化），旧的 `after` 不再能定位，回答就是新顺序的首页，带 `restarted: true` 和首页才有的 `folders`（无 `folderId` 时）；客户端此时丢掉已有的页、换成这一页，不往后追加。正常的下一页没有 `restarted`。
 - **文件夹计数**：一个文件夹的行数（项目算一行）；needsYou / running / jobs 复用 `workspaceSessionCounts`（`sessions.service.ts:4110`）已有的判定，按 `folder_id` 再分一层，所以文件夹行、侧栏 workspace 行和行上的图标不会说两样话。
+- **项目条目的活动**：`running` / `jobs` 表示它收走的成员里有没有在跑、有没有后台作业在动，判定同文件夹计数（`workspaceSessionCounts`）。客户端不再持有这些成员，项目行的转圈和呼吸点只能由服务端给（T2 发现，owner 2026-11-26 定为本期补上）。
 - **范围外不动**：Trash、按标签筛或按标签分组时列表是平的，继续走今天的 `GET /sessions` 分页读，不进这个新读。
 
 项目行要的其余内容（等你的成员、跨 workspace 的会话数）今天已经由 `GET /sessions/project-placement`（`useSessionProjectData`）一次读回，不变。

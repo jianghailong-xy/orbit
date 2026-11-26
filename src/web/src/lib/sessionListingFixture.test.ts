@@ -101,6 +101,8 @@ describe('session listing fixture (contracts/session-listing.fixtures.json)', ()
               memberCount: entry.members.length,
               placedAt: entry.listedAt,
               spokeAt: entry.lastTurnAt,
+              running: entry.running,
+              jobs: entry.jobs,
             }
           : { kind: 'session', id: entry.id })).toEqual(read.expected.entries);
       });

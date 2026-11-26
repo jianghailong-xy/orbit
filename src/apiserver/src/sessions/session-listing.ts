@@ -84,6 +84,10 @@ export type ListingEntryKey =
       spokeAtDate: Date;
       memberCount: number;
       coordinatorId: string | null;
+      /** Whether a member it holds runs / has a background job moving: workspaceSessionCounts' predicates, as a
+       *  folder row's. False without `activity`. */
+      running: boolean;
+      jobs: boolean;
     });
 
 const time = (at: Date | null | undefined): number => {
@@ -114,6 +118,8 @@ const compareFolders = (a: ListingFolder, b: ListingFolder): number =>
  * - A project entry is filed in its coordinator's folder, a session in its own; a folder that is not a
  *   live folder of this workspace counts as none.
  * - Without `folderId`, the entries in no live folder; with it, the entries filed in it.
+ * - With `activity`, a project entry says whether a member it holds runs or has a job moving, which the
+ *   members' own rows said when the client grouped them.
  */
 export function buildSessionListing(input: {
   view: ListingView;
@@ -169,11 +175,14 @@ export function buildSessionListing(input: {
     const latest = members.reduce((newest, s) => time(s.listedAt ?? s.createdAt) > time(newest.listedAt ?? newest.createdAt) ? s : newest);
     const spoke = members.reduce((newest, s) => time(s.lastTurnAt ?? s.createdAt) > time(newest.lastTurnAt ?? newest.createdAt) ? s : newest);
     const placedAtDate = latest.listedAt ?? latest.createdAt;
+    const activity = input.activity;
     entries.push({
       kind: 'project', order, rank: 1, id: projectId, pinned: pinnedHere(coordinator?.pinnedAt ?? null),
       placedAt: time(placedAtDate), createdAt: time(coordinator?.createdAt ?? latest.createdAt),
       placedAtDate, spokeAtDate: spoke.lastTurnAt ?? spoke.createdAt,
       memberCount: members.length, coordinatorId: coordinator?.id ?? null,
+      running: !!activity && members.some((s) => activity.running.has(s.id)),
+      jobs: !!activity && members.some((s) => activity.jobs.has(s.id)),
     });
   }
   entries.sort(compareListingKeys);

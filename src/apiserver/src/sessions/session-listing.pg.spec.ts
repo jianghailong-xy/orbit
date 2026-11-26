@@ -224,7 +224,8 @@ interface Page {
   folders?: Array<{ folderId: string; rowCount: number; needsYou: number; running: boolean; jobs: boolean }>;
   entries: Array<
     | { kind: 'session'; session: { id: string } }
-    | { kind: 'project'; projectId: string; placedAt: string; spokeAt: string; memberCount: number; coordinator: { id: string } | null }
+    | { kind: 'project'; projectId: string; placedAt: string; spokeAt: string; memberCount: number; running: boolean; jobs: boolean;
+        coordinator: { id: string } | null }
   >;
   next: string | null;
   restarted?: boolean;
@@ -257,6 +258,8 @@ function named(s: Seeded, page: Page) {
           memberCount: entry.memberCount,
           placedAt: entry.placedAt,
           spokeAt: entry.spokeAt,
+          running: entry.running,
+          jobs: entry.jobs,
         }),
   };
 }

@@ -4988,9 +4988,9 @@ export class SessionsService {
    * `GET /sessions/listing` (docs/session-list-scale-design.md §3.2): one page of a workspace's list as
    * top-level entries, and on the first page of the workspace's own list its folder rows. The rules are in
    * session-listing.ts; this reads what they take — the scope's sessions, narrowly, each with the project
-   * its membership names, those projects' coordinators, the live folders, and for the folder rows the
-   * tallies `workspaceSessionCounts` counts — and builds full rows only for the sessions and coordinators
-   * the page shows.
+   * its membership names, those projects' coordinators, the live folders, and for the folder rows and the
+   * project entries the tallies `workspaceSessionCounts` counts — and builds full rows only for the sessions
+   * and coordinators the page shows.
    */
   async sessionListing(
     ownerId: string,
@@ -5033,7 +5033,7 @@ export class SessionsService {
       sessionKind: SESSION_KIND_CONVERSATION,
       runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] },
     });
-    const [found, firstTallies] = await Promise.all([
+    const [found, tallied] = await Promise.all([
       projectIds.length === 0 ? [] : this.prisma.$queryRaw<Array<{ projectId: string } & Partial<ListingCoordinator>>>(Prisma.sql`
         SELECT p.id AS "projectId", c.id, c.workspace_id AS "workspaceId", c.folder_id AS "folderId",
                c.pinned_at AS "pinnedAt", c.created_at AS "createdAt"
@@ -5043,7 +5043,8 @@ export class SessionsService {
            AND c.deleted_at IS NULL AND c.kind = 'CONVERSATION' AND c.help_ask IS NULL ${confined}
            AND (${sessionProjectMembershipSql('c')} ->> 'projectId')::uuid = p.id
          WHERE p.owner_id = ${ownerId}::uuid AND p.id = ANY(${projectIds}::uuid[])`),
-      !opts.after && !opts.folderId && folders.length > 0 ? tallies() : null,
+      // A project entry reads them too: whether a member it holds runs, or has a job moving.
+      (!opts.after && !opts.folderId && folders.length > 0) || projectIds.length > 0 ? tallies() : null,
     ]);
     const coordinators = new Map(found.map((row) => [row.projectId, row.id ? row as ListingCoordinator : null]));
     const listing = (activity: Awaited<ReturnType<typeof tallies>> | null) => buildSessionListing({
@@ -5059,13 +5060,13 @@ export class SessionsService {
         jobs: new Set(activity.jobs.flatMap((session) => session.stalled ? [] : [session.id])),
       },
     });
-    let built = listing(firstTallies);
+    let built = listing(tallied);
     // A cursor written under the other order (the Completed view's switches on whether anything is held;
     // session-listing.ts) places nothing in this one: the list starts again, and says so with `restarted`,
     // carrying what a first page carries, so a client replaces the pages it holds rather than appending.
     const restarted = !!opts.after && opts.after.order !== built.order;
     const withFolders = !opts.folderId && (!opts.after || restarted);
-    if (restarted && withFolders && folders.length > 0) built = listing(await tallies());
+    if (restarted && withFolders && folders.length > 0 && !tallied) built = listing(await tallies());
     const { page, next } = listingPage(built.entries, restarted ? null : opts.after, opts.limit, built.order);
     const shown = page.flatMap((entry) => entry.kind === 'session' ? [entry.id] : entry.coordinatorId ? [entry.coordinatorId] : []);
     const rowConfined = opts.confinedTo
@@ -5081,7 +5082,8 @@ export class SessionsService {
     type Row = (typeof rows)[number];
     type Entry =
       | { kind: 'session'; session: Row }
-      | { kind: 'project'; projectId: string; placedAt: Date; spokeAt: Date; memberCount: number; coordinator: Row | null };
+      | { kind: 'project'; projectId: string; placedAt: Date; spokeAt: Date; memberCount: number; running: boolean; jobs: boolean;
+          coordinator: Row | null };
     const entries = page.flatMap((entry): Entry[] => {
       if (entry.kind === 'session') {
         // Gone between the read that placed it and the one that built it (trashed, say): not listed.
@@ -5094,6 +5096,8 @@ export class SessionsService {
         placedAt: entry.placedAtDate,
         spokeAt: entry.spokeAtDate,
         memberCount: entry.memberCount,
+        running: entry.running,
+        jobs: entry.jobs,
         coordinator: entry.coordinatorId ? byId.get(entry.coordinatorId) ?? null : null,
       }];
     });
