@@ -47,7 +47,9 @@ export function sessionOriginTag(origin: string | null | undefined): string | nu
 /**
  * The standing guidance for a Drive chat's agent, sent with its first message and again on the first message after its
  * text changed (the server keeps the digest of what it last sent). `onCloud`: the session runs on an Orbit Cloud runner,
- * where the drive is mounted at ~/Files.
+ * where the drive is mounted at ~/Files: the chat reads it there and changes it only through the drive_* tools, since a
+ * mount that cannot tell its callers apart (Docker, docs/drive-technical-design.md §5.8) leaves a write the chat's
+ * rules cannot always be held to.
  */
 export function driveChatGuidance(onCloud: boolean): string[] {
   return [
@@ -57,7 +59,7 @@ export function driveChatGuidance(onCloud: boolean): string[] {
     'Trash is invisible to you: you cannot list, read or restore what is in it. The owner restores from Trash in Drive.',
     'Do not make share links: sharing is the owner\'s, in Drive.',
     onCloud
-      ? 'This session runs on an Orbit Cloud runner: the drive is mounted at ~/Files, so work on it there with ordinary file commands.'
+      ? 'This session runs on an Orbit Cloud runner: the drive is mounted at ~/Files, so read it there with ordinary file commands (ls, cat, grep). Make every change to the drive with the drive_* tools, never with file commands on ~/Files: a new folder, a move, a rename, a move to Trash and new content for a file all go through drive_move, drive_put or drive_delete (drive_move and drive_put make the folders their destination needs). Only those changes are kept together for the owner to undo, and a change through ~/Files may not be.'
       : 'This session\'s machine does not mount the drive: work on it with the drive_* tools (drive_list, drive_get, drive_put, drive_move, drive_delete).',
     'Each of the owner\'s messages may come with the folder they have open and the items they selected: read those as what "here" and "these" mean.',
   ];
