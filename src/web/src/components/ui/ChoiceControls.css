@@ -48,7 +48,8 @@
 }
 
 .orbit-checkbox {
-  border-radius: var(--orbit-radius-sm);
+  /* Rounder, as the fields are: 5px on a 16px box, the share 10px is of a 32px field. */
+  border-radius: 5px;
 }
 
 .orbit-radio {
@@ -265,7 +266,8 @@
   height: var(--orbit-switch-handle-size);
   border-radius: 9px;
   background: var(--orbit-control-on-primary);
-  box-shadow: 0 2px 4px 0 rgba(0, 35, 11, 0.2);
+  /* The menus' soft shadow, small: a lift, not a tint. */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
   transition: inset-inline-start 0.2s ease-in-out, width 0.2s ease-in-out;
 }
 
