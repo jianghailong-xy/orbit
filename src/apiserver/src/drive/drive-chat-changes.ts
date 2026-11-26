@@ -15,6 +15,7 @@ import { driveSizeLabel } from './drive-chat-notes';
 import {
   DRIVE_CHANGED_SINCE,
   DRIVE_NAME_TAKEN,
+  DRIVE_PARENT_GONE,
   drivePathSegments,
   DriveService,
   OWNER_WRITER,
@@ -430,6 +431,7 @@ export class DriveChatChanges {
         const where = change.beforeParentId ? await this.pathOrNull(ownerId, change.beforeParentId) : null;
         return skip(`${name} could not go back${where ? ` to ${where}` : ''}: something named ${quoted(change.beforeName ?? '')} is there now.`);
       }
+      if (code === DRIVE_PARENT_GONE) return skip(`${name} could not go back: the folder it was in is gone or in Trash.`);
       return skip(`${name} was left as it is: ${readableMessage(error).replace(/\.$/u, '')}.`);
     }
   }
