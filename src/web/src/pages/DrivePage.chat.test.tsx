@@ -381,6 +381,7 @@ describe('a new chat (board ②)', () => {
     const created = writes.find((w) => w.path === '/api/drive/chats')!;
     expect(created.method).toBe('POST');
     expect(created.body).toMatchObject({ text: 'Sort these scans by month', workspaceId: 'w-cloud', folderId: 'scans' });
+    expect(created.body).not.toHaveProperty('noFolder');
     expect(typeof created.body.clientTurnId).toBe('string');
     expect(shownSession()).toBe('S1');
     expect(document.querySelector('.wk-chat-run')).toBeNull();
@@ -428,6 +429,30 @@ describe('the folder chip (board ② note 3)', () => {
     const third = writes.filter((w) => w.path === '/api/sessions/S1/turns/current-work-routing')[2]!;
     expect(third.body).toMatchObject({ driveContext: { folderId: null, entryIds: [] } });
     expect(shownSession(), 'turning folders keeps the chat').toBe('S1');
+  });
+});
+
+describe('the folder chip on a new chat (board ② note 3: what is not shown is not sent)', () => {
+  it('crossed out, the first message names no folder: noFolder, and no folderId the server would read as the top level', async () => {
+    await open('/drive?folder=scans');
+    expect(chips()).toEqual(['Folder · Scans']);
+    await press(byLabel('Remove Folder · Scans'));
+    expect(chips()).toEqual([]);
+    await type('What is taking up the most space?');
+    await press(byLabel('Send'));
+    const created = writes.find((w) => w.path === '/api/drive/chats')!;
+    expect(created.body).toMatchObject({ text: 'What is taking up the most space?', workspaceId: 'w-cloud', noFolder: true });
+    expect(created.body).not.toHaveProperty('folderId');
+  });
+
+  it('at the top level, shown, it goes as folderId null', async () => {
+    await open('/drive');
+    expect(chips()).toEqual(['Folder · Drive']);
+    await type('Anything big?');
+    await press(byLabel('Send'));
+    const created = writes.find((w) => w.path === '/api/drive/chats')!;
+    expect(created.body).toMatchObject({ folderId: null });
+    expect(created.body).not.toHaveProperty('noFolder');
   });
 });
 

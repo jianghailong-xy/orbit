@@ -188,7 +188,13 @@ export interface DriveChatCreateBody {
   text: string;
   clientTurnId: string;
   workspaceId?: string;
+  /** The folder the owner has open; null or absent for the drive's top level. */
   folderId?: string | null;
+  /**
+   * The owner removed the folder chip (board ② note 3: what is not shown is not sent): the first message carries no
+   * folder and no selection, so its note names none. Not with `folderId` or `entryIds`.
+   */
+  noFolder?: boolean;
   entryIds?: string[];
   attachmentIds?: string[];
   engine?: string;

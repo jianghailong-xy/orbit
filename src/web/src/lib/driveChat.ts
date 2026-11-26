@@ -144,7 +144,11 @@ export function driveChatContext(attachments: WikiChatAttachments): { folderId: 
   return page?.kind === 'folder' ? { folderId: page.folderId, entryIds: [] } : undefined;
 }
 
-/** `POST /api/drive/chats`: the chat's session, its first turn filed under a UUID of ours. */
+/**
+ * `POST /api/drive/chats`: the chat's session, its first turn filed under a UUID of ours. The folder chip shown goes as
+ * `folderId` (null at the top level); none shown — crossed out, or not read yet — goes as `noFolder`, so the agent is
+ * told of no folder rather than of the top level.
+ */
 export const createDriveChat = (
   body: Omit<WikiChatCreate, 'wikiContext'>,
   attachments: WikiChatAttachments,
@@ -155,7 +159,7 @@ export const createDriveChat = (
     text: body.content,
     clientTurnId,
     ...(body.workspaceId ? { workspaceId: body.workspaceId } : {}),
-    ...(context ? { folderId: context.folderId } : {}),
+    ...(context ? { folderId: context.folderId } : { noFolder: true }),
     ...(body.attachmentIds?.length ? { attachmentIds: body.attachmentIds } : {}),
     ...(body.model !== undefined ? { model: body.model } : {}),
     ...(body.permissionMode !== undefined ? { permissionMode: body.permissionMode } : {}),
