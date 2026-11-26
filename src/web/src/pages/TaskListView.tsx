@@ -1359,8 +1359,9 @@ export function TaskListView() {
                     scopePath,
                     (path) => navigate(path),
                   )}
+                  tooltip="Choose which tasks to show"
                   trigger={
-                    <button type="button" className="tasks-scope-trigger" title="Choose which tasks to show">
+                    <button type="button" className="tasks-scope-trigger">
                       {pageTitle}
                       <CaretDownOutlined className="tasks-scope-caret" />
                     </button>

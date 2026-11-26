@@ -327,18 +327,19 @@ export function SessionOutputs({
         onClick={() => (commits ? toggleCommits() : firstFile && setOpenFile(firstFile))}
         aria-expanded={commits ? commitsOpen : undefined}
       >
-        <button
-          type="button"
-          className="wt-branch"
-          title="Copy branch name"
-          onClick={(e) => {
-            e.stopPropagation();
-            copy(displayBranch, 'branch');
-          }}
-        >
-          <span className="wt-branch-ico">⎇</span>
-          <BranchLabel branch={displayBranch} />
-        </button>
+        <Tooltip content="Copy branch name">
+          <button
+            type="button"
+            className="wt-branch"
+            onClick={(e) => {
+              e.stopPropagation();
+              copy(displayBranch, 'branch');
+            }}
+          >
+            <span className="wt-branch-ico">⎇</span>
+            <BranchLabel branch={displayBranch} />
+          </button>
+        </Tooltip>
         {commits ? (
           <>
             <CommitSummary commits={commits} dirty={dirtyNow} fileCount={files.length} />
@@ -882,19 +883,19 @@ function MergeButton({
         e.stopPropagation();
         onMerge(primaryTarget);
       }}
-      title={failed ? undefined : `Merge this branch into ${effectiveTarget ?? 'main'}`}
     >
       {primaryLabel}
     </button>
   );
-  // On failure, hover surfaces the real reason via a Tooltip (native title cleared above); otherwise
-  // the plain button with its native title is enough.
+  // Hover says where it merges, or on failure the real reason, in the app's tooltip.
   const mainBtnEl = failed ? (
     <Tooltip content={failureHint} side="top">
       {mainBtn}
     </Tooltip>
   ) : (
-    mainBtn
+    <Tooltip content={`Merge this branch into ${effectiveTarget ?? 'main'}`} side="top">
+      {mainBtn}
+    </Tooltip>
   );
   // Older runner (no reported targets) or mid-merge → the plain button, no caret.
   if (!hasMenu) return mainBtnEl;
@@ -1046,26 +1047,29 @@ function CommitButton({
   if (!onCommit) return null;
   const pending = busy || status === 'pending';
   const failed = status === 'error';
+  const tip = turnActive && !pending
+    ? 'Wait for the current turn to finish before committing'
+    : failed
+      ? 'Commit failed — try again'
+      : 'Commit the worktree changes onto this branch';
+  // The span takes the pointer while the button is disabled for a running turn, so the reason still shows.
   return (
-    <button
-      type="button"
-      className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
-      disabled={pending || turnActive}
-      onClick={(e) => {
-        // Don't let the click bubble to the row's toggle — committing shouldn't expand the panel.
-        e.stopPropagation();
-        onCommit();
-      }}
-      title={
-        turnActive && !pending
-          ? 'Wait for the current turn to finish before committing'
-          : failed
-            ? 'Commit failed — try again'
-            : 'Commit the worktree changes onto this branch'
-      }
-    >
-      {pending ? 'Committing…' : failed ? 'Retry commit' : 'Commit'}
-    </button>
+    <Tooltip content={tip} side="top">
+      <span style={{ display: 'inline-flex' }}>
+        <button
+          type="button"
+          className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
+          disabled={pending || turnActive}
+          onClick={(e) => {
+            // Don't let the click bubble to the row's toggle — committing shouldn't expand the panel.
+            e.stopPropagation();
+            onCommit();
+          }}
+        >
+          {pending ? 'Committing…' : failed ? 'Retry commit' : 'Commit'}
+        </button>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -1594,15 +1598,12 @@ export function WorktreeDiffDrawer({
         )
       }
       headerActions={
-        <button
-          type="button"
-          className="wt-diff-max-btn"
-          onClick={toggleMax}
-          title={maximized ? 'Restore to side panel' : 'Maximize to full screen'}
-        >
-          {maximized ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-          {maximized ? 'Restore' : 'Maximize'}
-        </button>
+        <Tooltip content={maximized ? 'Restore to side panel' : 'Maximize to full screen'} side="bottom" align="end">
+          <button type="button" className="wt-diff-max-btn" onClick={toggleMax}>
+            {maximized ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+            {maximized ? 'Restore' : 'Maximize'}
+          </button>
+        </Tooltip>
       }
     >
       <div className="wt-diff-body" ref={bodyRef}>

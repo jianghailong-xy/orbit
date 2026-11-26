@@ -443,15 +443,16 @@ function PageTile({ file, files, pins, onView, onSave }: {
       {evidenceFileIsGone(file) ? (
         <div className="evidence-tile">{face}</div>
       ) : (
-        <button
-          type="button"
-          className="evidence-tile evidence-tile-press"
-          aria-label={picture ? name : evidenceFileDownloadName(name)}
-          title={picture ? name : evidenceFileDownloadName(name)}
-          onClick={(event) => (picture ? onView(file, event) : onSave(file))}
-        >
-          {face}
-        </button>
+        <Tooltip content={picture ? name : evidenceFileDownloadName(name)}>
+          <button
+            type="button"
+            className="evidence-tile evidence-tile-press"
+            aria-label={picture ? name : evidenceFileDownloadName(name)}
+            onClick={(event) => (picture ? onView(file, event) : onSave(file))}
+          >
+            {face}
+          </button>
+        </Tooltip>
       )}
       {picture ? null : evidenceFileCanPin(file) ? <PinButton file={file} pins={pins} /> : null}
       {picture && evidenceFileIsPinned(file) ? (

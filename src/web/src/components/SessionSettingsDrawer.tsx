@@ -525,18 +525,22 @@ export function SessionSettingsDrawer({
             </dd>
             <dt>Session ID</dt>
             <dd className="ss-mono ss-copy">
-              <button type="button" className="ss-copy-btn" title={sessionId} aria-label="Copy session ID"
-                onClick={() => copy(session?.id ?? sessionId, 'Session ID copied')}>
-                {tail(session?.id ?? sessionId)} <CopyOutlined />
-              </button>
+              <Tooltip content={session?.id ?? sessionId} mono align="end">
+                <button type="button" className="ss-copy-btn" aria-label="Copy session ID"
+                  onClick={() => copy(session?.id ?? sessionId, 'Session ID copied')}>
+                  {tail(session?.id ?? sessionId)} <CopyOutlined />
+                </button>
+              </Tooltip>
             </dd>
             <dt>Engine session</dt>
             <dd className="ss-mono ss-copy">
               {session?.runtimeSessionId ? (
-                <button type="button" className="ss-copy-btn" title={session.runtimeSessionId} aria-label="Copy engine session ID"
-                  onClick={() => copy(session.runtimeSessionId!, 'Engine session ID copied')}>
-                  {tail(session.runtimeSessionId)} <CopyOutlined />
-                </button>
+                <Tooltip content={session.runtimeSessionId} mono align="end">
+                  <button type="button" className="ss-copy-btn" aria-label="Copy engine session ID"
+                    onClick={() => copy(session.runtimeSessionId!, 'Engine session ID copied')}>
+                    {tail(session.runtimeSessionId)} <CopyOutlined />
+                  </button>
+                </Tooltip>
               ) : '—'}
             </dd>
           </dl>

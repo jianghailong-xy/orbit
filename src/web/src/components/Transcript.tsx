@@ -4416,17 +4416,18 @@ function LocalArtifactFile({
     }
   };
   return (
-    <button
-      type="button"
-      className={`chat-file${failed ? ' is-error' : ''}`}
-      onClick={download}
-      title={failed ? `Retry download ${filename}` : `Download ${filename}`}
-      aria-label={failed ? `Retry download ${filename}` : `Download ${filename}`}
-      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
-    >
-      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
-      <span className="chat-file-name">{shown}</span>
-    </button>
+    <Tooltip content={failed ? `Retry download ${filename}` : `Download ${filename}`}>
+      <button
+        type="button"
+        className={`chat-file${failed ? ' is-error' : ''}`}
+        onClick={download}
+        aria-label={failed ? `Retry download ${filename}` : `Download ${filename}`}
+        data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+      >
+        {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
+        <span className="chat-file-name">{shown}</span>
+      </button>
+    </Tooltip>
   );
 }
 

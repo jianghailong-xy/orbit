@@ -13692,20 +13692,21 @@ export function SessionComposer({
         {/* Settings › Translation is on (6A): what is typed here is translated into the agent language when it
             is sent, never while it is typed. The tag opens the setting. */}
         {translationIsOn && (
-          <button
-            type="button"
-            className={`composer-translation-tag${translationUnavailable ? ' is-unavailable' : ''}`}
-            title={
-              translationUnavailable
-                ? `${unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}. The translator is failing, so a message sent now is held until you Retry or Send as written. Open Settings › Translation`
-                : 'Messages are translated before the agent gets them. Open Settings › Translation'
-            }
-            onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
-          >
-            {translationUnavailable
-              ? unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))
-              : translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
-          </button>
+          <Tooltip content={
+            translationUnavailable
+              ? `${unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}. The translator is failing, so a message sent now is held until you Retry or Send as written. Open Settings › Translation`
+              : 'Messages are translated before the agent gets them. Open Settings › Translation'
+          }>
+            <button
+              type="button"
+              className={`composer-translation-tag${translationUnavailable ? ' is-unavailable' : ''}`}
+              onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
+            >
+              {translationUnavailable
+                ? unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))
+                : translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
+            </button>
+          </Tooltip>
         )}
         {/* A 32px icon like `+` and Send, there whenever the optimizer is on and only disabled with
             nothing to optimize: a button that came and went with the draft moved every control to
