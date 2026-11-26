@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DecisionStrip,
   GO_TO_CARD_HINT,
@@ -17,6 +17,17 @@ import {
   type PendingDecisionRow,
 } from './DecisionRail';
 import { DECISION_CONFIRM_ACTION, DECISION_SEND_BACK_ACTION } from './EvidenceDecisionCard';
+
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('./ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
 
 /**
  * What the strip puts on screen, and — the half that matters more — what it does not.
@@ -244,7 +255,7 @@ describe('the line', () => {
       expect(tags).toHaveLength(1);
       expect(tags[0]).not.toContain('aria-expanded');
       // Before any press it goes to the question it names; "the next" is for the presses after.
-      expect(tags[0]).toContain(`title="${GO_TO_CARD_HINT}"`);
+      expect(tags[0]).toContain(`data-tip="${GO_TO_CARD_HINT}"`);
     }
     expect(GO_TO_NEXT_CARD_HINT).not.toBe(GO_TO_CARD_HINT);
   });
@@ -465,7 +476,7 @@ describe('a question is counted where its card is', () => {
     // Three rows, one card: one question, and a line that says it goes to one card.
     const html = folded(queue(), (each) => each.taskId === 'task-middle');
     expect(html).toContain(needsDecisionCount(1));
-    expect(buttonTags(html)[0]).toContain(`title="${GO_TO_CARD_HINT}"`);
+    expect(buttonTags(html)[0]).toContain(`data-tip="${GO_TO_CARD_HINT}"`);
   });
 
   it('never counts a row the door itself would refuse, whatever the page says', () => {

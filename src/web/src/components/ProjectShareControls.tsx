@@ -11,6 +11,7 @@ import { ShareModal, shareLinkQueryKey } from './ShareModal';
 import { taskStatusLabel } from './TaskStatusPill';
 import { Button } from './ui/Button';
 import { Menu } from './ui/Menu';
+import { Tooltip } from './ui/Tooltip';
 
 /** The signed-in address of a project — what Copy link hands its owner, never the public one. */
 export const projectAppUrl = (projectId: string): string =>
@@ -160,14 +161,15 @@ export function ProjectShareControls({
   return (
     <>
       {live ? (
-        <button
-          type="button"
-          className="session-shared-pill"
-          title="Anyone with the link can view this project — open its sharing settings"
-          onClick={() => openShare(false)}
-        >
-          <GlobalOutlined /> Shared · Live
-        </button>
+        <Tooltip content="Anyone with the link can view this project — open its sharing settings" side="bottom" align="end">
+          <button
+            type="button"
+            className="session-shared-pill"
+            onClick={() => openShare(false)}
+          >
+            <GlobalOutlined /> Shared · Live
+          </button>
+        </Tooltip>
       ) : (
         <Button size="small" icon={<GlobalOutlined />} onClick={() => openShare(false)}>
           Share

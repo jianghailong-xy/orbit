@@ -1,0 +1,886 @@
+[
+{
+"kind": "C full text of a cut-off label",
+"file": "pages/GuestSessionPage.tsx",
+"line": 629,
+"tag": "span",
+"aria": false,
+"title": "{titleFirstLine(head.title)}",
+"cls": [
+"share-crumb",
+"is-here"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "pages/AdminUsersPage.tsx",
+"line": 130,
+"tag": "div",
+"aria": false,
+"title": "{user.email}",
+"cls": [
+"admin-users-email"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "pages/SharedTaskPage.tsx",
+"line": 63,
+"tag": "span",
+"aria": false,
+"title": "{edge.title}",
+"cls": [
+"share-dep-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "pages/TaskListView.tsx",
+"line": 1209,
+"tag": "span",
+"aria": false,
+"title": "{r.title}",
+"cls": [
+"task-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "pages/drive/StorageFilesPage.tsx",
+"line": 120,
+"tag": "span",
+"aria": false,
+"title": "{name}",
+"cls": [
+"storage-file-name-text"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionOutputs.tsx",
+"line": 485,
+"tag": "code",
+"aria": false,
+"title": "\"Copy\"",
+"cls": [
+"wt-merge-cmd"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionOutputs.tsx",
+"line": 493,
+"tag": "code",
+"aria": false,
+"title": "\"Copy\"",
+"cls": [
+"wt-merge-cmd"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionOutputs.tsx",
+"line": 1323,
+"tag": "span",
+"aria": false,
+"title": "{status}",
+"cls": [
+"session-file-status",
+"st-"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/NewSessionProviderHero.tsx",
+"line": 83,
+"tag": "button",
+"aria": true,
+"title": "{label}",
+"cls": [
+"np-place-chip"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/RunSettingsSummary.tsx",
+"line": 27,
+"tag": "b",
+"aria": false,
+"title": "{RUN_SETTING_DIFFERS}",
+"cls": [
+"run-settings-changed"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectRunSettings.tsx",
+"line": 530,
+"tag": "code",
+"aria": false,
+"title": "{branch}",
+"cls": [
+"start-card-branch"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/WatchRelations.tsx",
+"line": 212,
+"tag": "span",
+"aria": false,
+"title": "{targetName(single)}",
+"cls": [
+"ct-one"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/WatchRelations.tsx",
+"line": 325,
+"tag": "span",
+"aria": false,
+"title": "{targetName(t)}",
+"cls": [
+"ct-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectLandingsWindow.tsx",
+"line": 406,
+"tag": "span",
+"aria": false,
+"title": "{SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}",
+"cls": [
+"landing-page-foot-line"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ToolCallBody.tsx",
+"line": 85,
+"tag": "div",
+"aria": false,
+"title": "{path}",
+"cls": [
+"approval-path"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionMessageCard.tsx",
+"line": 96,
+"tag": "div",
+"aria": false,
+"title": "{SESSION_MESSAGE_NOT_YOU}",
+"cls": [
+"smc-head"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionCreatedTasksStrip.tsx",
+"line": 81,
+"tag": "span",
+"aria": false,
+"title": "{single.title}",
+"cls": [
+"ct-one"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionCreatedTasksStrip.tsx",
+"line": 139,
+"tag": "span",
+"aria": false,
+"title": "{row.title}",
+"cls": [
+"ct-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/EvidenceFiles.tsx",
+"line": 245,
+"tag": "span",
+"aria": false,
+"title": "{name}",
+"cls": [
+"evidence-report-name"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/WorkspaceView.tsx",
+"line": 1761,
+"tag": "div",
+"aria": false,
+"title": "{project.line.text}",
+"cls": [
+"session-project-pause-glyph"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/WorkspaceView.tsx",
+"line": 2938,
+"tag": "button",
+"aria": false,
+"title": "{lastMine.text}",
+"cls": [
+"chat-older-mine"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/WorkspaceView.tsx",
+"line": 13168,
+"tag": "span",
+"aria": false,
+"title": "{im.name}",
+"cls": [
+"composer-file-name"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/WorkspaceView.tsx",
+"line": 13387,
+"tag": "span",
+"aria": false,
+"title": "{offeredSuggestion}",
+"cls": [
+"composer-suggestion-text"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/JobCard.tsx",
+"line": 316,
+"tag": "span",
+"aria": false,
+"title": "{title}",
+"cls": [
+"chat-tool-summary",
+"chat-job-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3059,
+"tag": "div",
+"aria": false,
+"title": "{title}",
+"cls": [
+"project-open-item-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3063,
+"tag": "div",
+"aria": false,
+"title": "{detailLine}",
+"cls": [
+"project-open-item-line"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3126,
+"tag": "div",
+"aria": false,
+"title": "{START_PROJECT_TITLE}",
+"cls": [
+"project-open-item-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3130,
+"tag": "div",
+"aria": false,
+"title": "{line}",
+"cls": [
+"project-open-item-line"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3185,
+"tag": "div",
+"aria": false,
+"title": "{wait.title}",
+"cls": [
+"project-open-item-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3186,
+"tag": "div",
+"aria": false,
+"title": "{wait.detailLine}",
+"cls": [
+"project-open-item-line"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3210,
+"tag": "div",
+"aria": false,
+"title": "{wait.title}",
+"cls": [
+"project-open-item-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3211,
+"tag": "div",
+"aria": false,
+"title": "{wait.detailLine}",
+"cls": [
+"project-open-item-line"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3245,
+"tag": "div",
+"aria": false,
+"title": "{PROJECT_DONE_COPY.heading}",
+"cls": [
+"project-open-item-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectProgressStatus.tsx",
+"line": 3246,
+"tag": "div",
+"aria": false,
+"title": "{detail}",
+"cls": [
+"project-open-item-line"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/PublicShell.tsx",
+"line": 65,
+"tag": "Link",
+"aria": false,
+"title": "{crumb.label}",
+"cls": [
+"share-crumb"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/PublicShell.tsx",
+"line": 69,
+"tag": "span",
+"aria": false,
+"title": "{crumb.label}",
+"cls": [
+"share-crumb"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/BackgroundShellsTray.tsx",
+"line": 279,
+"tag": "span",
+"aria": false,
+"title": "{item.name}",
+"cls": [
+"bg-name-mid"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/BackgroundShellsTray.tsx",
+"line": 286,
+"tag": "span",
+"aria": false,
+"title": "{item.name}",
+"cls": [
+"bg-name-mid"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/BackgroundShellsTray.tsx",
+"line": 362,
+"tag": "div",
+"aria": false,
+"title": "{shell.outputPath}",
+"cls": [
+"bg-shell-meta"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/RunnerEngines.tsx",
+"line": 1593,
+"tag": "div",
+"aria": false,
+"title": "{accountDir(account)}",
+"cls": [
+"re-meta"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/RunnerEngines.tsx",
+"line": 1796,
+"tag": "div",
+"aria": false,
+"title": "{removed.home}",
+"cls": [
+"re-removed-line"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/WikiChatPanel.tsx",
+"line": 1080,
+"tag": "span",
+"aria": false,
+"title": "{label}",
+"cls": [
+"wk-chat-pick"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/OrbitLinkCard.tsx",
+"line": 324,
+"tag": "span",
+"aria": false,
+"title": "{shown.word}",
+"cls": [
+"olc-state",
+"is-"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/OrbitLinkCard.tsx",
+"line": 335,
+"tag": "span",
+"aria": false,
+"title": "{word}",
+"cls": [
+"olc-state",
+"is-"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/AccountPools.tsx",
+"line": 271,
+"tag": "div",
+"aria": false,
+"title": "{member.label}",
+"cls": [
+"re-name"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/AccountPools.tsx",
+"line": 366,
+"tag": "div",
+"aria": false,
+"title": "{key.label}",
+"cls": [
+"re-name"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/AccountPools.tsx",
+"line": 490,
+"tag": "div",
+"aria": false,
+"title": "{member.label}",
+"cls": [
+"re-name"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/LandTaskStatus.tsx",
+"line": 115,
+"tag": "time",
+"aria": false,
+"title": "{value}",
+"cls": [],
+"k": "C? no class to read"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/LandTaskStatus.tsx",
+"line": 200,
+"tag": "code",
+"aria": false,
+"title": "{job.targetRef}",
+"cls": [],
+"k": "C? no class to read"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionCommits.tsx",
+"line": 83,
+"tag": "span",
+"aria": false,
+"title": "{latest.subject}",
+"cls": [
+"wt-commits-subject"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/OwnerConfirmationReview.tsx",
+"line": 528,
+"tag": "span",
+"aria": false,
+"title": "{bar.reviewer}",
+"cls": [
+"owner-confirmation-review-name"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/OwnerConfirmationReview.tsx",
+"line": 582,
+"tag": "div",
+"aria": false,
+"title": "{line.text}",
+"cls": [
+"owner-confirmation-review-headline"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/Transcript.tsx",
+"line": 2970,
+"tag": "div",
+"aria": false,
+"title": "{node.message}",
+"cls": [],
+"k": "C? no class to read"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/Transcript.tsx",
+"line": 3088,
+"tag": "div",
+"aria": false,
+"title": "{summary.reason}",
+"cls": [
+"chat-error-card-reason"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/Transcript.tsx",
+"line": 4052,
+"tag": "span",
+"aria": false,
+"title": "{label}",
+"cls": [
+"chat-file"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/Transcript.tsx",
+"line": 4061,
+"tag": "span",
+"aria": false,
+"title": "{label}",
+"cls": [
+"chat-file",
+"is-expired"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/Transcript.tsx",
+"line": 4319,
+"tag": "span",
+"aria": false,
+"title": "{src}",
+"cls": [
+"md-image-unavailable"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/Transcript.tsx",
+"line": 4475,
+"tag": "span",
+"aria": false,
+"title": "{href}",
+"cls": [
+"md-image-unavailable"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/Transcript.tsx",
+"line": 5066,
+"tag": "span",
+"aria": false,
+"title": "{path}",
+"cls": [
+"chat-tool-summary",
+"mono",
+"chat-path"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/Transcript.tsx",
+"line": 5300,
+"tag": "div",
+"aria": false,
+"title": "{command}",
+"cls": [
+"chat-steps-live-cmd",
+"mono"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/TasksSidePanel.tsx",
+"line": 1728,
+"tag": "span",
+"aria": false,
+"title": "{runnerLabel}",
+"cls": [
+"tp-workspace-runner"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/TaskAccountHold.tsx",
+"line": 52,
+"tag": "div",
+"aria": false,
+"title": "{full}",
+"cls": [
+"task-hold-line"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionAgentsStrip.tsx",
+"line": 102,
+"tag": "span",
+"aria": false,
+"title": "{summary.band}",
+"cls": [
+"bg-tray-count",
+"ag-band"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/TaskDependencyList.tsx",
+"line": 58,
+"tag": "span",
+"aria": false,
+"title": "{node.title}",
+"cls": [
+"tdg-list-title"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/TaskDependencyList.tsx",
+"line": 61,
+"tag": "span",
+"aria": false,
+"title": "{relationships}",
+"cls": [
+"tdg-list-relation"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectReadyToRun.tsx",
+"line": 141,
+"tag": "span",
+"aria": false,
+"title": "{summary}",
+"cls": [
+"project-ready-summary",
+"orbit-typography",
+"orbit-typography-secondary"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/ProjectReadyToRun.tsx",
+"line": 293,
+"tag": "div",
+"aria": false,
+"title": "{item.title}",
+"cls": [],
+"k": "C? no class to read"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionSettingsDrawer.tsx",
+"line": 428,
+"tag": "span",
+"aria": false,
+"title": "{workDir.path}",
+"cls": [
+"ss-mono",
+"ss-value",
+"ss-path"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/SessionSettingsDrawer.tsx",
+"line": 444,
+"tag": "span",
+"aria": false,
+"title": "{v}",
+"cls": [
+"ss-mono"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/CoordinatorDeliveryLine.tsx",
+"line": 69,
+"tag": "summary",
+"aria": false,
+"title": "{sentence}",
+"cls": [
+"owner-answer-line"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/AccountPause.tsx",
+"line": 39,
+"tag": "span",
+"aria": false,
+"title": "{label}",
+"cls": [
+"account-status-dot",
+"account-status-dot-"
+],
+"k": "C2 not cut off by its own CSS"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/OwnerConfirmationCard.tsx",
+"line": 583,
+"tag": "div",
+"aria": false,
+"title": "{row.detail}",
+"cls": [
+"owner-confirmation-if-detail"
+],
+"k": "C1 cut off by CSS (ellipsis / line clamp)"
+},
+{
+"kind": "C full text of a cut-off label",
+"file": "components/drive/DriveSyncCard.tsx",
+"line": 201,
+"tag": "li",
+"aria": false,
+"title": "{f.path}",
+"cls": [
+"drive-xfer-row",
+"is-failed"
+],
+"k": "C2 not cut off by its own CSS"
+}
+]

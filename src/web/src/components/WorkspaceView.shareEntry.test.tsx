@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Where a session says it is public, and the three ways out of its ⋯ menu
@@ -266,12 +267,12 @@ describe('a shared session in the session list and its conversation', { timeout:
 
     const globe = listRow(SHARED.title).querySelector<HTMLElement>('.session-title-row .session-shared');
     expect(globe, 'the shared row has no globe').not.toBeNull();
-    expect(globe!.getAttribute('title')).toBe('Shared · anyone with the link');
-    expect(globe!.getAttribute('title')).toBe(SESSION_SHARED_TIP);
+    expect(SESSION_SHARED_TIP).toBe('Shared · anyone with the link');
     expect(globe!.querySelector('.anticon-global')).not.toBeNull();
     // Beside the time: the globe is the element right before it.
     expect(globe!.nextElementSibling?.classList.contains('session-time')).toBe(true);
     expect(listRow(PLAIN.title).querySelector('.session-shared')).toBeNull();
+    expect(await hoverTooltip(globe!)).toBe(SESSION_SHARED_TIP);
   });
 
   it('says "Shared · Live" on the header\'s Share button of a shared conversation, and plain Share… in one nobody shared', async () => {

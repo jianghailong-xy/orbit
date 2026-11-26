@@ -1,4 +1,5 @@
 import type { JSX, ReactNode } from 'react';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * The action row and the action button every card that asks the reader for something renders.
@@ -73,17 +74,23 @@ export function CardActionButton({
   onClick: () => void;
   children: ReactNode;
 }): JSX.Element {
-  return (
+  const button = (
     <button
       type="button"
       className={`${CARD_ACTION_CLASS} ${CARD_ACTION_CLASS}--${tone}`}
       disabled={disabled}
-      title={title}
       aria-expanded={expanded}
       aria-controls={controls}
       onClick={onClick}
     >
       {children}
     </button>
+  );
+  if (!title) return button;
+  // The span takes the pointer: a disabled button gets none, and the tip would never open on it.
+  return (
+    <Tooltip content={title}>
+      <span style={{ display: 'inline-flex' }}>{button}</span>
+    </Tooltip>
   );
 }

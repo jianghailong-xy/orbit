@@ -1,4 +1,8 @@
-# Codex earned rate-limit reset 跨层契约（v1）
+# Codex earned rate-limit reset 跨层契约（v1，v2 见 §12）
+
+> **v2（2026-11-26）**：每个 Codex 账户（Default 与每个新增槽）各有自己的 reset 块，各自单调；
+> CONSUME / REFRESH command 从 `protocolVersion: 2` 起写明 `accountSlot`；工作区选了新增账户不再是
+> `ACCOUNT_OVERRIDE`。v1 heartbeat 原样解析。改动只在 §12 及下文标注“v2”的地方，其余各节仍是两版共同的规则。
 
 **状态**：任务「同步最新 main 并定义 Codex reset 跨层契约」的产物，是项目「Orbit：Codex 使用额度 Reset 能力」
 其余实现与验证任务的接口来源。任何线上字段、枚举、时限或状态转移的改动，都必须先改
@@ -42,6 +46,8 @@ shared 与 runner-go 两侧的契约测试读同一份文件，任何一侧没�
 7. **快照块单调。** 按 `fetchedAt`（read 开始时间，毫秒）比较，同毫秒同进程再比 `sequence`；旧进程与乱序
    heartbeat 覆盖不了新值。
 8. **旧 heartbeat 照常解析。** 没有 `rateLimitReset` 表示“不提供 reset”，不是“0 个 credit”。
+9. **v2：一个账户一个块。** Default 的块在 Codex 快照上，新增槽的块在 `accounts[<8 位 hex 槽 id>]` 上，
+   各自按第 7 条单调；v2 command 用 `accountSlot` 说明在哪个 `CODEX_HOME` 里读取与 consume（§12）。
 
 ---
 
@@ -90,6 +96,8 @@ shared 与 runner-go 两侧的契约测试读同一份文件，任何一侧没�
 
 挂在 Codex 快照上：多 provider 时是 `planUsage.codex.rateLimitReset`，单 provider 扁平快照时是
 `planUsage.rateLimitReset`（`provider: "codex"`）。读取一律用 `codexRateLimitResetOf(planUsage)`。
+**v2**：新增槽的块挂在同一 Codex 快照的 `accounts[<槽 id>].rateLimitReset`，格式与本节完全相同（`protocolVersion` 仍为 `1`），
+读取用 `codexRateLimitResetOf(planUsage, slot)`（§12.1）。
 
 | 字段 | 必填 / 可空 | 规则 |
 | --- | --- | --- |
@@ -147,7 +155,9 @@ read 本身失败（进程起不来、RPC 报错）不产生新块，旧块按 �
 
 ## 3. 账户范围与指纹
 
-- **MVP 范围**：runner 进程自身环境决定的默认 Codex 登录（`effectiveCodexHome(os.Environ())`）。
+- **MVP 范围（v1）**：runner 进程自身环境决定的默认 Codex 登录（`effectiveCodexHome(os.Environ())`）。
+  **v2**：再加上 runner 的每个新增 GPT 账户槽（`src/runner-go/codex_account_slot.go`，槽 id 为 8 位小写 hex），
+  每个槽用它自己的 `CODEX_HOME` 读取、算指纹、consume（§12）。指纹的算法与 key 不变，所有槽共用同一把 key。
 - **指纹**：`cxa1_` + `HMAC-SHA256(key, "orbit.codex-account-fingerprint.v1\n" + accountId)` 的前 16 字节，小写 hex。
   - `accountId` 取自**同一次** `account/rateLimits/read`，数量与账户出自一次读。
   - `key`：`machineHome()/codex-account-fingerprint.key`，32 个随机字节，权限 0600，首次需要时以 O_EXCL 创建，永不上传。
@@ -157,9 +167,13 @@ read 本身失败（进程起不来、RPC 报错）不产生新块，旧块按 �
     `fingerprint-raw-account-id`、`observed-raw-account-id` 被两侧拒绝）。
   - key 丢失会让在途 operation 看到“账户变了”而停止（§7.4），这是安全方向。
 - **ACCOUNT_OVERRIDE**：确认来自工作区或会话上下文（请求带 `workspaceId`）时，apiserver 用
-  `codexResetAccountOverride({ provider, codexAccount, env })` 判定：provider 不是内置 `codex`（配置型 provider 或别的 runtime），
-  或工作区选了 Default 以外的 Codex 账户（`codexAccount` 是某个槽 id——按选择判，不管该 runner 眼下是否还报告这个槽），
+  `codexResetAccountOverride({ provider, env })` 判定：provider 不是内置 `codex`（配置型 provider 或别的 runtime），
   或 env 里 `CODEX_HOME`、`CODEX_API_KEY`、任意 `OPENAI_*` 非空 → 拒绝。runner 自己的页面不带 `workspaceId`，不做这项判断。
+  - **v2 改了定义**：工作区选了 Default 以外的 Codex 账户（`codexAccount` 是某个槽 id）**不再是 override**，
+    而是这次 reset 的目标槽：`codexResetContextSlot({ codexAccount })`（没选即 `default`；按选择判，不管该 runner
+    眼下是否还报告这个槽）。只有非内置 provider，或上下文自带的 env 凭据，仍是 override。规则写在契约文件 `accountOverride`。
+  - v1 时代该项判定为 override 的理由是“reset 只会花 Default 的 credit”。在 apiserver 能按槽派发之前，创建路由仍以
+    `ACCOUNT_OVERRIDE` 拒绝选了新增账户的工作区（`codex-rate-limit-reset.service.ts` 的 `accountOverride`），否则花掉的仍是 Default 的。
 
 ---
 
@@ -167,8 +181,8 @@ read 本身失败（进程起不来、RPC 报错）不产生新块，旧块按 �
 
 | 项 | 定义 |
 | --- | --- |
-| capability | `codex-rate-limit-reset-v1`，放进 `X-Orbit-Runner-Capabilities`。**只能在 relay（§6.2、§6.3）与 consume+refresh（§6.4）都已存在的那个提交里加入 `runnerCapabilitiesV1`**；本任务只定义常量。 |
-| 协议版本 | 快照块、command、回执都带 `protocolVersion: 1`。runner 收到版本不是 1 的 CONSUME command → 回 `CONSUME_NOT_CALLED / PROTOCOL_UNSUPPORTED`；其他非法 command 静默忽略。 |
+| capability | v2 另有 `codex-rate-limit-reset-v2`（§12.3）：声明它的 runner 才会收到新增槽的 operation 与 v2 command。v1 如下：`codex-rate-limit-reset-v1`，放进 `X-Orbit-Runner-Capabilities`。**只能在 relay（§6.2、§6.3）与 consume+refresh（§6.4）都已存在的那个提交里加入 `runnerCapabilitiesV1`**；本任务只定义常量。 |
+| 协议版本 | v2：块仍为 `1`；command 与回执为 `1` 或 `2`，回执带它所答 command 的版本（`protocolVersions`，§12.3）。v1：快照块、command、回执都带 `protocolVersion: 1`。runner 收到版本不是 1 的 CONSUME command → 回 `CONSUME_NOT_CALLED / PROTOCOL_UNSUPPORTED`；其他非法 command 静默忽略。 |
 | 活跃 lease | heartbeat 带合法 `leaseOwner`（小写 UUID）。创建时看最近一次 heartbeat 的 `leaseOwner`；派发时看本次 heartbeat 的。 |
 | draining | 带 `draining: true` 的进程不领取、不接管、不被重投任何 reset command；手上的 claim 若还没调用上游，回 `RELEASED / RUNNER_DRAINING`。 |
 | 在线 | 沿用 apiserver 现有 `OFFLINE_AFTER_MS = 90s`（`isRunnerOnline`）。 |
@@ -207,7 +221,7 @@ heartbeat 的发出时刻）：
 | 路由 | 请求 | 成功 | 失败 |
 | --- | --- | --- | --- |
 | `POST /runners/:id/codex-rate-limit-reset` | `CreateCodexRateLimitResetRequest` | 201 新建 / 200 重放：`CreateCodexRateLimitResetResponse { operation, replayed }` | 400 请求体非法（`createCodexResetRequestViolations`）；404 runner 不存在或不属于当前用户；409 `CodexRateLimitResetRefusal { code, operationId? }` |
-| `GET /runners/:id/codex-rate-limit-reset` | — | `CodexRateLimitResetOperations { active, latest }` | 404 |
+| `GET /runners/:id/codex-rate-limit-reset` | 查询参数 `accountFingerprint`（可选） | `CodexRateLimitResetOperations { active, latest }`：带参数时只看该账户的 operation，不带时看整个 runner 的 | 400 指纹格式非法；404 |
 | `GET /runners/:id/codex-rate-limit-reset/:operationId` | — | `CodexRateLimitResetOperationView` | 404（含不属于该 runner） |
 
 创建流程（一个事务内）：
@@ -230,21 +244,21 @@ Web 在 `active` 非空时每 2–3 秒 GET 一次；v1 不加实时推送帧。
 | 拒绝码 | 含义 | Web 入口 |
 | --- | --- | --- |
 | `REQUEST_ID_REUSED` | 同一个 `clientRequestId` 用在了别的 runner 或账户上 | 客户端 bug：换新 id |
-| `ACCOUNT_OVERRIDE` | 该上下文不跑在 runner 默认 Codex 账户上 | 隐藏 |
+| `ACCOUNT_OVERRIDE` | v1：该上下文不跑在 runner 默认 Codex 账户上。v2：该上下文跑在 runner 任何槽都不持有的登录上（非内置 provider，或自带 env 凭据）；选了新增账户不算（§3） | 隐藏 |
 | `OPERATION_IN_FLIGHT` | 已有另一次确认（另一个 `clientRequestId`）的在途操作 | 附着到 `operationId`，展示 pending |
 | `RUNNER_OFFLINE` / `NO_ACTIVE_LEASE` / `RUNNER_DRAINING` | runner 暂不可派发 | 禁用，提示离线或升级中 |
-| `CAPABILITY_MISSING` | runner 版本不支持 | 禁用，提示升级 runner |
-| `SNAPSHOT_MISSING` / `UNSUPPORTED_AUTH` / `PROVIDER_UNSUPPORTED` / `ACCOUNT_UNIDENTIFIED` | 该账户或版本不支持 | 隐藏 |
+| `CAPABILITY_MISSING` | runner 版本不支持；v2 起也包括：目标是新增槽而 runner 没声明 `codex-rate-limit-reset-v2` | 禁用，提示升级 runner |
+| `SNAPSHOT_MISSING` / `UNSUPPORTED_AUTH` / `PROVIDER_UNSUPPORTED` / `ACCOUNT_UNIDENTIFIED` | 该账户或版本不支持；v2 起看的是目标槽自己的块（该槽没有块即 `SNAPSHOT_MISSING`） | 隐藏 |
 | `ACCOUNT_MISMATCH` | 用户确认时看到的账户已不是当前账户 | 刷新后重试 |
 | `SNAPSHOT_STALE` | 快照超过 15 分钟、来自未来超过 5 分钟，或读取开始不晚于 `readRequiredAfter`（可能已扣费的结算之后还没有新读） | 禁用，展示新鲜度；因 `readRequiredAfter` 禁用时说明上次 reset 可能已用掉 credit，刷新后再试 |
 | `CREDITS_UNAVAILABLE` / `NO_CREDIT_AVAILABLE` | 上游暂不可用 / 数量为 0 | 禁用 |
 
 资格检查按 `CODEX_RATE_LIMIT_RESET_ELIGIBILITY_ORDER` 依次进行，Web 禁用入口与 API 拒绝用的是同一个函数、同一个答案。
-Web 的 `readRequiredAfter` 从 `GET /runners/:id/codex-rate-limit-reset` 的 `latest` 推出（runbook §2.4）；只看 `latest` 的例外见 runbook §8 R3。
+Web 按账户读（`?accountFingerprint=`），每张卡片的 `readRequiredAfter` 从该账户的 `latest` 推出（runbook §2.4、§8 R3）。
 
 ### 6.2 API → Runner：heartbeat 响应 `codexRateLimitResetRequest`
 
-每个 runner 进程一次最多一条（MVP 只有默认账户）。字段见 `CodexRateLimitResetCommand`：`protocolVersion`、
+每个 runner 进程一次最多一条（v1 只有默认账户；v2 见 §12.3）。字段见 `CodexRateLimitResetCommand`：`protocolVersion`、
 `operationId`（UUID，永不改写成 public id）、`leaseOwner`、`claimGeneration`、`phase`、`accountFingerprint`、
 `providerIdempotencyKey`（**恰在 CONSUME**）、`requestedAt`。
 
@@ -452,7 +466,9 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 
 ## 8. 快照单调（CAS）
 
-`orderCodexResetSnapshot(stored, incoming, transportLeaseOwner, now)`，heartbeat 写 `planUsage` 与 `REFRESHED` 回执写入时都要调用：
+`orderCodexResetSnapshot(stored, incoming, transportLeaseOwner, now)`，heartbeat 写 `planUsage` 与 `REFRESHED` 回执写入时都要调用。
+**v2：每个账户的块各自比较**——`stored` 与 `incoming` 是同一个槽的块（Default 对 Default，`accounts[X]` 对 `accounts[X]`），
+一个槽的块不会与别的槽比较，也不会被写到别的槽下（§12.2）：
 
 | 顺序 | 条件 | 结果 |
 | --- | --- | --- |
@@ -464,7 +480,7 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 | 6 | 同一毫秒、不同 generation | `REJECT_OLDER`（先到者保留） |
 | 7 | 同一毫秒、同一 generation：sequence 更大 / 相等 / 更小 | `ACCEPT_NEWER` / `REJECT_DUPLICATE` / `REJECT_OLDER` |
 
-写入：heartbeat 的 `planUsage` 其余部分照旧整体覆盖；块被拒时，写回保留已存储的块。实现是 compare-and-set，不开事务、不锁热行
+写入：heartbeat 的 `planUsage` 其余部分照旧整体覆盖；块被拒时，写回保留已存储的块（v2：逐槽保留，一个槽被拒不影响别的槽）。实现是 compare-and-set，不开事务、不锁热行
 （`src/apiserver/src/runner-api/codex-reset-plan-usage.ts`）：读出存储值，`mergeHeartbeatPlanUsage` 合并，再以“`plan_usage`
 仍等于读出的值”为条件 `updateMany` 写回；条件落空说明有并发写入，重读重合并，至多 `PLAN_USAGE_CAS_ATTEMPTS` 次后放弃本次、等下一次 heartbeat。
 新鲜度（资格检查用）：`now − 15min ≤ fetchedAt ≤ now + 5min`。时钟跳变只会让 reset 暂时不可用，不会导致重复消费——
@@ -552,5 +568,108 @@ bash scripts/test-codex-reset-fault-injection.sh # 加固：真实控制面 + Go
 - UNRESOLVED 是终态：进程失联很久之后迟到的真实 outcome 不再记录，界面应提示以刷新后的额度为准。
 - 同一个 ChatGPT 账户登录在两台 runner 上时指纹不同，两边可以各有一个在途 operation（各自需要一次明确确认）。
 - v1 不选择具体 credit（不传 `creditId`），不支持工作区级 `CODEX_HOME` 账户，不在原生客户端提供入口，不加实时推送帧。
+  v2 仍是如此；v2 支持的是 runner 的新增账户槽，不是工作区 env 里自带的 `CODEX_HOME`（那仍是 `ACCOUNT_OVERRIDE`）。
 - 排障、人工恢复的边界、日志与指标、故障注入 harness 与残余风险（进程在调用前暂停、app-server 放弃后上游仍处理、时钟偏差等）
   见 [codex-rate-limit-reset-runbook.md](./codex-rate-limit-reset-runbook.md)。
+
+---
+
+## 12. 契约 v2：每个账户一个 reset 块
+
+**状态**：项目「Codex reset for every GPT account」的契约任务（2026-11-26）。v1 的 reset 只属于 Default（§3）：新增 GPT 账户槽
+（`src/runner-go/codex_account_slot.go`、`codex_account_usage.go`）从不带 reset 块，apiserver 的 `sanitizePlanUsageAccounts`
+（`src/apiserver/src/providers/plan-usage-accounts.ts`）也会把它剥掉。v2 让每个账户都可以有自己的块和自己的 operation。
+
+**本任务不做**：不改 probe、不接 heartbeat、不改 apiserver 的存储与剥离、不建列、不做 UI。这些各有任务；本节只定义线上形状与纯函数。
+契约测试：`src/shared/src/codexRateLimitReset.spec.ts` 的 `contract v2` 一组，`src/runner-go/codex_rate_limit_reset_v2_test.go`
+（`go test -run CodexRateLimitReset ./...` 同时重跑 v1 的契约检查）。
+
+### 12.1 块挂在哪里
+
+| 账户 | 块的位置（嵌套快照；扁平快照把 `codex.` 去掉） | 读取 |
+| --- | --- | --- |
+| Default | `planUsage.codex.rateLimitReset`（与 v1 相同） | `codexRateLimitResetOf(planUsage)` 或 `codexRateLimitResetOf(planUsage, "default")` |
+| 新增槽 `X` | `planUsage.codex.accounts[X].rateLimitReset` | `codexRateLimitResetOf(planUsage, X)` |
+
+- 槽 id：`^[0-9a-f]{8}$`（runner 的 `accountSlotIDPattern`）；`default` 是 Default 的名字，不会出现在 `accounts` 的键里。
+  不是槽 id 的键（包括 `__proto__`）读出来一律是“没有块”。
+- 块的格式与 §2 完全相同，`protocolVersion` 仍为 `1`：v2 改的是块放在哪里，不是块长什么样。所以 v1 的 apiserver 和 Web
+  读 Default 的块不受影响，也不会把新增槽的块误当成 Default 的。
+- 只有 Codex 快照的 `accounts` 条目会带块；Claude、Kimi、Cursor 的 `accounts` 条目不带，带了也不读。
+- 某个槽没有块 = 该槽“不提供 reset”（§0 第 8 条），与 Default 一样，不是“0 个 credit”；其余槽照常。
+- 每个槽的块由该槽自己的 `account/read` + `account/rateLimits/read` 产生，在该槽的 `CODEX_HOME` 里读取，指纹用同一把 key
+  （§3），所以同一个 ChatGPT 账户签进两个槽时两个块指纹相同——那是同一份 credit，不是两份。
+- 示例：fixtures `heartbeats.perAccount`（Default 与两个新增槽 `3fa91c2e`、`7b04d1e9` 各一个块，后者是 `CREDITS_UNAVAILABLE`）。
+
+### 12.2 单调（§8 逐槽适用）
+
+- `orderCodexResetSnapshot(stored, incoming, …)` 不变，但 **`stored` 与 `incoming` 必须是同一个槽的块**：heartbeat 写入时对 Default
+  与 `accounts` 的每个键各做一次 CAS 判断，结果互不影响；一个槽被拒只保留该槽已存的块。
+- 块不会跨槽移动：`accounts[X]` 的块只能替换 `accounts[X]` 的块。一个槽从 runner 上消失时，它的块随条目一起消失。
+- `generation` 仍是读取它的进程（heartbeat 的 `leaseOwner`），同一进程所有槽相同；`sequence` 只需在**同一进程、同一槽**内从 1 严格递增
+  （进程可以给所有槽共用一个计数器，也可以每槽一个）。所以同一毫秒、同一进程的两个块只在同一槽内比较 `sequence`。
+- `REFRESHED` 回执里的块写入 operation 的槽（`operation.accountSlot`），不写别的槽。
+
+### 12.3 command、回执与能力
+
+| 对象 | v1 | v2 |
+| --- | --- | --- |
+| 块 | `protocolVersion: 1` | 仍为 `1` |
+| command | `protocolVersion: 1`，**不带** `accountSlot`，即 Default | `protocolVersion: 2`，**必带** `accountSlot`（`default` 或槽 id），Default 也写明 |
+| 回执 | `protocolVersion: 1` | 带它所答 command 的版本（`1` 或 `2`）；不带 `accountSlot`，槽由 operation 决定 |
+
+- `accountSlot` 告诉 runner 在哪个 `CODEX_HOME` 里读取账户、比对指纹、调用 consume 和做权威刷新。其余规则（§6.4）逐槽照旧：
+  指纹不等于 command 指纹即 `ACCOUNT_MISMATCH`、consume 参数恒为 `{ idempotencyKey }`、REFRESH 不带 key。
+- capability：`codex-rate-limit-reset-v2`（`CODEX_RATE_LIMIT_RESET_CAPABILITY_V2`）。声明它的 runner 也声明 v1（旧 apiserver 只认 v1），
+  它能执行 v1 与 v2 两种 command。本任务只定义常量；runner 在能逐槽读取、consume、刷新的同一个提交里声明它（与 §4 的 v1 规则相同）。
+- 派发版本（`codexResetCommandVersion(capabilities, slot)`）：声明了 v2 → 发 v2 command（Default 的也是）；只声明 v1 → 只有 Default 的
+  operation 能派发，发 v1 command；新增槽的 operation 对只有 v1 的 runner → `NONE / CAPABILITY_MISSING`，绝不以 v1 command 发出
+  （v1 runner 会在 Default 的登录里执行）。`decideCodexResetDispatch` 的 `rateLimitReset` 传 operation 那个槽的存储块。
+- v1 runner 收到 v2 command：CONSUME 回 `CONSUME_NOT_CALLED / PROTOCOL_UNSUPPORTED`（§4 已有规则），REFRESH 忽略。两者都不会在
+  Default 的登录里动手。Go runner 在 runner 任务之前正是如此；runner 任务起它声明 v2，执行 v1 与 v2 两种 command（§12.6）。
+- 示例：fixtures `heartbeatResponses.consumeAddedSlot`、`refreshAddedSlot`，`commands.valid` 的 `v2-*`，`commands.invalid` 的
+  `v2-without-account-slot`、`v1-naming-an-account-slot`、`account-slot-*`、`protocol-version-3`。
+
+### 12.4 operation、创建请求与资格
+
+| 字段 | 位置 | 规则 |
+| --- | --- | --- |
+| `accountSlot` | `CreateCodexRateLimitResetRequest` | 可选，`default` 或槽 id；缺省即 `default`。用户确认时看的是哪个槽的块，就写哪个槽 |
+| `accountSlot` | operation 状态（apiserver） | 必有，`default` 或槽 id；**不可变**（I3 增加此列）；`codexResetCreateReplay` 也比它：同一 `clientRequestId` 换了槽即 `REQUEST_ID_REUSED` |
+| `accountSlot` | `CodexRateLimitResetOperationView` | 可选，**恰在新增槽时出现**（槽 id）；Default 的 view 与 v1 逐字节相同，旧 Web 与原生客户端不受影响 |
+
+- 资格（`codexResetRefusal`）：新增 `accountSlot` 输入（缺省 `default`），`rateLimitReset` 传**该槽**的存储块。顺序表不变；
+  `CAPABILITY_MISSING` 增加“新增槽而 runner 未声明 v2”；指纹比对、新鲜度、`readRequiredAfter`、数量都只看该槽的块。
+- **ACCOUNT_OVERRIDE 重新定义**（§3）：工作区选的新增账户是目标槽（`codexResetContextSlot`），不再是 override；仍是 override 的
+  只有非内置 provider 与上下文自带的 env 凭据（`CODEX_HOME`、`CODEX_API_KEY`、`OPENAI_*`）。
+- I1（在途唯一）仍按 `(runnerId, accountFingerprint)`：同一账户签进两个槽时，两个槽共用一份 credit，也就共用一个在途名额。
+- apiserver（迁移 1669）：`account_slot` 列，缺省 `default`，CHECK 只收 `default` 或槽 id，guard trigger 把它列为不可变；在途唯一索引不变。
+  创建路由的槽：请求写明的 `accountSlot`；否则工作区选的账户（`codexResetContextSlot`）；工作区为 Automatic 或从 runner 页确认时，
+  取存储块指纹等于确认指纹的槽（先 Default，再按槽 id 升序），都不匹配则为 `default`（随后按 Default 的块判定）。重放只比请求写明的槽。
+  heartbeat 一次只交出一条 command（§6.2）：已交出一条后，其余在途 operation 本次只做到期 / 换账户结算，不认领、不续约；
+  本进程已持有认领的 operation 排在最前。
+
+### 12.5 兼容矩阵（v2）
+
+| 组合 | 行为 |
+| --- | --- |
+| v1 heartbeat（无块，或只有 Default 的块） → v2 apiserver | 原样解析（fixtures `heartbeats.legacy`、`nestedReset`、`flatReset`，两侧测试），新增槽“不提供 reset” |
+| v2 runner（带槽块） → v1 apiserver | `sanitizePlanUsageAccounts` 剥掉槽块，Default 的块照旧；只认 v1 能力，只发 v1 command，只有 Default |
+| v2 apiserver → v1 runner | 只发 v1 command、只派 Default 的 operation；新增槽的 reset 入口为 `CAPABILITY_MISSING` |
+| v2 apiserver → v2 runner | 全部 v2 command，Default 写明 `accountSlot: "default"` |
+| 旧 Web / 原生客户端 | Default 的 view 不变；新增槽的 view 多一个 `accountSlot`，Codable 忽略未知键 |
+| 回滚 runner 到 v1 | v2 能力消失：新增槽的在途 operation 不再派发，按 §7.5 到期；Default 的改发 v1 command |
+
+### 12.6 runner 的逐槽执行（runner 任务，2026-11-26）
+
+- 读取：每个新增槽的 probe（`src/runner-go/codex_account_usage.go` 的 `newCodexSlotUsage`）在该槽的 `CODEX_HOME` 里做与 Default
+  相同的 `account/read` + `account/rateLimits/read`（`fetchCodexAccountPlanUsage`），每槽一个 `codexResetReader`：`generation`
+  是本进程的 `leaseOwner`，`sequence` 每槽从 1 递增，`fetchedAt` 是读取开始时刻。heartbeat 把它放在 `accounts[X].rateLimitReset`；
+  会话的滚动通知只刷新窗口，保留该槽已有的块。
+- 执行：`codexResetConsumer` 按 command 的 `accountSlot`（v1 即 Default）在每次 attempt 时重新解析目标槽
+  （`codexAccountUsage.resetTarget`），在该槽的 `CODEX_HOME` 里起 app-server、读取、比对指纹、consume、权威刷新，块写入该槽的 probe。
+  回执的 `protocolVersion` 与 command 相同。
+- 槽已不存在（目录已删，或本机从未有过）：不起 app-server、不读取、不回落到 Default，也不为它建目录或 probe。
+  CONSUME → `CONSUME_NOT_CALLED / ACCOUNT_MISMATCH`（不带 `observedAccountFingerprint`），REFRESH → `REFRESH_FAILED / ACCOUNT_MISMATCH`；
+  日志 `account: slot_gone`。槽目录存在但解析失败（非“不存在”）→ `CONSUME_RETRYING / READ_FAILED`、`REFRESH_FAILED / READ_FAILED`。
+- 验证：`src/runner-go/codex_rate_limit_reset_slot_test.go`（每个 `CODEX_HOME` 一个 fake app-server）。

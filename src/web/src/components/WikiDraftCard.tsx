@@ -53,6 +53,7 @@ import {
   type WikiChatPress,
   type WikiChatPressAnswer,
 } from '../lib/wikiChat';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * What drawing a card needs of the place it is drawn in: the panel beside the wiki, or the full session page of the
@@ -291,14 +292,15 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
                   {wikiChatRewritesRow(view).map((link, index) => (
                     <span key={`${link.doc}#${link.key}`}>
                       {index > 0 && ' · '}
-                      <button
-                        type="button"
-                        className="lk"
-                        title={link.title ?? undefined}
-                        onClick={() => host.openSection(link.doc, link.key)}
-                      >
-                        {link.label}
-                      </button>
+                      <Tooltip content={link.title ?? undefined}>
+                        <button
+                          type="button"
+                          className="lk"
+                          onClick={() => host.openSection(link.doc, link.key)}
+                        >
+                          {link.label}
+                        </button>
+                      </Tooltip>
                     </span>
                   ))}
                 </FaceRow>

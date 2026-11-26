@@ -48,6 +48,7 @@ import {
   type EvidenceDecisionStanding,
 } from './EvidenceDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * The evidence-decision card as a system card: what it draws from the pending read, what one press
@@ -902,21 +903,20 @@ describe('a press, end to end inside the browser', () => {
 });
 
 describe('the provenance mark', () => {
-  it('is on the card in every standing, and says no agent wrote the card or relays its press', () => {
-    const live = row();
-    for (const standing of [
-      evidenceDecisionStanding(queue([live]), PROJECT_ID, live),
-      evidenceDecisionStanding(queue([row({ evidenceRevision: '3' })]), PROJECT_ID, live),
-      evidenceDecisionStanding(queue([]), PROJECT_ID, live),
-      evidenceDecisionStanding(null, PROJECT_ID, live),
-    ]) {
-      const html = card(standing);
-      const mark = /<span class="criteria-provenance" title="([^"]*)">([^<]*)<\/span>/u.exec(html);
-      expect(mark, standing.state).not.toBeNull();
-      expect(mark![2], standing.state).toBe(PROVENANCE_LABEL);
-      expect(mark![1], standing.state).toContain('agent');
-      expect(mark![1], standing.state).toContain('decision door');
-    }
+  const live = row();
+  it.each([
+    ['live', () => evidenceDecisionStanding(queue([live]), PROJECT_ID, live)],
+    ['moved on', () => evidenceDecisionStanding(queue([row({ evidenceRevision: '3' })]), PROJECT_ID, live)],
+    ['gone', () => evidenceDecisionStanding(queue([]), PROJECT_ID, live)],
+    ['unread', () => evidenceDecisionStanding(null, PROJECT_ID, live)],
+  ])('is on the card in every standing (%s), and says no agent wrote the card or relays its press', async (_name, standing) => {
+    const node = await mount(<EvidenceDecisionCard standing={standing()} onConfirm={() => {}} onChatAbout={() => {}} />);
+    const mark = node.querySelector('span.criteria-provenance');
+    expect(mark).not.toBeNull();
+    expect(mark!.textContent).toBe(PROVENANCE_LABEL);
+    const tip = await hoverTooltip(mark!);
+    expect(tip).toContain('agent');
+    expect(tip).toContain('decision door');
   });
 });
 

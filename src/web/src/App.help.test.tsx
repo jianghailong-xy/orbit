@@ -67,6 +67,27 @@ const INDEX: HelpIndex = {
   ],
 };
 
+/** The same index and article as a reader of Chinese gets them: the prose translated, everything else the same. */
+const ZH_INDEX: HelpIndex = {
+  categories: INDEX.categories,
+  articles: INDEX.articles.map((a) =>
+    a.slug === 'machine-offline' ? { ...a, title: '机器显示为离线', summary: '为什么会这样。' } : a,
+  ),
+};
+
+const ZH_OFFLINE: HelpArticle = {
+  ...OFFLINE,
+  title: '机器显示为离线',
+  summary: '为什么会这样。',
+  body: [
+    '当 Runner 90 秒没有签到时，Orbit 会把机器标记为 **Offline**。',
+    '',
+    '## 1. 电脑醒着吗？',
+    '',
+    '唤醒它。',
+  ].join('\n'),
+};
+
 /** What the signed-in account has, for the reads /help makes. */
 interface Account {
   runners: unknown[];
@@ -78,6 +99,8 @@ interface Account {
 const NEW_ACCOUNT: Account = { runners: [], workspaces: [], keys: [], pools: [], doneTasks: [] };
 let account: Account = NEW_ACCOUNT;
 let sessionAlive = true;
+/** What `GET /users/me` says under `preferences`. */
+let mePreferences: Record<string, unknown> = {};
 
 let container: HTMLDivElement;
 let root: Root | null = null;
@@ -94,6 +117,7 @@ beforeEach(() => {
   votes = [];
   account = NEW_ACCOUNT;
   sessionAlive = true;
+  mePreferences = {};
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -109,25 +133,29 @@ beforeEach(() => {
           ? [401, { statusCode: 401, message: 'Unauthorized' }]
           : url === '/api/help'
             ? [200, INDEX]
-            : url === '/api/help/articles/machine-offline'
-              ? [200, OFFLINE]
-              : url.startsWith('/api/help/articles/')
-                ? [404, { statusCode: 404, message: 'no such help article' }]
-                : url === '/api/users/me' && signedIn
-                  ? [200, { id: 'u1', email: 'ada@example.com', name: 'Ada', createdAt: '', role: 'MEMBER', preferences: {} }]
-                  : url === '/api/runners' && signedIn
-                    ? [200, account.runners]
-                    : url === '/api/workspaces' && signedIn
-                      ? [200, account.workspaces]
-                      : url === '/api/providers/mine' && signedIn
-                        ? [200, account.keys]
-                        : url === '/api/providers/pools' && signedIn
-                          ? [200, account.pools]
-                          : url.startsWith('/api/tasks/page?status=DONE') && signedIn
-                            ? [200, { items: account.doneTasks, nextCursor: null }]
-                            : url === '/api/auth/refresh'
-                              ? [401, { statusCode: 401, message: 'Unauthorized' }]
-                              : [404, { statusCode: 404, message: `Cannot GET ${url}` }];
+            : url === '/api/help?lang=zh-Hans'
+              ? [200, ZH_INDEX]
+              : url === '/api/help/articles/machine-offline'
+                ? [200, OFFLINE]
+                : url === '/api/help/articles/machine-offline?lang=zh-Hans'
+                  ? [200, ZH_OFFLINE]
+                  : url.startsWith('/api/help/articles/')
+                    ? [404, { statusCode: 404, message: 'no such help article' }]
+                    : url === '/api/users/me' && signedIn
+                      ? [200, { id: 'u1', email: 'ada@example.com', name: 'Ada', createdAt: '', role: 'MEMBER', preferences: mePreferences }]
+                    : url === '/api/runners' && signedIn
+                      ? [200, account.runners]
+                      : url === '/api/workspaces' && signedIn
+                        ? [200, account.workspaces]
+                        : url === '/api/providers/mine' && signedIn
+                          ? [200, account.keys]
+                          : url === '/api/providers/pools' && signedIn
+                            ? [200, account.pools]
+                            : url.startsWith('/api/tasks/page?status=DONE') && signedIn
+                              ? [200, { items: account.doneTasks, nextCursor: null }]
+                              : url === '/api/auth/refresh'
+                                ? [401, { statusCode: 401, message: 'Unauthorized' }]
+                                : [404, { statusCode: 404, message: `Cannot GET ${url}` }];
       return new Response(JSON.stringify(answer[1]), { status: answer[0], headers: { 'content-type': 'application/json' } });
     }),
   );
@@ -315,6 +343,46 @@ describe('an article page', () => {
   it('says so for an article that does not exist', async () => {
     await visit('/help/wiki/nothing-here');
     expect(container.querySelector('h1')?.textContent).toBe("This article doesn't exist");
+  });
+});
+
+describe('the article language', () => {
+  const picker = () => container.querySelector<HTMLSelectElement>('select[aria-label="Article language"]');
+  const choose = async (language: string) => {
+    const select = picker()!;
+    await act(async () => {
+      select.value = language;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await settle();
+  };
+
+  it('choosing 中文 reads the articles in Chinese, and remembers the choice across visits', async () => {
+    await visit('/help');
+    expect(picker()?.value).toBe('en');
+    expect(container.querySelector('.help-list-row')?.textContent).toBe('A machine shows Offline');
+
+    await choose('zh-Hans');
+    expect(localStorage.getItem('orbit.help.language')).toBe('zh-Hans');
+    expect(requests.map((r) => r.url)).toContain('/api/help?lang=zh-Hans');
+    expect(container.querySelector('.help-list-row')?.textContent).toBe('机器显示为离线');
+
+    await visit('/help/machines-and-engines/machine-offline');
+    expect(picker()?.value).toBe('zh-Hans');
+    expect(container.querySelector('h1')?.textContent).toBe('机器显示为离线');
+    expect(body().textContent).toContain('当 Runner 90 秒没有签到时');
+    // Only the article is translated: the help center's own chrome stays English.
+    expect(container.querySelector('.help-breadcrumb')?.textContent).toBe('Help › Machines & engines');
+    expect([...container.querySelectorAll('.help-feedback button')].map((b) => b.textContent)).toEqual(['Yes', 'No']);
+    expect(requests.map((r) => r.url)).toContain('/api/help/articles/machine-offline?lang=zh-Hans');
+  });
+
+  it("a signed-in account whose Your language is Chinese reads the articles in Chinese until it chooses otherwise", async () => {
+    signIn();
+    mePreferences = { translationLanguage: 'zh-Hans' };
+    await visit('/help');
+    expect(picker()?.value).toBe('zh-Hans');
+    expect(requests.map((r) => r.url)).toContain('/api/help?lang=zh-Hans');
   });
 });
 

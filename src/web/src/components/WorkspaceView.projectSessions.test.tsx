@@ -9,6 +9,7 @@ import type { Runner } from './TasksSidePanel';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
 import { SessionSearch } from './SessionSearch';
 import { projectSessionsQuery } from '../lib/queries';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // Exercise navigation, menus and both list scopes through the real WorkspaceView. Named API reads
 // call api() within api.ts, so stub them separately from the query factories' api export.
@@ -516,7 +517,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
   it('draws the progress tag as part of the entry, with the session-count hint', async () => {
     await mount();
     const progress = projectRow().querySelector('.session-project-progress');
-    expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
+    expect(await hoverTooltip(progress!)).toBe('2 sessions · 1 running');
     expect(progress?.closest('button')).toBeNull();
     await click(progress, 'the project progress tag');
     await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
@@ -955,7 +956,7 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     await click(projectRow(), 'the project row');
     await until(() => expect(column()).not.toBeNull());
     await until(() => expect(button().textContent).toBe('2'));
-    expect(button().getAttribute('title')).toBe('Project sessions');
+    expect(await hoverTooltip(button())).toBe('Project sessions');
     expect(button().classList.contains('orbit-button')).toBe(true);
     expect(button().querySelector('.orbit-button-icon svg, .orbit-button-icon .anticon, .orbit-button-icon img, .orbit-button-icon *')).not.toBeNull();
     // Left of the ⋯ More actions button and Share (docs/mocks/session-header-share-more).

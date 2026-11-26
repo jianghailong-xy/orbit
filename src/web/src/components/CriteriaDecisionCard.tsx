@@ -10,6 +10,7 @@ import { SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { api } from '../api';
 import { pendingCriteriaDecisionsQuery } from '../lib/queries';
 import { streamPoll } from '../lib/listBudget';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The card that asks the account owner whether this project's ruler may move, in the conversation
@@ -665,16 +666,20 @@ function RewrittenWords({ runs }: { runs: CriterionSegment[] }): JSX.Element {
       {runs.map((run, index) => {
         if (run.side === 'REMOVED') {
           return (
-            <del key={index} className="criteria-decision-cut" title={DROPPED_RUN_TITLE}>
-              {run.text}
-            </del>
+            <Tooltip key={index} content={DROPPED_RUN_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+              <del className="criteria-decision-cut">
+                {run.text}
+              </del>
+            </Tooltip>
           );
         }
         if (run.side === 'ADDED') {
           return (
-            <ins key={index} className="criteria-decision-add" title={ADDED_RUN_TITLE}>
-              {run.text}
-            </ins>
+            <Tooltip key={index} content={ADDED_RUN_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+              <ins className="criteria-decision-add">
+                {run.text}
+              </ins>
+            </Tooltip>
           );
         }
         return <span key={index}>{run.text}</span>;
@@ -839,9 +844,11 @@ export function CriteriaDecisionCard({
         {/* The mark, and the reason it exists is in its own title rather than in a footnote
             somebody has to find: this card is the server's, and the agent's turn is not where it
             came from. */}
-        <span className="criteria-provenance" title={PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={PROVENANCE_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
 
       <div className="approval-body criteria-decision-body">
@@ -1215,9 +1222,11 @@ export function CriteriaDecisionReceipt({
     >
       <div className="approval-head criteria-decision-head">
         <span className="criteria-decision-heading">{CRITERIA_DECISION_RECORDED_HEADING}</span>
-        <span className="criteria-provenance" title={PROVENANCE_TITLE}>
-          {PROVENANCE_LABEL}
-        </span>
+        <Tooltip content={PROVENANCE_TITLE} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {PROVENANCE_LABEL}
+          </span>
+        </Tooltip>
       </div>
       <p className="criteria-decision-receipt">
         <span className="criteria-decision-verdict">{criteriaVerdictReceipt(settled)}</span>

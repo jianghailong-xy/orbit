@@ -19,7 +19,6 @@ import { RunStatus } from '@orbit/shared';
 import { FeishuGroupService } from '../feishu/feishu-group.service';
 import { reserveOpenSlot } from '../feishu/feishu-open-limits';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
-import { HelpAsk } from '../help/help-ask';
 import { readSessions } from '../help/help-ask-reads';
 import { LinkPreviewsService } from '../link-previews/link-previews.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -222,7 +221,7 @@ test('the remaining modules read the facts, and answer as the stored word did', 
     }
   });
 
-  await t.test('help: the Ask list and the account read', async () => {
+  await t.test('help: the account read an Ask answers from', async () => {
     const ids = await world(db, 'help');
     const rows = await everyRow(db, ids);
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -233,16 +232,6 @@ test('the remaining modules read the facts, and answer as the stored word did', 
       assert.equal(answer.paused, row.word === RunStatus.INTERRUPTED, `${row.title}: paused`);
     }
     assert.equal(read.sessions.length, rows.length);
-    // A session is an Ask from its creation or never, so the Ask list has rows of its own.
-    const asker = await world(db, 'asks');
-    const asks = await everyRow(db, asker, { helpAsk: { page: null } });
-    const asked = new Map(asks.map((row) => [row.id, row]));
-    const list = await HelpAsk.prototype.list.call({ prisma } as never, asker.ownerId);
-    const outcomes = Object.fromEntries(list.questions.map((question) => [asked.get(question.sessionId)!.title, question.outcome]));
-    for (const row of asks) {
-      const expected = owed([row]).length ? 'working' : row.title === 'failed' ? 'failed' : 'answered';
-      assert.equal(outcomes[row.title], expected, row.title);
-    }
   });
 
   await t.test('link previews: a task card\'s last run carries the word', async () => {

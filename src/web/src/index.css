@@ -342,7 +342,7 @@ body {
   margin: 0;
   border: 1px solid var(--border-subtle);
   background: var(--bg-raised);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
   color: var(--text-1);
   font: inherit;
   font-size: 14px;
@@ -374,7 +374,7 @@ button.toast--pill:hover {
   width: 100%;
   min-height: 56px;
   padding: 12px 12px 12px 14px;
-  border-radius: 12px;
+  border-radius: 18px;
 }
 /* ③: tinted over the raised surface (the dark theme's tints are translucent), the server's words
    in a block of their own, and selectable — the thing you read twice and paste somewhere. */
@@ -383,6 +383,13 @@ button.toast--pill:hover {
   align-items: stretch;
   gap: 10px;
   user-select: text;
+}
+/* A failure card is one press: to its session, or back to the page it was raised on. */
+.toast--attention.toast--opens {
+  cursor: pointer;
+}
+.toast--attention .toast-reason {
+  cursor: text;
 }
 .toast--error {
   border-color: var(--error-border);
@@ -468,7 +475,7 @@ button.toast--pill:hover {
   overflow: auto;
   padding: 7px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg-raised);
   color: var(--text-2);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -477,18 +484,12 @@ button.toast--pill:hover {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.toast-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-left: 32px;
-}
 .toast-action {
   flex: none;
   height: 28px;
   padding: 0 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 7px;
+  border-radius: 10px;
   background: var(--bg-raised);
   color: var(--text-1);
   font: inherit;
@@ -498,15 +499,6 @@ button.toast--pill:hover {
 }
 .toast-action:hover {
   background: var(--bg-hover);
-}
-.toast-action--primary {
-  border-color: var(--brand);
-  background: var(--brand);
-  color: #fff;
-}
-.toast-action--primary:hover {
-  border-color: var(--brand-strong);
-  background: var(--brand-strong);
 }
 /* A result card's one action — Undo — in the tint the lifecycle card's Undo always had. */
 .toast--card:not(.toast--attention) > .toast-action {
@@ -3612,33 +3604,11 @@ button.toast--pill:focus-visible {
   outline: none;
 }
 .workspace-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); opacity: 0; }
+/* The › takes no room at rest, so a long title runs right up to the badges after it. */
+.workspace-name-chevron { flex: none; font-size: 11px; color: var(--text-3); display: none; }
 .workspace-name-button:hover, .workspace-name-button:focus-visible { background: var(--orbit-control-hover-bg); }
 .workspace-name-button:hover .workspace-name-chevron,
-.workspace-name-button:focus-visible .workspace-name-chevron { opacity: 1; }
-.workspace-header-task {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  margin-bottom: 3px;
-  padding: 0;
-  border: none;
-  background: none;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--text-3);
-  cursor: pointer;
-}
-.workspace-header-task:hover {
-  color: var(--brand);
-}
-.workspace-header-task-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.workspace-name-button:focus-visible .workspace-name-chevron { display: inline-flex; }
 .workspace-sub {
   font-size: 12.5px;
   color: var(--text-3);
@@ -8425,6 +8395,46 @@ button.toast--pill:focus-visible {
 .cu-pop.cu-pop-reset {
   width: min(320px, calc(100vw - 48px));
 }
+/* A card per account can be taller than the room above the composer: the body scrolls under the title.
+   The side padding, taken back by the margin, keeps focus rings inside the scroll box. */
+.cu-pop.cu-pop-accounts {
+  max-height: calc(var(--available-height, 80vh) - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  width: min(328px, calc(100vw - 40px));
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+}
+/* Scrolling, not squeezing: a flex column would otherwise shrink its parts to fit. */
+.cu-pop.cu-pop-accounts > * {
+  flex-shrink: 0;
+}
+/* Another account's reset: ruled off, its name and one line of its usage over the same card. */
+.cu-other {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.cu-other .cu-account {
+  padding-bottom: 10px;
+  border-bottom: 0;
+}
+.cu-other-usage {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.cu-other-usage b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.cu-other-usage b.spent {
+  color: var(--error-solid);
+}
+.cu-other .cu-rc {
+  padding-top: 0;
+  border-top: 0;
+}
 /* Focus lands on the popover body when a press opens it; the controls inside carry the rings. */
 .cu-pop:focus {
   outline: none;
@@ -8624,12 +8634,17 @@ button.composer-usage:focus-visible {
 }
 .cu-rc-confirm-usage {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-2);
+}
+.cu-rc-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
 }
 .cu-rc-confirm-value {
   font-weight: 600;
@@ -14757,6 +14772,61 @@ button.chat-jump-start:hover {
   line-height: 1.6;
   color: var(--text-1);
 }
+/* The pictures a question attached — the mocks it is asking the owner to choose between. Tiles
+   under the words, not in line with them: a question often IS the choice between these, and the
+   options and Send answer have to stay one look away. A tile opens the viewer on tap. */
+.coordinator-question-images-caption {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.coordinator-question-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.coordinator-question-images.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.coordinator-question-images .orbit-image {
+  display: block;
+  min-width: 0;
+}
+/* `.orbit-image .orbit-image-img` sets the height from the picture's own aspect ratio; a tile has
+   one height for every picture in the grid, so this selector carries one class more than it. */
+.coordinator-question-images .orbit-image .orbit-image-img {
+  width: 100%;
+  height: 184px;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  background: var(--bg-base);
+}
+/* One picture is drawn at its own shape, capped by the card's width or 340px of height — a tile
+   grid's fixed height would letterbox it into a box wider than the picture. */
+.coordinator-question-images.is-single .orbit-image .orbit-image-img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 340px;
+  margin: 0 auto;
+}
+.coordinator-question-images .md-image-loading {
+  display: block;
+  width: 100%;
+  height: 184px;
+}
+/* The card is the width of a phone's conversation here; one column reads better than two halves. */
+@media (max-width: 600px) {
+  .coordinator-question-images {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .coordinator-question-images .orbit-image .orbit-image-img,
+  .coordinator-question-images .md-image-loading {
+    height: 150px;
+  }
+}
 /* An option is the answer, so it is the tap target: a whole row, 44pt-ish, and the chosen one is
    outlined rather than merely ticked. */
 .coordinator-question-option {
@@ -17206,7 +17276,6 @@ button.chat-jump-start:hover {
   .workspace-header-main > .workspace-title-line {
     display: contents;
   }
-  .workspace-header-main > .workspace-header-task,
   .workspace-title-line > .workspace-name {
     flex: 0 0 100%;
   }
@@ -30680,10 +30749,12 @@ td > .routing-report-tier + .model-routing-flag {
   color: var(--text-1);
 }
 
-/* A coordinator question still waiting on the owner: orange and heavier-edged, the colour of the
-   `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
+/* A coordinator question still waiting on the owner: the brand tone, solid and heavier-edged.
+   Blue is the product's "somebody is being asked" colour — the same reason the card's mark is
+   brand — and the warning tone stays for what is wrong (owner's pick, 2026-11-26; it replaced
+   the 2026-11-13 orange edge). */
 .approval-card.coordinator-question {
-  border: 1.5px solid var(--warning-solid);
+  border: 1.5px solid var(--brand);
 }
 
 /* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's

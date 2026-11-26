@@ -16,6 +16,8 @@ function ask(
     accountDefault = null as string | null,
     allowance = undefined as unknown,
     session = true,
+    coordinated = [] as Array<{ id: string; startedAt: Date | null }>,
+    counted = undefined as ((where: unknown) => void) | undefined,
   } = {},
 ) {
   const preferences: Record<string, unknown> = {};
@@ -26,7 +28,8 @@ function ask(
       session: {
         findFirst: async () => (session ? { permissionMode: mode, engine: 'claude', owner: { preferences } } : null),
       },
-      task: { count: async () => created },
+      task: { count: async ({ where }: { where: unknown }) => (counted?.(where), created) },
+      project: { findMany: async () => coordinated },
     } as never,
     { id: 'session', ownerId: 'owner' },
     toolName,
@@ -80,4 +83,21 @@ test('other cards, unreadable input and an unknown session are asked', async () 
   assert.equal(await ask('orbit_task_batch', { tasks: 'x' }), null);
   assert.equal(await ask('orbit_task_batch', { tasks: [] }), null);
   assert.equal(await ask('orbit_task_create', {}, { session: false }), null);
+});
+
+test("a coordinator's tasks filed before its project started are left out of the count", async () => {
+  const started = new Date('2026-11-26T10:00:00Z');
+  const wheres: unknown[] = [];
+  await ask('orbit_task_create', {}, {
+    coordinated: [{ id: 'p1', startedAt: null }, { id: 'p2', startedAt: started }],
+    counted: (where) => wheres.push(where),
+  });
+  await ask('orbit_task_create', {}, { counted: (where) => wheres.push(where) });
+  assert.deepEqual(wheres, [
+    {
+      creatorSessionId: 'session',
+      OR: [{ projectId: null }, { NOT: { OR: [{ projectId: 'p1' }, { projectId: 'p2', createdAt: { lt: started } }] } }],
+    },
+    { creatorSessionId: 'session' },
+  ]);
 });

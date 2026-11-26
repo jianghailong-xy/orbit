@@ -119,7 +119,9 @@ const FIXTURES = JSON.parse(readFileSync(path.join(REPO, 'contracts/codex-rate-l
 const CAPABILITY = CODEX_RATE_LIMIT_RESET_CAPABILITY_V1;
 const FINGERPRINT = 'cxa1_92381c922ad04574cc61964161fd5687';
 const OTHER_FINGERPRINT = 'cxa1_0123456789abcdef0123456789abcdef';
-const COMMAND_FIELDS = Object.keys(CODEX_RATE_LIMIT_RESET_WIRE.CodexRateLimitResetCommand).sort();
+/** A v1 command's fields: every operation here is Default's on a v1 runner, and only a v2 command names its
+ *  account slot (contract §12.3; codex-reset-added-account.pg.spec.ts covers v2). */
+const COMMAND_FIELDS = Object.keys(CODEX_RATE_LIMIT_RESET_WIRE.CodexRateLimitResetCommand).filter((field) => field !== 'accountSlot').sort();
 const RECEIPT_FIELDS = Object.keys(CODEX_RATE_LIMIT_RESET_WIRE.CodexRateLimitResetResultResponse).sort();
 /** Read by this spec's own interceptor: hold the answer back this long AFTER the handler — and so its
  *  transaction — finished. A runner that gives up in that window has lost the receipt of a result

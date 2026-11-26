@@ -10,6 +10,7 @@ import {
   type ExchangeTreeLookup,
   type OrbitExchangeSummary,
 } from '../lib/orbitExchangeFold';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * The folds a conversation draws over the turns Orbit opened (lib/orbitExchangeFold; design:
@@ -82,26 +83,27 @@ function ExchangeRow({ ex, reveal, inTask }: { ex: ExchangeWithBody; reveal: num
   const what = inTask && ex.whatInTask ? ex.whatInTask : ex.what;
   return (
     <div className={`orbit-exchange${open ? ' is-open' : ''}`} data-seq={ex.seq} data-exchange={ex.category}>
-      <div
-        className="orbit-exchange-line"
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        title={ex.reply ? `${ex.what} — ${ex.reply}` : ex.what}
-        onClick={() => setOpen((o) => !o)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setOpen((o) => !o);
-          }
-        }}
-      >
-        <span className="orbit-exchange-mark" aria-hidden="true">→</span>
-        <span className="orbit-exchange-what">{what}</span>
-        {ex.reply && <span className="orbit-exchange-reply">{ex.reply}</span>}
-        <span className="orbit-exchange-time">{exchangeClock(ex.ts)}</span>
-        <span className="orbit-exchange-caret" aria-hidden="true">{open ? <DownOutlined /> : <RightOutlined />}</span>
-      </div>
+      <Tooltip content={ex.reply ? `${ex.what} — ${ex.reply}` : ex.what} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div
+          className="orbit-exchange-line"
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setOpen((o) => !o);
+            }
+          }}
+        >
+          <span className="orbit-exchange-mark" aria-hidden="true">→</span>
+          <span className="orbit-exchange-what">{what}</span>
+          {ex.reply && <span className="orbit-exchange-reply">{ex.reply}</span>}
+          <span className="orbit-exchange-time">{exchangeClock(ex.ts)}</span>
+          <span className="orbit-exchange-caret" aria-hidden="true">{open ? <DownOutlined /> : <RightOutlined />}</span>
+        </div>
+      </Tooltip>
       {open && <div className="orbit-exchange-detail">{ex.body()}</div>}
     </div>
   );

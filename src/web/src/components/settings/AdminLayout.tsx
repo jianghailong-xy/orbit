@@ -13,18 +13,20 @@ import { emailSettingsQuery } from '../../pages/AdminEmailPage';
 import { ImpersonationBanner } from '../ImpersonationBanner';
 import { HelpDrawer } from '../HelpDrawer';
 import { NARROW_SETTINGS_QUERY, NavGroup, NavRow } from './SettingsLayout';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../ui/Tooltip';
 import './Settings.css';
 
 /** A row's On / Off, drawn as the Machines group draws a machine's state. */
 function OnDot({ on }: { on: boolean | undefined }) {
   if (on === undefined) return null;
   return (
-    <span
-      className={`settings-dot settings-dot--${on ? 'online' : 'offline'}`}
-      role="img"
-      aria-label={on ? 'On' : 'Off'}
-      title={on ? 'On' : 'Off'}
-    />
+    <Tooltip content={on ? 'On' : 'Off'} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span
+        className={`settings-dot settings-dot--${on ? 'online' : 'offline'}`}
+        role="img"
+        aria-label={on ? 'On' : 'Off'}
+      />
+    </Tooltip>
   );
 }
 
