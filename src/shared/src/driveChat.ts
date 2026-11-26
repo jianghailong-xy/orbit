@@ -210,3 +210,96 @@ export interface DriveChatCreateAnswer {
   chat: DriveChatRow;
   workspace: DriveChatWorkspace;
 }
+
+/**
+ * A Drive chat's changes (owner decision Q2 A, board frames ③ ④; apiserver drive/drive-chat-changes.ts): what one turn
+ * changed in Drive, one card with Undo, as `GET /api/drive/chats/:sessionId/groups` answers it.
+ */
+export type DriveChatChangeKind = 'NEW_FOLDER' | 'NEW_FILE' | 'MOVE' | 'RENAME' | 'TRASH' | 'EDIT';
+
+/**
+ * DONE: made, Undo reverses it. PENDING: held past the turn's 200th change, nothing made until Apply. APPLYING and
+ * UNDOING while those run. UNDONE: reversed, but for the items it reports skipped.
+ */
+export type DriveChatChangeGroupStatus = 'DONE' | 'PENDING' | 'APPLYING' | 'UNDOING' | 'UNDONE';
+
+/** Where an entry was or went: its folder (id and path when known) and its name. */
+export interface DriveChatPlace {
+  parentId: string | null;
+  parentPath: string | null;
+  name: string | null;
+}
+
+/** One change of a group. `state` SKIPPED carries why Undo left it as it is. */
+export interface DriveChatChangeItem {
+  id: string;
+  kind: DriveChatChangeKind;
+  entryId: string;
+  entryKind: string;
+  before: DriveChatPlace;
+  after: DriveChatPlace;
+  state: 'DONE' | 'UNDONE' | 'SKIPPED';
+  reason: string | null;
+}
+
+/** One write held for Apply, as the agent asked for it. `state` SKIPPED carries why Apply could not make it. */
+export interface DriveChatHeldItem {
+  id: string;
+  kind: Exclude<DriveChatChangeKind, 'NEW_FILE' | 'EDIT'>;
+  entryId: string | null;
+  name: string;
+  fromPath: string | null;
+  toPath: string | null;
+  state: 'PENDING' | 'APPLIED' | 'SKIPPED';
+  reason: string | null;
+}
+
+export interface DriveChatChangeGroup {
+  id: string;
+  sessionId: string;
+  turnId: string;
+  status: DriveChatChangeGroupStatus;
+  /** It began PENDING: `held` lists what was held, `items` what Apply made. */
+  held: boolean;
+  createdAt: string;
+  appliedAt: string | null;
+  undoneAt: string | null;
+  /** How many of each kind: the changes made, or for a PENDING group the ones held. */
+  counts: Partial<Record<DriveChatChangeKind, number>>;
+  total: number;
+  /** The items Undo left as they are. */
+  skipped: number;
+  items: DriveChatChangeItem[];
+  heldItems: DriveChatHeldItem[];
+}
+
+/** One side of an overwrite question: a file as it was when the chat asked. */
+export interface DriveChatQuestionFile {
+  entryId: string;
+  path: string;
+  sizeBytes: number;
+  modifiedAt: string;
+  lastWriter: { kind: string; sessionId: string | null; sessionTitle: string | null };
+}
+
+/**
+ * A move or rename a Drive chat asked for onto a live file, refused — a Drive chat never replaces a file — and asked of
+ * the owner on a card: Keep both (the incoming file takes a suffix) or Replace (the file there keeps its old content as a
+ * version), answered by `POST /api/drive/chats/:sessionId/questions/:id { choice }`.
+ */
+export interface DriveChatQuestion {
+  id: string;
+  sessionId: string;
+  turnId: string;
+  status: 'OPEN' | 'ANSWERING' | 'ANSWERED' | 'STALE';
+  choice: 'KEEP_BOTH' | 'REPLACE' | null;
+  moving: DriveChatQuestionFile;
+  existing: DriveChatQuestionFile;
+  destination: { parentId: string; name: string };
+  /** What the answer made: the moved file's id, path and name. */
+  outcome: { entryId: string; path: string; name: string } | null;
+  /** Why a STALE question can no longer be answered. */
+  reason: string | null;
+  createdAt: string;
+  answeredAt: string | null;
+}

@@ -122,6 +122,11 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // Making a Drive chat (drive/drive-chat.ts), under /drive and its /documents alias: the owner's interactive
   // credential's, as making a wiki chat is; it also refuses an acting session, DRIVE_CHAT_OWNER_CHANNEL_ONLY.
   ...underEveryDrivePrefix('POST /drive/chats'),
+  // A Drive chat's Undo, Apply and an answer to its overwrite question (drive/drive-chat-changes.ts): presses of the
+  // owner's, as a wiki chat card's are; they also refuse an acting session, DRIVE_CHAT_OWNER_CHANNEL_ONLY.
+  ...underEveryDrivePrefix('POST /drive/chats/:sessionId/groups/:groupId/undo'),
+  ...underEveryDrivePrefix('POST /drive/chats/:sessionId/groups/:groupId/apply'),
+  ...underEveryDrivePrefix('POST /drive/chats/:sessionId/questions/:questionId'),
   // The six presses of a chat's card (contract `chat.presses`): the owner's alone, as decide is.
   'POST /wiki/chat-drafts/:id/apply',
   'POST /wiki/chat-drafts/:id/edit',
