@@ -1,7 +1,10 @@
+import { useMemo } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { SessionListItem } from '../api';
 import { listPollMs } from './listBudget';
-import { projectPlacementQuery, type SessionListView } from './queries';
+import { projectPlacementQuery, type ProjectPlacement, type SessionListView } from './queries';
+
+const NO_ANSWERS: readonly ProjectPlacement[] = [];
 
 /** The projects a workspace list shows, by id: the ones its rows are members of. A Trash list, or a
  *  list that draws no project rows, places none. */
@@ -57,7 +60,14 @@ export function useSessionProjectData(opts: {
     // A project joining the list re-keys the read: the rows already placed stay where they are meanwhile.
     placeholderData: keepPreviousData,
   });
-  const answers = enabled ? placement.data ?? [] : [];
+  const answers = enabled ? placement.data ?? NO_ANSWERS : NO_ANSWERS;
+  // One object per answer, so a list keyed on these reads the same while the answer does
+  // (docs/session-list-scale-design.md §4).
+  const read = useMemo(() => ({
+    coordinators: answers.flatMap((answer) => answer.coordinator ? [answer.coordinator] : []),
+    contentSessions: answers.flatMap((answer) => answer.waiting),
+    sessionCounts: new Map(answers.map((answer) => [answer.projectId, answer.sessionCount])) as ReadonlyMap<string, number>,
+  }), [answers]);
   const answered = new Set(answers.map((answer) => answer.projectId));
   // Where a coordinator the list does not hold runs decides the list's shape. Until the read answers
   // for its project, the shape may change.
@@ -65,9 +75,7 @@ export function useSessionProjectData(opts: {
     session.projectMembership?.role === 'COORDINATOR' ? [session.projectMembership.projectId] : []));
   const unanswered = placement.isPending || placement.isPlaceholderData;
   return {
-    coordinators: answers.flatMap((answer) => answer.coordinator ? [answer.coordinator] : []),
-    contentSessions: answers.flatMap((answer) => answer.waiting),
-    sessionCounts: new Map(answers.map((answer) => [answer.projectId, answer.sessionCount])),
+    ...read,
     placing: enabled && unanswered && projectIds.some((id) => !listed.has(id) && !answered.has(id)),
   };
 }

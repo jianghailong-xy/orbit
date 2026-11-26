@@ -3330,8 +3330,25 @@ button.toast--pill:focus-visible {
 .session-section-head:first-child {
   padding-top: 2px;
 }
-.session-col-list > section:not(:first-child) > .session-section-head {
+/* The session column is windowed (SessionListWindow): each heading, row and the top block is an item of
+   its own, placed at its measured offset, so a heading no longer reads its section's place among the
+   list's children. Every heading takes the room above it, but the first one under an empty top block. */
+.session-list-window {
+  position: relative;
+  width: 100%;
+}
+.session-list-window > .session-list-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+.session-list-item > .session-section-head,
+.session-list-item > section > .session-section-head {
   padding-top: 12px;
+}
+.session-list-item:has(> .session-list-top:empty) + .session-list-item > .session-section-head {
+  padding-top: 2px;
 }
 /* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
    and the chevron at its end points down while the rows show, right once they are folded. */
