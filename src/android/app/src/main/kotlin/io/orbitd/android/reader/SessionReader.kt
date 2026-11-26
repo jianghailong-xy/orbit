@@ -73,6 +73,7 @@ import io.orbitd.android.composer.WorkspaceClone
 import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.ManagedRunnerAsleepLine
 import io.orbitd.android.composer.SessionPendingTray
@@ -98,6 +99,8 @@ import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionRunStartCard
 import io.orbitd.android.schedule.ScheduleConversationInsert
 import io.orbitd.android.schedule.ScheduleInsert
+import io.orbitd.android.schedule.ScheduleRunStatusCard
+import io.orbitd.android.schedule.ScheduleRunStrip
 import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.cards.LocalWatchTargetNames
@@ -403,7 +406,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
     val scheduledState by scheduled.state.collectAsState()
     val scheduleRunId = snapshotDetail?.text("scheduleRunId")
-    LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) { scheduled.loadSession(route.id!!, scheduleRunId) }
+    val scheduleRead = scheduledState.session(route.id!!)
+    val scheduledRun = scheduleRead?.run
+    val scheduleRunStatus = scheduleRead?.runStatus
+    val scheduleStatusKind = scheduleRead?.statusKind?.takeUnless {
+        snapshotDetail?.text("lifecycleState") == "TRASH" || listRow?.effectiveLifecycleState == "TRASH"
+    }
+    LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) {
+        scheduled.loadSessionNow(route.id!!, scheduleRunId)
+    }
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
         key(insert.key) { Box(Modifier.conversationCard()) {
@@ -615,7 +626,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // ([WorktreeModel.offer]), a minute's safety read, and its own bounded cadence only while a merge or commit is in flight. It stops with
     // the Activity.
     PagePoll(app, handle, emptySet(), worktree, state.denied, inFlightMs = { worktree.inFlightMs() }) {
-        if (!state.denied) worktree.loadDetail()
+        if (!state.denied) {
+            worktree.loadDetail()
+            // The run can move on in a different session, without an update on this try's stream.
+            if (scheduledRun?.state in setOf("QUEUED", "RUNNING") && scheduleRunStatus != null) {
+                scheduled.loadSessionNow(route.id!!, scheduleRunId)
+            }
+        }
     }
     // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the reconnect
     // line) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
@@ -796,6 +813,33 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             }
             if (state.denied) {
                 StatusMessage("Session unavailable", if (session?.error?.httpStatus == 403) "You don't have permission to access this item." else "This item is no longer available.", model::retry)
+            } else if (scheduleStatusKind != null && scheduledRun != null && scheduleRunStatus != null) {
+                val schedule = scheduledState.run(route.id!!)?.schedule
+                val runner = data.effectiveRunnerRows.firstOrNull {
+                    ObjectId.same(it.text("id"), detail?.text("assignedRunnerId"))
+                }?.let { io.orbitd.android.management.RunnerPage.displayName(it) }
+                    ?: data.machineName(workspaceOfSession ?: schedule?.workspaceId) ?: "The runner"
+                val engine = detail?.text("engine") ?: schedule?.engine ?: detail?.text("provider")
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (schedule != null) {
+                        val conditionId = schedule.condition?.id
+                        LaunchedEffect(conditionId, scheduledRun.trigger) {
+                            if (scheduledRun.trigger == "CONDITION") conditionId?.let(scheduled::loadCondition)
+                        }
+                        Box(Modifier.conversationCard()) {
+                            ScheduleRunStrip(schedule, scheduledRun, scheduledState.condition(conditionId), notStarted = true)
+                        }
+                    }
+                    Box(Modifier.conversationCard()) {
+                        ScheduleRunStatusCard(scheduledRun, scheduleRunStatus, scheduleStatusKind, scheduled, route.id!!, runner,
+                            engine?.let(ProviderEngines::cliName) ?: "The engine",
+                            openSchedule = { open(OrbitRoute(Destination.SCHEDULED, it, origin = Origin.LINK)) },
+                            openRun = { open(OrbitRoute(Destination.SESSION, it, folderId = ScheduledRunsFolder.ID)) })
+                    }
+                }
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
