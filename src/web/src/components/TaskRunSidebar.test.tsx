@@ -237,7 +237,7 @@ function windowWidth(width: number) {
 }
 const DOCK_WIDTH = Number(/min-width:\s*(\d+)px/.exec(TASK_COLUMN_QUERY)![1]);
 
-describe('docked beside its own run conversation, the overlay everywhere else', () => {
+describe('docked beside a conversation from 1640 px, the overlay below that and on other pages', () => {
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
   let search = '';
@@ -283,6 +283,16 @@ describe('docked beside its own run conversation, the overlay everywhere else', 
     await open(`/sessions/${RUN}`);
     expect(panel().className).toBe('project-task-panel is-docked');
     expect(panel().querySelector('.task-detail-panel')!.className).toBe('task-detail-panel is-docked is-compact');
+  });
+
+  it('docks beside any conversation, not only one of its runs (owner, session-task-column)', async () => {
+    windowWidth(DOCK_WIDTH);
+    await open(`/sessions/${OTHER_SESSION}`);
+    expect(panel().className).toBe('project-task-panel is-docked');
+    expect(panel().querySelector('.task-detail-panel')!.className).toBe('task-detail-panel is-docked is-compact');
+    // No run of the task is this conversation, so none is named so and every run is a link.
+    expect(panel().textContent).not.toContain('this conversation');
+    expect(panel().querySelector(`a[href="/sessions/${RUN}"]`)).not.toBeNull();
   });
 
   it('lies over the page below the docking width, in the full arrangement', async () => {
