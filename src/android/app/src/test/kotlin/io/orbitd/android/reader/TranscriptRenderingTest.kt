@@ -43,7 +43,9 @@ class TranscriptRenderingTest {
         val rows = transcriptRows(listOf(event(10, "tool_use", """{"id":"child","parentToolUseId":"outside"}"""),
             event(11, "tool_result", """{"tool_use_id":"child","parentToolUseId":"outside","content":"Keep this result"}""")))
         assertEquals(1, rows.size)
-        assertEquals("Keep this result", rows.single().result!!.body())
+        // The call it nests under stands in for the one outside the page (OutOfWindowSubagentTest), and keeps the child's place.
+        assertEquals("outside", rows.single().event.toolId())
+        assertEquals("Keep this result", rows.single().children.single().result!!.body())
         assertEquals("event:10", anchorRow(rows, 11)!!.key)
     }
     @Test fun toolsAndSubagentsKeepResultAnchorsAndOrphanResults() {

@@ -49,6 +49,7 @@ const ALLOWED: Record<string, [count: number, why: string]> = {
   'src/android/core/src/main/kotlin/io/orbitd/android/core/cards/WakeCards.kt': [9, OLD_NOTES],
   'src/apiserver/src/tasks/task-criterion-shape-advice.ts': [10, OWNER_WORDS],
   'src/web/src/lib/wikiArticles.ts': [1, 'sorts Chinese titles by their pinyin initials'],
+  'src/shared/src/help.ts': [1, 'the help language picker names each language in its own words: 中文 is Chinese'],
 
   // The coordinator's judgment turn.
 
@@ -226,8 +227,8 @@ describe('copy language', () => {
       drift,
       'All copy is English, in every client and in what the server and runner write (AGENTS.md). Write '
         + 'the new words in English. A count that went down is a file that got more English: lower its '
-        + 'entry, or drop it at zero. Only a parser of old Chinese notes, or code that recognizes what the '
-        + 'owner writes, takes a new entry.',
+        + 'entry, or drop it at zero. Only a parser of old Chinese notes, code that recognizes what the '
+        + 'owner writes, or a language picker naming a language in its own words, takes a new entry.',
     ).toEqual([]);
   });
 });

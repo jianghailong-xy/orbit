@@ -11,6 +11,7 @@ import * as listingRules from '../../../apiserver/src/sessions/session-listing';
 import { answerListing } from '../test/sessionListingAnswer';
 import type { Runner } from './TasksSidePanel';
 import { SessionSearch } from './SessionSearch';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // Exercise the real list, its view/tag menu and the shell's search palette. Named API reads call
 // api() within api.ts, so stub them separately from the query factories' api export.
@@ -383,7 +384,7 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     expect(entry.querySelector('.session-project-icon svg')).not.toBeNull();
     const progress = entry.querySelector('.session-project-progress');
     expect(progress?.textContent).toContain('2/5');
-    expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
+    expect(await hoverTooltip(progress!)).toBe('2 sessions · 1 running');
     expect(entry.querySelector('.session-sub')?.firstElementChild).toBe(progress);
     expect(entry.querySelector('.coordinator-badge')).toBeNull();
     expect(entry.querySelector('.session-folder-needs')).toBeNull();
@@ -423,7 +424,7 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     expect(projectRows()).toHaveLength(0);
     const mark = sessionRow('Build the package').querySelector('.session-sub > .session-project-progress');
     expect(mark?.textContent).toBe('2/5');
-    expect(mark?.getAttribute('title')).toBe('Part of Project Alpha · open its sessions');
+    expect(await hoverTooltip(mark!)).toBe('Part of Project Alpha · open its sessions');
     expect(listCalls.some((p) => p.startsWith('/sessions/project-placement?') && p.includes('view=completed') &&
       new URLSearchParams(p.split('?')[1]).get('projectIds') === PROJECT_ID)).toBe(true);
     expect(listCalls.some((p) => p.startsWith('/sessions?') && p.includes('view=completed') &&
@@ -534,7 +535,10 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     rows = [LOOSE, COORDINATOR, newer, older];
     await mount();
     expect(preview()?.textContent).toBe('Waiting for your confirmation · Build the package');
-    expect(preview()?.getAttribute('title')).toBe('Waiting for your confirmation · Build the package');
+    // jsdom lays nothing out: give the label a cut-off box so its tip opens.
+    Object.defineProperty(preview()!, 'scrollWidth', { value: 500, configurable: true });
+    Object.defineProperty(preview()!, 'clientWidth', { value: 200, configurable: true });
+    expect(await hoverTooltip(preview()!)).toBe('Waiting for your confirmation · Build the package');
     expect(preview()?.classList.contains('tone-approval')).toBe(true);
   });
 
@@ -558,7 +562,7 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     expect(projectRow().querySelector('.session-project-icon .anticon-loading')).not.toBeNull();
     expect(projectRow().querySelector('.session-project-icon .sidebar-nav-icon')).toBeNull();
     expect(projectRow().querySelector('.session-project-status')).toBeNull();
-    expect(projectRow().querySelector('.session-project-progress')?.getAttribute('title')).toBe('3 sessions · 1 running');
+    expect(await hoverTooltip(projectRow().querySelector('.session-project-progress')!)).toBe('3 sessions · 1 running');
   });
 
   it('shows the coordinator’s exception handling words with an age and no Coordinator prefix', async () => {
@@ -707,7 +711,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     expect(mark?.textContent).toBe('2/5');
     expect(mark?.querySelector('.session-project-progress-bar')).not.toBeNull();
     expect(mark?.classList.contains('done')).toBe(false);
-    expect(mark?.getAttribute('title')).toBe('Part of Project Alpha · open its sessions');
+    expect(await hoverTooltip(mark!)).toBe('Part of Project Alpha · open its sessions');
     // The rest of the row is the session's own: its line and its status, not the project's grid.
     expect(member.querySelector('.session-preview')?.textContent).toBe('Running Bash…');
     expect(member.querySelector('.session-project-icon')).toBeNull();
@@ -723,7 +727,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     const mark = sessionRow('Build the package').querySelector('.session-project-progress');
     expect(mark?.querySelector('.session-project-progress-bar')).toBeNull();
     expect(mark?.classList.contains('done')).toBe(true);
-    expect(mark?.getAttribute('title')).toBe('Part of Project Alpha · open its sessions');
+    expect(await hoverTooltip(mark!)).toBe('Part of Project Alpha · open its sessions');
   });
 
   it('opens the project’s sessions column from the mark, and the member from the rest of its row', async () => {

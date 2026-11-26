@@ -244,6 +244,36 @@ final class SubagentTranscriptTests: XCTestCase {
         XCTAssertEqual(first.status, .ok)
     }
 
+    /// A workflow agent whose call is in an older page than the result it handed back: the tail page
+    /// holds the result alone, and paging back must settle the call with it, not leave it running.
+    func testAnOlderPageSettlesAWorkflowAgentWithTheResultTheTailHeld() {
+        let key = "toolu_wf:workflow-agent:a1"
+        let all = [
+            ev(1, .toolUse, ["id": .string("toolu_wf"), "name": .string("Workflow"), "input": .object([:])]),
+            ev(2, .toolUse, ["id": .string(key), "name": .string("Agent"), "parentToolUseId": .string("toolu_wf"),
+                             "input": .object(["description": .string("adjudicate")])]),
+            ev(3, .toolUse, ["id": .string("so"), "name": .string("Bash"), "parentToolUseId": .string(key),
+                             "input": .object(["command": .string("cat notes.md")])]),
+            ev(4, .toolResult, ["toolUseId": .string("so"), "parentToolUseId": .string(key), "content": .string("notes")]),
+            ev(5, .toolResult, ["toolUseId": .string(key), "parentToolUseId": .string("toolu_wf"),
+                                "content": .string("{\"claim_held\":false}")]),
+        ]
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: Array(all[3...]), hasMore: true))   // seqs 4…5
+        r.prependOlder(EventPage(events: Array(all[..<3]), hasMore: false))   // seqs 1…3
+
+        guard case .toolCall(let agent)? = r.state.subagentItems["toolu_wf"]?.first else {
+            return XCTFail("workflow agent missing: \(r.state.subagentItems)")
+        }
+        XCTAssertEqual(agent.status, .ok)
+        XCTAssertEqual(agent.result, "{\"claim_held\":false}")
+        guard case .toolCall(let call)? = r.state.subagentItems[key]?.first else {
+            return XCTFail("agent call missing")
+        }
+        XCTAssertEqual(call.status, .ok, "a sub-agent's own call settles across the seam too")
+        XCTAssertEqual(call.result, "notes")
+    }
+
     /// Trimming the window cuts a sub-agent's work at the same seq it cuts the conversation, not
     /// with its call: a background agent works on long after it.
     func testTrimmingCutsASubagentsWorkBySeqNotWithItsCall() {

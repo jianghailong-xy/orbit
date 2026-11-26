@@ -35,8 +35,9 @@ import (
 // and whether it carried a key. Built only with -tags codexresetfault, so `go test ./...` neither runs nor skips it.
 func TestCodexResetFaultProcess(t *testing.T) {
 	transport := NewTransport(codexResetFaultEnv(t, "ORBIT_CODEX_RESET_FAULT_URL"), codexResetFaultEnv(t, "ORBIT_CODEX_RESET_FAULT_TOKEN"))
-	probe := newCodexPlanUsageProbe(transport.leaseOwner)
-	consumer := newCodexResetConsumer(probe)
+	usage := newCodexAccountUsage(transport.leaseOwner)
+	probe := usage.def
+	consumer := newCodexResetConsumer(usage)
 	consumer.consumeTimeout = codexResetFaultMillis("ORBIT_CODEX_RESET_FAULT_CONSUME_TIMEOUT_MS", consumer.consumeTimeout)
 	consumer.attemptTimeout = codexResetFaultMillis("ORBIT_CODEX_RESET_FAULT_ATTEMPT_TIMEOUT_MS", consumer.attemptTimeout)
 	consumer.callFreshness = codexResetFaultMillis("ORBIT_CODEX_RESET_FAULT_CALL_FRESHNESS_MS", consumer.callFreshness)

@@ -6,7 +6,7 @@
  * under that snapshot's `accounts`, by the account's id (src/runner-go/{codex,claude}_account_usage.go),
  * and Kimi Code's and Cursor CLI's the same way under `kimi` and `cursor` (src/runner-go/cursor_usage.go).
  */
-import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
+import { codexRateLimitResetViolations, type PlanUsage, type PlanUsageSnapshot } from '@orbit/shared';
 import { ACCOUNT_ENGINES, ENGINE_ACCOUNTS_MAX, namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
 import {
   accountDir,
@@ -43,21 +43,22 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * `usage` with each engine snapshot's other accounts as they are stored: each under the id of an
- * account the runner added, and each as that account's own windows only — no `accounts` of its own,
- * and no reset block, which is Default's alone (docs/codex-rate-limit-reset-contract.md §3) and the
- * only one the stored-block ordering covers (§8). An entry under any other key, that is not an
- * object, or that names another account than its key (a Cursor CLI snapshot's `account`), is dropped
- * whole; at most ENGINE_ACCOUNTS_MAX are kept, as for the accounts the engine report lists. Snapshots
- * carrying no accounts are returned as they came, so a heartbeat that reported none still stores the
- * same object.
+ * account the runner added, and each as that account's own windows only — no `accounts` of its own.
+ * A Codex account keeps its own reset block when the block is well formed (contract v2,
+ * docs/codex-rate-limit-reset-contract.md §12.1), which the stored-block ordering then orders per
+ * account (§12.2); a malformed one is dropped, and so is any block on another engine's account, which
+ * no reader takes. An entry under any other key, that is not an object, or that names another account
+ * than its key (a Cursor CLI snapshot's `account`), is dropped whole; at most ENGINE_ACCOUNTS_MAX are
+ * kept, as for the accounts the engine report lists. Snapshots carrying no accounts are returned as
+ * they came, so a heartbeat that reported none still stores the same object.
  */
 export function sanitizePlanUsageAccounts(usage: PlanUsage): PlanUsage {
   // A runner older than nested snapshots reports its Codex quota as the payload itself.
-  if (usage.provider === 'codex' && !usage.codex) return sanitizeAccountsOf(usage) ?? usage;
-  const codex = sanitizeAccountsOf(usage.codex);
-  const claude = sanitizeAccountsOf(usage.claude);
-  const kimi = sanitizeAccountsOf(usage.kimi);
-  const cursor = sanitizeAccountsOf(usage.cursor);
+  if (usage.provider === 'codex' && !usage.codex) return sanitizeAccountsOf(usage, true) ?? usage;
+  const codex = sanitizeAccountsOf(usage.codex, true);
+  const claude = sanitizeAccountsOf(usage.claude, false);
+  const kimi = sanitizeAccountsOf(usage.kimi, false);
+  const cursor = sanitizeAccountsOf(usage.cursor, false);
   if (codex === usage.codex && claude === usage.claude && kimi === usage.kimi && cursor === usage.cursor) return usage;
   return {
     ...usage,
@@ -69,8 +70,9 @@ export function sanitizePlanUsageAccounts(usage: PlanUsage): PlanUsage {
 }
 
 /** One engine snapshot with its `accounts` as they are stored, or the same object when it carries
- *  none (the caller uses that identity to leave the whole payload untouched). */
-function sanitizeAccountsOf(snapshot: PlanUsageSnapshot | undefined): PlanUsageSnapshot | undefined {
+ *  none (the caller uses that identity to leave the whole payload untouched). `resetBlocks`: the
+ *  snapshot is Codex's, whose accounts keep a well-formed reset block. */
+function sanitizeAccountsOf(snapshot: PlanUsageSnapshot | undefined, resetBlocks: boolean): PlanUsageSnapshot | undefined {
   if (!snapshot || !('accounts' in snapshot)) return snapshot;
   const { accounts: reported, ...rest } = snapshot;
   const accounts: Record<string, PlanUsageSnapshot> = {};
@@ -79,8 +81,9 @@ function sanitizeAccountsOf(snapshot: PlanUsageSnapshot | undefined): PlanUsageS
     if (kept === ENGINE_ACCOUNTS_MAX) break;
     if (!ADDED_ACCOUNT_ID.test(id) || !isObject(entry)) continue;
     if (entry.account !== undefined && entry.account !== id) continue;
-    const { accounts: _nested, rateLimitReset: _block, ...own } = entry as PlanUsageSnapshot;
-    accounts[id] = own;
+    const { accounts: _nested, rateLimitReset: block, ...own } = entry as PlanUsageSnapshot;
+    const keepBlock = resetBlocks && block !== undefined && codexRateLimitResetViolations(block).length === 0;
+    accounts[id] = keepBlock ? { ...own, rateLimitReset: block } : own;
     kept += 1;
   }
   return kept ? { ...rest, accounts } : rest;

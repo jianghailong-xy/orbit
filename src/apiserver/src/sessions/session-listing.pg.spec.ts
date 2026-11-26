@@ -183,10 +183,9 @@ async function seed(c: Case): Promise<Seeded> {
     const completed = s.lifecycle === 'completed';
     const state: Partial<Prisma.SessionUncheckedCreateInput> =
       completed ? { status: 'SUCCEEDED', finishedAt: new Date(), ...(s.archivedAt ? { archivedAt: new Date() } : { completedAt: new Date() }) }
-        : s.activity === 'needsYou' ? { status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED' }
-          : s.activity === 'running' ? { status: 'RUNNING' }
-            : s.activity === 'jobs' ? { status: 'AWAITING_INPUT', runningBgJobs: ['bgj_listing'], runningBgJobActivity: {} }
-              : { status: 'AWAITING_INPUT' };
+        : s.activity === 'needsYou' || s.activity === 'running' ? { status: 'RUNNING' }
+          : s.activity === 'jobs' ? { status: 'AWAITING_INPUT', runningBgJobs: ['bgj_listing'], runningBgJobActivity: {} }
+            : { status: 'AWAITING_INPUT' };
     await h.db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, title: s.id, prompt: 'p', dispatchOrigin: 'USER',
@@ -198,6 +197,19 @@ async function seed(c: Case): Promise<Seeded> {
     });
     if (project && s.role === 'COORDINATOR') {
       await h.db.project.update({ where: { id: project }, data: { coordinatorSessionId: id } });
+    }
+    // Needing you is a question a turn in flight has asked and nobody has answered (workspaceSessionCounts'
+    // blocked set), not a failure: a failed project member is folded into its project row and counts nowhere.
+    if (s.activity === 'needsYou') {
+      const turn = await h.db.conversationTurn.create({
+        data: { sessionId: id, seq: 1, clientTurnId: randomUUID(), kind: 'message', deliveredAt: new Date() },
+      });
+      await h.db.approval.create({
+        data: {
+          sessionId: id, turnId: turn.id, toolName: 'AskUserQuestion', toolUseId: `ask-${id}`,
+          input: { questions: [{ question: 'Go on?', options: [{ label: 'Yes' }] }] },
+        },
+      });
     }
     // The clocks last: a settled status or a first completed_at stamps listed_at (migration 1490), and the
     // fixture names it. completed_at is already set here, so moving it does not stamp it again.

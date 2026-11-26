@@ -167,7 +167,14 @@ describe('the copy button at the end of a turn', () => {
 
     await act(async () => button.click());
     expect(button.getAttribute('aria-label')).toBe('Copied');
-    expect(button.title).toBe('Copied');
+    // The app Tooltip, under this file's fake clock: rest the pointer on the button and pass its delay.
+    await act(async () => {
+      button.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }));
+      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    });
+    await act(async () => vi.advanceTimersByTime(200));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Copied');
 
     await act(async () => vi.advanceTimersByTime(1600));
     expect(button.getAttribute('aria-label')).toBe('Copy reply');

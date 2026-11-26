@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { driveEntryQuery, formatSize } from '../../lib/drive';
 import { ApiError } from '../../api';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../ui/Tooltip';
 
 export const DRIVE_LINK_PREFIX = 'orbit-drive:';
 /** The scheme while Drive was called Drive, which stored transcripts carry and which still draws the same card. */
@@ -37,13 +38,15 @@ export function DriveFileCard({ id, label }: { id: string; label?: string }) {
   if (!file || file.trashedAt) {
     const gone = file?.trashedAt ? 'In Trash' : 'No longer in Files';
     return (
-      <span className="drive-file-card gone" title={entry.error instanceof ApiError ? entry.error.message : undefined}>
-        <FileOutlined aria-hidden="true" />
-        <span className="drive-file-text">
-          <span className="drive-file-name">{file?.name ?? label ?? 'File'}</span>
-          <span className="drive-file-sub">{gone}</span>
+      <Tooltip content={entry.error instanceof ApiError ? entry.error.message : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="drive-file-card gone">
+          <FileOutlined aria-hidden="true" />
+          <span className="drive-file-text">
+            <span className="drive-file-name">{file?.name ?? label ?? 'File'}</span>
+            <span className="drive-file-sub">{gone}</span>
+          </span>
         </span>
-      </span>
+      </Tooltip>
     );
   }
   // A folder (what drive_sync's summary links) opens itself and has no size of its own.

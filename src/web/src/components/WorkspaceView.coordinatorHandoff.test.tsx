@@ -9,6 +9,7 @@ import { answerListing } from '../test/sessionListingAnswer';
 import type { Runner } from './TasksSidePanel';
 import { ToastViewport } from './ToastViewport';
 import { clearToasts } from '../lib/toastStore';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Compact and Start a new coordinator in the Context popover (board 01), and the handoff as the
@@ -103,9 +104,10 @@ class FakeEventSource {
 }
 
 let pathname = '';
+let search = '';
 const visited: string[] = [];
 function Where() {
-  pathname = useLocation().pathname;
+  ({ pathname, search } = useLocation());
   if (visited[visited.length - 1] !== pathname) visited.push(pathname);
   return null;
 }
@@ -479,11 +481,26 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     expect(mounted().querySelector('.workspace-header-main > .workspace-header-task')).toBeNull();
     const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
     expect(badge?.textContent).toBe('Coordinator');
-    expect(badge?.getAttribute('title')).toBe('Open project · Checkout redesign');
+    expect(await hoverTooltip(badge!)).toBe('Open project · Checkout redesign');
     expect(badge?.getAttribute('aria-label')).toBe('Coordinator · Open project Checkout redesign');
     await act(async () => badge!.click());
     // The test's one catch-all route keeps WorkspaceView mounted on /projects/…, which may route on from there.
     await waitFor(() => expect(visited).toContain(`/projects/${PROJECT}`));
+  });
+
+  it('links a task session to its task through a Task badge, with no second line repeating the title', async () => {
+    // As the Coordinator badge does for a project: a task's session is named after its task.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    expect(mounted().querySelector('.workspace-header-task')).toBeNull();
+    const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
+    expect(badge?.textContent).toBe('Task');
+    expect(await hoverTooltip(badge!)).toBe('Open task · Fix the red checks');
+    expect(badge?.getAttribute('aria-label')).toBe('Task · Open task Fix the red checks');
+    await act(async () => badge!.click());
+    await waitFor(() => expect(new URLSearchParams(search).get('task')).toBeTruthy());
   });
 
   it('02-3: opens the successor with the note card and the waits that moved here', async () => {

@@ -687,7 +687,7 @@ export async function writeLinkBeatReports(
     const selfUpdate = sanitizeRunnerSelfUpdate(dto.selfUpdate);
     sets.push(selfUpdate ? Prisma.sql`"self_update" = ${JSON.stringify(selfUpdate)}::jsonb` : Prisma.sql`"self_update" = NULL`);
   }
-  let planUsage: { merged: string; order: ReturnType<typeof mergeHeartbeatPlanUsage>['order'] } | null = null;
+  let planUsage: { merged: string; orders: ReturnType<typeof mergeHeartbeatPlanUsage>['orders'] } | null = null;
   if (has('planUsage') && dto.planUsage != null) {
     const merge = mergeHeartbeatPlanUsage(
       input.storedPlanUsage,
@@ -695,7 +695,7 @@ export async function writeLinkBeatReports(
       input.leaseOwner,
       input.now,
     );
-    planUsage = { merged: JSON.stringify(merge.planUsage), order: merge.order };
+    planUsage = { merged: JSON.stringify(merge.planUsage), orders: merge.orders };
     const unchanged = input.storedPlanUsage == null
       ? Prisma.sql`(r."plan_usage" IS NULL OR r."plan_usage" = 'null'::jsonb)`
       : Prisma.sql`r."plan_usage" = ${JSON.stringify(input.storedPlanUsage)}::jsonb`;
@@ -744,7 +744,7 @@ export async function writeLinkBeatReports(
     SELECT ${planUsageStored} AS "planUsageStored", (SELECT count(*) FROM facts)::int AS "recorded"
   `;
   const written = rows[0]?.planUsageStored === true;
-  if (planUsage?.order != null && written) countCodexResetSnapshotWrite('heartbeat', planUsage.order);
+  if (planUsage && written) for (const order of planUsage.orders) countCodexResetSnapshotWrite('heartbeat', order);
   return { planUsageStored: written };
 }
 

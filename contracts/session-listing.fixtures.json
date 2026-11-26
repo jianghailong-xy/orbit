@@ -19,7 +19,7 @@
     "folder": "a folder of `folders` (this workspace) or of `foreignFolders` (the other workspace), or absent",
     "project": "the project its membership names, or absent",
     "role": "COORDINATOR (the project's coordinator) or TASK (a run of one of its tasks, the default when `project` is set)",
-    "activity": "what workspaceSessionCounts counts it as: needsYou, running or jobs; absent for none",
+    "activity": "what workspaceSessionCounts counts it as: needsYou (a pending approval on a turn in flight), running or jobs; absent for none",
     "createdAt": "defaults to `defaultCreatedAt`",
     "completedAt": "when a completed session was completed; defaults to its listedAt",
     "archivedAt": "set instead of completedAt on a legacy archived-only row"

@@ -24,6 +24,7 @@ import { meQuery, type SignInMethods } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { ago } from '../lib/watches';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../components/ui/Tooltip';
 
 /** What an account last used Orbit through: one of its apps, or an access token. */
 type ActiveVia = 'web' | 'ios' | 'macos' | 'android' | 'token';
@@ -126,9 +127,11 @@ function UserCell({ user, you }: { user: AdminUser; you: boolean }) {
           {you && <Badge tone="blue">You</Badge>}
           {user.role === 'ADMIN' && <Badge tone="gold">Admin</Badge>}
         </div>
-        <div className="admin-users-email" title={user.email}>
-          {user.email}
-        </div>
+        <Tooltip content={user.email} truncatedOnly>
+          <div className="admin-users-email">
+            {user.email}
+          </div>
+        </Tooltip>
       </div>
     </div>
   );
@@ -143,25 +146,29 @@ function SignInCell({ methods }: { methods?: SignInMethods }) {
   const { password, google } = methods ?? { password: true, google: null };
   if (!password && !google) {
     return (
-      <span className="admin-users-pending" title="No password: the Google account of this email address is linked at its first Google sign-in">
-        Google · pending
-      </span>
+      <Tooltip content="No password: the Google account of this email address is linked at its first Google sign-in" delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="admin-users-pending">
+          Google · pending
+        </span>
+      </Tooltip>
     );
   }
   return (
     <span className="admin-users-signin">
       {password && 'Password'}
       {password && google && ' · '}
-      {google && <span title={google.email}>Google</span>}
+      {google && <Tooltip content={google.email} delay={TEXT_TOOLTIP_DELAY_MS}><span>Google</span></Tooltip>}
     </span>
   );
 }
 
 function StatusCell({ disabledAt, welcomeEmail }: { disabledAt?: string | null; welcomeEmail?: WelcomeEmail | null }) {
   const status = disabledAt ? (
-    <span className="admin-users-status admin-users-status-off" title={`Disabled on ${fullDate(disabledAt)}`}>
-      Disabled
-    </span>
+    <Tooltip content={`Disabled on ${fullDate(disabledAt)}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="admin-users-status admin-users-status-off">
+        Disabled
+      </span>
+    </Tooltip>
   ) : (
     <span className="admin-users-status">Active</span>
   );
@@ -171,9 +178,11 @@ function StatusCell({ disabledAt, welcomeEmail }: { disabledAt?: string | null; 
   return (
     <div className="admin-users-status-stack">
       {status}
-      <span className="admin-users-welcome-failed" title={`${welcomeEmail.lastError ?? 'Unknown error'}\nLast attempt ${attemptTime(at)}`}>
-        {WELCOME_EMAIL_FAILED}
-      </span>
+      <Tooltip content={`${welcomeEmail.lastError ?? 'Unknown error'}\nLast attempt ${attemptTime(at)}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span className="admin-users-welcome-failed">
+          {WELCOME_EMAIL_FAILED}
+        </span>
+      </Tooltip>
     </div>
   );
 }
@@ -188,9 +197,11 @@ function LastActiveCell({ last, now }: { last?: AdminUser['lastActive']; now: nu
   if (last === null) return <span className="admin-users-quiet">Never</span>;
   const exact = new Date(last.at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
   return (
-    <span className="admin-users-active" title={`${exact} · ${ACTIVE_VIA[last.via] ?? last.via}`}>
-      {now - Date.parse(last.at) > MONTH ? fullDate(last.at) : ago(last.at, now)}
-    </span>
+    <Tooltip content={`${exact} · ${ACTIVE_VIA[last.via] ?? last.via}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="admin-users-active">
+        {now - Date.parse(last.at) > MONTH ? fullDate(last.at) : ago(last.at, now)}
+      </span>
+    </Tooltip>
   );
 }
 

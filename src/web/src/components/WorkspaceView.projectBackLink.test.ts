@@ -43,7 +43,6 @@ describe('CoordinatorBadge', () => {
   it('renders an accessible marker only when the row coordinates a project', () => {
     const html = renderToStaticMarkup(createElement(CoordinatorBadge, { projectId: 'project-1' }));
     expect(html).toContain('class="coordinator-badge"');
-    expect(html).toContain('title="This session coordinates a project"');
     expect(html).toContain('>Coordinator</span>');
     // The visible word IS the accessible name. An aria-label here would override it, so somebody
     // driving the UI by voice could say the word they can see and not match it (WCAG 2.5.3).

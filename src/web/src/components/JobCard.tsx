@@ -25,6 +25,7 @@ import { formatSpan } from '../lib/watches';
 import { SubagentWakeQueued } from './SubagentCardEnd';
 import { ExportCtx, Pre } from './ToolBlocks';
 import { Popconfirm } from './ui/Popconfirm';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * A `bg_run` job as one card from start to end (the owner's job-card board, choices A1 B1 C1 D1 E1 F1, rulings
@@ -313,9 +314,11 @@ export function JobCard({
         <span className="chat-tool-icon">
           <ConsoleSqlOutlined />
         </span>
-        <span className="chat-tool-summary chat-job-title" title={title}>
-          {title}
-        </span>
+        <Tooltip content={title} truncatedOnly>
+          <span className="chat-tool-summary chat-job-title">
+            {title}
+          </span>
+        </Tooltip>
         {!phone && kindChip}
         {!phone && elapsedChip}
         {quietChip}
