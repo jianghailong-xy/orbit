@@ -84,8 +84,15 @@ export function isApiErrorText(text: string | null | undefined): boolean {
  */
 export const EDGE_BLOCK_MARKERS = ['attention required', 'cloudflare'];
 export const CONNECTION_DROPPED_MARKERS = ['econnreset'];
+/**
+ * A provider's gateway that timed out reaching its own upstream and passed the Go transport error on
+ * as the body, under a status that says nothing: "API Error: 406 Post "https://dashscope-intl.aliyuncs.com/
+ * apps/anthropic/v1/messages": read tcp [fdbd:…]:38248->[64:ff9b::…]:443: read: connection timed out"
+ * (Qwen on DashScope, 2026-11-13). `read: ` is the syscall Go names, so only a transport error says it.
+ */
+export const CONNECTION_TIMED_OUT_MARKERS = ['read: connection timed out'];
 
-const CONNECTION_FAILURE_MARKERS = [EDGE_BLOCK_MARKERS, CONNECTION_DROPPED_MARKERS];
+const CONNECTION_FAILURE_MARKERS = [EDGE_BLOCK_MARKERS, CONNECTION_DROPPED_MARKERS, CONNECTION_TIMED_OUT_MARKERS];
 
 export function isConnectionFailureText(text: string | null | undefined): boolean {
   if (!text) return false;
