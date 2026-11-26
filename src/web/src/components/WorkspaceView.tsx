@@ -7085,9 +7085,21 @@ export function WorkspaceView({
         e.preventDefault();
         return;
       }
+      // A finished project's row completes as its menu's Complete does: the coordinator and the
+      // members still open, together. Its menu is keyed by the project's id, not a session's.
+      const completeFinishedProject = (project: (typeof folderListing.projects)[number] | undefined): boolean => {
+        if (!project || projectStateAction(project, effectiveView) !== 'complete') return false;
+        completeProjectMut.mutate({ projectId: project.projectId, memberIds: project.members.map((m: any) => m.id) });
+        return true;
+      };
       if (menuOpenId) {
         e.preventDefault();
         e.stopPropagation();
+        const project = folderListing.projects.find((p) => p.id === menuOpenId);
+        if (project) {
+          if (completeFinishedProject(project)) setMenuOpenId(null);
+          return;
+        }
         const row = orderedSessions.find((s) => s.id === menuOpenId);
         const source = selectedSession?.id === menuOpenId ? selectedSession : row;
         const sourceView = source ? sessionRowView(source) : rowView;
@@ -7097,6 +7109,17 @@ export function WorkspaceView({
         ) return;
         setMenuOpenId(null);
         requestComplete(row);
+        return;
+      }
+      // The coordinator stands for its project's row, which may stay in Open after the coordinator
+      // itself is completed, while members are still open.
+      const coordinated = selectedSession?.projectMembership?.role === 'COORDINATOR'
+        ? folderListing.projects.find((p) => p.coordinator?.id === selectedSession.id)
+        : undefined;
+      if (coordinated && projectStateAction(coordinated, effectiveView) === 'complete') {
+        e.preventDefault();
+        setHeaderMenuOpen(false);
+        completeFinishedProject(coordinated);
         return;
       }
       if (
@@ -7110,7 +7133,8 @@ export function WorkspaceView({
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [menuOpenId, orderedSessions, rowView, sessionRowView, selected, selectedSession, selectedLifecycleState, requestComplete]);
+  }, [menuOpenId, orderedSessions, rowView, sessionRowView, selected, selectedSession, selectedLifecycleState, requestComplete,
+    folderListing.projects, effectiveView, completeProjectMut]);
   useEffect(() => {
     if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId) &&
       !folderListing.projects.some((p) => p.id === menuOpenId) &&

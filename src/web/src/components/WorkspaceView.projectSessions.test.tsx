@@ -570,6 +570,34 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     expect(menuItem('Complete')).toBeUndefined();
   });
 
+  const pressCompleteShortcut = async (): Promise<void> => {
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', metaKey: true, bubbles: true, cancelable: true }));
+    });
+  };
+
+  it('completes a DONE project with ⌘D while its menu is open, as the menu\'s Complete does', async () => {
+    const finished = { ...membership('COORDINATOR'), projectStatus: 'DONE' };
+    rows = [LOOSE, { ...COORDINATOR, projectMembership: finished }, { ...TASK, projectMembership: { ...finished, role: 'TASK' } }];
+    projects = [project({ status: 'DONE' })];
+    await mount();
+    await hoverProjectMenu();
+    await pressCompleteShortcut();
+    await until(() => expect(apiModule.completeProjectSessions).toHaveBeenCalledWith(PROJECT_ID));
+    expect(apiModule.completeSession).not.toHaveBeenCalled();
+    await until(() => expect(projectRows()).toHaveLength(0));
+  });
+
+  it('completes a DONE project with ⌘D from its selected coordinator', async () => {
+    const finished = { ...membership('COORDINATOR'), projectStatus: 'DONE' };
+    rows = [LOOSE, { ...COORDINATOR, projectMembership: finished }, { ...TASK, projectMembership: { ...finished, role: 'TASK' } }];
+    projects = [project({ status: 'DONE' })];
+    await mount(undefined, `/sessions/${COORDINATOR.id}`);
+    await pressCompleteShortcut();
+    await until(() => expect(apiModule.completeProjectSessions).toHaveBeenCalledWith(PROJECT_ID));
+    expect(apiModule.completeSession).not.toHaveBeenCalled();
+  });
+
   it('pins and moves the coordinator from the project menu', async () => {
     folders = [FOLDER];
     await mount();
