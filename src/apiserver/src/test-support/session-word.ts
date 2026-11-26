@@ -62,3 +62,13 @@ export function writtenWord(data: Record<string, unknown> | null | undefined): `
   if (!data || !('turnState' in data || 'finishedAt' in data)) return undefined;
   return wordOfWrite(data);
 }
+
+/**
+ * The word in the column session.status, which since deploy D3 only migration 1671's trigger writes, from the facts,
+ * for a rollback to deploy-2 code. Read only by the specs that show that trigger keeps it equal to the projector's
+ * word; it goes with the column in deploy D4 (task T15).
+ */
+export async function storedWord(db: Pick<Prisma.TransactionClient, '$queryRaw'>, id: string): Promise<string | null> {
+  const rows = await db.$queryRaw<Array<{ word: string }>>`SELECT "status"::text AS word FROM "session" WHERE "id" = ${id}::uuid`;
+  return rows[0]?.word ?? null;
+}

@@ -24,6 +24,10 @@
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-turn-state-phase.pg.spec.ts
  *
+ * It runs on the database deploy D2 left: migration 1671 (D3) is rolled back first, with its down script
+ * (scripts/session-status-from-facts-down.sql), since D3 replaced the D1 trigger this file holds to account; what D3
+ * stores is sessions/session-status-from-facts.pg.spec.ts's.
+ *
  * Not destructive to anything but this disposable database, which it leaves at every migration: every id is fresh.
  * (4)'s census counts the whole database, which it reads as this spec's rows alone: run it on a database of its own,
  * as run-pg-spec.sh does.
@@ -129,18 +133,21 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   return { ownerId, runnerId, workspaceId };
 }
 
-/** A session of `shape` with `facts`, through Prisma's INSERT (which names neither new column). */
+/**
+ * A session of `shape` with `facts`, as a deploy-1 writer leaves it: Prisma's INSERT (which names neither new column),
+ * then the word, written alone. The Prisma model has no `status` since deploy D3, so the word is an UPDATE of its own,
+ * with the release column it comes with (session_release_fact_chk) and the engine read declared, as a claim declares
+ * it, so the engine guards let a move to RUNNING through.
+ */
 async function insertShape(db: PrismaClient, w: World, shape: ReleaseShape, facts: Facts, engine: string | null = 'claude'): Promise<string> {
   const id = randomUUID();
   const landing = shape.sessionKind === 'LANDING';
   await db.session.create({
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: shape.name, prompt: shape.what,
-      turnState: turnStateOfWord(shape.status),
       ...(landing
         ? { sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, engine: null, startsTaskWork: false }
         : { provider: 'claude', providerBuiltin: true, engine, assignedRunnerId: w.runnerId }),
-      finishedAt: shape.released ? new Date() : null,
       endReason: shape.endReason,
       ...(shape.endReason ? { cancelRequestedAt: new Date() } : {}),
       lastTurnOutcome: shape.lastTurnOutcome,
@@ -148,6 +155,12 @@ async function insertShape(db: PrismaClient, w: World, shape: ReleaseShape, fact
       ...facts,
     },
   });
+  await db.$transaction([
+    db.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`,
+    db.$executeRawUnsafe(
+      `UPDATE "session" SET "status" = $2::run_status, "finished_at" = CASE WHEN $3::boolean THEN now() END WHERE "id" = $1::uuid`,
+      id, shape.status, shape.released),
+  ]);
   return id;
 }
 
@@ -164,6 +177,9 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
+  // The database deploy D2 left: migration 1671 (D3) rolled back, as its down script does it. What this file holds to
+  // account is D1's trigger, which keeps the facts from the word, and which D3 replaced with one that does the opposite.
+  await sql.query(readFileSync(join(SCRIPTS, 'session-status-from-facts-down.sql'), 'utf8'));
   const read = async (id: string): Promise<Stored> =>
     (await sql.query(`${READ} WHERE "id" = $1::uuid`, [id])).rows[0] as Stored;
   const assertDerived = (row: Stored, what: string) => {

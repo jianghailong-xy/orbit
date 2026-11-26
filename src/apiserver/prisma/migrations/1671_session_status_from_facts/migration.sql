@@ -61,8 +61,9 @@
 -- runs on those statements too (they name turn_state) and stores the facts' word. A stray D2 write of the word alone
 -- names no fact, so this trigger does not undo it: session_turn_state_agrees_chk refuses it loudly instead. Rollback
 -- to D2 code is free: it reads only the facts and the projected word, and writes both. Rollback of this file is
--- re-running 1611's session_aa_turn_state_from_status (function and trigger), 1641's session_held_turn_state, 1621's
--- nine-argument function and the nine trigger definitions without the added column; not to D1 code (plan §4.1).
+-- scripts/session-status-from-facts-down.sql (1611's session_aa_turn_state_from_status, 1641's
+-- session_held_turn_state, 1621's nine-argument function and the nine trigger definitions without the added column);
+-- not to D1 code (plan §4.1).
 --
 -- LOCKS
 -- -----

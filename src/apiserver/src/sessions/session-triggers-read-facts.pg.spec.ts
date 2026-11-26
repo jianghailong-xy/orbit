@@ -4,8 +4,8 @@
  *
  *   (1) each restated body is the one in force before 1641 (its latest migration) with exactly the replacements below,
  *       and each restated WHEN clause is 1442's with exactly its replacements: nothing else moved, nothing reverted
- *   (2) session_held_turn_state reads what session_turn_state_of_status reads of the stored word, for every row the
- *       CHECKs admit, a held row with no turn_state (one not yet backfilled) among them
+ *   (2) session_held_turn_state reads the turn state of a held row and NULL of a released one, whatever stored word
+ *       is beside it (migration 1671 took the stored-word fallback out of it, task T14)
  *   (3) the five engine guards: the same claims, revives and lease writes go through, are skipped or are refused
  *   (4) open_list_bump_owner: the same workspace probes bump the same scope
  *   (5) session_listed_at_on_settle: the same writes move listed_at, but for the one kind the migration names
@@ -16,8 +16,9 @@
  *
  * Each of (3)-(9) runs its statements twice on the same rows, in a transaction rolled back after each run: once with
  * the definitions before 1641 installed (read from their migrations), once as migrated, and compares what each run
- * left. Rows a statement starts from include held rows with no turn_state and no phase, as a row nothing has written
- * since 1611 has until the backfill (task T3) fills it.
+ * left. Every row is written with both spellings; since 1671 (deploy D3) the stored word is the trigger's, from the
+ * facts, so the definitions before 1641, which read it, see what those after read. The rows with no turn_state
+ * beside a word that names a turn, and the writes of the word alone, are gone with the NULL fallback (task T14).
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-triggers-read-facts.pg.spec.ts
  */
@@ -34,9 +35,11 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { prismaClientFor } from '../prisma/prisma-client';
 import { legacySessionStatus } from './session-legacy-words';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
-import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
 
 const URL = process.env.COORDINATOR_PG_URL;
+
+/** A held word's turn state, as SQL. */
+const TURN_SQL: Record<string, string> = { PENDING: `'QUEUED'`, RUNNING: `'IN_FLIGHT'`, INTERRUPTED: `'ABANDONED'`, AWAITING_INPUT: 'NULL' };
 const skip = !URL;
 
 const THIS_MIGRATION = '1641_session_triggers_read_facts';
@@ -156,7 +159,6 @@ test('the session triggers and functions read the facts and answer as before (16
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
-  await sql.query(ALLOW_UNFILLED_SESSIONS);
 
   const w: World = { ownerId: randomUUID(), runnerId: randomUUID(), workspaceId: randomUUID() };
   await db.user.create({ data: { id: w.ownerId, email: `t6-${w.ownerId}@triggers.invalid`, name: 't6', passwordHash: 'x' } });
@@ -188,16 +190,8 @@ test('the session triggers and functions read the facts and answer as before (16
                      VALUES (${Object.values(all).join(', ')})`);
     return id;
   };
-  /** The row as one nothing has written since 1611: no turn_state, no phase (each write names only its column, so
-   *  no trigger but session_zz_phase fires, and the second names none of its columns). */
-  const unbackfill = async (id: string): Promise<void> => {
-    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [id]);
-    await sql.query(`UPDATE "session" SET "phase" = NULL WHERE "id" = $1::uuid`, [id]);
-    const row = (await sql.query(`SELECT turn_state, phase FROM "session" WHERE id = $1::uuid`, [id])).rows[0];
-    assert.deepEqual(row, { turn_state: null, phase: null });
-  };
-  /** A start state by its word: the word with its turn state, as the D1 trigger and every writer leave it. */
-  const held = (word: string, extra: Record<string, string> = {}) => ({ status: `'${word}'`, ...extra });
+  /** A start state by its word: the word with its turn state, as every writer of deploy 2 left it. */
+  const held = (word: string, extra: Record<string, string> = {}) => ({ status: `'${word}'`, turn_state: TURN_SQL[word], ...extra });
   const released = (word: string, extra: Record<string, string> = {}) => ({
     status: `'${word}'`, finished_at: `now() - interval '1 hour'`, ...extra,
   });
@@ -261,7 +255,9 @@ test('the session triggers and functions read the facts and answer as before (16
           assert.ok(def.includes(from), `${name} (1442) has no ${from}`);
           def = def.split(from).join(to);
         }
-        assert.equal(now.triggers[name], def, `${name}: 1641 changes more than the word reads`);
+        // 1671 (task T14) added turn_state to the column list beside status (plan §4.2), and nothing else.
+        def = def.replace('AFTER UPDATE OF status, ', 'AFTER UPDATE OF status, turn_state, ');
+        assert.equal(now.triggers[name], def, `${name}: 1641 and 1671 change more than the word reads and the list`);
         // The column list still names the word (plan §4.2: it leaves with the column, T14 and T15).
         assert.match(now.triggers[name], /AFTER UPDATE OF status, /);
         assert.doesNotMatch(now.triggers[name].replace(/^.* WHEN /, ''), /\bstatus\b/, `${name}'s WHEN still reads the word`);
@@ -271,25 +267,20 @@ test('the session triggers and functions read the facts and answer as before (16
     }
   });
 
-  await t.test('(2) session_held_turn_state is the stored word\'s turn state on every row the CHECKs admit', async () => {
-    const rows = (await sql.query<{ status: string; finished: boolean; turn_state: string | null; held: string | null; word: string | null }>(`
+  await t.test('(2) session_held_turn_state is a held row\'s turn state, whatever stored word is beside it', async () => {
+    const rows = (await sql.query<{ status: string; finished: boolean; turn_state: string | null; held: string | null }>(`
       WITH words AS (SELECT unnest(enum_range(NULL::run_status)) AS status),
            combos AS (SELECT w.status, f.finished, ts.turn_state
                         FROM words w, (VALUES (false), (true)) f(finished),
-                             (VALUES (NULL::text), ('QUEUED'), ('IN_FLIGHT'), ('ABANDONED')) ts(turn_state)),
-           admitted AS (SELECT * FROM combos c
-                         WHERE (c.status::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED')) = c.finished
-                           AND (c.turn_state IS NULL OR c.turn_state IS NOT DISTINCT FROM session_turn_state_of_status(c.status))
-                           AND (NOT c.finished OR c.turn_state IS NULL))
-      SELECT a.status::text AS status, a.finished, a.turn_state,
+                             (VALUES (NULL::text), ('QUEUED'), ('IN_FLIGHT'), ('ABANDONED')) ts(turn_state))
+      SELECT c.status::text AS status, c.finished, c.turn_state,
              session_held_turn_state(jsonb_populate_record(NULL::"session", jsonb_build_object(
-               'status', a.status, 'turn_state', a.turn_state,
-               'finished_at', CASE WHEN a.finished THEN '2026-11-25T00:00:00' END))) AS held,
-             session_turn_state_of_status(a.status) AS word
-        FROM admitted a ORDER BY 1, 2, 3`)).rows;
-    // 8 words: 5 held (PARKED among them) with no turn state, 3 of them also with theirs; 3 released with none.
-    assert.equal(rows.length, 11);
-    for (const row of rows) assert.equal(row.held, row.word, JSON.stringify(row));
+               'status', c.status, 'turn_state', c.turn_state,
+               'finished_at', CASE WHEN c.finished THEN '2026-11-25T00:00:00' END))) AS held
+        FROM combos c ORDER BY 1, 2, 3`)).rows;
+    // Every word (PARKED among the type's labels) against every turn state, held and released: the word decides none.
+    assert.equal(rows.length, 8 * 2 * 4);
+    for (const row of rows) assert.equal(row.held, row.finished ? null : row.turn_state, JSON.stringify(row));
   });
 
   await t.test('(3) the five engine guards pass, skip and refuse the same writes', async () => {
@@ -308,23 +299,14 @@ test('the session triggers and functions read the facts and answer as before (16
       { name: 'reads engines, no runtime declared', on: ['claim_reads_session_engine'] },
       { name: 'every runtime declared', on: ALL_ON },
     ];
-    interface Move { name: string; start: Record<string, string>; unbackfilled?: boolean; set: string }
+    interface Move { name: string; start: Record<string, string>; set: string }
     const MOVES: Move[] = [
       { name: 'claim, both spellings', start: held('PENDING'), set: `"status" = 'RUNNING', "turn_state" = 'IN_FLIGHT'` },
-      { name: 'claim, the word alone', start: held('PENDING'), set: `"status" = 'RUNNING'` },
-      { name: 'claim of a row not backfilled', start: held('PENDING'), unbackfilled: true, set: `"status" = 'RUNNING', "turn_state" = 'IN_FLIGHT'` },
-      { name: 'claim of a row not backfilled, the word alone', start: held('PENDING'), unbackfilled: true, set: `"status" = 'RUNNING'` },
       { name: 'enqueue on a parked session', start: held('AWAITING_INPUT'), set: `"status" = 'PENDING', "turn_state" = 'QUEUED'` },
       { name: 'turn end', start: held('RUNNING'), set: `"status" = 'AWAITING_INPUT', "turn_state" = NULL` },
-      { name: 'resume after the runner was stopped', start: held('INTERRUPTED'), unbackfilled: true, set: `"status" = 'PENDING'` },
-      { name: 'the word kept', start: held('RUNNING'), unbackfilled: true, set: `"status" = 'RUNNING', "turn_state" = 'IN_FLIGHT'` },
       { name: 'a runner takes the lease', start: held('RUNNING'), set: `"inbox_lease_owner" = '${v4()}'` },
-      { name: 'a runner takes the lease of a queued row not backfilled', start: held('PENDING'), unbackfilled: true, set: `"inbox_lease_owner" = '${v4()}'` },
-      { name: 'a new lease generation', start: held('RUNNING'), unbackfilled: true, set: `"inbox_lease_generation" = '${v4()}'` },
       { name: 'revive with a hand-off marker', start: released('CANCELLED', { end_reason: `'cancelled'` }),
         set: `"status" = 'PENDING', "turn_state" = 'QUEUED', "finished_at" = NULL, "end_reason" = NULL, "inbox_lease_owner" = '${v5()}'` },
-      { name: 'revive with a hand-off marker, the word alone', start: released('FAILED', { last_turn_outcome: `'FAILED'` }),
-        set: `"status" = 'PENDING', "finished_at" = NULL, "inbox_lease_owner" = '${v5()}'` },
       { name: 'revive with a runner lease', start: released('CANCELLED'),
         set: `"status" = 'PENDING', "turn_state" = 'QUEUED', "finished_at" = NULL, "inbox_lease_owner" = '${v4()}'` },
       { name: 'a parked row takes a hand-off marker', start: held('AWAITING_INPUT'), set: `"inbox_lease_owner" = '${v5()}'` },
@@ -336,7 +318,6 @@ test('the session triggers and functions read the facts and answer as before (16
       const seen: Record<string, string> = {};
       for (const c of cases) {
         await insertSession({ ...c.engine.cols, ...c.move.start }, c.id);
-        if (c.move.unbackfilled) await unbackfill(c.id);
         for (const name of ALL_ON) {
           await sql.query(`SELECT set_config($1, $2, true)`, [`orbit.${name}`, c.setting.on.includes(name) ? '1' : '0']);
         }
@@ -357,13 +338,10 @@ test('the session triggers and functions read the facts and answer as before (16
   });
 
   await t.test('(4) open_list_bump_owner: the same workspace probes bump the workspace scope', async () => {
-    const STARTS: Array<{ name: string; cols: Record<string, string>; unbackfilled?: boolean }> = [
+    const STARTS: Array<{ name: string; cols: Record<string, string> }> = [
       { name: 'queued, never started', cols: held('PENDING', { started_at: 'NULL' }) },
-      { name: 'queued, never started, not backfilled', cols: held('PENDING', { started_at: 'NULL' }), unbackfilled: true },
       { name: 'queued, started', cols: held('PENDING') },
-      { name: 'running, never started, not backfilled', cols: held('RUNNING', { started_at: 'NULL' }), unbackfilled: true },
       { name: 'parked, never started', cols: held('AWAITING_INPUT', { started_at: 'NULL' }) },
-      { name: 'interrupted, never started, not backfilled', cols: held('INTERRUPTED', { started_at: 'NULL' }), unbackfilled: true },
       { name: 'released, never started', cols: released('CANCELLED', { started_at: 'NULL' }) },
     ];
     const PROBES = [
@@ -381,7 +359,6 @@ test('the session triggers and functions read the facts and answer as before (16
                          VALUES ($1::uuid, $2::uuid, $3::uuid, 'probe', $4::bigint * 1048576)`,
         [c.workspaceId, w.ownerId, w.runnerId, c.probe.from]);
         await insertSession({ ...c.start.cols, workspace_id: lit(c.workspaceId) }, c.sessionId);
-        if (c.start.unbackfilled) await unbackfill(c.sessionId);
         const epoch = async () => Number((await sql.query(`
           SELECT COALESCE(sum(e.epoch), 0) AS n FROM open_list_epoch e
            WHERE e.owner_id = $1::uuid AND starts_with(e.source, open_list_scope_key('workspace', $2::uuid, true))`,
@@ -394,21 +371,18 @@ test('the session triggers and functions read the facts and answer as before (16
       return seen;
     });
     assert.deepEqual(after, before);
-    assert.equal(after['queued, never started, not backfilled / free space falls below the floor'], 1);
-    assert.equal(after['running, never started, not backfilled / free space falls below the floor'], 0);
+    assert.equal(after['queued, never started / free space falls below the floor'], 1);
   });
 
   await t.test('(5) session_listed_at_on_settle moves listed_at on the same writes, but for a failed import over C1', async () => {
-    const IMPORT_FAILED = `"status" = 'FAILED', "error" = 'import failed', "deleted_at" = clock_timestamp(), "finished_at" = clock_timestamp()`;
-    interface Write { name: string; start: Record<string, string>; unbackfilled?: boolean; set: string }
+    const IMPORT_FAILED = `"status" = 'FAILED', "turn_state" = NULL, "error" = 'import failed', "deleted_at" = clock_timestamp(), "finished_at" = clock_timestamp()`;
+    interface Write { name: string; start: Record<string, string>; set: string }
     const WRITES: Write[] = [
       { name: 'ended', start: held('RUNNING'), set: `"status" = 'CANCELLED', "turn_state" = NULL, "finished_at" = now(), "end_reason" = 'cancelled'` },
-      { name: 'ended, not backfilled', start: held('RUNNING'), unbackfilled: true, set: `"status" = 'CANCELLED', "finished_at" = now(), "end_reason" = 'cancelled'` },
       { name: 'failed', start: held('RUNNING'), set: `"status" = 'FAILED', "turn_state" = NULL, "finished_at" = now(), "last_turn_outcome" = 'FAILED'` },
       { name: 'finished its task', start: held('PENDING'), set: `"status" = 'SUCCEEDED', "turn_state" = NULL, "finished_at" = now(), "end_reason" = 'task_done'` },
       { name: 'completed', start: released('CANCELLED', { end_reason: `'cancelled'` }), set: `"completed_at" = now()` },
       { name: 'revived', start: released('CANCELLED', { end_reason: `'cancelled'` }), set: `"status" = 'PENDING', "turn_state" = 'QUEUED', "finished_at" = NULL, "end_reason" = NULL` },
-      { name: 'claimed', start: held('PENDING'), unbackfilled: true, set: `"status" = 'RUNNING', "turn_state" = 'IN_FLIGHT'` },
       { name: 'parked', start: held('RUNNING'), set: `"status" = 'AWAITING_INPUT', "turn_state" = NULL` },
       { name: 'a released row ended again (the word kept)', start: released('CANCELLED', { end_reason: `'cancelled'` }), set: `"status" = 'CANCELLED', "end_reason" = 'cancelled'` },
       { name: 'an import fails while it runs', start: held('RUNNING', { import_source_cwd: `'/home/someone/project'` }), set: IMPORT_FAILED },
@@ -417,29 +391,28 @@ test('the session triggers and functions read the facts and answer as before (16
       { name: 'an import fails over a failed row', start: released('FAILED', { last_turn_outcome: `'FAILED'`, import_source_cwd: `'/p'` }), set: IMPORT_FAILED },
       { name: 'an import fails over a failed import', start: released('FAILED', { import_source_cwd: `'/p'` }), set: IMPORT_FAILED },
       { name: 'an import fails over C1 (FAILED, an end not honoured)', start: released('FAILED', { end_reason: `'cancelled'`, import_source_cwd: `'/p'` }), set: IMPORT_FAILED },
-      { name: 'an event moves the running sets', start: held('RUNNING'), unbackfilled: true, set: `"running_bg_jobs" = ARRAY['job']` },
     ];
     const cases = WRITES.map((write) => ({ ...write, id: randomUUID() }));
     const { before, after } = await beforeAndAfter(async () => {
       const seen: Record<string, boolean> = {};
       for (const c of cases) {
         await insertSession(c.start, c.id);
-        if (c.unbackfilled) await unbackfill(c.id);
         await sql.query(`UPDATE "session" SET ${c.set} WHERE "id" = $1::uuid`, [c.id]);
         seen[c.name] = (await sql.query(`SELECT listed_at > '2000-01-01' AS moved FROM "session" WHERE id = $1::uuid`, [c.id])).rows[0].moved;
       }
       return seen;
     });
-    // The one kind the migration names: a row stored FAILED that the projector reads otherwise (plan §3.4 C1-C3, C6).
+    // The one kind 1641 named, a row stored FAILED that the projector reads otherwise (plan §3.4 C1-C3, C6), is stored
+    // as the projector reads it since 1671 (deploy D3): CANCELLED, so the definitions before 1641 move listed_at too.
     const C1 = 'an import fails over C1 (FAILED, an end not honoured)';
-    assert.deepEqual({ ...after, [C1]: before[C1] }, before);
-    assert.deepEqual([before[C1], after[C1]], [false, true]);
+    assert.deepEqual(after, before);
+    assert.deepEqual([before[C1], after[C1]], [true, true]);
     assert.equal(after['an import fails over an ended row'], true);
     assert.equal(after['an import fails over a failed row'], false);
   });
 
   await t.test('(6) session_request_recipient_ended closes the same requests, with the projector\'s word', async () => {
-    interface Shape { name: string; kind: string; start: Record<string, string>; unbackfilled?: boolean; set: string;
+    interface Shape { name: string; kind: string; start: Record<string, string>; set: string;
       projected: string | null; stored: string; settledAs: string | null }
     const at = `'2026-11-21T00:00:00'`;
     const shapes: Shape[] = WORD_SHAPES.map((shape) => {
@@ -454,16 +427,10 @@ test('the session triggers and functions read the facts and answer as before (16
         projected: legacySessionStatus(f, shape.landing), stored: shape.stored, settledAs: shape.landing?.settledAs ?? null,
       };
     });
-    // A held row reaches the word only when INTERRUPTED with an end; as a writer leaves it, and one not backfilled.
+    // A held row reaches the word only when INTERRUPTED with an end.
     shapes.push(
       { name: 'interrupted, then ended', kind: 'CONVERSATION', start: held('INTERRUPTED'), set: `"end_reason" = 'cancelled'`,
         projected: 'INTERRUPTED', stored: 'INTERRUPTED', settledAs: null },
-      { name: 'interrupted, not backfilled, then ended', kind: 'CONVERSATION', start: held('INTERRUPTED'), unbackfilled: true,
-        set: `"end_reason" = 'cancelled'`, projected: 'INTERRUPTED', stored: 'INTERRUPTED', settledAs: null },
-      { name: 'queued, not backfilled, then ended', kind: 'CONVERSATION', start: held('PENDING'), unbackfilled: true,
-        set: `"end_reason" = 'cancelled'`, projected: 'PENDING', stored: 'PENDING', settledAs: null },
-      { name: 'running, not backfilled, then ended', kind: 'CONVERSATION', start: held('RUNNING'), unbackfilled: true,
-        set: `"end_reason" = 'cancelled'`, projected: 'RUNNING', stored: 'RUNNING', settledAs: null },
       { name: 'trashed', kind: 'CONVERSATION', start: held('RUNNING'), set: `"deleted_at" = now()`, projected: null, stored: 'RUNNING', settledAs: null },
       { name: 'completed', kind: 'CONVERSATION', start: released('CANCELLED'), set: `"completed_at" = now()`, projected: null, stored: 'CANCELLED', settledAs: null },
     );
@@ -476,7 +443,6 @@ test('the session triggers and functions read the facts and answer as before (16
         await insertSession(landing
           ? { ...c.start, provider: `'orbit'`, engine: 'NULL', starts_task_work: 'false', workspace_id: 'NULL', assigned_runner_id: 'NULL' }
           : c.start, c.id);
-        if (c.unbackfilled) await unbackfill(c.id);
         if (landing && c.settledAs) {
           await sql.query(`INSERT INTO "task" ("id", "title", "owner_id", "creator_type", "creator_id", "updated_at",
                                                "completion_criterion", "project_id")
@@ -508,24 +474,17 @@ test('the session triggers and functions read the facts and answer as before (16
     assert.deepEqual(after, expected);
     console.log(`# close_reason changes (plan §3.4):\n# ${changed.join('\n# ')}`);
     assert.ok(changed.length > 0, 'the §3.4 kinds are among the shapes');
-    assert.equal(after['interrupted, not backfilled, then ended'], 'RECIPIENT_ENDED INTERRUPTED:cancelled');
-    assert.equal(after['running, not backfilled, then ended'], 'OPEN null');
   });
 
   await t.test('(7) session_request_asker_stopped fires on the same writes', async () => {
-    interface Write { name: string; start: Record<string, string>; unbackfilled?: boolean; set: string }
+    interface Write { name: string; start: Record<string, string>; set: string }
     const armed = { retry_at: `now() + interval '1 hour'` };
     const WRITES: Write[] = [
       { name: 'parked, its retry disarmed', start: held('AWAITING_INPUT', armed), set: `"retry_at" = NULL` },
       { name: 'queued, its retry disarmed', start: held('PENDING', armed), set: `"retry_at" = NULL` },
-      { name: 'queued, not backfilled, its retry disarmed', start: held('PENDING', armed), unbackfilled: true, set: `"retry_at" = NULL` },
-      { name: 'running, not backfilled, its retry disarmed', start: held('RUNNING', armed), unbackfilled: true, set: `"retry_at" = NULL` },
-      { name: 'interrupted, not backfilled, its retry disarmed', start: held('INTERRUPTED', armed), unbackfilled: true, set: `"retry_at" = NULL` },
       { name: 'parked, its claimed retry given up', start: held('AWAITING_INPUT', { retry_attempts: '1', retry_claimed_at: 'now()' }), set: `"retry_attempts" = 0, "retry_claimed_at" = NULL` },
-      { name: 'running, not backfilled, its claimed retry given up', start: held('RUNNING', { retry_attempts: '1', retry_claimed_at: 'now()' }), unbackfilled: true, set: `"retry_attempts" = 0, "retry_claimed_at" = NULL` },
       { name: 'parked by a turn end, its retry disarmed', start: held('RUNNING', armed), set: `"status" = 'AWAITING_INPUT', "turn_state" = NULL, "retry_at" = NULL` },
       { name: 'interrupted, then ended', start: held('INTERRUPTED'), set: `"end_reason" = 'cancelled'` },
-      { name: 'interrupted, not backfilled, then ended', start: held('INTERRUPTED'), unbackfilled: true, set: `"end_reason" = 'cancelled'` },
       { name: 'ended', start: held('RUNNING'), set: `"status" = 'CANCELLED', "turn_state" = NULL, "finished_at" = now(), "end_reason" = 'cancelled'` },
       { name: 'failed with a retry armed', start: held('RUNNING'), set: `"status" = 'FAILED', "turn_state" = NULL, "finished_at" = now(), "last_turn_outcome" = 'FAILED', "retry_at" = now() + interval '1 hour'` },
     ];
@@ -535,7 +494,6 @@ test('the session triggers and functions read the facts and answer as before (16
       for (const c of cases) {
         await insertSession(c.start, c.id);
         await insertSession(held('AWAITING_INPUT'), c.peer);
-        if (c.unbackfilled) await unbackfill(c.id);
         // A reply the asker holds: answered, its comment not yet due.
         await sql.query(`INSERT INTO "session_request" ("id", "owner_id", "from_session_id", "to_session_id", "turn_id",
                                                         "client_turn_id", "request_preview", "reply_by", "state", "closed_at",
@@ -549,17 +507,13 @@ test('the session triggers and functions read the facts and answer as before (16
     });
     assert.deepEqual(after, before);
     assert.equal(after['parked, its retry disarmed'], true);
-    assert.equal(after['running, not backfilled, its retry disarmed'], false);
-    assert.equal(after['interrupted, not backfilled, then ended'], true);
+    assert.equal(after['interrupted, then ended'], true);
   });
 
   await t.test('(8) task_owner_confirmation_review_reviewer_ended fires on the same writes', async () => {
-    interface Write { name: string; start: Record<string, string>; unbackfilled?: boolean; set: string }
+    interface Write { name: string; start: Record<string, string>; set: string }
     const WRITES: Write[] = [
       { name: 'interrupted, then ended', start: held('INTERRUPTED'), set: `"end_reason" = 'cancelled'` },
-      { name: 'interrupted, not backfilled, then ended', start: held('INTERRUPTED'), unbackfilled: true, set: `"end_reason" = 'cancelled'` },
-      { name: 'running, not backfilled, then ended', start: held('RUNNING'), unbackfilled: true, set: `"end_reason" = 'cancelled'` },
-      { name: 'queued, not backfilled, then ended', start: held('PENDING'), unbackfilled: true, set: `"end_reason" = 'cancelled'` },
       { name: 'parked, then ended', start: held('AWAITING_INPUT'), set: `"end_reason" = 'cancelled'` },
       { name: 'interrupted by the runner', start: held('RUNNING'), set: `"status" = 'INTERRUPTED', "turn_state" = 'ABANDONED', "end_reason" = 'cancelled'` },
       { name: 'ended', start: held('RUNNING'), set: `"status" = 'CANCELLED', "turn_state" = NULL, "finished_at" = now(), "end_reason" = 'cancelled'` },
@@ -571,7 +525,6 @@ test('the session triggers and functions read the facts and answer as before (16
       for (const c of cases) {
         await insertSession(c.start, c.id);
         await insertSession(held('AWAITING_INPUT'), c.asker);
-        if (c.unbackfilled) await unbackfill(c.id);
         await sql.query(`INSERT INTO "task" ("id", "title", "owner_id", "creator_type", "creator_id", "updated_at", "completion_criterion")
                          VALUES ($1::uuid, 'reviewed', $2::uuid, 'USER', $2::uuid, now(), 'EVIDENCE_JUDGMENT')`, [c.task, w.ownerId]);
         await sql.query(`INSERT INTO "task_owner_confirmation_request" ("id", "task_id", "owner_id", "session_id", "turn_id")
@@ -586,15 +539,13 @@ test('the session triggers and functions read the facts and answer as before (16
       return seen;
     });
     assert.deepEqual(after, before);
-    assert.equal(after['interrupted, not backfilled, then ended'], true);
-    assert.equal(after['running, not backfilled, then ended'], false);
+    assert.equal(after['interrupted, then ended'], true);
   });
 
   await t.test('(9) task_supersession_live_session_guard refuses the same retirements, naming the same word', async () => {
-    const STARTS: Array<{ name: string; cols: Record<string, string>; unbackfilled?: boolean }> = [
+    const STARTS: Array<{ name: string; cols: Record<string, string> }> = [
       ...['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'].flatMap((word) => [
         { name: word, cols: held(word) },
-        { name: `${word}, not backfilled`, cols: held(word), unbackfilled: true },
       ]),
       { name: 'released', cols: released('CANCELLED', { end_reason: `'cancelled'` }) },
     ];
@@ -605,14 +556,13 @@ test('the session triggers and functions read the facts and answer as before (16
         await sql.query(`INSERT INTO "task" ("id", "title", "owner_id", "creator_type", "creator_id", "updated_at", "completion_criterion")
                          VALUES ($1::uuid, 'retired', $2::uuid, 'USER', $2::uuid, now(), 'EVIDENCE_JUDGMENT')`, [c.task, w.ownerId]);
         await insertSession({ ...c.cols, task_id: lit(c.task), starts_task_work: 'true' }, c.id);
-        if (c.unbackfilled) await unbackfill(c.id);
         seen[c.name] = (await attempt(`UPDATE "task" SET "status" = 'CANCELLED', "terminal_reason" = 'ABANDONED' WHERE "id" = $1::uuid`, [c.task]))
           .split(c.id).join('<session>').split(c.task).join('<task>');
       }
       return seen;
     });
     assert.deepEqual(after, before);
-    assert.match(after['RUNNING, not backfilled'], /TASK_RETIRED_WHILE_RUNNING: .*\(<session> is RUNNING\)/);
+    assert.match(after.RUNNING, /TASK_RETIRED_WHILE_RUNNING: .*\(<session> is RUNNING\)/);
     assert.equal(after.released, 'rows 1');
   });
 });
