@@ -15,6 +15,7 @@ import { Prisma, ProjectStatus } from '@prisma/client';
 import {
   MAIN_CHECKOUT_ACTION_KINDS,
   MAIN_CHECKOUT_ACTION_TIMEOUT_SECONDS,
+  MAIN_CHECKOUT_COMMITS_MAX,
   MAIN_CHECKOUT_DIFF_PATHS_MAX,
   MAIN_CHECKOUT_DISCARD_CAPABILITY,
   MAIN_CHECKOUT_GIT_CAPABILITY,
@@ -65,6 +66,7 @@ const CONTROL_PLANE_CODES: ReadonlySet<string> = new Set(['ACTION_IN_FLIGHT', 'C
 const PATH_MAX = 4096;
 const MESSAGE_MAX = 64 * 1024;
 const REQUEST_ID_MAX = 200;
+const COMMIT_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 /** How often the timeout sweep runs on its own, besides on every read, action and heartbeat. */
 const SWEEP_EVERY_MS = 30_000;
 /** The conversation_turn key a result line rides on for a live session (`notice` turns), per request and occasion. */
@@ -124,9 +126,11 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
 
   // ── the person's side ─────────────────────────────────────────────────────────────────────────────
 
-  /** GET /workspaces/:id/main-checkout: a fresh snapshot from the runner, with the patches of `diffPaths`. */
-  async read(ownerId: string, workspaceId: string, diffPaths: string[] = []): Promise<MainCheckoutView> {
+  /** GET /workspaces/:id/main-checkout: a fresh snapshot from the runner, with the patches of `diffPaths` — taken
+   *  from `commit` when one is named, which the runner holds to `upstream..HEAD`. */
+  async read(ownerId: string, workspaceId: string, diffPaths: string[] = [], commit?: unknown): Promise<MainCheckoutView> {
     const paths = validDiffPaths(diffPaths);
+    const sha = validCommit(commit);
     const { workspace, health, actionsSupported, discardSupported } = await this.checkout(ownerId, workspaceId);
     if (!health) throw new NotFoundException(NOT_REPORTED);
     const runner = workspace.runner!;
@@ -148,7 +152,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
         runnerId: runner.id,
         root: health.root,
         op: 'snapshot',
-        input: { root: health.root, ...(paths.length ? { diffPaths: paths } : {}) },
+        input: { root: health.root, ...(paths.length ? { diffPaths: paths } : {}), ...(sha ? { commit: sha } : {}) },
         expiresAt: new Date(now.getTime() + MAIN_CHECKOUT_SNAPSHOT_WAIT_SECONDS * 1000),
       },
       select: { id: true, expiresAt: true },
@@ -345,6 +349,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
           op: 'snapshot',
           root: row.root,
           ...(diffPaths?.length ? { diffPaths } : {}),
+          ...(typeof body.commit === 'string' ? { commit: body.commit } : {}),
           requestedAt: row.createdAt.toISOString(),
           expiresAt: row.expiresAt.toISOString(),
         };
@@ -708,6 +713,14 @@ function validDiffPaths(value: unknown): string[] {
   return [...new Set(list as string[])];
 }
 
+function validCommit(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !COMMIT_SHA.test(value)) {
+    throw new BadRequestException('commit must be a full commit sha (40 or 64 lowercase hex characters)');
+  }
+  return value;
+}
+
 /** The request, held to its kind's fields (§5's table). A malformed one is a 400 and writes nothing. */
 function validAction(body: unknown): MainCheckoutActionPost {
   if (!body || typeof body !== 'object') throw new BadRequestException('body must be an object');
@@ -812,7 +825,10 @@ function validSnapshotAnswer(body: unknown): MainCheckoutSnapshotAnswer {
     || typeof s.fingerprint !== 'string' || typeof s.fileCount !== 'number') {
     throw new BadRequestException('snapshot is missing or malformed');
   }
-  const answer: MainCheckoutSnapshotAnswer = { snapshot: s as unknown as MainCheckoutSnapshot };
+  const { commits, commitsTruncated, ...snapshot } = s;
+  if (Array.isArray(commits)) snapshot.commits = commits.slice(0, MAIN_CHECKOUT_COMMITS_MAX);
+  if (typeof commitsTruncated === 'boolean') snapshot.commitsTruncated = commitsTruncated;
+  const answer: MainCheckoutSnapshotAnswer = { snapshot: snapshot as unknown as MainCheckoutSnapshot };
   if (Array.isArray(b.diffs)) answer.diffs = (b.diffs as MainCheckoutSnapshotAnswer['diffs'])!.slice(0, MAIN_CHECKOUT_DIFF_PATHS_MAX);
   return answer;
 }

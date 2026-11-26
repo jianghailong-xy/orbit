@@ -35,6 +35,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { MainCheckoutService } from './main-checkout.service';
+import { WorkspacesController } from './workspaces.controller';
 import { WorkspacesService } from './workspaces.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -179,6 +180,48 @@ test('the read goes through the runner: one snapshot request handed out once, it
   assert.deepEqual(await w.service.snapshotAnswer(w.runnerId, req.id, { snapshot: snapshot as never }), { accepted: false });
   // Another runner cannot answer it.
   await assert.rejects(w.service.snapshotAnswer(randomUUID(), req.id, { snapshot: snapshot as never }), NotFoundException);
+});
+
+test('a commit read: `commit` reaches the runner, a 30-commit answer comes back as 20, a malformed one is 400', { skip }, async (t) => {
+  const w = await world(t);
+  const controller = new WorkspacesController(w.workspaces, w.service);
+  const get = (commit: string | string[]) =>
+    controller.mainCheckoutRead({ userId: w.ownerId } as never, w.workspaceId, 'src/a.ts', commit);
+  const commits = Array.from({ length: 30 }, (_, i) => ({
+    sha: i.toString(16).padStart(40, '0'), subject: `commit ${i}`, committedAt: new Date().toISOString(), files: [],
+  }));
+  const snapshot = {
+    root: ROOT, branch: 'main', head: HEAD, state: 'clean', upstream: 'origin/main', ahead: 30, behind: 0,
+    files: [], fileCount: 0, truncated: false, fingerprint: FINGERPRINT, checkedAt: new Date().toISOString(),
+  };
+  const roundTrip = async (sha: string, extra: Record<string, unknown>) => {
+    const reading = get(sha);
+    let handed: MainCheckoutRunnerRequest[] = [];
+    for (let i = 0; i < 100 && handed.length === 0; i += 1) {
+      handed = await handOut(w);
+      if (!handed.length) await new Promise((r) => setTimeout(r, 20));
+    }
+    const req = handed[0];
+    assert.ok(req?.op === 'snapshot');
+    assert.equal(req.commit, sha);
+    assert.deepEqual(req.diffPaths, ['src/a.ts']);
+    await w.service.snapshotAnswer(w.runnerId, req.id, { snapshot: { ...snapshot, ...extra } as never });
+    return (await reading).snapshot;
+  };
+
+  const bounded = await roundTrip(commits[0].sha, { commits, commitsTruncated: true });
+  assert.deepEqual(bounded.commits, commits.slice(0, 20));
+  assert.equal(bounded.commitsTruncated, true);
+  // A sha-256 repository's sha; and an answer whose two fields are the wrong shape loses both.
+  const dropped = await roundTrip('f'.repeat(64), { commits: 'many', commitsTruncated: 'yes' });
+  assert.equal('commits' in dropped, false);
+  assert.equal('commitsTruncated' in dropped, false);
+
+  const before = await w.prisma.mainCheckoutRequest.count({ where: { ownerId: w.ownerId } });
+  for (const bad of ['', 'HEAD', 'abc1234', 'g'.repeat(40), 'a'.repeat(41), 'a'.repeat(63), 'A'.repeat(40), `${HEAD}^`, [HEAD, HEAD]]) {
+    await assert.rejects(get(bad), (e: unknown) => e instanceof BadRequestException && e.getStatus() === 400, String(bad));
+  }
+  assert.equal(await w.prisma.mainCheckoutRequest.count({ where: { ownerId: w.ownerId } }), before, 'nothing queued');
 });
 
 test('actions are the owner\'s: another owner, or another owner\'s session, is refused', { skip }, async (t) => {
