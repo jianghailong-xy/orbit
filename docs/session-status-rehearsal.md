@@ -403,3 +403,61 @@ of `postgresql.auto.conf` (1 before the `sed`, 0 after) and never read the file.
 plans script ran with one target patched, as above. The deployed projector was `e28aae1d68`, not the `eef31bea27` in the
 brief: production was redeployed between the brief and the run. bg_run is unavailable on orbit-prod, so these steps have
 SubAgent run ids, not `bgj_` ids.
+
+## Production backfill (task T3, 2026-11-26): 0 disagreements
+
+The owner's go was ruling `3540LMFjltauEGgoxMdkP` ("Go, after the real-backup census (T16b) comes back clean"); T16c
+above is that clean census. SubAgent run `35425E8L2jF0nOQaM9nOL` ran it on orbit-prod in `/root/orbit`. Its report is
+the attachment `3542AFOHOU262xJgbC5GZ` (`t3-report.md`): counts only.
+
+**What ran.** Production had been redeployed since the brief: the checkout and the images were `e28aae1d68`, not
+`eef31bea27`. The backfill and SQL census scripts were the ones this branch holds (same blobs). `census.cjs` (which
+lists C8) and `sample-locks.sh` came from `905dfecfb0`; the census ran by `docker compose exec` in the running
+apiserver. The only intended write was `scripts/session-turn-state-backfill.sh`.
+
+| | before | after |
+|---|---|---|
+| sessions (SQL census) | 13,167 | 13,167 |
+| held rows | 756 (of 13,166, counted a moment earlier) | 757 |
+| held with `turn_state` NULL | 753 (AWAITING_INPUT 750, INTERRUPTED 3) | 751, all AWAITING_INPUT (the word gives none) |
+| `turn_state_disagrees` | 3 | **0** |
+| `phase_disagrees` | 13,141 | **0** |
+| `phase_null` | 13,141 | **0** |
+| `parked_rows` / `released_with_turn` | 0 / 0 | **0 / 0** |
+| projector census: unlisted, held changed, phase off, turn_state off | 0, 0, 0, 3 (exit 1) | **0, 0, 0, 0 (exit 0)** |
+
+**The §3.4 kinds** (projector census, the same before and after; 335 changed words, 304 changed `sessionState`):
+
+| §3.4 kind | rows |
+|---|---|
+| C1, C2, C3 (`completed`): FAILED with an end reason, counted together | 13 |
+| C3 (`task_done`) | 0 |
+| C4, C5: SUCCEEDED with no end, counted together | 318 |
+| C6 | 0 |
+| C7 | 0 |
+| C8 | 4 |
+| a kind not in §3.4 | **0** |
+
+The other 12,832 rows keep their word. After the backfill by (word, `turn_state`, `phase`): SUCCEEDED/–/IDLE 7,871;
+CANCELLED/–/IDLE 3,536; FAILED/–/IDLE 1,003; AWAITING_INPUT/–/IDLE 747; AWAITING_INPUT/–/RUNNING 4;
+INTERRUPTED/ABANDONED/IDLE 3; RUNNING/IN_FLIGHT/RUNNING 3.
+
+**Batches and timing.** 02:01:16.773Z to 02:02:10.405Z, 53.6 s, exit 0: 26 batches of 500, one of 141, then one of 0;
+**13,141 rows**, no failed batch.
+
+**Lock waits** (`pg_stat_activity`, sampled every 0.2 s; the watchdog would have killed the backfill above 5 s and did
+not). Two samples had a waiter. The times are since the waiter's statement began, so they bound the wait from above:
+
+| at | waiter | ms | blocked by |
+|---|---|---|---|
+| 02:01:26.831Z | autovacuum `VACUUM ANALYZE public.session` (a page lock of `session_search_trgm`) | 1,032 | a backfill UPDATE |
+| 02:02:01.830Z | the app's `recap_claimed_at` UPDATE of a session (a transaction lock) | 195 | a backend in COMMIT |
+
+**After.** `https://orbitd.io/api/health` answered `{"status":"ok"}`; `docker compose ps` showed the same containers as
+before, all up and healthy. No container was started, stopped, recreated or pulled. One sampler backend outlived its
+killed client and was ended with `pg_terminate_backend`. The scratch directory was removed.
+
+**Not established.** C1/C2/C3 and C4/C5 are not split: the facts the census reads give one line for each group. Held
+rows moved during the run (live traffic), so before and after counts are two snapshots. The SubAgent saw 73 untracked
+files in `/root/orbit` that it did not create and did not examine. bg_run is unavailable there, so the production steps
+have the SubAgent run id, not `bgj_` ids.
