@@ -65,10 +65,13 @@ final class SessionListOrderFixtureTests: XCTestCase {
         let titles = SessionTimeGrouping.sections(before, now: now, calendar: cal).map { $0.sessions.map(\.id) }
 
         // A live summary for every row that moves lastTurnAt (and nothing else the owner sees).
+        XCTAssertTrue(before.contains { $0.phase != nil }, "a row carries phase, so the summary's must survive")
         var rows = before
         for (i, row) in before.enumerated() {
             let json = ##"{"id":"\##(row.id)","status":"\##(row.status.rawValue)","pendingApprovals":\##(row.pendingApprovals ?? 0),"lastTurnAt":"2026-11-20T12:00:\##(String(format: "%02d", i)).000Z","listedAt":"\##(row.listedAt ?? "")"}"##
                 .replacingOccurrences(of: ",\"listedAt\":\"\"", with: "")
+                // The server's summary carries phase (realtime.service.ts); a row that has one keeps it.
+                .replacingOccurrences(of: "}", with: row.phase.map { ",\"phase\":\"\($0.rawValue)\"}" } ?? "}")
             let summary = try JSONDecoder().decode(ControlSessionSummary.self, from: Data(json.utf8))
             rows[i] = row.applying(summary)
             XCTAssertEqual(rows[i].lastTurnAt, summary.lastTurnAt)
