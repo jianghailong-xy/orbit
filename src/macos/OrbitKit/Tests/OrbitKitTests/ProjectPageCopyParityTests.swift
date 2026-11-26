@@ -180,7 +180,9 @@ final class ProjectPageCopyParityTests: XCTestCase {
         assertSays(web, "{ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}", in: Self.progress)
         assertSays(web, "<div className=\"project-open-item-state is-ready-to-close\">{PROJECT_DONE_COPY.readyToClose}</div>",
                    in: Self.progress)
-        assertSays(web, "title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>", in: Self.progress)
+        // The heading's full text is the app Tooltip's, shown only when the row cuts it off.
+        assertSays(web, "<Tooltip content={PROJECT_DONE_COPY.heading} truncatedOnly>", in: Self.progress)
+        assertSays(web, "<div className=\"project-open-item-title\">{PROJECT_DONE_COPY.heading}</div>", in: Self.progress)
         assertSays(web, "`${PROJECT_DONE_COPY.openItemsDoneRequest} · ${row.doneRequest.gaps.length} ${PROJECT_DONE_COPY.gapsItCouldntProve}`",
                    in: Self.progress)
         assertSays(web, "{PROJECT_DONE_COPY.recordAsDoneRow}", in: Self.progress)

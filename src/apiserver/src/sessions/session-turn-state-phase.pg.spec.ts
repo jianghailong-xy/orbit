@@ -50,7 +50,7 @@ const API = join(__dirname, '..', '..');
 const SCRIPTS = join(API, '..', '..', 'scripts');
 const D1 = ['1611_session_turn_state_phase', '1612_session_turn_state_phase_validate'];
 /** What rewrites D1's phase function and trigger since (the armed-retry rule): taken away and put back with it. */
-const AFTER_D1 = ['1667_session_phase_retry_running'];
+const AFTER_D1 = ['1667_session_phase_retry_running', '1670_session_phase_retry_pending'];
 
 /** The plan's §1.4: each word the slot and claim rules read is exactly one turn state; every other word has none. */
 const TURN_STATE_OF_WORD: Partial<Record<RunStatus, string>> = {
@@ -255,7 +255,7 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
       ['engine_turn_active', 'true', 'false'],
       ['running_subagents', `ARRAY['agent-1']`, `ARRAY[]::text[]`],
       ['running_bg_jobs', `ARRAY['bgj_1']`, `ARRAY[]::text[]`],
-      // Migration 1667: an armed retry makes a released session RUNNING, and leaves a held one where it was.
+      // Migrations 1667 and 1670: an armed retry makes a session PENDING, held or released, unless it executes.
       ['retry_at', `now() + interval '30 seconds'`, 'NULL'],
     ];
     for (const shape of SHAPES) {

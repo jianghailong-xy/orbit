@@ -98,6 +98,8 @@ final class SessionPhaseBehaviorTests: XCTestCase {
         let cases: [(String, TimeInterval?)] = [
             (#""runStatus":"AWAITING_INPUT","phase":"RUNNING","released":false"#, 4),
             (#""runStatus":"AWAITING_INPUT","phase":"PENDING","released":false"#, 4),
+            // An armed retry waiting on its wake, hours out on a spent quota: the waiting pace.
+            (#""runStatus":"AWAITING_INPUT","phase":"PENDING","released":false,"waitingOn":"WAKE""#, 30),
             (#""runStatus":"RUNNING","phase":"IDLE","released":false"#, 30),
             (#""runStatus":"AWAITING_INPUT","phase":"IDLE","released":true"#, nil),
             (#""runStatus":"RUNNING""#, 4),

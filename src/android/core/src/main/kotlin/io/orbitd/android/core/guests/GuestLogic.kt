@@ -174,7 +174,9 @@ object GuestFollow {
     /** The wait before the next read, after an answer that did ([moved]) or did not bring anything new; null once the conversation
      * has stopped and gone quiet. [expecting]: a message was just sent and the run it starts has not been seen yet. */
     fun delay(state: GuestState, moved: Boolean, expecting: Boolean = false): Long? = when {
-        moved || (state.released != true && (state.phase?.let { it == "PENDING" || it == "RUNNING" } ?: state.busy)) -> WORKING_MS
+        // PENDING on a wake is an armed retry, which can be hours out on a spent quota: it waits, as an idle one does.
+        moved || (state.released != true
+            && (state.phase?.let { it == "RUNNING" || (it == "PENDING" && state.waitingOn != "WAKE") } ?: state.busy)) -> WORKING_MS
         state.live -> WAITING_MS
         expecting -> WORKING_MS
         else -> null

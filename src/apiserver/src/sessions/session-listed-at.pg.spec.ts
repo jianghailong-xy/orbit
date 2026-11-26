@@ -1,11 +1,12 @@
 /**
- * `session.listed_at` (migration 1434, session-listed-at.ts), the session list's order key, against a real PostgreSQL.
+ * `session.listed_at` (migration 1490, session-listed-at.ts), the session list's order key, against a real PostgreSQL.
  *
  * It moves when the session changes for its owner, and only then:
  *   - created (the column default);
  *   - the owner sends it a message (POST /sessions/:id/turns, SessionsController.turn);
- *   - a turn ends on the owner: a person's turn answered and parked AWAITING_INPUT (/turn-complete), a permission
- *     card raised (/approvals), an owner request filed (ask_owner), a turn that FAILED;
+ *   - a turn ends on the owner: any turn — a person's, another session's message, a watch's or a background job's
+ *     wake — answered and parked AWAITING_INPUT (/turn-complete), a permission card raised (/approvals), an owner
+ *     request filed (ask_owner), a turn that FAILED;
  *   - completed (POST /sessions/:id/complete).
  * And it stays where it was on everything that only says the session is alive, while `last_turn_at` — the liveness
  * clock the reaper and the active-session window read, left as it was — keeps moving:
@@ -13,7 +14,7 @@
  *   - the queue's claim (QueueService.claimSessionForRunner);
  *   - the runner's reconnect: lease takeover and activation, and the engine's init / resumed events;
  *   - streamed text, tool calls and their results (/events);
- *   - the end of a wake turn.
+ *   - a turn's end with another turn queued behind it.
  * Then the list (GET /sessions, SessionsController.list) carries `listedAt` and is ordered by it, not by lastTurnAt,
  * and the `session.updated` summary carries it too.
  *
@@ -257,7 +258,7 @@ test('listed_at moves only when the session changes for its owner', {
     await moved(id, at, 'a person\'s turn ending AWAITING_INPUT');
   });
 
-  await t.test('another session\'s message and a watch\'s wake are not a person\'s, and neither is their end', async () => {
+  await t.test('another session\'s message and a watch\'s wake do not move it; the last of their turns to end does', async () => {
     const id = await parked('platform sends');
     const other = await parked('the sender');
     let at = await clocks(id);
@@ -267,7 +268,8 @@ test('listed_at moves only when the session changes for its owner', {
     at = await stayed(id, at, 'a session-to-session send', true);
     await sessions.createTurn(ownerId, id, { clientTurnId: `${WATCH_TURN_KEY_PREFIX}${randomUUID()}:1`, content: '', intent: 'NEXT_TURN' });
     at = await stayed(id, at, 'a watch\'s wake', true);
-    // Both turns run and end; neither was a person's, so neither end moves it either.
+    // Both turns run and end: the first with the wake queued behind it, so it stays; the wake's end parks the session
+    // on its owner with a new reply, so it moves (owner 2026-11-26).
     const first = await claimAndTake(id);
     at = await stayed(id, { ...first.afterClaim, listed: at.listed }, 'the claim');
     await complete(id, first.leaseOwner, first.turnId);
@@ -276,11 +278,11 @@ test('listed_at moves only when the session changes for its owner', {
     const next = await inbox.dequeueTurn(id, runnerId, first.generation, false, []);
     assert.ok(next, 'the watch\'s turn was not handed out');
     await complete(id, first.leaseOwner, next.turnId);
-    at = await stayed(id, at, 'the watch\'s turn ending', true);
+    at = await moved(id, at, 'the watch\'s turn ending AWAITING_INPUT');
     assert.equal(await status(id), RunStatus.AWAITING_INPUT);
   });
 
-  await t.test('a background job\'s wake, its claim and its end leave it where it was', async () => {
+  await t.test('a background job\'s wake, its claim and its stream leave it where it was; its end moves it', async () => {
     const id = await parked('ci wait');
     let at = await clocks(id);
     const jobId = 'bgj_0123456789ab';
@@ -296,7 +298,7 @@ test('listed_at moves only when the session changes for its owner', {
     at = await stayed(id, at, 'the wake turn\'s stream', true);
     await complete(id, leaseOwner, turnId);
     assert.equal(await status(id), RunStatus.AWAITING_INPUT);
-    await stayed(id, at, 'a wake turn ending AWAITING_INPUT', true);
+    await moved(id, at, 'a wake turn ending AWAITING_INPUT');
   });
 
   await t.test('a permission card and an owner request move it: the turn is waiting on the owner', async () => {
