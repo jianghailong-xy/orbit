@@ -11,6 +11,7 @@ import {
   coordinatorDeliverySentence,
 } from '../lib/coordinatorDelivery';
 import { routeId } from '../lib/idCodec';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * A turn Orbit wrote to tell a session about a committed fact — a fact a project's coordinator is told,
@@ -66,15 +67,17 @@ export function CoordinatorDeliveryLine({
       data-orbit-round
     >
       <details className="owner-answer-fold">
-        <summary className="owner-answer-line" title={sentence}>
-          <ArrowRightOutlined aria-hidden="true" />
-          <span className="coordinator-delivery-words">
-            <span className="owner-answer-text coordinator-delivery-sentence">{sentence}</span>
-            <span className="coordinator-delivery-sep" aria-hidden="true">·</span>
-            <span className="coordinator-delivery-sent">{sentLine(card)}</span>
-          </span>
-          <span className="owner-answer-chev" aria-hidden="true">›</span>
-        </summary>
+        <Tooltip content={sentence} truncatedOnly>
+          <summary className="owner-answer-line">
+            <ArrowRightOutlined aria-hidden="true" />
+            <span className="coordinator-delivery-words">
+              <span className="owner-answer-text coordinator-delivery-sentence">{sentence}</span>
+              <span className="coordinator-delivery-sep" aria-hidden="true">·</span>
+              <span className="coordinator-delivery-sent">{sentLine(card)}</span>
+            </span>
+            <span className="owner-answer-chev" aria-hidden="true">›</span>
+          </summary>
+        </Tooltip>
         <div className="owner-answer-told">
           <div className="owner-answer-told-head">
             {card.toCoordinator ? OWNER_ANSWER_TOLD : COORDINATOR_DELIVERY_SESSION_TOLD}

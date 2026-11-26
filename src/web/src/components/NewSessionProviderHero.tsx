@@ -1,5 +1,5 @@
 import { CheckOutlined, CodeOutlined, FolderOutlined, StopOutlined } from '@ant-design/icons';
-import { useState, type ReactNode } from 'react';
+import { useState, type ComponentPropsWithRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { AgentProvider } from '@orbit/shared';
 import { CLAUDE_REGION_DETAILS, CLAUDE_REGION_USE_ANOTHER_PROVIDER, anthropicUnavailableOn } from '../lib/claudeRegionCopy';
@@ -65,6 +65,20 @@ export interface NewSessionPlace {
   onPickFolder: (id: string | null) => void;
 }
 
+/** A component rather than a wrapped element, so the popover's trigger props reach the button through
+ *  the tooltip. */
+function PlaceChip({ icon, label, ...props }: ComponentPropsWithRef<'button'> & { icon: ReactNode; label: string }) {
+  return (
+    <Tooltip content={label} truncatedOnly>
+      <button {...props}>
+        {icon}
+        <span className="np-place-name">{label}</span>
+        <span className="np-chev">▾</span>
+      </button>
+    </Tooltip>
+  );
+}
+
 /**
  * The hero's second line (docs/mocks/new-session-top ②⑤): `in [workspace ▾] › [folder ▾]`, each a menu, so
  * where the session runs is read and changed under the engine rather than in a header line far from it.
@@ -80,18 +94,15 @@ function PlaceLine({ place }: { place: NewSessionPlace }) {
     <Popover
       title={null}
       trigger={
-        <button
+        <PlaceChip
           type="button"
           className={`np-place-chip${open === which ? ' open' : ''}`}
           aria-haspopup="menu"
           aria-expanded={open === which}
           aria-label={`${which === 'workspace' ? 'Workspace' : 'Folder'}: ${label}`}
-          title={label}
-        >
-          {icon}
-          <span className="np-place-name">{label}</span>
-          <span className="np-chev">▾</span>
-        </button>
+          icon={icon}
+          label={label}
+        />
       }
       side="bottom"
       open={open === which}

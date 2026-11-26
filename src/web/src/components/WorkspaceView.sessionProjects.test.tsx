@@ -535,7 +535,10 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     rows = [LOOSE, COORDINATOR, newer, older];
     await mount();
     expect(preview()?.textContent).toBe('Waiting for your confirmation · Build the package');
-    expect(preview()?.getAttribute('title')).toBe('Waiting for your confirmation · Build the package');
+    // jsdom lays nothing out: give the label a cut-off box so its tip opens.
+    Object.defineProperty(preview()!, 'scrollWidth', { value: 500, configurable: true });
+    Object.defineProperty(preview()!, 'clientWidth', { value: 200, configurable: true });
+    expect(await hoverTooltip(preview()!)).toBe('Waiting for your confirmation · Build the package');
     expect(preview()?.classList.contains('tone-approval')).toBe(true);
   });
 

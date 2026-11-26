@@ -1206,9 +1206,11 @@ export function TaskListView() {
           <TaskStatusPill status={r.status} running={r.running} queued={r.queued} queuedOnHold={r.queuedOnHold} runReason={r.runReason} />
         </div>
         <div className={`task-title-cell${r.accountHold && !r.hold && !r.running && !r.queued ? ' has-hold' : ''}`}>
-          <span className="task-title" title={r.title}>
-            {r.title ?? ''}
-          </span>
+          <Tooltip content={r.title} truncatedOnly>
+            <span className="task-title">
+              {r.title ?? ''}
+            </span>
+          </Tooltip>
           <WaitingOnYouTaskBadge taskId={r.id} />
           {/* The sweep holds it for a sign-in (the server's `hold`): Held, why, and Sign in. */}
           {r.hold && !r.running && !r.queued ? <TaskSignInHoldNote hold={r.hold} /> : null}
@@ -1541,27 +1543,26 @@ export function TaskListView() {
                   {createdIn && (
                     // The replaced closable tag: the chip, its text cut to fit, and its close mark,
                     // itself the button.
-                    <span
-                      className="orbit-badge orbit-badge-default tasks-createdin"
-                      title={`${SESSION_CREATED_TASKS_COPY.createdInChip}${createdInTitle}`}
-                    >
-                      <span className="tasks-createdin-text">
-                        {SESSION_CREATED_TASKS_COPY.createdInChip}
-                        {createdInTitle}
+                    <Tooltip content={`${SESSION_CREATED_TASKS_COPY.createdInChip}${createdInTitle}`} truncatedOnly>
+                      <span className="orbit-badge orbit-badge-default tasks-createdin">
+                        <span className="tasks-createdin-text">
+                          {SESSION_CREATED_TASKS_COPY.createdInChip}
+                          {createdInTitle}
+                        </span>
+                        <CloseOutlined
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Remove this filter"
+                          className="tasks-createdin-close"
+                          onClick={() => setParam('createdIn', '', '')}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter' && e.key !== ' ') return;
+                            e.preventDefault();
+                            if (!e.repeat) e.currentTarget.click();
+                          }}
+                        />
                       </span>
-                      <CloseOutlined
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Remove this filter"
-                        className="tasks-createdin-close"
-                        onClick={() => setParam('createdIn', '', '')}
-                        onKeyDown={(e) => {
-                          if (e.key !== 'Enter' && e.key !== ' ') return;
-                          e.preventDefault();
-                          if (!e.repeat) e.currentTarget.click();
-                        }}
-                      />
-                    </span>
+                    </Tooltip>
                   )}
                   {uniformAssignee?.name && (
                     <span className="task-assignee-chip" style={{ marginLeft: 'auto' }}>

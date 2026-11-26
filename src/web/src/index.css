@@ -8412,6 +8412,46 @@ button.toast--pill:focus-visible {
 .cu-pop.cu-pop-reset {
   width: min(320px, calc(100vw - 48px));
 }
+/* A card per account can be taller than the room above the composer: the body scrolls under the title.
+   The side padding, taken back by the margin, keeps focus rings inside the scroll box. */
+.cu-pop.cu-pop-accounts {
+  max-height: calc(var(--available-height, 80vh) - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  width: min(328px, calc(100vw - 40px));
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+}
+/* Scrolling, not squeezing: a flex column would otherwise shrink its parts to fit. */
+.cu-pop.cu-pop-accounts > * {
+  flex-shrink: 0;
+}
+/* Another account's reset: ruled off, its name and one line of its usage over the same card. */
+.cu-other {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.cu-other .cu-account {
+  padding-bottom: 10px;
+  border-bottom: 0;
+}
+.cu-other-usage {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.cu-other-usage b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.cu-other-usage b.spent {
+  color: var(--error-solid);
+}
+.cu-other .cu-rc {
+  padding-top: 0;
+  border-top: 0;
+}
 /* Focus lands on the popover body when a press opens it; the controls inside carry the rings. */
 .cu-pop:focus {
   outline: none;
@@ -8611,12 +8651,17 @@ button.composer-usage:focus-visible {
 }
 .cu-rc-confirm-usage {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-2);
+}
+.cu-rc-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
 }
 .cu-rc-confirm-value {
   font-weight: 600;
@@ -14743,6 +14788,61 @@ button.chat-jump-start:hover {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-1);
+}
+/* The pictures a question attached — the mocks it is asking the owner to choose between. Tiles
+   under the words, not in line with them: a question often IS the choice between these, and the
+   options and Send answer have to stay one look away. A tile opens the viewer on tap. */
+.coordinator-question-images-caption {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.coordinator-question-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.coordinator-question-images.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.coordinator-question-images .orbit-image {
+  display: block;
+  min-width: 0;
+}
+/* `.orbit-image .orbit-image-img` sets the height from the picture's own aspect ratio; a tile has
+   one height for every picture in the grid, so this selector carries one class more than it. */
+.coordinator-question-images .orbit-image .orbit-image-img {
+  width: 100%;
+  height: 184px;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  background: var(--bg-base);
+}
+/* One picture is drawn at its own shape, capped by the card's width or 340px of height — a tile
+   grid's fixed height would letterbox it into a box wider than the picture. */
+.coordinator-question-images.is-single .orbit-image .orbit-image-img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 340px;
+  margin: 0 auto;
+}
+.coordinator-question-images .md-image-loading {
+  display: block;
+  width: 100%;
+  height: 184px;
+}
+/* The card is the width of a phone's conversation here; one column reads better than two halves. */
+@media (max-width: 600px) {
+  .coordinator-question-images {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .coordinator-question-images .orbit-image .orbit-image-img,
+  .coordinator-question-images .md-image-loading {
+    height: 150px;
+  }
 }
 /* An option is the answer, so it is the tap target: a whole row, 44pt-ish, and the chosen one is
    outlined rather than merely ticked. */

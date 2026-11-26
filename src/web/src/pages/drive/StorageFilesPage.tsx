@@ -16,6 +16,7 @@ import { SettingsCard, SettingsHeader, SettingsSection } from '../../components/
 import { Button } from '../../components/ui/Button';
 import { Menu, type MenuItem } from '../../components/ui/Menu';
 import { Segmented } from '../../components/ui/Segmented';
+import { Tooltip } from '../../components/ui/Tooltip';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
 import { deleteAttachmentEverywhere, fetchAttachmentObjectUrl, setAttachmentPinned } from '../../api';
 import {
@@ -117,7 +118,9 @@ function FileRow({
       <span className="storage-file-icon">{fileIcon(file.mimeType)}</span>
       <div className="settings-row-text">
         <div className="settings-row-title storage-file-name">
-          <span className="storage-file-name-text" title={name}>{name}</span>
+          <Tooltip content={name} truncatedOnly>
+            <span className="storage-file-name-text">{name}</span>
+          </Tooltip>
           {file.pinnedAt && <PushpinFilled className="storage-file-pin" aria-label="Pinned" />}
         </div>
         {file.label && <div className="settings-row-description storage-file-label">{file.label}</div>}

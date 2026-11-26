@@ -193,6 +193,27 @@ test('code blocks, inline code and URLs never reach the model, and come back byt
   assert.throws(() => restoreVerbatim('⟦0⟧ ⟦0⟧ ⟦1⟧ ⟦2⟧', spans), TranslationFailed);
 });
 
+test('the product’s own links are held back, so an attached picture stays a picture', () => {
+  const text = '对比这两张：\n\n![选项 A](orbit-attachment:354FYvqAYfCe18PmyjskL)\n\n'
+    + '- [报告](orbit-attachment:354FYwf3RJ189k2Nz1NVt "report.html")\n\n'
+    + '见 orbit-task:354CjZuiyYOOKr9D4iwgz 与 orbit-settings:modelRouting 。';
+  const { masked, spans } = protectVerbatim(text);
+  assert.deepEqual(spans, [
+    'orbit-attachment:354FYvqAYfCe18PmyjskL',
+    'orbit-attachment:354FYwf3RJ189k2Nz1NVt',
+    'orbit-task:354CjZuiyYOOKr9D4iwgz',
+    'orbit-settings:modelRouting',
+  ]);
+  // Only the link leaves the model's hands; the alt text and the words around it stay translatable.
+  assert.equal(masked, '对比这两张：\n\n![选项 A](⟦0⟧)\n\n- [报告](⟦1⟧ "report.html")\n\n见 ⟦2⟧ 与 ⟦3⟧ 。');
+  assert.equal(
+    restoreVerbatim('Compare:\n\n![Option A](⟦0⟧)\n\n- [Report](⟦1⟧ "report.html")\n\nSee ⟦2⟧ and ⟦3⟧.', spans),
+    'Compare:\n\n![Option A](orbit-attachment:354FYvqAYfCe18PmyjskL)\n\n'
+      + '- [Report](orbit-attachment:354FYwf3RJ189k2Nz1NVt "report.html")\n\n'
+      + 'See orbit-task:354CjZuiyYOOKr9D4iwgz and orbit-settings:modelRouting.',
+  );
+});
+
 test('translate asks DeepSeek in plain prose, says what to keep, and restores the code', async () => {
   const bodies = stubDeepSeek([ENGLISH]);
   assert.equal(await translate(ORIGINAL, 'zh-Hans', 'en'), ENGLISH_RESTORED);
@@ -203,6 +224,7 @@ test('translate asks DeepSeek in plain prose, says what to keep, and restores th
   assert.match(system, /from Chinese \(Simplified\) into English/);
   assert.match(system, /file paths/);
   assert.match(system, /markdown structure/);
+  assert.match(system, /images/);
   // The inline code went to the model as a placeholder.
   assert.equal(body.messages.find((m) => m.role === 'user')!.content.includes('signInWithPopup'), false);
 });

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { LinkPreview } from '@orbit/shared';
 import { SESSION_MARKS, sessionDisplayState, sessionDisplayText, sessionMarks } from './sessionDisplay';
 import { sessionStateWord } from './sessionState';
@@ -14,6 +14,16 @@ import { sessionStatusMeta, taskMarkdown } from '../components/TaskDetailPanel';
 import { TaskStatusPill } from '../components/TaskStatusPill';
 import { OrbitLinkCard } from '../components/OrbitLinkCard';
 import { SharedSessionStatus } from '../pages/SharedSessionPage';
+
+// Static markup draws no tip: the mock leaves each one's words on the element it wraps.
+vi.mock('../components/ui/Tooltip', async (importOriginal) => {
+  const { cloneElement } = await import('react');
+  return {
+    ...(await importOriginal<typeof import('../components/ui/Tooltip')>()),
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content: unknown }) =>
+      cloneElement(children, { 'data-tip': typeof content === 'string' ? content : undefined } as object),
+  };
+});
 
 /**
  * The approved board on web (docs/mocks/session-display-three-states, capture/rules.mjs without its Disconnected mark):
@@ -172,7 +182,7 @@ describe('the board on web: facts absent (an older server) draws what it drew be
       expect(runsLine(p)).toBe(`- ${runBadge} · — · orbit-ws01`);
       expect(orbitLinkStateWord(p)).toBe(linkCard);
       const card = linkCardHead(p);
-      expect(card).toContain(`title="${linkCard}">${linkCard}</span>`);
+      expect(card).toContain(`data-tip="${linkCard}">${linkCard}</span>`);
       expect(marksIn(card)).toEqual([]);
       expect(sessionStateWord(p, { canReply: false })).toBe(shared);
       expect(marksIn(renderToStaticMarkup(<SharedSessionStatus head={p} canReply={false} />))).toEqual([]);

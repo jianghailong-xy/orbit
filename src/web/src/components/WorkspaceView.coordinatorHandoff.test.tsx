@@ -497,7 +497,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     expect(mounted().querySelector('.workspace-header-task')).toBeNull();
     const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
     expect(badge?.textContent).toBe('Task');
-    expect(badge?.getAttribute('title')).toBe('Open task · Fix the red checks');
+    expect(await hoverTooltip(badge!)).toBe('Open task · Fix the red checks');
     expect(badge?.getAttribute('aria-label')).toBe('Task · Open task Fix the red checks');
     await act(async () => badge!.click());
     await waitFor(() => expect(new URLSearchParams(search).get('task')).toBeTruthy());

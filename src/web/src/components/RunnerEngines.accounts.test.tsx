@@ -11,6 +11,7 @@ import { tildePath } from './RunnerEngines';
 import { EngineRows } from './RunnerEngines.test-rows';
 import { clickRunnerMenuItem, openAccountGroups, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * More than one Codex account on one runner, on the Providers page.
@@ -174,7 +175,7 @@ describe('a runner with two Codex accounts', () => {
     expect(tags(engineRows[3])).toEqual(['Signed in']);
   });
 
-  it('names each account by what the user called it and where it lives, never by who it is', () => {
+  it('names each account by what the user called it and where it lives, never by who it is', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const [defaultRow, workRow] = rows(page, '.re-acct');
 
@@ -183,7 +184,10 @@ describe('a runner with two Codex accounts', () => {
     expect(defaultRow.querySelector('.re-name')?.textContent).toBe('DefaultNEXT');
     expect(defaultRow.querySelector('.re-chip')?.textContent).toBe('NEXT');
     expect(defaultRow.querySelector('.re-meta')?.textContent).toBe('~/.codex · account cxa1_9f3a41c7…');
-    expect(defaultRow.querySelector('.re-meta')?.getAttribute('title')).toBe('/root/.codex');
+    const meta = defaultRow.querySelector('.re-meta')!;
+    Object.defineProperty(meta, 'clientWidth', { value: 200, configurable: true });
+    Object.defineProperty(meta, 'scrollWidth', { value: 500, configurable: true });
+    expect(await hoverTooltip(meta)).toBe('/root/.codex');
 
     expect(workRow.querySelector('.re-name')?.textContent).toBe('Work');
     expect(workRow.querySelector('.re-chip')).toBeNull();

@@ -59,9 +59,16 @@ const PLACEHOLDER_RE = /\u27e6(\d+)\u27e7/g;
 
 /**
  * Fenced code blocks (``` or ~~~, to their closing fence or the end of the text), inline code
- * spans, and URLs — in that order, so a URL inside a code block goes with its block.
+ * spans, and links — in that order, so a link inside a code block goes with its block.
+ *
+ * "Links" is `https?://` AND this product's own: an attachment a reply embeds, a `#`-reference to
+ * a task, session, project or list, a Drive file, a wiki entry, a Settings row. The model has
+ * always been told to keep URLs, but only `https?://` was actually held back, and those are the
+ * sentences where the words around them are translated: a mock a coordinator attached came back
+ * as `Option A: orbit-attachment:354…` — the picture flattened into prose, the id left standing
+ * where a person reads. Held back like code, the link comes back whole or the translation fails.
  */
-const PROTECTED_RE = /(^|\n)( {0,3})(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\3[ \t]*(?=\n|$)|$)|`+[^`\n][\s\S]*?`+|\bhttps?:\/\/[^\s<>()`"']+/g;
+const PROTECTED_RE = /(^|\n)( {0,3})(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\3[ \t]*(?=\n|$)|$)|`+[^`\n][\s\S]*?`+|\bhttps?:\/\/[^\s<>()`"']+|\borbit-(?:attachment|list|task|session|project|settings|wiki|drive|document):[0-9a-zA-Z-]+/g;
 
 /** The text with every protected span swapped for a placeholder, and the spans in order. */
 export function protectVerbatim(text: string): { masked: string; spans: string[] } {
@@ -100,7 +107,8 @@ function systemPrompt(from: LanguageCode, to: LanguageCode): string {
     'Keep verbatim, untranslated and unchanged: every token of the form \u27e6N\u27e7 (each exactly once), ' +
     'file paths, file names, URLs, shell commands, code identifiers, flags, version numbers and error ' +
     'messages quoted from tools. Keep the markdown structure exactly: headings, lists and their ' +
-    'numbering, block quotes, tables, emphasis and line breaks. Text that is already in ' +
+    'numbering, block quotes, tables, emphasis, images (an `![alt](…)` stays one picture: translate ' +
+    'the alt text, keep the brackets and their contents) and line breaks. Text that is already in ' +
     `${languageName(to)} stays as it is.`
   );
 }

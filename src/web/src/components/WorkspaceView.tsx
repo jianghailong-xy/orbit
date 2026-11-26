@@ -1778,13 +1778,14 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
               ) : project.status}
             </span>
           </Tooltip>
-          <div
-            className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
-            title={project.line.text}
-          >
-            {project.line.glyph === 'pause' && <PauseOutlined className="session-project-pause-glyph" aria-hidden="true" />}
-            {project.line.text}
-          </div>
+          <Tooltip content={project.line.text} truncatedOnly align="start">
+            <div
+              className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
+            >
+              {project.line.glyph === 'pause' && <PauseOutlined className="session-project-pause-glyph" aria-hidden="true" />}
+              {project.line.text}
+            </div>
+          </Tooltip>
         </div>
       </div>
     </>
@@ -3372,14 +3373,15 @@ export function WorkspaceView({
   const jumpUpPill = () => (lastMine && !atBottom ? (
     // The person's last message first, the way back to the beginning beside it as an icon.
     <span className="chat-older-pill chat-older-split">
-      <button
-        type="button"
-        className="chat-older-mine"
-        title={lastMine.text}
-        onClick={revealLastMine}
-      >
-        {lastMine.text}
-      </button>
+      <Tooltip content={lastMine.text} truncatedOnly side="bottom">
+        <button
+          type="button"
+          className="chat-older-mine"
+          onClick={revealLastMine}
+        >
+          {lastMine.text}
+        </button>
+      </Tooltip>
       <Tooltip side="bottom" content="Jump to the beginning">
         <button
           type="button"
@@ -11719,16 +11721,17 @@ export function WorkspaceView({
               {/* As the Coordinator badge does for a project: a task's session is named after its task, so the way to
                   the task is a Task badge beside the title, not a second line repeating it. */}
               {!composing && selected?.taskId && (
-                <button
-                  type="button"
-                  className="coordinator-badge coordinator-badge-link"
-                  title={selected.taskTitle ? `Open task · ${selected.taskTitle}` : 'Open task'}
-                  aria-label={selected.taskTitle ? `Task · Open task ${selected.taskTitle}` : 'Task · Open task'}
-                  onClick={() => openTaskOverPage(encodeId(selected.taskId))}
-                >
-                  Task
-                  <RightOutlined aria-hidden />
-                </button>
+                <Tooltip content={selected.taskTitle ? `Open task · ${selected.taskTitle}` : 'Open task'} side="bottom">
+                  <button
+                    type="button"
+                    className="coordinator-badge coordinator-badge-link"
+                    aria-label={selected.taskTitle ? `Task · Open task ${selected.taskTitle}` : 'Task · Open task'}
+                    onClick={() => openTaskOverPage(encodeId(selected.taskId))}
+                  >
+                    Task
+                    <RightOutlined aria-hidden />
+                  </button>
+                </Tooltip>
               )}
               {/* docs/mocks/session-header-compact: a wide window says Shared on the Share button beside ⋯. */}
               {isMobile && !composing && selected && selectedShared && (
@@ -12916,12 +12919,12 @@ export function WorkspaceView({
                 }
               : undefined
           }
-          // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
-          // the built-in Codex runtime is offered them — on Default, whose quota this then is;
-          // the create route judges the workspace.
+          // Earned reset credits belong to the runner's own Codex sign-ins, so only a session on
+          // the built-in Codex runtime is offered them: each account's, the one whose quota this is
+          // first. The create route judges the workspace.
           planUsageReset={
-            shownProvider === 'codex' && shownCodexAccount === 'default'
-              ? { runner, workspaceId: shownWorkspaceId }
+            shownProvider === 'codex'
+              ? { runner, workspaceId: shownWorkspaceId, accountSlot: shownCodexAccount }
               : undefined
           }
           contextTokens={contextTokens}
@@ -13653,9 +13656,11 @@ export function SessionComposer({
                 ) : (
                   <PaperClipOutlined className="composer-file-icon" />
                 )}
-                <span className="composer-file-name" title={im.name}>
-                  {im.name}
-                </span>
+                <Tooltip content={im.name} truncatedOnly>
+                  <span className="composer-file-name">
+                    {im.name}
+                  </span>
+                </Tooltip>
                 {im.size !== undefined && (
                   <span className="composer-file-size">{fmtBytes(im.size)}</span>
                 )}
@@ -13872,9 +13877,11 @@ export function SessionComposer({
       {offeredSuggestion && (
         <div className="composer-suggestion">
           {/* Drawn for the eye; a screen reader hears the box's description below instead. */}
-          <span className="composer-suggestion-text" title={offeredSuggestion} aria-hidden="true">
-            {offeredSuggestion}
-          </span>
+          <Tooltip content={offeredSuggestion} truncatedOnly align="start">
+            <span className="composer-suggestion-text" aria-hidden="true">
+              {offeredSuggestion}
+            </span>
+          </Tooltip>
           {/* The grey line itself says how to take it, and there is no button to see: Tab with a
               keyboard, a double-tap on the box on a touch screen. Which shows is CSS's call. Drawn in
               docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
