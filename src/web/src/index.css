@@ -1355,9 +1355,11 @@ button.toast--pill:focus-visible {
 }
 .tp-account-menu .orbit-menu-submenu-icon {
   position: absolute;
-  top: calc(50% - 5.5px);
+  top: 50%;
   right: 8px;
+  display: flex;
   margin: 0;
+  transform: translateY(-50%);
   color: var(--text-3);
   font-size: 12px;
 }
@@ -1391,6 +1393,7 @@ button.toast--pill:focus-visible {
 }
 .tp-account-appearance-label {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
