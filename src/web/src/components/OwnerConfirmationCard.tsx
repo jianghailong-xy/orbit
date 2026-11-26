@@ -580,7 +580,9 @@ function OwnerConfirmationIfYouConfirm({
               ) : null}
             </div>
             {row.detail !== null ? (
-              <div className="owner-confirmation-if-detail" title={row.detail}>{row.detail}</div>
+              <Tooltip content={row.detail} truncatedOnly>
+                <div className="owner-confirmation-if-detail">{row.detail}</div>
+              </Tooltip>
             ) : null}
           </div>
         </div>

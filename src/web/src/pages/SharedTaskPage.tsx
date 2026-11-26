@@ -23,6 +23,7 @@ import { taskOutcomeChip } from '../lib/taskOutcome';
 import { titleFirstLine } from '../lib/title';
 import { openUserFile } from '../lib/userFile';
 import { ACCEPTANCE_EMPTY } from './TaskDetailPage';
+import { Tooltip } from '../components/ui/Tooltip';
 
 /** What the declared judgment means, said to somebody who does not own the task. */
 const JUDGED_HOW: Record<string, (task: SharedTask) => string> = {
@@ -60,9 +61,11 @@ function EdgeRow({ relation, edge }: { relation: string; edge: SharedTaskEdge })
   return (
     <div className="share-dep">
       <span className="share-dep-relation">{relation}</span>
-      <span className="share-dep-title" title={edge.title}>
-        <AppLink to={`/tasks/${encodeId(edge.id)}`}>{edge.title}</AppLink>
-      </span>
+      <Tooltip content={edge.title} truncatedOnly>
+        <span className="share-dep-title">
+          <AppLink to={`/tasks/${encodeId(edge.id)}`}>{edge.title}</AppLink>
+        </span>
+      </Tooltip>
       <TaskStatusPill status={edge.status} />
     </div>
   );

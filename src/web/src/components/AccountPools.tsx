@@ -268,10 +268,12 @@ function MemberRow({
       <div className="re-id">
         <ProviderTile slug={member.presetSlug ?? member.slug} label={member.label} size={28} />
         <div style={{ minWidth: 0 }}>
-          <div className="re-name" title={member.label}>
-            <span className="pool-member-label">{member.label}</span>
-            {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
-          </div>
+          <Tooltip content={member.label} truncatedOnly align="start">
+            <div className="re-name">
+              <span className="pool-member-label">{member.label}</span>
+              {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
+            </div>
+          </Tooltip>
           <AccountHealthProviderLine providerId={member.id} />
         </div>
       </div>
@@ -363,11 +365,13 @@ function KeyRow({
       <div className="re-id">
         <PersonMark pool={pool} userId={key.contributor.userId} name={key.contributor.name} />
         <div style={{ minWidth: 0 }}>
-          <div className="re-name" title={key.label}>
-            <span className="pool-member-label">{key.label}</span>
-            {key.contributor.you && <span className="pool-you">you</span>}
-            {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
-          </div>
+          <Tooltip content={key.label} truncatedOnly align="start">
+            <div className="re-name">
+              <span className="pool-member-label">{key.label}</span>
+              {key.contributor.you && <span className="pool-you">you</span>}
+              {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
+            </div>
+          </Tooltip>
           <div className="pool-key-mask">
             {key.contributor.name} · {key.fingerprint}
             {tagged && (
@@ -487,11 +491,13 @@ function LoginRow({
       <div className="re-id">
         <ProviderTile slug="openai" label="ChatGPT" size={28} />
         <div style={{ minWidth: 0 }}>
-          <div className="re-name" title={member.label}>
-            <span className="pool-member-label">{member.label}</span>
-            {/* With one account there is nothing to choose between, so the mark would say nothing. */}
-            {member.next && !accountIsPaused(member.pausedUntil, now) && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
-          </div>
+          <Tooltip content={member.label} truncatedOnly align="start">
+            <div className="re-name">
+              <span className="pool-member-label">{member.label}</span>
+              {/* With one account there is nothing to choose between, so the mark would say nothing. */}
+              {member.next && !accountIsPaused(member.pausedUntil, now) && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
+            </div>
+          </Tooltip>
           <AccountHealthLoginLine poolId={pool.id} accountId={member.id.replace(/^login:/, '')} />
           <div className="pool-key-mask">
             {contributor && `${contributor.name} · `}

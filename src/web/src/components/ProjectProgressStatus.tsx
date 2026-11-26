@@ -3056,13 +3056,17 @@ function OpenItemRowView({
     <li className={`project-open-item-row is-${row.assignee === 'OWNER' ? 'owner' : 'coordinator'}`}>
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
-        <div className="project-open-item-title" title={title}>
-          {title}
-        </div>
-        {detailLine ? (
-          <div className="project-open-item-line" title={detailLine}>
-            {detailLine}
+        <Tooltip content={title} truncatedOnly>
+          <div className="project-open-item-title">
+            {title}
           </div>
+        </Tooltip>
+        {detailLine ? (
+          <Tooltip content={detailLine} truncatedOnly>
+            <div className="project-open-item-line">
+              {detailLine}
+            </div>
+          </Tooltip>
         ) : null}
         {/* §4.7 H1: the coordinator's rerun of it, while it runs — the row is still open, and says
             so rather than "handled". */}
@@ -3123,13 +3127,17 @@ function StartRequestRowView({
     <li className="project-open-item-row is-owner" data-kind="START_REQUEST">
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
-        <div className="project-open-item-title" title={START_PROJECT_TITLE}>
-          {START_PROJECT_TITLE}
-        </div>
-        {line ? (
-          <div className="project-open-item-line" title={line}>
-            {line}
+        <Tooltip content={START_PROJECT_TITLE} truncatedOnly>
+          <div className="project-open-item-title">
+            {START_PROJECT_TITLE}
           </div>
+        </Tooltip>
+        {line ? (
+          <Tooltip content={line} truncatedOnly>
+            <div className="project-open-item-line">
+              {line}
+            </div>
+          </Tooltip>
         ) : null}
       </div>
       <div className="project-open-item-who">
@@ -3182,8 +3190,12 @@ export function SignInWaitRowView({ wait }: { wait: ProjectSignInWait }): JSX.El
     <li className="project-open-item-row is-owner" data-kind="SIGN_IN_WAIT">
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
-        <div className="project-open-item-title" title={wait.title}>{wait.title}</div>
-        <div className="project-open-item-line" title={wait.detailLine}>{wait.detailLine}</div>
+        <Tooltip content={wait.title} truncatedOnly>
+          <div className="project-open-item-title">{wait.title}</div>
+        </Tooltip>
+        <Tooltip content={wait.detailLine} truncatedOnly>
+          <div className="project-open-item-line">{wait.detailLine}</div>
+        </Tooltip>
       </div>
       <div className="project-open-item-who">
         <span>{WHO.OWNER}</span>
@@ -3207,8 +3219,12 @@ export function AccountWaitRowView({ wait }: { wait: ProjectAccountWait }): JSX.
     <li className="project-open-item-row is-owner" data-kind="ACCOUNT_WAIT">
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
-        <div className="project-open-item-title" title={wait.title}>{wait.title}</div>
-        <div className="project-open-item-line" title={wait.detailLine}>{wait.detailLine}</div>
+        <Tooltip content={wait.title} truncatedOnly>
+          <div className="project-open-item-title">{wait.title}</div>
+        </Tooltip>
+        <Tooltip content={wait.detailLine} truncatedOnly>
+          <div className="project-open-item-line">{wait.detailLine}</div>
+        </Tooltip>
       </div>
       <div className="project-open-item-who">
         <span>{WHO.OWNER}</span>
@@ -3242,8 +3258,14 @@ function DoneRequestRowView({
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
         <div className="project-open-item-state is-ready-to-close">{PROJECT_DONE_COPY.readyToClose}</div>
-        <div className="project-open-item-title" title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>
-        {detail ? <div className="project-open-item-line" title={detail}>{detail}</div> : null}
+        <Tooltip content={PROJECT_DONE_COPY.heading} truncatedOnly>
+          <div className="project-open-item-title">{PROJECT_DONE_COPY.heading}</div>
+        </Tooltip>
+        {detail ? (
+          <Tooltip content={detail} truncatedOnly>
+            <div className="project-open-item-line">{detail}</div>
+          </Tooltip>
+        ) : null}
       </div>
       <div className="project-open-item-who">
         <span>{WHO.OWNER}</span>

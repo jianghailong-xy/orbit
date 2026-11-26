@@ -78,9 +78,11 @@ export function SessionCreatedTasksStrip({
         <span className="bg-tray-title ct-head">{COPY.title}</span>
         {single ? (
           <>
-            <span className="ct-one" title={single.title}>
-              {single.title}
-            </span>
+            <Tooltip content={single.title} truncatedOnly>
+              <span className="ct-one">
+                {single.title}
+              </span>
+            </Tooltip>
             {single.watched && <WatchEye stale={single.stale} />}
           </>
         ) : (
@@ -136,12 +138,14 @@ export function SessionCreatedTasksStrip({
               <Link key={row.id} className="ct-row" data-row-focus="" to={pageHref({ kind: 'task', id: toUuid(row.id) })}>
                 <span className="ct-pill">{row.standing && <TaskStatusPill {...row.standing} />}</span>
                 <span className="ct-eye">{row.watched && <WatchEye stale={row.stale} />}</span>
-                <span className="ct-title" title={row.title}>
-                  {row.title}
-                  {row.replaces && (
-                    <span className="ct-replaces">{` · ${COPY.replacesPrefix}${row.replaces.title}`}</span>
-                  )}
-                </span>
+                <Tooltip content={row.title} truncatedOnly>
+                  <span className="ct-title">
+                    {row.title}
+                    {row.replaces && (
+                      <span className="ct-replaces">{` · ${COPY.replacesPrefix}${row.replaces.title}`}</span>
+                    )}
+                  </span>
+                </Tooltip>
                 <span className="ct-age">{row.createdAt ? relTime(row.createdAt) : COPY.elsewhere}</span>
                 <span className="ct-caret">›</span>
               </Link>

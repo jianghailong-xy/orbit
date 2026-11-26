@@ -75,12 +75,11 @@ export function SessionAgentsStrip({
             failed={subagentRunFailed(run)}
             stopped={run.status === "STOPPED"}
           />
-          <span
-            className="bg-shell-cmd ag-title"
-            title={run.description ?? run.type}
-          >
-            {run.description ?? run.type}
-          </span>
+          <Tooltip content={run.description ?? run.type} truncatedOnly>
+            <span className="bg-shell-cmd ag-title">
+              {run.description ?? run.type}
+            </span>
+          </Tooltip>
           {facts}
           <span className="bg-shell-caret">
             <RightOutlined />
@@ -99,9 +98,11 @@ export function SessionAgentsStrip({
       >
         <span className="bg-tray-ico chat-subagent-icon ag-mark">✦</span>
         <span className="bg-tray-title ag-head">Agents</span>
-        <span className="bg-tray-count ag-band" title={summary.band}>
-          {summary.band}
-        </span>
+        <Tooltip content={summary.band} truncatedOnly>
+          <span className="bg-tray-count ag-band">
+            {summary.band}
+          </span>
+        </Tooltip>
         <Spread summary={summary} parent={parent} />
         <span className="wt-spacer" />
         {summary.running > 0 && <RunGlyph running failed={false} />}

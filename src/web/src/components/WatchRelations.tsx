@@ -209,9 +209,11 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
         <span className="bg-tray-title ct-head">{STRIP_LABEL}</span>
         {single ? (
           <>
-            <span className="ct-one" title={targetName(single)}>
-              {targetName(single)}
-            </span>
+            <Tooltip content={targetName(single)} truncatedOnly>
+              <span className="ct-one">
+                {targetName(single)}
+              </span>
+            </Tooltip>
             <WatchTargetPill target={single} />
           </>
         ) : (
@@ -322,9 +324,11 @@ function StripWatch({ watch, now, listsTargets }: { watch: WatchView; now: numbe
             <span className="ct-pill">
               <WatchTargetPill target={t} />
             </span>
-            <span className="ct-title" title={targetName(t)}>
-              {targetName(t)}
-            </span>
+            <Tooltip content={targetName(t)} truncatedOnly>
+              <span className="ct-title">
+                {targetName(t)}
+              </span>
+            </Tooltip>
             <span className="ct-caret">›</span>
           </Link>
         ))}

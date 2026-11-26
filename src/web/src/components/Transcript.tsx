@@ -2967,22 +2967,23 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         .join(' · ');
       const className = warning ? 'chat-notice chat-diagnostic' : 'chat-error chat-diagnostic';
       const row = (
-        <div
-          className={className}
-          data-diagnostic="true"
-          data-impact={node.impact}
-          data-phase={node.phase}
-          data-level={level}
-          data-seq={node.seq}
-          title={node.message}
-        >
-          <span className="chat-diagnostic-mark">{warning ? '⚠' : !log || level === 'ERROR' ? '✖' : '·'}</span>
-          {label && <span className="chat-diagnostic-label">{label}</span>}
-          <span className="chat-diagnostic-text">{linkifyLogText(log?.text ?? node.message)}</span>
-          {(node.repeats ?? 1) > 1 && (
-            <span className={warning ? 'chat-diagnostic-repeat' : 'chat-error-repeat'}>×{node.repeats}</span>
-          )}
-        </div>
+        <Tooltip content={log ? node.message : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div
+            className={className}
+            data-diagnostic="true"
+            data-impact={node.impact}
+            data-phase={node.phase}
+            data-level={level}
+            data-seq={node.seq}
+          >
+            <span className="chat-diagnostic-mark">{warning ? '⚠' : !log || level === 'ERROR' ? '✖' : '·'}</span>
+            {label && <span className="chat-diagnostic-label">{label}</span>}
+            <span className="chat-diagnostic-text">{linkifyLogText(log?.text ?? node.message)}</span>
+            {(node.repeats ?? 1) > 1 && (
+              <span className={warning ? 'chat-diagnostic-repeat' : 'chat-error-repeat'}>×{node.repeats}</span>
+            )}
+          </div>
+        </Tooltip>
       );
       // The sandbox warning offers the agent that installs what Codex wants
       // (docs/mocks/codex-sandbox-fix-with-agent); every other diagnostic stays a plain row.
@@ -3085,9 +3086,11 @@ function ToolFailureCard({
       </div>
       <div className="chat-error-card-detail">
         {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
-        <div className="chat-error-card-reason" title={summary.reason}>
-          {summary.reason}
-        </div>
+        <Tooltip content={summary.reason} truncatedOnly>
+          <div className="chat-error-card-reason">
+            {summary.reason}
+          </div>
+        </Tooltip>
         <button
           className="chat-error-card-disclosure"
           type="button"
@@ -4058,11 +4061,13 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   // Its bytes have gone, so there is nothing to press or to try again.
   if (expired) {
     return (
-      <span className="chat-file is-expired" title={label}>
-        <PaperClipOutlined />
-        <span className="chat-file-name">{label}</span>
-        <span className="chat-file-expired">{`· ${evidenceFileExpiredLine(expired.at)}`}</span>
-      </span>
+      <Tooltip content={label} truncatedOnly>
+        <span className="chat-file is-expired">
+          <PaperClipOutlined />
+          <span className="chat-file-name">{label}</span>
+          <span className="chat-file-expired">{`· ${evidenceFileExpiredLine(expired.at)}`}</span>
+        </span>
+      </Tooltip>
     );
   }
   const download = async (): Promise<void> => {
@@ -4316,10 +4321,12 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
   }
   if (typeof src === 'string' && isLocalImageSrc(src)) {
     return (
-      <span className="md-image-unavailable" title={src}>
-        <PaperClipOutlined />
-        <code>{fileLabel(src)}</code>
-      </span>
+      <Tooltip content={src} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{fileLabel(src)}</code>
+        </span>
+      </Tooltip>
     );
   }
   if (typeof src === 'string' && isCheckoutRelativeImageSrc(src)) {
@@ -4472,10 +4479,12 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   }
   if (typeof href === 'string' && isLocalFileSrc(href)) {
     return (
-      <span className="md-image-unavailable" title={href}>
-        <PaperClipOutlined />
-        <code>{fileLabel(href)}</code>
-      </span>
+      <Tooltip content={href} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+        <span className="md-image-unavailable">
+          <PaperClipOutlined />
+          <code>{fileLabel(href)}</code>
+        </span>
+      </Tooltip>
     );
   }
   // A `#`-reference routes to the thing it names; anything else is an ordinary link.
@@ -5063,10 +5072,12 @@ function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; s
           <span className="chat-tool-icon">{icon}</span>
           <span className="chat-tool-name">{label}</span>
           {p ? (
-            <span className="chat-tool-summary mono chat-path" title={path}>
-              <b className="chat-path-file">{p.base}</b>
-              {p.dir && <span className="chat-path-dir">{p.dir}</span>}
-            </span>
+            <Tooltip content={path} delay={TEXT_TOOLTIP_DELAY_MS} mono>
+              <span className="chat-tool-summary mono chat-path">
+                <b className="chat-path-file">{p.base}</b>
+                {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+              </span>
+            </Tooltip>
           ) : (
             title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
           )}
@@ -5297,9 +5308,11 @@ function StepLive({ node }: { node: ToolNode }) {
         <span className={what?.mono ? 'mono' : undefined}>{what?.text}</span>
       </div>
       {command && (
-        <div className="chat-steps-live-cmd mono" title={command}>
-          <span className="chat-steps-elbow">⎿</span> $ {command}
-        </div>
+        <Tooltip content={command} truncatedOnly mono>
+          <div className="chat-steps-live-cmd mono">
+            <span className="chat-steps-elbow">⎿</span> $ {command}
+          </div>
+        </Tooltip>
       )}
     </div>
   );

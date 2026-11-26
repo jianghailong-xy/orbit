@@ -62,17 +62,20 @@ export function PublicShell({
               <Fragment key={i}>
                 {i > 0 && <span className="share-crumb-sep" aria-hidden>›</span>}
                 {crumb.to && !here ? (
-                  <Link className="share-crumb" to={crumb.to} title={crumb.label}>
-                    {crumb.label}
-                  </Link>
+                  <Tooltip content={crumb.label} truncatedOnly side="bottom">
+                    <Link className="share-crumb" to={crumb.to}>
+                      {crumb.label}
+                    </Link>
+                  </Tooltip>
                 ) : (
-                  <span
-                    className={`share-crumb${here ? ' is-here' : ''}`}
-                    title={crumb.label}
-                    aria-current={here ? 'page' : undefined}
-                  >
-                    {crumb.label}
-                  </span>
+                  <Tooltip content={crumb.label} truncatedOnly side="bottom">
+                    <span
+                      className={`share-crumb${here ? ' is-here' : ''}`}
+                      aria-current={here ? 'page' : undefined}
+                    >
+                      {crumb.label}
+                    </span>
+                  </Tooltip>
                 )}
               </Fragment>
             );
