@@ -6,11 +6,11 @@ import type { ConfigService } from '@nestjs/config';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobCommand as SharedIntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -34,6 +34,7 @@ import { taskLandingSql } from './project-criterion-landing';
 import { canonicalRepoUrl } from './project-integration-line';
 import { readProjectListAttention } from './project-list-attention';
 import { ProjectOpenItemService } from './project-open-item.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * Revision 29's deploy-time pass (`docs/project-integration-line-contract.md` §10.9 「迁移」 2), and the
@@ -262,7 +263,7 @@ async function world(
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(),
       runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -335,7 +336,7 @@ async function historicalTask(
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: task.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude',
-      status: work.moving ? RunStatus.RUNNING : RunStatus.SUCCEEDED,
+      turnState: turnStateOfWord(work.moving ? RunStatus.RUNNING : RunStatus.SUCCEEDED),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, isolationStatus: 'worktree',
       branch: work.branch, branchSha: work.branchSha, baseSha: work.baseSha, numTurns: 1,
       startedAt: minutesAgo(300), createdAt: minutesAgo(300), runtimeSessionId: randomUUID(),

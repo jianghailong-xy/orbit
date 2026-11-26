@@ -6,12 +6,12 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { INTEGRATION_JOB_CLAIM } from '../projects/project-integration-job';
@@ -220,7 +220,7 @@ async function landingRow(stack: Stack, w: World, overrides: Record<string, unkn
       titleManagedByProject: true,
       prompt: 'Orbit runs this landing. This conversation is a record, not an engine.',
       sessionKind: 'LANDING',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       startsTaskWork: false,
       provider: 'orbit',
       providerBuiltin: true,
@@ -246,7 +246,7 @@ async function conversationRow(stack: Stack, w: World, overrides: Record<string,
       title: 'a conversation',
       prompt: 'hello',
       sessionKind: 'CONVERSATION',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',
@@ -642,7 +642,7 @@ async function landingFixture(stack: Stack, label: string): Promise<LandingFixtu
       taskId,
       title: `${label} work`,
       prompt: 'do the work',
-      status: RunStatus.SUCCEEDED, 
+      turnState: null, 
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',
@@ -919,7 +919,7 @@ test('a SESSION_TURN_SETTLED watch on an open landing waits for the landing to e
     // The landing ends: the same watch now matches, and its row is the one that moved.
     await stack.db.session.update({
       where: { id: landing },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() },
+      data: { turnState: null, finishedAt: new Date(), completedAt: new Date() },
     });
     const evaluation = await new WatchEvaluatorService(stack.prisma, noopRealtime(), {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },

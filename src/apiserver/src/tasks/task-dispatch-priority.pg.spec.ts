@@ -37,7 +37,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { CreatorType, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -220,7 +221,7 @@ async function finishTheRun(stack: Stack, ids: World, listId: string): Promise<s
   const [run] = runs;
   await stack.db.session.update({
     where: { id: run.id },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+    data: { turnState: null, finishedAt: new Date() },
   });
   await completeHumanTaskForPgTest(stack.db, ids.ownerId, run.taskId, 'finished run');
   return run.taskId;

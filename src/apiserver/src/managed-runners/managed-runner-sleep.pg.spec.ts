@@ -60,6 +60,7 @@ import { managedRunnerInstanceClaimable } from './managed-runner-instance';
 import { bootstrapCredentialOf, managedPodName, managedSecretName } from './managed-runner-resources';
 import { managedRunnerHeartbeat } from './managed-runner-sleep';
 import { recordManagedDemand } from './managed-runner-work';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -307,7 +308,7 @@ test('managed runner idle sleep and wake against a fake cluster', {
     assert.equal(awake.generation, 2, 'a new generation serves it');
     assert.equal(awake.pvcUid, mapping.pvcUid);
     const turn = await db.session.findUniqueOrThrow({ where: { id: queued } });
-    assert.equal(turn.status, 'PENDING', 'the turn that arrived during the drain is still queued for the new instance');
+    assert.equal(wordOf(turn), 'PENDING', 'the turn that arrived during the drain is still queued for the new instance');
     assert.equal(managedRunnerInstanceClaimable(awake, instanceOf(awake)), true);
   });
 

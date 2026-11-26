@@ -41,8 +41,13 @@ import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
-  CreatorType, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, TaskCompletionCriterion,
+  CreatorType,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskCompletionCriterion,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -186,7 +191,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
         ...(extra.deletedAt ? { deletedAt: extra.deletedAt } : {}),
       },
     });
@@ -537,7 +542,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     const waiting = await visit(on('/events?after=1'));
     assert.deepEqual(seqs(waiting), []);
     assert.equal(waiting.json.runState, 'AWAITING_INPUT');
-    await db.session.update({ where: { id: live }, data: { status: RunStatus.RUNNING } });
+    await db.session.update({ where: { id: live }, data: { turnState: 'IN_FLIGHT' } });
     await event(live, 2, RunEventType.ASSISTANT, { text: 'going on' });
     const moved = await visit(on('/events?after=1'));
     assert.deepEqual(seqs(moved), [2]);
@@ -612,7 +617,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     publish(0, RunEventType.TASK_PROGRESS, { toolUseId: 'toolu_live', description: OWNER_ONLY[2] });
     publish(0, 'tombstone', {});
     publish(0, RunEventType.STATUS, { status: 'RUNNING' });
-    await db.session.update({ where: { id: shared }, data: { status: RunStatus.RUNNING } });
+    await db.session.update({ where: { id: shared }, data: { turnState: 'IN_FLIGHT' } });
     publish(0, RunEventType.APPROVAL_RESOLVED, { id: randomUUID(), behavior: 'allow' });
     // A durable reply, stored first as the ingest stores it, with a tool body the bare link must not show.
     await event(shared, 607, RunEventType.TOOL_USE, { id: 'toolu_live', name: 'Bash', input: { command: LIVE_OUTPUT } });

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { RunStatus, RunnerStatus } from '@prisma/client';
+import { RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, DEFAULT_MODEL_BY_PROVIDER } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -18,6 +19,8 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { DSH_RUNNER_UPGRADE_ERROR, PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'dsh-provider-gate-spec';
@@ -70,7 +73,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     const session = async (provider = 'dsh', providerBuiltin = true, status: RunStatus = RunStatus.PENDING) =>
       (await db.session.create({ data: {
         title: 'dsh', prompt: '', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: id,
-        provider, providerBuiltin, status, usesRuntimeDefaultModel: true,
+        provider, providerBuiltin, turnState: turnStateOfWord(status), usesRuntimeDefaultModel: true,
         // Reclaim is read-only for these pinned rows, so the claim race measures the capacity gate
         // without model-materialization row locks making a NOWAIT claim return empty.
         model: (providerBuiltin && DEFAULT_MODEL_BY_PROVIDER[provider as AgentProvider]) || '{"provider":"deepseek","model":"gate-model"}',
@@ -114,7 +117,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     await f.beat(CURRENT);
     for (const declaration of [undefined, LEGACY]) {
       assert.equal(await f.poll(declaration), null);
-      assert.equal((await row(id)).status, RunStatus.PENDING);
+      assert.equal(wordOf((await row(id))), RunStatus.PENDING);
       assert.equal((await row(id)).error, DSH_RUNNER_UPGRADE_ERROR);
       assert.ok(!(await f.reclaim(declaration)).sessions.some((s) => s.sessionId === id));
     }
@@ -237,8 +240,8 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     if (old) assert.equal(old.provider, AgentProvider.CLAUDE);
     assert.ok(!reclaimed.sessions.some((s) => s.sessionId === dsh || s.sessionId === borrowed));
     assert.equal(await db.session.count({ where: { assignedRunnerId: f.runner.id, status: RunStatus.RUNNING } }), 1);
-    await db.session.update({ where: { id: jobs[0]!.sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
-    const pendingDsh = (await row(dsh)).status === RunStatus.PENDING ? dsh : borrowed;
+    await db.session.update({ where: { id: jobs[0]!.sessionId }, data: { turnState: null } });
+    const pendingDsh = wordOf((await row(dsh))) === RunStatus.PENDING ? dsh : borrowed;
     const race = await Promise.all([f.claim(CURRENT), f.claim(CURRENT), f.reclaim(LEGACY), f.reclaim(CURRENT)]);
     const claimed = [race[0], race[1]].filter((job) => job !== null);
     assert.equal(claimed.length, 1, 'two capable requests still share the same runner cap');
@@ -246,7 +249,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     assert.equal(claimed[0]?.provider, AgentProvider.DSH);
     assert.ok(!race[2].sessions.some((s) => s.provider === AgentProvider.DSH));
     assert.ok(race[3].sessions.some((s) => s.sessionId === dsh && s.provider === AgentProvider.DSH));
-    assert.ok(new Set<RunStatus>([RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT]).has((await row(claude)).status));
+    assert.ok(new Set<RunStatus>([RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT]).has(wordOf((await row(claude))) as RunStatus));
 
     const active = claimed[0]!.sessionId;
     const owners = [randomUUID(), randomUUID()];
@@ -326,7 +329,7 @@ test('P1b DeepSeek Harness provider gate on PostgreSQL', { timeout: 300_000 }, a
     for (const slug of [disabled.slug, unknownRuntime.slug, foreign.slug, `missing-${randomUUID()}`]) {
       const id = await f.session(slug, false);
       assert.equal(await f.claim(CURRENT), null, `unavailable ${slug} produced a job`);
-      assert.equal((await row(id)).status, RunStatus.PENDING);
+      assert.equal(wordOf((await row(id))), RunStatus.PENDING);
       assert.equal((await row(id)).error, PROVIDER_UNAVAILABLE_ERROR);
       assert.ok(!(await f.reclaim(CURRENT)).sessions.some((s) => s.sessionId === id), 'invalid provider reappeared on reclaim');
     }

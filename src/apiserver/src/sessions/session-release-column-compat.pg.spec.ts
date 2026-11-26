@@ -24,8 +24,12 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import {
-  PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -120,7 +124,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
       assignedRunnerId: w.runnerId,
       title: 'a conversation',
       prompt: 'Explain the error in the log',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',

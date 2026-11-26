@@ -18,7 +18,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -136,7 +137,7 @@ async function createSession(
     data: {
       title: 'dispatch',
       prompt: 'do the thing',
-      status: RunStatus.PENDING,
+      turnState: 'QUEUED',
       ownerId: w.ownerId,
       creatorId: w.ownerId,
       workspaceId: w.workspaceId,
@@ -446,7 +447,7 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     await db.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         runClaimedAt: new Date(),
         inboxLeaseOwner: leaseOwner,
         inboxLeaseGeneration: generation,
@@ -532,7 +533,7 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
         sourceState: 'REFUSED',
         sourceRefusalCode: 'BASE_REF_NOT_FOUND',
         sourceRefusalDetail: refusalDetail,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         runClaimedAt: new Date(),
         inboxLeaseOwner: shellLeaseOwner,
         inboxLeaseGeneration: shellGeneration,
@@ -559,7 +560,7 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
         id: orphanShell, ownerId: w.ownerId, creatorId: w.ownerId, taskId: orphanTask.id,
         workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
         title: 'refused without a project', prompt: 'do the thing', provider: 'claude',
-        providerBuiltin: true, status: RunStatus.RUNNING,
+        providerBuiltin: true, turnState: 'IN_FLIGHT',
         sourceState: 'REFUSED', sourceKind: 'PROJECT_UPSTREAM',
         sourceCodebaseId: w.codebaseId, sourceRepoUrl: 'https://github.com/acme/widgets',
         sourceRef: ref, sourceRefAuthority: 'REMOTE', sourceConfigRevision: 0n,

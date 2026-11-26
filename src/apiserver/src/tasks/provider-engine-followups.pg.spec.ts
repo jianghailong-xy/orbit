@@ -11,7 +11,8 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { HttpException } from '@nestjs/common';
-import { CreatorType, Prisma, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -130,7 +131,7 @@ test('T3 follow-up on PostgreSQL', { timeout: 600_000 }, async (t) => {
   const sweep = () => (tasks as unknown as { reconcileReadyTasks(): Promise<void> }).reconcileReadyTasks();
   /** The run ends FAILED as the runner's /finalize leaves a usage limit with no retry of its own armed. */
   const killedByQuota = (run: Run) => db.session.update({
-    where: { id: run.id }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', error: QUOTA_ERROR, finishedAt: new Date() },
+    where: { id: run.id }, data: { turnState: null, lastTurnOutcome: 'FAILED', error: QUOTA_ERROR, finishedAt: new Date() },
   });
   /** Why the sweep is not starting the task again, as the task read reports it. */
   async function skipped(ownerId: string, taskId: string) {
@@ -239,9 +240,9 @@ test('T3 follow-up on PostgreSQL', { timeout: 600_000 }, async (t) => {
     }
     // A's coordinator, inside a turn: what it files over the line is a crossing, asked of the owner.
     await sql.query(
-      `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id","provider","status",
+      `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id","provider","turn_state",
          "dispatch_origin","updated_at")
-       VALUES ($1,$2,$3,'coordinator of A','fixture',$2,'claude','RUNNING'::"run_status",
+       VALUES ($1,$2,$3,'coordinator of A','fixture',$2,'claude','IN_FLIGHT',
          'USER'::"session_dispatch_origin",now())`, [sessionA, ownerId, workspaceId]);
     await sql.query(
       `INSERT INTO "conversation_turn" ("id","session_id","seq","client_turn_id","kind","status")

@@ -42,6 +42,7 @@ import { WORD_SHAPES } from '../sessions/session-legacy-words.fixture';
 import { RunnerApiController } from './runner-api.controller';
 import { readRunnerLinkHints } from './runner-link-hints';
 import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -114,7 +115,7 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
       data: {
         id, ownerId: of.ownerId, creatorId: of.ownerId, workspaceId: of.workspaceId, assignedRunnerId: of.runnerId,
         title: `${status} ${fill}`, prompt: 'hi', provider: 'claude', providerBuiltin: true,
-        status: status as RunStatus, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+        turnState: turnStateOfWord(status as RunStatus), dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
         // An engine conversation to resume: the reclaim hands back none without one (reclaimRuntimeIds).
         runtimeSessionId: randomUUID(),
         ...facts,
@@ -187,7 +188,7 @@ test('the runner API answers runners today\'s words from the facts', { skip, con
     const answers: Record<string, unknown> = {};
     const expected: Record<string, unknown> = {};
     for (const shape of released) {
-      const { status: _status, turnState: _turnState, ...facts } = shape.facts;
+      const { turnState: _turnState, ...facts } = shape.facts;
       const id = await session(of, shape.stored, 'filled', facts);
       answers[shape.name] = (await api.turnComplete(of.runner, id, { turnId: randomUUID(), status: RunStatus.SUCCEEDED } as never)).status;
       const row = golden.rows.find((r) => r.shape === shape.name)!;

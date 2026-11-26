@@ -50,8 +50,14 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import {
-  CreatorType, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource, TaskCompletionPolicy,
+  CreatorType,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
+  TaskCompletionPolicy,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus, SessionEndReason } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -65,6 +71,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { releaseWasFailure, releaseWasFailureSql } from '../common/session-release';
 import { RELEASE_SHAPES } from '../common/session-release-shapes.fixture';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -148,7 +155,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
       assignedRunnerId: w.runnerId,
       title: 'a conversation',
       prompt: 'Explain the error in the log',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',
@@ -187,7 +194,7 @@ function assertReleased(row: Released, status: string, why: string, failure?: bo
   // honoured, is a stop; while the cause was read, it was a failure. `failure` names the cases removal step R7 (the
   // status bridge gone) answers otherwise, each where it is called.
   const failed = releaseWasFailure({
-    finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, status: row.status,
+    finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, turnState: turnStateOfWord(row.status),
   });
   assert.equal(failed, failure ?? (row.status === 'FAILED' && row.end_reason == null),
     `${status}/${why}: read as a failure ${failure === undefined ? 'exactly when FAILED with no end reason' : `: ${failure}`}`);
@@ -518,22 +525,22 @@ test('every release writes the release column and its cause, and the revive clea
     assertReleased(await released(sql, done), 'SUCCEEDED', 'engine_exited');
 
     await refused('a terminal status with no finished_at', () =>
-      sql.query(`UPDATE "session" SET status = 'FAILED' WHERE id = $1::uuid`, [held]));
+      sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE id = $1::uuid`, [held]));
     await refused('an open status with finished_at set', () =>
       sql.query(`UPDATE "session" SET finished_at = now() WHERE id = $1::uuid`, [held]));
     await refused('a revive that clears the status but not the release column', () =>
-      sql.query(`UPDATE "session" SET status = 'PENDING' WHERE id = $1::uuid`, [done]));
+      sql.query(`UPDATE "session" SET "turn_state" = 'QUEUED' WHERE id = $1::uuid`, [done]));
     // Through Prisma the driver error is wrapped; the constraint is still named in its message.
     await assert.rejects(() => session(s.db, w, { status: RunStatus.CANCELLED }), /session_release_fact_chk/);
     await assert.rejects(
-      () => s.db.session.update({ where: { id: held }, data: { status: RunStatus.FAILED } }), /session_release_fact_chk/);
+      () => s.db.session.update({ where: { id: held }, data: { turnState: null } }), /session_release_fact_chk/);
     // The rows are as they were, and the legal writes still go through.
     assert.equal((await released(sql, held)).finished_at, null);
     await sql.query(
-      `UPDATE "session" SET status = 'FAILED', finished_at = now() WHERE id = $1::uuid`, [held],
+      `UPDATE "session" SET "turn_state" = NULL, finished_at = now() WHERE id = $1::uuid`, [held],
     );
     await sql.query(
-      `UPDATE "session" SET status = 'PENDING', finished_at = NULL WHERE id = $1::uuid`, [held],
+      `UPDATE "session" SET "turn_state" = 'QUEUED', finished_at = NULL WHERE id = $1::uuid`, [held],
     );
   });
 });
@@ -705,7 +712,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       || (['FAILED', 'INTERRUPTED'].includes(n.status) && ended(n));
     // The clauses 1442 states: released, and not by a failure (the release module's question), or no retry armed.
     const failed = (n: Row) => releaseWasFailure({
-      finishedAt: n.finished_at, endReason: n.end_reason, lastTurnOutcome: n.last_turn_outcome, status: n.status,
+      finishedAt: n.finished_at, endReason: n.end_reason, lastTurnOutcome: n.last_turn_outcome, turnState: turnStateOfWord(n.status),
     });
     const newRecipient = (o: Row, n: Row) => filed(n) || (n.finished_at != null && (!failed(n) || noRetry(o, n)))
       || (n.status === 'INTERRUPTED' && ended(n));
@@ -952,7 +959,7 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
       try {
         for (const setting of settings) await sql.query(`SELECT set_config($1, '1', true)`, [setting]);
         const out = await sql.query(
-          `UPDATE "session" SET "status" = 'PENDING', "finished_at" = NULL,
+          `UPDATE "session" SET "turn_state" = 'QUEUED', "finished_at" = NULL,
                   "inbox_lease_owner" = $2::uuid WHERE "id" = $1::uuid`, [id, marker]);
         await sql.query('COMMIT');
         return out.rowCount;

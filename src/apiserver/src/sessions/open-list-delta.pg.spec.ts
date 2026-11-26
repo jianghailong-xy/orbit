@@ -110,7 +110,7 @@ async function owner() {
   const session = async (title: string, fields: Partial<Prisma.SessionUncheckedCreateInput> = {}) =>
     (await h.db.session.create({
       data: {
-        ownerId, creatorId: ownerId, title, prompt: 'p', status: 'AWAITING_INPUT',
+        ownerId, creatorId: ownerId, title, prompt: 'p', turnState: null,
         dispatchOrigin: 'USER', ...fields,
       },
     })).id;

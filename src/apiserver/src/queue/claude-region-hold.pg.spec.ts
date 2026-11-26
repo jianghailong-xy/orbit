@@ -37,7 +37,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   AgentProvider,
   CLAUDE_REGION_REFUSED_SUBTYPE,
@@ -198,7 +199,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
         provider,
         providerBuiltin: provider === AgentProvider.CLAUDE,
         engine: AgentProvider.CLAUDE,
-        status: RunStatus.PENDING,
+        turnState: 'QUEUED',
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...extra,
       },
@@ -212,7 +213,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
       data: {
         id, ownerId: m.ownerId, creatorId: m.ownerId, workspaceId: m.workspaceId, assignedRunnerId: m.runnerId,
         title: 'running claude', prompt: 'the first message', provider: AgentProvider.CLAUDE, providerBuiltin: true,
-        engine: AgentProvider.CLAUDE, status: RunStatus.RUNNING, engineTurnActive: true, numTurns: 1,
+        engine: AgentProvider.CLAUDE, turnState: 'IN_FLIGHT', engineTurnActive: true, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(), runClaimedAt: new Date(), runtimeSessionId: randomUUID(),
       },
     });
@@ -334,7 +335,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
       assert.equal(error.message, 'Stop the session first.');
       return true;
     });
-    await db.session.update({ where: { id: busy }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
+    await db.session.update({ where: { id: busy }, data: { turnState: null, finishedAt: new Date()} });
 
     const moves = await sessions.moveTargets(from.ownerId, id);
     assert.equal(moves.reason, null, 'the Move panel offers it');

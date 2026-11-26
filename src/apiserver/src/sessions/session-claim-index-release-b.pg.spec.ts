@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { CreatorType, PrismaClient, RunnerStatus, RunStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
@@ -19,6 +20,8 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { TasksService } from '../tasks/tasks.service';
 import { AutoRetryService } from './auto-retry.service';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
+import { sessionWord } from '../test-support/session-word';
 
 /**
  * ONE LIVE RUN PER TASK, RELEASE B: the rehearsal before 1444 drops 0130's index, and the drop itself.
@@ -217,7 +220,7 @@ async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus): P
     await tx.session.update({
       where: { id: sessionId },
       data: {
-        status, finishedAt: TERMINAL.includes(status) ? new Date() : null,
+        turnState: turnStateOfWord(status), finishedAt: TERMINAL.includes(status) ? new Date() : null,
         ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
       },
     });
@@ -341,7 +344,7 @@ async function rehearse(
     // A press on a task whose run is held: refused while that run is live; on an idle parked run (AWAITING_INPUT,
     // INTERRUPTED) the press is a turn on that run, which is its plan RESUME, and no second run.
     for (const taskId of take(population.held, 20)) {
-      const { status } = await a.db.session.findUniqueOrThrow({ where: { id: population.heldRuns.get(taskId)! }, select: { status: true } });
+      const status = await sessionWord(a.db, population.heldRuns.get(taskId)!);
       const press = await Promise.allSettled([a.tasks.execute(population.w.ownerId, taskId, undefined, randomUUID())]);
       const run = press[0].status === 'fulfilled' ? (press[0].value as { sessionId?: string }).sessionId : undefined;
       const onto = run === undefined ? '' : run === population.heldRuns.get(taskId) ? ' (onto the held run)' : ' (a new run)';

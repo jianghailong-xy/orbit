@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { heldFilter } from '../common/session-release';
@@ -168,8 +169,8 @@ async function run(db: PrismaClient, ownerId: string, taskId: string, released =
     data: {
       id, ownerId, creatorId: ownerId, taskId, title: 'a run', prompt: 'do it', startsTaskWork: true,
       ...(released
-        ? { status: RunStatus.SUCCEEDED, finishedAt: new Date()}
-        : { status: RunStatus.RUNNING }),
+        ? { turnState: null, finishedAt: new Date()}
+        : { turnState: 'IN_FLIGHT' }),
     },
   });
   return id;
@@ -328,7 +329,7 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
         // The revive of a released run of the same task: what `resume` writes.
         const revive = await caught(() => db.session.update({
           where: { id: releasedOnBusy },
-          data: { status: RunStatus.PENDING, finishedAt: null},
+          data: { turnState: 'QUEUED', finishedAt: null},
         }));
         for (const [door, error] of [['second run', second], ['revive', revive]] as const) {
           const e = error as {
@@ -385,14 +386,14 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
            RETURNING id::text AS id`, [me],
         )).rows as Array<{ id: string }>;
         await sql.query(
-          `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status)
-           VALUES (gen_random_uuid(), 'holder', 'p', $1::uuid, $1::uuid, now(), $2::uuid, 'RUNNING')`, [me, taskId.id],
+          `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, turn_state)
+           VALUES (gen_random_uuid(), 'holder', 'p', $1::uuid, $1::uuid, now(), $2::uuid, 'IN_FLIGHT')`, [me, taskId.id],
         );
         await sql.query('SAVEPOINT shape');
         try {
           await sql.query(
-            `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status, finished_at)
-             VALUES (gen_random_uuid(), 'shape', 'p', $1::uuid, $1::uuid, now(), $2::uuid, $3::run_status, $4)`,
+            `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, turn_state, finished_at)
+             VALUES (gen_random_uuid(), 'shape', 'p', $1::uuid, $1::uuid, now(), $2::uuid, (CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), $4)`,
             [me, taskId.id, label, released ? new Date() : null],
           );
           return 'admitted';
@@ -431,15 +432,15 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
     const big = await owner(sql, 'claim-index-explain');
     const ids = await tasks(sql, big, 10_000);
     await sql.query(
-      `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status, finished_at, starts_task_work)
-       SELECT gen_random_uuid(), 'released run', 'p', $1::uuid, $1::uuid, now(), t::uuid, 'SUCCEEDED',
+      `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, turn_state, finished_at, starts_task_work)
+       SELECT gen_random_uuid(), 'released run', 'p', $1::uuid, $1::uuid, now(), t::uuid, NULL,
               now() - interval '1 day', true
          FROM unnest($2::text[]) t, generate_series(1, 10)`, [big, ids],
     );
     await sql.query(
-      `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, status, starts_task_work)
+      `INSERT INTO session (id, title, prompt, owner_id, creator_id, updated_at, task_id, turn_state, starts_task_work)
        SELECT gen_random_uuid(), 'live run', 'p', $1::uuid, $1::uuid, now(), t::uuid,
-              CASE WHEN n % 2 = 0 THEN 'RUNNING' ELSE 'AWAITING_INPUT' END::run_status, true
+              CASE WHEN n % 2 = 0 THEN 'IN_FLIGHT' END, true
          FROM unnest($2::text[]) WITH ORDINALITY AS u(t, n) WHERE n % 20 = 0`, [big, ids],
     );
     await sql.query(
@@ -516,7 +517,7 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
         readers.push({
           name, claim: true,
           before: one(await capture(() => logged.session.findFirst({
-            where: where({ status: { in: TASK_OCCUPYING } }), select: holderSelect,
+            where: where({ finishedAt: null }), select: holderSelect,
           })), pick, `${name} before`),
           after: one(await capture(() => logged.session.findFirst({
             where: where(heldFilter()), select: holderSelect,

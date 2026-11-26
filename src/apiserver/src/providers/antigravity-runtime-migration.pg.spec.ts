@@ -92,8 +92,8 @@ test('0367 moves whatever held `antigravity` aside and reserves the name', { ski
   const newSession = async (ownerId: string, provider: string, status = 'AWAITING_INPUT') => {
     const id = randomUUID();
     await sql.query(
-      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, status, updated_at)
-       VALUES ($1, 'agy', 'agy', $2, $2, $3, $4::run_status, now())`,
+      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, turn_state, updated_at)
+       VALUES ($1, 'agy', 'agy', $2, $2, $3, (CASE ($4)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), now())`,
       [id, ownerId, provider, status],
     );
     return id;
@@ -295,7 +295,7 @@ test('0367 moves whatever held `antigravity` aside and reserves the name', { ski
       try {
         if (settings) await sql.query(`SELECT ${settings}`);
         const claimed = await sql.query(
-          `UPDATE session SET status = 'RUNNING' WHERE id = $1 AND status = 'PENDING' RETURNING id`,
+          `UPDATE session SET "turn_state" = 'IN_FLIGHT' WHERE id = $1 AND "turn_state" = 'QUEUED' RETURNING id`,
           [id],
         );
         await sql.query('COMMIT');
@@ -324,7 +324,7 @@ test('0367 moves whatever held `antigravity` aside and reserves the name', { ski
     // Nothing else is touched: a Claude row claims as it always did, and an Antigravity row that is
     // already running parks without any capability.
     assert.equal(await claim(await newSession(ann, 'claude', 'PENDING'), ''), 1);
-    await sql.query(`UPDATE session SET status = 'AWAITING_INPUT' WHERE id = $1`, [agy]);
+    await sql.query(`UPDATE session SET "turn_state" = NULL WHERE id = $1`, [agy]);
     assert.equal((await one('SELECT status FROM session WHERE id = $1', [agy])).status, 'AWAITING_INPUT');
   });
 

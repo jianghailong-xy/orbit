@@ -26,7 +26,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, type RunInboxResponse } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -133,7 +134,7 @@ test('a turn completion kept across a runner restart settles the turn, and no fe
         title: `${label}: a session whose runner stops mid-answer`,
         prompt: 'stream the drill ticks',
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),

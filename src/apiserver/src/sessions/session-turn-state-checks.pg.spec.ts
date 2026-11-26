@@ -119,8 +119,8 @@ test('D2: the agreement CHECKs, phase NOT NULL, the partial indexes, the fill an
   const insert = async (word: string): Promise<string> => {
     const id = randomUUID();
     await sql.query(
-      `INSERT INTO "session" ("id", "title", "prompt", "owner_id", "creator_id", "updated_at", "status", "finished_at")
-       VALUES ($1, $2::text, 'p', $3, $3, now(), $2::run_status, CASE WHEN $4::boolean THEN now() END)`,
+      `INSERT INTO "session" ("id", "title", "prompt", "owner_id", "creator_id", "updated_at", "turn_state", "finished_at")
+       VALUES ($1, $2::text, 'p', $3, $3, now(), (CASE ($2)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), CASE WHEN $4::boolean THEN now() END)`,
       [id, word, owner, RELEASED_WORDS.includes(word)]);
     return id;
   };

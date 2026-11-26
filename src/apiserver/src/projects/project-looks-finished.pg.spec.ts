@@ -49,11 +49,11 @@ import {
   CreatorType,
   PrismaClient,
   ProjectStatus,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   IntegrationJobCommand,
   IntegrationJobResultRequest,
@@ -104,6 +104,7 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
 import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -267,7 +268,7 @@ async function world(stack: Stack, label: string, criteria: string[]): Promise<W
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -359,7 +360,7 @@ async function workSession(
       title: `ran ${branch ?? 'no worktree'}`,
       prompt: 'do the work',
       provider: 'claude',
-      status,
+      turnState: turnStateOfWord(status),
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -566,7 +567,7 @@ async function claimedLanding(
     // (§10.5 O-L4 3, §12.15 P-M1).
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      data: { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -843,7 +844,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
       where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: originalKey } },
       data: { status: 'ANSWERED', deliveredAt: null },
     });
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: null} });
     await Promise.all([stack.tasks.deliverLooksFinishedOwedTo(w.coordinatorSessionId), stack.tasks.deliverLooksFinishedOwedTo()]);
     const rebound = await stack.db.projectCoordinatorWake.findUniqueOrThrow({ where: { id: wake!.id } });
     const key = (rebound.delivery as { clientTurnId: string }).clientTurnId;
@@ -869,7 +870,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data });
       assert.equal((await due()).has(w.projectId), true, 'a truly unavailable coordinator hands off immediately');
     }
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, endReason: null, deletedAt: null } });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: null, endReason: null, deletedAt: null } });
     await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
     assert.equal((await due()).has(w.projectId), true, 'Automatic off hands off immediately');
     await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: true } });
@@ -998,7 +999,7 @@ test('a looks-finished fact first raised during FAILED waits and is delivered on
   const sessionId = await workSession(stack, w, task.id, 'orbit/walkthrough');
   await settleExecutable(stack, task.id);
   await queuedJob(stack, w, 'LAND_TASK', task.id, 'NOTHING_TO_LAND');
-  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
+  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
   await stack.receipts.record(w.ownerId, sessionId, {
     result: 'ALREADY_MERGED', sourceSha: sha('7'), targetBranch: await projectBranch(stack, w), targetShaBefore: sha('7'),
   }, 'RUNNER');
@@ -1008,7 +1009,7 @@ test('a looks-finished fact first raised during FAILED waits and is delivered on
   assert.deepEqual(await signalsFor(stack, w), []);
   await stack.tasks.deliverLooksFinishedOwedTo();
   assert.equal((await settledWakes(stack, w)).length, 1, 'paused scans do not write another refusal');
-  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: null} });
   await Promise.all([stack.tasks.deliverLooksFinishedOwedTo(w.coordinatorSessionId), stack.tasks.deliverLooksFinishedOwedTo()]);
   const delivered = (await settledWakes(stack, w)).filter((wake) => wake.status === 'DELIVERED');
   assert.equal(delivered.length, 1);
@@ -1233,7 +1234,7 @@ test('(6) the reaper\'s forced finish of the last task\'s work, with nothing to 
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: task.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: 'live run', prompt: 'work', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: 'orbit/reaped-settled', branchSha: sha('b'), baseSha: sha('b'),
       numTurns: 1, startedAt: new Date(),
     },
@@ -1275,7 +1276,7 @@ test('a settled-project fact refused during FAILED recovers on the reconcile tic
     await workSession(stack, w, task.id, null, RunStatus.SUCCEEDED, ['walkthrough.md']);
     await stack.db.session.update({
       where: { id: w.coordinatorSessionId },
-      data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()},
+      data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()},
     });
     await settleExecutable(stack, task.id);
     const prisma = stack.db as unknown as PrismaService;
@@ -1290,7 +1291,7 @@ test('a settled-project fact refused during FAILED recovers on the reconcile tic
     assert.equal((await wakes()).length, 1);
     await stack.tasks.reconcileTick();
     assert.equal((await wakes()).length, 1, 'a paused coordinator causes no repeated refusal');
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: null} });
     await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
     assert.equal((await wakes()).filter((wake) => wake.status === 'DELIVERED').length, 1);
     const turns = () => stack.db.conversationTurn.findMany({
@@ -1300,7 +1301,7 @@ test('a settled-project fact refused during FAILED recovers on the reconcile tic
     await stack.db.conversationTurn.updateMany({
       where: { id: (await turns())[0]!.id }, data: { status: 'ANSWERED', deliveredAt: null },
     });
-    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, finishedAt: null} });
     await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
     const resent = await turns();
     assert.equal(resent.length, 2);

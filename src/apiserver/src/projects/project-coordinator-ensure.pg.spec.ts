@@ -6,12 +6,12 @@ import { ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   type Runner,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { TaskStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -31,6 +31,7 @@ import {
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { establishProjectContractForPgTest } from './project-contract-test-helper';
 import { ProjectsService } from './projects.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The agent's `ensure` door, against a real PostgreSQL.
@@ -208,7 +209,7 @@ async function world(
     data: {
       id: actingSessionId, ownerId, creatorId: ownerId, workspaceId: actingWorkspaceId,
       assignedRunnerId: runnerId, title: `${label} acting`, prompt: `${label} acting`,
-      provider: 'claude', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+      provider: 'claude', turnState: null, numTurns: 1,
       startedAt: new Date(), runtimeSessionId: `runtime-${actingSessionId}`,
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
     },
@@ -253,7 +254,7 @@ async function world(
         id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId: landingWorkspaceId,
         assignedRunnerId: shape.offlineRunner ? offlineRunnerId : runnerId,
         title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-        status,
+        turnState: turnStateOfWord(status),
         ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
         startedAt: shape.startedAt === undefined ? new Date() : shape.startedAt,
         completedAt: shape.completedAt ?? null,
@@ -278,7 +279,7 @@ async function world(
     // the retirement, which 0130 refuses while a live session is working on the task.
     await db.session.update({
       where: { id: coordinatorSessionId },
-      data: { status: RunStatus.FAILED, finishedAt: new Date()},
+      data: { turnState: null, finishedAt: new Date()},
     });
     await stack.tasks.update(ownerId, taskId, { status: TaskStatus.CANCELLED });
     await stack.tasks.update(ownerId, taskId, { supersededByTaskId: successorId });

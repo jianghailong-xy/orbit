@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus, type IntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -173,7 +173,7 @@ async function world(stack: Stack, label: string, line: Line): Promise<World> {
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
   });
@@ -214,7 +214,7 @@ async function parkedTask(stack: Stack, w: World, label: string): Promise<Finish
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${label}`, prompt: 'work', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: `orbit/${label}`, branchSha: sha('a'), baseSha: sha('b'), numTurns: 1,
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       changedFiles: [{ path: 'src/a.ts', status: 'M', additions: 1, deletions: 0 }] as Prisma.InputJsonValue,
@@ -583,18 +583,18 @@ const negated: Array<[string, (stack: Stack, w: World, t: Finished) => Promise<v
     // Revived, running, and asked to end by a person: `cancel_requested_at` beside `end_reason = 'ended'`.
     await stack.db.session.update({
       where: { id: t.sessionId },
-      data: { status: RunStatus.RUNNING, finishedAt: null, endReason: 'ended', cancelRequestedAt: new Date() },
+      data: { turnState: 'IN_FLIGHT', finishedAt: null, endReason: 'ended', cancelRequestedAt: new Date() },
     });
   }],
   ['2: a person ended the work session', async (stack, _w, t) => {
-    await stack.db.session.update({ where: { id: t.sessionId }, data: { endReason: 'ended', status: RunStatus.CANCELLED } });
+    await stack.db.session.update({ where: { id: t.sessionId }, data: { endReason: 'ended', turnState: null } });
   }],
   ['3: the task\'s newest work session is another one', async (stack, w, t) => {
     await stack.db.session.create({
       data: {
         id: randomUUID(), ownerId: w.ownerId, creatorId: w.ownerId, taskId: t.taskId, workspaceId: w.workspaceId,
         assignedRunnerId: w.runnerId, title: 'a later run', prompt: 'work', provider: 'claude',
-        status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
         isolationStatus: 'worktree', branch: 'orbit/a-later-run', branchSha: sha('f'), baseSha: sha('b'), numTurns: 1,
         startedAt: new Date(), createdAt: new Date(), runtimeSessionId: randomUUID(), finishedAt: new Date(),
         endReason: 'task_done',
@@ -635,7 +635,7 @@ test('W-T6: W4 condition 4 — after two generations asked for by the work sessi
       // Its DONE's end, as `claimParkedSessionEnd` and the finalize leave it: `cancel_requested_at` too.
       await stack.db.session.update({
         where: { id: t.sessionId },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), endReason: 'task_done', cancelRequestedAt: new Date() },
+        data: { turnState: null, finishedAt: new Date(), endReason: 'task_done', cancelRequestedAt: new Date() },
       });
       const queued = await stack.db.$transaction((tx) => queueLandingRetry(tx, {
         ownerId: w.ownerId, projectId: w.projectId, taskId: t.taskId,

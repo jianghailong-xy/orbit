@@ -907,7 +907,7 @@ test('the owner channel refuses a personal access token door by door and field b
   await t.test("POST /sessions/:id/resume: a token's permission mode is refused whole and no turn is written; without it the token's message is taken; a login revives with a new mode", async () => {
     const turns = (clientTurnId: string) => db.conversationTurn.count({ where: { sessionId, clientTurnId } });
     // A session that has run and waits for its next message, as a runner leaves one.
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1`, [sessionId]);
     const before = await sessionRow();
     const refusedTurn = randomUUID();
     refusedFields(
@@ -923,7 +923,7 @@ test('the owner channel refuses a personal access token door by door and field b
 
     // Ended after having run, so a resume revives it — the door where a mode is re-applied.
     await sql.query(
-      `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "started_at" = now(), "runtime_session_id" = $2 WHERE "id" = $1`,
+      `UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()), "started_at" = now(), "runtime_session_id" = $2 WHERE "id" = $1`,
       [sessionId, `runtime-${RUN}`],
     );
     await db.runner.update({ where: { id: runnerId }, data: { status: 'ONLINE', lastHeartbeatAt: new Date() } });

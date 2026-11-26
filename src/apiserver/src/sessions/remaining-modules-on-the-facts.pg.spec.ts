@@ -35,6 +35,7 @@ import { WatchesService } from '../watches/watches.service';
 import { loadDossierRecords } from '../wiki/wiki-dossier';
 import { wikiSessionsOfSpace } from '../wiki/wiki-maintenance';
 import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -78,7 +79,7 @@ async function session(
   const released = word === RunStatus.SUCCEEDED || word === RunStatus.FAILED || word === RunStatus.CANCELLED;
   const { id } = await db.session.create({
     data: {
-      ownerId: ids.ownerId, creatorId: ids.ownerId, title, prompt: title, status: word,
+      ownerId: ids.ownerId, creatorId: ids.ownerId, title, prompt: title, turnState: turnStateOfWord(word),
       dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude', providerBuiltin: true,
       workspaceId: ids.workspaceId, assignedRunnerId: ids.runnerId, startedAt: new Date(), lastTurnAt: new Date(),
       ...(released ? { finishedAt: new Date(), lastTurnOutcome: word === RunStatus.FAILED ? 'FAILED' : 'ANSWERED' } : {}),
@@ -368,7 +369,7 @@ test('the remaining modules read the facts, and a row with no turn_state reads a
       action: 'NOTIFY_USER',
     });
     assert.equal(await db.watchMatch.count({ where: { watchId: waiting.id } }), 0);
-    await db.session.update({ where: { id: turning.id }, data: { status: RunStatus.INTERRUPTED } });
+    await db.session.update({ where: { id: turning.id }, data: { turnState: 'ABANDONED' } });
     await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', turning.id);
     const evaluator = new WatchEvaluatorService(prisma, { publishWatchChanged: () => undefined } as never);
     await evaluator.evaluate(waiting.id);

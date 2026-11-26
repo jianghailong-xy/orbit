@@ -26,7 +26,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { OVER_CAPACITY_V1, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -40,6 +41,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { openingTurnKey } from './orbit-authored-turn';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -101,7 +103,7 @@ test('Run now starts one queued turn over its runner\'s limit, up to max + burst
     await db.session.create({
       data: {
         id, ownerId: alice.id, creatorId: alice.id, workspaceId: r.workspaceId, assignedRunnerId: r.id, title,
-        prompt: title, provider: 'claude', providerBuiltin: true, status, dispatchOrigin: SessionDispatchOrigin.USER,
+        prompt: title, provider: 'claude', providerBuiltin: true, turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER,
         ...(status === RunStatus.RUNNING
           ? { startedAt: new Date(Date.now() - 50 * MINUTE), runtimeSessionId: randomUUID(), numTurns: 1 }
           : {}),
@@ -113,7 +115,7 @@ test('Run now starts one queued turn over its runner\'s limit, up to max + burst
     return id;
   }
   /** A turn that ended: its slot is free. */
-  const finish = (id: string) => sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [id]);
+  const finish = (id: string) => sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [id]);
   async function row(sessionId: string): Promise<Record<string, any>> {
     const list = await api('GET', '/api/sessions?view=open', alice.login);
     assert.equal(list.status, 200, list.text);

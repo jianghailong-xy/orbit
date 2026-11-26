@@ -87,7 +87,7 @@ test('task model suggestions survive create, batch, update, clearing and approva
   await prisma.session.create({
     data: {
       id: sessionId, title: 'model hints', prompt: 'model hints', ownerId: owner, creatorId: owner,
-      assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(),
+      assignedRunnerId: runnerId, turnState: null, startedAt: new Date(),
       runtimeSessionId: `runtime-${sessionId}`, provider: 'claude',
     },
   });
@@ -199,8 +199,8 @@ test('task model suggestions survive create, batch, update, clearing and approva
       await sql.query(`INSERT INTO "project"("id","owner_id","title","coordinator_enabled","updated_at") VALUES ($1,$2,'model hints',true,now())`, [project, owner]);
       await sql.query(`INSERT INTO "project_runtime"("project_id","updated_at") VALUES ($1,now()) ON CONFLICT DO NOTHING`, [project]);
     }
-    await sql.query(`INSERT INTO "session"("id","owner_id","workspace_id","title","prompt","creator_id","provider","status","dispatch_origin","updated_at")
-      VALUES ($1,$2,$3,'coordinator','fixture',$2,'claude','RUNNING'::"run_status",'USER'::"session_dispatch_origin",now())`, [session, owner, workspace]);
+    await sql.query(`INSERT INTO "session"("id","owner_id","workspace_id","title","prompt","creator_id","provider","turn_state","dispatch_origin","updated_at")
+      VALUES ($1,$2,$3,'coordinator','fixture',$2,'claude','IN_FLIGHT','USER'::"session_dispatch_origin",now())`, [session, owner, workspace]);
     await sql.query(`UPDATE "project" SET "coordinator_session_id"=$2 WHERE "id"=$1`, [projectA, session]);
     const digests = new Set<string>();
     for (const [modelHint, modelHintReason] of [['M', REASON], ['L', REASON], ['L', 'different reason']] as const) {

@@ -5,11 +5,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -226,7 +226,7 @@ async function world(
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -323,7 +323,7 @@ async function doneTask(
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -375,7 +375,7 @@ async function doneTask(
     // (§10.5 O-L4 3, §12.15 P-M1).
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      data: { turnState: null, finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -1264,7 +1264,7 @@ test('an answer asked before the work settled is recorded: requeued, or stopped 
       });
       await stack.db.session.update({
         where: { id: task.sessionId },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() + 1_000), worktreeBranch: task.branch },
+        data: { turnState: null, finishedAt: new Date(Date.now() + 1_000), worktreeBranch: task.branch },
       });
       const requeued = await report(stack, w, first, early());
       assert.equal(requeued.accepted, true);
@@ -1282,7 +1282,7 @@ test('an answer asked before the work settled is recorded: requeued, or stopped 
       )).state, 'CANCELLING');
       await stack.db.session.update({
         where: { id: task.sessionId },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() + 2_000) },
+        data: { turnState: null, finishedAt: new Date(Date.now() + 2_000) },
       });
       const cancelled = await report(stack, w, second, early());
       assert.equal(cancelled.accepted, true);
@@ -1311,7 +1311,7 @@ test('a candidate check that answered before its task work settled goes back to 
       // could still move, so its READY is the same question asked too early.
       await stack.db.session.update({
         where: { id: task.sessionId },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() + 1_000) },
+        data: { turnState: null, finishedAt: new Date(Date.now() + 1_000) },
       });
       const early = await report(stack, w, check, promotionReady('1'.repeat(40)));
       assert.equal(early.accepted, true);

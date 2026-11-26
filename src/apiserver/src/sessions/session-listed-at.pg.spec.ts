@@ -28,7 +28,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { ControlEventType, RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { filter, firstValueFrom, timeout } from 'rxjs';
@@ -49,6 +50,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import { WATCH_TURN_KEY_PREFIX } from './watch-turn-key';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -126,7 +128,7 @@ test('listed_at moves only when the session changes for its owner', {
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: title,
         provider: 'claude', providerBuiltin: true, model: 'claude-opus-5', permissionMode: 'default',
-        status: RunStatus.AWAITING_INPUT, numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
+        turnState: null, numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
         usesRuntimeDefaultModel: true, engineStartedAt: new Date(Date.now() - 60_000),
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
@@ -154,7 +156,7 @@ test('listed_at moves only when the session changes for its owner', {
     );
     return row;
   }
-  const status = async (id: string) => (await db.session.findUniqueOrThrow({ where: { id }, select: { status: true } })).status;
+  const status = async (id: string) => wordOf((await db.session.findUniqueOrThrow({ where: { id }, select: WORD_SELECT })));
 
   async function moved(id: string, before: Clocks, label: string): Promise<Clocks> {
     const after = await clocks(id);
@@ -342,7 +344,7 @@ test('listed_at moves only when the session changes for its owner', {
       const id = await parked(title);
       await db.session.update({
         where: { id },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), branch: `orbit/${randomUUID()}`, isolationStatus: 'worktree' },
+        data: { turnState: null, finishedAt: new Date(), branch: `orbit/${randomUUID()}`, isolationStatus: 'worktree' },
       });
       await sql.query(`UPDATE "session" SET "listed_at" = now() - interval '1 hour' WHERE "id" = $1::uuid`, [id]);
       return id;

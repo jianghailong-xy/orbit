@@ -23,7 +23,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { AccountRemoveCommand, LoginEngine, RunnerAccountRemoveState, RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -244,7 +245,7 @@ test('signing a runner’s Default account out: refusals, the heartbeat relay, a
         prompt: 'fix the flaky test',
         provider: 'claude',
         providerBuiltin: true,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),

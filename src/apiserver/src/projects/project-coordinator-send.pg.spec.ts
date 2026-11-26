@@ -6,12 +6,12 @@ import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   type Runner,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { isReleasedStatus } from '../common/session-release';
@@ -29,6 +29,7 @@ import {
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { establishProjectContractForPgTest } from './project-contract-test-helper';
 import { COORDINATOR_MESSAGE_UNDELIVERED_CODE, ProjectsService } from './projects.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The agent's `send` door, against a real PostgreSQL: a MESSAGE addressed to a PROJECT, resolved to
@@ -195,7 +196,7 @@ async function world(
     data: {
       id: actingSessionId, ownerId, creatorId: ownerId, workspaceId: actingWorkspaceId,
       assignedRunnerId: runnerId, title: `${label} acting`, prompt: `${label} acting`,
-      provider: 'claude', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+      provider: 'claude', turnState: null, numTurns: 1,
       startedAt: new Date(), runtimeSessionId: `runtime-${actingSessionId}`,
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
     },
@@ -213,7 +214,7 @@ async function world(
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId: landingWorkspaceId,
       assignedRunnerId: shape.offlineRunner ? offlineRunnerId : runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status,
+      turnState: turnStateOfWord(status),
       ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       startedAt: shape.startedAt === undefined ? new Date() : shape.startedAt,
       completedAt: shape.completedAt ?? null,

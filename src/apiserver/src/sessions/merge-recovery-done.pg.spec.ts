@@ -25,7 +25,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { BadRequestException, HttpException } from '@nestjs/common';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   type IntegrationCheckResult,
   type IntegrationJobCommand,
@@ -232,7 +233,7 @@ async function finishedSession(
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
       title: label, prompt: 'ship the feature', provider: 'claude', providerBuiltin: true,
-      dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.SUCCEEDED, startedAt: new Date(Date.now() - 7_200_000),
+      dispatchOrigin: SessionDispatchOrigin.USER, turnState: null, startedAt: new Date(Date.now() - 7_200_000),
       finishedAt: new Date(Date.now() - 3_600_000), numTurns: 1, branch: `orbit/${label}-${id.slice(0, 8)}`,
       isolationStatus: 'worktree', ...row,
     },
@@ -320,7 +321,7 @@ async function doneCodeTask(s: Stack, w: ProjectWorld, label: string): Promise<{
   await s.db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id, workspaceId: w.workspaceId,
-      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', status: RunStatus.RUNNING,
+      assignedRunnerId: w.runnerId, title, prompt: title, provider: 'claude', turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt: new Date(),
       branch: `orbit/${label}-${sessionId.slice(0, 8)}`,
       worktreeBranch: `orbit/${label}-${sessionId.slice(0, 8)}`, worktreeDirty: false, isolationStatus: 'worktree',

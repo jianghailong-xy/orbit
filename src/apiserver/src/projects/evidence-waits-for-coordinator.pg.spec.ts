@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RunEventType, RunStatus as SharedRunStatus, uuidToBase62 } from '@orbit/shared';
@@ -57,6 +57,8 @@ import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * WHILE AN AUTOMATIC PROJECT'S COORDINATOR IS PAUSED, ITS EVIDENCE WAITS FOR IT.
@@ -239,7 +241,7 @@ async function conversation(
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -344,7 +346,7 @@ async function world(
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: running ? RunStatus.RUNNING : RunStatus.AWAITING_INPUT,
+      turnState: turnStateOfWord(running ? RunStatus.RUNNING : RunStatus.AWAITING_INPUT),
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -578,7 +580,7 @@ async function claim(stack: Stack, w: World): Promise<void> {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
       where: { id: w.coordinatorSessionId, status: RunStatus.PENDING },
-      data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+      data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: null },
     });
   });
 }
@@ -621,7 +623,7 @@ test('a revision submitted while the coordinator is down waits for it: not asked
       assert.deepEqual(await evidenceMessages(stack.db, w.coordinatorSessionId, w.taskId), []);
       assert.equal(await stack.db.projectConvergenceDecision.count({ where: { projectId: w.projectId } }), 0);
       const coordinator = await stack.db.session.findUniqueOrThrow({ where: { id: w.coordinatorSessionId } });
-      assert.equal(coordinator.status, RunStatus.FAILED, 'the coordinator was revived to be told');
+      assert.equal(wordOf(coordinator), RunStatus.FAILED, 'the coordinator was revived to be told');
 
       // Not the owner's: not in the card's read, not in the count, not on the badge.
       assert.deepEqual(await ownerAsked(stack, w), []);
@@ -663,7 +665,7 @@ test('a revision submitted while the coordinator is parked on a retry waits too,
         'a turn was written to a conversation parked on a retry');
       const parked = await stack.db.session.findUniqueOrThrow({ where: { id: w.coordinatorSessionId } });
       assert.equal(parked.retryAt?.getTime(), retryAt.getTime(), 'the retry was disarmed');
-      assert.equal(parked.status, RunStatus.AWAITING_INPUT);
+      assert.equal(wordOf(parked), RunStatus.AWAITING_INPUT);
 
       assert.deepEqual(await ownerAsked(stack, w), []);
       assert.equal(await ownerCount(stack, w), 0);
@@ -695,7 +697,7 @@ for (const state of ['FAILED', 'retryAt', 'PENDING', 'RUNNING'] as const) {
           });
         } else if (state === 'PENDING') {
           await stack.db.session.update({
-            where: { id: w.coordinatorSessionId }, data: { status: RunStatus.PENDING },
+            where: { id: w.coordinatorSessionId }, data: { turnState: 'QUEUED' },
           });
         }
         const badgeBefore = await badge(stack, w);
@@ -1033,7 +1035,7 @@ test('a coordinator that took part in the work is not waited for: the revision i
       assert.equal(recorded!.status, 'CONSUMED');
       assert.equal(recorded!.sessionId, null);
       // And then it goes down: still not a coordinator anything waits for.
-      await stack.db.session.update({ where: { id: w.runSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+      await stack.db.session.update({ where: { id: w.runSessionId }, data: { turnState: null, finishedAt: new Date()} });
       await stack.waiting.deliverOwed(w.projectId);
       assert.equal((await evidenceWakes(stack.db, w.taskId)).length, 1);
       const own = await readPendingEvidenceJudgments(stack.prisma, w.ownerId, { id: w.runSessionId, taskId: w.taskId });

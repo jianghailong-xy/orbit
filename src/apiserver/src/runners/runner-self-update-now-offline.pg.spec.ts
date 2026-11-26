@@ -23,7 +23,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, SessionRunSource, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RUNNER_UPDATE_RESUME_NOTE, RunEventType, SELF_UPDATE_NOW_V1 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -37,6 +38,7 @@ import { AutoRetryService } from '../sessions/auto-retry.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -92,14 +94,14 @@ test('Update Now and a runner that never comes back: runner offline after the bo
     await prisma.session.create({ data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `Backfill missing shard rows (${label})`, prompt: 'Backfill missing shard rows', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
+      turnState: null, numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
     } });
     const message = `backfill the missing shard rows, then deploy (${label})`;
     await sessions.createTurn(ownerId, sessionId, { clientTurnId: randomUUID(), content: message } as never);
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
     const handed = await (api as unknown as {
       dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<{ turnId: string; content: string } | null>;
@@ -141,12 +143,12 @@ test('Update Now and a runner that never comes back: runner offline after the bo
     // Within the bound, a sweep leaves it alone: the restart is usually under a minute.
     await prisma.runner.update({ where: { id: updated.runnerId }, data: { lastHeartbeatAt: new Date(Date.now() - 60_000) } });
     await (reaper as unknown as { sweep(): Promise<void> }).sweep();
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: updated.sessionId } })).status, RunStatus.RUNNING,
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: updated.sessionId } }))), RunStatus.RUNNING,
       'reaped inside the bound, while the restart could still be under way');
 
     await neverComesBack(updated.runnerId);
     const ended = await prisma.session.findUniqueOrThrow({ where: { id: updated.sessionId } });
-    assert.equal(ended.status, RunStatus.FAILED, 'still RUNNING after its runner was gone past the bound');
+    assert.equal(wordOf(ended), RunStatus.FAILED, 'still RUNNING after its runner was gone past the bound');
     assert.equal(ended.error, 'runner offline');
     assert.ok(ended.retryAt, 'no retry was armed: nothing would resume it when the runner comes back');
   });
@@ -155,7 +157,7 @@ test('Update Now and a runner that never comes back: runner offline after the bo
     await retryComesDue(updated.sessionId, updated.runnerId, false);
     assert.equal((await resentOn(updated.sessionId)).length, 0, 'the retry re-sent onto a runner that is still away');
     const waiting = await prisma.session.findUniqueOrThrow({ where: { id: updated.sessionId } });
-    assert.equal(waiting.status, RunStatus.FAILED);
+    assert.equal(wordOf(waiting), RunStatus.FAILED);
     assert.ok(waiting.retryAt, 'the retry was given up while the runner was away');
   });
 
@@ -170,11 +172,11 @@ test('Update Now and a runner that never comes back: runner offline after the bo
     assert.ok(resent.content!.endsWith(`The interrupted message:\n${updated.message}`));
     assert.ok(resent.clientTurnId.startsWith(`${AUTO_RETRY_TURN_KEY_PREFIX}orbit:`), `not filed as Orbit's words: ${resent.clientTurnId}`);
     const resumed = await prisma.session.findUniqueOrThrow({ where: { id: updated.sessionId } });
-    assert.equal(resumed.status, RunStatus.PENDING, 'the session did not queue for the runner that came back');
+    assert.equal(wordOf(resumed), RunStatus.PENDING, 'the session did not queue for the runner that came back');
 
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: updated.sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: updated.sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
     const handed = await (api as unknown as {
       dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<{ turnId: string; content: string } | null>;

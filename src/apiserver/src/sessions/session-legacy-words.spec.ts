@@ -38,8 +38,8 @@ test('a held row with no turn state keeps its stored word; one with a turn state
   for (const status of ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED']) {
     assert.equal(legacySessionStatus(factsOfWord(status, { turnState: null })), status);
   }
-  assert.equal(legacySessionStatus(factsOfWord('RUNNING', { status: 'PENDING' })), 'RUNNING');
-  assert.equal(legacySessionStatus(factsOfWord('CANCELLED', { status: 'RUNNING' })), 'CANCELLED');
+  assert.equal(legacySessionStatus(factsOfWord('RUNNING', { turnState: 'QUEUED'})), 'RUNNING');
+  assert.equal(legacySessionStatus(factsOfWord('CANCELLED', { turnState: 'IN_FLIGHT'})), 'CANCELLED');
 });
 
 test('a word the protocol does not have is no filter', () => {

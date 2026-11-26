@@ -47,7 +47,8 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -447,7 +448,7 @@ test('owner requests: WIKI_CREATE asks the owner for a wiki, and only the owner 
     await db.session.create({
       data: {
         id: sessionId, ownerId: a.ownerId, creatorId: a.ownerId, workspaceId, assignedRunnerId: a.runner.id,
-        title: label, prompt: label, provider: 'claude', status: RunStatus.RUNNING,
+        title: label, prompt: label, provider: 'claude', turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
       },
     });
@@ -670,7 +671,7 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
         title,
         prompt: title,
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
       },

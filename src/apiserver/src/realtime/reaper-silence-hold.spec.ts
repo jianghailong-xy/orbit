@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,

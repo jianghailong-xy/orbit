@@ -22,7 +22,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import type { ConfigService } from '@nestjs/config';
-import { RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -79,7 +80,7 @@ test('an approval raised outside a dispatched turn alerts the owner and is count
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: label, prompt: 'the work',
-        provider: 'claude', status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        provider: 'claude', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(), runtimeSessionId: randomUUID(), ...over,
       },
     });

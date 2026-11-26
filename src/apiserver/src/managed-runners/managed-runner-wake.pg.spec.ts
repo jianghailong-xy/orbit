@@ -81,6 +81,7 @@ import type { PersistentVolumeClaim, Pod, Secret } from './kube-client';
 import { GENERATION_ANNOTATION, bootstrapCredentialOf, managedPodName, managedSecretName } from './managed-runner-resources';
 import { MANAGED_RUNNER_KUBE_CLIENT_FACTORY, MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import '../test-support/daemon-routes-over-http';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -365,7 +366,7 @@ test('managed runners wake on demand and sleep through the real application', {
     let awake = await upAndReady(o.userId, 2);
     await assertSameIdentity(o.mapping, awake);
     assert.equal(toUuid((await claim(awake.runnerId)).sessionId), parked, 'the wakeup\'s turn is served');
-    await sql.query(`UPDATE "session" SET status = 'AWAITING_INPUT', finished_at = NULL WHERE id = $1`, [parked]); // its turn ran
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, finished_at = NULL WHERE id = $1`, [parked]); // its turn ran
 
     asleep = await putToSleep(o);
     const created = await call(server, 'POST', '/api/tasks', o.token, { title: 'nightly', description: 'run at its time', assigneeId: o.workspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
@@ -440,7 +441,7 @@ test('managed runners wake on demand and sleep through the real application', {
     const waiting = await db.session.findUniqueOrThrow({ where: { id: failed } });
     assert.equal(waiting.retryAttempts, 1, 'no attempt is spent waiting for managed capacity');
     assert.ok(waiting.retryAt && waiting.retryAt > new Date(), 'still armed: 45 minutes after the failure, nothing gave up');
-    assert.equal(waiting.status, 'FAILED');
+    assert.equal(wordOf(waiting), 'FAILED');
     const status = await call(server, 'GET', '/api/managed-runner', o.token);
     assert.equal(status.json.managementState, 'WAITING_CAPACITY');
     assert.equal(status.json.reason.code, 'MANAGED_RUNNER_CAPACITY_UNAVAILABLE', 'the wait says why');
@@ -454,7 +455,7 @@ test('managed runners wake on demand and sleep through the real application', {
     await retries.sweep();
     const resent = await db.session.findUniqueOrThrow({ where: { id: failed } });
     assert.equal(resent.retryAttempts, 2, 'the retry was sent, and that is the one attempt it spent');
-    assert.equal(resent.status, 'PENDING');
+    assert.equal(wordOf(resent), 'PENDING');
     assert.equal(toUuid((await claim(awake.runnerId)).sessionId), failed);
   });
 
@@ -468,7 +469,7 @@ test('managed runners wake on demand and sleep through the real application', {
     await sql.query(`UPDATE runner_presence SET last_beat_at = now() - interval '10 minutes' WHERE runner_id = $1`, [asleep.runnerId]);
     const revived = await call(server, 'POST', `/api/sessions/${ended}/resume`, o.token, { clientTurnId: randomUUID(), content: 'carry on' });
     assert.ok(revived.status === 200 || revived.status === 201, `not refused as offline: ${revived.text}`);
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: ended } })).status, 'PENDING');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: ended } }))), 'PENDING');
     await assertWakeRequested(o.userId, asleep);
     const awake = await upAndReady(o.userId, 2);
     await assertSameIdentity(o.mapping, awake);
@@ -573,7 +574,7 @@ test('managed runners wake on demand and sleep through the real application', {
       // A message to a parked session: queued for its runner, as for any runner.
       const sent = await call(server, 'POST', `/api/sessions/${parked}/turns`, o.token, { clientTurnId: randomUUID(), content: 'are you there?' });
       assert.equal(sent.status, 201, sent.text);
-      assert.equal((await db.session.findUniqueOrThrow({ where: { id: parked } })).status, 'PENDING');
+      assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: parked } }))), 'PENDING');
       // An executable task: Run Now.
       const task = await call(server, 'POST', '/api/tasks', o.token, { title: 'build while disabled', description: 'build it', assigneeId: o.workspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
       assert.equal(task.status, 201, task.text);
@@ -602,9 +603,9 @@ test('managed runners wake on demand and sleep through the real application', {
       [scheduled],
     );
     await app!.get(ScheduledWakeupWorker).drain();
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: scheduled } })).status, 'PENDING', 'the wakeup\'s turn waits for its runner');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: scheduled } }))), 'PENDING', 'the wakeup\'s turn waits for its runner');
     // The watch's delivery, by the application's own workers.
-    await until('the watch delivery', async () => (await db.session.findUniqueOrThrow({ where: { id: observer } })).status === 'PENDING', 60_000);
+    await until('the watch delivery', async () => wordOf((await db.session.findUniqueOrThrow({ where: { id: observer } }))) === 'PENDING', 60_000);
     // Auto retry: armed and due, 45 minutes after its run failed. Not waited for as a managed runner
     // coming back: it gives up the ordinary way, spending nothing.
     await sql.query(`UPDATE "session" SET retry_at = now() - interval '1 second', finished_at = now() - interval '45 minutes' WHERE id = $1`, [retried]);

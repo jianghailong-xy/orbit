@@ -8,11 +8,11 @@ import { HttpException } from '@nestjs/common';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -300,7 +300,7 @@ async function world(stack: Stack, label: string): Promise<World> {
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -363,7 +363,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -411,7 +411,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
   await db.$transaction(async (tx) => {
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000)},
+      data: { turnState: null, finishedAt: new Date(Date.now() - 60_000)},
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -715,7 +715,7 @@ test('refused with its reason where there is no conversation to take the message
       // Ended, and resumable: the platform will not hand it a turn, a person may.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        data: { turnState: null, finishedAt: new Date() },
       });
       await stack.db.runner.update({ where: { id: w.runnerId }, data: { lastHeartbeatAt: new Date() } });
       let read = await rowOf(stack, w, red.itemId);
@@ -775,7 +775,7 @@ test('escalated, coordinator reaped while its runner is away: Ask again can queu
       // FAILED with the cancel it writes beside it — while the runner stayed away.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline', lastTurnOutcome: 'FAILED' },
+        data: { turnState: null, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline', lastTurnOutcome: 'FAILED' },
       });
       await stack.db.runner.update({
         where: { id: w.runnerId },
@@ -807,7 +807,7 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
       // beside it, nobody closing the conversation — and then the runner came back.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline', lastTurnOutcome: 'FAILED' },
+        data: { turnState: null, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline', lastTurnOutcome: 'FAILED' },
       });
       await stack.db.runner.update({
         where: { id: w.runnerId },
@@ -838,7 +838,7 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
       assert.ok(session.cancelRequestedAt);
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null, finishedAt: null},
+        data: { turnState: null, cancelRequestedAt: null, finishedAt: null},
       });
       await stack.openItems.deliverOwedTo(w.coordinatorSessionId);
       const delivery = await stack.db.projectOpenItemDelivery.findFirst({
@@ -882,7 +882,7 @@ test('escalated, coordinator that truly cannot receive — ended with no revival
       });
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.CANCELLED, finishedAt: new Date(), endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },
+        data: { turnState: null, finishedAt: new Date(), endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },
       });
       await expectUnreachable('ended without revival', 'COORDINATOR_UNAVAILABLE');
 

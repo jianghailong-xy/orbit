@@ -15,6 +15,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { SubagentRoutingReportService } from './subagent-routing-report.service';
 import { TaskModelRoutingReportController } from './task-model-routing-report.controller';
 import { TaskModelRoutingReportService, type ModelRoutingReportGroup } from './task-model-routing-report.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import type { SessionFixture } from '../test-support/session-word';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
 const OPUS = 'claude-opus-5-5';
@@ -59,13 +61,13 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
       assigneeId: agent.id, ...data,
     } });
   }
-  async function run(subject: Task, seconds: number, duration: number | null, data: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
-    const status = data.status ?? 'SUCCEEDED';
+  async function run(subject: Task, seconds: number, duration: number | null, data: SessionFixture = {}) {
+    const { status = 'SUCCEEDED', ...dataFacts } = data;
     const terminal = ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status);
     return db.session.create({ data: {
       ownerId: subject.ownerId, creatorId: subject.ownerId, title: 'report run', prompt: 'report', taskId: subject.id,
       workspaceId: subject.ownerId === owner ? agent.id : otherAgent.id, startsTaskWork: true,
-      provider: 'claude', model: OPUS, effort: 'low', status, createdAt: at(seconds), ...data,
+      provider: 'claude', model: OPUS, effort: 'low', turnState: turnStateOfWord(status), createdAt: at(seconds), ...dataFacts,
       finishedAt: terminal ? data.finishedAt ?? at(seconds + (duration ?? 0)) : null,
       // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
       ...(status === 'FAILED' && data.lastTurnOutcome === undefined ? { lastTurnOutcome: 'FAILED' } : {}),

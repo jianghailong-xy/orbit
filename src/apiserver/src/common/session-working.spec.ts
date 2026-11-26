@@ -32,8 +32,8 @@ const NOT_ENDED = new Set<RunStatus>([RunStatus.PENDING, RunStatus.RUNNING, RunS
 function shapesOf(status: RunStatus): Array<{ label: string; row: SessionWorkingRow }> {
   const finishedAt = NOT_ENDED.has(status) ? null : new Date();
   return [
-    { label: `${status} (turn_state filled)`, row: { status, finishedAt, turnState: turnStateOfWord(status) } },
-    { label: `${status} (turn_state null)`, row: { status, finishedAt, turnState: null } },
+    { label: `${status} (turn_state filled)`, row: { finishedAt, turnState: turnStateOfWord(status) } },
+    { label: `${status} (turn_state null)`, row: { finishedAt, turnState: null } },
   ];
 }
 const ALL_SHAPES = ALL_STATUSES.flatMap((status) => shapesOf(status).map((shape) => ({ status, ...shape })));

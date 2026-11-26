@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -71,7 +72,7 @@ async function session(
   await db.session.create({
     data: {
       id, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId, assignedRunnerId: f.runnerId, title: `olsk ${id}`,
-      prompt: 'olsk', provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, startedAt: new Date(),
+      prompt: 'olsk', provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', startedAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
     },
   });

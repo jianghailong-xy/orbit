@@ -32,7 +32,8 @@ import test from 'node:test';
 import { Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -58,6 +59,7 @@ import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsController } from './shared-pools.controller';
 import { SharedPoolsService } from './shared-pools.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The service encrypts the keys it is handed; any secret does in a throwaway database.
@@ -124,7 +126,7 @@ async function sessionOn(
     data: {
       title: 'shared pool doors',
       prompt: 'hello',
-      status,
+      turnState: turnStateOfWord(status),
       ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
         ? { finishedAt: new Date()}
         : {}),

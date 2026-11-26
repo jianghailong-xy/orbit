@@ -229,7 +229,7 @@ test('Still stuck: Ask your admin is a task in an admin\'s list, and a report ca
   await t.test('6. Your questions says With your admin, and who it went to', async () => {
     // Answered, as an Ask is by the time its person says it did not help: no machine runs in this spec, so the
     // session is settled the way its runner would leave it. Still PENDING, it reads Working, which outranks this.
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" IN ($1::uuid, $2::uuid)`, [memberAsk, adminAsk]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" IN ($1::uuid, $2::uuid)`, [memberAsk, adminAsk]);
     const reply = await api('GET', '/api/help/ask/sessions', memberToken);
     assert.equal(reply.status, 200, reply.text);
     const row = (reply.json.questions as Array<{ sessionId: string; outcome: string; sentTo: string | null }>)

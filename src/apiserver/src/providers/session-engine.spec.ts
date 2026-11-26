@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider } from '@orbit/shared';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { builtinSessionEngine, resolveProviderExec, type ModelProviderRow } from './custom-provider';
 import { encryptSecret } from './provider-crypto';
 import { LANDING_PROVIDER_SLUG } from './provider-slug';

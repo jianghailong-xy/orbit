@@ -45,7 +45,8 @@ import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, RunStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -328,7 +329,7 @@ test('the next candidate supersedes the one standing, and closes the exception i
     await db.session.create({
       data: {
         id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: working,
-        title: 'the work', prompt: 'the work', status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+        title: 'the work', prompt: 'the work', turnState: null, finishedAt: new Date(), 
         startsTaskWork: true, completedAt: new Date(),
       },
     });

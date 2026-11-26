@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, type IntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -227,7 +227,7 @@ async function world(stack: Stack, label: string, line: Line = 'PROJECT_BRANCH')
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
   });
@@ -282,7 +282,7 @@ async function finishedTask(stack: Stack, w: World, label: string): Promise<Fini
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${label}`, prompt: 'work', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch, branchSha: DELIVERED, baseSha: sha('b'), numTurns: 1,
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       changedFiles: [{ path: 'src/a.ts', status: 'M', additions: 1, deletions: 0 }] as Prisma.InputJsonValue,
@@ -445,7 +445,7 @@ async function runFixTurn(
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.updateMany({
       where: { id: t.sessionId, status: { in: [RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
-      data: { status: RunStatus.RUNNING, inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation },
+      data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation },
     });
     await tx.inboxLeaseGeneration.updateMany({
       where: { sessionId: t.sessionId, retiredAt: null }, data: { retiredAt: new Date() },
@@ -742,7 +742,7 @@ async function acceptedRun(stack: Stack, w: World, taskId: string, label: string
   await stack.db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
-      assignedRunnerId: w.runnerId, title: label, prompt: label, provider: 'claude', status: RunStatus.RUNNING,
+      assignedRunnerId: w.runnerId, title: label, prompt: label, provider: 'claude', turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt: new Date(), branch,
       isolationStatus: 'worktree', baseSha: sha('b'), branchSha, runtimeSessionId: randomUUID(),
     },
@@ -941,7 +941,7 @@ test('R2, CONTROL: an ordinary DONE task\'s idle session with a running backgrou
         data: {
           id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
           assignedRunnerId: w.runnerId, title: 'ordinary work', prompt: 'work', provider: 'claude',
-          status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
           isolationStatus: 'worktree', branch: 'orbit/ordinary', branchSha: DELIVERED, baseSha: sha('b'), numTurns: 1,
           startedAt: minutesAgo(30), runtimeSessionId: randomUUID(), runningBgJobs: ['bgj_ordinaryjob1'],
         },

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { ConfigService } from '@nestjs/config';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { renderFeishuCard, type FeishuAlert, type FeishuCard } from '../feishu/cards/feishu-cards';
 import type { FeishuSendResult } from '../feishu/feishu-outbound';
 import {

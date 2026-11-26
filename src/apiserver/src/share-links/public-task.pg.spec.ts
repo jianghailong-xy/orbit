@@ -37,12 +37,12 @@ import {
   CreatorType,
   PrismaClient,
   RunnerStatus,
-  RunStatus,
   SessionDispatchOrigin,
   TaskCommentMentionDeliveryStatus,
   TaskCompletionCriterion,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -199,7 +199,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
         } : {}),

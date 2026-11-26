@@ -2,12 +2,14 @@
  * CLAIM, SLOT AND DISPATCH ON THE FACTS, AGAINST POSTGRESQL (task T7 of docs/session-status-retirement-plan.md, §1.3,
  * §1.4 and §2.3).
  *
- * Every case runs over the same rows: each held word with turn_state as migration 1611's trigger keeps it AND with
- * turn_state NULL, as a held row nothing has written since that migration has until the backfill (task T3); each of
- * those also with a background job and with the engine's own turn, which make `phase` RUNNING without a dispatched
- * turn; and each released word, with the same stale work beside it. Every row has a runner, a batch, a spawn tree and
- * a workspace of its own, so what a reader counts or selects is that one row's answer. What each reader selects now
- * is held to what it selected on the stored word before, spelled here as the code spelled it before the change.
+ * Every case runs over the same rows: each held word, written as its turn state, also with a background job and with
+ * the engine's own turn, which make `phase` RUNNING without a dispatched turn; and each released word, with the same
+ * stale work beside it. Every row has a runner, a batch, a spawn tree and a workspace of its own, so what a reader
+ * counts or selects is that one row's answer. What each reader selects now is held to what it selected on the stored
+ * word before, spelled here as the code spelled it before the change, in SQL: since deploy D3 (task T14) the stored
+ * word is migration 1671's, written from the facts, so the two sides agree only if that trigger gives every row its
+ * word. A row with no turn_state beside a word that names a turn no longer exists (1652 validated it, and the fallback
+ * that read one went with T14).
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/queue/claim-slot-turn-state.pg.spec.ts
  */
@@ -44,7 +46,7 @@ import { runningSessionCounts } from '../runners/runner-background-holders';
 import { turnStateFilter } from '../sessions/session-turn-state';
 import { DispatchPauseService } from './dispatch-pause.service';
 import { QueueService } from './queue.service';
-import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -59,7 +61,6 @@ interface Row {
   id: string;
   word: RunStatus;
   held: boolean;
-  unfilled: boolean;
   extra: (typeof EXTRAS)[number];
   runnerId: string;
   batchId: string;
@@ -72,13 +73,13 @@ async function everyShape(db: PrismaClient): Promise<{ ownerId: string; rows: Ro
   const ownerId = randomUUID();
   await db.user.create({ data: { id: ownerId, email: `t7-${ownerId}@claim-facts.invalid`, name: 't7', passwordHash: 'x' } });
   const shapes = [
-    ...HELD_WORDS.flatMap((word) => [false, true].flatMap((unfilled) => EXTRAS.map((extra) => ({ word, unfilled, extra })))),
-    ...RELEASED_WORDS.flatMap((word) => EXTRAS.map((extra) => ({ word, unfilled: false, extra }))),
+    ...HELD_WORDS.flatMap((word) => EXTRAS.map((extra) => ({ word, extra }))),
+    ...RELEASED_WORDS.flatMap((word) => EXTRAS.map((extra) => ({ word, extra }))),
   ];
   const rows: Row[] = [];
-  for (const { word, unfilled, extra } of shapes) {
+  for (const { word, extra } of shapes) {
     const held = HELD_WORDS.includes(word);
-    const title = `${word}${unfilled ? ' unfilled' : ''}${extra === 'none' ? '' : ` + ${extra}`}`;
+    const title = `${word}${extra === 'none' ? '' : ` + ${extra}`}`;
     const runnerId = randomUUID();
     await db.runner.create({
       data: {
@@ -93,7 +94,7 @@ async function everyShape(db: PrismaClient): Promise<{ ownerId: string; rows: Ro
     const batchId = randomUUID();
     await db.session.create({
       data: {
-        id, ownerId, creatorId: ownerId, title, prompt: title, status: word, workspaceId: workspace.id,
+        id, ownerId, creatorId: ownerId, title, prompt: title, turnState: turnStateOfWord(word), workspaceId: workspace.id,
         assignedRunnerId: runnerId, provider: 'claude', providerBuiltin: true, model: 'claude-opus-5',
         permissionMode: 'default', usesRuntimeDefaultModel: true, dispatchOrigin: SessionDispatchOrigin.USER,
         numTurns: 1, startedAt: new Date(Date.now() - 60 * 60_000), runtimeSessionId: randomUUID(),
@@ -113,21 +114,16 @@ async function everyShape(db: PrismaClient): Promise<{ ownerId: string; rows: Ro
     });
     // The runner's last beat names the session as held by a background job (runner_presence, migration 0780).
     await db.runnerPresence.create({ data: { runnerId, lastBeatAt: new Date(), linkState: 'HTTP', backgroundJobSessionIds: [id] } });
-    // The word trigger fires on `status` alone, so this leaves the row as one nothing has written since 1611.
-    if (unfilled) await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', id);
-    rows.push({ title, id, word, held, unfilled, extra, runnerId, batchId });
+    rows.push({ title, id, word, held, extra, runnerId, batchId });
   }
-  const unfilled = await db.session.count({ where: { id: { in: rows.filter((r) => r.unfilled).map((r) => r.id) }, turnState: null } });
-  assert.equal(unfilled, rows.filter((r) => r.unfilled).length, 'the unfilled rows carry no turn_state');
   return { ownerId, rows };
 }
 
 const titles = (rows: Row[], keep: (row: Row) => boolean): string[] => rows.filter(keep).map((row) => row.title).sort();
 
-test('claim, slots and dispatch read the turn state, and a row with no turn_state reads as today', { skip, timeout: 600_000 }, async (t) => {
+test('claim, slots and dispatch read the turn state, and select what the stored word selected', { skip, timeout: 600_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
-  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
   const prisma = db as unknown as PrismaService;
   t.after(() => db.$disconnect());
   const { ownerId, rows } = await everyShape(db);
@@ -146,7 +142,7 @@ test('claim, slots and dispatch read the turn state, and a row with no turn_stat
     return titles(rows, (row) => found.has(row.id));
   };
 
-  await t.test('the slot counts: runner, batch and tree count the dispatched turns, filled or not, and nothing else', async () => {
+  await t.test('the slot counts: runner, batch and tree count the dispatched turns and nothing else', async () => {
     // Before (common/session-tree-sql.ts at the project tip): `status = 'RUNNING'`, the child's `status IN ('PENDING', 'RUNNING')`.
     const before = {
       runner: (s: string) => Prisma.sql`(SELECT count(*) FROM "session" active WHERE active."assigned_runner_id" = ${Prisma.raw(s)}."assigned_runner_id" AND active."status" = 'RUNNING') > 0`,
@@ -164,7 +160,7 @@ test('claim, slots and dispatch read the turn state, and a row with no turn_stat
       background: (s: string) => Prisma.sql`${runnerBackgroundHeldSessions(Prisma.raw(`${s}."assigned_runner_id"`))} > 0`,
     };
     const running = titles(rows, (row) => row.word === RunStatus.RUNNING);
-    assert.equal(running.length, 6, 'RUNNING filled and unfilled, with each kind of outside work');
+    assert.equal(running.length, 3, 'RUNNING, with each kind of outside work');
     for (const kind of ['runner', 'batch', 'tree'] as const) {
       assert.deepEqual(await where(after[kind]), await where(before[kind]), `${kind}: the same rows`);
       assert.deepEqual(await where(after[kind]), running, `${kind}: a slot is a dispatched turn only, never phase`);
@@ -174,14 +170,14 @@ test('claim, slots and dispatch read the turn state, and a row with no turn_stat
     assert.deepEqual(await where(after.background), holders, 'background holders: held and not in flight');
   });
 
-  await t.test('the spawn-tree exemption: a parent waiting on a queued or running child, filled or not, is not counted', async () => {
+  await t.test('the spawn-tree exemption: a parent waiting on a queued or running child is not counted', async () => {
     // A RUNNING parent over each row: the row moves into the parent's tree, as its child.
     const parents = new Map<string, string>();
     for (const row of rows) {
       const parent = randomUUID();
       await db.session.create({
         data: {
-          id: parent, ownerId, creatorId: ownerId, title: `parent of ${row.title}`, prompt: 'p', status: RunStatus.RUNNING,
+          id: parent, ownerId, creatorId: ownerId, title: `parent of ${row.title}`, prompt: 'p', turnState: 'IN_FLIGHT',
           provider: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER, rootSessionId: parent,
         },
       });
@@ -202,30 +198,27 @@ test('claim, slots and dispatch read the turn state, and a row with no turn_stat
   });
 
   await t.test('the Prisma filters the slot, generating and managed readers use select what the word selected', async () => {
-    const cases: Array<[string, Prisma.SessionWhereInput, Prisma.SessionWhereInput]> = [
-      ['queued (claim holds, hold notices)', turnStateFilter(['QUEUED']), { status: 'PENDING' }],
-      ['in flight (claim undo, Update Now, draining turns, OOM stop)', turnStateFilter(['IN_FLIGHT']), { status: 'RUNNING' }],
-      ['holds a slot', SESSION_HOLDS_SLOT_WHERE, { status: 'RUNNING' }],
-      ['held (Update Now shells)', heldFilter(), { status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] } }],
-      ['generating', GENERATING_SESSION_FILTER, { OR: [{ status: 'RUNNING' }, { status: 'AWAITING_INPUT', engineTurnActive: true }] }],
-      ['executing', SESSION_EXECUTING_WHERE, { OR: [{ status: 'RUNNING' }, {
-        status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
-        OR: [{ engineTurnActive: true }, { runningSubagents: { isEmpty: false } }, { runningBgJobs: { isEmpty: false } }],
-      }] }],
-      ['executing but a job', SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE, { OR: [{ status: 'RUNNING' }, {
-        status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
-        OR: [{ engineTurnActive: true }, { runningSubagents: { isEmpty: false } }],
-      }] }],
-      ['a job running', SESSION_RUNNING_BG_JOB_WHERE, { status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] }, runningBgJobs: { isEmpty: false } }],
+    const HELD = `s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')`;
+    const cases: Array<[string, Prisma.SessionWhereInput, string]> = [
+      ['queued (claim holds, hold notices)', turnStateFilter(['QUEUED']), `s."status" = 'PENDING'`],
+      ['in flight (claim undo, Update Now, draining turns, OOM stop)', turnStateFilter(['IN_FLIGHT']), `s."status" = 'RUNNING'`],
+      ['holds a slot', SESSION_HOLDS_SLOT_WHERE, `s."status" = 'RUNNING'`],
+      ['held (Update Now shells)', heldFilter(), HELD],
+      ['generating', GENERATING_SESSION_FILTER, `s."status" = 'RUNNING' OR (s."status" = 'AWAITING_INPUT' AND s."engine_turn_active")`],
+      ['executing', SESSION_EXECUTING_WHERE, `s."status" = 'RUNNING' OR (${HELD}
+        AND (s."engine_turn_active" OR cardinality(s."running_subagents") > 0 OR cardinality(s."running_bg_jobs") > 0))`],
+      ['executing but a job', SESSION_EXECUTING_EXCEPT_BG_JOB_WHERE, `s."status" = 'RUNNING' OR (${HELD}
+        AND (s."engine_turn_active" OR cardinality(s."running_subagents") > 0))`],
+      ['a job running', SESSION_RUNNING_BG_JOB_WHERE, `${HELD} AND cardinality(s."running_bg_jobs") > 0`],
     ];
     for (const [name, now, before] of cases) {
       const selected = await filtered(now);
-      assert.deepEqual(selected, await filtered(before), `${name}: the same rows`);
+      assert.deepEqual(selected, await where(() => Prisma.raw(`COALESCE(${before}, false)`)), `${name}: the same rows`);
       assert.ok(selected.length > 0 && selected.length < rows.length, `${name}: not vacuous`);
     }
     // Phase never decides a slot: a parked row with a job or the engine's own turn is phase RUNNING and holds none.
     const phaseRunning = await filtered({ phase: 'RUNNING' });
-    assert.ok(phaseRunning.includes('AWAITING_INPUT + job') && phaseRunning.includes('AWAITING_INPUT unfilled + engine'));
+    assert.ok(phaseRunning.includes('AWAITING_INPUT + job') && phaseRunning.includes('AWAITING_INPUT + engine'));
     assert.ok(!(await filtered(SESSION_HOLDS_SLOT_WHERE)).includes('AWAITING_INPUT + job'));
   });
 
@@ -267,7 +260,7 @@ test('claim, slots and dispatch read the turn state, and a row with no turn_stat
     }
   });
 
-  await t.test('the dispatch pause reads the held turns and hints the runners of queued sessions, filled or not', async () => {
+  await t.test('the dispatch pause reads the held turns and hints the runners of queued sessions', async () => {
     const hinted: string[] = [];
     const inboxes: string[] = [];
     const pause = new DispatchPauseService(
@@ -295,29 +288,28 @@ test('claim, slots and dispatch read the turn state, and a row with no turn_stat
     assert.ok(gauges.sessions.queued >= 6 && gauges.sessions.running >= 6);
   });
 
-  await t.test('the claim takes exactly the queued rows, filled or not, and the slot gate counts unfilled turns', async () => {
+  await t.test('the claim takes exactly the queued rows, and the slot gate counts the turns in flight', async () => {
     const queue = new QueueService(prisma, silent, new ProviderPlanUsageService(silent));
-    // A runner at capacity by an unfilled turn claims nothing; one slot more and it claims its queued session.
-    const gated = rows.find((row) => row.word === RunStatus.PENDING && !row.unfilled && row.extra === 'none')!;
+    // A runner at capacity by a turn in flight claims nothing; one slot more and it claims its queued session.
+    const gated = rows.find((row) => row.word === RunStatus.PENDING && row.extra === 'none')!;
     const turn = randomUUID();
     await db.session.create({
       data: {
-        id: turn, ownerId, creatorId: ownerId, title: 'slot holder', prompt: 'p', status: RunStatus.RUNNING,
+        id: turn, ownerId, creatorId: ownerId, title: 'slot holder', prompt: 'p', turnState: 'IN_FLIGHT',
         assignedRunnerId: gated.runnerId, provider: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
-    await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', turn);
     // A parked session with a background job on the same runner: phase RUNNING, no slot.
     await db.session.create({
       data: {
-        ownerId, creatorId: ownerId, title: 'phase only', prompt: 'p', status: RunStatus.AWAITING_INPUT,
+        ownerId, creatorId: ownerId, title: 'phase only', prompt: 'p', turnState: null,
         assignedRunnerId: gated.runnerId, provider: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER,
         runningBgJobs: ['bgj_phase'], engineTurnActive: true,
       },
     });
     await db.runner.update({ where: { id: gated.runnerId }, data: { maxConcurrent: 1 } });
     assert.equal(await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'] } as never), null,
-      'the unfilled turn holds the one slot');
+      'the turn in flight holds the one slot');
     await db.runner.update({ where: { id: gated.runnerId }, data: { maxConcurrent: 2 } });
     assert.equal((await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'] } as never))?.sessionId, gated.id,
       'the phase-RUNNING parked session holds none');
@@ -332,13 +324,15 @@ test('claim, slots and dispatch read the turn state, and a row with no turn_stat
       }
     }
     assert.deepEqual(claimed.sort(), titles(rows, (row) => row.word === RunStatus.PENDING), 'exactly the queued rows');
-    const after = await db.session.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, turnState: true, phase: true } });
+    const after = await db.$queryRaw<Array<{ id: string; stored: string; turnState: string | null; phase: string }>>(Prisma.sql`
+      SELECT id::text AS id, status::text AS stored, turn_state AS "turnState", phase FROM "session" WHERE id = ANY(${ids}::uuid[])`);
     for (const row of rows) {
       const now = after.find((a) => a.id === row.id)!;
       if (row.word === RunStatus.PENDING) {
-        assert.deepEqual([now.status, now.turnState, now.phase], ['RUNNING', 'IN_FLIGHT', 'RUNNING'], `${row.title}: claimed, both written`);
+        // The claim writes turn_state alone; migration 1671's trigger keeps the stored word from it.
+        assert.deepEqual([now.stored, now.turnState, now.phase], ['RUNNING', 'IN_FLIGHT', 'RUNNING'], `${row.title}: claimed`);
       } else {
-        assert.equal(now.status, row.word, `${row.title}: untouched`);
+        assert.equal(now.stored, row.word, `${row.title}: untouched`);
       }
     }
   });

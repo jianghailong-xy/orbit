@@ -21,7 +21,8 @@ import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
 import { PermissionMode } from '@orbit/shared';
-import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { firstValueFrom, take, timeout, toArray } from 'rxjs';
 
@@ -251,7 +252,7 @@ test('§7.3 NO_CHANGE notifies nobody, files nothing and its session is complete
   const w = await world('no-change');
   const { schedule } = await created(w);
   const { sessionId } = await nextRun(schedule.id);
-  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
   await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Still 0.48.0.' });
   assert.deepEqual(alertsOf(schedule.id), []);
   assert.deepEqual(await items(schedule.id), []);
@@ -318,7 +319,7 @@ test('§7.3 FAILED: push and Waiting on you; the third in a row says "failed 3 r
   // The second fails without a report (its turn settled idle), the third past its limit.
   const two = await nextRun(schedule.id);
   await db.conversationTurn.updateMany({ where: { sessionId: two.sessionId }, data: { status: 'ANSWERED' } });
-  await db.session.update({ where: { id: two.sessionId }, data: { status: 'AWAITING_INPUT' } });
+  await db.session.update({ where: { id: two.sessionId }, data: { turnState: null } });
   // §7.1: idle fails the run only once it has read so for the settle time.
   assert.equal(await runs.reconcileRun(two.run.id), 'UNCHANGED', 'idle is not settled at once');
   advance(SCHEDULE_IDLE_SETTLE_MS);
@@ -416,7 +417,7 @@ test('§6.4/§7.3 AWAITING_APPROVAL: push and an item that says what Always allo
   // Needs you counts the run once: the badge's sessions hold it once, and its row counts the card, not the card and its item.
   await db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-    await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
   });
   const badges = new PushService(db as unknown as PrismaService, { get: () => undefined } as never);
   const needing = await badges.needsYouSessions(w.ownerId);
@@ -912,7 +913,7 @@ test('§7.4/§12.1 a run\'s session is in no list but its Scheduled runs folder,
   const lastActive = (await lastActiveByWorkspace(db as never, [w.workspaceId])).get(w.workspaceId);
   assert.ok(!lastActive || lastActive < new Date('2026-12-01T00:00:00Z'), 'a run does not make the workspace "last used"');
   // v1 feeds no run to the wiki: no session_settled fact, and a backfill does not read it.
-  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
   const scope = { ownerId: w.ownerId, spaceId: randomUUID(), workspaceIds: [w.workspaceId], projectIds: [], foreignSessionIds: [], maintenanceListId: null };
   const facts = await db.$queryRaw<Array<{ kind: string; sessionId: string | null }>>(factsSql(scope, null));
   assert.ok(!facts.some((f) => f.sessionId === sessionId), 'no wiki fact names the run');
@@ -938,7 +939,7 @@ test('§7.4/§12.1 a run\'s session is in no list but its Scheduled runs folder,
   assert.deepEqual(history.find((h) => h.id === run.id)?.session, { id: sessionId, state: 'OPEN' });
 
   // A NO_CHANGE run's completed session is not in Completed either.
-  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
   await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Same.' });
   assert.ok((await runs.completeNoChangeSessions(1000)).includes(sessionId), 'the worker\'s pass completes it');
   assert.ok(!ids(await sessionsService.list(w.ownerId, { view: 'completed' })).includes(sessionId), 'list (Completed)');

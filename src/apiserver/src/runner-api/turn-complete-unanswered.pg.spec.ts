@@ -50,7 +50,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, type RunInboxResponse } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -150,7 +151,7 @@ async function fixture(
       title: `${label} 的会话`,
       prompt: '把这两张图里的报错讲清楚',
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
@@ -169,7 +170,7 @@ async function fixture(
         title: `${label}: the sender`,
         prompt: 'design the manual charge button',
         provider: 'codex',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
       },

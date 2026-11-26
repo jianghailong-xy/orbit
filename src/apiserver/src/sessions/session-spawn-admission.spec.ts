@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SPAWN_TREE_OUTSTANDING } from '../common/session-scheduling';
 import { SessionsService } from './sessions.service';
 import { turnStateFilter } from './session-turn-state';

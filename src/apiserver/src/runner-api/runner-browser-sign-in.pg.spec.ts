@@ -28,7 +28,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { toUuid } from '@orbit/shared';
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -79,7 +80,7 @@ test('browser_request_sign_in: a Waiting-on-you card from the Orbit Cloud runner
     (await prisma.session.create({
       data: {
         ownerId, creatorId: ownerId, assignedRunnerId: runnerId, provider: 'claude', engine: 'claude', model: 'claude-opus-5-5',
-        title, prompt: 'browse', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+        title, prompt: 'browse', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
       },
       select: { id: true },
     })).id;

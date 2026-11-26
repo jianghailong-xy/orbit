@@ -59,7 +59,8 @@ import { Module, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider, type Prisma } from '@prisma/client';
+import { PrismaClient, RunnerStatus, type ModelProvider, type Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
@@ -113,6 +114,7 @@ import { SharedPoolsController } from './shared-pools.controller';
 import { SharedPoolsService } from './shared-pools.service';
 import '../test-support/dequeue-under-lease';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts keys and the code under test decrypts them; both only need the same secret.
@@ -234,7 +236,7 @@ async function sessionOn(
     data: {
       title: 'pool security',
       prompt: 'hello',
-      status,
+      turnState: turnStateOfWord(status),
       ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       ownerId,
       creatorId: ownerId,
@@ -1512,7 +1514,7 @@ exec sleep 300
     // Rotated, the next claim carries the new key: decrypted from the row at the claim, kept nowhere.
     const rotated = subscription();
     await providers.update(alice, personal.row.id, { apiKey: rotated });
-    await db.session.update({ where: { id: session }, data: { status: RunStatus.PENDING, finishedAt: null} });
+    await db.session.update({ where: { id: session }, data: { turnState: 'QUEUED', finishedAt: null} });
     assert.equal(token((await claim(at.runnerId, session)).agent.env), rotated);
 
     // Every agent this spec made holds exactly the env it was configured with, after every door above.

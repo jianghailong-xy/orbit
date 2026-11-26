@@ -140,10 +140,10 @@ async function seed({ provider = 'claude', running = 'live', capabilities = ROUT
   await admin.query(
     `INSERT INTO "session"(
        id, title, prompt, owner_id, creator_id, assigned_runner_id, provider,
-       provider_builtin, status, num_turns, updated_at
+       provider_builtin, turn_state, num_turns, updated_at
      ) VALUES (
        $1::uuid, 'steered wake', 'opening prompt', $2::uuid, $2::uuid, $3::uuid, $4,
-       TRUE, $5, 1, clock_timestamp()
+       TRUE, (CASE ($5)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), 1, clock_timestamp()
      )`,
     [SESSION_ID, OWNER_ID, RUNNER_ID, provider, running ? 'RUNNING' : 'AWAITING_INPUT'],
   );
@@ -409,7 +409,7 @@ scenario('(b) with no live turn, on kimi, or behind a runner without routing-v1,
   await seed({ running: false });
   const filed = await fileWake(exitWake('bgj_b00000000003'));
   assert.equal(await sessionStatus(), 'PENDING', 'the wake did not ask for a runner slot');
-  await admin.query(`UPDATE "session" SET status = 'RUNNING' WHERE id = $1::uuid`, [SESSION_ID]);
+  await admin.query(`UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE id = $1::uuid`, [SESSION_ID]);
   const delivered = await take();
   assert.equal(delivered?.turnId, filed.turnId);
   assert.equal(delivered?.kind, 'message');
@@ -700,7 +700,7 @@ scenario('(g) an output wake that arrives after its job\'s exit was filed is dro
   assert.deepEqual(await jobsOn(queuedTurn.clientTurnId), [{ jobId: 'bgj_g00000000002', trigger: 'exit' }]);
 
   // ...and once that exit has been delivered and answered, a late output still opens nothing.
-  await admin.query(`UPDATE "session" SET status = 'RUNNING' WHERE id = $1::uuid`, [SESSION_ID]);
+  await admin.query(`UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE id = $1::uuid`, [SESSION_ID]);
   const delivered = await take();
   assert.equal(delivered?.turnId, queuedTurn.id);
   await answer(queuedTurn.id);

@@ -32,7 +32,8 @@ import { test } from 'node:test';
 
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -183,7 +184,7 @@ test('the daemon routes refuse HTTPS, and serve the link and the callers that na
     data: {
       id: sessionId, ownerId: owner.id, creatorId: owner.id, workspaceId, assignedRunnerId: machine.id,
       title: 'a session the CLI resumes', prompt: 'the work', provider: 'claude', engine: 'claude',
-      status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       runtimeSessionId: randomUUID(),
     },
   });

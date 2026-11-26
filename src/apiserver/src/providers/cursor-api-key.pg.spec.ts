@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { RunStatus, RunnerStatus } from '@prisma/client';
+import { RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, ENGINE_CLI_NAMES, PermissionMode, RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -195,7 +196,7 @@ test('P2 Cursor API key on PostgreSQL', { timeout: 600_000 }, async (t) => {
   }
   /** Parks every open session of a machine, so the next claim takes only the one a case makes. */
   const park = (at: Machine) => db.session.updateMany({
-    where: { assignedRunnerId: at.id, status: RunStatus.PENDING }, data: { status: RunStatus.AWAITING_INPUT },
+    where: { assignedRunnerId: at.id, turnState: 'QUEUED' }, data: { turnState: null },
   });
 
   const owner = await account('cursor');
@@ -311,7 +312,7 @@ test('P2 Cursor API key on PostgreSQL', { timeout: 600_000 }, async (t) => {
     // A Claude Code session cannot move onto it either.
     const claude = (await viaApi(at, { engine: AgentProvider.CLAUDE })).id;
     await db.session.update({ where: { id: claude }, data: {
-      status: RunStatus.FAILED, numTurns: 1, runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(), finishedAt: new Date(),
+      turnState: null, numTurns: 1, runtimeSessionId: `runtime-${randomUUID()}`, startedAt: new Date(), finishedAt: new Date(),
     } });
     const switched = await refusal(sessions.resume(owner, claude, { content: 'again', clientTurnId: randomUUID(), provider: key.slug } as never));
     assert.deepEqual([switched.status, switched.code], [400, 'PROVIDER_ENGINE_INCOMPATIBLE']);
@@ -395,7 +396,7 @@ test('P2 Cursor API key on PostgreSQL', { timeout: 600_000 }, async (t) => {
     }
     // The claim of the session on it now hands over the new key.
     await park(at);
-    await db.session.update({ where: { id: keySession }, data: { status: RunStatus.PENDING, inboxLeaseOwner: null, inboxLeaseGeneration: null } });
+    await db.session.update({ where: { id: keySession }, data: { turnState: 'QUEUED', inboxLeaseOwner: null, inboxLeaseGeneration: null } });
     const job = (await claim(at))!;
     assert.equal(job.sessionId, keySession);
     assert.equal(job.agent.env?.ORBIT_CURSOR_API_KEY, rotated);

@@ -37,8 +37,14 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import {
-  CreatorType, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource, TaskStatus,
+  CreatorType,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
+  TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, SESSION_RELEASE_V1, SessionEndReason } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -53,6 +59,7 @@ import { AutoRetryService } from '../sessions/auto-retry.service';
 import { SessionsService } from '../sessions/sessions.service';
 import type { BackgroundWakeDto } from './background-job-wake';
 import { RunnerApiController } from './runner-api.controller';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -136,7 +143,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
   await db.session.create({
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
-      title: 'a conversation', prompt: 'Explain the error in the log', status,
+      title: 'a conversation', prompt: 'Explain the error in the log', turnState: turnStateOfWord(status),
       engineTurnActive: status === RunStatus.RUNNING, provider: 'claude', providerBuiltin: true, engine: 'claude',
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL, startedAt: new Date(),
       runClaimedAt: new Date(), runtimeSessionId: randomUUID(), numTurns: 1, ...data,

@@ -5,11 +5,11 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -21,6 +21,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TASK_RUN_ACTION } from './task-run-receipt';
 import { TasksService } from './tasks.service';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * A reconcile pass must not report — or pay for — a dispatch it only replayed.
@@ -284,7 +285,7 @@ test('an auto-run whose session was CANCELLED is not replayed by the next reconc
     // A person stops the run: the task list's Stop, which cancels through SessionsService.
     assert.equal((await s.tasks.batchStop(ids.ownerId, [stopped])).stopped, 1);
     assert.equal(
-      (await s.db.session.findUniqueOrThrow({ where: { id: run.id } })).status,
+      wordOf((await s.db.session.findUniqueOrThrow({ where: { id: run.id } }))),
       RunStatus.CANCELLED,
     );
 

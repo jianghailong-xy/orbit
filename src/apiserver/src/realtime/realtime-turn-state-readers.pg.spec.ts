@@ -26,6 +26,8 @@ import { endIdleWorkOfDoneTask } from './parked-session-end';
 import { ReaperService } from './reaper.service';
 import { RealtimeService } from './realtime.service';
 import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -89,7 +91,7 @@ async function everyShape(
       : null;
     const { id } = await db.session.create({
       data: {
-        ownerId: ids.ownerId, creatorId: ids.ownerId, title, prompt: title, status: word, taskId,
+        ownerId: ids.ownerId, creatorId: ids.ownerId, title, prompt: title, turnState: turnStateOfWord(word), taskId,
         startsTaskWork: taskId !== null, dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude',
         providerBuiltin: true, workspaceId: workspace.id, assignedRunnerId: ids.runnerId, runtimeSessionId: randomUUID(),
         startedAt: new Date(Date.now() - 60 * 60_000), runClaimedAt: new Date(Date.now() - 60 * 60_000),
@@ -158,7 +160,7 @@ test('the reaper and realtime read the facts, and a row with no turn_state reads
         assert.deepEqual(now, before.get(row.id), `${row.title}: untouched`);
         continue;
       }
-      assert.deepEqual([now.status, now.turnState, now.lastTurnOutcome, now.error],
+      assert.deepEqual([wordOf(now), now.turnState, now.lastTurnOutcome, now.error],
         [RunStatus.FAILED, null, 'FAILED', 'runner offline'], row.title);
       assert.equal(published.get(row.id)?.status, RunStatus.FAILED, `${row.title}: the STATUS event`);
     }
@@ -188,7 +190,7 @@ test('the reaper and realtime read the facts, and a row with no turn_state reads
       }
       const queued = row.word === RunStatus.PENDING;
       assert.deepEqual(
-        [now.status, now.turnState, now.finishedAt != null, now.lastTurnOutcome, now.error, now.endReason, now.retryAt],
+        [wordOf(now), now.turnState, now.finishedAt != null, now.lastTurnOutcome, now.error, now.endReason, now.retryAt],
         [
           queued ? RunStatus.CANCELLED : RunStatus.FAILED, null, true,
           row.word === RunStatus.RUNNING ? 'CANCELLED' : null,

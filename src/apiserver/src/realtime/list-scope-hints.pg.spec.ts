@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { MessageEvent } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import type { Subscription } from 'rxjs';
 import { ControlEventType, uuidToBase62, type ControlEvent } from '@orbit/shared';
@@ -19,6 +20,7 @@ import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from '../sessions/sessions.service';
 import { OpenListHints } from './open-list-hints';
 import { RealtimeService } from './realtime.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * docs/list-freshness-scope-hints.md §5.1 and §8.2, the poller's side, against a real PostgreSQL: a stream that
@@ -86,7 +88,7 @@ async function session(
   await db.session.create({
     data: {
       id, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId, assignedRunnerId: f.runnerId, title: `lsh ${id.slice(0, 8)}`,
-      prompt: 'lsh', provider: 'claude', providerBuiltin: true, status: RunStatus.AWAITING_INPUT, startedAt: new Date(),
+      prompt: 'lsh', provider: 'claude', providerBuiltin: true, turnState: null, startedAt: new Date(),
       dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
     },
   });
@@ -452,7 +454,7 @@ test('soundness: whenever a tick sends no hint naming W, a since= read of W\'s c
       if (pending) await db.sessionScheduledWakeup.update({ where: { id: pending.id }, data: { state: 'CANCELLED' } });
       else await db.sessionScheduledWakeup.create({ data: { sessionId, delaySeconds: 600, reason: 'lsh', dueAt: new Date(Date.now() + 600_000) } });
     }],
-    ['a session queued or running', () => db.session.update({ where: { id: pick(live) }, data: { status: pick([RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT]) } })],
+    ['a session queued or running', () => db.session.update({ where: { id: pick(live) }, data: { turnState: turnStateOfWord(pick([RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT])) } })],
     ['a session completed or reopened', async () => {
       const id = any();
       const completing = live.includes(id);

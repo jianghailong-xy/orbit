@@ -27,6 +27,8 @@ import { isReleasedStatus } from '../common/session-release';
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from './coordinator-pg-test-safety';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import type { SessionFixture } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -94,12 +96,12 @@ async function task(o: Owner, projectId: string): Promise<string> {
   return row.id;
 }
 
-async function session(o: Owner, fields: Partial<Prisma.SessionUncheckedCreateInput>): Promise<string> {
-  const status = fields.status ?? 'AWAITING_INPUT';
+async function session(o: Owner, fields: SessionFixture): Promise<string> {
+  const { status = 'AWAITING_INPUT', ...fieldsFacts } = fields;
   const row = await o.h.db.session.create({
     data: {
       ownerId: o.id, creatorId: o.id, title: 'a session', prompt: 'p',
-      status, dispatchOrigin: 'USER', ...fields,
+      turnState: turnStateOfWord(status), dispatchOrigin: 'USER', ...fieldsFacts,
       ...(isReleasedStatus(status) ? { finishedAt: fields.finishedAt ?? new Date()} : {}),
     },
   });

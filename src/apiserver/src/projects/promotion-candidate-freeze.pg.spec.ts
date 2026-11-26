@@ -58,7 +58,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, TaskStatus, type Prisma, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, TaskStatus, type Prisma, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { IntegrationJobResultRequest } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -193,12 +194,12 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
         createdAt: when.createdAt,
         ...(when.finished
           ? {
-            status: RunStatus.SUCCEEDED, 
+            turnState: null, 
             finishedAt: when.finished,
             worktreeBranch: when.worktreeBranch ?? branch,
             worktreeDirty: when.worktreeDirty ?? false,
           }
-          : { status: RunStatus.RUNNING }),
+          : { turnState: 'IN_FLIGHT' }),
       },
     });
     return id;
@@ -229,14 +230,14 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
     if (moving.length > 0) {
       await tx.session.updateMany({
         where: { id: { in: moving } },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+        data: { turnState: null, finishedAt: new Date()},
       });
     }
     const queued = await enqueueForDoneTask(tx, ownerId, taskId);
     if (moving.length > 0) {
       await tx.session.updateMany({
         where: { id: { in: moving } },
-        data: { status: RunStatus.RUNNING, finishedAt: null},
+        data: { turnState: 'IN_FLIGHT', finishedAt: null},
       });
       await tx.task.update({ where: { id: taskId }, data: DELIVERED_IDENTITY_CLEARED });
     }
@@ -391,7 +392,7 @@ test('a candidate is not frozen before the work it offers has stopped moving', {
       await prisma.session.update({
         where: { id: runningSession },
         data: {
-          status: RunStatus.SUCCEEDED, 
+          turnState: null, 
           finishedAt: new Date(),
           worktreeBranch: runningBranch,
           worktreeDirty: false,

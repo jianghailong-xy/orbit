@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   AgentProvider,
   MANAGED_RUNNER_GENERATION_HEADER,
@@ -21,6 +21,8 @@ import { runnerLinkCredential } from '../runner-api/runner-link-token';
 import { managedRunnerWorld } from '../test-support/managed-runner-world';
 import { managedPodName } from './managed-runner-resources';
 import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -59,7 +61,7 @@ test('managed runner OOM recovery', { skip: !URL }, async (t) => {
         data: {
           ownerId, creatorId: ownerId, assignedRunnerId: runnerId, workspaceId: workspace.id,
           title: status, prompt: 'Run a turn', provider: 'claude', providerBuiltin: true, engine: AgentProvider.CLAUDE,
-          status, ...(status === RunStatus.RUNNING ? {
+          turnState: turnStateOfWord(status), ...(status === RunStatus.RUNNING ? {
             runtimeSessionId: randomUUID(), startedAt: w.now(), lastTurnAt: w.now(),
           } : {}),
         },
@@ -119,7 +121,7 @@ test('managed runner OOM recovery', { skip: !URL }, async (t) => {
       await db.runnerPresence.update({ where: { runnerId }, data: { lastBeatAt: lastBeat } });
       const reaper = new ReaperService(w.prisma, realtime);
       await (reaper as unknown as { sweep(): Promise<void> }).sweep();
-      assert.equal((await stateOf(running.id)).status, RunStatus.RUNNING);
+      assert.equal(wordOf((await stateOf(running.id))), RunStatus.RUNNING);
       assert.equal((await stateOf(running.id)).retryAt, null);
       assert.equal((await w.drive(ownerId)).at(-1), 'READY');
       assert.equal((await reclaim()).find((s) => s.sessionId === running.id)?.status, RunStatus.RUNNING);
@@ -132,15 +134,15 @@ test('managed runner OOM recovery', { skip: !URL }, async (t) => {
       assert.equal(await w.primary.reconcile(mapping.id), maxAttempts === 3 ? 'BACKOFF' : 'FAILED');
       for (const former of [running, alsoRunning]) {
         const interrupted = await stateOf(former.id);
-        assert.equal(interrupted.status, RunStatus.INTERRUPTED);
+        assert.equal(wordOf(interrupted), RunStatus.INTERRUPTED);
         assert.equal(interrupted.turnState, 'ABANDONED', 'the runner was stopped under the turn, beside the word');
         assert.equal(interrupted.error, 'Stopped because the machine ran out of memory twice while this turn was running. Send a message to continue.');
         assert.equal(interrupted.lastTurnOutcome, 'INTERRUPTED');
         assert.equal(interrupted.retryAt, null);
         assert.equal(interrupted.finishedAt, null, 'the conversation can still receive a message');
       }
-      assert.equal((await stateOf(idle.id)).status, RunStatus.AWAITING_INPUT);
-      assert.equal((await stateOf(pending.id)).status, RunStatus.PENDING);
+      assert.equal(wordOf((await stateOf(idle.id))), RunStatus.AWAITING_INPUT);
+      assert.equal(wordOf((await stateOf(pending.id))), RunStatus.PENDING);
       assert.equal((await w.mappingOf(ownerId)).concurrencyCap, 1);
       const nextAttempt = (await w.mappingOf(ownerId)).nextAttemptAt!;
       w.advance(nextAttempt.getTime() - w.now().getTime() + 1);

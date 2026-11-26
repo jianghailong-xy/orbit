@@ -14,7 +14,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -66,7 +67,7 @@ test('session guests: suggestions are the owner’s own past invitations, newest
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: where.workspaceId, assignedRunnerId: where.runnerId,
         title: 'suggest', prompt: 'suggest', provider: 'claude', providerBuiltin: true, model: 'claude-opus-4-1',
-        permissionMode: 'auto', dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        permissionMode: 'auto', dispatchOrigin: SessionDispatchOrigin.USER, turnState: null, numTurns: 1,
         engineTurnActive: false, runtimeSessionId: randomUUID(), startedAt: new Date(),
       },
     });

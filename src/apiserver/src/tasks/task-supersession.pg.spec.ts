@@ -19,7 +19,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { TaskStatus, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,6 +31,7 @@ import {
 import { TasksService } from './tasks.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -497,7 +499,7 @@ suite('task supersession, on real PostgreSQL', async (t) => {
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, taskId: old.id,
-        title: 'the attempt', prompt: 'p', status: RunStatus.FAILED, finishedAt: new Date(), endReason: 'error',
+        title: 'the attempt', prompt: 'p', turnState: null, finishedAt: new Date(), endReason: 'error',
       },
     });
 
@@ -505,7 +507,7 @@ suite('task supersession, on real PostgreSQL', async (t) => {
     await tasks.update(ownerId, old.id, { supersededByTaskId: fresh.id });
 
     const session = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(session.status, RunStatus.FAILED, 'the run is still recorded as having failed');
+    assert.equal(wordOf(session), RunStatus.FAILED, 'the run is still recorded as having failed');
     assert.equal(session.endReason, 'error');
     assert.equal(session.taskId, old.id, 'and it is still attached to the attempt it ran');
   });

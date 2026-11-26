@@ -31,7 +31,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type ClaimedSession, type PlanUsageSnapshot, type TurnCompleteRequest } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -163,12 +164,12 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
     (await sessions.create(who.id, { prompt: 'hello', title: pool.label, workspaceId: who.workspaceId, provider: pool.slug })).id;
   /** The runner asking for work — which has to be `sessionId` — leaving it RUNNING or parked, as a turn would. */
   async function claim(who: Person, sessionId: string, park = true): Promise<ClaimedSession> {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null, finishedAt: null} });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED', cancelRequestedAt: null, finishedAt: null} });
     const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
     assert.equal(claimed.agent.env?.OPENAI_BASE_URL, GATEWAY, 'a login pool session goes to the gateway, whatever its account');
-    if (park) await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    if (park) await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
     return claimed;
   }
   const sessionRow = (sessionId: string) =>
@@ -415,7 +416,7 @@ suite("a login pool's sessions: which ChatGPT account each runs on, and when the
     // B, with A spent — and that is where it starts, not a move.
     const live = (await db.session.create({
       data: {
-        title: 'switched onto the pool', prompt: 'hello', status: RunStatus.AWAITING_INPUT,
+        title: 'switched onto the pool', prompt: 'hello', turnState: null,
         ownerId: owner.id, creatorId: owner.id, workspaceId: owner.workspaceId, assignedRunnerId: owner.runnerId,
         provider: 'codex', providerBuiltin: true, model: 'gpt-5.5', permissionMode: 'default', usesRuntimeDefaultModel: true,
         numTurns: 1, runtimeSessionId: randomUUID(), startedAt: new Date(),

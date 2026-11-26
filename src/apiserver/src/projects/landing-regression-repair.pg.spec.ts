@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import type { ModuleRef } from '@nestjs/core';
-import { PrismaClient, ProjectStatus, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, ProjectStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -177,7 +178,7 @@ async function settledProject(db: PrismaClient, label: string, runs: Verificatio
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
   });
@@ -228,7 +229,7 @@ async function settledProject(db: PrismaClient, label: string, runs: Verificatio
       data: {
         id: sessionId, ownerId, creatorId: ownerId, taskId, workspaceId, assignedRunnerId: runnerId,
         title: `verify V${index + 2}`, prompt: 'git checkout --detach origin/project/<id>, then verify',
-        provider: 'claude', status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER,
+        provider: 'claude', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true, isolationStatus: 'worktree', branch, branchSha: run.branchSha, baseSha: run.baseSha,
         changedFiles: run.changedFiles as never, worktreeDirty: false, endReason: 'task_done',
         numTurns: 3, startedAt: new Date('2026-10-30T10:00:00.000Z'), createdAt: new Date('2026-10-30T10:00:00.000Z'),
@@ -513,7 +514,7 @@ test('(f) the scope review is not asked about a task with nothing of its own who
         data: {
           id: committedSession, ownerId: project.ownerId, creatorId: project.ownerId, taskId: committed,
           workspaceId: project.workspaceId, assignedRunnerId: project.runnerId, title: 'fix', prompt: 'fix',
-          provider: 'claude', status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER,
+          provider: 'claude', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true, isolationStatus: 'worktree', branch: 'orbit/fix-install', branchSha: sha('c'),
           baseSha: sha('9'), worktreeDirty: false, finishedAt: new Date(),
           changedFiles: [{ path: 'scripts/install.sh', status: 'M', additions: 5, deletions: 2 }],
@@ -580,7 +581,7 @@ test('(g) a project whose only misread task serves no criterion is not projected
         data: {
           id: randomUUID(), ownerId: project.ownerId, creatorId: project.ownerId, taskId: loose,
           workspaceId: project.workspaceId, assignedRunnerId: project.runnerId, title: 'measure', prompt: 'measure',
-          provider: 'claude', status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER,
+          provider: 'claude', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true, isolationStatus: 'worktree', branch: 'orbit/loose', baseSha: sha('3'),
           changedFiles: [], worktreeDirty: false, finishedAt: new Date('2026-10-01T10:00:00.000Z'),
         },

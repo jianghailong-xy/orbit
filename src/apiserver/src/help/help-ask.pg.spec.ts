@@ -226,7 +226,7 @@ test('Ask is a read-only session on a machine the person picks, in no workspace\
 
   await t.test('5. the claim hands an Ask only to a runner that declares help-ask/v1, read-only, with no workDir', async () => {
     // The ordinary session is claimed first by its own machine; take it out of the way.
-    await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "completed_at" = now() WHERE "id" = $1::uuid`, [ordinaryId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()), "completed_at" = now() WHERE "id" = $1::uuid`, [ordinaryId]);
     // The runner stops declaring it (a downgrade): the Ask waits.
     await sql.query(`UPDATE "runner" SET "capabilities" = '{source-pin/v1}' WHERE "id" = $1::uuid`, [ask.runnerId]);
     const refused = await api('GET', '/api/runner/sessions/claim', ask.token, undefined, { 'x-orbit-runner-capabilities': 'source-pin/v1' });

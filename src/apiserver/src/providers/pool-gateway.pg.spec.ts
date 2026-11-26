@@ -40,7 +40,8 @@ import test from 'node:test';
 
 import { Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type ClaimedSession, type TurnCompleteRequest } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
@@ -275,11 +276,11 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
   /** The runner asking for work — which has to be `sessionId` — leaving it RUNNING or parked, as a turn would. */
   async function claim(who: Person, sessionId: string, park = true): Promise<ClaimedSession> {
     // A failed run is revived as AutoRetryService's resume revives it: PENDING, and the cancel cleared.
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null, finishedAt: null} });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED', cancelRequestedAt: null, finishedAt: null} });
     const claimed = await queue.claimSessionForRunner({ id: who.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
-    if (park) await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    if (park) await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
     return claimed;
   }
   const tokenOf = (claimed: ClaimedSession) => claimed.agent.env!.OPENAI_API_KEY!;
@@ -404,9 +405,9 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
     assert.equal(seen.length, 0, 'a refused request reached OpenAI');
 
     // The session ends.
-    await db.session.update({ where: { id: maxSession }, data: { status: RunStatus.CANCELLED, finishedAt: new Date()} });
+    await db.session.update({ where: { id: maxSession }, data: { turnState: null, finishedAt: new Date()} });
     await refused(token, 'the session ended');
-    await db.session.update({ where: { id: maxSession }, data: { status: RunStatus.AWAITING_INPUT, completedAt: new Date(), finishedAt: null} });
+    await db.session.update({ where: { id: maxSession }, data: { turnState: null, completedAt: new Date(), finishedAt: null} });
     await refused(token, 'the session was completed');
     await db.session.update({ where: { id: maxSession }, data: { completedAt: null } });
     assert.equal((await ask(token)).status, 200, 'an open session again: its token is good again');

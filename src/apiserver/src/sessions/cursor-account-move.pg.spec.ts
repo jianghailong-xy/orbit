@@ -26,7 +26,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, PermissionMode, type RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -366,7 +367,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
         data: {
           id: kimi, ownerId: old.ownerId, creatorId: old.ownerId, workspaceId: old.workspaceId, assignedRunnerId: old.runnerId,
           title: 'kimi session', prompt: 'fix the flaky test', provider: AgentProvider.KIMI, providerBuiltin: true,
-          engine: AgentProvider.KIMI, status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          engine: AgentProvider.KIMI, turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           startedAt: new Date(), numTurns, runtimeSessionId: numTurns ? randomUUID() : null, kimiAccount: 'default',
         },
       });

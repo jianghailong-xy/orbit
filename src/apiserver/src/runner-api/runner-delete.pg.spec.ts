@@ -22,7 +22,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -83,7 +84,7 @@ test('a session deletes a runner or a workspace only on the owner\'s card, and t
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id, title: `${name} orchestrator`,
-        prompt: 'tidy up the runners', provider: 'claude', providerBuiltin: true, status: RunStatus.AWAITING_INPUT,
+        prompt: 'tidy up the runners', provider: 'claude', providerBuiltin: true, turnState: null,
         runtimeSessionId: randomUUID(), startedAt: new Date(), runClaimedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });

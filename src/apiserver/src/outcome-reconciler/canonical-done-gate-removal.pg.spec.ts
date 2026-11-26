@@ -334,8 +334,8 @@ suite('(o)-(r) the machinery beside this removal is intact and still writable', 
     [taskId, seeded.ownerId, seeded.projectId, workspaceId]);
   await client.query(
     `INSERT INTO "session" ("id","owner_id","creator_id","task_id","workspace_id",
-                            "assigned_runner_id","title","prompt","provider","status","updated_at")
-     VALUES ($1,$2,$2,$3,$4,$5,'removal session','run it','claude','PENDING'::"run_status",now())`,
+                            "assigned_runner_id","title","prompt","provider","turn_state","updated_at")
+     VALUES ($1,$2,$2,$3,$4,$5,'removal session','run it','claude','QUEUED',now())`,
     [sessionId, seeded.ownerId, taskId, workspaceId, runnerId]);
   await client.query(
     `INSERT INTO "run_event" ("id","session_id","seq","type","payload")

@@ -48,11 +48,11 @@ import {
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import {
@@ -77,6 +77,7 @@ import { TaskOwnerConfirmationController } from './task-owner-confirmation.contr
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
 import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const suite = URL ? test : test.skip;
@@ -182,7 +183,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         title: 'the project coordinator',
         prompt: 'read the ledger and decide',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
       },
@@ -423,7 +424,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         title: '整理 9 月发票并归档',
         prompt: 'file the September invoices',
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
         startedAt: new Date(),
@@ -449,7 +450,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         },
         update: { status: 'IN_FLIGHT', deliveredAt: new Date() },
       });
-      await db.session.update({ where: { id: runSessionId }, data: { status: RunStatus.RUNNING } });
+      await db.session.update({ where: { id: runSessionId }, data: { turnState: 'IN_FLIGHT' } });
       await db.runEvent.create({
         data: { sessionId: runSessionId, seq, type: 'assistant', payload: { text: report }, turnId },
       });
@@ -520,7 +521,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         data: {
           id: failedSessionId, ownerId, creatorId: ownerId, taskId: failedTaskId, workspaceId,
           assignedRunnerId: runnerId, title: 'a run that fails', prompt: 'fail', provider: 'claude',
-          status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
           startedAt: new Date(),
         },
       });
@@ -570,7 +571,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
           data: {
             id: busySessionId, ownerId, creatorId: ownerId, taskId: busyTaskId, workspaceId,
             assignedRunnerId: runnerId, title: 'a run with more to do', prompt: 'do the work',
-            provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+            provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
             startsTaskWork: true, startedAt: new Date(),
           },
         });
@@ -596,7 +597,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
           await db.conversationTurn.update({
             where: { id: turnId }, data: { status: 'IN_FLIGHT', deliveredAt: new Date() },
           });
-          await db.session.update({ where: { id: busySessionId }, data: { status: RunStatus.RUNNING } });
+          await db.session.update({ where: { id: busySessionId }, data: { turnState: 'IN_FLIGHT' } });
           await db.runEvent.create({
             data: {
               sessionId: busySessionId, seq: 1000 + (seq++), type: RunEventType.ASSISTANT,
@@ -619,7 +620,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         // pause the card used to be drawn in — "it stopped, so it must be finished".
         const firstTurnId = await queueMessage('start');
         await endTurn(firstTurnId, FIRST_REPORT);
-        assert.equal((await busySession()).status, RunStatus.AWAITING_INPUT, 'the run parked');
+        assert.equal(wordOf((await busySession())), RunStatus.AWAITING_INPUT, 'the run parked');
         assert.equal(await asking(), null, 'a run that never declared asks nobody');
 
         // (b) The run declares while it still has work queued: the question waits for the run to
@@ -633,7 +634,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         const declared = await runnerDoor.claim(runner, busyTaskId, busySessionId);
         assert.equal(declared.turnId, secondTurnId, 'declared in the turn that is in flight');
         await endTurn(secondTurnId, SECOND_REPORT);
-        assert.equal((await busySession()).status, RunStatus.RUNNING, 'the slot passes to the follow-up');
+        assert.equal(wordOf((await busySession())), RunStatus.RUNNING, 'the slot passes to the follow-up');
         assert.equal(await asking(), null, 'a declared run that is still working has not finished');
 
         // (c) The follow-up ends with a job of its own in flight: still nobody — that job's wake
@@ -729,7 +730,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         data: {
           id: executableSessionId, ownerId, creatorId: ownerId, taskId: executableTaskId, workspaceId,
           assignedRunnerId: runnerId, title: 'a task that compares an exit code', prompt: 'run it',
-          provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+          provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true, startedAt: new Date(),
         },
       });
@@ -907,7 +908,7 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         data: {
           id: filedSessionId, ownerId, creatorId: ownerId, taskId: filedTaskId, workspaceId,
           assignedRunnerId: runnerId, title: 'filed by the coordinator', prompt: 'do it', provider: 'claude',
-          status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
           startedAt: new Date(),
         },
       });

@@ -25,6 +25,7 @@ import { LEGACY_STATUS_SELECT, legacySessionStatus, statusWordFilter } from './s
 import { withSessionState } from './session-state';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
 import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -96,11 +97,11 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
         data: { ownerId, creatorType: 'USER', creatorId: ownerId, title: shape.name, projectId: project.id, completionCriterion: 'EVIDENCE_JUDGMENT' },
       })
       : null;
-    const { turnState: _fromTheWord, status: _asStored, ...facts } = shape.facts;
+    const { turnState: _fromTheWord, ...facts } = shape.facts;
     // Through the stored word alone for turn_state: the D1 trigger keeps it, as every writer today leaves it.
     const { id } = await db.session.create({
       data: {
-        ownerId, creatorId: ownerId, title: shape.name, prompt: 'words', status: shape.stored,
+        ownerId, creatorId: ownerId, title: shape.name, prompt: 'words', turnState: turnStateOfWord(shape.stored),
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...(landing
           ? { provider: 'orbit', providerBuiltin: true, startsTaskWork: false }
@@ -155,7 +156,7 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
     for (const word of HELD_WORDS) {
       const { id } = await db.session.create({
         data: {
-          ownerId, creatorId: ownerId, title: `unfilled ${word}`, prompt: 'words', status: word,
+          ownerId, creatorId: ownerId, title: `unfilled ${word}`, prompt: 'words', turnState: turnStateOfWord(word),
           dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude', providerBuiltin: true,
           workspaceId: workspace.id, assignedRunnerId: runnerId, startedAt: new Date(),
         },

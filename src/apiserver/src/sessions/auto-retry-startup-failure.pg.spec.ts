@@ -30,7 +30,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -174,7 +175,7 @@ function connect(url: string): Harness {
           title: `${label} 的会话`,
           prompt: '把这两张图里的报错讲清楚',
           provider: 'claude',
-          status: RunStatus.RUNNING,
+          turnState: 'IN_FLIGHT',
           engineTurnActive: true,
           dispatchOrigin: SessionDispatchOrigin.USER,
           startedAt: new Date(),
@@ -296,7 +297,7 @@ async function claimed(h: Harness, sessionId: string): Promise<void> {
   try {
     await h.sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
     await h.sql.query(
-      `UPDATE "session" SET status = 'RUNNING', inbox_lease_owner = gen_random_uuid()
+      `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', inbox_lease_owner = gen_random_uuid()
         WHERE id = $1::uuid`,
       [sessionId],
     );

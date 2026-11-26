@@ -27,7 +27,8 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { RunnerStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -184,7 +185,7 @@ test('Feishu: a group session asks the owner in private and answers the group wi
     try {
       await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
       await sql.query(
-        `UPDATE "session" SET "status" = 'RUNNING', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
+        `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
                 "inbox_lease_generation" = $4::uuid, "started_at" = coalesce("started_at", now()),
                 "engine_turn_active" = $5, "runtime_session_id" = coalesce("runtime_session_id", $6)
           WHERE "id" = $1::uuid`,
@@ -270,7 +271,7 @@ test('Feishu: a group session asks the owner in private and answers the group wi
         const session = await db.session.create({
           data: {
             ownerId, creatorId: ownerId, workspaceId: personal.id, assignedRunnerId: runnerId, title, prompt: title, provider: 'claude',
-            status: RunStatus.AWAITING_INPUT, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER,
+            turnState: null, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER,
           },
         });
         await db.conversationTurn.create({
@@ -333,7 +334,7 @@ test('Feishu: a group session asks the owner in private and answers the group wi
       turnId, leaseOwner: lease.owner, status: 'SUCCEEDED', result: 'done', numTurns: 1, costUsd: 0,
     });
     assert.equal(done.status, 200, done.text);
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [sessionId]);
   }
   const sentOutbox = (turnId: string) => until(`the reply of turn ${turnId} sent`, async () => {
     const row = await db.feishuOutbox.findUnique({ where: { turnId } });

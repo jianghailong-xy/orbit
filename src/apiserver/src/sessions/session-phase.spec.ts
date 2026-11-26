@@ -15,6 +15,7 @@ import {
   type SessionHoldFacts,
   type SessionPhaseRow,
 } from './session-phase';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * Plan step 5.1 (docs/session-three-state-plan.md §8): `phase` and `waitingOn` are decided by one function each
@@ -40,6 +41,8 @@ const HOLDS = {
 
 interface Case {
   key: string;
+  /** The word the case's facts stand for. */
+  status: string;
   row: SessionPhaseRow;
   hold: SessionHoldFacts;
   owed: number;
@@ -59,8 +62,9 @@ function combinations(): Case[] {
         for (const [holdKind, { error, hold }] of Object.entries(HOLDS) as Array<[keyof typeof HOLDS, typeof HOLDS[keyof typeof HOLDS]]>) {
           cases.push({
             key: `${status}|${Object.entries(facts).filter(([, on]) => on).map(([name]) => name).join('+') || '-'}|owed ${owed}|${holdKind}`,
+            status,
             row: {
-              status: status as SessionPhaseRow['status'],
+              turnState: turnStateOfWord(status),
               finishedAt: RELEASED.has(status) ? AT : null,
               engineTurnActive: facts.engine,
               runningSubagents: facts.subagent ? ['toolu_sub'] : [],
@@ -86,7 +90,7 @@ function combinations(): Case[] {
 /** The rule as the design and the coordinator's ruling of 2026-11-22 state it, with the owner's of 2026-11-26: a
  *  released session an armed retry will re-send is RUNNING, and still waits on that wake. */
 function expected(c: Case): { phase: string; waitingOn: string | null } {
-  const status = c.row.status!;
+  const status = c.status;
   const executing = status === 'RUNNING' || (OPEN.has(status) && (c.facts.engine || c.facts.subagent || c.facts.job));
   const retrying = RELEASED.has(status) && c.facts.retry;
   const phase = executing || retrying ? 'RUNNING' : status === 'PENDING' ? 'PENDING' : 'IDLE';
@@ -126,7 +130,7 @@ test('the invariants hold on every combination', () => {
     assert.ok(fields.waitingOn === null || (SESSION_WAITING_ON as readonly string[]).includes(fields.waitingOn), c.key);
     // released is the release column; a released session is IDLE, or RUNNING while an armed retry will re-send it
     // (design §4.2, amended 2026-11-26).
-    assert.equal(fields.released, RELEASED.has(c.row.status!), c.key);
+    assert.equal(fields.released, RELEASED.has(c.status), c.key);
     if (fields.released) assert.equal(fields.phase, c.row.retryAt != null ? 'RUNNING' : 'IDLE', c.key);
     // A held RUNNING session waits on a person or on nothing; a released one on a person or its retry's wake; a hold is
     // a queued turn's; a wake is an idle session's, or a released one's that its retry will re-send.
@@ -139,11 +143,11 @@ test('the invariants hold on every combination', () => {
 });
 
 test('the shapes the ruling names answer as it says', () => {
-  const base: SessionPhaseRow = { status: 'AWAITING_INPUT', finishedAt: null };
+  const base: SessionPhaseRow = { turnState: null, finishedAt: null };
   // A parked conversation that asked for nothing waits on nobody.
   assert.equal(deriveSessionWaitingOn(base, NO_HOLD, 0), null);
   // A released session: nothing, unless a retry is armed.
-  const failed: SessionPhaseRow = { status: 'FAILED', finishedAt: AT };
+  const failed: SessionPhaseRow = { turnState: null, finishedAt: AT };
   assert.equal(deriveSessionWaitingOn(failed, NO_HOLD, 0), null);
   assert.equal(deriveSessionWaitingOn({ ...failed, retryAt: AT }, NO_HOLD, 0), 'WAKE');
   // Waiting for that retry counts as running (the owner, 2026-11-26); a held session's armed retry does not.
@@ -156,7 +160,7 @@ test('the shapes the ruling names answer as it says', () => {
   assert.equal(deriveSessionWaitingOn({ ...crashed, hasPendingWakeup: true }, NO_HOLD, 0), 'WAKE');
   assert.equal(deriveSessionWaitingOn({ ...crashed, hasPendingWakeup: true, completedAt: AT }, NO_HOLD, 0), null);
   assert.equal(deriveSessionWaitingOn({ ...crashed, hasResumeWatch: true }, NO_HOLD, 0), null);
-  const ended: SessionPhaseRow = { status: 'CANCELLED', finishedAt: AT, endReason: 'ended', lastTurnOutcome: 'ANSWERED' };
+  const ended: SessionPhaseRow = { turnState: null, finishedAt: AT, endReason: 'ended', lastTurnOutcome: 'ANSWERED' };
   assert.equal(deriveSessionWaitingOn({ ...ended, hasPendingWakeup: true, hasResumeWatch: true }, NO_HOLD, 0), null);
   assert.equal(sessionWakes({ ...crashed, hasPendingWakeup: true }), true);
   // Beside PERSON: a held idle session with an owner request open and a watch armed still wakes.
@@ -175,19 +179,19 @@ test('phase reads the turn state, and the stored word only for a held row withou
   assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'IN_FLIGHT' }), 'RUNNING');
   assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'QUEUED' }), 'PENDING');
   assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'ABANDONED' }), 'IDLE');
-  assert.equal(deriveSessionPhase({ status: 'PENDING', finishedAt: null, turnState: 'IN_FLIGHT' }), 'RUNNING');
+  assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'IN_FLIGHT' }), 'RUNNING');
   // Not yet backfilled: the stored word.
-  assert.equal(deriveSessionPhase({ status: 'PENDING', finishedAt: null, turnState: null }), 'PENDING');
-  assert.equal(deriveSessionPhase({ status: 'RUNNING', finishedAt: null }), 'RUNNING');
+  assert.equal(deriveSessionPhase({ finishedAt: null, turnState: null }), 'PENDING');
+  assert.equal(deriveSessionPhase({ turnState: 'IN_FLIGHT', finishedAt: null }), 'RUNNING');
   // Neither: parked. Released: IDLE whatever the rest says.
   assert.equal(deriveSessionPhase({ finishedAt: null, turnState: null }), 'IDLE');
-  assert.equal(deriveSessionPhase({ status: 'RUNNING', finishedAt: AT, turnState: 'IN_FLIGHT' }), 'IDLE');
+  assert.equal(deriveSessionPhase({ finishedAt: AT, turnState: 'IN_FLIGHT' }), 'IDLE');
   // A queued turn held by the dispatch pause is HOLD, on the turn state alone.
   assert.equal(deriveSessionWaitingOn({ finishedAt: null, turnState: 'QUEUED' }, { ...NO_HOLD, dispatchPaused: true }, 0), 'HOLD');
 });
 
 test('lastTurnOutcome passes the column through, and nothing else', () => {
-  const row: SessionPhaseRow = { status: 'AWAITING_INPUT', finishedAt: null };
+  const row: SessionPhaseRow = { turnState: null, finishedAt: null };
   for (const outcome of SESSION_TURN_OUTCOMES) {
     assert.equal(sessionPhaseFields({ ...row, lastTurnOutcome: outcome }, NO_HOLD, 0).lastTurnOutcome, outcome);
   }

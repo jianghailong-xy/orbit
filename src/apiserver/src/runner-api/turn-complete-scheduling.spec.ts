@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { buildCoordinatorDeliveryContextKey } from '../projects/coordinator-opening';
 import { currentWorkTerminalizationDouble, noSessionRequests } from '../test-support/prisma-transaction-double';

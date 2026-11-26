@@ -52,7 +52,8 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { json } from 'express';
-import { type PrismaClient, RunStatus } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import {
   MANAGED_RUNNER_GENERATION_HEADER,
@@ -96,6 +97,7 @@ import { assignRunnerRelease, loadRunnerReleasePolicy, RUNNER_RELEASE_POLICY_FIL
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerReleaseFeed } from './runner-release-feed';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -367,7 +369,7 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status,
+        turnState: turnStateOfWord(status),
         ...(isReleasedStatus(status) ? {
           finishedAt: new Date(),
         } : {}),

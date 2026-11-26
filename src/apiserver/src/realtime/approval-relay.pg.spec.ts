@@ -31,7 +31,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -157,7 +158,7 @@ test('an approval card too big for its notification reaches the streams on the o
   await prisma.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: 'Seed the fixtures',
-      prompt: 'seed the order fixtures', provider: 'claude', status: RunStatus.RUNNING, engineTurnActive: true,
+      prompt: 'seed the order fixtures', provider: 'claude', turnState: 'IN_FLIGHT', engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(), runtimeSessionId: randomUUID(),
     },
   });

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { RunStatus, RunnerStatus } from '@prisma/client';
+import { RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, PermissionMode } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -17,6 +18,8 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { CURSOR_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * Migration 0426's runner gate against a real server, through the real claim, reclaim and lease routes:
@@ -78,7 +81,7 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
         title: 'cursor', prompt: '', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: id,
         provider: opts.provider ?? AgentProvider.CURSOR, providerBuiltin: true,
         engine: opts.engine === undefined ? AgentProvider.CURSOR : opts.engine,
-        status: opts.status ?? RunStatus.PENDING, usesRuntimeDefaultModel: true,
+        turnState: turnStateOfWord(opts.status ?? RunStatus.PENDING), usesRuntimeDefaultModel: true,
         model: (opts.provider ?? AgentProvider.CURSOR) === AgentProvider.CURSOR ? 'default[]' : null,
         permissionMode: PermissionMode.ACCEPT_EDITS,
       } })).id;
@@ -115,7 +118,7 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
     await f.beat(CURRENT);
     for (const declaration of [undefined, LEGACY]) {
       assert.equal(await f.poll(declaration), null);
-      assert.equal((await row(id)).status, RunStatus.PENDING);
+      assert.equal(wordOf((await row(id))), RunStatus.PENDING);
       assert.equal((await row(id)).error, CURSOR_RUNNER_UPGRADE_ERROR);
     }
     assert.equal(await f.claim(LEGACY), null);
@@ -124,7 +127,7 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
     assert.equal(job?.provider, AgentProvider.CURSOR);
     assert.equal(job?.agent.provider, AgentProvider.CURSOR);
     assert.equal(job?.agent.permissionMode, PermissionMode.ACCEPT_EDITS);
-    assert.equal((await row(id)).status, RunStatus.RUNNING);
+    assert.equal(wordOf((await row(id))), RunStatus.RUNNING);
     assert.equal((await row(id)).error, null, 'the claim clears the upgrade notice');
   });
 
@@ -271,7 +274,7 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
       assert.equal(job?.provider, engine);
       assert.equal(await rawUpdate(id, "status = 'AWAITING_INPUT'"), 1);
     }
-    assert.equal((await row(cursor)).status, RunStatus.PENDING);
+    assert.equal(wordOf((await row(cursor))), RunStatus.PENDING);
     assert.equal((await row(cursor)).error, null, 'the queue never held it for another runtime');
     // The capability gates of the others are untouched: OpenCode still needs its own declaration.
     const opencode = await f.session({ provider: AgentProvider.OPENCODE, engine: AgentProvider.OPENCODE });
@@ -281,6 +284,6 @@ test('P1 Cursor CLI runner gate on PostgreSQL', { timeout: 300_000 }, async (t) 
     await f.beat(CURRENT);
     const next = await f.claim(withoutOpenCode);
     assert.equal(next?.sessionId, cursor, 'the Cursor CLI session goes to a runner that declares it');
-    assert.equal((await row(opencode)).status, RunStatus.PENDING);
+    assert.equal(wordOf((await row(opencode))), RunStatus.PENDING);
   });
 });

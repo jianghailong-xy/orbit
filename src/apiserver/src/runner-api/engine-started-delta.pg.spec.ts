@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -73,7 +74,7 @@ test('a streamed delta stamps engineStartedAt and announces it; the runner\'s ow
     return db.session.create({
       data: {
         ownerId, creatorId: ownerId, assignedRunnerId: runnerId, provider: 'claude', model: null,
-        title: 'engine-started session', prompt: 'hello', status: RunStatus.RUNNING,
+        title: 'engine-started session', prompt: 'hello', turnState: 'IN_FLIGHT',
         engineStartedAt: null, dispatchOrigin: SessionDispatchOrigin.USER,
       },
       select: { id: true },

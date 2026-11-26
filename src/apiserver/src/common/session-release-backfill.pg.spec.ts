@@ -40,6 +40,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { prismaClientFor } from '../prisma/prisma-client';
 import { releaseWasFailure, releaseWasFailureSql } from './session-release';
 import { backfilled, RELEASE_SHAPES, type ReleaseShape } from './session-release-shapes.fixture';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -287,7 +288,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
     const asker = randomUUID();
     await db.session.create({ data: {
       id: asker, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: 'asker', prompt: 'ask',
-      status: 'AWAITING_INPUT', provider: 'claude', providerBuiltin: true, engine: 'claude', assignedRunnerId: w.runnerId,
+      turnState: null, provider: 'claude', providerBuiltin: true, engine: 'claude', assignedRunnerId: w.runnerId,
     } });
     for (const row of rows) {
       const { shape } = row;
@@ -297,7 +298,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
       await db.session.create({
         data: {
           id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: row.label, prompt: shape.what,
-          status: shape.status,
+          turnState: turnStateOfWord(shape.status),
           ...(landing
             ? { sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, engine: null, startsTaskWork: false }
             : { provider: 'claude', providerBuiltin: true, engine: 'claude', assignedRunnerId: w.runnerId }),
@@ -387,7 +388,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
       assert.equal(stored.status, row.shape.status, `${row.label}: the status is not written`);
       assert.equal(stored.failed, releaseWasFailure({
         finishedAt: stored.finished_at, endReason: stored.end_reason, lastTurnOutcome: stored.last_turn_outcome,
-        status: stored.status,
+        turnState: turnStateOfWord(stored.status),
       }), `${row.label}: the SQL and the predicate agree`);
       if (stored.failed !== deploy2.get(row.label)) differences.push(row.label);
       // The turns: the carrying one got FAILED and the session's error; every other one is as it was.

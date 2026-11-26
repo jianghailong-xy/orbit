@@ -17,7 +17,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider } from '@prisma/client';
+import { PrismaClient, RunnerStatus, type ModelProvider } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -112,7 +113,7 @@ async function queuedSession(db: PrismaClient, who: Owner, provider: string): Pr
     data: {
       title: 'pool',
       prompt: 'hello',
-      status: RunStatus.PENDING,
+      turnState: 'QUEUED',
       ownerId: who.id,
       creatorId: who.id,
       workspaceId: who.workspaceId,
@@ -165,7 +166,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
   }
   /** The session's next message queued, which is what has the runner claim it again. */
   async function nextTurn(sessionId: string): Promise<void> {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED' } });
   }
   const token = (claimed: ClaimedSession) => claimed.agent.env?.ANTHROPIC_AUTH_TOKEN;
   const recorded = (sessionId: string) =>

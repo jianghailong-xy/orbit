@@ -5,11 +5,11 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -163,7 +163,7 @@ const workRuns = (db: PrismaClient, taskId: string) =>
 async function failRun(db: PrismaClient, sessionId: string, error: string | null): Promise<void> {
   await db.session.update({
     where: { id: sessionId },
-    data: { status: RunStatus.FAILED, error, finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
+    data: { turnState: null, error, finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
   });
 }
 
@@ -407,7 +407,7 @@ test('a run somebody stopped is not retried, a CANCELLED run nobody asked for is
     // a cancel it reports on its own, with no end reason and no filing.
     await s.db.session.update({
       where: { id: droppedRun.id },
-      data: { status: RunStatus.CANCELLED, finishedAt: new Date() },
+      data: { turnState: null, finishedAt: new Date() },
     });
     const ended = new Map((await s.db.session.findMany({
       where: { id: { in: [stoppedRun.id, filedRun.id, droppedRun.id] } },

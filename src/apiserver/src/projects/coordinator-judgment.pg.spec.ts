@@ -6,12 +6,12 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -136,7 +136,7 @@ async function deliveryWorld(db: PrismaClient, label: string) {
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId,
       assignedRunnerId: runnerId, title: `coordinator: ${label}`, prompt: `coordinator: ${label}`,
-      provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER, titleManagedByProject: true, numTurns: 1,
       startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -711,7 +711,7 @@ test('an exception item delivered to the coordinator records its facts beside th
         data: {
           id: landedSessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId,
           assignedRunnerId: w.runnerId, taskId: landed.taskId, title: 'landed', prompt: 'landed',
-          provider: 'claude', status: RunStatus.SUCCEEDED, finishedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
+          provider: 'claude', turnState: null, finishedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
           branch: 'orbit/item-card',
         },
       });

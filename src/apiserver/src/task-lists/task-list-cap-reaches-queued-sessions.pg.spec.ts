@@ -43,6 +43,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TaskListsService } from './task-lists.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 /** Emails are unique and this database can outlive one run. */
@@ -148,7 +149,7 @@ async function seedSession(
       assignedRunnerId: ids.runnerId,
       batchId: listId,
       batchMaxConcurrent: cap,
-      status,
+      turnState: turnStateOfWord(status),
       ...(status === 'SUCCEEDED' ? { finishedAt: new Date()} : {}),
       ...(status === 'RUNNING' ? { startedAt: new Date() } : {}),
     },

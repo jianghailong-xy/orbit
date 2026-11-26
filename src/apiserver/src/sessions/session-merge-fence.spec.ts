@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { SESSION_MERGE_BESIDE_TURN_V1, SESSION_MERGE_RECOVERY_V1, type MergeRecovery } from '@orbit/shared';
 import { SessionsService } from './sessions.service';

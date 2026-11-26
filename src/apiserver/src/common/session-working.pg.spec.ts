@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { Prisma, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
@@ -20,6 +21,7 @@ import {
   type SessionWorkingRow,
 } from './session-working';
 import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * The three questions of common/session-working.ts answer alike in all three forms — TypeScript
@@ -42,7 +44,7 @@ const skip = !URL;
 
 const BITS = ['engine', 'subagent', 'job', 'shell', 'watch', 'wakeup', 'retry'] as const;
 type Bit = (typeof BITS)[number];
-const NOT_ENDED = new Set<RunStatus>(['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED']);
+const NOT_ENDED = new Set<string>(['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED']);
 
 interface Fixture {
   id: string;
@@ -86,7 +88,7 @@ test('predicate, Prisma filter and SQL fragment agree on every status and fact c
     await db.session.createMany({
       data: fixtures.map((f) => ({
         id: f.id, ownerId, creatorId: ownerId, title: 'session-working', prompt: 'p', provider: 'claude',
-        status: f.status, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: turnStateOfWord(f.status), dispatchOrigin: SessionDispatchOrigin.USER,
         ...(isReleasedStatus(f.status) ? {
           finishedAt: new Date(),
         } : {}),
@@ -164,7 +166,7 @@ test('predicate, Prisma filter and SQL fragment agree on every status and fact c
       },
     });
     const rows = new Map(fetched.map((r): [string, SessionWorkingRow] => [r.id, {
-      status: r.status, finishedAt: r.finishedAt, turnState: r.turnState,
+      finishedAt: r.finishedAt, turnState: r.turnState,
       engineTurnActive: r.engineTurnActive, runningSubagents: r.runningSubagents,
       runningBgJobs: r.runningBgJobs, retryAt: r.retryAt,
       hasResumeWatch: r._count.observingWatches > 0, hasPendingWakeup: r._count.scheduledWakeups > 0,

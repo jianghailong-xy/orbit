@@ -30,12 +30,12 @@ import {
   type Prisma,
   type PrismaClient,
   type Runner,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -152,7 +152,7 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         ...data,
@@ -251,7 +251,7 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
    * comes out — a control turn is handed out first and answered on the spot.
    */
   async function deliver(sessionId: string): Promise<{ turnId: string; content: string }> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await prisma.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     for (;;) {
       const handed = await (api as unknown as {
         dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<Record<string, unknown> | null>;
@@ -587,7 +587,7 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
   await t.test('a run\'s notify handed to the coordinator (runNotice)', async () => {
     const { projectId, coordinator } = await coordinatedProject('run notice parity');
     const taskId = await task('the run that notifies', { projectId });
-    const run = await session('Notifying run', { taskId, status: RunStatus.RUNNING });
+    const run = await session('Notifying run', { taskId, turnState: 'IN_FLIGHT'});
     const requestId = randomUUID();
     const clientTurnId = `run-notify:v1:${requestId}`;
     const turn = await sessions.createTurn(ownerId, coordinator, { clientTurnId, content: '', intent: 'NEXT_TURN' }, {
@@ -636,7 +636,7 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
   await t.test('a run question handed to the coordinator (runQuestion)', async () => {
     const { projectId, coordinator } = await coordinatedProject('run question parity');
     const taskId = await task('the run question', { projectId });
-    const run = await session('Questioning run', { taskId, status: RunStatus.RUNNING });
+    const run = await session('Questioning run', { taskId, turnState: 'IN_FLIGHT'});
     const approval = await prisma.approval.create({ data: { sessionId: run, toolName: 'AskUserQuestion',
       input: { questions: [{ question: 'Which port?', options: [{ label: '3000' }, { label: '4000' }] }] } } });
     const clientTurnId = `run-question:v1:${approval.id}`;

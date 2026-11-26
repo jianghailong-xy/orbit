@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { CreatorType, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -74,7 +75,7 @@ async function world(db: PrismaClient, label: string, lastOutputAgoMs: number) {
     data: {
       id: ids.sessionId, ownerId: ids.ownerId, creatorId: ids.ownerId, taskId: ids.taskId,
       workspaceId: ids.workspaceId, assignedRunnerId: ids.runnerId, title: `${label} run`,
-      prompt: 'the task brief', provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      prompt: 'the task brief', provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       startedAt: new Date(Date.now() - 60 * 60_000), numTurns: 1,
       runningBgShells: ['bgj_build'],

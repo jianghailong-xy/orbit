@@ -24,7 +24,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { RunInboxResponse } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -85,7 +86,7 @@ async function liveSession(db: PrismaClient, ownerId: string, on: Machine, provi
     data: {
       title: 'live',
       prompt: 'hello',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       ownerId,
       creatorId: ownerId,
       workspaceId: on.workspaceId,

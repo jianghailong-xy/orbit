@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus, TaskStatus } from '@prisma/client';
+import { TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RUNNER_REAP_AFTER_MS, ReaperService } from './reaper.service';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';

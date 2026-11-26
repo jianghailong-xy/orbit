@@ -35,13 +35,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { PrismaClient, RunnerStatus, RunStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RELEASE_SHAPES, type ReleaseShape } from '../common/session-release-shapes.fixture';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { deriveSessionPhase } from './session-phase';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -90,7 +92,7 @@ function expected(row: Stored): { turn_state: string | null; phase: string } {
   return {
     turn_state: turnStateOf(row.status),
     phase: deriveSessionPhase({
-      status: row.status as RunStatus, finishedAt: row.finished_at, engineTurnActive: row.engine_turn_active,
+      turnState: turnStateOfWord(row.status as RunStatus), finishedAt: row.finished_at, engineTurnActive: row.engine_turn_active,
       runningSubagents: row.running_subagents, runningBgJobs: row.running_bg_jobs, retryAt: row.retry_at,
     }),
   };
@@ -134,7 +136,7 @@ async function insertShape(db: PrismaClient, w: World, shape: ReleaseShape, fact
   await db.session.create({
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: shape.name, prompt: shape.what,
-      status: shape.status,
+      turnState: turnStateOfWord(shape.status),
       ...(landing
         ? { sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, engine: null, startsTaskWork: false }
         : { provider: 'claude', providerBuiltin: true, engine, assignedRunnerId: w.runnerId }),
@@ -293,7 +295,7 @@ test('D1: turn_state and phase kept from the word by triggers, the backfill and 
     // The claim on an engine row: an older replica's (no declaration) is skipped whole by the guard, so the row keeps
     // QUEUED and PENDING; the current claim's declaration lets it through, to IN_FLIGHT and RUNNING.
     const queued = await insertShape(db, w, HELD[0], none, 'claude');
-    const claim = `UPDATE "session" SET "status" = 'RUNNING' WHERE "id" = $1::uuid`;
+    const claim = `UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE "id" = $1::uuid`;
     assert.equal((await sql.query(claim, [queued])).rowCount, 0, 'the guard skips the claim');
     assert.deepEqual(await read(queued).then((r) => [r.status, r.turn_state, r.phase]), ['PENDING', 'QUEUED', 'PENDING']);
     await sql.query('BEGIN');

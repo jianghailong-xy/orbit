@@ -30,7 +30,8 @@ import { test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { type Prisma, RunStatus, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { type Prisma, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -56,6 +57,8 @@ import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 import { TaskListsService } from '../task-lists/task-lists.service';
 import { TasksService } from '../tasks/tasks.service';
 import { SessionsService } from './sessions.service';
+import type { SessionFixture } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -204,21 +207,21 @@ test('a session stops a wider run from its task’s side only as the table says'
   }
   await accountDefault(null);
 
-  type Shape = Partial<Prisma.SessionUncheckedCreateInput>;
+  type Shape = SessionFixture;
 
   /** A session parked between turns, in a mode and on an engine. A stored mode of null is written as null. */
   async function sessionIn(mode: string | null, extra: Shape = {}): Promise<string> {
     const id = randomUUID();
     const engine = extra.engine ?? 'claude';
-    const fixtureStatus = extra.status ?? RunStatus.AWAITING_INPUT;
+    const { status: fixtureStatus = RunStatus.AWAITING_INPUT, ...extraFacts } = extra;
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: `${mode} ${id.slice(-6)}`, prompt: `${mode}`,
         provider: engine, providerBuiltin: true, engine, permissionMode: mode,
-        status: RunStatus.AWAITING_INPUT, numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
+        turnState: turnStateOfWord(fixtureStatus), numTurns: 1, startedAt: new Date(), runtimeSessionId: randomUUID(),
         dispatchOrigin: SessionDispatchOrigin.USER,
-        ...extra,
+        ...extraFacts,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
         } : {}),

@@ -342,7 +342,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       assert.equal(claimed.status, 200, claimed.text);
       assert.equal(toUuid(claimed.json.sessionId), queuedForDraining, 'its queued turn is still handed out');
       // Its turn ran: settled, so the next boot finds nothing of this one's left running.
-      await sql.query(`UPDATE "session" SET status = 'SUCCEEDED', finished_at = now() WHERE id = $1`, [queuedForDraining]);
+      await sql.query(`UPDATE "session" SET "turn_state" = NULL, finished_at = now() WHERE id = $1`, [queuedForDraining]);
     } finally {
       await server.stop();
     }

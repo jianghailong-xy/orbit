@@ -29,6 +29,7 @@ import {
   type WatchPredicate,
   type WatchTargetFact,
 } from './watch-predicate';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 type SessionFact = Extract<WatchTargetFact, { kind: 'SESSION' }>;
 
@@ -50,6 +51,7 @@ function session(over: Partial<SessionFact> = {}): SessionFact {
     kind: 'SESSION',
     sessionKind: 'CONVERSATION',
     status: 'AWAITING_INPUT',
+    turnState: turnStateOfWord(over.status ?? 'AWAITING_INPUT'),
     finishedAt: released ? new Date(NOW) : null,
     endReason: null,
     completedAt: null,

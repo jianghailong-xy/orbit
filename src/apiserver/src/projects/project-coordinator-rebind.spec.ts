@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, NotFoundException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { ProjectsController } from './projects.controller';
 import {
   COORDINATOR_SESSION_LIVE_CODE,

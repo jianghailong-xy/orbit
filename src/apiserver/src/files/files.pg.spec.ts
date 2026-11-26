@@ -225,7 +225,7 @@ function storeCases(leg: Leg) {
     await db.session.create({
       data: {
         id: sessionId, title: 'files', prompt: 'files', ownerId, creatorId: ownerId, workspaceId,
-        assignedRunnerId: machine.id, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
+        assignedRunnerId: machine.id, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
       },
     });
     const taskId = randomUUID();
@@ -498,7 +498,7 @@ function storeCases(leg: Leg) {
       await db.session.create({
         data: {
           id: run, title: 'a run', prompt: 'a run', ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id, taskId: citingTask,
-          startsTaskWork: true, status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${run}`,
+          startsTaskWork: true, turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${run}`,
         },
       });
       const head = Buffer.alloc(24);

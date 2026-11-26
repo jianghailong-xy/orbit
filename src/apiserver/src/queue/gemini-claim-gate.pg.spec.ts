@@ -15,7 +15,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -105,7 +106,7 @@ suite('a Gemini key at claim time, on real PostgreSQL', async (t) => {
       data: {
         title: 'gemini',
         prompt: 'hello',
-        status: RunStatus.PENDING,
+        turnState: 'QUEUED',
         ownerId,
         creatorId: ownerId,
         workspaceId,

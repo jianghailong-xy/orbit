@@ -25,7 +25,8 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -38,6 +39,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -108,7 +110,7 @@ async function fixture(
       title: `${label} session`,
       prompt: 'Explain the error in the log',
       provider: 'claude',
-      status: session.status ?? RunStatus.RUNNING,
+      turnState: turnStateOfWord(session.status ?? RunStatus.RUNNING),
       ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(session.status ?? RunStatus.RUNNING)
         ? { finishedAt: new Date()}
         : {}),

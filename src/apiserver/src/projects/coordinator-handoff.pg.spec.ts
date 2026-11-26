@@ -29,6 +29,8 @@ import { readSessionCoordinatorHandoffs } from './coordinator-handoff';
 import { CoordinatorHandoffService } from './coordinator-handoff.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from './coordinator-pg-test-safety';
 import { ProjectsService } from './projects.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -80,7 +82,7 @@ async function fixture(): Promise<Fixture> {
   const workspaceId = (await db.workspace.create({ data: { ownerId, name: 'home' } })).id;
   const projectId = (await db.project.create({ data: { ownerId, title: 'Checkout redesign' } })).id;
   const mk = async (title: string) => (await db.session.create({
-    data: { ownerId, creatorId: ownerId, title, prompt: 'p', workspaceId, status: 'AWAITING_INPUT', dispatchOrigin: 'USER' },
+    data: { ownerId, creatorId: ownerId, title, prompt: 'p', workspaceId, turnState: null, dispatchOrigin: 'USER' },
   })).id;
   const outgoing = await mk('the coordinator');
   const bystander = await mk('Payment retries');
@@ -126,7 +128,7 @@ function services(f: Fixture) {
       await db.session.updateMany({
         where: { id: sessionId, status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } },
         // As the real revive: held again, so the release column and its cause go with the terminal status.
-        data: { status: 'PENDING', finishedAt: null},
+        data: { turnState: 'QUEUED', finishedAt: null},
       });
       await db.conversationTurn.create({
         data: { sessionId, seq: seq++, clientTurnId: dto.clientTurnId, content: dto.content, kind: 'message', sendIntent: dto.intent ?? null },
@@ -151,7 +153,7 @@ function services(f: Fixture) {
       const row = await db.session.create({
         data: {
           ownerId: owner, creatorId: owner, title: dto.title, prompt: dto.prompt, workspaceId: dto.workspaceId,
-          status: 'AWAITING_INPUT', dispatchOrigin: 'USER', titleManagedByProject: true,
+          turnState: null, dispatchOrigin: 'USER', titleManagedByProject: true,
         },
       });
       openings.push({ id: row.id, prompt: dto.prompt, engine: dto.engine, provider: dto.provider, model: dto.model });
@@ -279,7 +281,7 @@ test('success: the note turn\'s final text becomes the successor\'s opening, the
 
 test('requested while a turn runs: the note turn queues behind it, and that turn\'s own end settles nothing', { skip, timeout: 120_000 }, async () => {
   const f = await fixture();
-  await f.db.session.update({ where: { id: f.outgoing }, data: { status: 'RUNNING' } });
+  await f.db.session.update({ where: { id: f.outgoing }, data: { turnState: 'IN_FLIGHT' } });
   const running = await f.db.conversationTurn.create({
     data: { sessionId: f.outgoing, seq: 1, clientTurnId: 'owner-typed', content: 'how are we doing?', kind: 'message', status: 'IN_FLIGHT', deliveredAt: new Date() },
   });
@@ -577,13 +579,13 @@ test('an ended coordinator (FAILED, or recycled while idle) is revived for its n
     // a cause, a failure cause for FAILED.
     await f.db.session.update({
       where: { id: f.outgoing },
-      data: { status, finishedAt: new Date()},
+      data: { turnState: turnStateOfWord(status), finishedAt: new Date()},
     });
     const s = services(f);
     const started = await s.handoffs.start(f.ownerId, f.projectId);
     assert.equal(started.state, 'WRITING', status);
     assert.equal(s.turns.length, 1, status);
-    assert.equal((await f.db.session.findUniqueOrThrow({ where: { id: f.outgoing } })).status, 'PENDING', `${status}: revived`);
+    assert.equal(wordOf((await f.db.session.findUniqueOrThrow({ where: { id: f.outgoing } }))), 'PENDING', `${status}: revived`);
   }
 });
 
@@ -594,7 +596,7 @@ test('the revived coordinator fails again before its note turn reaches the engin
   // Its model cannot run: the claim fails and the conversation is FAILED, the note turn never delivered. The failure is
   // on the turn the claim was for, copied to lastTurnOutcome (removal step R2), which is what reads it as failed (R7).
   await f.db.session.update({
-    where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
+    where: { id: f.outgoing }, data: { turnState: null, finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
   });
   assert.equal(await s.handoffs.sweep(), 1);
   const { coordinatorHandoff } = await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing);
@@ -630,7 +632,7 @@ test('the coordinator cannot run and the owner picked a successor: the handover 
     const s = services(f);
     await s.handoffs.start(f.ownerId, f.projectId, { successor: { engine: 'claude', provider: 'claude' } });
     // The claim failed: FAILED on the turn it was for, copied (removal step R2), which reads it as failed since R7.
-    await f.db.session.update({ where: { id: f.outgoing }, data: { status: 'FAILED', finishedAt: new Date(), lastTurnOutcome: 'FAILED' } });
+    await f.db.session.update({ where: { id: f.outgoing }, data: { turnState: null, finishedAt: new Date(), lastTurnOutcome: 'FAILED' } });
     assert.equal(await s.handoffs.sweep(), 1);
     assert.notEqual(await projectPointer(f), f.outgoing, 'handed over');
     assert.equal((await readSessionCoordinatorHandoffs(f.db as unknown as PrismaService, f.outgoing)).coordinatorHandoff?.state, 'COMPLETED');

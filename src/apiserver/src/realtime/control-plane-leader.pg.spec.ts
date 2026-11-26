@@ -34,7 +34,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -167,7 +168,7 @@ test('several apiserver processes over one database: one runs the singleton swee
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: title,
-        provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, runtimeSessionId: randomUUID(),
+        provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', runtimeSessionId: randomUUID(),
         startedAt: new Date(Date.now() - 10 * MINUTE), runClaimedAt: new Date(Date.now() - 10 * MINUTE),
         dispatchOrigin: SessionDispatchOrigin.USER,
       },

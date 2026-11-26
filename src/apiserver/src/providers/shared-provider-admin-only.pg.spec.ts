@@ -35,7 +35,8 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -58,6 +59,7 @@ import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsService } from './shared-pools.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec stores keys through the providers' own door and the code under test decrypts them.
@@ -164,7 +166,7 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
       data: {
         title: 'shared provider',
         prompt: 'hello',
-        status,
+        turnState: turnStateOfWord(status),
         ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(status)
           ? { finishedAt: new Date()}
           : {}),

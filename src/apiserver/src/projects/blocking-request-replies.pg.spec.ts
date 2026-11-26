@@ -75,11 +75,11 @@ import { HttpException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -100,6 +100,7 @@ import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { PushService } from '../push/push.service';
 import { ProjectsService } from './projects.service';
+import { sessionWord } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -332,7 +333,7 @@ test('a decided criteria proposal is answered back to the session that proposed 
     const f = await fixture(stack, owner, 'ended');
     const held = await proposeAsSession(stack, f);
     await sql.query(
-      `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()), "completed_at" = now() WHERE "id" = $1::uuid`,
+      `UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()), "completed_at" = now() WHERE "id" = $1::uuid`,
       [f.sessionId],
     );
 
@@ -464,7 +465,7 @@ async function fixture(stack: Stack, owner: Owner, label: string): Promise<Fixtu
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -557,8 +558,7 @@ async function commentsOn({ sql }: Stack, taskId: string): Promise<Array<{ id: s
 }
 
 async function statusOf({ db }: Stack, sessionId: string): Promise<RunStatus> {
-  return (await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true } }))
-    .status;
+  return (await sessionWord(db, sessionId)) as RunStatus;
 }
 
 async function revisionOf({ db }: Stack, definitionId: string): Promise<number> {
@@ -942,7 +942,7 @@ async function coordinatorConversation(
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,

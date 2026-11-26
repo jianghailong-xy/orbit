@@ -30,11 +30,11 @@ import { ForbiddenException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { uuidToBase62 } from '@orbit/shared';
 import {
@@ -121,7 +121,7 @@ async function fixture(db: PrismaClient) {
       title: 'the run that did the work',
       prompt: 'do the work and submit the evidence',
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },
@@ -138,7 +138,7 @@ async function fixture(db: PrismaClient) {
       title: 'the project coordinator',
       prompt: 'read the ledger and decide',
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: false,
     },

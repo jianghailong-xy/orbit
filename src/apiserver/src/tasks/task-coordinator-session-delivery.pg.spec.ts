@@ -5,11 +5,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
@@ -53,6 +53,8 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { sessionWord } from '../test-support/session-word';
 
 /**
  * `DELIVERED`: the wake that reached the coordinator conversation this project already had.
@@ -267,7 +269,7 @@ async function fixture(
         title: `协调：${label}`,
         prompt: `协调：${label}`,
         provider: 'claude',
-        status: wanted === 'PARKED' ? RunStatus.AWAITING_INPUT : RunStatus.SUCCEEDED,
+        turnState: turnStateOfWord(wanted === 'PARKED' ? RunStatus.AWAITING_INPUT : RunStatus.SUCCEEDED),
         ...(wanted === 'PARKED' ? {} : { finishedAt: new Date()}),
         dispatchOrigin: SessionDispatchOrigin.USER,
         titleManagedByProject: true,
@@ -359,7 +361,7 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       // The attempt commits on a worktree branch of its own, past the commit it forked from: work with
@@ -426,7 +428,7 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
   });
   await stack.db.session.update({
     where: { id: sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+    data: { turnState: null, finishedAt: new Date()},
   });
 
   assert.equal(
@@ -494,7 +496,7 @@ async function coordinatorReadsIt(db: PrismaClient, f: Fixture) {
   });
   await db.session.update({
     where: { id: f.coordinatorSessionId! },
-    data: { status: RunStatus.AWAITING_INPUT, finishedAt: null},
+    data: { turnState: null, finishedAt: null},
   });
 }
 
@@ -747,9 +749,7 @@ test('a coordinator conversation that is not there, or is over, is a readable en
       // And it was not resurrected either: the conversation is exactly as the person left it.
       assert.deepEqual(await coordinatorMessages(stack.db, over), []);
       assert.equal(
-        (await stack.db.session.findUniqueOrThrow({
-          where: { id: over.coordinatorSessionId! }, select: { status: true },
-        })).status,
+        await sessionWord(stack.db, over.coordinatorSessionId!),
         RunStatus.SUCCEEDED,
         'a notification revived the conversation its owner had ended',
       );

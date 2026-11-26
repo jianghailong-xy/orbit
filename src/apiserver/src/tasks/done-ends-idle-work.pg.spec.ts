@@ -6,11 +6,11 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 
@@ -25,6 +25,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { completeHumanTaskForPgTest } from './task-completion-test-helper';
 import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * §12.15 P-M1 on a real runner: a DONE over an open work session releases its dependents at that
@@ -150,7 +151,7 @@ async function workSession(
   await db.session.create({
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
-      assignedRunnerId: w.runnerId, title: 'work', prompt: 'work', provider: 'claude', status,
+      assignedRunnerId: w.runnerId, title: 'work', prompt: 'work', provider: 'claude', turnState: turnStateOfWord(status),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch, worktreeBranch: branch, baseSha: BASE, branchSha: BASE,
       changedFiles: [], worktreeDirty: false,

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { before, after, beforeEach, test } from 'node:test';
 import { Client } from 'pg';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   AgentProvider,
   SESSION_CLAUDE_STEER_WITHDRAW_V1,
@@ -151,8 +151,8 @@ beforeEach(async () => {
 async function session(provider: string) {
   await client.query(`DELETE FROM "session"`);
   await client.query(
-    `INSERT INTO "session"(id, owner_id, assigned_runner_id, provider, status)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)`,
+    `INSERT INTO "session"(id, owner_id, assigned_runner_id, provider, turn_state)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, (CASE ($5)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END))`,
     [SESSION_ID, OWNER_ID, RUNNER_ID, provider, RunStatus.RUNNING],
   );
 }

@@ -2,9 +2,14 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
-  CreatorType, PrismaClient, ProjectStatus, RunnerStatus, RunStatus,
-  SessionDispatchOrigin, TaskStatus,
+  CreatorType,
+  PrismaClient,
+  ProjectStatus,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { isReleasedStatus } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +19,7 @@ import {
 } from './coordinator-pg-test-safety';
 import { ProjectsService } from './projects.service';
 import { prismaClientFor } from '../prisma/prisma-client';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * Second independent acceptance pass over the `GET /projects` bucket rollup, written fresh for
@@ -113,7 +119,7 @@ async function makeSession(
 ): Promise<void> {
   await db.session.create({
     data: {
-      ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
+      ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', turnState: turnStateOfWord(status),
       ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },

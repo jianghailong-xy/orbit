@@ -35,8 +35,14 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import {
-  CreatorType, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource, TaskStatus,
+  CreatorType,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
+  TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, SessionEndReason } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -51,6 +57,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { releaseWasFailure } from '../common/session-release';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -146,7 +153,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
       assignedRunnerId: w.runnerId,
       title: 'a conversation',
       prompt: 'Explain the error in the log',
-      status,
+      turnState: turnStateOfWord(status),
       engineTurnActive: status === RunStatus.RUNNING,
       provider: 'claude',
       providerBuiltin: true,
@@ -466,7 +473,7 @@ test('every failure writer records FAILED and the error on the turn that carries
     try {
       await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
       const claimed = await sql.query(
-        `UPDATE "session" SET status = 'RUNNING', engine_turn_active = true, run_claimed_at = now(),
+        `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', engine_turn_active = true, run_claimed_at = now(),
                 inbox_lease_owner = $2::uuid
           WHERE id = $1::uuid AND status = 'PENDING'`, [id, leaseOwner]);
       assert.equal(claimed.rowCount, 1, 'claimed');
@@ -493,7 +500,7 @@ test('every failure writer records FAILED and the error on the turn that carries
     assert.equal(row.status, 'CANCELLED', 'the status is written as before');
     assert.equal(row.end_reason, null, 'no end was asked');
     assert.equal(releaseWasFailure({
-      finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, status: row.status,
+      finishedAt: row.finished_at, endReason: row.end_reason, lastTurnOutcome: row.last_turn_outcome, turnState: turnStateOfWord(row.status),
     }), false, 'so the release reads as no failure (common/session-release.ts), as nothing but the turn and the end reason say');
     assert.equal((await turnRow(sql, revived.failedTurn)).outcome, 'FAILED', 'the failed turn keeps its own');
 

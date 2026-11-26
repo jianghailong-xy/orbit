@@ -42,7 +42,8 @@ import { request as httpRequest } from 'node:http';
 import { createServer, type AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -240,7 +241,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: title,
-        provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, runtimeSessionId: randomUUID(),
+        provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', runtimeSessionId: randomUUID(),
         startedAt: new Date(Date.now() - 10 * 60 * SECOND), runClaimedAt: new Date(Date.now() - 10 * 60 * SECOND),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
         inboxLeaseOwner: process, inboxLeaseGeneration: generation,

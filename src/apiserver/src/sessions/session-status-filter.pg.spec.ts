@@ -29,6 +29,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { WORD_SHAPES } from './session-legacy-words.fixture';
 import { SessionsService } from './sessions.service';
 import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from './session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -63,11 +64,11 @@ test('?status= lists the rows the stored word listed, but for the §3.4 kinds', 
   const conversations = WORD_SHAPES.filter((shape) => shape.facts.sessionKind === 'CONVERSATION');
   const title = new Map<string, string>();
   for (const shape of conversations) {
-    const { turnState: _fromTheWord, status: _asStored, ...facts } = shape.facts;
+    const { turnState: _fromTheWord, ...facts } = shape.facts;
     // Through the stored word alone: migration 1611's trigger keeps turn_state, as every writer before deploy 2 does.
     const { id } = await db.session.create({
       data: {
-        ownerId, creatorId: ownerId, title: shape.name, prompt: 'filter', status: shape.stored,
+        ownerId, creatorId: ownerId, title: shape.name, prompt: 'filter', turnState: turnStateOfWord(shape.stored),
         dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude', providerBuiltin: true,
         workspaceId: workspace.id, assignedRunnerId: runnerId, ...facts,
       },
@@ -78,7 +79,7 @@ test('?status= lists the rows the stored word listed, but for the §3.4 kinds', 
     const name = `unfilled ${word}`;
     const { id } = await db.session.create({
       data: {
-        ownerId, creatorId: ownerId, title: name, prompt: 'filter', status: word as RunStatus,
+        ownerId, creatorId: ownerId, title: name, prompt: 'filter', turnState: turnStateOfWord(word as RunStatus),
         dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude', providerBuiltin: true,
         workspaceId: workspace.id, assignedRunnerId: runnerId, startedAt: new Date(),
       },

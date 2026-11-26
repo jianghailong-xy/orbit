@@ -8,10 +8,10 @@ import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -27,6 +27,7 @@ import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * A message sent into a run the task has already replaced, against a real PostgreSQL.
@@ -175,12 +176,12 @@ async function fixture(
       ...common,
       id: replaced,
       title: `${label}-replaced`,
-      status: RunStatus.FAILED, 
+      turnState: null, 
       finishedAt: new Date(),
     },
   });
   await db.session.create({
-    data: { ...common, id: holder, title: `${label}-holder`, status: holderStatus },
+    data: { ...common, id: holder, title: `${label}-holder`, turnState: turnStateOfWord(holderStatus) },
   });
   return { ownerId, taskId, replaced, holder, sameRuntime, crossRuntime };
 }
@@ -367,7 +368,7 @@ test('a run that has to wind down keeps the message honest: the stop lands, the 
       // What the runner does when it has finished winding the process down.
       await db.session.update({
         where: { id: f.holder },
-        data: { status: RunStatus.CANCELLED, finishedAt: new Date() },
+        data: { turnState: null, finishedAt: new Date() },
       });
 
       const answer = await sessions.resume(f.ownerId, f.replaced, dto as never, {
