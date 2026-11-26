@@ -153,13 +153,13 @@ class SessionRowTest {
         compose.onNodeWithContentDescription("Project coordinator", useUnmergedTree = true).assertExists()
     }
 
-    @Test fun theTimeIsHowLongTheTurnHasRunOrWhenItLastMoved() {
+    @Test fun theTimeIsHowLongTheTurnHasRunOrWhenItWasListed() {
         val now = Instant.parse("2026-10-09T01:00:00Z")
         val running = parked().copy(runState = "RUNNING", status = "RUNNING")
         assertEquals("12m", SessionListTime.format(running.copy(currentTurnStartedAt = "2026-10-09T00:48:00Z"), now))
         assertNull("no start, no time", SessionListTime.format(running.copy(lastTurnAt = "2026-10-09T00:48:00Z"), now))
-        assertEquals("the last message, not the listing", "12m ago",
-            SessionListTime.format(parked().copy(lastTurnAt = "2026-10-09T00:48:00Z", listedAt = "2026-10-02T00:00:00Z"), now))
+        assertEquals("the listing, not the last message", "12m ago",
+            SessionListTime.format(parked().copy(listedAt = "2026-10-09T00:48:00Z", lastTurnAt = "2026-10-09T00:59:00Z"), now))
         assertEquals("from when it was made", "1h ago", SessionListTime.format(parked().copy(createdAt = "2026-10-09T00:00:00Z"), now))
     }
 
