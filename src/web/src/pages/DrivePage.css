@@ -1,5 +1,12 @@
 /* Drive (board docs/mocks/drive/02-web). */
 
+/* The chat's host around the files (board docs/mocks/drive-chat/01): the page fills it as it filled the view. */
+.wk-chat-frame.is-drive,
+.wk-chat-frame.is-drive > .wk-chat-host {
+  height: 100%;
+  min-height: 0;
+}
+
 .files-page {
   display: flex;
   flex-direction: column;

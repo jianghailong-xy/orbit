@@ -80,10 +80,12 @@ export class DriveChat {
   ) {}
 
   /**
-   * `POST /api/drive/chats`: `{ text, clientTurnId, workspaceId?, folderId?, entryIds?, attachmentIds?, engine?, model?,
-   * permissionMode?, effort?, fastMode? }`. `folderId` is the folder the owner has open (null or absent for the top
-   * level), `entryIds` the items they selected; both are ids, read at delivery. The model, effort, speed and mode are the
-   * composer's, each defaulting as a session of that workspace does.
+   * `POST /api/drive/chats`: `{ text, clientTurnId, workspaceId?, folderId?, noFolder?, entryIds?, attachmentIds?, engine?,
+   * model?, permissionMode?, effort?, fastMode? }`. `folderId` is the folder the owner has open (null or absent for the
+   * top level), `entryIds` the items they selected; both are ids, read at delivery. `noFolder: true` says the owner
+   * removed the folder chip: the first turn carries no folder and no selection, as a later message without a
+   * driveContext does. The model, effort, speed and mode are the composer's, each defaulting as a session of that
+   * workspace does.
    */
   async create(ownerId: string, body: unknown, actingSessionId: string | null, credential?: AuthCredential): Promise<DriveChatCreateAnswer> {
     refuseActingSession(actingSessionId, 'Making a Drive chat');
@@ -102,14 +104,23 @@ export class DriveChat {
     if (input.fastMode !== undefined && input.fastMode !== null && typeof input.fastMode !== 'boolean') {
       throw new BadRequestException('fastMode must be true or false');
     }
+    if (input.noFolder !== undefined && typeof input.noFolder !== 'boolean') {
+      throw new BadRequestException('noFolder must be true or false');
+    }
+    const noFolder = input.noFolder === true;
+    if (noFolder && ((input.folderId !== undefined && input.folderId !== null) || input.entryIds !== undefined)) {
+      throw new BadRequestException('noFolder sends no folder and no selection: leave folderId and entryIds out with it');
+    }
     const attachmentIds = input.attachmentIds ?? [];
     if (!Array.isArray(attachmentIds) || attachmentIds.some((id) => typeof id !== 'string' || id === '')) {
       throw new BadRequestException('attachmentIds must be a list of the ids of files the owner uploaded');
     }
-    const driveContext = readDriveChatContext({
-      folderId: input.folderId ?? null,
-      ...(input.entryIds !== undefined ? { entryIds: input.entryIds } : {}),
-    });
+    const driveContext = noFolder
+      ? null
+      : readDriveChatContext({
+          folderId: input.folderId ?? null,
+          ...(input.entryIds !== undefined ? { entryIds: input.entryIds } : {}),
+        });
     const named = typeof input.workspaceId === 'string' && input.workspaceId !== '' ? input.workspaceId : null;
     const workspace = named ? await this.ownedWorkspace(ownerId, named) : (await this.defaultWorkspace(ownerId))?.row;
     if (!workspace) {

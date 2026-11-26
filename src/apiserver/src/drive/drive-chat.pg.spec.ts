@@ -22,6 +22,8 @@
  *   5. list, search and paging: Open first — the ones that need the owner, then the ones working, then the one last
  *      spoken in — then Completed; 50 to a page with `more`; `?status=`, `?q=` and `?offset=`; the round button's counts
  *      over all; Trash and other accounts left out.
+ *   6. noFolder: the owner removed the folder chip, so the first turn is filed with no folder and no selection and its
+ *      note names none; folderId left out still means the top level.
  *
  * Not destructive: every row belongs to accounts this run creates.
  */
@@ -471,5 +473,43 @@ test('the Drive chat: made as a session, run where the owner last chatted, liste
       const refused = await list(`?${bad}`);
       assert.equal(refused.status, 400, `${bad}: ${refused.text}`);
     }
+  });
+
+  await t.test('6. noFolder: the folder chip removed, the first turn carries no folder, and its note names none (not the top level)', async () => {
+    // An account of its own, so the cases above keep their counts and their default workspaces.
+    const crossed = await account('crossed');
+    const crossedToken = await signIn(crossed);
+    const machine = await register(crossedToken, `crossed-${RUN}`);
+    await beat(machine);
+    const ws = await workspace(crossed.id, machine.runnerId, 'crossed-files');
+    const before = await driveChatsOf(crossed.id);
+    const refusals: Array<[string, Reply]> = [
+      ['noFolder that is not a boolean', await create({ workspaceId: pub(ws), noFolder: 'yes' }, crossedToken)],
+      ['noFolder with a folder', await create({ workspaceId: pub(ws), noFolder: true, folderId: pub(year.id) }, crossedToken)],
+      ['noFolder with a selection', await create({ workspaceId: pub(ws), noFolder: true, entryIds: [] }, crossedToken)],
+    ];
+    for (const [what, reply] of refusals) assert.equal(reply.status, 400, `${what}: ${reply.text}`);
+    assert.equal(await driveChatsOf(crossed.id), before, 'no refusal made a chat');
+
+    const WORDS_ = 'What is taking up the most space?';
+    const answer = await create({ workspaceId: pub(ws), text: WORDS_, noFolder: true }, crossedToken);
+    assert.equal(answer.status, 201, answer.text);
+    const chatId = toUuid(answer.json.sessionId);
+    const [turn] = await turnsOf(chatId);
+    assert.equal(turn.drive_context, null, 'no folder and no selection filed with the first turn');
+    const out = await prisma.$transaction((tx) => appendDriveChatNotes(tx as never, {
+      ownerId: crossed.id, sessionId: chatId, runnerId: machine.runnerId,
+      turn: { seq: turn.seq, kind: 'message', driveContext: turn.drive_context },
+    }, WORDS_));
+    assert.equal(out, [
+      WORDS_,
+      '',
+      ['<orbit_drive_chat>', 'How to work in this chat:', ...driveChatGuidance(false).map((line) => `- ${line}`), '</orbit_drive_chat>'].join('\n'),
+    ].join('\n'), 'the guidance alone: no folder attribute, no top-level line, no selection line');
+
+    // Left out, the folder still means the top level, as before.
+    const plain = await create({ workspaceId: pub(ws), text: 'And at the top?' }, crossedToken);
+    assert.equal(plain.status, 201, plain.text);
+    assert.deepEqual((await turnsOf(toUuid(plain.json.sessionId)))[0].drive_context, { folderId: null, entryIds: [] });
   });
 });

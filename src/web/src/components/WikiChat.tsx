@@ -1,53 +1,44 @@
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
   useReducer,
-  useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CommentOutlined } from '@ant-design/icons';
+import { useChatHost } from './ChatHost';
 import { WIKI_DOC_SECTION_EVENT } from './WikiDirectory';
-import { WikiChatFab } from './WikiChatFab';
-import { WikiChatPanel } from './WikiChatPanel';
-import { useHelpDrawer } from '../lib/helpDrawer';
+import type { ChatOrigin } from './WikiChatPanel';
 import { routeId } from '../lib/idCodec';
-import { setSidebarFolded } from '../lib/sidebarFold';
 import { wikiChatDraftsQuery, wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery, wikiPlanQuery } from '../lib/queries';
 import {
   WIKI_CHAT_ASK,
-  WIKI_CHAT_FOCUS_NEEDS_YOU,
-  WIKI_CHAT_NEW_PARAM,
+  WIKI_CHAT_CHOOSE_WORKSPACE,
+  WIKI_CHAT_EMPTY_HINT,
+  WIKI_CHAT_EMPTY_NOTE,
+  WIKI_CHAT_HISTORY,
   WIKI_CHAT_NO_ATTACHMENTS,
-  WIKI_CHAT_PARAM,
-  readWikiChatClosed,
-  readWikiChatOpen,
-  readWikiChatWidth,
+  WIKI_CHAT_NO_HISTORY,
+  WIKI_CHAT_NO_WORKTREE,
+  WIKI_CHAT_PLACEHOLDER,
+  WIKI_CHAT_PLACEHOLDER_DRAFT,
+  WIKI_CHAT_STORE,
+  createWikiChat,
   wikiChatAttach,
   wikiChatCapped,
-  wikiChatDocks,
+  wikiChatContext,
   wikiChatFab,
   wikiChatFabShown,
-  wikiChatFoldsDirectory,
-  wikiChatFoldsSidebar,
-  wikiChatLayout,
   wikiChatPageSection,
-  wikiChatPanelWidth,
   wikiChatReading,
-  wikiChatSearch,
   wikiChatSnap,
   wikiChatToOpen,
-  writeWikiChatClosed,
-  writeWikiChatOpen,
-  writeWikiChatWidth,
   type WikiChatPage,
   type WikiChatQuote,
   type WikiChatReading,
@@ -78,124 +69,29 @@ const WikiChatCtx = createContext<WikiChatApi | null>(null);
 
 export const useWikiChat = (): WikiChatApi | null => useContext(WikiChatCtx);
 
-/** The window's width, as the panel's place is read from it (design §4.1). */
-function useWindowWidth(): number {
-  const read = () => (typeof window === 'undefined' ? 1440 : window.innerWidth);
-  const [width, setWidth] = useState(read);
-  useEffect(() => {
-    const onResize = () => setWidth(read());
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return width;
-}
-
-/** The space between the Wiki's head and the panel's top, while the head is on screen. */
-const UNDER_HEAD = 10;
-
 /**
- * The chat's place on every page of a space but its Settings (design §3, §4): the round button, the panel it
- * opens, and the composer's attachments, which the pages feed.
- *
- * THE ADDRESS SAYS WHICH CHAT IS OPEN (`?chat=<session>`, or `?chat=new`): a reload brings the panel back. A
- * page turned by one of the wiki's own links drops the query, so the tab keeps the chat it shows per space and
- * puts the address back (`readWikiChatOpen`): turning pages does not close the panel; hiding it does.
- *
- * OPEN BY DEFAULT WHERE IT DOCKS (board 45 ①②, owner 11-11, contract `chat.panel.openByDefault`): with no chat named
- * by the address or the tab, a page whose layout docks the panel shows it on the chat the round button would open,
- * unless the owner hid it with ✕ in this space (`readWikiChatClosed`, kept on the device until the button opens it
- * again). That opening is derived, never written: narrowed past docking it folds away, widened it comes back. Until
- * the chats are read the page is laid out at the panel's width already, so it does not jump when the panel comes.
- *
- * WHERE IT STANDS (§4.1, `wikiChatLayout`), a third of the window wide between 400 and 720 unless dragged (up to
- * half the window): wide windows dock it and push everything under the Wiki's head over,
- * leaving the head's buttons where they are (board 42 ①); narrower ones fold the directory into Contents; under
- * 1200 it lies over the page's right with no scrim, under 640 it is a sheet. The entry drawer opens to its left,
- * the button floats above the drawer, and the page's foot keeps 88 clear for the button.
+ * The chat's place on every page of a space but its Settings (design §3, §4): the round button, the panel it opens, and
+ * the composer's attachments, which the pages feed. Where it stands and when it opens is the shared host's
+ * (`useChatHost`); what is the Wiki's is here: its chats, kept per space, the page and the selection the composer
+ * attaches, and the cards whose sections the page marks.
  */
 export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; route: string; children: ReactNode }) {
-  const location = useLocation();
-  const navigate = useNavigate();
   const list = useQuery(wikiChatsQuery(space.id));
-  const fabShown = wikiChatFabShown(route, true) && list.data !== null;
-
-  const asked = new URLSearchParams(location.search).get(WIKI_CHAT_PARAM);
-  const kept = readWikiChatOpen(space.slug);
-  const windowWidth = useWindowWidth();
-  const layout = wikiChatLayout(windowWidth);
-  // Read from storage on every render, as `kept` is: ✕ and the button write it beside a navigation, and a state of its
-  // own would render once more with the old address first, which the effect below would then put back.
-  const closed = readWikiChatClosed(space.slug);
-  const setClosed = useCallback((next: boolean) => writeWikiChatClosed(space.slug, next), [space.slug]);
-  // The help drawer docks in the panel's slot (board help-center 01 ①): one at a time. While help is open the panel is
-  // not shown by default, opening help closes a panel that is open, and opening the panel closes help.
-  const help = useHelpDrawer();
-  const { closeHelp } = help;
-  // Shown by default (board 45): only where it docks, on a page that has the panel, and not once hidden with ✕.
-  const byDefault =
-    asked === null && kept === null && wikiChatFabShown(route, true) && wikiChatDocks(layout) && !closed && !help.open;
-  const defaultChat = byDefault && list.data ? wikiChatToOpen(list.data.chats) : null;
-  const chat = asked ?? kept ?? defaultChat;
-  const open = chat !== null;
-  // The chats are still being read: lay the page out at the panel's width already.
-  const reserving = byDefault && list.isPending;
-
-  const go = useCallback(
-    (next: string | null) => {
-      writeWikiChatOpen(space.slug, next);
-      navigate(
-        { pathname: location.pathname, search: wikiChatSearch(location.search, next), hash: location.hash },
-        { replace: true, state: location.state },
-      );
-    },
-    [navigate, location.pathname, location.search, location.hash, location.state, space.slug],
-  );
-  // The address and the tab keep the same chat: an address that names one is remembered, and a page that lost
-  // it to a link gets it back.
-  useLayoutEffect(() => {
-    if (asked) {
-      if (asked !== kept) writeWikiChatOpen(space.slug, asked);
-    } else if (kept) {
-      navigate(
-        { pathname: location.pathname, search: wikiChatSearch(location.search, kept), hash: location.hash },
-        { replace: true, state: location.state },
-      );
-    }
-  }, [asked, kept, space.slug, navigate, location.pathname, location.search, location.hash, location.state]);
-
-  // Help opened (by its button, ? or a link) while a chat is open: the chat gives up the slot.
-  const helpWasOpen = useRef(help.open);
-  useLayoutEffect(() => {
-    const opened = help.open && !helpWasOpen.current;
-    helpWasOpen.current = help.open;
-    if (opened && (asked || kept)) go(null);
-  }, [help.open, asked, kept, go]);
-
-  const [dragged, setDragged] = useState<number | null>(() => readWikiChatWidth());
-  const width = wikiChatPanelWidth(layout, dragged, windowWidth);
-
-  // The panel's top: under the Wiki's head while the head is on screen, then the top of the page's scroll. A desktop
-  // draws the head in the directory's column; folding the column away brings the head row back, so it measures again.
-  const hostRef = useRef<HTMLDivElement>(null);
-  const folds = (open || reserving) && wikiChatFoldsDirectory(layout);
-  const top = usePanelTop(hostRef, open, location.pathname, folds);
+  const host = useChatHost({
+    scope: space.slug,
+    store: WIKI_CHAT_STORE,
+    list,
+    shown: wikiChatFabShown(route, true),
+    fab: wikiChatFab(list.data?.fab),
+    toOpen: wikiChatToOpen,
+  });
+  const { open, go, openChat, closeHelp, chats, shownChat } = host;
 
   const [attachments, dispatch] = useReducer(wikiChatAttach, WIKI_CHAT_NO_ATTACHMENTS);
   const page = useWikiChatPage(space, route);
   useEffect(() => dispatch({ type: 'follow', page }), [page]);
 
-  const chats = list.data?.chats;
-  // The card the panel brings into view when it opens a chat (the button: the first that needs the owner; Activity: one
-  // card), kept with that chat: closing or turning to another needs no write of its own, which would render once more
-  // with the address before the navigation and put the old chat back.
-  const [focused, setFocused] = useState<{ chat: string; card: string } | null>(null);
-  const focus = focused && focused.chat === chat
-    ? focused.card
-    : defaultChat !== null && chat === defaultChat && list.data?.fab && wikiChatFab(list.data.fab).state === 'needs_you'
-      ? WIKI_CHAT_FOCUS_NEEDS_YOU
-      : null;
   // The shown chat's cards: the sections its open ones would rewrite are marked on the page beside it (board 42 ②).
-  const shownChat = chat && chat !== WIKI_CHAT_NEW_PARAM ? (routeId(chat) ?? chat) : null;
   const cards = useQuery(wikiChatDraftsQuery(shownChat));
   const wouldRewrite = useMemo(
     () =>
@@ -215,110 +111,38 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
       },
       quoted: new Set(attachments.quote?.sentenceIds ?? []),
       wouldRewrite,
-      open: (next, card = null) => {
-        setFocused(card ? { chat: next, card } : null);
-        closeHelp();
-        go(next);
-      },
+      open: openChat,
     }),
-    [attachments.quote, open, go, chats, wouldRewrite, closeHelp],
+    [attachments.quote, open, go, chats, wouldRewrite, closeHelp, openChat],
   );
-
-  const fab = wikiChatFab(list.data?.fab);
-  const docks = (open || reserving) && wikiChatDocks(layout);
-  // A column narrower than 1440 takes the app sidebar's width rather than the directory's (board wiki-rail 03 C2).
-  const foldsSidebar = (open || reserving) && wikiChatFoldsSidebar(layout);
-  useEffect(() => {
-    setSidebarFolded(foldsSidebar);
-    return () => setSidebarFolded(false);
-  }, [foldsSidebar]);
-  const className = [
-    'wk-chat-host',
-    fabShown ? 'has-fab' : '',
-    open ? `is-open is-${layout}` : '',
-    docks ? 'is-docked' : '',
-    folds ? 'is-fold' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-  const style = (open || reserving) && width ? ({ '--wk-chat-w': `${width}px` } as CSSProperties) : undefined;
+  const origin = useMemo<ChatOrigin>(
+    () => ({
+      copy: {
+        history: WIKI_CHAT_HISTORY,
+        noHistory: WIKI_CHAT_NO_HISTORY,
+        emptyHint: WIKI_CHAT_EMPTY_HINT,
+        emptyNote: WIKI_CHAT_EMPTY_NOTE,
+        placeholder: WIKI_CHAT_PLACEHOLDER,
+        placeholderDraft: WIKI_CHAT_PLACEHOLDER_DRAFT,
+        noWorkspace: WIKI_CHAT_NO_WORKTREE,
+        chooseWorkspace: WIKI_CHAT_CHOOSE_WORKSPACE,
+      },
+      listKey: wikiChatsQuery(space.id).queryKey,
+      create: (body, sent) => createWikiChat(space.id, { ...body, wikiContext: wikiChatContext(sent) }),
+      turnContext: (sent) => {
+        const wikiContext = wikiChatContext(sent);
+        return wikiContext ? { wikiContext } : undefined;
+      },
+      space,
+    }),
+    [space],
+  );
 
   return (
     <WikiChatCtx.Provider value={api}>
-      {/* Where it docks the panel is a column of the page beside it, not a layer over it (board wiki-rail 03 Ⓑ). */}
-      <div className={`wk-chat-frame${docks ? ' is-columned' : ''}`}>
-        <div ref={hostRef} className={className} style={style}>
-          {children}
-        </div>
-        {docks && !open && <div className="wk-chat-slot" style={{ width: width ?? undefined }} aria-hidden="true" />}
-        {open && (
-          <WikiChatPanel
-            space={space}
-            chat={chat}
-            list={list.data}
-            layout={layout}
-            width={width}
-            top={top}
-            attachments={attachments}
-            dispatch={dispatch}
-            cards={shownChat ? (cards.data ?? null) : null}
-            focus={focus}
-            onChat={go}
-            onClose={() => {
-              // ✕ is the owner saying no: kept on the device until the button opens the panel again (board 45, Q1 A).
-              setClosed(true);
-              go(null);
-            }}
-            onResize={(next, done) => {
-              setDragged(next);
-              if (done) writeWikiChatWidth(wikiChatPanelWidth('wide', next, windowWidth) ?? next);
-            }}
-          />
-        )}
-      </div>
-      {fabShown && !open && (
-        <WikiChatFab
-          state={fab.state}
-          label={fab.label}
-          count={fab.count}
-          onOpen={() => {
-            // Straight to the card that needs the owner, when one does (design §3).
-            const next = wikiChatToOpen(chats);
-            setFocused(fab.state === 'needs_you' ? { chat: next, card: WIKI_CHAT_FOCUS_NEEDS_YOU } : null);
-            // The button undoes ✕: pages open with the panel shown again (board 45, Q1 A).
-            setClosed(false);
-            closeHelp();
-            go(next);
-          }}
-        />
-      )}
+      {host.render(children, { origin, attachments, dispatch, cards: cards.data ?? null })}
     </WikiChatCtx.Provider>
   );
-}
-
-/** Where the panel's top is: below the Wiki's head while it shows, else the top of the page's own scroll. */
-function usePanelTop(hostRef: RefObject<HTMLDivElement | null>, open: boolean, pathname: string, folds: boolean): number {
-  const [top, setTop] = useState(0);
-  useLayoutEffect(() => {
-    if (!open) return;
-    const measure = () => {
-      const host = hostRef.current;
-      if (!host) return;
-      const scroller = host.closest('.app-view');
-      const floor = scroller ? scroller.getBoundingClientRect().top : 0;
-      const head = host.querySelector('.wk-title-row');
-      const below = head && head.getClientRects().length > 0 ? head.getBoundingClientRect().bottom + UNDER_HEAD : 0;
-      setTop(Math.max(0, Math.round(Math.max(floor, below))));
-    };
-    measure();
-    window.addEventListener('scroll', measure, { capture: true, passive: true });
-    window.addEventListener('resize', measure);
-    return () => {
-      window.removeEventListener('scroll', measure, { capture: true });
-      window.removeEventListener('resize', measure);
-    };
-  }, [hostRef, open, pathname, folds]);
-  return top;
 }
 
 /** No section announced yet, and no anchor. */

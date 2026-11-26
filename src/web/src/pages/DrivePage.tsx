@@ -21,6 +21,7 @@ import {
   UploadOutlined,
 } from '@ant-design/icons';
 import Markdown from '../components/Markdown';
+import { DriveChatHost } from '../components/drive/DriveChatHost';
 import { DriveWriterName } from '../components/drive/DriveWriterName';
 import { DriveMoveDialog } from '../components/drive/DriveMoveDialog';
 import { DriveShareDialog } from '../components/drive/DriveShareDialog';
@@ -478,7 +479,8 @@ type Dialog =
 /**
  * Drive (board docs/mocks/drive/02-web): the account's drive in a wide window — the folder tree, the list with
  * who last wrote each file, and the picked file's preview and details. Trash and earlier versions are reached from in
- * here (board choice a). `/drive/trash` is its Trash.
+ * here (board choice a). `/drive/trash` is its Trash. The files view hosts the Drive chat (board drive-chat 01);
+ * Trash does not.
  */
 export function DrivePage({ view = 'files' }: { view?: 'files' | 'trash' }) {
   if (view === 'trash') return <DriveTrash />;
@@ -672,249 +674,251 @@ function DriveBrowser() {
   const crumbs = (here.data?.path ?? '').split('/').filter(Boolean);
 
   return (
-    <div className="files-page">
-      <header className="files-head">
-        <h1>Drive</h1>
-        <div className="files-head-actions">
-          <Input
-            size="small"
-            aria-label="Search Files"
-            placeholder="Search all of Files"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <Button icon={<FolderAddOutlined />} onClick={() => void newFolder(folder?.id ?? null)}>
-            New folder
-          </Button>
-          <Button variant="primary" icon={<UploadOutlined />} onClick={() => picker.current?.click()}>
-            Upload
-          </Button>
-          <Button icon={<DeleteOutlined />} onClick={() => navigate('/drive/trash')}>
-            Trash
-          </Button>
-          <Button icon={<DatabaseOutlined />} onClick={() => navigate('/drive/storage')}>
-            Storage
-          </Button>
-          <input
-            ref={picker}
-            type="file"
-            multiple
-            hidden
-            aria-label="Files to upload"
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])];
-              event.target.value = '';
-              if (folder && files.length > 0) upload(files.map((file) => ({ file, relativePath: null })), { id: folder.id, name: folderName });
+    <DriveChatHost folderId={folder?.parentId ? folder.id : null} folderName={folder ? folderName : null}>
+      <div className="files-page">
+        <header className="files-head">
+          <h1>Drive</h1>
+          <div className="files-head-actions">
+            <Input
+              size="small"
+              aria-label="Search Files"
+              placeholder="Search all of Files"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <Button icon={<FolderAddOutlined />} onClick={() => void newFolder(folder?.id ?? null)}>
+              New folder
+            </Button>
+            <Button variant="primary" icon={<UploadOutlined />} onClick={() => picker.current?.click()}>
+              Upload
+            </Button>
+            <Button icon={<DeleteOutlined />} onClick={() => navigate('/drive/trash')}>
+              Trash
+            </Button>
+            <Button icon={<DatabaseOutlined />} onClick={() => navigate('/drive/storage')}>
+              Storage
+            </Button>
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              hidden
+              aria-label="Files to upload"
+              onChange={(event) => {
+                const files = [...(event.target.files ?? [])];
+                event.target.value = '';
+                if (folder && files.length > 0) upload(files.map((file) => ({ file, relativePath: null })), { id: folder.id, name: folderName });
+              }}
+            />
+          </div>
+        </header>
+        <div className="files-body">
+          <nav className="files-tree" role="tree" aria-label="Folders">
+            {rootId && (
+              <TreeFolder
+                folder={{ id: rootId, name: 'Drive', root: true }}
+                depth={0}
+                current={folder?.id ?? ''}
+                open={open}
+                toggle={toggle}
+                onOpen={openFolder}
+                onDropFiles={(event, target) => dropInto(event, target)}
+              />
+            )}
+          </nav>
+          <section
+            className={`files-list-wrap${dropOver ? ' drop-over' : ''}`}
+            aria-label={`${folderName} contents`}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes('Files')) return;
+              event.preventDefault();
+              setDropOver(true);
             }}
-          />
-        </div>
-      </header>
-      <div className="files-body">
-        <nav className="files-tree" role="tree" aria-label="Folders">
-          {rootId && (
-            <TreeFolder
-              folder={{ id: rootId, name: 'Drive', root: true }}
-              depth={0}
-              current={folder?.id ?? ''}
-              open={open}
-              toggle={toggle}
-              onOpen={openFolder}
-              onDropFiles={(event, target) => dropInto(event, target)}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropOver(false);
+            }}
+            onDrop={(event) => dropInto(event, null)}
+          >
+            <div className="files-crumbs">
+              <Link to="/drive">Drive</Link>
+              {crumbs.map((name, i) => (
+                <span key={`${name}-${i}`}>
+                  <span className="files-crumb-sep"> › </span>
+                  {i === crumbs.length - 2 && folder?.parentId && folder.parentId !== rootId ? (
+                    <button type="button" className="files-link-button" onClick={() => openFolder(folder.parentId)}>
+                      {name}
+                    </button>
+                  ) : (
+                    <span className={i === crumbs.length - 1 ? 'files-crumb-here' : undefined}>{name}</span>
+                  )}
+                </span>
+              ))}
+            </div>
+            {searching ? (
+              <div className="files-search" role="region" aria-label="Search results">
+                {found.isError ? (
+                  <div className="files-empty" role="alert">
+                    Couldn't search: {messageOf(found.error)}
+                  </div>
+                ) : settled !== search.trim() || found.isPending ? (
+                  <div className="files-empty">Searching…</div>
+                ) : found.data.entries.length === 0 ? (
+                  <div className="files-empty">Nothing matches “{settled}”.</div>
+                ) : (
+                  <table className="files-list">
+                    <thead>
+                      <tr>
+                        <th className="files-col-name">Name</th>
+                        <th className="files-col-writer">Folder</th>
+                        <th className="files-col-size">Size</th>
+                        <th className="files-col-when">Modified</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {found.data.entries.map((entry) => (
+                        <tr
+                          key={entry.id}
+                          data-entry={entry.name}
+                          className="files-row"
+                          onClick={() => {
+                            const target = entry.kind === 'FOLDER' ? entry.id : entry.parentId;
+                            setSearch('');
+                            setParams(target ? (entry.kind === 'FOLDER' ? { folder: target } : { folder: target, file: entry.id }) : {});
+                          }}
+                        >
+                          <td className="files-col-name">
+                            <span className="files-name-cell">
+                              <EntryIcon entry={entry} />
+                              <span className="files-name">{entry.name}</span>
+                            </span>
+                          </td>
+                          <td className="files-col-writer">{entry.folderPath === '/' ? 'Drive' : `Drive${entry.folderPath}`}</td>
+                          <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
+                          <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ) : listing.isError ? (
+              <div className="files-empty" role="alert">
+                Couldn't read this folder: {messageOf(listing.error)}
+              </div>
+            ) : (
+              <table className="files-list">
+                <thead>
+                  <tr>
+                    <th className="files-col-name">Name</th>
+                    <th className="files-col-writer">Last written by</th>
+                    <th className="files-col-size">Size</th>
+                    <th className="files-col-when">Modified</th>
+                    <th className="files-col-more" aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry) => (
+                    <tr
+                      key={entry.id}
+                      data-entry={entry.name}
+                      className={`files-row${entry.id === selectedId ? ' selected' : ''}`}
+                      aria-selected={entry.id === selectedId}
+                      onClick={() => select(entry.id)}
+                      onDoubleClick={() => entry.kind === 'FOLDER' && openFolder(entry.id)}
+                    >
+                      <td className="files-col-name">
+                        <span className="files-name-cell">
+                        <EntryIcon entry={entry} />
+                        {renaming?.id === entry.id ? (
+                          <Input
+                            ref={renameInput}
+                            autoFocus
+                            size="small"
+                            aria-label={`New name for ${entry.name}`}
+                            value={renaming.name}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => setRenaming({ id: entry.id, name: event.target.value })}
+                            onFocus={(event) => {
+                              const dot = entry.kind === 'FILE' ? entry.name.lastIndexOf('.') : -1;
+                              event.target.setSelectionRange(0, dot > 0 ? dot : entry.name.length);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') void commitRename();
+                              if (event.key === 'Escape') setRenaming(null);
+                            }}
+                          />
+                        ) : (
+                          <span className="files-name">{entry.name}</span>
+                        )}
+                        {linkOf(entry) && <LinkOutlined className="files-shared-mark" aria-label="Shared" />}
+                        </span>
+                      </td>
+                      <td className="files-col-writer">
+                        <DriveWriterName writer={entry.lastWriter} />
+                      </td>
+                      <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
+                      <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
+                      <td className="files-col-more" onClick={(event) => event.stopPropagation()}>
+                        {moreButton(entry)}
+                      </td>
+                    </tr>
+                  ))}
+                  {pending.map((u) => (
+                    <tr key={u.key} className="files-row pending" data-entry={u.name}>
+                      <td className="files-col-name">
+                        <span className="files-name-cell">
+                          <EntryIcon entry={{ kind: 'FILE', name: u.name }} />
+                          <span className="files-name">{u.name}</span>
+                        </span>
+                      </td>
+                      <td className="files-col-writer">
+                        {u.status === 'uploading' || u.status === 'queued'
+                          ? `Uploading · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`
+                          : u.status === 'failed'
+                            ? "Couldn't upload"
+                            : `Paused · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`}
+                      </td>
+                      <td className="files-col-size">{formatSize(u.size)}</td>
+                      <td className="files-col-when">—</td>
+                      <td />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {listing.data && entries.length === 0 && pending.length === 0 && (
+              <div className="files-empty">Nothing here yet. Drop files or folders here, or press Upload.</div>
+            )}
+            {dropOver && (
+              <div className="files-drop-hint" aria-hidden="true">
+                <strong>Drop to upload to {folderName}</strong>
+                <span>Files or folders, any size</span>
+              </div>
+            )}
+            <DriveUploadTray uploads={uploads} syncs={syncs} />
+          </section>
+          {selected && (
+            <DetailsPane
+              entry={selected}
+              link={linkOf(selected)}
+              menu={moreButton(selected, 'files-pane-more')}
+              onShare={(moveToCurrent) => setDialog({ kind: 'share', entry: selected, moveToCurrent })}
+              onOpenFolder={openFolder}
             />
           )}
-        </nav>
-        <section
-          className={`files-list-wrap${dropOver ? ' drop-over' : ''}`}
-          aria-label={`${folderName} contents`}
-          onDragOver={(event) => {
-            if (!event.dataTransfer.types.includes('Files')) return;
-            event.preventDefault();
-            setDropOver(true);
-          }}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropOver(false);
-          }}
-          onDrop={(event) => dropInto(event, null)}
-        >
-          <div className="files-crumbs">
-            <Link to="/drive">Drive</Link>
-            {crumbs.map((name, i) => (
-              <span key={`${name}-${i}`}>
-                <span className="files-crumb-sep"> › </span>
-                {i === crumbs.length - 2 && folder?.parentId && folder.parentId !== rootId ? (
-                  <button type="button" className="files-link-button" onClick={() => openFolder(folder.parentId)}>
-                    {name}
-                  </button>
-                ) : (
-                  <span className={i === crumbs.length - 1 ? 'files-crumb-here' : undefined}>{name}</span>
-                )}
-              </span>
-            ))}
-          </div>
-          {searching ? (
-            <div className="files-search" role="region" aria-label="Search results">
-              {found.isError ? (
-                <div className="files-empty" role="alert">
-                  Couldn't search: {messageOf(found.error)}
-                </div>
-              ) : settled !== search.trim() || found.isPending ? (
-                <div className="files-empty">Searching…</div>
-              ) : found.data.entries.length === 0 ? (
-                <div className="files-empty">Nothing matches “{settled}”.</div>
-              ) : (
-                <table className="files-list">
-                  <thead>
-                    <tr>
-                      <th className="files-col-name">Name</th>
-                      <th className="files-col-writer">Folder</th>
-                      <th className="files-col-size">Size</th>
-                      <th className="files-col-when">Modified</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {found.data.entries.map((entry) => (
-                      <tr
-                        key={entry.id}
-                        data-entry={entry.name}
-                        className="files-row"
-                        onClick={() => {
-                          const target = entry.kind === 'FOLDER' ? entry.id : entry.parentId;
-                          setSearch('');
-                          setParams(target ? (entry.kind === 'FOLDER' ? { folder: target } : { folder: target, file: entry.id }) : {});
-                        }}
-                      >
-                        <td className="files-col-name">
-                          <span className="files-name-cell">
-                            <EntryIcon entry={entry} />
-                            <span className="files-name">{entry.name}</span>
-                          </span>
-                        </td>
-                        <td className="files-col-writer">{entry.folderPath === '/' ? 'Drive' : `Drive${entry.folderPath}`}</td>
-                        <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
-                        <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          ) : listing.isError ? (
-            <div className="files-empty" role="alert">
-              Couldn't read this folder: {messageOf(listing.error)}
-            </div>
-          ) : (
-            <table className="files-list">
-              <thead>
-                <tr>
-                  <th className="files-col-name">Name</th>
-                  <th className="files-col-writer">Last written by</th>
-                  <th className="files-col-size">Size</th>
-                  <th className="files-col-when">Modified</th>
-                  <th className="files-col-more" aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    data-entry={entry.name}
-                    className={`files-row${entry.id === selectedId ? ' selected' : ''}`}
-                    aria-selected={entry.id === selectedId}
-                    onClick={() => select(entry.id)}
-                    onDoubleClick={() => entry.kind === 'FOLDER' && openFolder(entry.id)}
-                  >
-                    <td className="files-col-name">
-                      <span className="files-name-cell">
-                      <EntryIcon entry={entry} />
-                      {renaming?.id === entry.id ? (
-                        <Input
-                          ref={renameInput}
-                          autoFocus
-                          size="small"
-                          aria-label={`New name for ${entry.name}`}
-                          value={renaming.name}
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={(event) => setRenaming({ id: entry.id, name: event.target.value })}
-                          onFocus={(event) => {
-                            const dot = entry.kind === 'FILE' ? entry.name.lastIndexOf('.') : -1;
-                            event.target.setSelectionRange(0, dot > 0 ? dot : entry.name.length);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') void commitRename();
-                            if (event.key === 'Escape') setRenaming(null);
-                          }}
-                        />
-                      ) : (
-                        <span className="files-name">{entry.name}</span>
-                      )}
-                      {linkOf(entry) && <LinkOutlined className="files-shared-mark" aria-label="Shared" />}
-                      </span>
-                    </td>
-                    <td className="files-col-writer">
-                      <DriveWriterName writer={entry.lastWriter} />
-                    </td>
-                    <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
-                    <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
-                    <td className="files-col-more" onClick={(event) => event.stopPropagation()}>
-                      {moreButton(entry)}
-                    </td>
-                  </tr>
-                ))}
-                {pending.map((u) => (
-                  <tr key={u.key} className="files-row pending" data-entry={u.name}>
-                    <td className="files-col-name">
-                      <span className="files-name-cell">
-                        <EntryIcon entry={{ kind: 'FILE', name: u.name }} />
-                        <span className="files-name">{u.name}</span>
-                      </span>
-                    </td>
-                    <td className="files-col-writer">
-                      {u.status === 'uploading' || u.status === 'queued'
-                        ? `Uploading · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`
-                        : u.status === 'failed'
-                          ? "Couldn't upload"
-                          : `Paused · ${u.size ? Math.floor((u.sentBytes / u.size) * 100) : 0}%`}
-                    </td>
-                    <td className="files-col-size">{formatSize(u.size)}</td>
-                    <td className="files-col-when">—</td>
-                    <td />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {listing.data && entries.length === 0 && pending.length === 0 && (
-            <div className="files-empty">Nothing here yet. Drop files or folders here, or press Upload.</div>
-          )}
-          {dropOver && (
-            <div className="files-drop-hint" aria-hidden="true">
-              <strong>Drop to upload to {folderName}</strong>
-              <span>Files or folders, any size</span>
-            </div>
-          )}
-          <DriveUploadTray uploads={uploads} syncs={syncs} />
-        </section>
-        {selected && (
-          <DetailsPane
-            entry={selected}
-            link={linkOf(selected)}
-            menu={moreButton(selected, 'files-pane-more')}
-            onShare={(moveToCurrent) => setDialog({ kind: 'share', entry: selected, moveToCurrent })}
-            onOpenFolder={openFolder}
+        </div>
+        {dialog?.kind === 'move' && rootId && (
+          <DriveMoveDialog entry={dialog.entry} rootId={rootId} onClose={() => setDialog(null)} />
+        )}
+        {dialog?.kind === 'share' && (
+          <DriveShareDialog
+            file={dialog.entry}
+            existing={linkOf(dialog.entry)}
+            moveToCurrent={dialog.moveToCurrent}
+            onClose={() => setDialog(null)}
           />
         )}
       </div>
-      {dialog?.kind === 'move' && rootId && (
-        <DriveMoveDialog entry={dialog.entry} rootId={rootId} onClose={() => setDialog(null)} />
-      )}
-      {dialog?.kind === 'share' && (
-        <DriveShareDialog
-          file={dialog.entry}
-          existing={linkOf(dialog.entry)}
-          moveToCurrent={dialog.moveToCurrent}
-          onClose={() => setDialog(null)}
-        />
-      )}
-    </div>
+    </DriveChatHost>
   );
 }
