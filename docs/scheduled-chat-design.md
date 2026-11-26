@@ -1,6 +1,7 @@
 # Scheduled page chat: manage every schedule from one conversation (product plan, revision 2, 2026-11-26)
 
-**Status:** proposal, not decided, nothing built. Builds on [scheduled-tasks-design.md](scheduled-tasks-design.md)
+**Status:** **decided** (owner, 2026-11-26: A on D1–D6, §9), nothing built. Board:
+[docs/mocks/scheduled-chat/](mocks/scheduled-chat/01-board.html). Builds on [scheduled-tasks-design.md](scheduled-tasks-design.md)
 (cited as *S§n*) and the Wiki chat panel ([wiki-chat-design.md](wiki-chat-design.md), cited as *W§n*).
 
 > Owner 11-26: on the Scheduled page, a press opens a Chat in a column on the right, so that I can manage all
@@ -229,9 +230,9 @@ Then, following the Wiki chat: **macOS / iPad (regular width)** gets a third col
 
 ---
 
-## 9. Decisions to make
+## 9. Decisions (owner, 2026-11-26: A on all six)
 
-| | Question | A (recommended) | B |
+| | Question | A (chosen) | B |
 | --- | --- | --- | --- |
 | D1 | Entry point | A **Chat** button in the header's tools row. The bottom right already holds the quick-add line and its picker. This is a deliberate departure from the Wiki's FAB ruling (W§3), and the board shows both | The Wiki's round FAB at the bottom right, consistent across pages |
 | D2 | Inspector and chat together | Three columns, with the table of §6 (the sidebar folds at 1200–1439) | One right column: the chat replaces the inspector while open, and a row press swaps them |
@@ -251,7 +252,7 @@ Then, following the Wiki chat: **macOS / iPad (regular width)** gets a third col
 3. **macOS + iOS.**
 4. **Android.**
 
-Before step 1: a board in `docs/mocks/scheduled-chat/` showing (1) today vs the docked chat at 1440, (2) the
+Before step 1, the board `docs/mocks/scheduled-chat/01-board.html` shows (1) today vs the docked chat at 1440, (2) the
 1200–1439 band with the sidebar folded and the < 1200 slide-over, (3) a change line with Undo and the row flash,
 (4) a widen card with the panel closed (button count, session row tag), (5) the Run now button, (6) an empty
-account and an offline *Runs in*, and (7) the iPhone sheet, with D1–D6 marked.
+account and an offline *Runs in*, and (7) the iPhone sheet. Client work starts after the owner approves it.
