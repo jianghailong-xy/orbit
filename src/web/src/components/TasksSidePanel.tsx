@@ -66,6 +66,7 @@ import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { unregisterWebPushOnSignOut } from '../lib/webPush';
 import { useDriveEnabled } from '../lib/driveSwitch';
+import { SIDEBAR_WIDTH_KEY, clampSidebarWidth, savedSidebarWidth } from '../lib/sidebarWidth';
 import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { setConversationProjectPage, useConversationProjectPage } from '../lib/conversationProjectPage';
@@ -203,15 +204,8 @@ const TOP: TopNavItem[] = [
   // there — so it is reached as the phone reaches it, from Settings.
 ];
 
-// The left sidebar is user-resizable; the chosen width persists across refreshes.
-const SIDEBAR_WIDTH_KEY = 'orbit:sidebar-width';
 // Whether the user collapsed the panel to its icon rail; persisted like the width.
 const SIDEBAR_COLLAPSED_KEY = 'orbit:sidebar-collapsed';
-const DEFAULT_SIDEBAR_WIDTH = 280;
-const MIN_SIDEBAR_WIDTH = 200;
-const MAX_SIDEBAR_WIDTH = 480;
-const clampWidth = (w: number): number =>
-  Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -542,10 +536,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // rows pass under it (docs/mocks/sidebar-projects-scroll, 03).
   const listsRef = useRef<HTMLDivElement>(null);
 
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
-    return saved > 0 ? clampWidth(saved) : DEFAULT_SIDEBAR_WIDTH;
-  });
+  const [sidebarWidth, setSidebarWidth] = useState<number>(savedSidebarWidth);
 
   // Collapse the whole panel to a slim icon rail (desktop) — hands the content
   // region the full width back. Persisted so the choice survives a refresh.
@@ -594,7 +585,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     // The panel hugs the viewport's left edge, so clientX is the target width.
     let next = sidebarWidth;
     const onMove = (ev: MouseEvent) => {
-      next = clampWidth(ev.clientX);
+      next = clampSidebarWidth(ev.clientX);
       setSidebarWidth(next);
     };
     const onUp = () => {
