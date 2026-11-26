@@ -1,5 +1,5 @@
 /**
- * `session.listed_at` (migration 1434): where a session sits in its owner's session list. `last_turn_at` is the
+ * `session.listed_at` (migration 1490): where a session sits in its owner's session list. `last_turn_at` is the
  * liveness clock — every persisted event, claim and state move rewrites it — so a list sorted by it reshuffled each
  * time a session waiting on CI printed a line. This one moves only when the session changes for its owner:
  *

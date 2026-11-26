@@ -7555,7 +7555,6 @@ export class RunnerApiController {
           leaseGeneration: true,
           coordinatorContextKey: true,
           senderSessionId: true,
-          byPerson: true,
         },
       });
       // A dequeue only proposes that context was delivered. The successful top-level turn is its
@@ -8548,7 +8547,7 @@ export class RunnerApiController {
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
           // The turn ended on its owner with nothing queued behind it, so the row moves to the top of their list
-          // (session.listed_at, migration 1434), whoever started the turn: a wake-up's or another session's reply is
+          // (session.listed_at, migration 1490), whoever started the turn: a wake-up's or another session's reply is
           // news too (owner 2026-11-26). FAILED and every other end move it through the session_listed_at_settle trigger.
           ...(nextStatus === RunStatus.AWAITING_INPUT ? { listedAt: new Date() } : {}),
           numTurns: { increment: turnInc },

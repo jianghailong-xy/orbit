@@ -82,9 +82,9 @@ public enum SessionListTime {
             guard let started = session.currentTurnStartedAt else { return nil }
             return RelativeTime.elapsed(started, now: now)
         }
-        // The last message, not `listedAt`: a wake or session-to-session turn leaves the row where it
-        // is but still says when it last spoke (owner 2026-11-25).
-        guard let timestamp = session.lastTurnAt ?? session.createdAt else { return nil }
+        // When the row was listed, so the time agrees with where it sits (owner 2026-11-26): since a
+        // reply moves `listedAt`, what `lastTurnAt` alone still says is liveness, not news.
+        guard let timestamp = session.listedAt ?? session.createdAt else { return nil }
         return RelativeTime.format(timestamp, now: now)
     }
 }
@@ -108,7 +108,7 @@ public enum SessionFilter {
     /// `POST /sessions` answers with the reverse shape — a flat `agentId`, no nested agent — and that
     /// record is registered straight into the loaded lists, where it would otherwise match no agent
     /// and vanish from the list that just created it. Both are the same id (see `AppModel.agentID`).
-    /// Server order (lastTurnAt desc) is preserved.
+    /// Server order (listedAt desc) is preserved.
     public static func forAgent(_ sessions: [Session], agentID: String) -> [Session] {
         sessions.filter { ($0.agent?.id ?? $0.agentId) == agentID }
     }
@@ -123,11 +123,9 @@ public enum SessionFilter {
     /// Agent console. Every non-completed session returned by the Open query stays visible there;
     /// there is no separate System list.
     ///
-    /// The activity-ordered views (Open/Trash) are re-sorted client-side to match web's Agent
-    /// console exactly — the server orders never-run (queued) sessions last (`last_turn_at DESC
-    /// NULLS LAST`), but web ranks them by `createdAt` instead, so a freshly queued session sits
-    /// among recent activity rather than pinned to the bottom. Completed is the one
-    /// exception: the server orders it by completion time (newest completed first) and deliberately
+    /// Open and Trash are re-sorted client-side by the shared rule (`consoleSorted`), so a row a live
+    /// update patched in lands where the server would put it; only Open honours pins. Completed is
+    /// the one exception: the server orders it by completion time (newest completed first) and deliberately
     /// ignores pinning, and that timestamp isn't in the list payload, so the client can't reproduce
     /// it — the server order is preserved verbatim, exactly as web's AgentView does
     /// (`if view === 'completed' return rows`). Without these two rules the clients disagree on order.
@@ -138,17 +136,18 @@ public enum SessionFilter {
         let scoped = forAgent(sessions, agentID: agentID).filter {
             $0.runSource != "SCHEDULE_CHANGE" && ($0.runSource == "SCHEDULE") == scheduled
         }
-        return view == .completed ? scoped : consoleSorted(scoped)
+        return view == .completed ? scoped : consoleSorted(scoped, pinnedFirst: view == .open)
     }
 
     /// Order a per-agent console list by the shared rule (contracts/session-list-order.fixtures.json):
-    /// pinned sessions first, then `listedAt` descending (`createdAt` when null), then `createdAt`
-    /// descending, then id ascending. `lastTurnAt` is never a key: it moves with every streamed event.
-    /// Instants are compared as parsed dates, so fractional-second and offset spellings agree.
-    static func consoleSorted(_ sessions: [Session]) -> [Session] {
+    /// pinned sessions first when `pinnedFirst` (Open), then `listedAt` descending (`createdAt` when
+    /// null), then `createdAt` descending, then id ascending. `lastTurnAt` is never a key: it moves
+    /// with every streamed event. Instants are compared as parsed dates, so fractional-second and
+    /// offset spellings agree.
+    static func consoleSorted(_ sessions: [Session], pinnedFirst: Bool = true) -> [Session] {
         func instant(_ iso: String?) -> Date { iso.flatMap(RelativeTime.parse) ?? .distantPast }
         return sessions.sorted { a, b in
-            if (a.pinnedAt != nil) != (b.pinnedAt != nil) { return a.pinnedAt != nil }
+            if pinnedFirst, (a.pinnedAt != nil) != (b.pinnedAt != nil) { return a.pinnedAt != nil }
             let la = instant(a.listedAt ?? a.createdAt), lb = instant(b.listedAt ?? b.createdAt)
             if la != lb { return la > lb }
             let ca = instant(a.createdAt), cb = instant(b.createdAt)
@@ -156,4 +155,7 @@ public enum SessionFilter {
             return a.id < b.id
         }
     }
+
+    /// The shared order without the pin: what every section but Pinned is ordered by.
+    static func listedOrder(_ sessions: [Session]) -> [Session] { consoleSorted(sessions, pinnedFirst: false) }
 }

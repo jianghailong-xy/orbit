@@ -1,5 +1,5 @@
 /**
- * `session.listed_at` (migration 1434, session-listed-at.ts), the session list's order key, against a real PostgreSQL.
+ * `session.listed_at` (migration 1490, session-listed-at.ts), the session list's order key, against a real PostgreSQL.
  *
  * It moves when the session changes for its owner, and only then:
  *   - created (the column default);

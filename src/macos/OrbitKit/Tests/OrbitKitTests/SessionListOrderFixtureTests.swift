@@ -86,11 +86,50 @@ final class SessionListOrderFixtureTests: XCTestCase {
         XCTAssertEqual(row.applying(summary).listedAt, "2026-11-20T02:00:00.000Z")
     }
 
-    /// The row dates its last message, not its listing (owner 2026-11-25): the order stays on listedAt.
-    func testRowTimeLabelShowsLastTurnAt() throws {
+    /// A settled row dates its listing, so its time agrees with its place (owner 2026-11-26).
+    func testRowTimeLabelShowsListedAt() throws {
         let row = try JSONDecoder().decode(Session.self, from: Data(
             ##"{"id":"a","title":"a","status":"AWAITING_INPUT","listedAt":"2026-11-20T11:00:00.000Z","lastTurnAt":"2026-11-20T11:59:30.000Z","createdAt":"2026-09-01T00:00:00.000Z"}"##.utf8))
-        XCTAssertEqual(SessionListTime.format(for: row, now: date("2026-11-20T12:00:00.000Z")), "just now")
+        XCTAssertEqual(SessionListTime.format(for: row, now: date("2026-11-20T12:00:00.000Z")), "1h ago")
+    }
+
+    /// Every settled fixture row (a date section's) shows `listedAt`, `createdAt` when null.
+    func testEverySettledFixtureRowShowsItsListing() throws {
+        let fx = try fixture()
+        let now = date(try XCTUnwrap(fx["now"] as? String))
+        let dated = Set((try XCTUnwrap(fx["expected"] as? [[String: Any]]))
+            .filter { ["Pinned", "Needs you", "Working"].contains($0["section"] as! String) == false }
+            .flatMap { $0["ids"] as! [String] })
+        for row in try sessions(fx) where dated.contains(row.id) {
+            XCTAssertEqual(SessionListTime.format(for: row, now: now),
+                           RelativeTime.format(try XCTUnwrap(row.listedAt ?? row.createdAt), now: now), row.id)
+        }
+    }
+
+    private func shape(_ out: [SessionTimeSection]) -> [[String]] { out.map { [$0.title] + $0.sessions.map(\.id) } }
+    private func shape(_ expected: Any?) throws -> [[String]] {
+        try XCTUnwrap(expected as? [[String: Any]]).map { [$0["section"] as! String] + ($0["ids"] as! [String]) }
+    }
+
+    /// With a tag filter on, Open draws no Pinned section, keeps Needs you and Working, and orders a
+    /// pinned row like any other (the options the workspace list passes, `AgentsView.timeSections`).
+    func testTagFilteredOpenMatchesTheSharedFixture() throws {
+        let fx = try fixture()
+        let rows = SessionFilter.consoleSorted(openList(try sessions(fx)).reversed())
+        let out = SessionTimeGrouping.sections(rows, pinnedFirst: false, attention: true,
+                                               now: date(try XCTUnwrap(fx["now"] as? String)), calendar: try calendar(fx))
+        XCTAssertEqual(shape(out), try shape(fx["expectedTagFilter"]))
+    }
+
+    /// Trash: date sections by listedAt, no pin, no attention sections, through the path the list takes.
+    func testTrashMatchesTheSharedFixture() throws {
+        let fx = try fixture()
+        let all = try sessions(fx)
+        let trashed = all.filter { $0.deletedAt != nil && $0.completedAt == nil }.reversed()
+        let rows = SessionFilter.consoleSorted(Array(trashed), pinnedFirst: false)
+        let out = SessionTimeGrouping.sections(rows, pinnedFirst: false,
+                                               now: date(try XCTUnwrap(fx["now"] as? String)), calendar: try calendar(fx))
+        XCTAssertEqual(shape(out), try shape(fx["expectedTrash"]))
     }
 
     /// The list the phone draws goes through `SessionProjectGrouping`, whose entries are what the

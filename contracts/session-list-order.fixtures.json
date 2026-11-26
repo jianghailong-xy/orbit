@@ -1,5 +1,5 @@
 {
-  "description": "The session list's sections and their order, which the web, Apple and Android clients each test against. Server: session.listed_at (migration 1434, src/apiserver/src/sessions/session-listed-at.ts). Each row's serverFacts are the columns the server holds for it (docs/session-status-retirement-plan.md section 2.6); its status is the legacy wire word derived from them, which is what a client reads: no client reads serverFacts, and the server spec reads only them.",
+  "description": "The session list's sections and their order, which the web, Apple and Android clients each test against. Server: session.listed_at (migration 1490, src/apiserver/src/sessions/session-listed-at.ts). Each row's serverFacts are the columns the server holds for it (docs/session-status-retirement-plan.md section 2.6); its status is the legacy wire word derived from them, which is what a client reads: no client reads serverFacts, and the server spec reads only them.",
   "rule": [
     "Input: the Open list's rows. A row with completedAt or deletedAt set is not in it (the Completed view orders by completedAt; Trash, the rows with deletedAt, is expectedTrash below).",
     "Each row goes to the FIRST section that takes it, in this order: Pinned, Needs you, Working, then one date section.",

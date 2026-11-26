@@ -4428,7 +4428,7 @@ export class SessionsService {
     // Completed orders by when the session was completed
     // (completed_at, newest first) — not by last activity — and deliberately ignores
     // pinning, which is an Open-list affordance. Every other view floats pinned
-    // sessions to the top and orders by `listed_at` (migration 1434, session-listed-at.ts): the
+    // sessions to the top and orders by `listed_at` (migration 1490, session-listed-at.ts): the
     // clock that moves only when the session changes for its owner, not with every event.
     // The clients sort on the same key, read as created_at where an older server left it NULL.
     // With `limit` that is not cosmetic: a differently ordered page would cut exactly
@@ -5086,7 +5086,7 @@ export class SessionsService {
         s.kind            AS "sessionKind",
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
-        -- The list's order key (migration 1434): moved only when the session changes for its owner. NULL only on a row
+        -- The list's order key (migration 1490): moved only when the session changes for its owner. NULL only on a row
         -- an older server inserted mid-deploy, which is read as its creation.
         COALESCE(s.listed_at, s.created_at) AS "listedAt",
         -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
@@ -7616,7 +7616,7 @@ export class SessionsService {
       /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
       senderClient?: string;
       senderClientDetail?: string | null;
-      /** A person sent it (migration 1434): its end, waiting for input, moves the session's `listedAt`. */
+      /** A person sent it (migration 1490): its arrival moves the session's `listedAt`, as every turn's end on the owner does. */
       byPerson?: boolean;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
@@ -7915,7 +7915,7 @@ export class SessionsService {
       translated?: { content: string; from: TranslationLanguage };
       /**
        * A person sent this turn — the owner at one of their own doors, a guest, a Feishu sender — so the session moves
-       * to the top of the session list (`session.listed_at`, migration 1434). An option of this call and never a field
+       * to the top of the session list (`session.listed_at`, migration 1490). An option of this call and never a field
        * of `dto`; every platform delivery (wake-ups, notifications, task briefs, re-sends) and every session-to-session
        * door leaves it unset, which is what keeps a session busy with those where its owner left it.
        */
