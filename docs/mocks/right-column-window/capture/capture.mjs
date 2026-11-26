@@ -174,12 +174,36 @@ const PANEL = `
 .workspace-split:has(> .session-project-column:not(.session-project-column-over)) > .workspace-view {
   background: var(--bg-base); border: 1px solid var(--border-subtle); border-left: 0; border-radius: 0 12px 12px 0; }
 .workspace-split:has(> .session-project-column-over) > :is(.session-col, .workspace-view) { background: var(--bg-base); }`;
+// C (2026-11-26, after the owner found B2 "not ideal"): panels on a canvas. The window is the grey canvas;
+// the nav sits on it with no surface of its own; what you work in is a white panel rounded on all four
+// corners (list + conversation together, like a chat app's main window); the project column is a second
+// panel of the same kind beside it. One radius, one gap, one elevation everywhere, column open or not.
+const CANVAS = `
+.app-shell { --canvas: color-mix(in srgb, var(--text-1) 5%, var(--bg-base)); background: var(--canvas); }
+.app-nav { background: transparent; border-right: 0; }
+.tp-lists .tp-group-head { background: var(--canvas); }
+.app-main { padding: 8px 8px 8px 0; box-sizing: border-box; }
+.workspace-split > .session-col:not(.session-project-column) {
+  background: var(--bg-base); border: 1px solid var(--border-subtle); border-right: 0; border-radius: 12px 0 0 12px; }
+.workspace-split > .workspace-view {
+  background: var(--bg-base); border: 1px solid var(--border-subtle); border-left: 0; border-radius: 0 12px 12px 0; }
+.workspace-split > .session-col:not(.session-project-column), .workspace-split > .workspace-view { box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.session-resizer:has(+ .session-project-column) { background: transparent; width: 8px; }
+.session-resizer:has(+ .session-project-column):hover { background: transparent; box-shadow: inset 4px 0 0 -3px var(--brand); }
+.session-project-column { background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04); overflow: hidden; }
+.session-project-column-over { top: 0; bottom: 0; right: 0; box-shadow: 0 2px 6px rgba(0,0,0,.08), 0 16px 40px rgba(0,0,0,.14); }`;
 const SCENES = {
   'today-wide': { vp: WIDE },
   'a-wide': { vp: WIDE, css: CARD },
   'b-wide': { vp: WIDE, css: CARD + GREY + PANEL },
   'today-narrow': { vp: NARROW, pressButton: true },
   'b-narrow': { vp: NARROW, pressButton: true, css: CARD + GREY + PANEL },
+  'c-wide': { vp: WIDE, css: CANVAS },
+  'c-closed': { vp: WIDE, folded: '1', css: CANVAS },
+  'c-narrow': { vp: NARROW, pressButton: true, css: CANVAS },
+  // Dark: the canvas goes below the panels (the theme's sunken surface), not a lighter mix.
+  'c-dark': { vp: WIDE, theme: 'dark', css: CANVAS + `.app-shell { --canvas: var(--bg-sunken); }` },
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, ignoreDefaultArgs: ['--hide-scrollbars'] });
@@ -195,8 +219,8 @@ for (const [name, scene] of Object.entries(SCENES)) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 600)); });
   await fixDate(page);
   await page.addInitScript(() => Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel' }));
-  const fixtures = await installFixtures(page, { theme: 'light' });
-  await page.addInitScript((folded) => localStorage.setItem('orbit.projectColumnFolded', folded), '0');
+  const fixtures = await installFixtures(page, { theme: scene.theme ?? 'light' });
+  await page.addInitScript((folded) => localStorage.setItem('orbit.projectColumnFolded', folded), scene.folded ?? '0');
   await routes(page, unhandled);
   // Start on another conversation, as the owner was, then press the coordinator's Needs-you row.
   await page.goto(`${origin}/sessions/${D.notes.id}`);
