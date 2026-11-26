@@ -34,11 +34,13 @@ test('every row shape derives the golden words, and differs from the stored word
     ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']);
 });
 
-test('a held row with no turn state keeps its stored word; one with a turn state, or released, does not read it', () => {
+test('a held row reads its turn state, and with none is parked; a released one reads its release (deploy D3)', () => {
+  // No stored word is read: a held row with no turn state is AWAITING_INPUT whatever word it was built from.
   for (const status of ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED']) {
-    assert.equal(legacySessionStatus(factsOfWord(status, { turnState: null })), status);
+    assert.equal(legacySessionStatus(factsOfWord(status, { turnState: null })), 'AWAITING_INPUT');
+    assert.equal(legacySessionStatus(factsOfWord(status)), status);
   }
-  assert.equal(legacySessionStatus(factsOfWord('RUNNING', { turnState: 'QUEUED'})), 'RUNNING');
+  assert.equal(legacySessionStatus(factsOfWord('RUNNING', { turnState: 'QUEUED'})), 'PENDING');
   assert.equal(legacySessionStatus(factsOfWord('CANCELLED', { turnState: 'IN_FLIGHT'})), 'CANCELLED');
 });
 

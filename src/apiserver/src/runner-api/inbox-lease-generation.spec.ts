@@ -5,6 +5,7 @@ import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -31,6 +32,7 @@ function harness(
               inboxLeaseGeneration: activeGeneration,
               inboxLeaseOwner: GENERATION,
               status,
+              turnState: turnStateOfWord(status),
               // A terminal row carries its release column (session_release_fact_chk).
               ...(isReleasedStatus(status) ? { finishedAt: new Date() } : {}),
             }]
@@ -62,7 +64,7 @@ test('dequeue row-locks runner ownership and stamps the engine generation with t
   assert.match(lockSQL, /"assigned_runner_id" = \?::uuid[\s\S]*FOR UPDATE/);
   // The word and the turn state read with the lock: the projector's SQL twin and the turn state (task T8).
   assert.match(lockSQL, /"inbox_lease_owner" AS "inboxLeaseOwner", session_legacy_status\("session"\."finished_at", "session"\."turn_state"/);
-  assert.match(lockSQL, /AS "status", \(CASE WHEN "session"\."finished_at" IS NULL THEN COALESCE\("session"\."turn_state", session_turn_state_of_status\("session"\."status"\)\) END\) AS "turnState"/);
+  assert.match(lockSQL, /AS "status", \(CASE WHEN "session"\."finished_at" IS NULL THEN "session"\."turn_state" END\) AS "turnState"/);
   // The values it binds once composed: the dispatch pause it reads beside the lock binds none.
   assert.deepEqual(renderRawQuery(h.rawCalls[0]).values, [SESSION_ID, RUNNER_ID]);
 

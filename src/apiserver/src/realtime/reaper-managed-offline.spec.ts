@@ -43,7 +43,7 @@ function reaperFor(runner: { managed: boolean; beatAgoMs: number }) {
         id: SESSION_ID,
         taskId: null,
         assignedRunnerId: RUNNER_ID,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
         provider: 'deepseek',
         providerBuiltin: false,
         runtimeSessionId: null,

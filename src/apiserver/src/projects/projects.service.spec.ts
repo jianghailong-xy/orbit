@@ -224,7 +224,6 @@ test('the index is owner-scoped and newest first, and narrows only when asked', 
     // The coordinator's conversation, for what it is doing — its state columns and nothing else.
     coordinatorSession: {
       select: {
-        status: true,
         finishedAt: true,
         turnState: true,
         engineTurnActive: true,
@@ -449,13 +448,13 @@ test('the index says whether each coordinator is working, exactly when the sessi
     ...over,
   });
   const cases: Array<[string, unknown, boolean | null]> = [
-    ['dispatched turn', conversation({ status: 'RUNNING' }), true],
+    ['dispatched turn', conversation({ turnState: 'IN_FLIGHT', status: 'RUNNING' }), true],
     ['turn the runtime started for itself', conversation({ engineTurnActive: true }), true],
     ['sub-agent still going', conversation({ runningSubagents: ['agent-1'] }), true],
     ['waiting for a reply', conversation({}), false],
-    ['queued, not yet dispatched', conversation({ status: 'PENDING' }), false],
+    ['queued, not yet dispatched', conversation({ turnState: 'QUEUED', status: 'PENDING' }), false],
     ['finished', conversation({ status: 'SUCCEEDED' }), false],
-    ['asking somebody mid-turn', conversation({ status: 'RUNNING', _count: { approvals: 1 } }), false],
+    ['asking somebody mid-turn', conversation({ turnState: 'IN_FLIGHT', status: 'RUNNING', _count: { approvals: 1 } }), false],
     ['no coordinator bound', null, null],
   ];
   const service = serviceWith({

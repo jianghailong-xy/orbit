@@ -537,7 +537,7 @@ test('skips an idle session that is being torn down', async () => {
 });
 
 test('leaves a live session alone', async () => {
-  const { service, resumed } = makeService([row({ status: RunStatus.RUNNING })]);
+  const { service, resumed } = makeService([row({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING })]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'it is already working; nothing is waiting on us');
 });

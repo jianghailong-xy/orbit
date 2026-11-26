@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
+import { writtenWord } from '../test-support/session-word';
 
 const OWNER = '00000000-0000-7000-8000-000000000001';
 const SESSION = '00000000-0000-7000-8000-0000000000b1';
@@ -15,7 +16,7 @@ function fixture(adopted: boolean) {
   const row = {
     id: SESSION,
     ownerId: OWNER,
-    status: 'PENDING',
+    turnState: 'QUEUED', status: 'PENDING',
     assignedRunnerId: null,
     cancelRequestedAt: null,
     endReason: null,
@@ -65,7 +66,7 @@ test('an unbound coordinator candidate clears title ownership and enters Trash a
   assert.equal(f.writes.length, 1);
   assert.equal(f.writes[0].titleManagedByProject, false);
   assert.ok(f.writes[0].deletedAt instanceof Date);
-  assert.equal(f.writes[0].status, 'CANCELLED');
+  assert.equal(writtenWord(f.writes[0]), 'CANCELLED');
   assert.deepEqual(f.lifecycle, [SESSION]);
 });
 

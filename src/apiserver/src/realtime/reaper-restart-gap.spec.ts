@@ -25,7 +25,7 @@ function sweepWith(opts: {
           id: SESSION,
           taskId: null,
           assignedRunnerId: RUNNER,
-          status: RunStatus.RUNNING,
+          turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
           provider: AgentProvider.OPENCODE,
           engine: AgentProvider.OPENCODE,
           runtimeSessionId: null,

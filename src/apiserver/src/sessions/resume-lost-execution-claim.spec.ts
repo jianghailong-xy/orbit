@@ -158,7 +158,7 @@ const retry = { clientTurnId: 'retry-1', content: 'go on' };
 test('a revive that loses the execution claim is a 409 naming the session that holds it', async () => {
   const { service, holderReads } = fixture({
     id: SIBLING,
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     workspaceId: WORKSPACE,
     startsTaskWork: true,
     cancelRequestedAt: null,
@@ -192,7 +192,7 @@ test('a revive that loses the execution claim is a 409 naming the session that h
 test('the refusal says which of the shapes the holder is', async () => {
   const onAnotherAgent = fixture({
     id: SIBLING,
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     workspaceId: OTHER_WORKSPACE,
     startsTaskWork: true,
     cancelRequestedAt: null,
@@ -207,7 +207,7 @@ test('the refusal says which of the shapes the holder is', async () => {
 
   const ending = fixture({
     id: SIBLING,
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     workspaceId: WORKSPACE,
     startsTaskWork: true,
     cancelRequestedAt: now,

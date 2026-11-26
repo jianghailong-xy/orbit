@@ -170,8 +170,8 @@ test('local sync preserves landed projections and cannot be used for a candidate
 });
 
 for (const tc of [
-  { name: 'PENDING session', overrides: { status: RunStatus.PENDING } },
-  { name: 'RUNNING session', overrides: { status: RunStatus.RUNNING } },
+  { name: 'PENDING session', overrides: { turnState: 'QUEUED', status: RunStatus.PENDING } },
+  { name: 'RUNNING session', overrides: { turnState: 'IN_FLIGHT', status: RunStatus.RUNNING } },
   {
     name: 'ending idle session',
     overrides: { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: new Date() },
@@ -228,7 +228,7 @@ test('a queued merge wakes its runner once the queue has committed', async () =>
 test('a merge request that queued nothing wakes no runner', async () => {
   const pending = harness({ mergeStatus: 'pending', mergeOperationId: 'operation-1' });
   await pending.service.mergeToMain(OWNER_ID, SESSION_ID);
-  const running = harness({ status: RunStatus.RUNNING });
+  const running = harness({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING });
   await assert.rejects(() => running.service.mergeToMain(OWNER_ID, SESSION_ID));
 
   assert.deepEqual(pending.order, ['commit']);
@@ -255,7 +255,7 @@ test('merge queueing cannot overlap a runner-claimed commit', async () => {
 const dataOf = (write: unknown) => (write as { data: Record<string, unknown> }).data;
 
 test('a session merging itself during its own turn is kept for the turn\'s end, not refused', async () => {
-  const h = harness({ status: RunStatus.RUNNING });
+  const h = harness({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING });
 
   const answer = await h.service.mergeToMain(OWNER_ID, SESSION_ID, 'develop', undefined,
     { requestedBy: 'AGENT', selfRequest: true });
@@ -270,7 +270,7 @@ test('a session merging itself during its own turn is kept for the turn\'s end, 
 });
 
 test('a session merging itself with waitSeconds is answered at once, without waiting on its own turn', async () => {
-  const h = harness({ status: RunStatus.RUNNING });
+  const h = harness({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING });
 
   const answer = await h.service.mergeToMain(OWNER_ID, SESSION_ID, undefined, 60,
     { requestedBy: 'AGENT', selfRequest: true }) as { outcome: string; receiptAbsentReason: string };
@@ -280,7 +280,7 @@ test('a session merging itself with waitSeconds is answered at once, without wai
 });
 
 test('another caller is still told to wait for the turn', async () => {
-  const h = harness({ status: RunStatus.RUNNING });
+  const h = harness({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING });
   await assert.rejects(
     () => h.service.mergeToMain(OWNER_ID, SESSION_ID, undefined, undefined, { requestedBy: 'AGENT' }),
     ConflictException,
@@ -290,7 +290,7 @@ test('another caller is still told to wait for the turn', async () => {
 
 test('on a runner that merges beside a turn, a merge mid-turn is queued at once, whoever asks', async () => {
   for (const options of [{ requestedBy: 'AGENT' as const, selfRequest: true }, { requestedBy: 'AGENT' as const }, {}]) {
-    const h = harness({ status: RunStatus.RUNNING }, [SESSION_MERGE_RECOVERY_V1, SESSION_MERGE_BESIDE_TURN_V1]);
+    const h = harness({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING }, [SESSION_MERGE_RECOVERY_V1, SESSION_MERGE_BESIDE_TURN_V1]);
 
     const answer = await h.service.mergeToMain(OWNER_ID, SESSION_ID, 'develop', undefined, options);
 
@@ -331,7 +331,7 @@ test('the end of a turn with nothing owed, or with another turn already running,
   assert.equal(await none.service.mergeAfterOwnTurn(SESSION_ID), 'NOTHING_OWED');
   assert.deepEqual(none.writes, []);
 
-  const running = harness({ status: RunStatus.RUNNING, mergeAfterTurnAt: new Date() });
+  const running = harness({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING, mergeAfterTurnAt: new Date() });
   assert.equal(await running.service.mergeAfterOwnTurn(SESSION_ID), 'DEFERRED');
   assert.deepEqual(running.writes, []);
 });

@@ -7,6 +7,7 @@ import { encryptSecret } from '../providers/provider-crypto';
 import { resolveProviderExec } from '../providers/custom-provider';
 import { SessionsService } from './sessions.service';
 import { sessionMoveVerdict, type SessionMoveFacts } from './session-move';
+import { writtenWord } from '../test-support/session-word';
 
 process.env.PROVIDER_SECRET_KEY = 'dsh-session-routing-test-key';
 
@@ -178,7 +179,7 @@ test('dsh compatibility: legacy DeepSeek history resumes with the same Claude id
   const answer = await fixture.service.resume(ownerId, sessionId, continuation);
   assert.equal(answer.turnId, 'resume-turn');
   assert.equal(answer.revived, true);
-  assert.equal(fixture.updates[0].status, RunStatus.PENDING);
+  assert.equal(writtenWord(fixture.updates[0]), RunStatus.PENDING);
   const resumed = { ...fixture.session, ...fixture.updates[0] };
   assert.equal(resumed.runtimeSessionId, historicalId);
   assert.equal(resumed.numTurns, 3);

@@ -61,7 +61,7 @@ test('a commit request that queued nothing wakes no runner', async () => {
   await pending.service.commitWorktree('owner-1', 'session-1');
   const raced = makeService({}, 0, { commitStatus: 'pending' });
   await raced.service.commitWorktree('owner-1', 'session-1');
-  const running = makeService({ status: RunStatus.RUNNING });
+  const running = makeService({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING });
   await assert.rejects(() => running.service.commitWorktree('owner-1', 'session-1'));
 
   assert.deepEqual([...pending.wakes, ...raced.wakes, ...running.wakes], []);
@@ -83,11 +83,9 @@ test('commit queues atomically only while a session is truly idle', async () => 
     };
     data: { commitStatus: string };
   };
-  // Parked (turnStateFilter([null])): held, with no turn state, or not yet backfilled and stored AWAITING_INPUT.
+  // Parked (turnStateFilter([null])): held, with no turn state.
   assert.equal(update.where.finishedAt, null);
-  assert.deepEqual(update.where.OR, [
-    { turnState: null, status: { notIn: [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.INTERRUPTED] } },
-  ]);
+  assert.deepEqual(update.where.OR, [{ turnState: null }]);
   assert.equal(update.where.cancelRequestedAt, null);
   assert.deepEqual(update.where.runningSubagents, { isEmpty: true });
   // Background shells are not part of the compare-and-set: a left-up dev server never exits, so
@@ -97,7 +95,7 @@ test('commit queues atomically only while a session is truly idle', async () => 
 });
 
 test('commit rejects a RUNNING turn before touching commit state', async () => {
-  const { service, updates } = makeService({ status: RunStatus.RUNNING });
+  const { service, updates } = makeService({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING });
 
   await assert.rejects(
     () => service.commitWorktree('owner-1', 'session-1'),
@@ -109,7 +107,7 @@ test('commit rejects a RUNNING turn before touching commit state', async () => {
 });
 
 test('commit rejects an interrupted session that is not at a settled turn boundary', async () => {
-  const { service, updates } = makeService({ status: RunStatus.INTERRUPTED });
+  const { service, updates } = makeService({ turnState: 'ABANDONED', status: RunStatus.INTERRUPTED });
 
   await assert.rejects(
     () => service.commitWorktree('owner-1', 'session-1'),
@@ -160,7 +158,7 @@ test('a concurrent identical commit request remains idempotent', async () => {
 test('a pending commit does not hide a turn that started after the compare-and-set lost', async () => {
   const { service } = makeService({}, 0, {
     commitStatus: 'pending',
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
   });
 
   await assert.rejects(
@@ -231,7 +229,7 @@ test('an ended session resumed under a lost compare-and-set is rejected', async 
   const { service } = makeService(
     { status: RunStatus.SUCCEEDED, worktreeDirty: true },
     0,
-    { status: RunStatus.RUNNING, finishedAt: null, commitStatus: 'pending' },
+    { turnState: 'IN_FLIGHT', status: RunStatus.RUNNING, finishedAt: null, commitStatus: 'pending' },
   );
 
   await assert.rejects(

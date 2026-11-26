@@ -174,16 +174,11 @@ test('the shapes the ruling names answer as it says', () => {
   assert.equal(deriveSessionWaitingOn(base, NO_HOLD, 0), null);
 });
 
-test('phase reads the turn state, and the stored word only for a held row without one (task T10)', () => {
-  // Filled: the turn state decides, whatever the word beside it.
+test('phase reads the turn state; a held row with none is parked (task T10, and T14 for the fallback)', () => {
   assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'IN_FLIGHT' }), 'RUNNING');
   assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'QUEUED' }), 'PENDING');
   assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'ABANDONED' }), 'IDLE');
-  assert.equal(deriveSessionPhase({ finishedAt: null, turnState: 'IN_FLIGHT' }), 'RUNNING');
-  // Not yet backfilled: the stored word.
-  assert.equal(deriveSessionPhase({ finishedAt: null, turnState: null }), 'PENDING');
-  assert.equal(deriveSessionPhase({ turnState: 'IN_FLIGHT', finishedAt: null }), 'RUNNING');
-  // Neither: parked. Released: IDLE whatever the rest says.
+  // No turn state: parked, since no stored word is read (deploy D3). Released: IDLE whatever the rest says.
   assert.equal(deriveSessionPhase({ finishedAt: null, turnState: null }), 'IDLE');
   assert.equal(deriveSessionPhase({ finishedAt: AT, turnState: 'IN_FLIGHT' }), 'IDLE');
   // A queued turn held by the dispatch pause is HOLD, on the turn state alone.

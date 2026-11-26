@@ -4,6 +4,8 @@ import { RunStatus } from '@orbit/shared';
 import { TURN_COMPLETE_STEER_REQUEUE } from '@orbit/shared';
 import { turnStateFilter } from '../sessions/session-turn-state';
 import { RunnerApiController } from './runner-api.controller';
+import { writtenWord } from '../test-support/session-word';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * Taking a steer back: the runner reporting that the engine PROVABLY never read it.
@@ -75,12 +77,14 @@ function harness({
     session: {
       findUniqueOrThrow: async () => ({
         status,
+        turnState: turnStateOfWord(status),
+        finishedAt: null,
         taskId: null,
         mergeStatus: null,
         mergedSourceSha: null,
         retryAt: null,
       }),
-      findUnique: async () => ({ status }),
+      findUnique: async () => ({ status, turnState: turnStateOfWord(status), finishedAt: null }),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         sessionWrites.push(args);
         return { count: 1 };
@@ -200,7 +204,7 @@ test('a re-filed steer wakes a session its turn already parked', async () => {
     ...turnStateFilter([null]),
     cancelRequestedAt: null,
   });
-  assert.equal(h.sessionWrites[0].data.status, RunStatus.PENDING);
+  assert.equal(writtenWord(h.sessionWrites[0].data), RunStatus.PENDING);
   assert.equal(h.sessionWrites[0].data.turnState, 'QUEUED');
   assert.deepEqual(h.inboxWakes, [SESSION_ID]);
 });

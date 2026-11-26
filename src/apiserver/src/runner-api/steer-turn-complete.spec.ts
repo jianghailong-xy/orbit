@@ -4,6 +4,7 @@ import { RunStatus } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
 import { CURRENT_WORK_INTERRUPTED } from '../sessions/current-work-delivery';
+import { writtenWord } from '../test-support/session-word';
 
 /**
  * A steer settles only itself.
@@ -114,13 +115,13 @@ function harness(
     },
     session: {
       findUniqueOrThrow: async () => ({
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
         taskId: null,
         mergeStatus: null,
         mergedSourceSha: null,
         retryAt: null,
       }),
-      findUnique: async () => ({ status: RunStatus.RUNNING }),
+      findUnique: async () => ({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING }),
       updateMany: async ({ data }: { data: Record<string, unknown> }) => {
         sessionWrites.push(data);
         return { count: 1 };
@@ -204,7 +205,7 @@ test('an ordinary turn still settles the session, so the steer branch is not a w
   await complete(h, 'SUCCEEDED');
 
   assert.equal(h.sessionWrites.length, 1);
-  assert.equal(h.sessionWrites[0].status, RunStatus.AWAITING_INPUT);
+  assert.equal(writtenWord(h.sessionWrites[0]), RunStatus.AWAITING_INPUT);
   // A steer left queued when its turn ends becomes the ordinary message it would have been
   // had it arrived a moment later.
   const promoted = h.turnWrites.find((w) => w.data.kind === 'message');
@@ -312,7 +313,7 @@ test('a target that ended interrupted writes off its unread CURRENT_WORK instead
   assert.equal(receipt?.data.deliveryStatus, 'FAILED');
   assert.equal(receipt?.data.deliveryFailureCode, CURRENT_WORK_INTERRUPTED);
   assert.ok(!h.turnWrites.some((write) => write.data.kind === 'message' && write.data.sendIntent === 'NEXT_TURN'));
-  assert.equal(h.sessionWrites[0].status, RunStatus.AWAITING_INPUT);
+  assert.equal(writtenWord(h.sessionWrites[0]), RunStatus.AWAITING_INPUT);
   assert.deepEqual(h.queueChanges, [SESSION_ID]);
 });
 

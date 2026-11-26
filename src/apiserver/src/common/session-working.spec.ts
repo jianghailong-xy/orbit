@@ -20,21 +20,19 @@ import {
  * combination, on every status. That the Prisma filter and the SQL fragment answer the same on the
  * same rows is session-working.pg.spec.ts, against PostgreSQL.
  *
- * Each status is a row as the server stores it: a released word with its `finished_at`, a held one with the turn
- * state migration 1611's trigger gives it, or with none (not yet backfilled, task T3), which reads its stored word.
+ * Each status is a row as the server stores it: a released word with its `finished_at`, a held one with its turn
+ * state. (A held row with no turn state beside a word that names one no longer exists: the backfill, task T3, filled
+ * every row, and the fallback that read its stored word went with task T14.)
  */
 
 const ALL_STATUSES = Object.values(RunStatus);
 /** Statuses on which work outside a turn is read: the session has not ended. */
 const NOT_ENDED = new Set<RunStatus>([RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED]);
 
-/** The stored shapes of a status: filled and not yet backfilled. */
+/** The stored shape of a status. */
 function shapesOf(status: RunStatus): Array<{ label: string; row: SessionWorkingRow }> {
   const finishedAt = NOT_ENDED.has(status) ? null : new Date();
-  return [
-    { label: `${status} (turn_state filled)`, row: { finishedAt, turnState: turnStateOfWord(status) } },
-    { label: `${status} (turn_state null)`, row: { finishedAt, turnState: null } },
-  ];
+  return [{ label: status, row: { finishedAt, turnState: turnStateOfWord(status) } }];
 }
 const ALL_SHAPES = ALL_STATUSES.flatMap((status) => shapesOf(status).map((shape) => ({ status, ...shape })));
 

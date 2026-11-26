@@ -5,6 +5,8 @@ import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { buildCoordinatorDeliveryContextKey } from '../projects/coordinator-opening';
 import { currentWorkTerminalizationDouble, noSessionRequests } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOfWrite } from '../test-support/session-word';
 
 const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
 const LEASE_GENERATION = '44444444-4444-4444-8444-444444444444';
@@ -78,16 +80,20 @@ function makeController(
     session: {
       findUniqueOrThrow: async () => ({
         status: session.status,
+        turnState: turnStateOfWord(session.status),
+        finishedAt: null,
         taskId: session.taskId,
         inboxLeaseGeneration: LEASE_GENERATION,
         coordinatorContextEpoch,
         coordinatorForProject: coordinatorContextKey ? { id: PROJECT_ID, coordinatorEnabled } : null,
       }),
-      findUnique: async () => ({ status: session.status }),
-      updateMany: async ({ data }: { data: { status: RunStatus } }) => {
-        statusWrites.push(data.status);
+      findUnique: async () => ({ status: session.status, turnState: turnStateOfWord(session.status), finishedAt: null }),
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        // The writer writes the facts; the word they leave is the projector's (deploy D3).
+        const word = wordOfWrite(data) as RunStatus;
+        statusWrites.push(word);
         sessionWrites.push(data);
-        session.status = data.status;
+        session.status = word;
         return { count: 1 };
       },
       count: async () => 0,

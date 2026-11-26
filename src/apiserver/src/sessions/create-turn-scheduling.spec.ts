@@ -3,6 +3,8 @@ import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { RunStatus } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
+import { writtenWord } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
 
 function makeService(
   initialStatus: RunStatus,
@@ -23,6 +25,8 @@ function makeService(
     id: '11111111-1111-4111-8111-111111111111',
     ownerId: '22222222-2222-4222-8222-222222222222',
     status: initialStatus,
+    turnState: turnStateOfWord(initialStatus),
+    finishedAt: null,
     deletedAt: null,
     cancelRequestedAt: null,
     prompt: 'opening prompt',
@@ -66,8 +70,8 @@ function makeService(
       findUniqueOrThrow: async () => ({ ...session }),
       update: async (write: { data: Record<string, unknown> }) => {
         updateWrites.push(write);
-        statusWrites.push(write.data.status as RunStatus);
-        session.status = write.data.status as RunStatus;
+        statusWrites.push(writtenWord(write.data) as RunStatus);
+        session.status = (writtenWord(write.data) ?? session.status) as RunStatus;
         return { ...session };
       },
     },
@@ -316,7 +320,7 @@ test('a replayed re-send is answered from its receipt, and a different file unde
 
 for (const boundary of [
   { name: 'terminal', status: RunStatus.FAILED, deletedAt: null },
-  { name: 'Trash', status: RunStatus.PENDING, deletedAt: new Date() },
+  { name: 'Trash', turnState: 'QUEUED', status: RunStatus.PENDING, deletedAt: new Date() },
 ] as const) {
   test(`a committed send retries by key after the session became ${boundary.name}`, async () => {
     const h = makeService(boundary.status, {

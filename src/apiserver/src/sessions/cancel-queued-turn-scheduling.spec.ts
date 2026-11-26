@@ -2,12 +2,16 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
+import { writtenWord } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
 
 function makeService(status: RunStatus, executableAfterDelete: number) {
   const session = {
     id: '11111111-1111-4111-8111-111111111111',
     ownerId: '22222222-2222-4222-8222-222222222222',
     status,
+    turnState: turnStateOfWord(status),
+    finishedAt: null,
     cancelRequestedAt: null,
   };
   const statusWrites: RunStatus[] = [];
@@ -17,8 +21,8 @@ function makeService(status: RunStatus, executableAfterDelete: number) {
     $queryRaw: async () => [{ id: session.id }],
     session: {
       findUniqueOrThrow: async () => ({ ...session }),
-      update: async ({ data }: { data: { status: RunStatus } }) => {
-        statusWrites.push(data.status);
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        statusWrites.push(writtenWord(data) as RunStatus);
         return { ...session, ...data };
       },
     },

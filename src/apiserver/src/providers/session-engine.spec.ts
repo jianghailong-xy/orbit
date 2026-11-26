@@ -193,7 +193,7 @@ test('T2 the reaper watches a configured non-Claude session initialize', async (
   const sessionId = '22222222-2222-4222-8222-222222222222';
   const stuck = (over: Record<string, unknown>) => ({
     id: sessionId, taskId: null, assignedRunnerId: '33333333-3333-4333-8333-333333333333',
-    status: RunStatus.RUNNING, runtimeSessionId: null, lastTurnAt: new Date(Date.now() - 3 * 60_000),
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING, runtimeSessionId: null, lastTurnAt: new Date(Date.now() - 3 * 60_000),
     cancelRequestedAt: null, endReason: null, task: null, ownerId: OWNER, providerBuiltin: false,
     assignedRunner: { status: 'ONLINE', lastHeartbeatAt: new Date() }, ...over,
   });

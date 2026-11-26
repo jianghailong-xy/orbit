@@ -39,3 +39,26 @@ export async function sessionWord(
  * helper turns the word into the facts (turnStateOfWord, and the release beside a released word) and never writes it.
  */
 export type SessionFixture = Partial<Prisma.SessionUncheckedCreateInput> & { status?: RunStatus | `${RunStatus}` };
+
+/**
+ * The word a session write leaves on a row that ran (started, a conversation): what a unit double that recorded the
+ * written `status` records now that writers write the facts. `data` is the write's `data`.
+ */
+export function wordOfWrite(data: Record<string, unknown>): `${RunStatus}` {
+  return legacySessionStatus({
+    finishedAt: (data.finishedAt as Date | null | undefined) ?? null,
+    turnState: (data.turnState as string | null | undefined) ?? null,
+    endReason: (data.endReason as string | null | undefined) ?? null,
+    lastTurnOutcome: (data.lastTurnOutcome as string | null | undefined) ?? null,
+    startedAt: new Date(0),
+    importSourceCwd: (data.importSourceCwd as string | null | undefined) ?? null,
+    sessionKind: 'CONVERSATION',
+  });
+}
+
+/** The word a session write sets, or undefined when it names neither the turn state nor the release: wordOfWrite for a
+ *  write that moves the session's state. */
+export function writtenWord(data: Record<string, unknown> | null | undefined): `${RunStatus}` | undefined {
+  if (!data || !('turnState' in data || 'finishedAt' in data)) return undefined;
+  return wordOfWrite(data);
+}

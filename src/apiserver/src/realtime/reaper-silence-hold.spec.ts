@@ -166,7 +166,7 @@ function world(opts: {
         id: SESSION_ID,
         taskId: null,
         assignedRunnerId: RUNNER_ID,
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
         provider: 'claude',
         providerBuiltin: true,
         engine: 'claude',
