@@ -21,7 +21,6 @@ import {
   stripStaleLine,
   targetHref,
   targetName,
-  targetNoun,
   waitedOn,
   waitsBeyondTasks,
   watchBucket,
@@ -135,36 +134,17 @@ export function TaskFollowedBy({ taskId, hideWhenEmpty = false }: { taskId: stri
 }
 
 /**
- * A session's two relations, in its header: Following — the live watches it is the observer of, so
- * what it is waiting on — and Followed by — the live watches that name it. Each opens its watch rows;
- * Follow creates a watch on this session.
+ * A session's Followed by, in its header: the live watches that name it, opening their watch rows;
+ * Follow creates a watch on this session. What the session itself waits on is not here: a task is an
+ * eye in its Tasks card, anything else is the Watching strip above the composer.
  */
 export function SessionWatchBadges({ sessionId, follow = true }: { sessionId: string; follow?: boolean }) {
   const watchesQ = useQuery(watchesQuery());
   const [following, setFollowing] = useState(false);
   const rows = rowsOf(watchesQ.data);
-  const waitingOn = watchesFollowing(rows, sessionId).filter(isLiveWatch);
   const watchedBy = watchesFollowedBy(rows, 'SESSION', sessionId).filter(isLiveWatch);
-  const targets = new Set(
-    waitingOn.flatMap((w) => w.targets.map((t) => `${t.targetKind}:${t.targetResourceId}`)),
-  ).size;
   return (
     <span className="watch-badges">
-      {waitingOn.length > 0 && (
-        <Popover
-          side="bottom"
-          align="start"
-          title="This session is waiting on"
-          popupClassName="watch-popover"
-          trigger={
-            <button type="button" className="watch-chip">
-              <EyeOutlined /> Following {targets} {targetNoun(waitingOn, targets)}
-            </button>
-          }
-        >
-          <WatchRowList watches={waitingOn} />
-        </Popover>
-      )}
       {watchedBy.length > 0 && (
         <Popover
           side="bottom"
