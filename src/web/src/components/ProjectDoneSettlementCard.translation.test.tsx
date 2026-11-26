@@ -2,10 +2,12 @@
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DoneRequest, OwnerCardTranslation } from '@orbit/shared';
-import { PROJECT_DONE_COPY } from '../lib/projectDone';
+import { PROJECT_DONE_COPY, type ProjectDoneDocument } from '../lib/projectDone';
 import { TRANSLATION_COPY } from '../lib/translation';
 import { cardHost, clientWithMe, OWNER_LANG, ownerMe, translationRefused } from '../test/ownerCardTranslation';
-import { ProjectDoneCard, ProjectDoneDialog } from './ProjectSettlementCard';
+import projectRead from '../test/projectRead.translation.json';
+import { ProjectAcceptanceCard } from './ProjectAcceptanceCard';
+import { ProjectDoneCard, ProjectDoneDialog, ProjectWhyNotDoneCard } from './ProjectSettlementCard';
 
 vi.mock('../api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api')>()), api: vi.fn() }));
 const { api } = await import('../api');
@@ -171,5 +173,141 @@ describe('the project page’s done dialog', () => {
     const line = "The translation came back damaged, so your answer wasn't sent";
     await h.until(() => h.text().includes(line), 'the reason');
     expect(h.text()).toContain(`${line}·Retry·Send as written`);
+  });
+});
+
+/**
+ * The project's own title and criteria, over `GET /projects/:id` as the server serves it: the read of
+ * project-text-translation.pg.spec.ts (a), taken against PostgreSQL and passed through the HTTP layer's
+ * public-id mapping (`addTwins`). Its translator is a stub that answers `ZH[<the text>]`.
+ */
+const served = projectRead as unknown as ProjectDoneDocument & { acceptanceCriteriaItems: Array<{ id: string; text: string }> };
+const words = served.translation!;
+const originals = served.acceptanceCriteriaItems.map((item) => item.text);
+const translated = words.criteria!.map((criterion) => criterion.text);
+const zhOwner = () => clientWithMe(ownerMe({ translationLanguage: 'zh-Hans' }));
+const texts = (selector: string) => [...document.body.querySelectorAll(selector)].map((el) => el.textContent);
+const metaTitle = () => texts('.project-settlement-meta')[0]!.split(' · ')[0];
+
+const FALLBACKS = [
+  ['no translation', { ...served, translation: undefined }, zhOwner],
+  ['a failed translation', { ...served, translation: { lang: 'zh-Hans' as const, failed: true as const } }, zhOwner],
+  ['a translation in another language', served, () => clientWithMe(ownerMe({ translationLanguage: 'ja' }))],
+  ['translation switched off', served, () => clientWithMe(ownerMe({ translationLanguage: 'zh-Hans', translationEnabled: false }))],
+] as const;
+
+describe('the done card’s title and Done when, over the served read', () => {
+  const card = (project: ProjectDoneDocument) => <ProjectDoneCard project={project} ownerInitiated onRecordDone={() => {}} />;
+
+  it('owner-started: draws them translated, and the toggle shows the originals', async () => {
+    await h.draw(card(served), zhOwner());
+    expect(metaTitle()).toBe(words.title);
+    expect(texts('.project-done-criterion-text')).toEqual(translated);
+    expect(h.text()).toContain(`${TRANSLATION_COPY.translated}·${TRANSLATION_COPY.showOriginal}`);
+    expect(h.text()).toContain(PROJECT_DONE_COPY.noRequestMeta);
+
+    await h.press(TRANSLATION_COPY.showOriginal);
+    expect(metaTitle()).toBe(served.title);
+    expect(texts('.project-done-criterion-text')).toEqual(originals);
+    await h.press(TRANSLATION_COPY.showTranslation);
+    expect(texts('.project-done-criterion-text')).toEqual(translated);
+  });
+
+  it('coordinator request: one toggle flips the judgment, gaps, title and criteria together', async () => {
+    const [first, second] = served.acceptanceCriteriaItems;
+    // The open-items row's own translation, in the same language; its second gap has no title, so the card
+    // draws that criterion's text.
+    const asked: DoneRequest = { ...request, gaps: [{ ...request.gaps[0]!, criterionKey: first!.id }, { criterionKey: second!.id } as DoneRequest['gaps'][number]] };
+    const judged: OwnerCardTranslation = { ...translation, lang: 'zh-Hans' };
+    await h.draw(<ProjectDoneCard project={served} doneRequest={asked} translation={judged} onRecordDone={() => {}} onNotYet={() => {}} />, zhOwner());
+    expect(metaTitle()).toBe(words.title);
+    expect(texts('.project-done-criterion-text')).toEqual(translated);
+    expect(texts('.project-done-gap-title')).toEqual([judged.gaps![0]!.title, translated[1]]);
+    expect(h.text()).toContain(judged.judgment);
+    expect(texts('.chat-translate-foot')).toHaveLength(1);
+
+    await h.press(TRANSLATION_COPY.showOriginal);
+    expect(metaTitle()).toBe(served.title);
+    expect(texts('.project-done-criterion-text')).toEqual(originals);
+    expect(texts('.project-done-gap-title')).toEqual(['The live check', originals[1]]);
+    expect(h.text()).toContain(JUDGMENT);
+  });
+
+  it('the receipt draws the title translated, with the same toggle', async () => {
+    await h.draw(<ProjectDoneCard project={{ ...served, status: 'DONE', doneBy: 'OWNER' }} />, zhOwner());
+    expect(metaTitle()).toBe(words.title);
+    await h.press(TRANSLATION_COPY.showOriginal);
+    expect(metaTitle()).toBe(served.title);
+  });
+
+  it('draws a criterion the translation does not hold in its own words, matched by id', async () => {
+    await h.draw(card({ ...served, translation: { ...words, criteria: [words.criteria![1]!] } }), zhOwner());
+    expect(texts('.project-done-criterion-text')).toEqual([originals[0], translated[1]]);
+  });
+
+  it.each(FALLBACKS)('draws the originals with %s, on both variants', async (_, project, client) => {
+    for (const ui of [card(project), <ProjectDoneCard project={project} doneRequest={request} onRecordDone={() => {}} />]) {
+      await h.draw(ui, client());
+      expect(metaTitle()).toBe(served.title);
+      expect(texts('.project-done-criterion-text')).toEqual(originals);
+      expect(h.text()).not.toContain(TRANSLATION_COPY.showOriginal);
+    }
+  });
+});
+
+describe('the why-not-done card over the served read', () => {
+  it('draws the criteria translated, and the toggle shows the originals', async () => {
+    await h.draw(<ProjectWhyNotDoneCard project={served} />, zhOwner());
+    expect(texts('.project-why-item-title')).toEqual(translated);
+    expect(h.text()).toContain(PROJECT_DONE_COPY.whyHeading);
+
+    await h.press(TRANSLATION_COPY.showOriginal);
+    expect(texts('.project-why-item-title')).toEqual(originals);
+  });
+
+  it('offers no toggle once the project is done, where it draws no criterion', async () => {
+    await h.draw(<ProjectWhyNotDoneCard project={{ ...served, status: 'DONE' }} />, zhOwner());
+    expect(h.text()).not.toContain(TRANSLATION_COPY.showOriginal);
+  });
+
+  it.each(FALLBACKS)('draws the originals with %s', async (_, project, client) => {
+    await h.draw(<ProjectWhyNotDoneCard project={project} />, client());
+    expect(texts('.project-why-item-title')).toEqual(originals);
+    expect(h.text()).not.toContain(TRANSLATION_COPY.showOriginal);
+  });
+});
+
+describe('the project page’s Done when list over the served read', () => {
+  // The row's Markdown unwraps its paragraph, so the criterion's words are the row's first node.
+  const rows = () => [...document.body.querySelectorAll('.acceptance-row-text')].map((el) => el.firstChild!.textContent);
+  async function drawList(read: unknown, client = zhOwner()) {
+    apiMock.mockImplementation((async () => read) as never);
+    vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+    await h.draw(<ProjectAcceptanceCard projectId={served.id!} />, client);
+    await h.until(() => rows().length === originals.length, 'the criteria');
+  }
+
+  it('draws the criteria translated, and the toggle shows the originals', async () => {
+    await drawList(served);
+    expect(rows()).toEqual(translated);
+    expect(h.text()).toContain(`${TRANSLATION_COPY.translated}·${TRANSLATION_COPY.showOriginal}`);
+
+    await h.press(TRANSLATION_COPY.showOriginal);
+    expect(rows()).toEqual(originals);
+  });
+
+  it('keeps a press on a translated row on the criterion’s own words', async () => {
+    const [first, second] = served.acceptanceCriteriaItems;
+    await drawList({ ...served, acceptanceCriteriaItems: [{ ...first, satisfiedBy: 'CONFIRMATION' }, second] });
+    await h.press('Confirm…');
+    const dialog = document.body.querySelector('[role="dialog"]')!.textContent!;
+    expect(dialog).toContain(originals[0]);
+    expect(dialog).not.toContain(translated[0]);
+  });
+
+  it.each(FALLBACKS)('draws the originals with %s', async (_, project, client) => {
+    await drawList(project, client());
+    expect(rows()).toEqual(originals);
+    expect(h.text()).not.toContain(TRANSLATION_COPY.showOriginal);
   });
 });

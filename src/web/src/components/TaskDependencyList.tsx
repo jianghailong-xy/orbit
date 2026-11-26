@@ -46,7 +46,13 @@ export function TaskDependencyList({
               key={node.id}
             >
               <button type="button" className="tdg-list-open" onClick={() => onOpenTask(node.id)}>
-                <TaskStatusPill status={node.status} running={node.running} queued={node.queued} />
+                <TaskStatusPill
+                  status={node.status}
+                  running={node.running}
+                  queued={node.queued}
+                  queuedOnHold={node.queuedOnHold}
+                  runReason={node.runReason}
+                />
                 <span className="tdg-list-copy">
                   <span className="tdg-list-title-row">
                     <span className="tdg-list-title" title={node.title}>{node.title}</span>

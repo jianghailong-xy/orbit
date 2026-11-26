@@ -31,8 +31,13 @@ func cmdMcp() {
 		fmt.Fprintln(os.Stderr, "orbit mcp: no runner config — run `orbit register` first")
 		os.Exit(1)
 	}
-	srv := &mcpServer{
-		t:                     newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerMCP),
+	mcpServerFromEnv(newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerMCP)).serve(os.Stdin, os.Stdout)
+}
+
+// mcpServerFromEnv is the server for the session the runner's spawn environment describes.
+func mcpServerFromEnv(t *Transport) *mcpServer {
+	return &mcpServer{
+		t:                     t,
 		sessionID:             os.Getenv("ORBIT_SESSION_ID"),
 		agentID:               os.Getenv("ORBIT_AGENT_ID"),
 		taskID:                os.Getenv("ORBIT_TASK_ID"),
@@ -48,12 +53,13 @@ func cmdMcp() {
 		onlyTools:             mcpToolsFromEnv(),
 		callTimeout:           mcpCallTimeoutFromEnv(),
 		helpAsk:               helpAskModeFromEnv(),
+		engine:                strings.TrimSpace(os.Getenv(envMCPEngine)),
 	}
-	srv.serve(os.Stdin, os.Stdout)
 }
 
 type mcpServer struct {
 	t                     *Transport
+	createKeys            derivedCreateKeys // the keys given to creates that carried none (task_create_autorun.go)
 	sessionID             string
 	agentID               string // attributes created tasks/comments; "" => server falls back to USER
 	taskID                string // the "current task" default for get/update/comment
@@ -62,7 +68,7 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
-	documentsOff          bool   // spawned with ORBIT_DOCUMENTS=off: no drive tools (documents_switch.go)
+	documentsOff          bool   // spawned with ORBIT_DOCUMENTS=off: no drive tools (drive_switch.go)
 	browserOn             bool   // spawned with ORBIT_BROWSER=on: the browser tools (browser_tools.go)
 	workflowsOff          bool   // spawned with ORBIT_WORKFLOWS=off: no workflow tool (subagent_workflow.go)
 	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
@@ -75,6 +81,9 @@ type mcpServer struct {
 	// helpAsk: spawned with ORBIT_HELP_ASK=1 for the help center's Ask, it serves the four help reads and nothing else
 	// (mcp_help_ask.go).
 	helpAsk bool
+	// engine is the engine whose own carrier the runner gave Orbit's instructions (ORBIT_MCP_ENGINE); "" when the
+	// runner did not say, as for a bare `orbit mcp`.
+	engine string
 	// callToolUseID is the engine's id for the tool call being answered (Claude Code's `claudecode/toolUseId`), so a
 	// drive transfer's progress lands on its card; "" outside one, or when the engine names none. Calls are served
 	// one at a time (serve), as rec is.
@@ -96,6 +105,23 @@ func (s *mcpServer) planRefusal(name string, args map[string]interface{}) string
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
+
+// envMCPEngine names the engine `orbit mcp` serves. A runner sets it only where that engine's own carrier was given
+// Orbit's instructions (claudeCommandArgs), so initialize need not repeat them.
+const envMCPEngine = "ORBIT_MCP_ENGINE"
+
+// engineProfile is the profile initialize composes for: the named engine's inside a runner session, and
+// unknownEngineProfile, which repeats everything, anywhere else.
+func (s *mcpServer) engineProfile() EngineProfile {
+	if strings.TrimSpace(s.sessionID) != "" && s.engine != "" {
+		for _, profile := range engineProfiles {
+			if profile.Engine == s.engine {
+				return profile
+			}
+		}
+	}
+	return unknownEngineProfile
+}
 
 // envMCPCallTimeout is set by a runtime whose engine ends an MCP tool call on its own deadline, and
 // whose mcpServers declaration cannot change it (DeepSeek Harness, dsh_mcp.go). Unset, every call
@@ -173,6 +199,32 @@ func mcpOrchestrationEnabled() bool {
 // orchestrationEnabled requires the account's switch and an exact session context.
 // The credential is read (or, if absent/invalid, refreshed) lazily by Transport,
 // so a long-lived MCP process never depends on its startup environment snapshot.
+// sessionShape is the shape of the session this server serves, as its spawn environment says it.
+func (s *mcpServer) sessionShape() SessionShape {
+	role := roleTopLevel
+	switch {
+	case s.helpAsk:
+		role = roleHelpAsk
+	case os.Getenv(envSubagentRunID) != "":
+		role = roleSubAgent
+	case scheduledCheckOnlyFromEnv():
+		role = roleCheckOnly
+	case s.taskID != "":
+		role = roleTaskRun
+	}
+	return SessionShape{
+		Tools:              toolNameSet(s.listedToolDescriptors()),
+		Role:               role,
+		InsideRecordedWork: s.taskID != "",
+		Watches:            !s.watchesOff,
+		Browser:            s.browserOn,
+		Orchestration:      s.orchestrationEnabled(),
+		Wiki:               !s.wikiOff,
+		Workflows:          !s.workflowsOff,
+		DriveMounted:       driveMounted(),
+	}
+}
+
 func (s *mcpServer) orchestrationEnabled() bool {
 	return s.allowOrchestration &&
 		strings.TrimSpace(s.sessionID) != ""
@@ -240,12 +292,11 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if len(req.Params) > 0 && json.Unmarshal(req.Params, &p) == nil && p.ProtocolVersion != "" {
 			pv = p.ProtocolVersion
 		}
-		// The agent primer, versioned in its first line, is the one set of instructions every engine's
-		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go).
-		instructions := agentPrimer
-		if s.helpAsk {
-			instructions = helpAskInstructions
-		}
+		// The agent primer, versioned in its first line, is what every engine's MCP client is handed; each
+		// engine's own instructions carry it too (agent_primer.go). Inside a session of an engine whose own carrier
+		// is confirmed, that carrier has it, and initialize keeps only its lead paragraph. An Ask is given the help
+		// reads' instructions instead (unit help.ask).
+		instructions := compose(s.sessionShape(), s.engineProfile()).MCP
 		return s.ok(req.ID, map[string]interface{}{
 			"protocolVersion": pv,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
@@ -271,7 +322,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
 		}
-		// A Documents tool called by its name before the rename is served as the tool it is now (documents_tools.go).
+		// A Drive tool called by its Drive name is served as the tool it is now (drive_tools.go).
 		p.Name = canonicalToolName(p.Name)
 		if s.helpAsk {
 			return s.ok(req.ID, s.callHelpAskTool(p.Name)), true
@@ -401,17 +452,33 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	if refusal := s.planRefusal(name, args); refusal != "" {
 		return toolResult(refusal, true)
 	}
+	args = s.withDerivedCreateKey(name, args)
 	mark := markTransportActivity()
 	return s.withRecovery(name, args, mark, s.runTool(name, args))
 }
 
-func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
-	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Documents/Proj/r.md."}
+// withDerivedCreateKey is args with an idempotencyKey derived for a task_create or task_create_batch that carries none
+// (design D4): a retry of the same call inside createKeyWindow answers with the first write. A key the caller gave
+// always wins, and a dry run writes nothing, so it gets none.
+func (s *mcpServer) withDerivedCreateKey(name string, args map[string]interface{}) map[string]interface{} {
+	if (name != "task_create" && name != "task_create_batch") || getString(args, "idempotencyKey") != "" || getBool(args, "dryRun") {
+		return args
+	}
+	keyed := make(map[string]interface{}, len(args)+1)
+	for key, value := range args {
+		keyed[key] = value
+	}
+	keyed["idempotencyKey"] = s.createKeys.derive(s.sessionID, name, args, createKeyNow())
+	return keyed
+}
+
+func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
+	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Drive/Proj/r.md."}
 	return []map[string]interface{}{
 		{
-			"name": "documents_put",
-			"description": "Copy a local file into the owner's Documents drive. Creates missing parent folders and " +
-				"keeps the previous version when overwriting a file. Returns an orbit-document: link for replies. The file is " +
+			"name": "drive_put",
+			"description": "Copy a local file into the owner's Drive. Creates missing parent folders and " +
+				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies. The file is " +
 				"sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 			"inputSchema": obj(map[string]interface{}{
 				"localPath": map[string]interface{}{"type": "string", "description": "A file in this session's checkout or uploads directory."},
@@ -420,13 +487,13 @@ func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[st
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name":        "documents_get",
+			"name":        "drive_get",
 			"description": "Download a drive file into this session's uploads directory and return its local path and size.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
 		{
-			"name":        "documents_list",
+			"name":        "drive_list",
 			"description": "List one page of a drive folder with each entry's path, kind, size and modification time.",
 			"inputSchema": obj(map[string]interface{}{
 				"path":   map[string]interface{}{"type": "string", "description": "The folder's drive path. Omit it to list the root."},
@@ -435,27 +502,27 @@ func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[st
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
 		{
-			"name":        "documents_move",
+			"name":        "drive_move",
 			"description": "Move or rename a drive entry. This overwrites an existing file at the destination.",
 			"inputSchema": obj(map[string]interface{}{"from": drivePath, "to": drivePath}, "from", "to"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name": "documents_sync",
-			"description": "Copy a local directory into a Documents folder, once, in the background. Answers at once with a " +
+			"name": "drive_sync",
+			"description": "Copy a local directory into a Drive folder, once, in the background. Answers at once with a " +
 				"background job id; you are woken when it ends, and its last output line is the summary (uploaded, unchanged, " +
-				"deleted, failed). Files already the same in Documents are skipped, so a second sync only sends what changed. " +
-				"One way: nothing comes down. The owner watches it in the Documents page's upload tray.",
+				"deleted, failed). Files already the same in Drive are skipped, so a second sync only sends what changed. " +
+				"One way: nothing comes down. The owner watches it in the Drive page's upload tray.",
 			"inputSchema": obj(map[string]interface{}{
 				"localPath": map[string]interface{}{"type": "string", "description": "A directory in this session's checkout or uploads directory."},
-				"path":      map[string]interface{}{"type": "string", "description": "The Documents folder to copy into, such as /Reports/out."},
-				"delete":    map[string]interface{}{"type": "boolean", "description": "Move Documents files under path that the directory no longer has to the owner's Trash."},
+				"path":      map[string]interface{}{"type": "string", "description": "The Drive folder to copy into, such as /Reports/out."},
+				"delete":    map[string]interface{}{"type": "boolean", "description": "Move Drive files under path that the directory no longer has to the owner's Trash."},
 			}, "localPath", "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name":        "documents_delete",
-			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
+			"name":        "drive_delete",
+			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Drive page. Agents cannot see Trash.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
 		},
@@ -486,8 +553,8 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	if result, handled := s.callFileTool(name, args); handled {
 		return result
 	}
-	// The Documents tools: `orbit documents` runs the same runDocumentsTool (documents_tools.go).
-	if result, handled := s.callDocumentsTool(name, args); handled {
+	// The Drive tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
+	if result, handled := s.callDriveTool(name, args); handled {
 		return result
 	}
 	// The owner's Settings: `orbit settings` runs the same runSettingsTool (settings_tools.go).
@@ -1337,6 +1404,9 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		if err := requireRunnerTaskAutoRunDeclaration(body); err != nil {
+			return toolResult(err.Error(), true)
+		}
 		// The snapshot is taken at the start of the call, before the card (design §2.1): the task
 		// starts from what this session had when it asked, and the card shows the fork it will carry.
 		var fork *forkSnapshot
@@ -1424,6 +1494,9 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 				body["assigneeId"] = s.agentID
 			}
 			if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
+				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
+			}
+			if err := requireRunnerTaskAutoRunDeclaration(body); err != nil {
 				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
 			}
 			bodies = append(bodies, body)

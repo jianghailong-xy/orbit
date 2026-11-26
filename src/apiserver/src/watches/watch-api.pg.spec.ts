@@ -54,6 +54,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { WATCH_LEAF_TARGET_KIND, WATCH_PREDICATE_VERSION as EVALUATED_PREDICATE_VERSION } from './watch-predicate';
 import { WatchesController } from './watches.controller';
+import { vectorSessionStatus } from './watch-vector.fixture';
 import { WatchesService } from './watches.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -537,7 +538,7 @@ test('the contract leaf vectors decide create-time matches: settled, run-termina
     const given = vector.given;
     const sessionId = given.session
       ? await session(h, owner.id, {
-          status: given.session.status,
+          status: vectorSessionStatus(given.session),
           endReason: given.session.endReason ?? null,
           completedAt: given.session.completedAt ? new Date() : null,
           deletedAt: given.session.deletedAt ? new Date() : null,

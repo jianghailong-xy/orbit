@@ -51,6 +51,7 @@
 set -euo pipefail
 # shellcheck source=../staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../staging-lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/session-word.sh"
 
 helper="$here/drills/drill-api.mjs"
 out="$state/client/mass-disconnect"
@@ -306,7 +307,7 @@ engine_starts() {
 declare -A sid=() suuid=()
 workspace_id() { json "$(cat "$(rdir "$1")/workspace.json")" id; }
 session_ids_sql() { local i s=""; for i in $(runners); do s+="${s:+, }'${suuid[$i]}'"; done; echo "$s"; }
-session_status() { psql_value "SELECT status FROM session WHERE id = '$1'"; }
+session_status() { psql_value "SELECT $(session_word_sql s) FROM session s WHERE s.id = '$1'"; }
 # assistant_at SESSION_UUID TEXT: when the session's assistant event saying TEXT was stored; nothing before it is.
 assistant_at() {
   psql_value "SELECT to_char(min(ingested_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') FROM run_event
@@ -418,7 +419,7 @@ sample() {
           if awk -v s="$b" -v m="${silence_max[$i]:-0}" 'BEGIN { exit !(s > m) }'; then silence_max[$i]="$b"; fi
         done ;;
     esac
-  done < <(psql_rows "SELECT 'S', s.id::text, s.status::text FROM session s WHERE s.id IN ($(session_ids_sql))
+  done < <(psql_rows "SELECT 'S', s.id::text, $(session_word_sql s) FROM session s WHERE s.id IN ($(session_ids_sql))
     UNION ALL
     SELECT 'P', r.id::text, round(extract(epoch FROM now() - GREATEST(p.last_beat_at, r.last_heartbeat_at))::numeric, 1)::text
       FROM runner r LEFT JOIN runner_presence p ON p.runner_id = r.id WHERE r.id IN ($(runner_ids_sql))

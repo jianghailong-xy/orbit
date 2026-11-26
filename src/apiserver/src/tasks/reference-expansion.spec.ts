@@ -75,7 +75,11 @@ function makeService(opts: { ownedList?: boolean; ownedTask?: boolean } = {}) {
         { error: "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage" },
         { error: 'runner offline' },
       ],
-      findFirst: async () => ({ status: 'FAILED', numTurns: 0, error: 'runner offline' }),
+      // Released by a failure: the facts the word is derived from (sessions/session-legacy-words.ts).
+      findFirst: async () => ({
+        status: 'FAILED', finishedAt: new Date(0), turnState: null, endReason: null, lastTurnOutcome: 'FAILED',
+        startedAt: new Date(0), importSourceCwd: null, sessionKind: 'CONVERSATION', numTurns: 0, error: 'runner offline',
+      }),
     },
   } as never;
   return { service: new ReferenceExpansionService(prisma), queries };
@@ -162,7 +166,13 @@ test('the task block is, byte for byte, the English note both clients are proved
     session: {
       count: async ({ where }: any) => (where.taskId === ran ? 1 : 0),
       findFirst: async ({ where }: any) =>
-        where.taskId === ran ? { status: 'SUCCEEDED', numTurns: 144, error: null } : null,
+        where.taskId === ran
+          ? {
+            // Released with its task done: the facts the word is derived from.
+            status: 'SUCCEEDED', finishedAt: new Date(0), turnState: null, endReason: 'task_done', lastTurnOutcome: 'ANSWERED',
+            startedAt: new Date(0), importSourceCwd: null, sessionKind: 'CONVERSATION', numTurns: 144, error: null,
+          }
+          : null,
     },
   } as never;
   const typed = '[QA](orbit-task:34DH29mTc7OQ6AwxAFIJu) [P0](orbit-task:349vy0HknpSjHwdwJ31O1)';

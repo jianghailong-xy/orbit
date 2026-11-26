@@ -402,13 +402,22 @@ def observer_get(state, target, label):
             'status': parsed.get('status') if isinstance(parsed, dict) else None}
 
 
+def session_word(row):
+    """SQL for the status word of the session row the query names `row`: the server's projector over its facts
+    (migration 1621). The last argument is the stored word, read only for a held row with no turn_state (a database
+    the backfill has not reached); it is the one allowed read of session.status, and task T14 removes it."""
+    return (f'session_legacy_status({row}.finished_at, {row}.turn_state, {row}.end_reason, {row}.last_turn_outcome, '
+            f'{row}.started_at, {row}.import_source_cwd, {row}.kind, '
+            f'(select l.settled_as from project_landing l where l.session_id = {row}.id), {row}.status::text)')
+
+
 def turns_of(session_uuid):
     return sql_json(f"select seq, client_turn_id, kind, status, created_at, delivered_at, answered_at from conversation_turn "
                     f"where session_id = {quote(session_uuid)} order by seq")
 
 
 def idle(session_uuid):
-    rows = sql_json(f"select s.status, (select count(*) from conversation_turn t where t.session_id = s.id and t.status in "
+    rows = sql_json(f"select {session_word('s')} as status, (select count(*) from conversation_turn t where t.session_id = s.id and t.status in "
                     f"('PENDING', 'IN_FLIGHT')) as open_turns from session s where s.id = {quote(session_uuid)}")
     return rows[0]
 
@@ -674,7 +683,7 @@ def snapshot(state):
     ids = [s['uuid'] for s in (state.get('sessions') or {}).values()]
     in_list = ', '.join(quote(i) for i in ids) or "'00000000-0000-0000-0000-000000000000'"
     query = f"""select json_build_object('at', clock_timestamp(),
-      'sessions', coalesce((select json_agg(json_build_object('id', s.id, 'title', s.title, 'status', s.status, 'retryAt', s.retry_at,
+      'sessions', coalesce((select json_agg(json_build_object('id', s.id, 'title', s.title, 'status', {session_word('s')}, 'retryAt', s.retry_at,
           'retryClaimedAt', s.retry_claimed_at, 'retryAttempts', s.retry_attempts, 'finishedAt', s.finished_at,
           'endReason', s.end_reason, 'cancelRequestedAt', s.cancel_requested_at, 'error', left(s.error, 160),
           'runningBgJobs', s.running_bg_jobs) order by s.title) from session s where s.id in ({in_list})), '[]'::json),

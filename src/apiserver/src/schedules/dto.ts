@@ -1,7 +1,8 @@
 /**
  * The bodies the schedule doors take. The service validates every field itself (schedules.service.ts); these
- * declare what passes the global whitelist, nothing more. There is no REST body that creates or changes a schedule:
- * those come only from a session's tools (`ScheduleCreateDto`, `ScheduleUpdateDto` are the runner doors').
+ * declare what passes the global whitelist, nothing more. No REST body creates or changes a schedule but its name
+ * (`ScheduleRenameDto`): the rest comes only from a session's tools (`ScheduleCreateDto`, `ScheduleUpdateDto` are the
+ * runner doors').
  */
 import { IsPublicId } from '../common/public-id';
 import { IsBoolean, IsDateString, IsIn, IsInt, IsObject, IsOptional, IsString, MaxLength, Min, ValidateIf } from 'class-validator';
@@ -47,6 +48,11 @@ export class ScheduleRunReportDto {
   @IsOptional() @IsString({ each: true }) links?: string[];
   /** Replaces the schedule's note; null clears it. */
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() note?: string | null;
+}
+
+/** Rename (§8.4): the one change a surface makes directly, and the title is all it carries. */
+export class ScheduleRenameDto {
+  @IsString() @MaxLength(200) title!: string;
 }
 
 export class ScheduleUndoDto {

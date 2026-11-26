@@ -370,6 +370,9 @@ test('every release writes the release column and its cause, and the revive clea
     // Rows from before 1261 break session_release_fact_chk (1401) by design; the check comes back, by its own two
     // migrations, once the backfill has made the rows whole.
     await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_fact_chk"`);
+    // Nor can they satisfy deploy D2's released CHECK (1622), which that constraint implies: some hold a word's turn
+    // beside finished_at. It stays dropped for (10), whose hand-over rows are the same.
+    await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_turn_state_released_chk"`);
     // One row per rule of 1262's table, written as a row from before 1261: no cause, and no release column where
     // the old writer set none. Three of each, so the counts are counts.
     const cases: Array<{ name: string; data: Record<string, unknown> }> = [
@@ -854,6 +857,8 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
   });
 
   await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_release_fact_chk"`);
+  // And deploy D2's released CHECK (1622), which refuses the same writes: finished_at set under a held word's turn.
+  await sql.query(`ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_turn_state_released_chk"`);
 
   const releaseAlone = (id: string) => sql.query(
     `UPDATE "session" SET "finished_at" = now() WHERE "id" = $1::uuid`, [id]);
@@ -985,7 +990,9 @@ test('(12) the release fact alone fires every guard and ended-trigger (plan step
     const closed = await request(open);
     console.log(`# recipient_ended ${JSON.stringify(closed)}`);
     assert.equal(closed.state, 'RECIPIENT_ENDED');
-    assert.equal(closed.close_reason, 'RUNNING', 'close_reason is still STATUS[:end_reason], unchanged');
+    // Since 1641 (task T6) the word in close_reason is the projector's (session_legacy_status), not the stored one the
+    // release fact alone left RUNNING: released with no end reason and no turn outcome reads CANCELLED (P5).
+    assert.equal(closed.close_reason, 'CANCELLED', 'close_reason is WORD[:end_reason], the word read from the facts');
 
     // A release by a failure with a retry armed is not an end. The status word is still RUNNING, so it is the turn
     // outcome the clause read (removal step R4: the failure is the turn's).

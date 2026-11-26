@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 
 /**
- * Storage moved into Documents (docs/mocks/documents, board choice a): /settings/storage, and the address of one of its
- * rows' files, lead to Documents → Storage, with the address bar left at the new address.
+ * Storage moved into Drive (docs/mocks/drive, board choice a): /settings/storage, and the address of one of its
+ * rows' files, lead to Drive → Storage, with the address bar left at the new address.
  */
 
 vi.mock('./api', async (original) => ({ ...(await original<typeof import('./api')>()), api: vi.fn() }));
@@ -30,11 +30,11 @@ vi.mock('./components/AppShell', async () => {
     FlushView: ({ children }: { children: ReactNode }) => children,
   };
 });
-vi.mock('./pages/DocumentsPage', () => ({
-  DocumentsPage: ({ view }: { view?: string }) => <p>documents page {view ?? 'files'}</p>,
+vi.mock('./pages/DrivePage', () => ({
+  DrivePage: ({ view }: { view?: string }) => <p>documents page {view ?? 'files'}</p>,
 }));
-vi.mock('./pages/documents/StoragePage', () => ({ StorageSettingsPage: () => <p>files storage</p> }));
-vi.mock('./pages/documents/StorageFilesPage', () => ({ StorageFilesPage: () => <p>files storage rows</p> }));
+vi.mock('./pages/drive/StoragePage', () => ({ StorageSettingsPage: () => <p>files storage</p> }));
+vi.mock('./pages/drive/StorageFilesPage', () => ({ StorageFilesPage: () => <p>files storage rows</p> }));
 
 let container: HTMLDivElement;
 let root: Root | null = null;
@@ -91,33 +91,39 @@ async function visit(path: string): Promise<void> {
 const addressBar = (): string => window.location.pathname + window.location.search + window.location.hash;
 
 describe('the Storage addresses', () => {
-  it('/settings/storage leads to Documents → Storage', async () => {
+  it('/settings/storage leads to Drive → Storage', async () => {
     await visit('/settings/storage');
-    expect(addressBar()).toBe('/documents/storage');
+    expect(addressBar()).toBe('/drive/storage');
     expect(container.textContent).toContain('files storage');
   });
 
-  it('/settings/storage/projects/:id leads to the same rows under Documents', async () => {
+  it('/settings/storage/projects/:id leads to the same rows under Drive', async () => {
     await visit('/settings/storage/projects/abc');
-    expect(addressBar()).toBe('/documents/storage/projects/abc');
+    expect(addressBar()).toBe('/drive/storage/projects/abc');
     expect(container.textContent).toContain('files storage rows');
   });
 
-  it('/documents renders the page', async () => {
-    await visit('/documents?folder=f1');
-    expect(addressBar()).toBe('/documents?folder=f1');
+  it('/drive renders the page', async () => {
+    await visit('/drive?folder=f1');
+    expect(addressBar()).toBe('/drive?folder=f1');
     expect(container.textContent).toContain('documents page files');
   });
 });
 
-describe('the old /files addresses', () => {
+describe('the old /files and /documents addresses', () => {
   it.each([
-    ['/files', '/documents'],
-    ['/files?folder=f1&file=e1', '/documents?folder=f1&file=e1'],
-    ['/files/trash', '/documents/trash'],
-    ['/files/trash?x=1', '/documents/trash?x=1'],
-    ['/files/storage', '/documents/storage'],
-    ['/files/storage/projects/abc?order=size', '/documents/storage/projects/abc?order=size'],
+    ['/files', '/drive'],
+    ['/files?folder=f1&file=e1', '/drive?folder=f1&file=e1'],
+    ['/files/trash', '/drive/trash'],
+    ['/files/trash?x=1', '/drive/trash?x=1'],
+    ['/files/storage', '/drive/storage'],
+    ['/files/storage/projects/abc?order=size', '/drive/storage/projects/abc?order=size'],
+    ['/files/x', '/drive/x'],
+    ['/documents', '/drive'],
+    ['/documents/x', '/drive/x'],
+    ['/documents?folder=f1', '/drive?folder=f1'],
+    ['/documents/trash?x=1', '/drive/trash?x=1'],
+    ['/documents/storage/projects/abc', '/drive/storage/projects/abc'],
   ])('%s leads to %s', async (from, to) => {
     await visit(from);
     expect(addressBar()).toBe(to);

@@ -222,7 +222,7 @@ function storeCases(leg: Leg, filesDir: string, scratch: string) {
         current = await bootScrubbedApiserver(scratch, `${leg.storage}-${(boots += 1)}`, {
           DATABASE_URL: url,
           JWT_SECRET,
-          ORBIT_DOCUMENTS_DIR: filesDir,
+          ORBIT_DRIVE_DIR: filesDir,
           // No reaching models.dev from a spec: the catalogue keeps the lists this build shipped.
           MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
           NODE_OPTIONS: `--expose-gc --require ${collector}`,
@@ -445,7 +445,7 @@ test('a client may leave a file download at any moment', { skip: !URL, concurren
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
 
   const localDir = path.join(scratch, 'local-files');
-  await t.test('local', storeCases({ storage: 'local', env: { ORBIT_DOCUMENTS_BACKEND: 'local' } }, localDir, scratch));
+  await t.test('local', storeCases({ storage: 'local', env: { ORBIT_DRIVE_BACKEND: 'local' } }, localDir, scratch));
 
   const s3 = await startS3((fn) => t.after(fn));
   const bucket = await bucketConnections(s3.endpoint, (fn) => t.after(fn));
@@ -453,12 +453,12 @@ test('a client may leave a file download at any moment', { skip: !URL, concurren
     storage: 's3',
     bucket,
     env: {
-      ORBIT_DOCUMENTS_BACKEND: 's3',
-      ORBIT_DOCUMENTS_S3_ENDPOINT: bucket.endpoint,
-      ORBIT_DOCUMENTS_S3_BUCKET: s3.bucket,
-      ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: s3.accessKeyId,
-      ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
-      ORBIT_DOCUMENTS_S3_REGION: s3.region,
+      ORBIT_DRIVE_BACKEND: 's3',
+      ORBIT_DRIVE_S3_ENDPOINT: bucket.endpoint,
+      ORBIT_DRIVE_S3_BUCKET: s3.bucket,
+      ORBIT_DRIVE_S3_ACCESS_KEY_ID: s3.accessKeyId,
+      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+      ORBIT_DRIVE_S3_REGION: s3.region,
     },
   }, path.join(scratch, 's3-files'), scratch));
 });

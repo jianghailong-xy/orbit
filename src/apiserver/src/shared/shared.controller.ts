@@ -17,7 +17,7 @@ import {
 import type { Response } from 'express';
 import type { Observable } from 'rxjs';
 import { PublicIdPipe } from '../common/public-id';
-import { DocumentsContentService, parseRange } from '../documents/documents-content.service';
+import { DriveContentService, parseRange } from '../drive/drive-content.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { publicOrigin } from '../email/email-settings.service';
 import { streamable } from '../files/files.service';
@@ -52,7 +52,7 @@ export class SharedController {
     private readonly sessions: SessionsService,
     private readonly attachments: AttachmentsService,
     private readonly viewerStreams: ViewerStreamService,
-    private readonly drive: DocumentsContentService,
+    private readonly drive: DriveContentService,
   ) {}
 
   /**

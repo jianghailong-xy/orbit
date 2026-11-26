@@ -856,7 +856,10 @@ describe('the composer: the session page’s own (board 43, plan A)', () => {
     // Typed while it runs, Send says where it goes: into the running turn, the way the session page sends it.
     await type('Read the lease from the config, not the constant.');
     const into = byLabel('Add to current work')!;
-    expect(into.getAttribute('title')).toMatch(/^Send into the current turn · .*Enter, or hold, to queue it for the next turn$/u);
+    // Its tip is the app's tooltip, not the browser's `title`.
+    expect(into.hasAttribute('title')).toBe(false);
+    await act(async () => { into.focus(); await new Promise((resolve) => setTimeout(resolve, 150)); });
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toMatch(/^Send into the current turn · .*Enter, or hold, to queue it for the next turn$/u);
     await press(into);
     expect(turns()[0]!.body).toMatchObject({ content: 'Read the lease from the config, not the constant.', intent: 'CURRENT_WORK' });
     // ⌥Enter queues it for the next turn instead.

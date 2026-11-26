@@ -10,6 +10,7 @@ import type { CloneReport, CloneRequest, RunnerGitCredentialAnswer, WorkspaceClo
 import { redactSecrets } from '../common/secret-redaction';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { GithubCallError, GithubClient } from './github-api.client';
 import { GithubAppConfigService } from './github-app-config.service';
 import { GithubConnectionService } from './github-connection.service';
@@ -269,7 +270,7 @@ export class GithubWorkspaceService {
   private async announce(ownerId: string, workspaceId: string, state: WorkspaceCloneState, progress: number | null): Promise<void> {
     this.realtime.publishWorkspaceCloneChanged(ownerId, workspaceId, { state, progress });
     const held = await this.prisma.session.findMany({
-      where: { workspaceId, ownerId, status: 'PENDING', deletedAt: null },
+      where: { workspaceId, ownerId, deletedAt: null, ...turnStateFilter(['QUEUED']) },
       select: { id: true },
       take: 100,
     });

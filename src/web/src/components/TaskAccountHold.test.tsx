@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskAccountHold } from '../lib/accountHealth';
 import { accountHoldLineText, RelaxedRunNote, TaskAccountHoldLine, TaskAccountHoldNote } from './TaskAccountHold';
 
@@ -16,11 +16,14 @@ let root: Root;
 let host: HTMLDivElement;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // The day of the next try, in whatever zone this runs in: the row gives a bare clock time only for today.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(hold.until).setHours(0, 0, 0, 0));
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); });
+afterEach(() => { act(() => root.unmount()); host.remove(); vi.useRealTimers(); });
 
 describe('a task held for an account', () => {
   it('says Held, the provider\'s words, the next try and links to the account row', () => {

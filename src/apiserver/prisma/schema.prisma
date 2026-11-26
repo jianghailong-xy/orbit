@@ -373,18 +373,18 @@ model User {
   wikiSpaces       WikiSpace[]
 
   /// The drive's chunk manifest and its writes not committed yet (migration 1283).
-  documentStagings      DocumentStaging[]
-  documentVersionChunks DocumentVersionChunk[]
+  driveStagings      DriveStaging[]
+  driveVersionChunks DriveVersionChunk[]
   /// The drive's name layer (migration 1327): folders and files, their versions, Trash, commits and the change feed.
-  documentEntries       DocumentEntry[]
-  documentVersions      DocumentVersion[]
-  documentTrashGroups   DocumentTrashGroup[]
-  documentCommits       DocumentCommit[]
-  documentChanges       DocumentChange[]
+  driveEntries       DriveEntry[]
+  driveVersions      DriveVersion[]
+  driveTrashGroups   DriveTrashGroup[]
+  driveCommits       DriveCommit[]
+  driveChanges       DriveChange[]
   /// Files a replacing rename removed, for a handle still writing one (migration 1438).
-  documentRemovedEntries DocumentRemovedEntry[]
+  driveRemovedEntries DriveRemovedEntry[]
   /// The mount credentials of its managed runner's generations (migration 1339).
-  documentMountCredentials DocumentMountCredential[]
+  driveMountCredentials DriveMountCredential[]
 
   /// The account's one managed runner mapping, when it has one (migration 0399).
   managedRunner    ManagedRunner?
@@ -411,8 +411,8 @@ model User {
   feishuOutbox     FeishuOutbox[]
   /// What Orbit has learned about its accounts from the runs it sent there (migration 1494).
   accountHealth         AccountHealth[]
-  /// Its agents' directory syncs into Documents, as the upload tray shows them (migration 1560).
-  documentSyncs         DocumentSync[]
+  /// Its agents' directory syncs into Drive, as the upload tray shows them (migration 1560).
+  driveSyncs         DriveSync[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -916,6 +916,8 @@ model DeviceToken {
   // The login session that registered it; nothing is pushed once that session has ended. NULL: no
   // session was named (registered before 0425), pushed to as before (docs/push-login-session-design.md).
   loginSessionId String? @map("login_session_id") @db.Uuid
+  // A browser's (platform 'web') subscription keys { p256dh, auth }: its pushes are encrypted to them (docs/web-push-design.md).
+  webKeys     Json?    @map("web_keys")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -1288,11 +1290,11 @@ model Runner {
   /// through runners/runner-presence.ts.
   presence      RunnerPresence?
   /// The drive mount credentials issued for its generations (migration 1339): a managed runner's only.
-  documentMountCredentials DocumentMountCredential[]
+  driveMountCredentials DriveMountCredential[]
   // Account health of the sign-ins on this runner (migration 1494).
   accountHealth     AccountHealth[]
-  // The directory syncs into Documents this runner runs (migration 1560).
-  documentSyncs     DocumentSync[]
+  // The directory syncs into Drive this runner runs (migration 1560).
+  driveSyncs     DriveSync[]
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off: naming BOTH the runner and the owner in one
@@ -1768,6 +1770,8 @@ model ManagedRunner {
   defaultWorkspace   Workspace?                   @relation("ManagedRunnerDefaultWorkspace", fields: [defaultWorkspaceId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_default_workspace_fkey")
   desiredState       ManagedRunnerDesiredState    @default(RUNNING) @map("desired_state")
   managementState    ManagedRunnerManagementState @default(REQUESTED) @map("management_state")
+  /// Temporary ceiling after an out-of-memory stop, cleared once the replacement stays READY.
+  concurrencyCap     Int?                         @map("concurrency_cap")
   /// The execution incarnation the Pod is created for. Monotonic; only a proven stop or fencing
   /// receipt may advance it, which this version never does.
   generation         Int                          @default(1)
@@ -2239,6 +2243,13 @@ model Session {
   /// and add their own `kind: 'session'`, so a field called `kind` would be overwritten in the
   /// payload. The column keeps the short name.
   sessionKind          String    @default("CONVERSATION") @map("kind")
+  /// Where the session's turn stands for the runner (migration 1611): QUEUED, IN_FLIGHT, ABANDONED or null. A
+  /// dispatched turn (IN_FLIGHT) holds a runner slot. Until the writers move, a trigger keeps it from the stored word.
+  /// Never sent to a client: withSessionState strips it.
+  turnState            String?   @map("turn_state")
+  /// The session's state, PENDING, RUNNING or IDLE (migration 1611), kept by a trigger from the facts; no writer sets
+  /// it. A payload's `phase` is read by sessions/session-phase.ts.
+  phase                String?
   /// Who opened this conversation (migration 0670, docs/workspace-default-model-design.md §2.2):
   /// PERSON, or the Orbit door that opened it on its own — COORDINATOR, COORDINATOR_JUDGMENT,
   /// TASK_LIST_CONSOLE, WIKI_CHAT, FEISHU, SERVICE_TOKEN, MENTION_REPLY, or ORBIT for a row 0670 knew
@@ -2509,6 +2520,11 @@ model Session {
   /// foreign key: a deleted space leaves its chats as sessions. Its partial index over
   /// (wiki_chat_space_id, created_at) is the migration's alone, as schema.prisma cannot spell one.
   wikiChatSpaceId          String?   @map("wiki_chat_space_id") @db.Uuid
+  /// What this chat'"'"'s delivery last told its agent (migration 1561, wiki contract `chat.notes.chat` and `chat.notes.contents`):
+  /// the digest of the `<orbit_wiki_chat>` text, and the confirmed plan version `<orbit_wiki_contents>` named. Written in the
+  /// delivery'"'"'s own transaction, so a claim rolled back sends both again; NULL = never delivered.
+  wikiChatPromptDigest     String?   @map("wiki_chat_prompt_digest")
+  wikiChatContentsVersion  Int?      @map("wiki_chat_contents_version")
   /// The help center's Ask (migration 0850, @orbit/shared HelpAskMarker `{ page }`): a session is an Ask exactly
   /// when it is set. Written by the Ask door (help/help-ask.ts) in this row's own INSERT and never afterwards (a
   /// trigger refuses the UPDATE). An Ask belongs to no workspace, is in no session list, starts read-only on its
@@ -2832,12 +2848,12 @@ model ShareLink {
   wikiSpace   WikiSpace? @relation(fields: [wikiSpaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_wiki_space_fkey")
 
   /// One drive file (1340) and the version of it the link was pinned to: the link serves that version's bytes whatever is
-  /// written to the file later, until its owner moves it (docs/documents-drive-technical-design.md §9). Both are reached
+  /// written to the file later, until its owner moves it (docs/drive-technical-design.md §9). Both are reached
   /// through the (id, owner_id) keys of the drive tables, so a link is only ever rooted at its owner's file.
   driveEntryId   String?       @map("drive_entry_id") @db.Uuid
-  driveEntry     DocumentEntry?   @relation("ShareLinkDriveEntry", fields: [driveEntryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_drive_entry_fkey")
+  driveEntry     DriveEntry?   @relation("ShareLinkDriveEntry", fields: [driveEntryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_drive_entry_fkey")
   driveVersionId String?       @map("drive_version_id") @db.Uuid
-  driveVersion   DocumentVersion? @relation("ShareLinkDriveVersion", fields: [driveVersionId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_drive_version_fkey")
+  driveVersion   DriveVersion? @relation("ShareLinkDriveVersion", fields: [driveVersionId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_drive_version_fkey")
 
   /// The ticked layers: `taskPages`, `commentsAndFiles`, `conversations`, `toolOutput`, `footnotes`. A
   /// key that is absent reads as its default (contract §1), so this records choices, not the defaults.
@@ -3683,11 +3699,11 @@ model Attachment {
   // Original upload filename. The runner writes a non-image/-PDF upload to the worktree
   // under this name and references it to claude. Null for legacy rows and pasted images.
   fileName  String?           @map("file_name")
-  // Raw bytes (bytea) of a row written before Documents (0462). NULL on a row whose bytes are only
+  // Raw bytes (bytea) of a row written before Drive (0462). NULL on a row whose bytes are only
   // in the file store under `sha256`; attachment_bytes_present holds every row to one of the two.
   // A row the copy has reached has both, until the clear (files/attachment-migration.ts).
   data      Bytes?
-  /// The bytes' sha256, 64 lowercase hex (0462, docs/documents-design.md §2.1): this row's bytes
+  /// The bytes' sha256, 64 lowercase hex (0462, docs/drive-design.md §2.1): this row's bytes
   /// are the file_blob of that name, kept once however many rows name them (files/files.service.ts).
   /// NULL on a row whose bytes are only in `data`.
   sha256    String?
@@ -3726,10 +3742,10 @@ model Attachment {
   @@map("attachment")
 }
 
-/// The bytes of Documents (0462, docs/documents-design.md §2.1): one row per distinct content,
+/// The bytes of Drive (0462, docs/drive-design.md §2.1): one row per distinct content,
 /// named by its sha256, however many attachment rows name it. The bytes themselves are in the store
-/// `storage` names — `local`, the files directory (ORBIT_DOCUMENTS_DIR, `<sha256[0:2]>/<sha256>`), or `s3`
-/// (`files/<sha256[0:2]>/<sha256>` in ORBIT_DOCUMENTS_S3_BUCKET) — and never in Postgres.
+/// `storage` names — `local`, the files directory (ORBIT_DRIVE_DIR, `<sha256[0:2]>/<sha256>`), or `s3`
+/// (`files/<sha256[0:2]>/<sha256>` in ORBIT_DRIVE_S3_BUCKET) — and never in Postgres.
 model FileBlob {
   sha256           String       @id
   sizeBytes        Int          @map("size_bytes")
@@ -3746,23 +3762,23 @@ model FileBlob {
   /// From when the backup sidecar may remove them from the off-host copy (scripts/pg-backup.sh).
   offHostPruneAt   DateTime?    @map("off_host_prune_at")
   attachments      Attachment[]
-  /// The drive's holders (1283, docs/documents-drive-technical-design.md §2.4): a chunk of a drive version, and a
+  /// The drive's holders (1283, docs/drive-technical-design.md §2.4): a chunk of a drive version, and a
   /// chunk of a write not committed yet. Either holds the bytes while its row exists.
-  documentVersionChunks DocumentVersionChunk[]
-  documentStagingChunks DocumentStagingChunk[]
+  driveVersionChunks DriveVersionChunk[]
+  driveStagingChunks DriveStagingChunk[]
 
   @@map("file_blob")
 }
 
-/// A drive write not committed yet (1283, docs/documents-drive-technical-design.md §1.1): an owner's resumable upload,
+/// A drive write not committed yet (1283, docs/drive-technical-design.md §1.1): an owner's resumable upload,
 /// a write through the mount, or a drive tool's put. Its chunks hold their bytes until a commit names them; one untouched
 /// for 7 days is removed by the retention sweep (files/file-retention-sweep.ts, step 0). `entry_id` and `parent_id` name
-/// document_entry rows, whose foreign keys the name layer's migration adds.
-model DocumentStaging {
+/// drive_entry rows, whose foreign keys the name layer's migration adds.
+model DriveStaging {
   id           String    @id @default(uuid(7)) @db.Uuid
   ownerId      String    @map("owner_id") @db.Uuid
-  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_staging_owner_id_fkey")
-  /// `OWNER_UPLOAD` | `MOUNT` | `TOOL` (document_staging_source_chk).
+  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_staging_owner_id_fkey")
+  /// `OWNER_UPLOAD` | `MOUNT` | `TOOL` (drive_staging_source_chk).
   source       String
   /// For `MOUNT`: the entry the handle is bound to.
   entryId      String?   @map("entry_id") @db.Uuid
@@ -3780,63 +3796,63 @@ model DocumentStaging {
   /// Moves with every chunk and keepalive.
   touchedAt    DateTime  @default(now()) @map("touched_at") @db.Timestamptz(3)
   committedAt  DateTime? @map("committed_at") @db.Timestamptz(3)
-  chunks       DocumentStagingChunk[]
+  chunks       DriveStagingChunk[]
   /// The foreign keys 1327 adds: the entry a mount handle is bound to, and the folder an upload lands in.
-  entry        DocumentEntry? @relation("DocumentStagingEntry", fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "document_staging_entry_fkey")
-  parent       DocumentEntry? @relation("DocumentStagingParent", fields: [parentId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "document_staging_parent_fkey")
+  entry        DriveEntry? @relation("DriveStagingEntry", fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_staging_entry_fkey")
+  parent       DriveEntry? @relation("DriveStagingParent", fields: [parentId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_staging_parent_fkey")
 
-  @@unique([id, ownerId], map: "document_staging_id_owner_id_key")
-  @@index([touchedAt], map: "document_staging_touched_at_idx")
-  @@index([entryId], map: "document_staging_entry_idx")
-  @@index([parentId], map: "document_staging_parent_idx")
-  @@map("document_staging")
+  @@unique([id, ownerId], map: "drive_staging_id_owner_id_key")
+  @@index([touchedAt], map: "drive_staging_touched_at_idx")
+  @@index([entryId], map: "drive_staging_entry_idx")
+  @@index([parentId], map: "drive_staging_parent_idx")
+  @@map("drive_staging")
 }
 
 /// One chunk a staging has received (1283): at most 8 MiB, a file_blob by its sha256. A chunk re-sent for the same `idx`
 /// replaces the row.
-model DocumentStagingChunk {
+model DriveStagingChunk {
   stagingId String       @map("staging_id") @db.Uuid
   idx       Int
   ownerId   String       @map("owner_id") @db.Uuid
-  staging   DocumentStaging @relation(fields: [stagingId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "document_staging_chunk_staging_fkey")
+  staging   DriveStaging @relation(fields: [stagingId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_staging_chunk_staging_fkey")
   sha256    String
-  blob      FileBlob     @relation(fields: [sha256], references: [sha256], onDelete: Restrict, map: "document_staging_chunk_sha256_fkey")
+  blob      FileBlob     @relation(fields: [sha256], references: [sha256], onDelete: Restrict, map: "drive_staging_chunk_sha256_fkey")
   sizeBytes Int          @map("size_bytes")
 
-  @@id([stagingId, idx], map: "document_staging_chunk_pkey")
-  @@index([sha256], map: "document_staging_chunk_sha256_idx")
-  @@map("document_staging_chunk")
+  @@id([stagingId, idx], map: "drive_staging_chunk_pkey")
+  @@index([sha256], map: "drive_staging_chunk_sha256_idx")
+  @@map("drive_staging_chunk")
 }
 
-/// The ordered chunks of one drive version (1283, docs/documents-drive-technical-design.md §1.2): a file's bytes are
+/// The ordered chunks of one drive version (1283, docs/drive-technical-design.md §1.2): a file's bytes are
 /// their concatenation in `idx` order, and `offset` finds the chunk for any byte. The name layer's migration adds the
-/// foreign key (version_id, owner_id) -> document_version ON DELETE CASCADE.
-model DocumentVersionChunk {
+/// foreign key (version_id, owner_id) -> drive_version ON DELETE CASCADE.
+model DriveVersionChunk {
   versionId String   @map("version_id") @db.Uuid
   idx       Int
   ownerId   String   @map("owner_id") @db.Uuid
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_version_chunk_owner_id_fkey")
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_version_chunk_owner_id_fkey")
   offset    BigInt
   sizeBytes Int      @map("size_bytes")
   sha256    String
-  blob      FileBlob @relation(fields: [sha256], references: [sha256], onDelete: Restrict, map: "document_version_chunk_sha256_fkey")
-  version   DocumentVersion @relation(fields: [versionId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "document_version_chunk_version_fkey")
+  blob      FileBlob @relation(fields: [sha256], references: [sha256], onDelete: Restrict, map: "drive_version_chunk_sha256_fkey")
+  version   DriveVersion @relation(fields: [versionId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_version_chunk_version_fkey")
 
-  @@id([versionId, idx], map: "document_version_chunk_pkey")
-  @@index([sha256], map: "document_version_chunk_sha256_idx")
-  @@map("document_version_chunk")
+  @@id([versionId, idx], map: "drive_version_chunk_pkey")
+  @@index([sha256], map: "drive_version_chunk_sha256_idx")
+  @@map("drive_version_chunk")
 }
 
-/// What one deletion (`DELETE`) or one overwrite (`VERSION`) put in Trash (1327, docs/documents-drive-technical-design.md
+/// What one deletion (`DELETE`) or one overwrite (`VERSION`) put in Trash (1327, docs/drive-technical-design.md
 /// §1.1, §3.3–§3.5). A `DELETE` group from the mount stays open for a burst of deletes (`burst_key`, joined while
 /// `last_added_at` is under 10 s old); an owner's deletion is closed at once. `folder_id` has no foreign key: it is the
 /// folder the items were deleted from, for display, and `folder_path` keeps its path as it was.
-/// Partial index: document_trash_group_burst_idx (owner_id, burst_key) WHERE burst_key IS NOT NULL AND closed_at IS NULL.
-model DocumentTrashGroup {
+/// Partial index: drive_trash_group_burst_idx (owner_id, burst_key) WHERE burst_key IS NOT NULL AND closed_at IS NULL.
+model DriveTrashGroup {
   id             String    @id @default(uuid(7)) @db.Uuid
   ownerId        String    @map("owner_id") @db.Uuid
-  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_trash_group_owner_id_fkey")
-  /// `DELETE` | `VERSION` (document_trash_group_kind_chk).
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_trash_group_owner_id_fkey")
+  /// `DELETE` | `VERSION` (drive_trash_group_kind_chk).
   kind           String
   folderId       String?   @map("folder_id") @db.Uuid
   folderPath     String    @map("folder_path")
@@ -3851,35 +3867,35 @@ model DocumentTrashGroup {
   itemCount      Int       @default(0) @map("item_count")
   sizeBytes      BigInt    @default(0) @map("size_bytes")
   /// A folder's marking into this group is still under way, a batch per transaction (§1.4); partial index
-  /// document_trash_group_marking_idx (migration 1440) finds the ones left part-way.
+  /// drive_trash_group_marking_idx (migration 1440) finds the ones left part-way.
   marking        Boolean   @default(false)
-  entries        DocumentEntry[]
-  versions       DocumentVersion[]
+  entries        DriveEntry[]
+  versions       DriveVersion[]
 
-  @@unique([id, ownerId], map: "document_trash_group_id_owner_id_key")
-  @@index([ownerId, createdAt], map: "document_trash_group_owner_created_idx")
-  @@map("document_trash_group")
+  @@unique([id, ownerId], map: "drive_trash_group_id_owner_id_key")
+  @@index([ownerId, createdAt], map: "drive_trash_group_owner_created_idx")
+  @@map("drive_trash_group")
 }
 
-/// One folder or file of an account's drive, live or in Trash (1327, docs/documents-drive-technical-design.md §1.1).
-/// The root is the one row with no parent, named ''. A file always has a current version (document_entry_version_chk; the
+/// One folder or file of an account's drive, live or in Trash (1327, docs/drive-technical-design.md §1.1).
+/// The root is the one row with no parent, named ''. A file always has a current version (drive_entry_version_chk; the
 /// foreign key to it is DEFERRABLE INITIALLY DEFERRED, so a file and its first version are written in one transaction).
 /// A folder in Trash marks every descendant with the same `trashed_at` and `trash_group_id`.
-/// Partial unique indexes: document_entry_live_name_key (owner_id, parent_id, name) WHERE trashed_at IS NULL, and
-/// document_entry_root_key (owner_id) WHERE parent_id IS NULL.
-model DocumentEntry {
+/// Partial unique indexes: drive_entry_live_name_key (owner_id, parent_id, name) WHERE trashed_at IS NULL, and
+/// drive_entry_root_key (owner_id) WHERE parent_id IS NULL.
+model DriveEntry {
   id                  String    @id @default(uuid(7)) @db.Uuid
   ownerId             String    @map("owner_id") @db.Uuid
-  owner               User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_entry_owner_id_fkey")
+  owner               User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_entry_owner_id_fkey")
   parentId            String?   @map("parent_id") @db.Uuid
-  parent              DocumentEntry?  @relation("DocumentEntryParent", fields: [parentId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "document_entry_parent_fkey")
-  children            DocumentEntry[] @relation("DocumentEntryParent")
+  parent              DriveEntry?  @relation("DriveEntryParent", fields: [parentId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_entry_parent_fkey")
+  children            DriveEntry[] @relation("DriveEntryParent")
   /// `FOLDER` | `FILE`.
   kind                String
   /// Exact bytes of the name, not normalised.
   name                String
   currentVersionId    String?   @map("current_version_id") @db.Uuid
-  currentVersion      DocumentVersion? @relation("DocumentEntryCurrentVersion", fields: [currentVersionId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "document_entry_current_version_fkey")
+  currentVersion      DriveVersion? @relation("DriveEntryCurrentVersion", fields: [currentVersionId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "drive_entry_current_version_fkey")
   sizeBytes           BigInt    @default(0) @map("size_bytes")
   mtime               DateTime  @default(now()) @db.Timestamptz(3)
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -3891,32 +3907,32 @@ model DocumentEntry {
   lastWrittenAt       DateTime  @default(now()) @map("last_written_at") @db.Timestamptz(3)
   trashedAt           DateTime? @map("trashed_at") @db.Timestamptz(3)
   trashGroupId        String?   @map("trash_group_id") @db.Uuid
-  trashGroup          DocumentTrashGroup? @relation(fields: [trashGroupId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "document_entry_trash_group_fkey")
+  trashGroup          DriveTrashGroup? @relation(fields: [trashGroupId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "drive_entry_trash_group_fkey")
   /// A top-level item of its Trash group: its parent is not in the same group.
   trashTop            Boolean   @default(false) @map("trash_top")
-  /// The document_change.seq of its last change, appends included: the cache key.
+  /// The drive_change.seq of its last change, appends included: the cache key.
   seq                 BigInt    @default(0)
-  versions            DocumentVersion[] @relation("DocumentVersionEntry")
-  commits             DocumentCommit[]
-  stagings            DocumentStaging[] @relation("DocumentStagingEntry")
-  uploadsHere         DocumentStaging[] @relation("DocumentStagingParent")
+  versions            DriveVersion[] @relation("DriveVersionEntry")
+  commits             DriveCommit[]
+  stagings            DriveStaging[] @relation("DriveStagingEntry")
+  uploadsHere         DriveStaging[] @relation("DriveStagingParent")
   shareLinks          ShareLink[] @relation("ShareLinkDriveEntry")
 
-  @@unique([id, ownerId], map: "document_entry_id_owner_id_key")
-  @@index([ownerId, trashGroupId], map: "document_entry_trash_group_idx")
-  @@index([parentId], map: "document_entry_parent_idx")
-  @@index([currentVersionId], map: "document_entry_current_version_idx")
-  @@map("document_entry")
+  @@unique([id, ownerId], map: "drive_entry_id_owner_id_key")
+  @@index([ownerId, trashGroupId], map: "drive_entry_trash_group_idx")
+  @@index([parentId], map: "drive_entry_parent_idx")
+  @@index([currentVersionId], map: "drive_entry_current_version_idx")
+  @@map("drive_entry")
 }
 
 /// One content a file has had (1327): the current one, or a replaced one (`replaced_at`) in Trash (`trash_group_id`).
 /// `handle_id` is the writer's handle still writing it, so a later commit of that handle continues it (§3.1).
-model DocumentVersion {
+model DriveVersion {
   id              String    @id @default(uuid(7)) @db.Uuid
   ownerId         String    @map("owner_id") @db.Uuid
-  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_version_owner_id_fkey")
+  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_version_owner_id_fkey")
   entryId         String    @map("entry_id") @db.Uuid
-  entry           DocumentEntry @relation("DocumentVersionEntry", fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "document_version_entry_fkey")
+  entry           DriveEntry @relation("DriveVersionEntry", fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_version_entry_fkey")
   sizeBytes       BigInt    @default(0) @map("size_bytes")
   chunkCount      Int       @default(0) @map("chunk_count")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -3927,85 +3943,85 @@ model DocumentVersion {
   writerRunnerId  String?   @map("writer_runner_id") @db.Uuid
   replacedAt      DateTime? @map("replaced_at") @db.Timestamptz(3)
   trashGroupId    String?   @map("trash_group_id") @db.Uuid
-  trashGroup      DocumentTrashGroup? @relation(fields: [trashGroupId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "document_version_trash_group_fkey")
-  chunks          DocumentVersionChunk[]
-  currentOf       DocumentEntry[] @relation("DocumentEntryCurrentVersion")
+  trashGroup      DriveTrashGroup? @relation(fields: [trashGroupId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "drive_version_trash_group_fkey")
+  chunks          DriveVersionChunk[]
+  currentOf       DriveEntry[] @relation("DriveEntryCurrentVersion")
   shareLinks      ShareLink[] @relation("ShareLinkDriveVersion")
 
-  @@unique([id, ownerId], map: "document_version_id_owner_id_key")
-  @@index([entryId], map: "document_version_entry_idx")
-  @@index([ownerId, trashGroupId], map: "document_version_trash_group_idx")
-  @@map("document_version")
+  @@unique([id, ownerId], map: "drive_version_id_owner_id_key")
+  @@index([entryId], map: "drive_version_entry_idx")
+  @@index([ownerId, trashGroupId], map: "drive_version_trash_group_idx")
+  @@map("drive_version")
 }
 
 /// The answer to one commit, by the writer's own `commit_id` within its owner, kept a day so a retried commit is answered
 /// and never applied twice (1327, §3.1). The retention sweep's step 0 prunes it.
-model DocumentCommit {
+model DriveCommit {
   ownerId   String     @map("owner_id") @db.Uuid
-  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_commit_owner_id_fkey")
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_commit_owner_id_fkey")
   commitId  String     @map("commit_id")
   entryId   String     @map("entry_id") @db.Uuid
-  entry     DocumentEntry @relation(fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "document_commit_entry_fkey")
+  entry     DriveEntry @relation(fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "drive_commit_entry_fkey")
   result    Json
   createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  @@id([ownerId, commitId], map: "document_commit_pkey")
-  @@index([createdAt], map: "document_commit_created_at_idx")
-  @@index([entryId], map: "document_commit_entry_idx")
-  @@map("document_commit")
+  @@id([ownerId, commitId], map: "drive_commit_pkey")
+  @@index([createdAt], map: "drive_commit_created_at_idx")
+  @@index([entryId], map: "drive_commit_entry_idx")
+  @@map("drive_commit")
 }
 
 /// A file a rename onto an existing file removed outright (1438, §3.2): its name and folder, so a mount handle still bound
 /// to its id commits as a new file in Trash named after it (`successor_id`, made by the first such commit). No foreign
 /// key to the entry, the folder or the successor: each is read by id and checked. Pruned after seven days.
-model DocumentRemovedEntry {
+model DriveRemovedEntry {
   ownerId     String    @map("owner_id") @db.Uuid
-  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_removed_entry_owner_id_fkey")
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_removed_entry_owner_id_fkey")
   entryId     String    @map("entry_id") @db.Uuid
   parentId    String    @map("parent_id") @db.Uuid
   name        String
   removedAt   DateTime  @default(now()) @map("removed_at") @db.Timestamptz(3)
   successorId String?   @map("successor_id") @db.Uuid
 
-  @@id([ownerId, entryId], map: "document_removed_entry_pkey")
-  @@index([removedAt], map: "document_removed_entry_removed_at_idx")
-  @@map("document_removed_entry")
+  @@id([ownerId, entryId], map: "drive_removed_entry_pkey")
+  @@index([removedAt], map: "drive_removed_entry_removed_at_idx")
+  @@map("drive_removed_entry")
 }
 
 /// The drive's change feed (1327, §5.4): one row per change to an entry, kept a day. `at` is the clock when the row was
 /// inserted, which the feed's look-back reads. No foreign key to the entry: a REMOVE outlives it.
-model DocumentChange {
+model DriveChange {
   seq      BigInt   @id @default(autoincrement())
   ownerId  String   @map("owner_id") @db.Uuid
-  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_change_owner_id_fkey")
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_change_owner_id_fkey")
   entryId  String   @map("entry_id") @db.Uuid
   parentId String?  @map("parent_id") @db.Uuid
   /// `UPSERT` | `REMOVE`.
   op       String
   at       DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(3)
 
-  @@index([ownerId, seq], map: "document_change_owner_seq_idx")
-  @@index([ownerId, at], map: "document_change_owner_at_idx")
-  @@index([at], map: "document_change_at_idx")
-  @@map("document_change")
+  @@index([ownerId, seq], map: "drive_change_owner_seq_idx")
+  @@index([ownerId, at], map: "drive_change_owner_at_idx")
+  @@index([at], map: "drive_change_at_idx")
+  @@map("drive_change")
 }
 
 /// What the mount daemon of one managed-runner generation presents at /runner/drive/* (1339,
-/// docs/documents-drive-technical-design.md §4.3): only the token's sha256 is kept. Refused by every other route, and
+/// docs/drive-technical-design.md §4.3): only the token's sha256 is kept. Refused by every other route, and
 /// accepted only while its generation is the mapping's and its instance the one the manager recorded (§8.2).
-model DocumentMountCredential {
+model DriveMountCredential {
   id         String    @id @default(uuid(7)) @db.Uuid
   ownerId    String    @map("owner_id") @db.Uuid
-  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_mount_credential_owner_id_fkey")
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_mount_credential_owner_id_fkey")
   runnerId   String    @map("runner_id") @db.Uuid
-  runner     Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade, map: "document_mount_credential_runner_id_fkey")
+  runner     Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade, map: "drive_mount_credential_runner_id_fkey")
   generation Int
-  tokenHash  String    @unique(map: "document_mount_credential_token_hash_key") @map("token_hash")
+  tokenHash  String    @unique(map: "drive_mount_credential_token_hash_key") @map("token_hash")
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
 
-  @@index([runnerId, generation], map: "document_mount_credential_runner_idx")
-  @@map("document_mount_credential")
+  @@index([runnerId, generation], map: "drive_mount_credential_runner_idx")
+  @@map("drive_mount_credential")
 }
 
 // Lightweight activity feed (no FKs, append-only).
@@ -4046,6 +4062,8 @@ model Activity {
 /// a matter of interpreting a paragraph, which is the failure verification exists to avoid.
 model Project {
   promotionRequests ProjectPromotionRequest[]
+  /// Settings › Translation (migration 1600): the title and criteria in the owner's language.
+  textTranslation   ProjectTextTranslation?
   id      String @id @default(uuid(7)) @db.Uuid
   title   String
   // Tenant scope: list/authorization always filter by this column (like tasks and task lists).
@@ -5439,6 +5457,19 @@ model ProjectCriteriaChangeTranslation {
   intent      ProjectRatifiedActionIntent @relation(fields: [intentId], references: [id], onDelete: Cascade, map: "project_criteria_change_translation_intent_fkey")
 
   @@map("project_criteria_change_translation")
+}
+
+/// Settings › Translation (migration 1600): a project's title and its criteria's text in the owner's language,
+/// `{ lang, failed?, sourceDigest, title?, criteria?: [{ id, text }] }` (ProjectTextTranslation in @orbit/shared, plus
+/// the digest of the words it was made from). A reader's copy: the project's own columns stay what the agent wrote.
+model ProjectTextTranslation {
+  projectId   String   @id @map("project_id") @db.Uuid
+  ownerId     String   @map("owner_id") @db.Uuid
+  translation Json
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade, map: "project_text_translation_project_fkey")
+
+  @@map("project_text_translation")
 }
 
 model ProjectRatifiedActionCommit {
@@ -10002,6 +10033,12 @@ model WikiChatDraft {
   /// `{ "<entry id>": "<trust>" }`: what each entry an amend of the card changed was trusted as before the press.
   trustBefore    Json?     @map("trust_before")
   undoneAt       DateTime? @map("undone_at") @db.Timestamptz(3)
+  /// When the server queued a rewrite card's sections without a press (migration 1574, design §7.2 option A).
+  autoQueuedAt   DateTime? @map("auto_queued_at") @db.Timestamptz(3)
+  /// `web` | `budget` | `draft`: why a rewrite card inside option A's other bounds was left for a press, as found when drafted.
+  held           String?
+  /// For held `draft`, the card it waits on. A history reference with no foreign key. Its partial index is the migration's.
+  heldById       String?   @map("held_by_id") @db.Uuid
   seenAt         DateTime? @map("seen_at") @db.Timestamptz(3)
   /// When the agent was last told of its press, with the owner's next message (`chat.notes.drafts`).
   toldAt         DateTime? @map("told_at") @db.Timestamptz(3)
@@ -10870,6 +10907,12 @@ model ScheduleRun {
   /// The last time the watch pass found the run's session, not yet delivered, held by a full runner, run or batch
   /// (§7.2, migration 1430): such a run waits for a slot, and the 10-minute undelivered limit counts from here.
   capacityHeldAt   DateTime?          @map("capacity_held_at") @db.Timestamptz(3)
+  /// A MANUAL run the owner pressed themselves (§8.4, migration 1601): it counts toward no budget. False for every
+  /// other run, including a Run now by a session or a personal access token, which counts toward theirs.
+  byOwner          Boolean            @default(false) @map("by_owner")
+  /// When the watch pass first found the delivered run's session idle with nothing to wake it (§7.1, migration 1643):
+  /// the run is failed NO_REPORT once it has read so for SCHEDULE_IDLE_SETTLE_MS; any other reading clears it.
+  idleSeenAt       DateTime?          @map("idle_seen_at") @db.Timestamptz(3)
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions         Session[]
 
@@ -11180,14 +11223,14 @@ model AccountHealth {
   @@map("account_health")
 }
 
-/// One agent's directory sync into the owner's Documents, as the upload tray shows it (migration 1560,
-/// docs/documents-directory-sync-design.md S4). The runner running it opens and reports into the row; the owner reads it.
-model DocumentSync {
+/// One agent's directory sync into the owner's Drive, as the upload tray shows it (migration 1560,
+/// docs/drive-directory-sync-design.md S4). The runner running it opens and reports into the row; the owner reads it.
+model DriveSync {
   id           String    @id @default(uuid(7)) @db.Uuid
   ownerId      String    @map("owner_id") @db.Uuid
-  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_sync_owner_id_fkey")
+  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "drive_sync_owner_id_fkey")
   runnerId     String    @map("runner_id") @db.Uuid
-  runner       Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade, map: "document_sync_runner_id_fkey")
+  runner       Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade, map: "drive_sync_runner_id_fkey")
   /// The session that started it: history read by id, not a key.
   sessionId    String?   @map("session_id") @db.Uuid
   /// The local directory's last segment only, never a runner path.
@@ -11195,7 +11238,7 @@ model DocumentSync {
   destPath     String    @map("dest_path")
   /// The destination folder once it exists: history read by id, not a key.
   destEntryId  String?   @map("dest_entry_id") @db.Uuid
-  /// CHECKING | UPLOADING | DONE | FAILED | STOPPED (document_sync_status_check).
+  /// CHECKING | UPLOADING | DONE | FAILED | STOPPED (drive_sync_status_check).
   status       String    @default("CHECKING")
   /// Local files looked at so far, while checking.
   filesSeen    Int       @default(0) @map("files_seen")
@@ -11218,7 +11261,7 @@ model DocumentSync {
   updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
   endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
 
-  @@index([ownerId, startedAt(sort: Desc)], map: "document_sync_owner_started_idx")
-  @@index([runnerId], map: "document_sync_runner_id_idx")
-  @@map("document_sync")
+  @@index([ownerId, startedAt(sort: Desc)], map: "drive_sync_owner_started_idx")
+  @@index([runnerId], map: "drive_sync_runner_id_idx")
+  @@map("drive_sync")
 }

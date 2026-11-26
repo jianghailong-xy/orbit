@@ -525,12 +525,15 @@ public struct ProjectDoneSubject: Equatable, Sendable {
     public let nonCodeMark: NonCodeMark?
     /// The criteria this project moved out to a follow-up (board 02 G).
     public let criteriaMovedOut: [CriterionMovedOut]
+    /// Settings › Translation: the title and criteria in the owner's language, as the document
+    /// carried them — what `shown(owner:showOriginal:)` draws from.
+    public let translation: ProjectTextTranslation?
 
     public init(title: String, status: String?, criteria: [Criterion] = [],
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
                 doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [], upstreamRef: String? = nil,
                 projectID: String? = nil, nonCodeMark: NonCodeMark? = nil,
-                criteriaMovedOut: [CriterionMovedOut] = []) {
+                criteriaMovedOut: [CriterionMovedOut] = [], translation: ProjectTextTranslation? = nil) {
         self.title = title
         self.status = status
         self.criteria = criteria
@@ -542,6 +545,7 @@ public struct ProjectDoneSubject: Equatable, Sendable {
         self.projectID = projectID
         self.nonCodeMark = nonCodeMark
         self.criteriaMovedOut = criteriaMovedOut
+        self.translation = translation
     }
 
     /// `isNonCode`: the mark on the project, or on its derived read.

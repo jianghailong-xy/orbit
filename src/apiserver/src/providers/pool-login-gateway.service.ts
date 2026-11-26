@@ -414,7 +414,7 @@ export class PoolLoginGatewayService {
         pool: { select: { slug: true, label: true, engine: true, ownerId: true, shared: true } },
         session: {
           select: {
-            status: true, finishedAt: true, ownerId: true, provider: true, poolCodexAccountId: true, poolKeyId: true,
+            finishedAt: true, ownerId: true, provider: true, poolCodexAccountId: true, poolKeyId: true,
             completedAt: true, deletedAt: true, owner: { select: { disabledAt: true } },
             engine: true, model: true, cancelRequestedAt: true, endReason: true,
           },

@@ -82,6 +82,8 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
                 catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         return ComposerCatalog(runner, rows, own, runners)
     }
+    /** A sent file's bytes, to stage it again. */
+    suspend fun attachment(id: String): ByteArray = auth.request(handle, ApiRequest(listOf("attachments", id), maxResponseBytes = 25L * 1024 * 1024)).body
     suspend fun upload(attachment: StagedAttachment, bytes: ByteArray, progress: (Float) -> Unit): String = withContext(Dispatchers.IO) {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", attachment.name, bytes.toRequestBody(attachment.mime.toMediaType())).build()

@@ -32,7 +32,8 @@ import {
   type SubagentRunUpdateResponse,
   SUBAGENT_REMOTE_RESUME_V1,
 } from '@orbit/shared';
-import { Prisma, RunStatus, type Runner } from '@prisma/client';
+import { Prisma, type Runner } from '@prisma/client';
+import { TURN_STATE_SELECT } from '../sessions/session-turn-state';
 import { PublicIdPipe } from '../common/public-id';
 import {
   ALWAYS_ALLOWED_TOOLS,
@@ -79,7 +80,7 @@ import {
   truncateResultSummary,
 } from './subagent-run';
 import { AccountHealthService, claimTrialByKey } from '../providers/account-health.service';
-import { uuidv7 } from '../documents/documents.service';
+import { uuidv7 } from '../drive/drive.service';
 import type { SubagentAttempt } from '@orbit/shared';
 import { planSubagentRoute } from './subagent-route';
 import {
@@ -126,7 +127,6 @@ function refusalText(error: HttpException): string {
 /** What a SubAgent's run reads of its parent session. */
 const SUBAGENT_PARENT_SELECT = {
   ownerId: true,
-  status: true,
   // The release column: a released parent opens no SubAgent run (common/session-release.ts).
   finishedAt: true,
   workspaceId: true,
@@ -301,7 +301,9 @@ export class RunnerSubagentsController {
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
         select: {
-          ownerId: true, status: true, finishedAt: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
+          // What sessionHasEnded reads: the turn state's columns (sessions/session-legacy-words.ts) and the filing facts.
+          ...TURN_STATE_SELECT,
+          ownerId: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true,
           workspace: { select: { subagentsEnabled: true, workflowsEnabled: true } },
         },
       });

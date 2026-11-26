@@ -51,6 +51,10 @@ class ScheduleApi(private val api: OrbitApi, private val handle: SessionHandle) 
     suspend fun undo(id: String, revision: Int) {
         send(listOf("schedules", id, "undo"), HttpMethod.POST, buildJsonObject { put("revision", revision) })
     }
+    /** Rename (§8.4): the title alone, applied at once. */
+    suspend fun rename(id: String, title: String) {
+        send(listOf("schedules", id, "rename"), HttpMethod.POST, buildJsonObject { put("title", title) })
+    }
     suspend fun delete(id: String) { send(listOf("schedules", id), HttpMethod.DELETE) }
     suspend fun stopRun(runId: String) { send(listOf("schedule-runs", runId, "stop"), HttpMethod.POST) }
 

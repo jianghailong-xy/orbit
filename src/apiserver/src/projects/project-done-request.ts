@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Logger } from '@nestjs/common';
 
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 import type {
   AcceptedGap,
   DoneState,
@@ -16,6 +16,7 @@ import type {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import type { SessionsService } from '../sessions/sessions.service';
+import { TURN_STATE_SELECT, turnStateFilter, turnStateOf } from '../sessions/session-turn-state';
 import { storeDerivedProjectStatus, type StoreDerivedProjectStatusOptions } from './project-done-derived';
 import { tellCoordinatorDoneRequestSuperseded } from './project-started';
 
@@ -224,20 +225,20 @@ export async function readDoneState(
   const runs = await tx.session.findMany({
     where: {
       ownerId,
-      status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+      ...turnStateFilter(['QUEUED', 'IN_FLIGHT']),
       // "Nothing is still running" counts engine runs; the landing container is the platform's
       // own and is never one (§2.9 LS6).
       sessionKind: 'CONVERSATION',
       task: { projectId },
       ...(askingSessionId ? { id: { not: askingSessionId } } : {}),
     },
-    select: { taskId: true, status: true },
+    select: { taskId: true, ...TURN_STATE_SELECT },
   });
   const running = new Set(
-    runs.filter((run) => run.status === RunStatus.RUNNING).map((run) => run.taskId),
+    runs.filter((run) => turnStateOf(run) === 'IN_FLIGHT').map((run) => run.taskId),
   );
   const queued = new Set(
-    runs.filter((run) => run.status === RunStatus.PENDING).map((run) => run.taskId),
+    runs.filter((run) => turnStateOf(run) === 'QUEUED').map((run) => run.taskId),
   );
   const tasks = rows.map((task): DoneStateTask => ({
     ...task,

@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Session settings as a column — board 01</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9eaee; font-family: -apple-system, BlinkMacSystemFont, Inter, 'PingFang SC', 'Noto Sans SC', sans-serif; color: #1d1f24; }
+  .board { width: 2200px; padding: 48px 56px 64px; background: #f4f5f7; }
+  h1 { font-size: 34px; margin: 0 0 6px; }
+  .lede { font-size: 17px; color: #5b6070; margin: 0 0 36px; line-height: 1.6; }
+  h2 { font-size: 22px; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+  h2 .no { display: inline-flex; width: 30px; height: 30px; border-radius: 50%; background: #1d1f24; color: #fff; font-size: 16px; align-items: center; justify-content: center; }
+  h2.new .no { background: #2f6fec; }
+  .row { display: flex; gap: 40px; align-items: flex-start; margin-bottom: 48px; }
+  .card { background: #fff; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 24px 28px; }
+  .cap { font-size: 14px; color: #6b7080; margin: 10px 0 0; line-height: 1.6; }
+  .note { font-size: 15px; line-height: 1.65; color: #343844; }
+  .note b { color: #1d1f24; }
+  .note li { margin-bottom: 8px; }
+  .bad { color: #c93a2f; font-weight: 600; }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: #f1f2f5; padding: 1px 5px; border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #eceef2; vertical-align: top; line-height: 1.5; }
+  th { color: #6b7080; font-weight: 600; font-size: 13.5px; background: #fafbfc; }
+  .decide { border: 2px solid #f0b429; background: #fffbea; }
+  .decide h2 .no { background: #d69e0b; }
+  .opt { display: flex; gap: 10px; margin: 8px 0; }
+  .opt .tag { flex: none; font-weight: 700; color: #2f6fec; }
+  .mark { position: absolute; width: 26px; height: 26px; border-radius: 50%; background: #2f6fec; color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px #fff; z-index: 5; }
+  .mark.r { background: #e5484d; }
+
+  /* ---- app pieces ---- */
+  .app { position: relative; display: flex; background: #fff; border: 1px solid #dcdfe5; border-radius: 12px; overflow: hidden; font-size: 14px; }
+  .side { width: 240px; flex: none; background: #f7f8fa; border-right: 1px solid #e6e8ec; padding: 14px 10px; }
+  .side .ws { font-weight: 650; font-size: 14px; padding: 4px 8px 12px; }
+  .side .srow { padding: 8px 10px; border-radius: 8px; margin-bottom: 2px; }
+  .side .srow .t { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .side .srow .s { font-size: 12px; color: #8a8f9c; margin-top: 2px; }
+  .side .srow.on { background: #e8efff; }
+  .conv { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .head { display: flex; align-items: flex-start; gap: 10px; padding: 16px 22px 14px; border-bottom: 1px solid #eceef2; }
+  .head-main { flex: 1; min-width: 0; }
+  .title-line { display: flex; align-items: center; gap: 8px; }
+  .title { font-size: 20px; font-weight: 650; padding: 2px 8px; margin-left: -8px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 6px; }
+  .title .chev { font-size: 13px; color: #9aa0ad; font-weight: 500; }
+  .title.hover { background: #f1f2f5; cursor: pointer; }
+  .title.open { background: #e8efff; color: #1d4fd8; }
+  .title.open .chev { color: #2f6fec; }
+  .follow { font-size: 12px; font-weight: 600; border: 1px solid #d9dce3; border-radius: 11px; padding: 2px 9px; color: #4d5260; }
+  .sub { font-size: 13px; color: #7b808d; margin-top: 4px; display: flex; gap: 6px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 19px; padding: 0 7px; border-radius: 10px; background: #f1f2f5; color: #4d5260; font-size: 12px; }
+  .chip i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .ib { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #555b68; font-size: 18px; font-weight: 700; }
+  .ib.on { background: #e8efff; color: #2f6fec; }
+  .body { flex: 1; padding: 18px 22px; }
+  .bubble { margin-left: auto; width: 55%; background: #eaf2ff; border-radius: 12px; padding: 10px 14px; color: #2b3a55; font-size: 13.5px; }
+  .ln { height: 10px; border-radius: 5px; background: #eef0f3; margin: 12px 0; }
+  .composer { margin: 0 22px 18px; height: 70px; border: 1px solid #dcdfe5; border-radius: 18px; color: #a0a5b1; padding: 14px 18px; font-size: 14px; }
+  .tip { position: absolute; background: #1d1f24; color: #fff; font-size: 12px; padding: 5px 9px; border-radius: 6px; white-space: nowrap; z-index: 6; }
+
+  /* settings column */
+  .resizer { width: 1px; background: #e3e5ea; flex: none; }
+  .col { width: 380px; flex: none; background: #fbfbfc; display: flex; flex-direction: column; }
+  .col-head { display: flex; align-items: center; gap: 10px; padding: 16px 16px 14px 20px; border-bottom: 1px solid #eceef2; }
+  .col-head .h { font-size: 16px; font-weight: 650; flex: 1; }
+  .col-head .x { color: #7b808d; font-size: 16px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
+  .col-body { padding: 4px 16px 16px; overflow: hidden; }
+  .sec { font-size: 11.5px; font-weight: 650; letter-spacing: .06em; color: #8a8f9c; margin: 16px 4px 8px; display: flex; justify-content: space-between; }
+  .sec span { font-weight: 500; letter-spacing: 0; text-transform: none; }
+  .grp { background: #fff; border: 1px solid #e6e8ec; border-radius: 10px; }
+  .it { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-top: 1px solid #f0f1f4; font-size: 13.5px; }
+  .it:first-child { border-top: 0; }
+  .it .k { flex: 1; min-width: 0; }
+  .it .k small { display: block; color: #8a8f9c; font-size: 12px; margin-top: 2px; }
+  .it .v { color: #4d5260; font-size: 13px; text-align: right; }
+  .it .sel { border: 1px solid #dcdfe5; border-radius: 7px; padding: 5px 10px; font-size: 12.5px; color: #1d1f24; }
+  .sw { width: 34px; height: 20px; border-radius: 10px; background: #dfe1e6; position: relative; flex: none; }
+  .sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .lbl { display: flex; flex-wrap: wrap; gap: 6px; }
+  .lbl .c { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 12px; border: 1px solid #e3e5ea; font-size: 12.5px; }
+  .lbl .c i { width: 7px; height: 7px; border-radius: 50%; }
+  .lbl .add { color: #7b808d; border-style: dashed; }
+  .name { width: 100%; border: 1px solid #dcdfe5; border-radius: 8px; padding: 7px 10px; font-size: 14px; font-weight: 600; background: #fff; }
+  .name.focus { border-color: #2f6fec; box-shadow: 0 0 0 3px rgba(47,111,236,.15); }
+  .name .caret { display: inline-block; width: 1px; height: 15px; background: #1d1f24; vertical-align: -2px; margin-left: 1px; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .proj { width: 300px; flex: none; background: #fbfbfc; }
+  .proj .col-head .h { font-size: 15px; }
+  .proj .srow { padding: 8px 14px; font-size: 13px; border-bottom: 1px solid #f0f1f4; }
+  .over { position: absolute; top: 0; right: 0; bottom: 0; box-shadow: -10px 0 30px rgba(20,25,40,.14); border-left: 1px solid #e3e5ea; }
+
+  .phone { width: 393px; height: 760px; border-radius: 40px; border: 10px solid #1d1f24; overflow: hidden; background: #fff; position: relative; font-size: 14px; }
+  .phone .bar { height: 44px; }
+  .phone .ph-head { display: flex; align-items: center; gap: 10px; padding: 8px 16px 12px; border-bottom: 1px solid #eceef2; }
+  .phone .ph-head .h { flex: 1; text-align: center; font-weight: 650; font-size: 16px; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Session settings：从侧滑抽屉改为侧栏 · 点标题打开</h1>
+  <p class="lede">Web 控制台 · 2026-11-25 · 现状为 <code>SessionSettingsDrawer</code>（440px 抽屉，盖住对话、背后变暗）。方案：与 Project sessions 侧栏同一位置、同一套行为的
+    <b>Settings 侧栏</b>，对话照常可读可写；点会话标题即开关。中文为批注，界面文字为英文。</p>
+
+  <!-- ① TODAY -->
+  <div class="row">
+    <div>
+      <h2><span class="no">①</span>现状 · 侧滑抽屉（你的截图，邮箱已遮）</h2>
+      <img src="00-today-owner.png" style="width:900px;border-radius:12px;border:1px solid #dcdfe5;display:block">
+    </div>
+    <div class="card note" style="width:1150px">
+      <h2 style="font-size:19px">问题</h2>
+      <ol style="padding-left:20px;margin:0">
+        <li><b>抽屉盖住对话，背后整片变暗。</b>打开设置就看不了对话、也不能回复；而设置里大多是"看一眼"的东西（Info、Labels、通知），不该打断对话。</li>
+        <li><b>和 Project sessions 不是一套。</b>项目会话已经是右侧可拉宽、可收起的侧栏（<code>aside.session-col</code>，✕ 或 Esc 收起）；设置却是另一种浮层，两种右侧面板行为不一致。</li>
+        <li><b>入口藏得深。</b>只在 ⋯ → Session settings… 里；标题本身单击无反应，双击才是重命名，且屏幕上没有任何提示。</li>
+      </ol>
+      <h2 style="font-size:19px;margin-top:22px">方案要点</h2>
+      <ol style="padding-left:20px;margin:0">
+        <li><b>Settings 变成侧栏</b>，和 Project sessions 侧栏同一槽位：对话变窄而不是被盖住，无遮罩；左边缘可拖宽（默认 380px，记住宽度）；✕ 或 Esc 收起。</li>
+        <li><b>点标题开关侧栏。</b>标题悬停时有浅底 + 小箭头 ›，提示可点；打开时标题呈选中色。⋯ 菜单里的 Session settings… 保留，做同一件事。</li>
+        <li><b>重命名搬进侧栏顶部的 Name 字段。</b>单击已被"打开设置"占用，双击重命名去掉（见待定 Q1）；⋯ → Rename… 打开侧栏并聚焦 Name。</li>
+        <li>侧栏内容与现在的抽屉一致（Labels、Public link、Environment、Notifications、Info），只在最上面加 Name。</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ② PROPOSAL WIDE -->
+  <div class="row">
+    <div>
+      <h2 class="new"><span class="no">②</span>方案 · 宽窗口：对话 + Settings 侧栏并排</h2>
+      <div class="app" style="width:1500px;height:900px">
+        <div class="side">
+          <div class="ws">orbit-ws01</div>
+          <div class="srow on"><div class="t">Session 头部与下拉菜单设计</div><div class="s">Waiting for your reply</div></div>
+          <div class="srow"><div class="t">Fix login redirect</div><div class="s">Completed · 2h</div></div>
+          <div class="srow"><div class="t">Runner link cut-over</div><div class="s">Working</div></div>
+          <div class="srow"><div class="t">Wiki chat follow-ups</div><div class="s">Open · 1d</div></div>
+        </div>
+        <div class="conv">
+          <div class="head">
+            <div class="head-main">
+              <div class="title-line"><span class="title open">Session 头部与下拉菜单设计 <span class="chev">›</span></span><span class="follow">Follow</span></div>
+              <div class="sub">Waiting for your reply · Open · 14h ago <span class="chip"><i style="background:#e8890c"></i>前端问题</span><span class="chip"><i style="background:#f2c230"></i>交互设计</span></div>
+            </div>
+            <span class="ib">⋮</span>
+          </div>
+          <div class="body">
+            <div class="bubble">merge into main to upgrade</div>
+            <div class="ln" style="width:72%"></div><div class="ln" style="width:58%"></div><div class="ln" style="width:66%"></div>
+            <div class="ln" style="width:44%"></div><div class="ln" style="width:70%"></div><div class="ln" style="width:50%"></div>
+          </div>
+          <div class="composer">Reply…</div>
+        </div>
+        <div class="resizer"></div>
+        <aside class="col">
+          <div class="col-head"><span class="h">Session settings</span><span class="x">✕</span></div>
+          <div class="col-body">
+            <div class="sec">SESSION</div>
+            <div class="grp">
+              <div class="it" style="display:block"><div style="font-size:12px;color:#8a8f9c;margin-bottom:6px">Name</div><div class="name">Session 头部与下拉菜单设计</div></div>
+              <div class="it" style="display:block"><div style="font-size:12px;color:#8a8f9c;margin-bottom:6px">Labels</div>
+                <div class="lbl"><span class="c"><i style="background:#e8890c"></i>前端问题 ✕</span><span class="c"><i style="background:#f2c230"></i>交互设计 ✕</span><span class="c add">+ Add</span></div></div>
+              <div class="it"><div class="k">Public link<small>Off · only you can open this session</small></div><span class="sw"></span></div>
+            </div>
+            <div class="sec">ENVIRONMENT <span>Applies when the engine next starts</span></div>
+            <div class="grp">
+              <div class="it"><div class="k">Working directory<small>This session's worktree</small></div><span class="v mono">~/.orbit/worktrees/01a2…</span></div>
+              <div class="it"><div class="k">Compact at</div><span class="sel">Default ⌄</span></div>
+              <div class="it"><div class="k" style="color:#2f6fec">+ Add variable</div></div>
+            </div>
+            <div class="sec">NOTIFICATIONS <span>iOS and Android</span></div>
+            <div class="grp">
+              <div class="it"><div class="k">When the session finishes</div><span class="sel">As in Settings ⌄</span></div>
+              <div class="it"><div class="k">When it needs you</div><span class="sel">As in Settings ⌄</span></div>
+              <div class="it"><div class="k">Mute this session</div><span class="sw"></span></div>
+            </div>
+            <div class="sec">INFO</div>
+            <div class="grp">
+              <div class="it"><div class="k" style="color:#8a8f9c">Engine</div><span class="v">Claude Code 2.1.331</span></div>
+              <div class="it"><div class="k" style="color:#8a8f9c">Runner</div><span class="v">HPC</span></div>
+              <div class="it"><div class="k" style="color:#8a8f9c">Branch</div><span class="v mono">orbit/session-session-8729b7</span></div>
+              <div class="it"><div class="k" style="color:#8a8f9c">Cost</div><span class="v">$8.55 · 146 turns</span></div>
+            </div>
+          </div>
+        </aside>
+        <div class="mark" style="left:228px;top:20px">A</div>
+        <div class="mark" style="left:1106px;top:420px">B</div>
+        <div class="mark" style="left:1440px;top:120px">C</div>
+        <div class="mark" style="left:1420px;top:16px">D</div>
+      </div>
+      <p class="cap">无遮罩：对话仍可滚动、可回复。侧栏内部单独滚动。</p>
+    </div>
+    <div class="card note" style="width:550px">
+      <h2 style="font-size:19px">图注</h2>
+      <ol type="A" style="padding-left:22px;margin:0">
+        <li><b>标题 = 开关。</b>打开时标题浅蓝底 + ›，再点一次收起。键盘：Tab 到标题，Enter/Space。</li>
+        <li><b>左边缘可拖宽</b>（320–560px），宽度记在本机，与 Project sessions 侧栏的宽度分开记。</li>
+        <li><b>Name 在最上面。</b>改名在这里：回车或离开输入框保存，Esc 还原——沿用现在标题编辑器的规则。</li>
+        <li><b>✕ 或 Esc 收起</b>；焦点在输入框、菜单、对话框里时 Esc 归它们（与项目侧栏相同）。</li>
+      </ol>
+      <h2 style="font-size:19px;margin-top:22px">开着时切换会话</h2>
+      <p style="margin:0">侧栏<b>保持打开</b>，内容换成新会话的设置（像 Project sessions 侧栏一样记住开/关）。新建会话（composer 状态）没有设置可看：侧栏暂时隐藏，回到已有会话再出现。</p>
+    </div>
+  </div>
+
+  <!-- ③ TITLE STATES -->
+  <div class="row">
+    <div style="width:1000px">
+      <h2 class="new"><span class="no">③</span>标题的三种状态</h2>
+      <div class="app" style="height:96px;margin-bottom:10px"><div class="conv"><div class="head" style="border-bottom:0">
+        <div class="head-main"><div class="title-line"><span class="title">Session 头部与下拉菜单设计</span><span class="follow">Follow</span></div><div class="sub">Waiting for your reply · Open · 14h ago</div></div><span class="ib">⋮</span></div></div></div>
+      <p class="cap" style="margin:0 0 16px">③-a 静止：与现在一样，不加任何装饰。</p>
+      <div class="app" style="height:96px;margin-bottom:10px;overflow:visible"><div class="conv"><div class="head" style="border-bottom:0">
+        <div class="head-main"><div class="title-line"><span class="title hover">Session 头部与下拉菜单设计 <span class="chev">›</span></span><span class="follow">Follow</span></div><div class="sub">Waiting for your reply · Open · 14h ago</div></div><span class="ib">⋮</span></div></div>
+        <div class="tip" style="left:120px;top:58px">Session settings</div></div>
+      <p class="cap" style="margin:0 0 16px">③-b 悬停：浅灰底 + ›，鼠标变手形，提示 "Session settings"。</p>
+      <div class="app" style="height:96px;margin-bottom:10px"><div class="conv"><div class="head" style="border-bottom:0">
+        <div class="head-main"><div class="title-line"><span class="title open">Session 头部与下拉菜单设计 <span class="chev">›</span></span><span class="follow">Follow</span></div><div class="sub">Waiting for your reply · Open · 14h ago</div></div><span class="ib">⋮</span></div></div></div>
+      <p class="cap" style="margin:0 0 16px">③-c 侧栏打开：浅蓝底（与 Project sessions 按钮按下时同色）。</p>
+    </div>
+    <div style="width:1000px">
+      <h2 class="new"><span class="no">④</span>重命名：⋯ → Rename… 打开侧栏并聚焦 Name</h2>
+      <div class="app" style="height:300px">
+        <div class="conv"><div class="head"><div class="head-main"><div class="title-line"><span class="title open">Session 头部与下拉菜单设计 <span class="chev">›</span></span></div><div class="sub">Waiting for your reply · Open · 14h ago</div></div><span class="ib">⋮</span></div>
+          <div class="body"><div class="ln" style="width:70%"></div><div class="ln" style="width:50%"></div></div></div>
+        <div class="resizer"></div>
+        <aside class="col" style="width:400px">
+          <div class="col-head"><span class="h">Session settings</span><span class="x">✕</span></div>
+          <div class="col-body"><div class="sec">SESSION</div><div class="grp">
+            <div class="it" style="display:block"><div style="font-size:12px;color:#8a8f9c;margin-bottom:6px">Name</div><div class="name focus">Session 头部与下拉菜单设计<span class="caret"></span></div>
+              <div style="font-size:12px;color:#8a8f9c;margin-top:6px">Return to save · Esc to undo</div></div>
+          </div></div>
+        </aside>
+      </div>
+      <p class="cap">全选文字、光标在开头（与现在的标题编辑器一致）。保存后标题即时更新；项目管理的标题在这里改名后同样脱离项目同步（服务端现有规则不变）。</p>
+    </div>
+  </div>
+
+  <!-- ⑤ PROJECT COLUMN + NARROW + PHONE -->
+  <div class="row">
+    <div style="width:1000px">
+      <h2 class="new"><span class="no">⑤</span>与 Project sessions 侧栏同时存在时（推荐：同一槽位，一次一个）</h2>
+      <div class="app" style="height:330px">
+        <div class="conv"><div class="head"><div class="head-main"><div class="title-line"><span class="title open">Coordinator · Session three-state <span class="chev">›</span></span></div><div class="sub">Working · Open · 2m ago</div></div><span class="ib">▦</span><span class="ib">⋮</span></div>
+          <div class="body"><div class="ln" style="width:70%"></div><div class="ln" style="width:50%"></div><div class="ln" style="width:62%"></div></div></div>
+        <div class="resizer"></div>
+        <aside class="col" style="width:380px">
+          <div class="col-head"><span class="h">Session settings</span><span class="x">✕</span></div>
+          <div class="col-body"><div class="sec">SESSION</div><div class="grp"><div class="it" style="display:block"><div style="font-size:12px;color:#8a8f9c;margin-bottom:6px">Name</div><div class="name">Coordinator · Session three-state</div></div><div class="it"><div class="k">Public link</div><span class="sw"></span></div></div></div>
+        </aside>
+      </div>
+      <p class="cap">点标题：Settings 换进右侧槽位，Project sessions 让位（▦ 按钮变回未按下）。点 ▦：反过来。✕ 收起 Settings 时，若之前开着 Project sessions，就回到它。窗口再宽也不并排两栏——对话会被挤得太窄。</p>
+    </div>
+    <div style="width:560px">
+      <h2 class="new"><span class="no">⑥</span>窄窗口（&lt;1100px）</h2>
+      <div class="app" style="height:330px">
+        <div class="conv"><div class="head"><div class="head-main"><div class="title-line"><span class="title open">Session 头部… <span class="chev">›</span></span></div><div class="sub">Open · 14h ago</div></div><span class="ib">⋮</span></div>
+          <div class="body"><div class="ln" style="width:70%"></div><div class="ln" style="width:50%"></div></div></div>
+        <aside class="col over" style="width:340px">
+          <div class="col-head"><span class="h">Session settings</span><span class="x">✕</span></div>
+          <div class="col-body"><div class="sec">SESSION</div><div class="grp"><div class="it" style="display:block"><div style="font-size:12px;color:#8a8f9c;margin-bottom:6px">Name</div><div class="name">Session 头部与下拉菜单设计</div></div></div></div>
+        </aside>
+      </div>
+      <p class="cap">放不下并排时，侧栏浮在对话右侧之上（阴影、无遮罩），与项目侧栏"按需打开"时一样；点对话区域不关闭，✕/Esc 关闭。</p>
+    </div>
+    <div style="width:420px">
+      <h2 class="new"><span class="no">⑦</span>手机</h2>
+      <div class="phone">
+        <div class="bar"></div>
+        <div class="ph-head"><span style="color:#2f6fec">‹ Back</span><span class="h">Session settings</span><span style="width:44px"></span></div>
+        <div style="padding:0 14px"><div class="sec">SESSION</div><div class="grp">
+          <div class="it" style="display:block"><div style="font-size:12px;color:#8a8f9c;margin-bottom:6px">Name</div><div class="name">Session 头部与下拉菜单设计</div></div>
+          <div class="it" style="display:block"><div style="font-size:12px;color:#8a8f9c;margin-bottom:6px">Labels</div><div class="lbl"><span class="c"><i style="background:#e8890c"></i>前端问题 ✕</span><span class="c add">+ Add</span></div></div>
+          <div class="it"><div class="k">Public link</div><span class="sw"></span></div></div>
+          <div class="sec">NOTIFICATIONS</div><div class="grp"><div class="it"><div class="k">When the session finishes</div><span class="sel">As in Settings ⌄</span></div><div class="it"><div class="k">Mute this session</div><span class="sw"></span></div></div>
+        </div>
+      </div>
+      <p class="cap">没有侧栏的位置：点标题推入一整页（‹ Back 返回对话），不是抽屉。</p>
+    </div>
+  </div>
+
+  <!-- rules + decisions -->
+  <div class="row">
+    <div class="card note" style="width:1050px">
+      <h2 style="font-size:19px">规则</h2>
+      <table>
+        <tr><th style="width:260px">情况</th><th>行为</th></tr>
+        <tr><td>点标题 / ⋯ → Session settings…</td><td>开关 Settings 侧栏（同一个状态）</td></tr>
+        <tr><td>⋯ → Rename…</td><td>打开侧栏并聚焦 Name、全选</td></tr>
+        <tr><td>双击标题</td><td>按 Q1 定：A 不再有特殊行为（第二下又把侧栏关上，所以双击≈无变化）；B 保留改名</td></tr>
+        <tr><td>开着侧栏切换会话</td><td>保持打开，内容换成新会话；新建会话时暂隐</td></tr>
+        <tr><td>Project sessions 也要开</td><td>同一槽位一次一个；✕ 收 Settings 回到之前的项目侧栏</td></tr>
+        <tr><td>宽度</td><td>320–560px，默认 380，拖动左缘，本机记住</td></tr>
+        <tr><td>窄窗口 / 手机</td><td>浮在对话上（无遮罩）/ 推入整页</td></tr>
+        <tr><td>回收站里的会话</td><td>标题不可点（没有可设置的东西），与现在 ⋯ 菜单一致</td></tr>
+      </table>
+      <h2 style="font-size:19px;margin-top:22px">会动到的文件（确认后）</h2>
+      <table>
+        <tr><th style="width:430px">文件</th><th>改动</th></tr>
+        <tr><td><code>src/web/src/components/SessionSettingsDrawer.tsx</code></td><td>拆出内容为 <code>SessionSettingsPanel</code>；手机仍用整页容器；加 Name 行</td></tr>
+        <tr><td><code>src/web/src/components/WorkspaceView.tsx</code></td><td>标题改为按钮、开关侧栏；右侧槽位在 Settings 与 Project sessions 之间切换；Rename… 改为打开侧栏；去掉双击改名（Q1=A）</td></tr>
+        <tr><td><code>src/web/src/index.css</code> / <code>SessionSettingsDrawer.css</code></td><td>侧栏、标题悬停/选中样式</td></tr>
+        <tr><td>测试</td><td>标题点击开关、Esc、Rename… 聚焦、与项目侧栏互换、切换会话保持打开</td></tr>
+      </table>
+    </div>
+    <div class="card note decide" style="width:1000px">
+      <h2 style="font-size:19px"><span class="no">?</span>待你定</h2>
+      <p style="margin:0 0 6px"><b>Q1 · 双击标题改名还要吗？</b></p>
+      <div class="opt"><span class="tag">A（推荐）</span><span>不要。单击开设置，改名在侧栏的 Name 里（或 ⋯ → Rename…）。单击立即响应。</span></div>
+      <div class="opt"><span class="tag">B</span><span>保留。单击要等约 250ms 确认不是双击才开侧栏，每次点标题都会有一点迟滞。</span></div>
+      <p style="margin:14px 0 6px"><b>Q2 · 和 Project sessions 侧栏的关系</b></p>
+      <div class="opt"><span class="tag">A（推荐）</span><span>同一槽位、一次一个（⑤）。</span></div>
+      <div class="opt"><span class="tag">B</span><span>宽屏（≥1600px）两栏并排，Settings 在最右。</span></div>
+      <p style="margin:14px 0 6px"><b>Q3 · 切换会话时</b></p>
+      <div class="opt"><span class="tag">A（推荐）</span><span>侧栏保持打开，跟着换内容（适合连续给多个会话打标签/看成本）。</span></div>
+      <div class="opt"><span class="tag">B</span><span>切换即收起。</span></div>
+      <p style="margin:14px 0 6px"><b>Q4 · 范围</b>：先做 Web；iOS / macOS / Android 的会话设置页另行对齐（它们现在是各自平台的 sheet/页面）。</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

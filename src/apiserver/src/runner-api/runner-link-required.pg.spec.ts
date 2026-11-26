@@ -145,8 +145,8 @@ test('the daemon routes refuse HTTPS, and serve the link and the callers that na
     await sql.end().catch(() => undefined);
   });
 
-  assert.equal(ROUTES.length, 60, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
-  assert.equal(DAEMON_ROUTES.length, 53);
+  assert.equal(ROUTES.length, 61, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
+  assert.equal(DAEMON_ROUTES.length, 54);
   assert.equal(DAEMON_ROUTES.filter((r) => r.named).length, 8);
 
   // ── accounts, the machine, its checkout and a session on it ──────────────────────────────────────────────────────

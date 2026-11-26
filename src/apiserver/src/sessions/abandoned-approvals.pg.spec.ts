@@ -61,6 +61,7 @@ import {
   APPROVAL_ABANDONED_STATUS,
   APPROVAL_ORPHANED_MESSAGE,
   countLiveApprovals,
+  countLiveApprovalsBySession,
   reapApprovalsOfEndedTurns,
 } from './abandoned-approvals';
 import { SessionsService } from './sessions.service';
@@ -756,10 +757,13 @@ test('a job card is collected when its job ends, not when the turn does', {
     assert.ok(row, 'the conversation is in this owner’s Open list');
     const session = await db.session.findUniqueOrThrow({
       where: { id: f.sessionId },
-      select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
+      select: { id: true, taskId: true, status: true, finishedAt: true, turnState: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
     });
     const shown = await stack.sessions.listApprovals(f.ownerId, f.sessionId, 'PENDING');
-    return { list: row.pendingApprovals, live: await countLiveApprovals(db as never, session), shown: shown.length };
+    const live = await countLiveApprovals(db as never, session);
+    // The batch a search page counts with says the same (countLiveApprovalsBySession).
+    assert.equal((await countLiveApprovalsBySession(db as never, [session])).get(session.id), live, 'the batched count agrees');
+    return { list: row.pendingApprovals, live, shown: shown.length };
   }
 
   const card = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {

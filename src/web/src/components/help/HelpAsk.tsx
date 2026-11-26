@@ -198,7 +198,7 @@ function AskNeedsMachine({
           <div className="help-ask-start">
             <div className="help-ask-start-heading">Until then, start here</div>
             {shown.map((a, i) => (
-              <button key={a.slug} type="button" className="help-ask-start-row" onClick={() => help.openHelp({ slug: a.slug })}>
+              <button key={a.slug} type="button" className="help-ask-start-row" data-row-focus="" onClick={() => help.openHelp({ slug: a.slug })}>
                 <span className="help-ask-start-n" aria-hidden>{i + 1}</span>
                 <span>{a.title}</span>
               </button>
@@ -571,7 +571,7 @@ function StillStuck({
           <div className="help-ask-stuck-title">Still stuck?</div>
           <div className="help-ask-stuck-sub">Say what's still wrong and the agent tries again, or hand it to a person.</div>
         </div>
-        <button type="button" className="help-ask-stuck-row" data-help-stuck="retry" onClick={onTellIt}>
+        <button type="button" className="help-ask-stuck-row" data-row-focus="" data-help-stuck="retry" onClick={onTellIt}>
           <span className="help-ask-stuck-icon" aria-hidden><EditOutlined /></span>
           <span className="help-ask-stuck-text"><span>Tell it what's still wrong</span></span>
           <RightOutlined className="help-ask-stuck-chevron" />
@@ -580,6 +580,7 @@ function StillStuck({
           <button
             type="button"
             className="help-ask-stuck-row"
+            data-row-focus=""
             data-help-stuck="admin"
             disabled={sending || !!withAdmin}
             onClick={() => void sendToAdmin()}
@@ -601,6 +602,7 @@ function StillStuck({
         <button
           type="button"
           className="help-ask-stuck-row"
+          data-row-focus=""
           data-help-stuck="github"
           aria-expanded={reviewing}
           disabled={!data}

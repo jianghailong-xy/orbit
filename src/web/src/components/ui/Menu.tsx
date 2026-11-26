@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEve
 import { Menu as BaseMenu } from '@base-ui/react/menu';
 import { CheckOutlined, RightOutlined } from '@ant-design/icons';
 import { useDropdownPlacement, useFloating, useSubmenuPlacement, type FloatingProps } from './Floating';
+import { Tooltip } from './Tooltip';
 import './Floating.css';
 
 interface MenuAction {
@@ -60,6 +61,9 @@ export interface MenuProps extends FloatingProps {
    *  the replaced submenu did; `slide` then moves what still hangs off the screen back into it, over its own menu —
    *  the replaced composer model menu's placement, whose control sits near a phone's right edge (P5.3). */
   submenuOverflow?: 'flip' | 'slide';
+  /** The app's tooltip on the trigger, for an icon-only trigger, in place of a native `title`: shown on hover and
+   *  focus, under the trigger, and never while the menu is open. Gives no accessible name: the trigger keeps its own. */
+  tooltip?: ReactNode;
 }
 
 /**
@@ -150,7 +154,7 @@ function Items({ items, container, zIndex, slide }: { items: MenuItem[]; contain
 }
 
 export function Menu({ trigger, items, disabled, variant = 'default', openOnArrowKeys = true, footer, nativeButton = true,
-  submenuOverflow = 'flip', side = 'bottom', align = 'start', popupClassName, popupStyle, returnFocus, ...state }: MenuProps) {
+  submenuOverflow = 'flip', tooltip, side = 'bottom', align = 'start', popupClassName, popupStyle, returnFocus, ...state }: MenuProps) {
   const slide = submenuOverflow === 'slide';
   const layer = useFloating(state);
   const anchor = useRef<HTMLButtonElement>(null);
@@ -166,7 +170,7 @@ export function Menu({ trigger, items, disabled, variant = 'default', openOnArro
     observer.observe(node);
     return () => observer.disconnect();
   }, [layer.open]);
-  return <BaseMenu.Root open={layer.open} onOpenChange={layer.setOpen} modal={false}>
+  const menuTrigger = (
     <BaseMenu.Trigger ref={anchor} render={trigger} disabled={disabled} nativeButton={nativeButton} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
       // Keys that beat the focus move go to the highlighted item, else the menu, as Select's do: Home and End
       // move the highlight before an Enter runs it, and Tab and Shift+Tab leave the menu and close it, as they
@@ -177,6 +181,9 @@ export function Menu({ trigger, items, disabled, variant = 'default', openOnArro
       // key goes on to the page's own handler.
       else if (!layer.open && !openOnArrowKeys && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) event.preventBaseUIHandler();
     }} />
+  );
+  return <BaseMenu.Root open={layer.open} onOpenChange={layer.setOpen} modal={false}>
+    {tooltip == null ? menuTrigger : <Tooltip content={tooltip} disabled={layer.open} side="bottom" align={align}>{menuTrigger}</Tooltip>}
     <BaseMenu.Portal container={layer.container()}>
       <BaseMenu.Positioner ref={positioner} side={side} align={align} {...placement} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
         <BaseMenu.Popup ref={popup} finalFocus={returnFocus} className={`orbit-menu${footer != null ? ' orbit-menu-footed' : ''}${popupClassName ? ` ${popupClassName}` : ''}`} data-variant={variant} onClick={(event) => event.stopPropagation()}

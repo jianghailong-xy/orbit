@@ -134,7 +134,7 @@ object ScheduleCopy {
         "LANDING_FAILED" to "could not land on main",
     )
     val runReasonTexts: Map<String, String> = mapOf(
-        "OVER_BUDGET" to "Not started: it had already started as many runs in the past 7 days as you allowed.",
+        "OVER_BUDGET" to "Not started: it had already started as many scheduled runs in the past 7 days as you allowed.",
     )
     val failureReasonsWithSummary: Map<String, String> = mapOf(
         "REPORTED_FAILED" to "reported a failure: {summary}",
@@ -193,6 +193,7 @@ object ScheduleCopy {
         const val pause = "Pause"
         const val resume = "Resume"
         const val change = "Change…"
+        const val rename = "Rename…"
         const val delete = "Delete"
         const val undo = "Undo"
         const val open = "Open"
@@ -215,6 +216,12 @@ object ScheduleCopy {
         const val body = "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here."
         const val confirm = "Delete"
         const val cancel = "Cancel"
+    }
+    object RenameAlert {
+        const val title = "Rename Schedule"
+        const val body = "Only the name changes. When it runs and what it does stay the same."
+        const val cancel = "Cancel"
+        const val save = "Save"
     }
     object StopConfirm {
         const val title = "Stop this run?"
@@ -283,6 +290,7 @@ object ScheduleCopy {
         const val ended = "Ended: {reason}"
         const val minutes = "{minutes} min"
         const val noEnd = "no end"
+        const val renamed = "Renamed from “{title}”"
     }
     object ChangeConversation {
         const val title = "Change {title}"
@@ -355,6 +363,7 @@ object ScheduleCopy {
     object Push {
         const val failedBody = "The last run {reason}. It keeps running until you pause it."
         const val goalReachedTitle = "{title} ended itself"
+        const val reportedLateTitle = "{title} reported after all"
         const val stoppedAsPlanned = "Stopped as planned after {runs}"
     }
     object Empty {
@@ -548,6 +557,7 @@ object ScheduleCopy {
         "actions.pause" to Actions.pause,
         "actions.resume" to Actions.resume,
         "actions.change" to Actions.change,
+        "actions.rename" to Actions.rename,
         "actions.delete" to Actions.delete,
         "actions.undo" to Actions.undo,
         "actions.open" to Actions.open,
@@ -568,6 +578,10 @@ object ScheduleCopy {
         "deleteConfirm.body" to DeleteConfirm.body,
         "deleteConfirm.confirm" to DeleteConfirm.confirm,
         "deleteConfirm.cancel" to DeleteConfirm.cancel,
+        "renameAlert.title" to RenameAlert.title,
+        "renameAlert.body" to RenameAlert.body,
+        "renameAlert.cancel" to RenameAlert.cancel,
+        "renameAlert.save" to RenameAlert.save,
         "stopConfirm.title" to StopConfirm.title,
         "stopConfirm.body" to StopConfirm.body,
         "stopConfirm.confirm" to StopConfirm.confirm,
@@ -622,6 +636,7 @@ object ScheduleCopy {
         "history.ended" to History.ended,
         "history.minutes" to History.minutes,
         "history.noEnd" to History.noEnd,
+        "history.renamed" to History.renamed,
         "changeConversation.title" to ChangeConversation.title,
         "changeConversation.lead" to ChangeConversation.lead,
         "changeConversation.does" to ChangeConversation.does,
@@ -678,6 +693,7 @@ object ScheduleCopy {
         "waiting.widen.body" to Waiting.widenBody,
         "push.failedBody" to Push.failedBody,
         "push.goalReachedTitle" to Push.goalReachedTitle,
+        "push.reportedLateTitle" to Push.reportedLateTitle,
         "push.stoppedAsPlanned" to Push.stoppedAsPlanned,
         "empty.lead" to Empty.lead,
         "empty.examples.0" to Empty.examples[0],

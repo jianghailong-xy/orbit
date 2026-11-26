@@ -41,6 +41,7 @@ class EngineErrorsParityTest {
     @Test fun connectionFailureMarkersAreTheSameOnBothEnds() {
         assertEquals(strings("EDGE_BLOCK_MARKERS"), EngineErrors.edgeBlockMarkers)
         assertEquals(strings("CONNECTION_DROPPED_MARKERS"), EngineErrors.connectionDroppedMarkers)
+        assertEquals(strings("CONNECTION_TIMED_OUT_MARKERS"), EngineErrors.connectionTimedOutMarkers)
     }
 
     @Test fun usageLimitMarkersAndTheirOffsetAreTheSameOnBothEnds() {

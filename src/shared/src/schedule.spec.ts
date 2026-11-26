@@ -14,6 +14,7 @@ import {
   scheduleNeedsYou,
   scheduleReportedText,
   scheduleRowCircle,
+  scheduleRenamedText,
   scheduleRowLine,
   scheduleRunCircle,
   scheduleRunLine,
@@ -435,5 +436,18 @@ describe('an EVERY rule (design §3, §9.2)', () => {
     const rule = { kind: 'EVERY', minutes: 30, time: '09:00', until: '18:00', weekdays: [...WORK] } as const;
     expect(scheduleRuleRepeats(rule)).toBe(true);
     expect(scheduleRowLine(schedule({ rule }))).toBe('Every 30 min, 09:00–18:00, Mon–Fri · apiserver · Check only');
+  });
+});
+
+describe('a rename in the history (design §8.4 Rename)', () => {
+  it('names the old title for a person’s change of the title alone, and nothing else', () => {
+    const change = { before: { title: 'Codex check' }, after: { title: 'Codex stable check' } };
+    expect(scheduleRenamedText({ changedBy: 'USER', ...change })).toBe('Renamed from “Codex check”');
+    expect(scheduleRenamedText({ changedBy: 'SESSION', ...change })).toBeNull();
+    expect(scheduleRenamedText({ changedBy: 'RUN', ...change })).toBeNull();
+    expect(scheduleRenamedText({ changedBy: 'USER', before: null, after: { title: 'Codex check' } })).toBeNull();
+    expect(scheduleRenamedText({
+      changedBy: 'USER', before: { title: 'a', prompt: 'p' }, after: { title: 'b', prompt: 'q' },
+    })).toBeNull();
   });
 });

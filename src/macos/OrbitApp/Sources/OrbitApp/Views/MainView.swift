@@ -53,7 +53,7 @@ struct MainView: View {
                 #else
                 // Scheduled's timeline is the web board's page, with the long row line, so it takes the width a
                 // list column does not; its right-hand panel is the detail column (web board 01 ②).
-                // Documents' list is Finder's, four columns wide; the inspector is the detail column (03-mac ①).
+                // Drive' list is Finder's, four columns wide; the inspector is the detail column (03-mac ①).
                 .navigationSplitViewColumnWidth(min: Self.contentWidth(model.selectedSection).min,
                                                 ideal: Self.contentWidth(model.selectedSection).ideal,
                                                 max: Self.contentWidth(model.selectedSection).max)
@@ -112,11 +112,11 @@ struct MainView: View {
         .toastHost()
     }
 
-    /// The middle column's width for a section: Scheduled's timeline and Documents' list take the width a list does not.
+    /// The middle column's width for a section: Scheduled's timeline and Drive' list take the width a list does not.
     private static func contentWidth(_ section: AppSection) -> (min: CGFloat, ideal: CGFloat, max: CGFloat) {
         switch section {
         case .scheduled: return (400, 520, 760)
-        case .documents: return (600, 700, 1000)
+        case .drive: return (600, 700, 1000)
         default: return (240, 300, 420)
         }
     }
@@ -193,7 +193,7 @@ struct SectionSidebar: View {
                                machineDraftRunnerID: model.machineDraftRunnerID,
                                projectID: selectedProjectID,
                                guestSessionID: model.guestSessionID,
-                               documentsPlace: model.documents?.place ?? .drive)
+                               drivePlace: model.drive?.place ?? .drive)
     }
 
     var body: some View {
@@ -210,9 +210,9 @@ struct SectionSidebar: View {
             scheduled: model.scheduled.map { !$0.unsupported } ?? false,
             scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0,
             // Documents under the Wiki, no count (board 03-mac ①), only while the server has it on.
-            documents: model.documents?.shown == true)
-        // Trash and Storage, the rows under Documents (③): data too, one flat row array.
-        let documentsPlaces: [DocumentsPlace] = model.documents?.shown == true ? [.trash, .storage] : []
+            drive: model.drive?.shown == true)
+        // Trash and Storage, the rows under Drive (③): data too, one flat row array.
+        let drivePlaces: [DrivePlace] = model.drive?.shown == true ? [.trash, .storage] : []
         let openProjects = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
         let projects = AgentListLogic.sidebarProjects(openProjects, coordinators: model.projectCoordinators)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
@@ -220,8 +220,8 @@ struct SectionSidebar: View {
             ForEach(sections) { row in
                 sectionRow(row)
             }
-            ForEach(documentsPlaces, id: \.self) { place in
-                documentsPlaceRow(place)
+            ForEach(drivePlaces, id: \.self) { place in
+                drivePlaceRow(place)
             }
             Section(isExpanded: $workspacesExpanded) {
                 workspaceRows(shortcutIndex: commandHeld ? shortcutIndex : [:])
@@ -294,8 +294,8 @@ struct SectionSidebar: View {
         .task { await model.wiki?.loadSpaces() }
         // The Projects row counts the projects waiting on you, and the last group lists the open ones.
         .task { await model.projects?.load() }
-        // Whether the Documents row is drawn is the capabilities read's answer (`DocumentsLogic.shown`).
-        .task { await model.documents?.loadCapabilities() }
+        // Whether the Drive row is drawn is the capabilities read's answer (`DriveLogic.shown`).
+        .task { await model.drive?.loadCapabilities() }
         // Scheduled's number — the schedules failing or held — read with the rail like the others.
         .task { await model.scheduled?.load() }
         .task { await model.followSharedWithMe() }
@@ -304,11 +304,11 @@ struct SectionSidebar: View {
             applied = now
             switch SidebarLogic.target(now) {
             case .section(let section):
-                if section == .documents { model.documents?.place = .drive }
+                if section == .drive { model.drive?.place = .drive }
                 model.selectedSection = section
-            case .documents(let place):
-                model.documents?.place = place
-                model.selectedSection = .documents
+            case .drive(let place):
+                model.drive?.place = place
+                model.selectedSection = .drive
             case .agent(let id):
                 openWorkspace(id)
             case .machine(let runnerID):
@@ -347,12 +347,12 @@ struct SectionSidebar: View {
         .accessibilityIdentifier("sidebar-\(row.section.rawValue)")
     }
 
-    /// Trash or Storage, indented under Documents.
-    private func documentsPlaceRow(_ place: DocumentsPlace) -> some View {
+    /// Trash or Storage, indented under Drive.
+    private func drivePlaceRow(_ place: DrivePlace) -> some View {
         Label(place.title, systemImage: place.systemImage)
             .padding(.leading, 14)
-            .tag(SidebarSelection.documents(place))
-            .accessibilityIdentifier("sidebar-documents-\(place.rawValue)")
+            .tag(SidebarSelection.drive(place))
+            .accessibilityIdentifier("sidebar-drive-\(place.rawValue)")
     }
 
     /// The line standing in for an empty workspace list. It says there are none only after a fetch
@@ -658,14 +658,14 @@ struct SectionContent: View {
             TasksListView()
         case .wiki:
             WikiContentsColumn()
-        case .documents:
+        case .drive:
             #if os(macOS)
-            DocumentsContentColumn()
+            DriveContentColumn()
             #else
             // The iPad's column is the phone's pages, on the section's stack (documents board 01-ios).
             NavigationStack(path: Bindable(model).nav.path) {
-                DocumentsFolderPage(folderID: nil, name: DocumentsLogic.title)
-                    .navigationDestination(for: NavNode.self) { node in DocumentsDestination(node: node) }
+                DriveFolderPage(folderID: nil, name: DriveLogic.title)
+                    .navigationDestination(for: NavNode.self) { node in DriveDestination(node: node) }
             }
             #endif
         case .scheduled:
@@ -725,10 +725,10 @@ struct SectionDetail: View {
             TaskDetailView()
         case .wiki:
             WikiDetailPane().wikiChatHost()   // the chat's third column beside the page (wiki-chat design §9)
-        case .documents:
+        case .drive:
             #if os(macOS)
             // The inspector beside the list (board 03-mac ①), Trash's summary or Storage's rankings.
-            DocumentsDetailColumn()
+            DriveDetailColumn()
             #else
             ContentUnavailableView(section.title, systemImage: section.systemImage)
             #endif

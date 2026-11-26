@@ -1,5 +1,5 @@
 /**
- * The Documents drive's wiring on the manager's side (docs/documents-drive-technical-design.md §4.3, §6.1, §8.2):
+ * The drive's wiring on the manager's side (docs/drive-technical-design.md §4.3, §6.1, §8.2):
  * with a profile that gives runners the drive, the manager issues each generation's mount credential with its runner
  * credential and writes it into Secret `mrf-<runner uuid>` of the files namespace before it creates the Pod; the Pod
  * carries the one drive volume and the admission guard admits it; retiring the generation (sleep) revokes the
@@ -45,14 +45,14 @@ test('the manager delivers each generation its mount credential, for the CSI plu
   await verifyCoordinatorPgIdentity(sql);
 
   const liveCredentials = (runnerId: string) =>
-    db.documentMountCredential.findMany({ where: { runnerId, revokedAt: null }, orderBy: { createdAt: 'asc' } });
+    db.driveMountCredential.findMany({ where: { runnerId, revokedAt: null }, orderBy: { createdAt: 'asc' } });
 
   await t.test('a generation gets its Secret before its Pod, and the Pod gets the drive', async () => {
     const w = managedRunnerWorld(db, { files: true });
     const { mapping } = await w.readyRunner('drive-owner');
     const secret = w.cluster.object<Secret>('drivesecrets', driveMountSecretName(mapping.runnerId))!;
     assert.ok(secret, 'Secret mrf-<runner uuid> is written');
-    assert.equal(secret.metadata.namespace, 'orbit-documents-test', 'in the files namespace');
+    assert.equal(secret.metadata.namespace, 'orbit-drive-test', 'in the files namespace');
     assert.equal(w.cluster.object<Secret>('secrets', driveMountSecretName(mapping.runnerId)), undefined, 'never in the runner namespace');
     assert.equal(secretGeneration(secret), mapping.generation);
     const token = bootstrapCredentialOf(secret)!;
@@ -67,8 +67,8 @@ test('the manager delivers each generation its mount credential, for the CSI plu
     assert.ok(order.indexOf('drivesecrets') >= 0 && order.indexOf('drivesecrets') < order.indexOf('pods'), order.join(' → '));
     // The Pod has the drive, admitted by the guard; the runner's bootstrap Secret is not the mount credential.
     const pod = w.cluster.object<Pod>('pods', managedPodName(mapping.runnerId))!;
-    assert.deepEqual(pod.spec.volumes!.find((v) => v.name === 'orbit-documents'), {
-      name: 'orbit-documents', csi: { driver: 'documents.orbit.dev', volumeAttributes: { runnerId: mapping.runnerId } },
+    assert.deepEqual(pod.spec.volumes!.find((v) => v.name === 'orbit-drive'), {
+      name: 'orbit-drive', csi: { driver: 'drive.orbit.dev', volumeAttributes: { runnerId: mapping.runnerId } },
     });
     const boot = w.cluster.object<Secret>('secrets', managedSecretName(mapping.runnerId))!;
     assert.notEqual(bootstrapCredentialOf(boot), token);
@@ -106,7 +106,7 @@ test('the manager delivers each generation its mount credential, for the CSI plu
     v.cluster.inject({ op: 'create', kind: 'drivesecrets', mode: 'status', status: 500 });
     const failed = await v.readyRunner('drive-failed-create');
     const delivered = bootstrapCredentialOf(v.cluster.object<Secret>('drivesecrets', driveMountSecretName(failed.mapping.runnerId))!)!;
-    const all = await db.documentMountCredential.findMany({ where: { runnerId: failed.mapping.runnerId } });
+    const all = await db.driveMountCredential.findMany({ where: { runnerId: failed.mapping.runnerId } });
     assert.equal(all.length, 2, 'issued twice');
     assert.deepEqual(all.filter((c) => !c.revokedAt).map((c) => c.tokenHash), [sha256(delivered)], 'only the delivered one is live');
   });
@@ -117,6 +117,6 @@ test('the manager delivers each generation its mount credential, for the CSI plu
     assert.equal(w.cluster.count('create', 'drivesecrets'), 0);
     assert.deepEqual(await liveCredentials(mapping.runnerId), []);
     const pod = w.cluster.object<Pod>('pods', managedPodName(mapping.runnerId))!;
-    assert.ok(!pod.spec.volumes!.some((v) => v.name === 'orbit-documents'));
+    assert.ok(!pod.spec.volumes!.some((v) => v.name === 'orbit-drive'));
   });
 });

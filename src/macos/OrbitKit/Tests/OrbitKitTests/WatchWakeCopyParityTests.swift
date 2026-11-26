@@ -267,21 +267,15 @@ final class WatchWakeCopyParityTests: XCTestCase {
                            + "over the line and the question leaves it")
 
         // The scanner itself still reaches the rounds Orbit opened (an exception item's, a task run's
-        // opening), and hides the bar over them, as `StickySummary.isOrbits` does here.
+        // opening), and passes over them, as `StickySummary.isOrbits` does here. The browser names the
+        // question in the pill at the top of the transcript, not in a bar (owner, 2026-11-25), so it has
+        // no label of its own to hold to this client's.
         let web = try flat(Self.webWorkspace)
         XCTAssertTrue(web.contains("[data-orbit-round]:not(.is-queued)"),
                       "the browser's scanner no longer reaches a round Orbit opened — it is back "
                           + "to `.chat-user` bubbles alone.")
-        XCTAssertTrue(web.contains("cur?.hasAttribute('data-orbit-round')"),
-                      "the browser's bar no longer hides over a round Orbit opened.")
-        // The bar's one label, and the arrow it opens with.
-        assertWritten(web, prefix: "const STICKY_LABEL = ",
-                      String(StickySummary.yourQuestion.dropFirst(StickySummary.arrow.count)),
-                      "what the bar calls a turn the person typed", Self.webWorkspace)
-        XCTAssertTrue(web.contains("className=\"chat-sticky-label\">\(StickySummary.arrow){STICKY_LABEL}"),
-                      "the bar's label drifted: \(Self.webWorkspace) no longer opens it with "
-                          + "\(StickySummary.arrow.debugDescription) — first is StickySummary.arrow, "
-                          + "which this client puts in front of the label too.")
+        XCTAssertTrue(web.contains("if (!bubbles[i].hasAttribute('data-orbit-round')) mine = bubbles[i]"),
+                      "the browser's question no longer passes over a round Orbit opened.")
     }
 
     // MARK: the span both the card's EXPIRES row and the strip count off

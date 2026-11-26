@@ -2436,6 +2436,15 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     public let deletedAt: String?
     /// Carried so `SessionStatusGlyph` reports the same wording here as in the session list.
     public let endReason: String?
+    /// The session facts (`SessionDisplay`); absent while the search route does not send them.
+    @LenientSessionField public private(set) var phase: SessionPhase?
+    @LenientSessionField public private(set) var released: Bool?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
+    /// The Background mark's inputs, beside the facts; absent while the search route does not send them.
+    public let activity: String?
+    public let runningBgCount: Int?
     public let matchField: SessionSearchMatchField
     /// A whitespace-collapsed window around the match; nil for a `recent` row. The match is
     /// located client-side (see the web `splitHighlight`) — collapsing invalidates any offset.
@@ -2482,6 +2491,13 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
             ?? legacy.decodeIfPresent(String.self, forKey: .archivedAt)
         deletedAt = try c.decodeIfPresent(String.self, forKey: .deletedAt)
         endReason = try c.decodeIfPresent(String.self, forKey: .endReason)
+        phase = try? c.decodeIfPresent(SessionPhase.self, forKey: .phase)
+        released = try? c.decodeIfPresent(Bool.self, forKey: .released)
+        workFinished = try? c.decodeIfPresent(Bool.self, forKey: .workFinished)
+        lastTurnOutcome = try? c.decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome)
+        waitingOn = try? c.decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn)
+        activity = try? c.decodeIfPresent(String.self, forKey: .activity)
+        runningBgCount = try? c.decodeIfPresent(Int.self, forKey: .runningBgCount)
         snippet = try c.decodeIfPresent(String.self, forKey: .snippet)
         let raw = try c.decodeIfPresent(String.self, forKey: .matchField) ?? ""
         matchField = SessionSearchMatchField(rawValue: raw) ?? .message

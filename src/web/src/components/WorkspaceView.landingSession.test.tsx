@@ -32,7 +32,7 @@ describe('the session route opens a landing in its project’s Landings window',
     expect(SOURCE).toContain('focusId={landingsProjectId ? null : selectedId}');
     expect(SOURCE).toContain("const landingsProjectId = routeId(useMatch('/projects/:id/landings')?.params.id);");
     const landing = SOURCE.indexOf('<ProjectLandingsWindow');
-    const header = SOURCE.indexOf('<div className="workspace-header">');
+    const header = SOURCE.indexOf('<div className={`workspace-header$');
     const composer = SOURCE.indexOf('<div className="workspace-composer">');
     expect(landing).toBeGreaterThan(-1);
     expect(header).toBeGreaterThan(-1);

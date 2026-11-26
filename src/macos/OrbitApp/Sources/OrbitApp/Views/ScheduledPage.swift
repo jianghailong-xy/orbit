@@ -303,6 +303,9 @@ struct ScheduledPage: View {
     /// The schedule a row's swipe or menu asked to delete, and the run it asked to stop, while the question is up.
     @State private var deleting: ScheduleView?
     @State private var stopping: ScheduleRunView?
+    /// The schedule a row's menu asked to rename, and the alert's text.
+    @State private var renaming: ScheduleView?
+    @State private var renameDraft = ""
     /// The round swipe buttons need the compact list (as the session list's do); a regular-width one keeps the system's.
     @Environment(\.horizontalSizeClass) private var hSize
     @State private var rowSwipe = RowSwipeState()
@@ -378,6 +381,7 @@ struct ScheduledPage: View {
         } message: { _ in
             Text(SC.StopConfirm.body)
         }
+        .scheduleRenameAlert($renaming, draft: $renameDraft)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -579,6 +583,11 @@ struct ScheduledPage: View {
     @ViewBuilder
     private func swipeable<V: View>(_ content: V, _ row: ScheduleRowModel, _ scheduled: ScheduledModel) -> some View {
         let actions = ScheduleRowActions(row.kind, model: model, scheduled: scheduled,
+                                         askRename: { s in
+                                             // Seeded in the action that presents the alert (SessionRenameAlert).
+                                             renameDraft = s.title
+                                             renaming = s
+                                         },
                                          askDelete: { deleting = $0 }, askStop: { stopping = $0 },
                                          openTask: { id in model.route(to: .task(id)) })
         if #available(iOS 26.0, *), hSize == .compact, !(actions.leading.isEmpty && actions.trailing.isEmpty) {
@@ -651,6 +660,46 @@ struct ScheduledPage: View {
 
 #endif
 
+#if os(iOS)
+/// Rename… on the phone (§8.4, board schedule-rename 01-board-2): the system alert with one field, the current name
+/// in it and selected, Save off while it is empty or unchanged. As `SessionRenameAlert`, the draft is the caller's,
+/// seeded in the action that presents the alert.
+private struct ScheduleRenameAlert: ViewModifier {
+    @Environment(AppModel.self) private var model
+    @Binding var renaming: ScheduleView?
+    @Binding var draft: String
+
+    func body(content: Content) -> some View {
+        content
+            .alert(SC.RenameAlert.title,
+                   isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }),
+                   presenting: renaming) { schedule in
+                TextField(SC.History.fields["title"] ?? "", text: $draft)
+                Button(SC.RenameAlert.cancel, role: .cancel) {}
+                Button(SC.RenameAlert.save) {
+                    guard let title = ScheduleDisplay.renameTitle(draft, from: schedule.title) else { return }
+                    Task { @MainActor in await model.scheduled?.rename(schedule.id, title: title) }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(ScheduleDisplay.renameTitle(draft, from: schedule.title) == nil)
+            } message: { _ in
+                Text(SC.RenameAlert.body)
+            }
+            // SwiftUI has no way to select an alert field's text; UIKit says when it starts editing.
+            .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { note in
+                guard renaming != nil, let field = note.object as? UITextField else { return }
+                DispatchQueue.main.async { field.selectAll(nil) }
+            }
+    }
+}
+
+private extension View {
+    func scheduleRenameAlert(_ renaming: Binding<ScheduleView?>, draft: Binding<String>) -> some View {
+        modifier(ScheduleRenameAlert(renaming: renaming, draft: draft))
+    }
+}
+#endif
+
 // MARK: - The detail panel (board 01 ③, 02 ③)
 
 /// A schedule's detail, from the bottom: what it does and was asked, notes for the next run, this month's use and
@@ -660,6 +709,10 @@ struct ScheduleDetailPanel: View {
     let scheduleID: String
     @State private var confirmingDelete = false
     @State private var busy = false
+    #if os(iOS)
+    @State private var renaming: ScheduleView?
+    @State private var renameDraft = ""
+    #endif
 
     var body: some View {
         #if os(iOS)
@@ -677,7 +730,17 @@ struct ScheduleDetailPanel: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button(SC.Actions.delete, role: .destructive) { confirmingDelete = true }
+                        Button {
+                            guard let s = model.scheduled?.schedule(scheduleID) else { return }
+                            renameDraft = s.title
+                            renaming = s
+                        } label: {
+                            Label(SC.Actions.rename, systemImage: "pencil")
+                        }
+                        Divider()
+                        Button(role: .destructive) { confirmingDelete = true } label: {
+                            Label(SC.Actions.delete, systemImage: "trash")
+                        }
                     } label: {
                         Image(systemName: "ellipsis")
                     }
@@ -687,6 +750,7 @@ struct ScheduleDetailPanel: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .modifier(ScheduleDeleteQuestion(scheduleID: scheduleID, asking: $confirmingDelete))
+        .scheduleRenameAlert($renaming, draft: $renameDraft)
         #else
         // The Mac's right-hand panel (web board 01 ②): no bar of its own — the doors carry ⋯ beside Change…, as
         // the web's inspector does, and the panel closes when another row or nothing is chosen.
@@ -749,7 +813,25 @@ extension ScheduleDetailPanel {
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
+                    #if os(macOS)
+                    if scheduled.renamingID.map(PublicID.storageKey) == PublicID.storageKey(s.id) {
+                        ScheduleTitleField(
+                            title: s.title,
+                            save: { title in Task { @MainActor in await scheduled.rename(s.id, title: title) } },
+                            done: {
+                                // Another row's Rename… may already have taken it.
+                                if scheduled.renamingID.map(PublicID.storageKey) == PublicID.storageKey(s.id) {
+                                    scheduled.renamingID = nil
+                                }
+                            })
+                    } else {
+                        Text(s.title).font(.title2.weight(.bold))
+                            .onTapGesture { scheduled.renamingID = s.id }
+                            .help(SC.Actions.rename)
+                    }
+                    #else
                     Text(s.title).font(.title2.weight(.bold))
+                    #endif
                     HStack(spacing: 4) {
                         if ScheduleDisplay.ruleRepeats(s.rule) { Text("↻") }
                         Text(meta)
@@ -796,8 +878,10 @@ extension ScheduleDetailPanel {
                         model.openChangeConversation(for: s)
                     }
                     #if os(macOS)
-                    // The web inspector's ⋯ beside Change…: Delete, which asks first.
+                    // The web inspector's ⋯ beside Change…: Rename…, and Delete, which asks first.
                     Menu {
+                        Button(SC.Actions.rename) { scheduled.renamingID = s.id }
+                        Divider()
                         Button(SC.Actions.delete, role: .destructive) { confirmingDelete = true }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -1014,7 +1098,7 @@ extension ScheduleDetailPanel {
             let who = ScheduleDisplay.historyWho(changedBy: record.changedBy, before: record.before, after: record.after)
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(ScheduleDisplay.recordText(record)).font(.orbitSubtext)
+                    Text(ScheduleDisplay.renamedText(record) ?? ScheduleDisplay.recordText(record)).font(.orbitSubtext)
                     if let asked = record.askedText {
                         // Asked in the schedule's change conversation (§8.2): the person's words, and the way back.
                         HStack(spacing: 0) {

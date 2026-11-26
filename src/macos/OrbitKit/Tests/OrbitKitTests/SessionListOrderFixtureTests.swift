@@ -86,10 +86,11 @@ final class SessionListOrderFixtureTests: XCTestCase {
         XCTAssertEqual(row.applying(summary).listedAt, "2026-11-20T02:00:00.000Z")
     }
 
-    func testRowTimeLabelShowsListedAt() throws {
+    /// The row dates its last message, not its listing (owner 2026-11-25): the order stays on listedAt.
+    func testRowTimeLabelShowsLastTurnAt() throws {
         let row = try JSONDecoder().decode(Session.self, from: Data(
             ##"{"id":"a","title":"a","status":"AWAITING_INPUT","listedAt":"2026-11-20T11:00:00.000Z","lastTurnAt":"2026-11-20T11:59:30.000Z","createdAt":"2026-09-01T00:00:00.000Z"}"##.utf8))
-        XCTAssertEqual(SessionListTime.format(for: row, now: date("2026-11-20T12:00:00.000Z")), "1h ago")
+        XCTAssertEqual(SessionListTime.format(for: row, now: date("2026-11-20T12:00:00.000Z")), "just now")
     }
 
     /// The list the phone draws goes through `SessionProjectGrouping`, whose entries are what the

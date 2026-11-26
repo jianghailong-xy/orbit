@@ -471,6 +471,7 @@ struct ConsoleView: View {
                     agentLanguage: SessionTranslation.agentLanguage(appModel.user?.preferences),
                     retryTurn: { id in Task { await console.retryTurnTranslation(id) } },
                     sendAsWritten: { id in Task { await console.sendTurnAsWritten(id) } },
+                    cancelTurn: { bubble in Task { await console.cancelUntranslated(bubble) } },
                     retryReply: { seq in Task { await console.retryReplyTranslation(seq) } }))
                 // A task link in this conversation — prose on the Mac, a card's own button —
                 // opens over the conversation on a wide shell (owner decision 2026-11-12). With
@@ -1705,11 +1706,11 @@ struct TranscriptView: View {
         }
     }
 
-    /// Where a transfer card's "Show in Documents" goes: the file in its folder on the Mac's Documents page. The phone
-    /// has no Documents page, so its card has no such press.
-    private var showInDocuments: ((String) -> Void)? {
+    /// Where a transfer card's "Show in Drive" goes: the file in its folder on the Mac's Drive page. The phone
+    /// has no Drive page, so its card has no such press.
+    private var showInDrive: ((String) -> Void)? {
         #if os(macOS)
-        guard app.documents?.shown == true else { return nil }
+        guard app.drive?.shown == true else { return nil }
         return { app.revealDocument($0) }
         #else
         return nil
@@ -1770,10 +1771,10 @@ struct TranscriptView: View {
             AgentGroupView(cards: cards, fullPayload: console.fullPayload)
         case .transfer(let kind, let cards):
             // No `AnchorRow`, for the steps line's reason. Live as the steps line is, off the session row.
-            DocumentsTransferCardView(
+            DriveTransferCardView(
                 kind: kind, cards: cards,
                 live: app.session(id: console.sessionID)?.isGenerating ?? (console.state.status == .running),
-                showInDocuments: showInDocuments)
+                showInDrive: showInDrive)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
@@ -2094,7 +2095,7 @@ struct TranscriptView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            headerStatus
+            headerStatusLine
                 .font(.caption)
             if let session = app.session(id: console.sessionID) {
                 SessionCoordinatorBadge(session: session)
@@ -2137,6 +2138,23 @@ struct TranscriptView: View {
             + Text(subtitle.dropFirst(word.count)).foregroundColor(.secondary)
     }
 
+    /// With the session facts: the state word from `phase`, its marks, then "lifecycle · when"
+    /// (`SessionDisplay`). From an older server, `headerStatus` as it always was.
+    @ViewBuilder private var headerStatusLine: some View {
+        let watching = app.watches?.summary(for: console.sessionID)
+        let now = Date()
+        if let session = app.session(id: console.sessionID),
+           let state = SessionDisplay.state(session.displayFacts),
+           let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
+                                                 machine: console.runnerName) {
+            SessionHeaderStateLine(session: session, state: state, subtitle: subtitle,
+                                   word: SessionHeader.headerWord(for: session, watching: watching, now: now,
+                                                                  machine: console.runnerName))
+        } else {
+            headerStatus
+        }
+    }
+
     private static func statusWordColor(_ tone: SessionStatusGlyph.Tone) -> Color {
         switch tone {
         case .brand:   return .blue
@@ -2148,6 +2166,27 @@ struct TranscriptView: View {
     }
     #endif
 }
+
+#if os(macOS)
+/// The status bar's line with the session facts: the state word from `phase` (blue while Running), its marks, then
+/// "lifecycle · when" (`SessionDisplay`).
+struct SessionHeaderStateLine: View {
+    let session: Session
+    let state: SessionDisplayState
+    let subtitle: String
+    let word: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(word).fontWeight(.semibold)
+                .foregroundColor(word == state.word && state == .running ? .blue : .primary)
+            SessionMarkPills(marks: SessionDisplay.marks(session.displayFacts) ?? [])
+            Text(subtitle.hasPrefix(word) ? String(subtitle.dropFirst(word.count)) : subtitle)
+                .foregroundColor(.secondary)
+        }
+    }
+}
+#endif
 
 private extension View {
     /// No iOS 26 scroll-edge effect at the top: the transcript runs on up behind the nav bar as it
@@ -2681,10 +2720,10 @@ struct TranscriptItemView: View {
             // A bg_run call is its job's card from start to end (board A1); one refused, or whose answer
             // names no job, stays a call.
             JobCardView(card: c)
-        case .toolCall(let c) where DocumentsSyncCard.drawsCard(c):
-            // A documents_sync call is its sync's card, live after the turn ends (board documents-sync-card); an
+        case .toolCall(let c) where DriveSyncCard.drawsCard(c):
+            // A drive_sync call is its sync's card, live after the turn ends (board drive-sync-card); an
             // answer that names no sync, from an older runner, stays a call.
-            DocumentsSyncCardView(syncID: DocumentsSyncCard.syncID(c.result) ?? "")
+            DriveSyncCardView(syncID: DriveSyncCard.syncID(c.result) ?? "")
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).

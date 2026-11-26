@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -33,6 +34,8 @@ const evalCLIEnv = "ORBIT_EVAL_AS_ORBIT_CLI"
 const evalMCPBrokenMarker = "eval-mcp-broken"
 
 func init() {
+	// A run without some instruction units: this process is that run's `orbit mcp` or CLI (agent_eval_leave_out_test.go).
+	readEvalLeaveOutMarker()
 	if len(os.Args) < 2 || os.Args[1] != "mcp" {
 		return
 	}
@@ -63,6 +66,7 @@ type evalSession struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	bg       *bgTailer
+	wakes    *evalWakeBox
 	stopJobs func()
 	tools    []string
 	context  evalContextBytes
@@ -111,7 +115,8 @@ func newEvalSession(sc *evalScenario, provider string) (*evalSession, error) {
 		s.plane.selfTask = current.ID
 	}
 	for _, seed := range sc.Setup.Seeds {
-		row := &evalTaskRow{Title: seed.Title, Description: seed.Description, Status: seed.Status}
+		row := &evalTaskRow{Title: seed.Title, Description: seed.Description, Status: seed.Status,
+			DoneAfter: seed.DoneAfter, DoneAtTurn: seed.DoneAtTurn}
 		if seed.InProject {
 			row.ProjectID = s.world.ProjectID
 		}
@@ -138,6 +143,22 @@ func newEvalSession(sc *evalScenario, provider string) (*evalSession, error) {
 		s.close()
 		return nil, fmt.Errorf("the session's checkout: %w", err)
 	}
+	s.world.WorkDir = s.work
+	if len(sc.Setup.Outside) > 0 {
+		outside, err := os.MkdirTemp("", "p201o")
+		if err != nil {
+			s.close()
+			return nil, err
+		}
+		s.cleanup = append(s.cleanup, func() { _ = os.RemoveAll(outside) })
+		s.world.OutsideDir = outside
+		for name, content := range sc.Setup.Outside {
+			if err := os.WriteFile(filepath.Join(outside, name), []byte(content), 0o644); err != nil {
+				s.close()
+				return nil, err
+			}
+		}
+	}
 	previousHome, hadHome := os.LookupEnv("ORBIT_HOME")
 	_ = os.Setenv("ORBIT_HOME", s.home)
 	s.cleanup = append(s.cleanup, func() {
@@ -153,6 +174,10 @@ func newEvalSession(sc *evalScenario, provider string) (*evalSession, error) {
 			return nil, err
 		}
 	}
+	if err := writeEvalLeaveOutMarker(s.home); err != nil {
+		s.close()
+		return nil, err
+	}
 
 	s.job = &ClaimedSession{
 		SessionID: sessionUUID, SessionUUID: sessionUUID, AgentID: agentID, TaskID: s.world.TaskID, Provider: provider,
@@ -160,9 +185,18 @@ func newEvalSession(sc *evalScenario, provider string) (*evalSession, error) {
 		Agent: AgentExecConfig{Provider: provider, PermissionMode: sc.Turns[0].Mode,
 			Env: map[string]string{evalCLIEnv: "1"}},
 	}
+	// The session's uploads directory, under this run's ORBIT_HOME, as the runner makes it before an engine starts.
+	s.world.UploadsDir = uploadsDir(s.job.SessionID)
+	if err := os.MkdirAll(s.world.UploadsDir, 0o755); err != nil {
+		s.close()
+		return nil, err
+	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.cleanup = append(s.cleanup, s.cancel)
 	s.bg = newBgTailer(s.ctx, func(string, map[string]interface{}) {}, nil)
+	// The wakes its jobs owe the session, which the control plane would file as turns (agent_eval_wake_test.go).
+	s.wakes = &evalWakeBox{}
+	s.bg.wakeSessionVia(s.wakes.file)
 	s.cleanup = append(s.cleanup, s.bg.stopAll)
 	stop, err := startSessionBgJobService(s.ctx, NewTransport(s.plane.srv.URL, "eval-runner-token"), s.bg, s.job, s.work, s.scratch)
 	if err != nil {
@@ -272,7 +306,8 @@ func evalReplyAsks(reply string) bool {
 	return strings.Contains(reply, "?")
 }
 
-// play runs every turn of the scenario through engine and returns the run, graded or not.
+// play runs every turn of the scenario through engine and returns the run, graded or not. After each turn it plays the
+// wake turns of the owner waits that turn handed off (playOwnerWaitWakes).
 func (s *evalSession) play(engine evalEngine, repeat int, turnTimeout time.Duration) *evalRun {
 	started := time.Now()
 	run := &evalRun{Scenario: s.sc, Repeat: repeat, Exe: s.exe, World: s.world}
@@ -286,6 +321,7 @@ func (s *evalSession) play(engine evalEngine, repeat int, turnTimeout time.Durat
 		run.DurationMs = int(time.Since(started).Milliseconds())
 		run.Events = s.rec.snapshot()
 		run.Turns = s.logs
+		run.Files = s.files()
 		run.rebuildTurns(s.job.AllowOrchestration)
 	}()
 	if err := engine.start(s); err != nil {
@@ -293,7 +329,7 @@ func (s *evalSession) play(engine evalEngine, repeat int, turnTimeout time.Durat
 		return run
 	}
 	for spec, turn := range s.sc.Turns {
-		log := evalTurnLog{Index: len(s.logs), Spec: spec, Prompt: turn.Prompt, Mode: turn.Mode, Before: turn.Before}
+		log := evalTurnLog{Index: len(s.logs), Spec: spec, Prompt: s.resolvePrompt(turn.Prompt), Mode: turn.Mode, Before: turn.Before}
 		// The owner switching the session's mode between turns, as the supervisor tells a running engine.
 		if spec > 0 && s.sc.Turns[spec-1].Mode != turn.Mode {
 			if setter, ok := engine.(evalModeSetter); ok {
@@ -312,14 +348,14 @@ func (s *evalSession) play(engine evalEngine, repeat int, turnTimeout time.Durat
 			}
 			log.ResetDone = done
 		}
-		if !s.runTurn(engine, &log, turnTimeout, run) {
+		if !s.runTurn(engine, &log, turnTimeout, run) || !s.playOwnerWaitWakes(engine, spec, turn.Mode, turnTimeout, run) {
 			return run
 		}
 		if turn.FollowUp == "" || !evalReplyAsks(s.lastReply()) || s.wroteAny(spec, turn.Expect) {
 			continue
 		}
 		follow := evalTurnLog{Index: len(s.logs), Spec: spec, Prompt: turn.FollowUp, Mode: turn.Mode, FollowUp: true}
-		if !s.runTurn(engine, &follow, turnTimeout, run) {
+		if !s.runTurn(engine, &follow, turnTimeout, run) || !s.playOwnerWaitWakes(engine, spec, turn.Mode, turnTimeout, run) {
 			return run
 		}
 	}
@@ -397,15 +433,69 @@ func (s *evalSession) wroteAny(spec int, ops []string) bool {
 			continue
 		}
 		for _, op := range ops {
-			switch {
-			case op == "task_create" && e.Kind == "task_created",
-				op == "task_create_batch" && e.Kind == "batch_created",
-				op == "project_create" && e.Kind == "project_created":
+			if evalWriteEvent[op] == e.Kind {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// evalWriteEvent is the ledger event a turn's expected operation leaves when it was made.
+var evalWriteEvent = map[string]string{
+	"task_create": "task_created", "task_create_batch": "batch_created", "project_create": "project_created",
+	"delegate": "subagent_started", "file_upload": "file_uploaded", "task_progress_report": "progress",
+	"wiki_search": "wiki_searched", "settings_propose": "settings_proposed", "notify": "notified", "task_await": "watch_created",
+}
+
+// evalPromptPlaceholder is a name a turn's words leave for the run to fill: {seed:NAME}, {outside:NAME}, {watch}.
+var evalPromptPlaceholder = regexp.MustCompile(`\{(seed|outside):([^}]+)\}|\{watch\}`)
+
+// resolvePrompt is a turn's words with this run's ids and paths in them. {watch} is the watch the wake turn reports:
+// the newest the agent made, or one the world makes when it made none.
+func (s *evalSession) resolvePrompt(prompt string) string {
+	watch := ""
+	return evalPromptPlaceholder.ReplaceAllStringFunc(prompt, func(m string) string {
+		sub := evalPromptPlaceholder.FindStringSubmatch(m)
+		switch sub[1] {
+		case "seed":
+			return s.world.Seeds[sub[2]]
+		case "outside":
+			return filepath.Join(s.world.OutsideDir, sub[2])
+		}
+		if watch == "" {
+			var targets []string
+			for _, id := range s.world.Seeds {
+				targets = append(targets, id)
+			}
+			watch = s.plane.worldWatch(targets...)
+		}
+		return watch
+	})
+}
+
+// files is every file in the session's checkout (but .git) and its uploads directory as the run ends: what a reply
+// that links one can hand over (reply_attachments.go).
+func (s *evalSession) files() []string {
+	var out []string
+	for _, root := range []string{s.world.WorkDir, s.world.UploadsDir} {
+		if root == "" {
+			continue
+		}
+		_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if d.IsDir() && d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			if !d.IsDir() {
+				out = append(out, path)
+			}
+			return nil
+		})
+	}
+	return out
 }
 
 // ── An MCP client that speaks to the session's `orbit mcp` the way an engine does ───────────────────────

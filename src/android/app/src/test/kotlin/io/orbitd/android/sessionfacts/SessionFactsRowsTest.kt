@@ -3,16 +3,20 @@ package io.orbitd.android.sessionfacts
 import io.orbitd.android.core.guests.*
 import io.orbitd.android.directory.DirectorySession
 import io.orbitd.android.directory.RunState
+import io.orbitd.android.directory.SessionDisplay
 import io.orbitd.android.directory.SessionHeader
 import io.orbitd.android.directory.SessionLine
+import io.orbitd.android.directory.displayFacts
 import io.orbitd.android.directory.displayRunState
 import java.time.Instant
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Plan step 5.4, the approved words on the list row (`SessionHeader.statusWord`) and the guest status pill, each with the facts
- * present (the five cases) and absent (today's word). */
+/** Plan step 5.4's five cases on the list row and the guest status pill. With the facts present, the list row now draws the approved
+ * board's state and marks (docs/mocks/session-display-three-states): its word is the state from `phase` ([SessionHeader.statusWord]) and
+ * its value the state with the marks ([shown]); the run state the rest of the app reads ([displayRunState]) is unchanged. With the facts
+ * absent, today's word. */
 class SessionFactsRowsTest {
     private val now = Instant.parse("2026-11-23T10:00:00Z")
     private fun s(status: String, endReason: String? = null, released: Boolean? = null, outcome: String? = null, waitingOn: String? = null,
@@ -20,36 +24,43 @@ class SessionFactsRowsTest {
         DirectorySession("s", "t", status = status, endReason = endReason, released = released, lastTurnOutcome = outcome, waitingOn = waitingOn,
             workFinished = workFinished, phase = phase, sessionKind = kind, runningBgCount = bg)
     private fun word(s: DirectorySession) = SessionHeader.statusWord(s, now = now)
+    private fun shown(s: DirectorySession) = SessionDisplay.text(s.displayFacts, ", ")
 
     @Test fun aFinishedTaskRunReadsFinished() {
-        assertEquals("Finished", word(s("SUCCEEDED", "task_done", true, "ANSWERED", phase = "IDLE")))
-        assertEquals("Finished", word(s("CANCELLED", null, true, "ANSWERED", workFinished = true, phase = "IDLE")))
-        assertEquals("Finished", word(s("SUCCEEDED", null, true, "ANSWERED", phase = "IDLE", kind = "LANDING")))
+        // The Finished mark reads the server's `workFinished` alone (the board: nothing re-derived).
+        assertEquals("Idle, Finished", shown(s("SUCCEEDED", "task_done", true, "ANSWERED", workFinished = true, phase = "IDLE")))
+        assertEquals("Idle, Finished", shown(s("CANCELLED", null, true, "ANSWERED", workFinished = true, phase = "IDLE")))
+        assertEquals("Idle", word(s("SUCCEEDED", null, true, "ANSWERED", workFinished = true, phase = "IDLE", kind = "LANDING")))
+        assertEquals(RunState.SUCCEEDED, s("SUCCEEDED", "task_done", true, "ANSWERED", phase = "IDLE").displayRunState)
+        assertNull(shown(s("SUCCEEDED", "task_done")))
         assertEquals("Succeeded", word(s("SUCCEEDED", "task_done")))
     }
     @Test fun aQueuedSessionOnHoldReadsOnHold() {
-        assertEquals("On hold", word(s("PENDING", released = false, waitingOn = "HOLD", phase = "PENDING")))
-        assertEquals("Queued", word(s("PENDING", released = false, phase = "PENDING")))
+        assertEquals("Queued", word(s("PENDING", released = false, waitingOn = "HOLD", phase = "PENDING")))
+        assertEquals("Queued, On hold", shown(s("PENDING", released = false, waitingOn = "HOLD", phase = "PENDING")))
+        assertEquals("Queued", shown(s("PENDING", released = false, phase = "PENDING")))
         assertEquals("Queued", word(s("PENDING")))
     }
     @Test fun anEndNobodyConfirmedReadsEndedNotFailed() {
         assertEquals(RunState.ENDED, s("FAILED", "ended", true, "FAILED", phase = "IDLE").displayRunState)
-        assertEquals("Ended", word(s("FAILED", "ended", true, "FAILED", phase = "IDLE")))
-        assertEquals("Failed", word(s("FAILED", released = true, outcome = "FAILED", phase = "IDLE")))
+        assertEquals("Idle, Ended", shown(s("FAILED", "ended", true, "FAILED", phase = "IDLE")))
+        assertEquals("Idle, Failed", shown(s("FAILED", released = true, outcome = "FAILED", phase = "IDLE")))
         assertEquals("Failed", word(s("FAILED")))
     }
     @Test fun anOldPlainSucceededReadsEndedNotSucceeded() {
-        assertEquals("Ended", word(s("SUCCEEDED", null, true, "ANSWERED", phase = "IDLE")))
+        assertEquals("Idle, Ended", shown(s("SUCCEEDED", null, true, "ANSWERED", phase = "IDLE")))
         assertEquals("Succeeded", word(s("SUCCEEDED")))
     }
     @Test fun anInterruptedSessionBeingEndedReadsInterruptedUntilReleased() {
-        assertEquals("Interrupted", word(s("INTERRUPTED", "ended", false, "INTERRUPTED", phase = "IDLE")))
-        assertEquals("Ended", word(s("INTERRUPTED", "ended", true, "INTERRUPTED", phase = "IDLE")))
+        assertEquals("Idle, Interrupted", shown(s("INTERRUPTED", "ended", false, "INTERRUPTED", phase = "IDLE")))
+        assertEquals(RunState.INTERRUPTED, s("INTERRUPTED", "ended", false, "INTERRUPTED", phase = "IDLE").displayRunState)
+        assertEquals("Idle, Ended", shown(s("INTERRUPTED", "ended", true, "INTERRUPTED", phase = "IDLE")))
         assertEquals("Ended", word(s("INTERRUPTED", "ended")))
         assertEquals("Interrupted", word(s("INTERRUPTED")))
     }
     @Test fun aSessionRunningOnlyABackgroundJobKeepsToday() {
-        assertEquals(word(s("AWAITING_INPUT", bg = 1)), word(s("AWAITING_INPUT", released = false, phase = "RUNNING", bg = 1)))
+        assertEquals("Background process running", word(s("AWAITING_INPUT", bg = 1)))
+        assertEquals("Running, Background", shown(s("AWAITING_INPUT", released = false, phase = "RUNNING", bg = 1)))
         assertEquals(s("AWAITING_INPUT").displayRunState, s("AWAITING_INPUT", released = false, phase = "RUNNING", bg = 1).displayRunState)
     }
 
@@ -62,7 +73,8 @@ class SessionFactsRowsTest {
         assertEquals("Succeeded", guest("released" to JsonPrimitive(true)).word)
         assertEquals("Succeeded", guest().word)
         val queued = GuestState(runStatus = "PENDING", released = false, waitingOn = "HOLD", phase = "PENDING")
-        assertEquals("On hold", queued.word)
+        assertEquals("Queued", queued.word)
+        assertEquals(listOf("On hold"), queued.marks!!.map { it.word })
         assertEquals("Queued", GuestState(runStatus = "PENDING").word)
         assertEquals("Interrupted", GuestState(runStatus = "INTERRUPTED", released = false, endReason = "ended", lastTurnOutcome = "INTERRUPTED").word)
     }

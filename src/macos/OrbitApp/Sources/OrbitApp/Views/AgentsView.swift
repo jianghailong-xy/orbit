@@ -423,6 +423,8 @@ struct AgentPanes: View {
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
+    /// Whether the Needs you section is folded to its header, stored for the same reason.
+    @AppStorage("sessionList.needsYouCollapsed") private var needsYouCollapsed = false
     /// The last grouping drawn and its inputs (see `body`).
     @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
     /// The clock the session list's terminal line is filtered against.
@@ -807,17 +809,17 @@ struct AgentPanes: View {
                     listRow(session, projects: projectRows, marks: projectMarks)
                 }
             }
-        } else if section.title == "Pinned" {
-            // Pinned folds to its header, as Notes' Pinned does: the rows leave the
-            // list, the header stays to bring them back. The rows are dropped here
-            // rather than through `Section(isExpanded:)`, whose disclosure only draws in
-            // the sidebar list style.
+        } else if let folded = sectionFold(section.title) {
+            // Pinned and Needs you fold to their header, as Notes' Pinned does: the rows
+            // leave the list, the header stays to bring them back. The rows are dropped
+            // here rather than through `Section(isExpanded:)`, whose disclosure only draws
+            // in the sidebar list style.
             TitledListSection {
-                if !pinnedCollapsed {
+                if !folded.wrappedValue {
                     ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                 }
             } title: {
-                pinnedSectionHeader(section.title)
+                foldSectionHeader(section.title, folded: folded)
             }
         } else {
             TitledListSection {
@@ -1174,25 +1176,37 @@ struct AgentPanes: View {
         }
     }
 
-    /// The Pinned section's header: its title, and at the trailing edge a chevron that points down
-    /// while the rows show and right once they are folded away (one glyph turned, never two
-    /// swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
-    private func pinnedSectionHeader(_ title: String) -> some View {
-        Button {
-            withAnimation { pinnedCollapsed.toggle() }
+    /// A folding section's header (Pinned, Needs you): its title, and at the trailing edge a chevron
+    /// that points down while the rows show and right once they are folded away (one glyph turned,
+    /// never two swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
+    private func foldSectionHeader(_ title: String, folded: Binding<Bool>) -> some View {
+        let pinned = title == "Pinned"
+        let shows = pinned ? "Shows the pinned sessions" : "Shows the sessions waiting for you"
+        let hides = pinned ? "Hides the pinned sessions" : "Hides the sessions waiting for you"
+        return Button {
+            withAnimation { folded.wrappedValue.toggle() }
         } label: {
             HStack {
                 Text(title).textCase(nil)
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
+                    .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
                     .accessibilityHidden(true)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
-        .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+        .accessibilityHint(folded.wrappedValue ? shows : hides)
+    }
+
+    /// The fold of a section that folds to its header (Pinned, Needs you); nil for one that doesn't.
+    private func sectionFold(_ title: String) -> Binding<Bool>? {
+        switch title {
+        case "Pinned": return $pinnedCollapsed
+        case "Needs you": return $needsYouCollapsed
+        default: return nil
+        }
     }
 }
 
@@ -1757,6 +1771,15 @@ struct AgentSessionRow: View {
     /// The machine the session runs on: a session held for the Claude region names it ("Anthropic
     /// unavailable on HPC", web `sessionLine`'s `machine`).
     private var machine: String? { app.agents?.machineName(for: session) }
+    /// The state from `phase` and the marks beside it (`SessionDisplay`); nil from an older server,
+    /// which keeps the glyph and the value the row always had.
+    private var displayState: SessionDisplayState? { SessionDisplay.state(session.displayFacts) }
+    private var marks: [SessionMark] { SessionDisplay.marks(session.displayFacts) ?? [] }
+    /// The row's VoiceOver value: "Idle, Interrupted", else, from an older server, `statusWord`.
+    private var statusValue: String {
+        if let displayState { return SessionDisplay.spoken(displayState, marks) }
+        return SessionHeader.statusWord(for: session, watching: watching, machine: machine)
+    }
 
     var body: some View {
         #if os(iOS)
@@ -1770,7 +1793,7 @@ struct AgentSessionRow: View {
         #else
         HStack(spacing: 0) {
             HStack(spacing: 8) {
-                StatusGlyphView(glyph: .make(for: session, watching: watching, machine: machine))
+                StatusGlyphView(glyph: displayState?.glyph ?? .make(for: session, watching: watching, machine: machine))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.title ?? "Untitled session").lineLimit(1)
                     HStack(spacing: 7) {
@@ -1779,6 +1802,10 @@ struct AgentSessionRow: View {
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                             // A full runner, run or batch: which one, and how its slots are taken.
                             .help(QueuedCapacity.rowHint(session, machine: machine, now: Date()) ?? "")
+                        if !marks.isEmpty {
+                            Spacer(minLength: 4)
+                            SessionMarkPills(marks: marks)
+                        }
                     }
                 }
                 Spacer()
@@ -1826,11 +1853,12 @@ struct AgentSessionRow: View {
                     .font(.orbitListSubtitle)
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
+                phoneMarks
             }
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching, machine: machine))
+        .accessibilityValue(statusValue)
     }
 
     /// The compact (iPhone) row for the ChatGPT-style grouped list: a flush-left title with a
@@ -1852,6 +1880,7 @@ struct AgentSessionRow: View {
                 if let projectMark { SessionProjectMarkChip(mark: projectMark) }
                 SessionCoordinatorBadge(session: session)
                 Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                phoneMarks
             }
         }
         .padding(.vertical, 2)
@@ -1860,7 +1889,16 @@ struct AgentSessionRow: View {
         // done, queued) would otherwise no longer announce their status the way the dropped leading
         // glyph did. `statusWord` is the shared, tested port of web's `statusLabel`.
         .accessibilityElement(children: .combine)
-        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching, machine: machine))
+        .accessibilityValue(statusValue)
+    }
+
+    /// The marks at the right end of a phone row's second line: at most two, then "+N".
+    @ViewBuilder private var phoneMarks: some View {
+        if !marks.isEmpty {
+            let row = SessionDisplay.phoneRowMarks(marks)
+            Spacer(minLength: 4)
+            SessionMarkPills(marks: row.shown, more: row.more)
+        }
     }
 
     /// The slim trailing status cue for the compact row — the shared `SessionLiveIndicator` (spinner
@@ -1938,6 +1976,21 @@ struct SessionLiveIndicator: View {
     /// holds none, which keeps the reading it always had.
     var watching: WatchSessionSummary? = nil
     @ViewBuilder var body: some View {
+        // With the session facts, the slot always draws the state icon from `phase`, in the quiet
+        // tone; the marks go to the row's second line (`SessionDisplay`).
+        if let state = SessionDisplay.state(session.displayFacts) {
+            switch state {
+            case .running: SpinnerGlyph(color: .secondary)
+            case .queued:  Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
+            case .idle:    Image(systemName: "circle").font(.orbitGlyph).foregroundStyle(.secondary)
+            }
+        } else {
+            legacyCue
+        }
+    }
+
+    /// What the slot drew before the session facts, and still draws against an older server.
+    @ViewBuilder private var legacyCue: some View {
         let glyph = SessionStatusGlyph.make(for: session, watching: watching)
         switch (glyph.shape, glyph.tone) {
         // Working is the one live state that does *not* want you — the row is making progress on

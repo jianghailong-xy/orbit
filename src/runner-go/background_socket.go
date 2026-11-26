@@ -199,6 +199,11 @@ func (s *bgJobService) serveConn(conn net.Conn) {
 		s.serveSecretLease(conn, req.Args)
 		return
 	}
+	if req.Op == memoryToolExitOp {
+		s.reportMemoryToolExit(conn, req.Args)
+		writeBgResponse(conn, bgSocketResponse{OK: true})
+		return
+	}
 	writeBgResponse(conn, s.handle(req))
 }
 
@@ -311,9 +316,9 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			"jobs": s.bg.listJobs(getBool(args, "includeFinished")), "liveCount": s.bg.liveJobCount(),
 		}}
 
-	case documentsProgressOp:
-		// How far a documents_put or documents_get call has got, as its live tool_output (documents_progress.go).
-		return s.serveDocumentsProgress(args)
+	case driveProgressOp:
+		// How far a drive_put or drive_get call has got, as its live tool_output (drive_progress.go).
+		return s.serveDriveProgress(args)
 
 	case planGateModeOp:
 		// The session's permission mode as it is now, for Orbit's own Plan gate (plan_gate.go): `orbit mcp` and

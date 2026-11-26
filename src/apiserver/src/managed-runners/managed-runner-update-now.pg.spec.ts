@@ -368,7 +368,8 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     // Idle by the records, but its own fresh report still counts a job: busy, with the report's count.
     // Ended as the server ends one: a terminal status with its release column (session_release_fact_chk, 1401).
     await db.session.updateMany({
-      where: { id: { in: [turn.id, waiting.id] } }, data: { status: 'SUCCEEDED', finishedAt: new Date(), runningBgShells: [] },
+      where: { id: { in: [turn.id, waiting.id] } },
+      data: { status: 'SUCCEEDED', finishedAt: w.now(), runningBgShells: [] },
     });
     w.advance(1_000);
     await w.heartbeat(mapping.runnerId, { backgroundJobs: 1 });

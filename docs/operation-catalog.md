@@ -1,7 +1,7 @@
-# Orbit operation catalogue v1.11.0
+# Orbit operation catalogue v1.12.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `5286496953420d27ee3f26d33c8989e10cff0ab5a291165d4f379912e00d1c65`.
+> Content hash: `a73d9fae79851964fd7d5d611ee74ab6b51973ceafc8c4e221b7abec45032796`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -20,7 +20,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `inspect` | R1.8 | `project_get`? → `task_get` → `task_list`? → `session_get`? | Read the state of a project, a task or a session before deciding anything. |
 | `wait` | R1.9 | `task_await` → `session_await`? → `watch_create`? | Wait for Orbit work to finish without holding the turn open. |
 | `wiki` | R1.10 | `wiki_search` → `wiki_get`? → `wiki_propose`? → `wiki_note`? | Find what is already known about a file or a pattern, and keep what you learned. |
-| `files` | R1.11 | `file_upload` → `file_list`? → `file_fetch`? → `documents_put`? → `documents_get`? → `documents_list`? → `documents_move`? → `documents_delete`? → `documents_sync`? | Keep a screenshot, report or log in Orbit instead of the repository, or read one back. |
+| `files` | R1.11 | `file_upload` → `file_list`? → `file_fetch`? → `drive_put`? → `drive_get`? → `drive_list`? → `drive_move`? → `drive_delete`? → `drive_sync`? | Keep a screenshot, report or log in Orbit instead of the repository, or read one back. |
 | `task-list` | R1.12 | `tasklist_list`? → `tasklist_create` → `tasklist_update`? | Give a class of work its own dispatch policy: a concurrency cap, a pause, standing instructions. |
 | `agent` | R1.13 | `agent_list` → `agent_update`? → `agent_create`? | Choose where work runs and under which identity, or change an agent's defaults. |
 | `finish-task` | — | `task_get` → `task_progress_report` → `bg_run`? → `task_evidence_submit` → `task_comment`? | Carry the task this session runs to its end: progress, checks and the evidence its criterion decides by. |
@@ -46,12 +46,12 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `criterion_check_start` | project | high | yes | none | no | none | refused | always | absent | Start a criterion check as the project's coordinator. |
 | `criterion_confirm` | project | high | yes | none | no | none | refused | always | absent | Confirm a project criterion as the project's coordinator. |
 | `criterion_confirmation_withdraw` | project | high | yes | none | no | none | refused | always | absent | Withdraw a criterion confirmation as the project's coordinator. |
-| `documents_delete` | file | high | yes | none | yes | none | refused | always | always — `orbit documents rm` | Move an entry to the owner's Trash. |
-| `documents_get` | file | low | no | none | no | read | runs | always | session — `orbit documents get` | Download a drive file into this session's uploads directory. |
-| `documents_list` | file | low | no | none | no | read | runs | always | always — `orbit documents ls` | See the contents of a drive folder. |
-| `documents_move` | file | medium | yes | none | no | none | refused | always | always — `orbit documents mv` | Move or rename an entry on the drive. |
-| `documents_put` | file | medium | yes | none | no | none | refused | always | session — `orbit documents put` | Copy a local file into the owner's Documents drive. |
-| `documents_sync` | file | medium | yes | none | no | none | refused | always | session — `orbit documents sync` | Copy a local directory into a Documents folder in the background. |
+| `drive_delete` | file | high | yes | none | yes | none | refused | always | always — `orbit drive rm` | Move an entry to the owner's Trash. |
+| `drive_get` | file | low | no | none | no | read | runs | always | session — `orbit drive get` | Download a drive file into this session's uploads directory. |
+| `drive_list` | file | low | no | none | no | read | runs | always | always — `orbit drive ls` | See the contents of a drive folder. |
+| `drive_move` | file | medium | yes | none | no | none | refused | always | always — `orbit drive mv` | Move or rename an entry on the drive. |
+| `drive_put` | file | medium | yes | none | no | none | refused | always | session — `orbit drive put` | Copy a local file into the owner's Drive. |
+| `drive_sync` | file | medium | yes | none | no | none | refused | always | session — `orbit drive sync` | Copy a local directory into a Drive folder in the background. |
 | `file_fetch` | file | low | no | none | no | read | runs | always | session — `orbit file fetch` | Read a file's bytes back. |
 | `file_list` | file | low | no | none | no | read | runs | always | always — `orbit file list` | See the files this session keeps. |
 | `file_pin` | file | medium | yes | none | no | none | refused | always | session — `orbit file pin` | Keep a file so it survives the turn. |
@@ -162,6 +162,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `wiki_import` | wiki | medium | yes | none | no | none | refused | absent | session+wiki_switch — `orbit wiki import` | Import a Markdown file or tree into a wiki space. |
 | `wiki_note` | wiki | medium | yes | none | no | none | refused | wiki_switch | session+wiki_switch — `orbit wiki note` | Record one claim or pitfall in the shared wiki. |
 | `wiki_propose` | wiki | medium | yes | none | no | caller_key | refused | wiki_switch | session+wiki_switch — `orbit wiki propose` | Propose a change to the shared wiki. |
+| `wiki_read` | wiki | low | no | none | no | read | runs | wiki_switch | session+wiki_switch — `orbit wiki read` | Read the wiki's documents from a wiki chat. |
 | `wiki_search` | wiki | low | no | none | no | read | runs | wiki_switch | session+wiki_switch — `orbit wiki search` | Search the shared wiki for what is known. |
 | `wiki_verify` | wiki | medium | yes | none | no | none | refused | absent | session+wiki_switch — `orbit wiki verify` | Wait for the server's verdicts on a wiki import. |
 | `withdraw_owner_request` | owner | medium | yes | none | no | none | runs | always | absent | Withdraw a request this session filed with the account owner. |

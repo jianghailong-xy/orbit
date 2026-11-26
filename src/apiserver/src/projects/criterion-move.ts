@@ -5,7 +5,8 @@ import type { AuthCredential } from '../common/current-user.decorator';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
 import { criteriaFromDefinitions, standardSetVersion } from './project-acceptance';
 import { readCriterionSatisfaction } from './project-criterion-satisfaction';
-import { HELD_SESSION_STATUSES } from '../common/session-release';
+import { heldFilter } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus } from '../sessions/session-legacy-words';
 
 /**
  * The done card's "Move to a follow-up…" (owner decision 2026-11-11): one unmet acceptance criterion
@@ -65,9 +66,6 @@ import { HELD_SESSION_STATUSES } from '../common/session-release';
 
 /** Open items that are about a task itself and so go where it goes. */
 export const OPEN_ITEM_KINDS_MOVING_WITH_TASK: ReadonlySet<string> = new Set(['TASK_FAILED']);
-
-/** The live-claim statuses 0389's guard refuses a project move over. */
-export const LIVE_RUN_STATUSES = HELD_SESSION_STATUSES;
 
 const SETTLED: ReadonlySet<string> = new Set([TaskStatus.DONE, TaskStatus.CANCELLED]);
 
@@ -272,8 +270,9 @@ export async function readCriterionMoveFacts(
 
   // One statement at a time: an interactive transaction runs its queries in turn anyway.
   const liveRuns = await tx.session.findMany({
-    where: { ownerId, taskId: { in: ids }, deletedAt: null, status: { in: [...LIVE_RUN_STATUSES] } },
-    select: { id: true, taskId: true, status: true },
+    // Live: held, the claim 0389's guard refuses a project move over.
+    where: { ownerId, taskId: { in: ids }, deletedAt: null, ...heldFilter() },
+    select: { id: true, taskId: true, ...LEGACY_STATUS_SELECT },
   });
   const landings = await tx.projectIntegrationJob.findMany({
     where: {
@@ -332,7 +331,7 @@ export async function readCriterionMoveFacts(
     target: target ? { id: target.id, status: target.status } : null,
     criterion: { id: input.criterionId, satisfied: criterion.satisfied },
     servingTasks: servingTasks.map((task) => ({ id: task.id, title: task.title, status: task.status })),
-    liveRuns: liveRuns.map((run) => ({ taskId: run.taskId!, sessionId: run.id, status: run.status })),
+    liveRuns: liveRuns.map((run) => ({ taskId: run.taskId!, sessionId: run.id, status: legacySessionStatus(run) })),
     landings: landings.map((job) => ({ taskId: job.taskId!, jobId: job.id })),
     dependencies: edges.map((edge) => ({ task: edge.task, dependsOn: edge.dependsOnTask })),
     links,

@@ -103,7 +103,7 @@ test('session guests: a guest attaches images they uploaded, and only those', {
   const jwt = new JwtService({ secret: jwtSecret });
   const loginOf = (p: { id: string; email: string }) => jwt.signAsync({ sub: p.id, email: p.email });
   const [ownerLogin, guestLogin, otherLogin, strangerLogin] = await Promise.all([owner, guest, other, stranger].map(loginOf));
-  server = await startApiserver(url, jwtSecret, { ORBIT_DOCUMENTS_BACKEND: 'local', ORBIT_DOCUMENTS_DIR: filesDir });
+  server = await startApiserver(url, jwtSecret, { ORBIT_DRIVE_BACKEND: 'local', ORBIT_DRIVE_DIR: filesDir });
   const api = (method: string, path: string, bearer: string, body?: unknown, headers?: Record<string, string>): Promise<Reply> =>
     call(server!, method, `/api${path}`, bearer, body, headers);
   const ok = (reply: Reply, what: string) => {

@@ -14,7 +14,7 @@ import {
   type TaskReachDeclaration,
 } from './sessionReach';
 import type { ProjectPlacement } from './queries';
-import { refreshDocumentsSyncs } from './documentsSyncs';
+import { refreshDriveSyncs } from './driveSyncs';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
 // single refetch per list. A second, as the list budget asks (docs/list-freshness-design.md R1): a
@@ -961,7 +961,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // it surface too. A tab that is hidden reads it when it is back in view (`pump`).
         if (missedEvents) {
           missedEvents = false;
-          void refreshDocumentsSyncs();
+          if (!hidden()) void refreshDriveSyncs();
           reconcile();
         }
       };
@@ -1000,8 +1000,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // events (tag/provider/task-list) legitimately carry none.
         if (!ev?.type || ev.type === 'ping') return;
         if (ev.type === 'sessions.list_changed') hinted = true;
-        // An agent's directory sync moved (`hints=drive_syncs`): the Documents tray reads its list again.
-        if (ev.type === 'drive.sync') void refreshDocumentsSyncs();
+        // An agent's directory sync moved (`hints=drive_syncs`): the Drive tray reads its list again.
+        if (ev.type === 'drive.sync' && !hidden()) void refreshDriveSyncs();
         const projectId = ev.data?.projectMembership?.projectId;
         const id = ev.data?.id;
         if (ev.type === 'session.updated' || ev.type === 'session.created' || ev.type === 'session.ended') {

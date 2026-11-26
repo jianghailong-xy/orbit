@@ -231,6 +231,13 @@ describe('isRetryableApiErrorText', () => {
       + 'For more information, pass `verbose: true` in the second argument to fetch()';
     expect(isConnectionFailureText(reset)).toBe(true);
     expect(isRetryableApiErrorText(reset)).toBe(true);
+    // DashScope's gateway timing out on its upstream, under a 406 that is not about the request.
+    const timedOut =
+      'API Error: 406 Post "https://dashscope-intl.aliyuncs.com/apps/anthropic/v1/messages": read tcp '
+      + '[fdbd:dc53:2a:630::37]:38248->[64:ff9b::2fec:75bf]:443: read: connection timed out';
+    expect(isConnectionFailureText(timedOut)).toBe(true);
+    expect(isRetryableApiErrorText(timedOut)).toBe(true);
+    expect(isRetryableApiErrorText('API Error: 406 Not Acceptable')).toBe(false);
     // The same 403 with neither wording is still a fact about the request: no re-send.
     expect(isRetryableApiErrorText('Failed to authenticate. API Error: 403 Request not allowed')).toBe(false);
     // Anchored like the other classifications: a reply that merely quotes one is an ordinary reply,

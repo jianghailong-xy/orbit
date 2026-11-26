@@ -127,7 +127,7 @@ async function click(element: Element | null | undefined, what: string): Promise
 }
 
 async function openHeaderMenu(): Promise<HTMLElement> {
-  await click(mounted().querySelector('.workspace-header button[title="More actions"]'), 'the header ⋯ button');
+  await click(mounted().querySelector('.workspace-header button[aria-label="More actions"]'), 'the header ⋯ button');
   await act(async () => {
     await vi.waitFor(() => expect(document.querySelector('[role="menu"]:not([data-closed])')).not.toBeNull(), {
       timeout: 10_000,

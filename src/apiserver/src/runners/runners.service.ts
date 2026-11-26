@@ -3,6 +3,7 @@ import {
   ConflictException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -32,7 +33,7 @@ import type {
   RunnerSelfUpdatePostponeRequest,
   RunnerSelfUpdatePostponeResponse,
 } from '@orbit/shared';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { agentFixesOf } from './attention-fix';
 import { namedRunnerEngines, sanitizeEngineUpdateDismissals, sanitizeFormerDefaults, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
@@ -67,6 +68,8 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { runnerSettingsData } from './runner-settings';
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
+import { clampManagedConcurrency, managedConcurrencyCeiling, managedConcurrencyClampNotice } from '../managed-runners/managed-runner-concurrency';
+import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from '../managed-runners/managed-runner-runtime';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
 import { runningSessionCounts } from './runner-background-holders';
 import { runnerResourcesAnswerOf } from './runner-resources';
@@ -84,6 +87,8 @@ import {
 } from './claude-account-swap';
 import { openCodeKeyRows, runsOnOpenCode } from '../providers/custom-provider';
 import { releasedFilter } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, readLandingSettlements } from '../sessions/session-legacy-words';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -106,6 +111,9 @@ export class RunnersService {
     // Optional, and last, for the specs that build this service on a bare Prisma: without it a
     // sign-in still reaches the runner, on its next heartbeat instead of at once.
     @Optional() private readonly realtime?: RealtimeService,
+    // The managed runner runtime, for the profile a managed runner's concurrency ceiling is read from
+    // (managed-runner-concurrency.ts). Absent, as on a server with the switch off, no ceiling is applied.
+    @Optional() @Inject(MANAGED_RUNNER_RUNTIME) private readonly managedRuntime?: ManagedRunnerRuntime | null,
   ) {}
 
   private readonly deviceLookups = new Map<string, number[]>();
@@ -354,7 +362,7 @@ export class RunnersService {
     const turns = new Map<string, RunnerUpdateTurn[]>(draining.map((id) => [id, []]));
     if (draining.length === 0) return turns;
     const rows = await this.prisma.session.findMany({
-      where: { assignedRunnerId: { in: draining }, ownerId, status: RunStatus.RUNNING, deletedAt: null },
+      where: { assignedRunnerId: { in: draining }, ownerId, ...turnStateFilter(['IN_FLIGHT']), deletedAt: null },
       select: { id: true, title: true, assignedRunnerId: true, runClaimedAt: true, lastTurnAt: true },
       orderBy: [{ runClaimedAt: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
     });
@@ -561,8 +569,18 @@ export class RunnersService {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
     const data = runnerSettingsData(dto);
+    // Cap managed concurrency at the memory ceiling and tell the owner when it was lowered.
+    let notice: string | undefined;
+    if (dto.maxConcurrent !== undefined) {
+      const ceiling = managedConcurrencyCeiling(this.managedRuntime);
+      if (ceiling && dto.maxConcurrent > ceiling.ceiling
+        && (await this.prisma.managedRunner.findUnique({ where: { runnerId: id }, select: { id: true } }))) {
+        data.maxConcurrent = clampManagedConcurrency(dto.maxConcurrent, ceiling);
+        notice = managedConcurrencyClampNotice(dto.maxConcurrent, ceiling);
+      }
+    }
     // Never echo back tokenHash.
-    return this.prisma.runner.update({
+    const updated = await this.prisma.runner.update({
       where: { id },
       data,
       select: {
@@ -574,6 +592,7 @@ export class RunnersService {
         minFreeDiskMb: true,
       },
     });
+    return notice ? { ...updated, notice } : updated;
   }
 
   /**
@@ -603,7 +622,9 @@ export class RunnersService {
           select: {
             title: true,
             branch: true,
-            status: true,
+            // What the session's word is derived from (sessions/session-legacy-words.ts).
+            id: true,
+            ...LEGACY_STATUS_SELECT,
             commitStatus: true,
             commitError: true,
             commitResultMessage: true,
@@ -611,12 +632,13 @@ export class RunnersService {
         },
       },
     });
+    const landings = await readLandingSettlements(this.prisma, rows.map((row) => row.session));
     return {
       checkouts: rows.map((row) => ({
         sessionId: row.sessionId,
         title: row.session.title,
         branch: row.session.branch,
-        status: row.session.status,
+        status: legacySessionStatus(row.session, landings.get(row.session.id)),
         files: row.files,
         hasPatches: row.hasPatches,
         observedAt: row.observedAt,
@@ -1682,7 +1704,7 @@ export function accountRemoveStateOf(r: {
  * since the refusal reads as it is now; a session deleted since is left out.
  */
 export async function accountRemoveSessionsOf(
-  db: Pick<PrismaService, 'session'>,
+  db: Pick<PrismaService, 'session' | 'projectLanding'>,
   ownerId: string,
   runners: Array<{ id: string; codexAccountRemoveStatus?: string | null; codexAccountRemoveSessions?: string[] | null }>,
 ): Promise<Map<string, RunnerAccountRemoveSession[]>> {
@@ -1694,13 +1716,15 @@ export async function accountRemoveSessionsOf(
       ownerId,
       OR: named.map((r) => ({ assignedRunnerId: r.id, id: { in: r.codexAccountRemoveSessions ?? [] } })),
     },
-    select: { id: true, title: true, status: true, assignedRunnerId: true },
+    // What the word each one reads on the wire is derived from (sessions/session-legacy-words.ts).
+    select: { id: true, title: true, ...LEGACY_STATUS_SELECT, assignedRunnerId: true },
     orderBy: { createdAt: 'asc' },
   });
+  const landings = await readLandingSettlements(db, rows);
   for (const row of rows) {
     if (!row.assignedRunnerId) continue;
     const list = out.get(row.assignedRunnerId) ?? [];
-    list.push({ id: row.id, title: row.title, status: row.status as RunnerAccountRemoveSession['status'] });
+    list.push({ id: row.id, title: row.title, status: legacySessionStatus(row, landings.get(row.id)) });
     out.set(row.assignedRunnerId, list);
   }
   return out;

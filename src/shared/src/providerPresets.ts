@@ -49,6 +49,21 @@ export interface ProviderBrand {
   to: string;
 }
 
+/**
+ * One of a vendor's separate platforms. MiniMax, Z.AI/Zhipu and Moonshot each run an international
+ * platform and a China one with their own accounts: a key made on one is refused (401) by the other,
+ * so the form asks which one the key is from rather than leaving the endpoint to be retyped.
+ */
+export interface ProviderPresetRegion {
+  id: 'global' | 'cn';
+  /** The switch's word: "International" or "China". */
+  label: string;
+  /** The site its keys are made on, as people recognise it: "minimax.io", "minimaxi.com". */
+  site: string;
+  baseUrl: string;
+  keyUrl: string;
+}
+
 export interface ProviderPreset {
   slug: string;
   label: string;
@@ -100,6 +115,23 @@ export interface ProviderPreset {
   brand: ProviderBrand;
   /** Vendor console where the user mints an API key (rendered as a "Get your API key" link). */
   keyUrl?: string;
+  /**
+   * The vendor's platforms, when it runs more than one with separate keys, International first as
+   * the switch shows them. One of them is what `baseUrl` and `keyUrl` above name; a provider's
+   * region is read off its own base URL.
+   */
+  regions?: ProviderPresetRegion[];
+  /**
+   * The vendor's subscription for coding tools, which takes keys of its own: offered on this preset's
+   * connect page as a second key type. `preset` is the preset its keys are connected with; `signIn` is
+   * an engine whose own sign-in on a machine is the only way in (Kimi Code's chat API serves only the
+   * coding agents it lists, which Kimi CLI is and Orbit's server is not).
+   */
+  codingPlan?: { label: string; preset: string } | { label: string; signIn: 'kimi' };
+  /** Set on a coding plan's preset: the pay-as-you-go preset it is the plan of, which it is grouped and offered with. */
+  planOf?: string;
+  /** The vendor's own rule for these keys, shown under the key field. */
+  terms?: string;
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -228,9 +260,13 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'kimi-k2.7-code',
     catalog: { source: 'moonshotai', match: /^kimi-/ },
-    note: 'Global endpoint; the CN platform uses https://api.moonshot.cn/v1.',
     brand: { mono: 'K', from: '#3a3a3a', to: '#111111' },
     keyUrl: 'https://platform.moonshot.ai',
+    codingPlan: { label: 'Kimi Code', signIn: 'kimi' },
+    regions: [
+      { id: 'global', label: 'International', site: 'moonshot.ai', baseUrl: 'https://api.moonshot.ai/v1', keyUrl: 'https://platform.moonshot.ai' },
+      { id: 'cn', label: 'China', site: 'moonshot.cn', baseUrl: 'https://api.moonshot.cn/v1', keyUrl: 'https://platform.moonshot.cn' },
+    ],
   },
   {
     // A Cursor User API Key, which Cursor CLI alone runs on (docs/cursor-runtime-contract.md §9): the
@@ -261,6 +297,10 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     catalog: { source: 'zai', match: /^glm-/ },
     brand: { mono: 'Z', from: '#33b6b0', to: '#1e8e8e' },
     keyUrl: 'https://z.ai',
+    regions: [
+      { id: 'global', label: 'International', site: 'z.ai', baseUrl: 'https://api.z.ai/api/anthropic', keyUrl: 'https://z.ai' },
+      { id: 'cn', label: 'China', site: 'bigmodel.cn', baseUrl: 'https://open.bigmodel.cn/api/anthropic', keyUrl: 'https://open.bigmodel.cn' },
+    ],
   },
   {
     slug: 'minimax',
@@ -275,6 +315,10 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     catalog: { source: 'minimax', match: /^MiniMax-/ },
     brand: { mono: 'M', from: '#ff5b76', to: '#e11d48' },
     keyUrl: 'https://www.minimax.io',
+    regions: [
+      { id: 'global', label: 'International', site: 'minimax.io', baseUrl: 'https://api.minimax.io/anthropic', keyUrl: 'https://www.minimax.io' },
+      { id: 'cn', label: 'China', site: 'minimaxi.com', baseUrl: 'https://api.minimaxi.com/anthropic', keyUrl: 'https://platform.minimaxi.com' },
+    ],
   },
   {
     slug: 'qwen',
@@ -287,13 +331,62 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'qwen3.7-max',
     catalog: { source: 'alibaba', match: /^qwen\d/ },
-    note: 'Beijing-region endpoint; Singapore/intl uses a workspace-specific URL (see Model Studio docs).',
     brand: { mono: 'Q', from: '#7a72ff', to: '#4f46e5' },
     keyUrl: 'https://bailian.console.aliyun.com',
+    codingPlan: { label: 'Coding Plan', preset: 'qwen-coding-plan' },
+    // Model Studio's Beijing and Singapore regions issue separate keys; the preset's own is Beijing's.
+    regions: [
+      { id: 'global', label: 'International', site: 'alibabacloud.com', baseUrl: 'https://dashscope-intl.aliyuncs.com/apps/anthropic', keyUrl: 'https://modelstudio.console.alibabacloud.com' },
+      { id: 'cn', label: 'China', site: 'aliyun.com', baseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic', keyUrl: 'https://bailian.console.aliyun.com' },
+    ],
+  },
+  {
+    // Model Studio's Coding Plan: a subscription whose keys work only on its own endpoints, and only
+    // for the models it lists (verified against Alibaba's Coding Plan docs 2026-11). The list is the
+    // plan's, not the vendor's catalogue, which would offer models the plan refuses — so it has none.
+    slug: 'qwen-coding-plan',
+    label: 'Qwen Coding Plan',
+    planOf: 'qwen',
+    baseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
+    models: [
+      { value: 'qwen3.7-plus', label: 'Qwen3.7 Plus', tier: 'L' },
+      { value: 'qwen3.6-plus', label: 'Qwen3.6 Plus', tier: 'M' },
+      { value: 'qwen3.5-plus', label: 'Qwen3.5 Plus', tier: 'M' },
+      { value: 'kimi-k2.5', label: 'Kimi K2.5', tier: 'L' },
+      { value: 'glm-5', label: 'GLM-5', tier: 'L' },
+      { value: 'MiniMax-M2.5', label: 'MiniMax-M2.5', tier: 'M' },
+    ],
+    defaultModel: 'qwen3.7-plus',
+    terms: 'Alibaba allows Coding Plan keys in interactive coding tools only, not in automated scripts or app backends.',
+    brand: { mono: 'Q', from: '#7a72ff', to: '#4f46e5' },
+    keyUrl: 'https://bailian.console.aliyun.com',
+    regions: [
+      { id: 'global', label: 'International', site: 'alibabacloud.com', baseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic', keyUrl: 'https://modelstudio.console.alibabacloud.com' },
+      { id: 'cn', label: 'China', site: 'aliyun.com', baseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic', keyUrl: 'https://bailian.console.aliyun.com' },
+    ],
   },
 ];
 
 /** The preset a configured provider follows, or undefined for a self-maintained one. */
 export function providerPreset(presetSlug?: string | null): ProviderPreset | undefined {
   return presetSlug ? PROVIDER_PRESETS.find((p) => p.slug === presetSlug) : undefined;
+}
+
+const sameUrl = (a: string, b: string) => a.trim().replace(/\/+$/, '').toLowerCase() === b.trim().replace(/\/+$/, '').toLowerCase();
+
+/** Which of the preset's platforms a base URL is, or undefined for a vendor with one, or a URL typed by hand. */
+export function presetRegionOf(preset: ProviderPreset | undefined, baseUrl: string): ProviderPresetRegion | undefined {
+  return preset?.regions?.find((r) => sameUrl(r.baseUrl, baseUrl));
+}
+
+/**
+ * The vendor platform a base URL belongs to and its other ones, found by the URL alone: what the
+ * connection test tries a refused key on, since the request names only the endpoint.
+ */
+export function regionSiblings(baseUrl: string): { preset: ProviderPreset; region: ProviderPresetRegion; others: ProviderPresetRegion[] } | undefined {
+  for (const preset of PROVIDER_PRESETS) {
+    const region = presetRegionOf(preset, baseUrl);
+    if (region) return { preset, region, others: preset.regions!.filter((r) => r !== region) };
+  }
+  return undefined;
 }

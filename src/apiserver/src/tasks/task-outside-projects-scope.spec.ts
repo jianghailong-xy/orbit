@@ -258,7 +258,10 @@ test('a running row says when its oldest live run began; a queued one says nothi
   // The work sessions carrying the two rows (sessions/task-work-carrier.ts): one running since
   // `started`, one queued and never started. Every other raw read answers as the harness's does.
   const carrier = (taskId: string, status: string, startedAt: Date | null) => ({
-    taskId, sessionId: `session-${taskId}`, status, runReason: 'TURN',
+    taskId, sessionId: `session-${taskId}`, finishedAt: null,
+    // The carrier read answers the resolved turn state (sessionTurnStateSql), not the stored word.
+    turnState: ({ PENDING: 'QUEUED', RUNNING: 'IN_FLIGHT' } as Record<string, string | undefined>)[status] ?? null,
+    runReason: 'TURN',
     runningBgJobs: [], runningBgJobActivity: {}, startedAt,
   });
   const { service } = harness(

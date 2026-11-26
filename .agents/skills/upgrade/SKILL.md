@@ -100,7 +100,7 @@ f="$(find data/files -type f -not -path 'data/files/tmp/*' | tail -1)"
 ssh root@backup-host ls -l "/data/backup/orbit-pg-archive-files/${f#data/files/}"
 ```
 
-With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_DOCUMENTS_BACKEND=s3`, the last two have nothing to show: see the backup and restore runbook, `docs/postgres-backup-restore.md`, "Attachment files".
+With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_DRIVE_BACKEND=s3`, the last two have nothing to show: see the backup and restore runbook, `docs/postgres-backup-restore.md`, "Attachment files".
 
 ## Two-stage release
 

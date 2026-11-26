@@ -22,7 +22,7 @@ export type ReferenceKind = 'list' | 'task' | 'drive';
 export interface PickedReference {
   kind: ReferenceKind;
   id: string;
-  /** A drive file's `/home/orbit/Documents/…` path: what is sent in place of its chip. */
+  /** A drive file's `/home/orbit/Drive/…` path: what is sent in place of its chip. */
   path?: string;
 }
 
@@ -117,7 +117,7 @@ export function materializeReferences(text: string, refs: ReferenceMap): string 
     // expands it (it matches on the URI), but the user's own bubble renders the markdown, so the
     // broken link puts a raw uuid in front of the person who never typed one.
     const label = token.replace(/[[\]]/g, '\\$&');
-    return `[${label}](orbit-${ref.kind === 'drive' ? 'document' : ref.kind}:${ref.id})`;
+    return `[${label}](orbit-${ref.kind}:${ref.id})`;
   });
 }
 

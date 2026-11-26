@@ -306,9 +306,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// the English the engine got (or, while held, the same words). Nil on every message translation
     /// was not involved in.
     public var translation: TurnTranslation?
-    /// The session's opening prompt, while it is the accepted head no runner has echoed yet
-    /// (`QueuedTurnInfo.opening`). The server keeps it, so the held tag offers no Cancel under it
-    /// (`HeldCancel.offers`). False on every other message.
+    /// The session's opening prompt, while no runner has echoed it yet (`QueuedTurnInfo.opening`).
+    /// The server keeps it, so neither the held tag (`HeldCancel.offers`) nor a failed translation's
+    /// line (`SessionTranslation.offersCancel`) offers Cancel under it. False on every other message.
     public var opening: Bool = false
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
@@ -543,7 +543,7 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// `AssistantBubble.ts` is kept: a receipt arrives from a read rather than from the stream and
     /// is placed by comparing clocks.
     public var ts: String?
-    /// The runner's clock on the `tool_result`: with `ts`, how long a Documents transfer took (`DocumentsTransfer`).
+    /// The runner's clock on the `tool_result`: with `ts`, how long a Drive transfer took (`DriveTransfer`).
     public var resultTs: String?
 
     public init(id: String, name: String, input: JSONValue, result: String?,

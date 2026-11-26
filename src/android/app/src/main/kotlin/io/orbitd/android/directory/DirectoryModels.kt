@@ -100,6 +100,12 @@ data class DirectorySession(
     val queuedHeldByJobs: Int? = null,
     /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
     val queuedRunnerUpdate: JsonElement? = null,
+    /** Beside a capacity gate: whether Run now can start this queued message over the limit, and the server's sentence where it
+     *  cannot. False and null on any other row, and from an older server. */
+    val runNowAvailable: Boolean? = null, val runNowRefusal: String? = null,
+    /** On a turn started over its runner's limit, while it runs: `{active, limit, runnerName}`, kept as the JSON it came as and
+     *  read by [RunningOverLimit.of]. */
+    val runningOverLimit: JsonElement? = null,
     val runSource: String? = null,
     /** When the session last changed for its owner, the order the Open list keeps (contracts/session-list-order.fixtures.json). Unlike
      *  [lastTurnAt] it does not move with streamed text or background output. Null from an older server: the row reads as [createdAt]. */
@@ -149,7 +155,10 @@ data class SessionProjectMembership(val projectId: String, val projectTitle: Str
 @Serializable
 data class SearchHit(val id: String, val title: String, val status: String = "UNKNOWN",
     val runState: String? = null, val lifecycleState: String? = null,
-    val agent: WorkspaceRef? = null, val snippet: String? = null, val matchField: String = "message")
+    val agent: WorkspaceRef? = null, val snippet: String? = null, val matchField: String = "message",
+    /** The session facts and the Background mark's inputs, as [DirectorySession] reads them; all null from an older server. */
+    val phase: String? = null, val released: Boolean? = null, val lastTurnOutcome: String? = null, val waitingOn: String? = null,
+    val endReason: String? = null, val workFinished: Boolean? = null, val activity: String? = null, val runningBgCount: Int? = null)
 @Serializable
 data class SearchResults(val q: String = "", val contentSearched: Boolean = false,
     val hits: List<SearchHit> = emptyList(), val total: Int? = null)

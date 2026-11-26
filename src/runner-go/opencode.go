@@ -59,6 +59,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 	// The generation's inbox: what fetches its turns, and the turnIds already taken on, which a
 	// redelivery of one is dropped against for the generation's whole life.
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCh := make(chan openCodeInboxResult, 16)
 	go func() {
@@ -522,7 +523,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 	if err != nil {
 		return failedOpenCodeSpawn("stderr", err, emit)
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		if ctx.Err() != nil {
 			return cancelledOpenCodeTurn(ctx, result.RuntimeSessionID)
 		}
@@ -893,7 +894,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 	}
 	appendPrompt := strings.TrimSpace(strings.Join(nonEmptyStrings(
 		job.appendSystemPrompt(),
-		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent), job.workflowsOn()),
+		compose(job.sessionShape(executable), openCodeProfile).System,
 	), "\n\n"))
 	if appendPrompt != "" {
 		instructionsPath := filepath.Join(scratchDir, "opencode-instructions.txt")
@@ -983,10 +984,6 @@ func nonEmptyStrings(values ...string) []string {
 		}
 	}
 	return out
-}
-
-func openCodeOrbitCLIInstructions(executable string, insideRecordedWork, watches, delegates, workflows bool) string {
-	return strings.Replace(orbitCLIInstructions(executable, insideRecordedWork, watches, delegates, workflows), "mcp__orbit__*", "orbit_*", 1)
 }
 
 func appendConfigString(value interface{}, addition string) []string {
@@ -1101,7 +1098,7 @@ func applyOpenCodePermissions(permission map[string]interface{}, agent AgentExec
 		permission["bash"] = "ask"
 	}
 
-	// The Documents drive is a workspace root: outside the checkout, so its external-directory check is told. Plan
+	// The drive is a workspace root: outside the checkout, so its external-directory check is told. Plan
 	// keeps its denial of every edit above, so there the drive is only read (design §7.2).
 	if guarded {
 		if roots := driveGrantRoots(); len(roots) > 0 {

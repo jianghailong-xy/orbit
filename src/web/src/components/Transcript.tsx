@@ -630,7 +630,7 @@ type ToolNode = {
   // `seq` is the *result* event's own seq (≠ the call's), which is what refetches its content.
   result?: { content: any; isError?: boolean; seq: number; truncated?: boolean; ts?: string };
   children: Node[];
-  // When the call was made; with the result's, how long a drive transfer took (DocumentsTransferCard).
+  // When the call was made; with the result's, how long a drive transfer took (DriveTransferCard).
   ts?: string;
 };
 type TextNode = {
@@ -2163,7 +2163,7 @@ export interface TranscriptInsert {
 type NodeListItem =
   | { kind: 'node'; node: Node }
   | { kind: 'steps'; key: string; nodes: Node[] }
-  | { kind: 'drive'; key: string; transfer: DocumentsTransferKind; nodes: ToolNode[] };
+  | { kind: 'drive'; key: string; transfer: DriveTransferKind; nodes: ToolNode[] };
 
 function NodeList({
   nodes,
@@ -2192,7 +2192,7 @@ function NodeList({
       item.kind === 'steps' ? (
         <StepsLine key={item.key} nodes={item.nodes} live={live} />
       ) : item.kind === 'drive' ? (
-        <DocumentsTransferItem key={item.key} transfer={item.transfer} nodes={item.nodes} live={!!live} />
+        <DriveTransferItem key={item.key} transfer={item.transfer} nodes={item.nodes} live={!!live} />
       ) : (
         <NodeView key={item.node.seq} node={item.node} live={live} />
       ),
@@ -2417,9 +2417,9 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
     run = [];
   };
   for (const node of nodes) {
-    // An agent's documents_put or documents_get calls (drive_put / drive_get before the rename) are one transfer card, which only thinking may sit inside: the thinking
+    // An agent's drive_put or drive_get calls (documents_put / documents_get while Drive was called Documents) are one transfer card, which only thinking may sit inside: the thinking
     // is drawn under the card, so the calls stay together.
-    const transfer = node.kind === 'tool' && node.children.length === 0 ? documentsTransferKind(node.name) : null;
+    const transfer = node.kind === 'tool' && node.children.length === 0 ? driveTransferKind(node.name) : null;
     if (transfer) {
       const last = out[out.length - 1];
       if (last?.kind === 'drive' && last.transfer === transfer && run.every((n) => n.kind === 'thinking')) {
@@ -2442,10 +2442,10 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
 }
 
 /** A run of drive calls as its transfer card: each call's file from its input, its result, or its live byte count. */
-function DocumentsTransferItem({ transfer, nodes, live }: { transfer: DocumentsTransferKind; nodes: ToolNode[]; live: boolean }) {
+function DriveTransferItem({ transfer, nodes, live }: { transfer: DriveTransferKind; nodes: ToolNode[]; live: boolean }) {
   const outputs = useContext(LiveToolOutputsCtx);
   const files = nodes.map((node) =>
-    documentsTransferFile({
+    driveTransferFile({
       id: node.id || String(node.seq),
       toolInput: node.input,
       result: node.result && { text: resultText(node.result.content), isError: node.result.isError },
@@ -2455,7 +2455,7 @@ function DocumentsTransferItem({ transfer, nodes, live }: { transfer: DocumentsT
       resultTs: node.result?.ts,
     }),
   );
-  return <DocumentsTransferCard kind={transfer} files={files} live={live} />;
+  return <DriveTransferCard kind={transfer} files={files} live={live} />;
 }
 
 // Calls that render as their own card — an approval, a plan, a spawned child session, a
@@ -2481,7 +2481,7 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__project_create' &&
     !isBackgroundTaskCall(node.name) &&
     node.name !== BG_RUN_TOOL &&
-    node.name !== DOCUMENTS_SYNC_TOOL &&
+    !isDriveSyncTool(node.name) &&
     !ownerChatReplyOf(node)
   );
 }
@@ -3212,7 +3212,8 @@ export interface CursorQuotaHelp {
 }
 
 export interface AutoRetryHelp {
-  /** Session's provider slug, for naming whose quota ran out / whose API failed. */
+  /** Session's provider by its display name ("Qwen (Model Studio)", "Claude Code"), for naming whose quota ran
+   *  out / whose API failed. */
   provider: string;
   /** Set for a session on Cursor CLI (CursorQuotaHelp). */
   cursor?: CursorQuotaHelp | null;
@@ -4152,12 +4153,12 @@ function CodeBlock({ children }: any) {
   );
 }
 
-import { DocumentsFileCard, documentsIdFromHref } from './documents/DocumentsFileCard';
-import { DocumentsTransferCard } from './documents/DocumentsTransferCard';
-import { DocumentsSyncCard } from './documents/DocumentsSyncCard';
-import { DOCUMENTS_SYNC_TOOL, documentsSyncIdOf } from '../lib/documentsSyncs';
-import { documentsTransferFile, documentsTransferKind, type DocumentsTransferKind } from '../lib/documentsTransfer';
-import { useDocumentsSaidOff } from '../lib/documentsSwitch';
+import { DriveFileCard, driveIdFromHref } from './drive/DriveFileCard';
+import { DriveTransferCard } from './drive/DriveTransferCard';
+import { DriveSyncCard } from './drive/DriveSyncCard';
+import { driveSyncIdOf, isDriveSyncTool } from '../lib/driveSyncs';
+import { driveTransferFile, driveTransferKind, type DriveTransferKind } from '../lib/driveTransfer';
+import { useDriveSaidOff } from '../lib/driveSwitch';
 
 const ORBIT_ATTACHMENT_PREFIX = 'orbit-attachment:';
 
@@ -4179,7 +4180,7 @@ function attachmentIdFromSrc(src: unknown): string | null {
 function transcriptUrlTransform(url: string): string {
   const trimmed = url.trim();
   if (trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX)) return trimmed;
-  if (documentsIdFromHref(trimmed)) return trimmed;
+  if (driveIdFromHref(trimmed)) return trimmed;
   return referenceUrlTransform(url);
 }
 
@@ -4238,9 +4239,9 @@ function fileLabel(src: string): string {
 }
 
 function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }: any) {
-  const documentsOff = useDocumentsSaidOff();
-  const documentsId = !documentsOff ? documentsIdFromHref(src) : null;
-  if (documentsId) return <DocumentsFileCard id={documentsId} label={typeof alt === 'string' ? alt : undefined} />;
+  const driveOff = useDriveSaidOff();
+  const driveId = !driveOff ? driveIdFromHref(src) : null;
+  if (driveId) return <DriveFileCard id={driveId} label={typeof alt === 'string' ? alt : undefined} />;
   const id = attachmentIdFromSrc(src);
   if (id) {
     return (
@@ -4376,9 +4377,9 @@ function nodeText(node: ReactNode): string {
 
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   const exp = useContext(ExportCtx);
-  const documentsOff = useDocumentsSaidOff();
-  const documentsId = !documentsOff ? documentsIdFromHref(href) : null;
-  if (documentsId) return <DocumentsFileCard id={documentsId} label={nodeText(children).trim() || undefined} />;
+  const driveOff = useDriveSaidOff();
+  const driveId = !driveOff ? driveIdFromHref(href) : null;
+  if (driveId) return <DriveFileCard id={driveId} label={nodeText(children).trim() || undefined} />;
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
@@ -4949,11 +4950,11 @@ function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; s
       return <JobCard seq={node.seq} input={input} jobId={receipt?.jobId ?? null} startedAt={receipt?.startedAt ?? null} live={live} />;
     }
   }
-  // A documents_sync call is its sync's card once its answer names the sync; an older runner's answer names none and
-  // stays a call (board docs/mocks/documents-sync-card).
-  if (node.name === DOCUMENTS_SYNC_TOOL && node.result && !node.result.isError) {
-    const syncId = documentsSyncIdOf(resultText(resultContent));
-    if (syncId) return <DocumentsSyncCard syncId={syncId} />;
+  // A drive_sync (or documents_sync) call is its sync's card once its answer names the sync; an older runner's answer
+  // names none and stays a call (board docs/mocks/drive-sync-card).
+  if (isDriveSyncTool(node.name) && node.result && !node.result.isError) {
+    const syncId = driveSyncIdOf(resultText(resultContent));
+    if (syncId) return <DriveSyncCard syncId={syncId} />;
   }
   if (node.name === 'mcp__orbit__session_create' && node.result && !node.result.isError) {
     // Nothing to render until the untrimmed result lands (see needsWholeResult).

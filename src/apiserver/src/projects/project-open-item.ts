@@ -43,6 +43,7 @@ import {
 } from './open-item-doors';
 import type { PrismaService } from '../prisma/prisma.service';
 import { LANDING_FIX_TURN_KEY_PREFIX } from '../sessions/landing-fix-turn-key';
+import { TURN_STATE_SELECT } from '../sessions/session-turn-state';
 import { runLastWords } from './run-last-words';
 
 /** Nest token for the post-commit delivery edge, kept structural to avoid a service import cycle. */
@@ -798,8 +799,7 @@ const BLOCKING_TASKS_NAMED = 5;
 
 /** The columns "has this conversation ended" is decided from. */
 export const SESSION_ENDING_SELECT = {
-  status: true,
-  finishedAt: true,
+  ...TURN_STATE_SELECT,
   endReason: true,
   lastTurnOutcome: true,
   completedAt: true,
@@ -811,6 +811,8 @@ export const SESSION_ENDING_SELECT = {
 export interface SessionEnding {
   status: string;
   finishedAt: Date | null;
+  /** Read through turnStateOf (sessions/session-turn-state.ts); a row without it reads its stored word. */
+  turnState?: string | null;
   endReason: string | null;
   lastTurnOutcome: string | null;
   completedAt: Date | null;

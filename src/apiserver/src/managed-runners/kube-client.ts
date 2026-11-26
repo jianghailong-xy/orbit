@@ -94,6 +94,8 @@ export interface Pod {
     phase?: string;
     startTime?: string;
     reason?: string;
+    /** The kubelet's sentence beside `reason`, as for an eviction: which resource ran out. */
+    message?: string;
     conditions?: PodCondition[];
     initContainerStatuses?: PodContainerStatus[];
     containerStatuses?: PodContainerStatus[];
@@ -178,7 +180,7 @@ export interface ManagedKubeClient {
   readonly secrets: KubeResource<Secret>;
   /**
    * The Secrets of the profile's files namespace (`files.namespace`), where the manager writes each generation's
-   * mount credential for the Documents CSI plugin; absent when the profile has no drive.
+   * mount credential for the Drive CSI plugin; absent when the profile has no drive.
    */
   readonly driveSecrets?: Pick<KubeResource<Secret>, 'get' | 'create' | 'delete'>;
   readonly pods: KubePods;

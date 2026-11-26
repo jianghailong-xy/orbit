@@ -69,6 +69,7 @@ export function HelpQuestionsPage() {
               key={row.sessionId}
               type="button"
               className="help-questions-row"
+              data-row-focus=""
               data-help-question={row.sessionId}
               onClick={() => navigate(`/help/questions/${row.sessionId}`)}
             >

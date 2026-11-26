@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 567 |
+| `user` | 569 |
 | `admin` | 31 |
-| `runner` | 253 |
+| `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **896** |
+| **Total** | **904** |
 
 ## Public routes
 
@@ -95,8 +95,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/auth/methods` | — | `AuthController.methods` |
 | `POST` | `/api/auth/refresh` | body `RefreshDto` | `AuthController.refresh` |
 | `GET` | `/api/auth/setup-status` | — | `AuthController.setupStatus` |
-| `GET` | `/api/documents/dl/:token` | path `token` | `DocumentsDownloadController.open` |
-| `GET` | `/api/drive/dl/:token` | path `token` | `DocumentsDownloadController.open` |
+| `GET` | `/api/documents/dl/:token` | path `token` | `DriveDownloadController.open` |
+| `GET` | `/api/drive/dl/:token` | path `token` | `DriveDownloadController.open` |
 | `ALL` | `/api/gw/anthropic` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/anthropic/{*path}` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
@@ -172,64 +172,64 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/auth/google/link` | body `GoogleLinkDto` | `GoogleAuthController.link` |
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
 | `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
-| `GET` | `/api/documents/changes` | query `since` | `DocumentsController.changes` |
-| `GET` | `/api/documents/entries` | query `cursor`, `limit`, `parentId` | `DocumentsController.list` |
-| `DELETE` | `/api/documents/entries/:id` | path `id` | `DocumentsController.moveToTrash` |
-| `GET` | `/api/documents/entries/:id` | path `id` | `DocumentsController.get` |
-| `PATCH` | `/api/documents/entries/:id` | body `UpdateDocumentsEntryDto`; path `id` | `DocumentsController.update` |
-| `GET` | `/api/documents/entries/:id/content` | path `id` | `DocumentsController.download` |
-| `POST` | `/api/documents/entries/:id/download-link` | body `DocumentsDownloadLinkDto`; path `id` | `DocumentsController.downloadLink` |
-| `POST` | `/api/documents/entries/:id/share-check` | path `id` | `DocumentsController.shareCheck` |
-| `GET` | `/api/documents/entries/:id/versions` | path `id` | `DocumentsController.versions` |
-| `POST` | `/api/documents/folders` | body `CreateDocumentsFolderDto` | `DocumentsController.createFolder` |
-| `GET` | `/api/documents/resolve` | query `path` | `DocumentsController.resolve` |
-| `GET` | `/api/documents/search` | query `cursor`, `limit`, `q` | `DocumentsController.search` |
-| `GET` | `/api/documents/syncs` | — | `DocumentsController.listSyncs` |
-| `GET` | `/api/documents/syncs/:id` | path `id` | `DocumentsController.getSync` |
-| `DELETE` | `/api/documents/trash` | — | `DocumentsController.emptyTrash` |
-| `GET` | `/api/documents/trash` | query `cursor`, `limit` | `DocumentsController.trash` |
-| `DELETE` | `/api/documents/trash/groups/:id` | path `id` | `DocumentsController.deleteGroup` |
-| `GET` | `/api/documents/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DocumentsController.trashGroup` |
-| `POST` | `/api/documents/trash/groups/:id/items/:entryId/restore` | path `entryId`, `id` | `DocumentsController.restoreItem` |
-| `POST` | `/api/documents/trash/groups/:id/restore` | path `id` | `DocumentsController.restoreGroup` |
-| `POST` | `/api/documents/uploads` | body `OpenDocumentsUploadDto` | `DocumentsController.openUpload` |
-| `DELETE` | `/api/documents/uploads/:id` | path `id` | `DocumentsController.abandonUpload` |
-| `GET` | `/api/documents/uploads/:id` | path `id` | `DocumentsController.uploadStatus` |
-| `PUT` | `/api/documents/uploads/:id/chunks/:idx` | path `id`, `idx` | `DocumentsController.putChunk` |
-| `POST` | `/api/documents/uploads/:id/complete` | path `id` | `DocumentsController.completeUpload` |
-| `GET` | `/api/documents/usage` | — | `DocumentsController.usage` |
-| `DELETE` | `/api/documents/versions/:id` | path `id` | `DocumentsController.deleteVersion` |
-| `GET` | `/api/documents/versions/:id/content` | path `id` | `DocumentsController.downloadVersion` |
-| `POST` | `/api/documents/versions/:id/restore` | body `RestoreDocumentsVersionDto`; path `id` | `DocumentsController.restoreVersion` |
-| `GET` | `/api/drive/changes` | query `since` | `DocumentsController.changes` |
-| `GET` | `/api/drive/entries` | query `cursor`, `limit`, `parentId` | `DocumentsController.list` |
-| `DELETE` | `/api/drive/entries/:id` | path `id` | `DocumentsController.moveToTrash` |
-| `GET` | `/api/drive/entries/:id` | path `id` | `DocumentsController.get` |
-| `PATCH` | `/api/drive/entries/:id` | body `UpdateDocumentsEntryDto`; path `id` | `DocumentsController.update` |
-| `GET` | `/api/drive/entries/:id/content` | path `id` | `DocumentsController.download` |
-| `POST` | `/api/drive/entries/:id/download-link` | body `DocumentsDownloadLinkDto`; path `id` | `DocumentsController.downloadLink` |
-| `POST` | `/api/drive/entries/:id/share-check` | path `id` | `DocumentsController.shareCheck` |
-| `GET` | `/api/drive/entries/:id/versions` | path `id` | `DocumentsController.versions` |
-| `POST` | `/api/drive/folders` | body `CreateDocumentsFolderDto` | `DocumentsController.createFolder` |
-| `GET` | `/api/drive/resolve` | query `path` | `DocumentsController.resolve` |
-| `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DocumentsController.search` |
-| `GET` | `/api/drive/syncs` | — | `DocumentsController.listSyncs` |
-| `GET` | `/api/drive/syncs/:id` | path `id` | `DocumentsController.getSync` |
-| `DELETE` | `/api/drive/trash` | — | `DocumentsController.emptyTrash` |
-| `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DocumentsController.trash` |
-| `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DocumentsController.deleteGroup` |
-| `GET` | `/api/drive/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DocumentsController.trashGroup` |
-| `POST` | `/api/drive/trash/groups/:id/items/:entryId/restore` | path `entryId`, `id` | `DocumentsController.restoreItem` |
-| `POST` | `/api/drive/trash/groups/:id/restore` | path `id` | `DocumentsController.restoreGroup` |
-| `POST` | `/api/drive/uploads` | body `OpenDocumentsUploadDto` | `DocumentsController.openUpload` |
-| `DELETE` | `/api/drive/uploads/:id` | path `id` | `DocumentsController.abandonUpload` |
-| `GET` | `/api/drive/uploads/:id` | path `id` | `DocumentsController.uploadStatus` |
-| `PUT` | `/api/drive/uploads/:id/chunks/:idx` | path `id`, `idx` | `DocumentsController.putChunk` |
-| `POST` | `/api/drive/uploads/:id/complete` | path `id` | `DocumentsController.completeUpload` |
-| `GET` | `/api/drive/usage` | — | `DocumentsController.usage` |
-| `DELETE` | `/api/drive/versions/:id` | path `id` | `DocumentsController.deleteVersion` |
-| `GET` | `/api/drive/versions/:id/content` | path `id` | `DocumentsController.downloadVersion` |
-| `POST` | `/api/drive/versions/:id/restore` | body `RestoreDocumentsVersionDto`; path `id` | `DocumentsController.restoreVersion` |
+| `GET` | `/api/documents/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/documents/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
+| `DELETE` | `/api/documents/entries/:id` | path `id` | `DriveController.moveToTrash` |
+| `GET` | `/api/documents/entries/:id` | path `id` | `DriveController.get` |
+| `PATCH` | `/api/documents/entries/:id` | body `UpdateDriveEntryDto`; path `id` | `DriveController.update` |
+| `GET` | `/api/documents/entries/:id/content` | path `id` | `DriveController.download` |
+| `POST` | `/api/documents/entries/:id/download-link` | body `DriveDownloadLinkDto`; path `id` | `DriveController.downloadLink` |
+| `POST` | `/api/documents/entries/:id/share-check` | path `id` | `DriveController.shareCheck` |
+| `GET` | `/api/documents/entries/:id/versions` | path `id` | `DriveController.versions` |
+| `POST` | `/api/documents/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
+| `GET` | `/api/documents/resolve` | query `path` | `DriveController.resolve` |
+| `GET` | `/api/documents/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
+| `GET` | `/api/documents/syncs` | — | `DriveController.listSyncs` |
+| `GET` | `/api/documents/syncs/:id` | path `id` | `DriveController.getSync` |
+| `DELETE` | `/api/documents/trash` | — | `DriveController.emptyTrash` |
+| `GET` | `/api/documents/trash` | query `cursor`, `limit` | `DriveController.trash` |
+| `DELETE` | `/api/documents/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
+| `GET` | `/api/documents/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DriveController.trashGroup` |
+| `POST` | `/api/documents/trash/groups/:id/items/:entryId/restore` | path `entryId`, `id` | `DriveController.restoreItem` |
+| `POST` | `/api/documents/trash/groups/:id/restore` | path `id` | `DriveController.restoreGroup` |
+| `POST` | `/api/documents/uploads` | body `OpenDriveUploadDto` | `DriveController.openUpload` |
+| `DELETE` | `/api/documents/uploads/:id` | path `id` | `DriveController.abandonUpload` |
+| `GET` | `/api/documents/uploads/:id` | path `id` | `DriveController.uploadStatus` |
+| `PUT` | `/api/documents/uploads/:id/chunks/:idx` | path `id`, `idx` | `DriveController.putChunk` |
+| `POST` | `/api/documents/uploads/:id/complete` | path `id` | `DriveController.completeUpload` |
+| `GET` | `/api/documents/usage` | — | `DriveController.usage` |
+| `DELETE` | `/api/documents/versions/:id` | path `id` | `DriveController.deleteVersion` |
+| `GET` | `/api/documents/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
+| `POST` | `/api/documents/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
+| `GET` | `/api/drive/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/drive/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
+| `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
+| `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
+| `PATCH` | `/api/drive/entries/:id` | body `UpdateDriveEntryDto`; path `id` | `DriveController.update` |
+| `GET` | `/api/drive/entries/:id/content` | path `id` | `DriveController.download` |
+| `POST` | `/api/drive/entries/:id/download-link` | body `DriveDownloadLinkDto`; path `id` | `DriveController.downloadLink` |
+| `POST` | `/api/drive/entries/:id/share-check` | path `id` | `DriveController.shareCheck` |
+| `GET` | `/api/drive/entries/:id/versions` | path `id` | `DriveController.versions` |
+| `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
+| `GET` | `/api/drive/resolve` | query `path` | `DriveController.resolve` |
+| `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
+| `GET` | `/api/drive/syncs` | — | `DriveController.listSyncs` |
+| `GET` | `/api/drive/syncs/:id` | path `id` | `DriveController.getSync` |
+| `DELETE` | `/api/drive/trash` | — | `DriveController.emptyTrash` |
+| `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
+| `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
+| `GET` | `/api/drive/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DriveController.trashGroup` |
+| `POST` | `/api/drive/trash/groups/:id/items/:entryId/restore` | path `entryId`, `id` | `DriveController.restoreItem` |
+| `POST` | `/api/drive/trash/groups/:id/restore` | path `id` | `DriveController.restoreGroup` |
+| `POST` | `/api/drive/uploads` | body `OpenDriveUploadDto` | `DriveController.openUpload` |
+| `DELETE` | `/api/drive/uploads/:id` | path `id` | `DriveController.abandonUpload` |
+| `GET` | `/api/drive/uploads/:id` | path `id` | `DriveController.uploadStatus` |
+| `PUT` | `/api/drive/uploads/:id/chunks/:idx` | path `id`, `idx` | `DriveController.putChunk` |
+| `POST` | `/api/drive/uploads/:id/complete` | path `id` | `DriveController.completeUpload` |
+| `GET` | `/api/drive/usage` | — | `DriveController.usage` |
+| `DELETE` | `/api/drive/versions/:id` | path `id` | `DriveController.deleteVersion` |
+| `GET` | `/api/drive/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
+| `POST` | `/api/drive/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
 | `GET` | `/api/guest-sessions/:id` | path `id`; query `limit`, `maxPayload` | `GuestSessionsController.get` |
@@ -397,6 +397,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/providers/test` | body `TestModelProviderDto` | `ProvidersController.test` |
 | `POST` | `/api/push/register` | body `RegisterDeviceTokenDto` | `PushController.register` |
 | `POST` | `/api/push/unregister` | body `UnregisterDeviceTokenDto` | `PushController.unregister` |
+| `GET` | `/api/push/web-config` | — | `PushController.webConfig` |
 | `GET` | `/api/runners` | — | `RunnersController.list` |
 | `DELETE` | `/api/runners/:id` | path `id` | `RunnersController.remove` |
 | `GET` | `/api/runners/:id` | path `id` | `RunnersController.get` |
@@ -455,6 +456,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/schedules/:id/change` | path `id` | `SchedulesController.change` |
 | `POST` | `/api/schedules/:id/change` | body `ScheduleChangeDto`; path `id` | `SchedulesController.openChange` |
 | `POST` | `/api/schedules/:id/pause` | path `id` | `SchedulesController.pause` |
+| `POST` | `/api/schedules/:id/rename` | body `ScheduleRenameDto`; path `id` | `SchedulesController.rename` |
 | `POST` | `/api/schedules/:id/resume` | path `id` | `SchedulesController.resume` |
 | `POST` | `/api/schedules/:id/run` | path `id` | `SchedulesController.runNow` |
 | `GET` | `/api/schedules/:id/runs` | path `id`; query `before`, `limit` | `SchedulesController.listRuns` |
@@ -756,44 +758,48 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/cursor-key-check-result` | body `CursorKeyCheckResultDto` | `RunnerApiController.cursorKeyCheckResult` |
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |
 | `POST` | `/api/runner/dir-probe-result` | body `Object` | `RunnerApiController.dirProbeResult` |
-| `GET` | `/api/runner/documents/changes` | query `since`, `wait` | `RunnerDocumentsController.changes` |
-| `GET` | `/api/runner/documents/chunks/:sha256` | path `sha256` | `RunnerDocumentsController.chunk` |
-| `POST` | `/api/runner/documents/commit` | body `RunnerDocumentsCommitDto` | `RunnerDocumentsController.commit` |
-| `GET` | `/api/runner/documents/commits/:commitId` | path `commitId` | `RunnerDocumentsController.commitStatus` |
-| `POST` | `/api/runner/documents/create` | body `RunnerDocumentsCreateDto` | `RunnerDocumentsController.create` |
-| `POST` | `/api/runner/documents/delete` | body `RunnerDocumentsDeleteDto` | `RunnerDocumentsController.remove` |
-| `GET` | `/api/runner/documents/list` | query `cursor`, `id`, `limit`, `path` | `RunnerDocumentsController.list` |
-| `GET` | `/api/runner/documents/manifest` | query `id`, `path` | `RunnerDocumentsController.manifest` |
-| `POST` | `/api/runner/documents/mkdir` | body `RunnerDocumentsMkdirDto` | `RunnerDocumentsController.mkdir` |
-| `POST` | `/api/runner/documents/rename` | body `RunnerDocumentsRenameDto` | `RunnerDocumentsController.rename` |
-| `POST` | `/api/runner/documents/stagings` | body `RunnerDocumentsStagingDto` | `RunnerDocumentsController.openStaging` |
-| `GET` | `/api/runner/documents/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDocumentsController.readChunk` |
-| `PUT` | `/api/runner/documents/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDocumentsController.putChunk` |
-| `POST` | `/api/runner/documents/stagings/:id/keepalive` | body `RunnerDocumentsKeepaliveDto`; path `id` | `RunnerDocumentsController.keepalive` |
-| `GET` | `/api/runner/documents/stat` | query `id`, `path` | `RunnerDocumentsController.stat` |
-| `POST` | `/api/runner/documents/syncs` | body `RunnerDocumentsSyncOpenDto` | `RunnerDocumentsSyncsController.open` |
-| `PATCH` | `/api/runner/documents/syncs/:id` | body `RunnerDocumentsSyncReportDto`; path `id` | `RunnerDocumentsSyncsController.report` |
-| `GET` | `/api/runner/documents/usage` | — | `RunnerDocumentsController.usage` |
-| `POST` | `/api/runner/documents/utimens` | body `RunnerDocumentsUtimensDto` | `RunnerDocumentsController.utimens` |
-| `GET` | `/api/runner/drive/changes` | query `since`, `wait` | `RunnerDocumentsController.changes` |
-| `GET` | `/api/runner/drive/chunks/:sha256` | path `sha256` | `RunnerDocumentsController.chunk` |
-| `POST` | `/api/runner/drive/commit` | body `RunnerDocumentsCommitDto` | `RunnerDocumentsController.commit` |
-| `GET` | `/api/runner/drive/commits/:commitId` | path `commitId` | `RunnerDocumentsController.commitStatus` |
-| `POST` | `/api/runner/drive/create` | body `RunnerDocumentsCreateDto` | `RunnerDocumentsController.create` |
-| `POST` | `/api/runner/drive/delete` | body `RunnerDocumentsDeleteDto` | `RunnerDocumentsController.remove` |
-| `GET` | `/api/runner/drive/list` | query `cursor`, `id`, `limit`, `path` | `RunnerDocumentsController.list` |
-| `GET` | `/api/runner/drive/manifest` | query `id`, `path` | `RunnerDocumentsController.manifest` |
-| `POST` | `/api/runner/drive/mkdir` | body `RunnerDocumentsMkdirDto` | `RunnerDocumentsController.mkdir` |
-| `POST` | `/api/runner/drive/rename` | body `RunnerDocumentsRenameDto` | `RunnerDocumentsController.rename` |
-| `POST` | `/api/runner/drive/stagings` | body `RunnerDocumentsStagingDto` | `RunnerDocumentsController.openStaging` |
-| `GET` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDocumentsController.readChunk` |
-| `PUT` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDocumentsController.putChunk` |
-| `POST` | `/api/runner/drive/stagings/:id/keepalive` | body `RunnerDocumentsKeepaliveDto`; path `id` | `RunnerDocumentsController.keepalive` |
-| `GET` | `/api/runner/drive/stat` | query `id`, `path` | `RunnerDocumentsController.stat` |
-| `POST` | `/api/runner/drive/syncs` | body `RunnerDocumentsSyncOpenDto` | `RunnerDocumentsSyncsController.open` |
-| `PATCH` | `/api/runner/drive/syncs/:id` | body `RunnerDocumentsSyncReportDto`; path `id` | `RunnerDocumentsSyncsController.report` |
-| `GET` | `/api/runner/drive/usage` | — | `RunnerDocumentsController.usage` |
-| `POST` | `/api/runner/drive/utimens` | body `RunnerDocumentsUtimensDto` | `RunnerDocumentsController.utimens` |
+| `POST` | `/api/runner/documents/batch` | body `RunnerDriveBatchDto` | `RunnerDriveController.batch` |
+| `GET` | `/api/runner/documents/changes` | query `since`, `wait` | `RunnerDriveController.changes` |
+| `GET` | `/api/runner/documents/chunks/:sha256` | path `sha256` | `RunnerDriveController.chunk` |
+| `POST` | `/api/runner/documents/chunks/held` | body `RunnerDriveHeldDto` | `RunnerDriveController.held` |
+| `POST` | `/api/runner/documents/commit` | body `RunnerDriveCommitDto` | `RunnerDriveController.commit` |
+| `GET` | `/api/runner/documents/commits/:commitId` | path `commitId` | `RunnerDriveController.commitStatus` |
+| `POST` | `/api/runner/documents/create` | body `RunnerDriveCreateDto` | `RunnerDriveController.create` |
+| `POST` | `/api/runner/documents/delete` | body `RunnerDriveDeleteDto` | `RunnerDriveController.remove` |
+| `GET` | `/api/runner/documents/list` | query `cursor`, `id`, `limit`, `path` | `RunnerDriveController.list` |
+| `GET` | `/api/runner/documents/manifest` | query `id`, `path` | `RunnerDriveController.manifest` |
+| `POST` | `/api/runner/documents/mkdir` | body `RunnerDriveMkdirDto` | `RunnerDriveController.mkdir` |
+| `POST` | `/api/runner/documents/rename` | body `RunnerDriveRenameDto` | `RunnerDriveController.rename` |
+| `POST` | `/api/runner/documents/stagings` | body `RunnerDriveStagingDto` | `RunnerDriveController.openStaging` |
+| `GET` | `/api/runner/documents/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.readChunk` |
+| `PUT` | `/api/runner/documents/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.putChunk` |
+| `POST` | `/api/runner/documents/stagings/:id/keepalive` | body `RunnerDriveKeepaliveDto`; path `id` | `RunnerDriveController.keepalive` |
+| `GET` | `/api/runner/documents/stat` | query `id`, `path` | `RunnerDriveController.stat` |
+| `POST` | `/api/runner/documents/syncs` | body `RunnerDriveSyncOpenDto` | `RunnerDriveSyncsController.open` |
+| `PATCH` | `/api/runner/documents/syncs/:id` | body `RunnerDriveSyncReportDto`; path `id` | `RunnerDriveSyncsController.report` |
+| `GET` | `/api/runner/documents/usage` | — | `RunnerDriveController.usage` |
+| `POST` | `/api/runner/documents/utimens` | body `RunnerDriveUtimensDto` | `RunnerDriveController.utimens` |
+| `POST` | `/api/runner/drive/batch` | body `RunnerDriveBatchDto` | `RunnerDriveController.batch` |
+| `GET` | `/api/runner/drive/changes` | query `since`, `wait` | `RunnerDriveController.changes` |
+| `GET` | `/api/runner/drive/chunks/:sha256` | path `sha256` | `RunnerDriveController.chunk` |
+| `POST` | `/api/runner/drive/chunks/held` | body `RunnerDriveHeldDto` | `RunnerDriveController.held` |
+| `POST` | `/api/runner/drive/commit` | body `RunnerDriveCommitDto` | `RunnerDriveController.commit` |
+| `GET` | `/api/runner/drive/commits/:commitId` | path `commitId` | `RunnerDriveController.commitStatus` |
+| `POST` | `/api/runner/drive/create` | body `RunnerDriveCreateDto` | `RunnerDriveController.create` |
+| `POST` | `/api/runner/drive/delete` | body `RunnerDriveDeleteDto` | `RunnerDriveController.remove` |
+| `GET` | `/api/runner/drive/list` | query `cursor`, `id`, `limit`, `path` | `RunnerDriveController.list` |
+| `GET` | `/api/runner/drive/manifest` | query `id`, `path` | `RunnerDriveController.manifest` |
+| `POST` | `/api/runner/drive/mkdir` | body `RunnerDriveMkdirDto` | `RunnerDriveController.mkdir` |
+| `POST` | `/api/runner/drive/rename` | body `RunnerDriveRenameDto` | `RunnerDriveController.rename` |
+| `POST` | `/api/runner/drive/stagings` | body `RunnerDriveStagingDto` | `RunnerDriveController.openStaging` |
+| `GET` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.readChunk` |
+| `PUT` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.putChunk` |
+| `POST` | `/api/runner/drive/stagings/:id/keepalive` | body `RunnerDriveKeepaliveDto`; path `id` | `RunnerDriveController.keepalive` |
+| `GET` | `/api/runner/drive/stat` | query `id`, `path` | `RunnerDriveController.stat` |
+| `POST` | `/api/runner/drive/syncs` | body `RunnerDriveSyncOpenDto` | `RunnerDriveSyncsController.open` |
+| `PATCH` | `/api/runner/drive/syncs/:id` | body `RunnerDriveSyncReportDto`; path `id` | `RunnerDriveSyncsController.report` |
+| `GET` | `/api/runner/drive/usage` | — | `RunnerDriveController.usage` |
+| `POST` | `/api/runner/drive/utimens` | body `RunnerDriveUtimensDto` | `RunnerDriveController.utimens` |
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |
 | `POST` | `/api/runner/git-credential` | body `RunnerGitCredentialDto` | `RunnerGitCredentialController.credential` |
 | `POST` | `/api/runner/heartbeat` | body `Object` | `RunnerApiController.heartbeat` |
@@ -895,7 +901,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.pin` |
 | `POST` | `/api/runner/sessions/:id/finalize` | body `Object`; path `id` | `RunnerApiController.finalize` |
 | `POST` | `/api/runner/sessions/:id/import-result` | body `Object`; path `id` | `RunnerApiController.importResult` |
-| `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
+| `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `draining`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
 | `POST` | `/api/runner/sessions/:id/interrupt` | body `Object`; path `id` | `RunnerSessionsController.interruptSession` |
 | `POST` | `/api/runner/sessions/:id/merge` | body `Object`; path `id` | `RunnerSessionsController.mergeSession` |
 | `GET` | `/api/runner/sessions/:id/merge-receipts` | path `id`; query `limit` | `RunnerSessionsController.listMergeReceipts` |
@@ -908,6 +914,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/sessions/:id/orchestration-credential` | path `id` | `RunnerApiController.refreshOrchestrationCredential` |
 | `POST` | `/api/runner/sessions/:id/release` | body `Object`; path `id` | `RunnerApiController.release` |
 | `POST` | `/api/runner/sessions/:id/release-leases` | body `Object`; path `id` | `RunnerApiController.releaseLeases` |
+| `POST` | `/api/runner/sessions/:id/return-slot` | body `Object`; path `id` | `RunnerApiController.returnSlot` |
 | `POST` | `/api/runner/sessions/:id/scheduled-wakeup` | body `ScheduledWakeupDto`; path `id` | `RunnerApiController.scheduledWakeup` |
 | `POST` | `/api/runner/sessions/:id/source/pin` | body `Object`; path `id` | `RunnerApiController.pinSessionSource` |
 | `POST` | `/api/runner/sessions/:id/subagents` | body `SubagentRunCreateDto`; path `id` | `RunnerSubagentsController.openSubagentRun` |
@@ -977,6 +984,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/wiki/drafts` | body `Object` | `RunnerWikiController.draft` |
 | `GET` | `/api/runner/wiki/entries/:id` | path `id`; query `include` | `RunnerWikiController.getEntry` |
 | `POST` | `/api/runner/wiki/notes` | body `WikiSessionNoteDto` | `RunnerWikiController.note` |
+| `GET` | `/api/runner/wiki/read` | query `doc`, `draft`, `more`, `q`, `section` | `RunnerWikiController.read` |
 | `POST` | `/api/runner/wiki/repo-ops/:id/fragments` | body `Object`; path `id` | `RunnerApiController.wikiRepoOpFragment` |
 | `POST` | `/api/runner/wiki/repo-ops/:id/progress` | body `Object`; path `id` | `RunnerApiController.wikiRepoOpProgress` |
 | `POST` | `/api/runner/wiki/repo-ops/:id/result` | body `Object`; path `id` | `RunnerApiController.wikiRepoOpResult` |

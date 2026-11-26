@@ -861,7 +861,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// this belongs to the flush and not to the engine's reader. The roots are this session's own
 	// directories; the memo keeps a retried batch, or a mock linked twice, from being uploaded
 	// again under a second id.
-	replyFiles := newReplyAttachmentIDs()
+	replyFiles := replyFilesOf(sessionID)
+	defer replyFileMemos.Delete(sessionID)
 	replyFileRoots := []string{execDir, uploadsDir(sessionID)}
 	// takeBuffered takes what is buffered, its reply files uploaded.
 	takeBuffered := func(flushCtx context.Context) []RunEvent {
@@ -998,7 +999,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		payload = runnerSecrets().scrubPayload(payload)
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
-		pool.engineTurnEvent(live, eventType, payload)
+		if pool.engineTurnEvent(live, eventType, payload) && t.returnHeldSlot != nil {
+			go t.returnHeldSlot(sessionID) // the engine's own turn ended under a claim held for the update
+		}
 		executing.observe(eventType, payload)
 		// A tool may have written to the volume (a commit, an edit): a managed runner syncs it
 		// behind the tool, in the background, without holding the stream up (volume_durability.go).
@@ -2017,6 +2020,11 @@ var builtinTaskTools = []string{
 	"TodoWrite", "TodoRead",
 }
 
+// builtinSubAgentTools are Claude's own sub-agent tool, under the two names it has had. They are disabled in a session
+// that is served Orbit's delegate (claude_spawn.go), which is the door for the same request that records the work and
+// brings its result back (design D1). Denying a name the installed claude does not have is a no-op.
+var builtinSubAgentTools = []string{"Agent", "Task"}
+
 // withBuiltinTaskToolsDisallowed appends builtinTaskTools to the agent's configured
 // disallow list, de-duplicated and order-stable.
 func withBuiltinTaskToolsDisallowed(configured []string) []string {
@@ -2347,6 +2355,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The generation's inbox: what fetches its turns, and the turnIds being processed (dedup
 	// lease re-delivery).
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	// Exact Orbit executable turn owned by this Claude generation. It is separate from the
 	// transcript attribution cursor: the poller and stdout reader use it as one linearization
@@ -2631,6 +2640,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// shell output, the flag is cleared only once the message is accepted below.
 				carriesReset := !steer && contextReset.Load()
 				feedText = withContextResetNote(feedText, carriesReset, job.insideRecordedWork())
+				if !steer {
+					feedText = withReplyFileCorrection(feedText, replyFilesOf(job.SessionID).takeCorrection())
+				}
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
 				// content it never received.

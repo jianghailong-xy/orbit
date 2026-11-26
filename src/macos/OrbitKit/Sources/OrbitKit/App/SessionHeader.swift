@@ -143,14 +143,16 @@ public enum SessionHeader {
     /// (`Session.resumesOnItsOwn`; web `SESSION_ACTIVITY_WORD.WAITING`).
     public static let waitingToResume = "Waiting to resume"
 
-    /// The word the conversation header leads with: `statusWord`, except on a coordinator whose
-    /// handoff note is being written or whose replacement is running, which reads "Handing over"
+    /// The word the conversation header leads with: the state word from `phase` (`SessionDisplay`;
+    /// the header draws the marks after it), else, from an older server, `statusWord`. A coordinator
+    /// whose handoff note is being written or whose replacement is running reads "Handing over"
     /// (board 02-2). Only the header: list rows and the menu bar keep `statusWord`.
     public static func headerWord(for s: Session, watching: WatchSessionSummary? = nil,
                                   now: Date = Date(), machine: String? = nil) -> String {
         if CoordinatorContextActions.locksComposer(s.coordinatorHandoff) {
             return CoordinatorHandoffCopy.badgeHandingOver
         }
+        if let state = SessionDisplay.state(s.displayFacts) { return state.word }
         return statusWord(for: s, watching: watching, now: now, machine: machine)
     }
 

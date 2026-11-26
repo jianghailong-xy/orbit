@@ -7,14 +7,14 @@ import (
 	"strings"
 )
 
-// The Documents drive is read-only in Plan mode (docs/documents-drive-design.md D9, D16; technical design §7.2).
+// The drive is read-only in Plan mode (docs/drive-product-design.md D9, D16; technical design §7.2).
 // Claude Code's Plan does not keep a write there from running: it asks its permission prompt about every Write, Edit
 // and Bash call, and an Allow on that card wrote the drive. Kimi's Plan asks about every shell call the same way. So
 // where the runner answers an engine's permission request, a Plan-mode call that would write under the drive is
 // refused on the spot with planDriveRefusal, and no card is filed. Reads, and every call about any other path, take
 // the path they took before.
 
-const planDriveRefusal = "The Documents drive is read-only in Plan mode: nothing was written to ~/Documents. Do not retry " +
+const planDriveRefusal = "The Drive is read-only in Plan mode: nothing was written to ~/Drive. Do not retry " +
 	"it or make the same write another way. Put the change in your plan; it can be made once the owner approves the " +
 	"plan or switches this session out of Plan mode."
 
@@ -38,10 +38,10 @@ func planDriveWrite(toolName string, input map[string]interface{}) bool {
 	return false
 }
 
-// driveRootSpellings are the drive's roots as written and as their links resolve: the parent, ~/Documents and the mount.
+// driveRootSpellings are the drive's roots as written and as their links resolve: the parent, ~/Drive and the mount.
 func driveRootSpellings() []string {
 	var roots []string
-	for _, root := range []string{driveParentPath, driveHomePath, driveLegacyHomePath, driveMountPath} {
+	for _, root := range []string{driveParentPath, driveHomePath, driveMountPath} {
 		roots = appendUnique(roots, filepath.Clean(root), realPath(root))
 	}
 	return roots

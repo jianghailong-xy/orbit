@@ -62,6 +62,7 @@ import {
   watchHintFor,
 } from './watch-evaluator.service';
 import { WATCH_PREDICATE_VERSION } from './watch-predicate';
+import { vectorSessionStatus } from './watch-vector.fixture';
 import { redactReason, redactSnapshot } from './watch-redaction';
 import { WatchesService } from './watches.service';
 
@@ -528,7 +529,7 @@ test('every leaf decides the contract vectors from the rows the evaluator reads'
     vectors += 1;
     const session = givenSession
       ? await insertSession({
-          status: givenSession.status,
+          status: vectorSessionStatus(givenSession),
           endReason: givenSession.endReason ?? null,
           completedAt: givenSession.completedAt != null,
           deletedAt: givenSession.deletedAt != null,
@@ -673,8 +674,9 @@ test('a published event only schedules an evaluation: a status it claims is not 
   assert.equal(hinted.state, 'ACTIVE', 'a Match was derived from an event payload');
   assert.equal((await readMatches(watchId)).length, 0);
 
-  // The row fails too, and the same event now finds it.
-  await sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1`, [session]);
+  // The row fails too, released as a failure is (its turn records it), and the same event now finds it.
+  await sql.query(`UPDATE "session" SET "status" = 'FAILED', "last_turn_outcome" = 'FAILED', "finished_at" = COALESCE("finished_at", now())
+                    WHERE "id" = $1`, [session]);
   realtime.publish(session, event(RunEventType.STATUS, { status: 'FAILED' }));
   const [match] = await eventually('the Match', () => readMatches(watchId), (m) => m.length === 1);
   assert.equal(match.snapshot.targets[0].observed?.status, 'FAILED');
@@ -1754,7 +1756,7 @@ test('the contract vectors that ask SESSION_QUIESCENT are decided as they say', 
     if (!('SESSION_QUIESCENT' in vector.expect)) continue;
     const given = vector.given.session;
     const target = await quiescentSession({
-      status: given.status,
+      status: vectorSessionStatus(given),
       endReason: given.endReason ?? null,
       jobs: (vector.given.jobs ?? []).map((job: { id: string }) => job.id),
       subagents: given.runningSubagents ?? [],

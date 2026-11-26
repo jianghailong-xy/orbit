@@ -87,7 +87,7 @@ struct MarkdownView: View, Equatable {
                     MarkdownFileLinkView(ref: ref)
                         .modifier(BubbleProseInset(active: inset))
                 case .document(let id, let label):
-                    DocumentsLinkCard(entryID: id, label: label)
+                    DriveLinkCard(entryID: id, label: label)
                 }
             }
         }
@@ -112,7 +112,7 @@ struct MarkdownView: View, Equatable {
                     MarkdownFileLinkView(ref: ref)
                         .modifier(BubbleProseInset(active: inset))
                 case .document(let id, let label):
-                    DocumentsLinkCard(entryID: id, label: label)
+                    DriveLinkCard(entryID: id, label: label)
                 }
             }
             if let tail, !tailInline {
@@ -139,7 +139,7 @@ enum MarkdownRenderBlock: Equatable {
     case card(OrbitLinkRef)
     case file(MarkdownFileRef)
     case settings(SettingPlace)
-    /// A drive file a reply links (`orbit-document:<id>`), drawn as that file (docs/mocks/documents, 01-ios ⑮).
+    /// A drive file a reply links (`orbit-document:<id>`), drawn as that file (docs/mocks/drive, 01-ios ⑮).
     case document(entryID: String, label: String)
 }
 
@@ -191,7 +191,7 @@ extension Array where Element == MarkdownRenderBlock {
 /// the file-link split below.
 private func splitDocumentLinks(in block: MarkdownBlock) -> [MarkdownRenderBlock] {
     guard case .paragraph(let text) = block else { return splitFileLinks(in: block) }
-    let matches = DocumentsLogic.linkMatches(in: text)
+    let matches = DriveLogic.linkMatches(in: text)
     guard !matches.isEmpty else { return splitFileLinks(in: block) }
     var result: [MarkdownRenderBlock] = []
     var cursor = text.startIndex

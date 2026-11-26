@@ -408,3 +408,72 @@ public extension CrossingBatch {
                                    showOriginal: showOriginal)
     }
 }
+
+// MARK: - a project's title and criteria, on the done cards
+
+public extension OwnerCardTranslations {
+    static func usable(_ t: ProjectTextTranslation?, owner: TranslationLanguage?) -> ProjectTextTranslation? {
+        guard let t, let owner, !t.failed, t.lang == owner.rawValue else { return nil }
+        return t
+    }
+
+    /// The one foot of "Is this project done?": the project's words and, when the coordinator asked,
+    /// its request flip together — so the card the owner opened unasked has the foot too.
+    static func doneCardFoot(subject: ProjectDoneSubject, request row: ProjectOpenItemRow?,
+                             owner: TranslationLanguage?, showOriginal: Bool) -> [SessionTranslation.FootPart] {
+        let translates = subject.shown(owner: owner, showOriginal: false) != subject
+            || row?.shownDoneRequest(owner: owner, showOriginal: false) != row?.doneRequest
+        return foot(translates: translates, showOriginal: showOriginal)
+    }
+}
+
+public extension ProjectDoneSubject {
+    /// The project as the done cards draw it (`ProjectTextTranslation`): its title and each
+    /// criterion's text in the owner's language, matched by the criterion's id; a criterion the
+    /// translation does not name keeps its words. The original otherwise — no translation, a failed
+    /// one, one in another language, or translation off. Never what a press sends: the coordinator
+    /// is handed the original (`ProjectDone.settlementContext`), and a record names keys and seals.
+    func shown(owner: TranslationLanguage?, showOriginal: Bool) -> ProjectDoneSubject {
+        guard !showOriginal, let t = OwnerCardTranslations.usable(translation, owner: owner) else { return self }
+        let byID = Dictionary((t.criteria ?? []).map { ($0.id, $0.text) }, uniquingKeysWith: { first, _ in first })
+        return ProjectDoneSubject(
+            title: OwnerCardTranslations.over(title, t.title), status: status,
+            criteria: criteria.map {
+                Criterion(id: $0.id, key: $0.key, ordinal: $0.ordinal,
+                          text: OwnerCardTranslations.over($0.text, byID[$0.id]), revision: $0.revision,
+                          verificationMethod: $0.verificationMethod)
+            },
+            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt, acceptedGaps: acceptedGaps,
+            upstreamRef: upstreamRef, projectID: projectID, nonCodeMark: nonCodeMark,
+            criteriaMovedOut: criteriaMovedOut, translation: translation)
+    }
+
+    /// The why-not-done card's foot. That card draws no title, only the criteria in its two groups,
+    /// so it is drawn while a usable translation changes one of those.
+    func whyNotDoneFoot(_ why: ProjectDone.WhyNotDone, owner: TranslationLanguage?,
+                        showOriginal: Bool) -> [SessionTranslation.FootPart] {
+        let drawn = self.shown(owner: owner, showOriginal: false)
+        let translates = (why.waiting + why.needsCall).contains {
+            drawn.criterion($0.definitionId)?.text != criterion($0.definitionId)?.text
+        }
+        return OwnerCardTranslations.foot(translates: translates, showOriginal: showOriginal)
+    }
+}
+
+public extension ProjectDocument {
+    /// A criterion's text as the project page's Acceptance criteria list draws it: in the owner's
+    /// language by the criterion's id while a usable translation names it, as written otherwise. The
+    /// row's presses and dialogs (modes, Confirm…, Move…) keep reading `criterion.text`.
+    func criterionText(_ criterion: ProjectCriterion, owner: TranslationLanguage?, showOriginal: Bool) -> String {
+        guard !showOriginal, let t = OwnerCardTranslations.usable(translation, owner: owner) else { return criterion.text }
+        return OwnerCardTranslations.over(criterion.text, t.criteria?.first { $0.id == criterion.id }?.text)
+    }
+
+    /// The one foot under that list, drawn while a usable translation changes one of its criteria.
+    func criteriaTranslationFoot(owner: TranslationLanguage?, showOriginal: Bool) -> [SessionTranslation.FootPart] {
+        let translates = acceptanceCriteriaItems.contains {
+            criterionText($0, owner: owner, showOriginal: false) != $0.text
+        }
+        return OwnerCardTranslations.foot(translates: translates, showOriginal: showOriginal)
+    }
+}

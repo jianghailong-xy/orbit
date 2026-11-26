@@ -1230,7 +1230,7 @@ internal fun RunPress(label: String, enabled: Boolean, tag: String, description:
     }
 }
 
-private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit, actions: CriteriaActions?, now: Instant) {
+internal fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit, actions: CriteriaActions?, now: Instant) {
     val criteria = ProjectPage.withLandingReasons(doc.objects("acceptanceCriteriaItems"), doc.obj("derivedDone")).sortedBy { it.number("ordinal") ?: 0 }
     item(key = "criteria-head") { SectionHead("Acceptance criteria") }
     val movedOut = doc.objects("criteriaMovedOut")
@@ -1241,17 +1241,25 @@ private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) ->
     item(key = "criteria") {
         var expanded by rememberSaveable { mutableStateOf(false) }
         val limit = ProjectPage.criteriaPreviewCompact
+        // The criteria's words in the owner's language (Settings › Translation), flipped to the agent's by the foot. Only the words:
+        // each row's menus and writes keep the criterion as it came.
+        var showOriginal by rememberSaveable { mutableStateOf(false) }
+        val translated = OwnerCardTranslation.project(doc, LocalTranslation.current.cardLanguage)?.objects("acceptanceCriteriaItems")
+            ?.takeIf { it != doc.objects("acceptanceCriteriaItems") }
+        val words = translated?.takeUnless { showOriginal }?.associate { it.text("id") to it.text("text") }.orEmpty()
         Column(Modifier.testTag("project-criteria"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val mixed = DoneFollowUps.standingMixed(criteria)
             Text(mixed ?: ProjectPage.criteriaStanding(criteria.size), Modifier.testTag("criteria-standing"), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             val main = RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef"))
             (if (expanded) criteria else criteria.take(limit)).forEach { criterion ->
-                CriterionRow(criterion, doc.obj("integration")?.text("ref"), main, openTask, criteria, actions, now) }
+                CriterionRow(criterion, words[criterion.text("id")] ?: criterion.text("text").orEmpty(), doc.obj("integration")?.text("ref"), main,
+                    openTask, criteria, actions, now) }
             ProjectPage.criteriaDisclosure(criteria.size, limit, expanded)?.let { (press, meta) ->
                 OutlinedButton(onClick = { expanded = !expanded }, Modifier.fillMaxWidth()) { Text(press) }
                 Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
+            if (translated != null) io.orbitd.android.translation.CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
             MovedOutLines(movedOut, "criteria-moved-out", actions?.openProject)
             Text(if (mixed != null) DoneCopy.ACCEPTANCE_NOTE_MIXED else ProjectPage.criteriaOutcomeNote, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1260,7 +1268,7 @@ private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) ->
 }
 
 @Composable
-private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, openTask: (String) -> Unit, all: List<JsonObject>, actions: CriteriaActions?, now: Instant) {
+private fun CriterionRow(criterion: JsonObject, text: String, ref: String?, main: String, openTask: (String) -> Unit, all: List<JsonObject>, actions: CriteriaActions?, now: Instant) {
     var method by rememberSaveable(criterion.text("id")) { mutableStateOf(false) }
     val satisfied = ProjectDoc.satisfied(criterion)
     Row(Modifier.fillMaxWidth().testTag("criterion:${criterion.number("ordinal")}"), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1274,7 +1282,7 @@ private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, open
                 color = if (satisfied == true) Color.White else MaterialTheme.colorScheme.onSurface)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(criterion.text("text").orEmpty())
+            Text(text)
             criterion.obj("movedFrom")?.let { MovedFromLine(it, actions?.openProject) }
             if (DoneFollowUps.byConfirmation(criterion)) ConfirmationWorkView(criterion, actions, now, "criterion-confirmation:${criterion.number("ordinal")}")
             else ProjectPage.criterionWork(criterion, ref, main)?.let { work ->

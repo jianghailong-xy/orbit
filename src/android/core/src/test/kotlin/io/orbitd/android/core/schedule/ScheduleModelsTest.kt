@@ -232,6 +232,13 @@ class ScheduleModelsTest {
             server.bodies.drop(1))
     }
 
+    @Test fun renamePostsTheTitleAlone() = runTest {
+        val server = Server(body = """{"outcome":"APPLIED"}""")
+        ScheduleApi(server, handle).rename("a", "US app 1070 data readiness")
+        assertEquals(listOf("POST schedules/a/rename"), server.asked)
+        assertEquals("""{"title":"US app 1070 data readiness"}""", server.bodies.single())
+    }
+
     @Test fun theInspectorAndACardRead() = runTest {
         val server = Server(body = """{"schedule":{"id":"a","title":"A","rule":{"kind":"DAILY","time":"09:00"},"workspaceId":"w"},"id":"q","kind":"CREATE"}""")
         val api = ScheduleApi(server, handle)

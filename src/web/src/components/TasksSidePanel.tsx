@@ -64,9 +64,12 @@ import type {
 } from '@orbit/shared';
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
-import { useDocumentsEnabled } from '../lib/documentsSwitch';
+import { unregisterWebPushOnSignOut } from '../lib/webPush';
+import { useDriveEnabled } from '../lib/driveSwitch';
+import { SIDEBAR_WIDTH_KEY, clampSidebarWidth, savedSidebarWidth } from '../lib/sidebarWidth';
 import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
+import { setConversationProjectPage, useConversationProjectPage } from '../lib/conversationProjectPage';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { useSidebarFolded } from '../lib/sidebarFold';
@@ -191,9 +194,9 @@ const TOP: TopNavItem[] = [
   // the Workspaces; this one stands for them all, as Projects does: the whole count, the one way in on
   // the collapsed rail, and the way to a first wiki for an account with none to list.
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
-  // Documents, the account's drive, directly under the Wiki (docs/mocks/documents/02-web, frame 1). No count and no
+  // Drive, the account's drive, directly under the Wiki (docs/mocks/drive/02-web, frame 1). No count and no
   // shortcut: nothing in Files waits on the owner. Its Trash and earlier versions are reached from inside it.
-  { key: 'documents', icon: <SidebarNavIcon name="files" />, label: 'Documents' },
+  { key: 'drive', icon: <SidebarNavIcon name="files" />, label: 'Drive' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
@@ -201,15 +204,8 @@ const TOP: TopNavItem[] = [
   // there — so it is reached as the phone reaches it, from Settings.
 ];
 
-// The left sidebar is user-resizable; the chosen width persists across refreshes.
-const SIDEBAR_WIDTH_KEY = 'orbit:sidebar-width';
 // Whether the user collapsed the panel to its icon rail; persisted like the width.
 const SIDEBAR_COLLAPSED_KEY = 'orbit:sidebar-collapsed';
-const DEFAULT_SIDEBAR_WIDTH = 280;
-const MIN_SIDEBAR_WIDTH = 200;
-const MAX_SIDEBAR_WIDTH = 480;
-const clampWidth = (w: number): number =>
-  Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -371,6 +367,7 @@ export function workspaceRunnerIsOffline(
 }
 
 async function logout() {
+  await unregisterWebPushOnSignOut(); // this browser's notifications, while the token still signs the request
   await logoutSession(); // revoke the refresh token server-side (best-effort) before clearing
   clearToken();
   location.href = '/login';
@@ -401,9 +398,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiWaitingCount = wikiWaiting(wikiSpaces.data ?? []);
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
-  // Nor a Files row on a server without Documents (ORBIT_DOCUMENTS_ENABLED), nor while that is still being read.
-  const documents = useDocumentsEnabled();
-  const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'documents' || documents.enabled));
+  // Nor a Files row on a server without Drive (ORBIT_DRIVE_ENABLED), nor while that is still being read.
+  const drive = useDriveEnabled();
+  const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'drive' || drive.enabled));
   // The wikis the Wiki group lists, in the server's order, each called what the Wiki's own head calls it.
   const wikiRows = wikiSpaces.data ?? [];
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
@@ -467,8 +464,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // whichever workspace or member session it shows, and the workspace's row is not lit there. That is
   // a phone's: wider, `?project=` is a column beside the conversation and the list stays the
   // workspace's, so the workspace's row stays lit (owner 2026-11-14).
+  // A conversation's address names no project page (owner 2026-11-25): beside one it is the console's.
   const onConsole = !!(workspacesMatch ?? agentsMatch) || !!sessionId;
-  const projectPageId = onConsole ? routeId(searchParams.get('project')) : null;
+  const conversationProjectPage = useConversationProjectPage();
+  const projectPageId = !onConsole ? null
+    : routeId(sessionId ? conversationProjectPage?.project : searchParams.get('project'));
   const projectPageKey =
     narrow && projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
       ? `project:${projectPageId}`
@@ -513,9 +513,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           ? (projectRowKey ?? 'projects')
           : onWiki
             ? (wikiRowKey ?? 'wiki')
-            // The Documents page and its Trash are Documents.
-            : loc.pathname === '/documents' || loc.pathname.startsWith('/documents/')
-              ? 'documents'
+            // The Drive page and its Trash are Drive.
+            : loc.pathname === '/drive' || loc.pathname.startsWith('/drive/')
+              ? 'drive'
             // Every task route — all tasks, one task, a list, the tasks in none — is the Tasks
             // page, whose title picks among them.
             : loc.pathname.startsWith('/tasks/') || loc.pathname.startsWith('/lists/')
@@ -536,10 +536,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // rows pass under it (docs/mocks/sidebar-projects-scroll, 03).
   const listsRef = useRef<HTMLDivElement>(null);
 
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
-    return saved > 0 ? clampWidth(saved) : DEFAULT_SIDEBAR_WIDTH;
-  });
+  const [sidebarWidth, setSidebarWidth] = useState<number>(savedSidebarWidth);
 
   // Collapse the whole panel to a slim icon rail (desktop) — hands the content
   // region the full width back. Persisted so the choice survives a refresh.
@@ -588,7 +585,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     // The panel hugs the viewport's left edge, so clientX is the target width.
     let next = sidebarWidth;
     const onMove = (ev: MouseEvent) => {
-      next = clampWidth(ev.clientX);
+      next = clampSidebarWidth(ev.clientX);
       setSidebarWidth(next);
     };
     const onUp = () => {
@@ -902,7 +899,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     if (sel === `project:${key}` || (besideConversation && projectPageId === key)) return;
     if (narrow) setSel(`project:${key}`);
     if (besideConversation) {
-      navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
+      setConversationProjectPage({ project: key, completed: false });
       return;
     }
     const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;
@@ -940,15 +937,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           </svg>
         </span>
         <span className="tp-brand-name">Orbit</span>
-        <button
-          type="button"
-          className="tp-collapse-btn"
-          onClick={toggleCollapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-        </button>
+        <Tooltip side="bottom" content={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          <button
+            type="button"
+            className="tp-collapse-btn"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          </button>
+        </Tooltip>
       </div>
 
       {/* Collapsed-only icon rail: the fixed top-nav as icons. The dynamic lists (workspaces,
@@ -1099,11 +1097,15 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
                       (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
                       'Shared';
+                    // Orbit Cloud is hosted, apart from your own machines' tools and keys: its workspaces wear its
+                    // cloud, and every other workspace keeps the folder (docs/mocks/workspace-machine-icon, B).
+                    const onCloud = !!runnerId && !!managedRunnerId && routeId(runnerId) === routeId(managedRunnerId);
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
                         key={a.id}
                         workspace={a}
                         runnerLabel={runnerLabel}
+                        cloud={onCloud}
                         active={a.id === litWorkspaceId}
                         managed={managedRowOf(accountManaged, runnerId)}
                         offline={
@@ -1560,8 +1562,9 @@ export function WikiRow({
           items={menu}
           open={menuOpen}
           onOpenChange={setMenuOpen}
+          tooltip="Actions"
           trigger={
-            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`} title="Actions">
+            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`}>
               <MoreOutlined />
             </button>
           }
@@ -1689,12 +1692,13 @@ export function ManagedRunnerMark({ row, className }: { row: ManagedRunnerRow; c
   );
 }
 
-// A compact, permanently visible workspace row. Its folder occupies the same icon column as the
-// fixed first-level destinations above, so Workspace names share their label alignment. Runner is
-// descriptive metadata on the same line, not a disclosure parent the user has to remember.
+// A compact, permanently visible workspace row. Its folder (Orbit Cloud's cloud, for a workspace there)
+// occupies the same icon column as the fixed first-level destinations above, so Workspace names share their
+// label alignment. Runner is descriptive metadata on the same line, not a disclosure parent the user has to remember.
 export function WorkspaceRow({
   workspace,
   runnerLabel,
+  cloud = false,
   active,
   offline,
   managed = null,
@@ -1708,6 +1712,8 @@ export function WorkspaceRow({
 }: {
   workspace: Workspace;
   runnerLabel: string;
+  /** On Orbit Cloud: its cloud stands in the folder's place. */
+  cloud?: boolean;
   active: boolean;
   offline: boolean;
   /** The account's managed runner, when it is this workspace's: Asleep or Waking up…, never Offline. */
@@ -1776,7 +1782,7 @@ export function WorkspaceRow({
         role={offline ? 'img' : undefined}
         aria-label={offline ? offlineTitle : undefined}
       >
-        <FolderOutlined aria-hidden="true" />
+        {cloud ? <CloudOutlined aria-hidden="true" data-machine="cloud" /> : <FolderOutlined aria-hidden="true" />}
         {managedRest(managed) && !showRunningDot && !showJobsDot && (
           <ManagedRunnerMark row={managed!} className="tp-workspace-icon-managed" />
         )}
@@ -1821,8 +1827,9 @@ export function WorkspaceRow({
           items={menu}
           open={menuOpen}
           onOpenChange={setMenuOpen}
+          tooltip="Actions"
           trigger={
-            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`} title="Actions">
+            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`}>
               <MoreOutlined />
             </button>
           }
@@ -1852,18 +1859,19 @@ function SortableWorkspaceRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
       {children(
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          className="tp-ico tp-workspace-handle"
-          title="Drag to reorder"
-          aria-label={`Reorder ${workspace.name}`}
-          disabled={disabled}
-          {...attributes}
-          {...listeners}
-        >
-          <HolderOutlined />
-        </button>,
+        <Tooltip content="Drag to reorder">
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            className="tp-ico tp-workspace-handle"
+            aria-label={`Reorder ${workspace.name}`}
+            disabled={disabled}
+            {...attributes}
+            {...listeners}
+          >
+            <HolderOutlined />
+          </button>
+        </Tooltip>,
       )}
     </div>
   );

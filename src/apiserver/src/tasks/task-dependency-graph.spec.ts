@@ -268,7 +268,10 @@ function graphFixture(
       assert.equal(statement.values[0], RUNNER_OFFLINE_AFTER_MS);
       busyWhere = { ownerId: statement.values[1], taskId: { in: statement.values.slice(2) } };
       const carrier = (taskId: string, status: RunStatus) => ({
-        taskId, sessionId: `session-${taskId}`, status, runReason: 'TURN',
+        taskId, sessionId: `session-${taskId}`, finishedAt: null,
+        // The carrier read answers the resolved turn state (sessionTurnStateSql), not the stored word.
+        turnState: ({ PENDING: 'QUEUED', RUNNING: 'IN_FLIGHT' } as Record<string, string | undefined>)[status] ?? null,
+        runReason: 'TURN',
         runningBgJobs: [], runningBgJobActivity: {}, startedAt: null,
       });
       return [carrier(TASK_B, RunStatus.RUNNING), carrier(TASK_C, RunStatus.PENDING)];

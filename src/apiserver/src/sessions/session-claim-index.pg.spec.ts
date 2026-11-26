@@ -49,6 +49,8 @@ const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
 const NEW_INDEX = 'session_task_execution_claim_idx_finished_at';
+/** The partial indexes on `finished_at IS NULL` (migrations 1628, 1633, 1426's execution claim). */
+const HELD_PARTIAL_INDEXES = ['session_runner_held_idx', 'session_owner_held_task_idx', NEW_INDEX];
 const OLD_INDEX = 'session_task_execution_claim_idx';
 const MIGRATION = '1426_session_task_execution_claim_finished_at_idx';
 const NEW_DEF = `CREATE UNIQUE INDEX ${NEW_INDEX} ON public.session USING btree (task_id) `
@@ -451,6 +453,14 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
        SELECT gen_random_uuid(), s.id, 2, 'explain2-' || s.id, 'message', 'PENDING'
          FROM session s WHERE s.owner_id = $1::uuid AND s.finished_at IS NULL`, [big],
     );
+    // A released run's history: the turns it answered before it ended, as production's runs carry several each. With
+    // one turn a session the whole turn table is small enough that a scan of it competes with the held sessions' index
+    // probes, and the plan flips between the two on ANALYZE's sample (task T7 measured both on this table).
+    await sql.query(
+      `INSERT INTO conversation_turn (id, session_id, seq, client_turn_id, kind, status)
+       SELECT gen_random_uuid(), s.id, g, 'explain-history-' || g || '-' || s.id, 'message', 'COMPLETED'
+         FROM session s, generate_series(3, 7) g WHERE s.owner_id = $1::uuid AND s.finished_at IS NOT NULL`, [big],
+    );
     await sql.query('ANALYZE session; ANALYZE conversation_turn; ANALYZE task');
     const sizes = (await sql.query(
       `SELECT (SELECT count(*) FROM session)::int AS sessions,
@@ -521,10 +531,12 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
         ['dispatch pause, wake (turns PENDING)', woken, `'PENDING'`],
       ] as const) {
         const after = one(list, (s) => s.query.includes(`t."status" = ${turn}`), name);
-        assert.match(after.query, /s\."finished_at" IS NULL AND s\."status" IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/);
+        // The release column alone (task T7 of docs/session-status-retirement-plan.md): no held statuses beside it.
+        assert.match(after.query, /WHERE s\."finished_at" IS NULL\s/);
+        assert.doesNotMatch(after.query, /s\."status"/);
         readers.push({
           name, claim: false, after,
-          before: { ...after, query: after.query.replace(/\(s\."finished_at" IS NULL AND (s\."status" IN \([^)]*\))\)/, '$1') },
+          before: { ...after, query: after.query.replace(/WHERE s\."finished_at" IS NULL/, `WHERE s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')`) },
         });
       }
     } finally {
@@ -565,7 +577,8 @@ test('the one-live-run-per-task index, release A (migration 1426)', {
           }
           if (!reader.claim && form === 'after') {
             assert.equal(seq, null, `${reader.name}: no sequential scan of session or its turns`);
-            assert.ok(used.includes('session_status_idx'), `${reader.name}: entered through session_status_idx`);
+            // A partial index on the held rows (migrations 1628, 1633) is the entry now, as session_status_idx was.
+            assert.ok(used.some((name) => HELD_PARTIAL_INDEXES.includes(name)), `${reader.name}: entered through a held partial index (${used.join(', ')})`);
           }
         }
       }

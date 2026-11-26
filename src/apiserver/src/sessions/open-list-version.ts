@@ -4,6 +4,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { EVIDENCE_REVIEW_WINDOW_SECONDS } from '../tasks/evidence-review';
 import { freshRunningBgJobs } from './background-job-activity';
+import { sessionTurnStateSql } from './session-turn-state';
 import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, runnerLastBeatSql } from '../runners/runner-presence';
 
 /**
@@ -122,9 +123,11 @@ export async function readOpenListVersionParts(
                          WHERE owner_id = ${o}
                          GROUP BY 1) counters), '') AS epochs,
       -- The queued gate counts every running turn on the runner a PENDING row waits for.
-      ${rowsOf('x', Prisma.sql`FROM session x WHERE x.status = 'RUNNING' AND x.owner_id <> ${o}
-        AND x.assigned_runner_id IN (SELECT assigned_runner_id FROM session
-          WHERE owner_id = ${o} AND status = 'PENDING' AND assigned_runner_id IS NOT NULL)`)} AS foreign_running,
+      ${rowsOf('x', Prisma.sql`FROM session x WHERE x.finished_at IS NULL AND ${sessionTurnStateSql('x')} = 'IN_FLIGHT'
+        AND x.owner_id <> ${o}
+        AND x.assigned_runner_id IN (SELECT queued.assigned_runner_id FROM session queued
+          WHERE queued.owner_id = ${o} AND queued.finished_at IS NULL AND ${sessionTurnStateSql('queued')} = 'QUEUED'
+            AND queued.assigned_runner_id IS NOT NULL)`)} AS foreign_running,
       (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text FROM runners) AS runner,
       -- Those runners' presence rows, which a heartbeat rewrites without touching the runner's own.
       ${rowsOf('x', Prisma.sql`FROM runner_presence x WHERE x.runner_id IN (SELECT id FROM runners)`)} AS runner_presence,

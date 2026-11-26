@@ -6,13 +6,16 @@ import type { SessionSearchHit, WikiSearchRow } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { sessionSearchQuery, wikiSearchQuery } from '../lib/queries';
 import { splitHighlight } from '../lib/searchHighlight';
+import { sessionMarks } from '../lib/sessionDisplay';
 import { sessionLifecycleStateOf } from '../lib/sessionState';
 import { wikiAnchorMark, wikiKindWord, WIKI_TRUST_LABELS, WIKI_TITLE } from '../lib/wiki';
 import { useWikiShown } from '../lib/useWikiShown';
 import { WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
+import { SessionMarkChips } from './SessionStateDisplay';
 import { StatusIcon, statusLabel } from './WorkspaceView';
 import { Dialog } from './ui/Dialog';
 import { Spinner } from './ui/Spinner';
+import { Tooltip } from './ui/Tooltip';
 
 // Matches the server's CONTENT_MIN_CHARS. Below it the search only matches names (session title,
 // branch, workspace, task) — the palette says so rather than letting the narrower result set read as
@@ -338,17 +341,18 @@ export function SessionSearch() {
           <span className="ssearch-scope">
             <FolderOutlined />
             <span className="ssearch-scope-name">{scope.name}</span>
-            <button
-              type="button"
-              className="ssearch-scope-remove"
-              aria-label={SEARCH_SCOPE_REMOVE}
-              title={SEARCH_SCOPE_REMOVE}
-              // Keeps the field's focus, whose blur would close the palette.
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={unscope}
-            >
-              <CloseOutlined />
-            </button>
+            <Tooltip content={SEARCH_SCOPE_REMOVE} side="bottom">
+              <button
+                type="button"
+                className="ssearch-scope-remove"
+                aria-label={SEARCH_SCOPE_REMOVE}
+                // Keeps the field's focus, whose blur would close the palette.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={unscope}
+              >
+                <CloseOutlined />
+              </button>
+            </Tooltip>
           </span>
         )}
         <input
@@ -424,6 +428,7 @@ export function SessionSearch() {
                 <div className="ssearch-meta">
                   {hit.agent?.name && <span className="ssearch-workspace">{hit.agent.name}</span>}
                   <span>{statusLabel(hit)}</span>
+                  <SessionMarkChips marks={sessionMarks(hit)} />
                   {matchLabel && <span className="ssearch-in">in {matchLabel}</span>}
                 </div>
                 {hit.snippet && hit.matchField !== 'title' && (

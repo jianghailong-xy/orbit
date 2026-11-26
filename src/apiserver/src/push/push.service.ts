@@ -5,6 +5,7 @@ import { RELEASE_FACTS_SELECT } from '../common/session-release';
 import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
+import { TURN_STATE_SELECT, turnStateFilter } from '../sessions/session-turn-state';
 import { fitCollapseId } from './collapse-id';
 import { ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -14,7 +15,7 @@ import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from '../projects/coor
 import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
-import { Prisma, RunStatus, type DeviceToken } from '@prisma/client';
+import { Prisma, type DeviceToken } from '@prisma/client';
 import { accountSubjectNames } from '../providers/account-health-subject';
 import { accountNeedsActionBody } from '../providers/account-health-copy';
 import type { AccountNeedsAction } from '../providers/account-health.service';
@@ -38,6 +39,7 @@ import { ownerStarted, settleAlert } from './settle-alert';
 import { crossingRequestAlert } from './crossing-request-alert';
 import { CARD_SESSION_SELECT, crossingCardSessionId } from '../projects/project-handoff.service';
 import { FcmTransport } from './fcm-transport';
+import { WebPushTransport, webPushMessage, type WebPushKeys } from './web-push-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
 import { claudeRegionPushBody, regionMachineName } from '../runners/runner-region';
@@ -145,13 +147,13 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The sessions that can hold a card raised outside a dispatched turn, whose status that work leaves at AWAITING_INPUT
+ * The sessions that can hold a card raised outside a dispatched turn, which that work leaves parked
  * (docs/session-three-state-design.md §11.3 item 2): the engine's own turn, or a runner-hosted process still up. The
  * process is read off `runningBgShells`, the set `abandoned-approvals.ts` collects a job's card on, not
  * `runningBgJobs`: a card is answerable exactly while the reap would leave it, and the badge rings for no other.
  */
 const OUTSIDE_TURN_CARD_SESSIONS: Prisma.SessionWhereInput = {
-  OR: [{ status: RunStatus.AWAITING_INPUT, ...ENGINE_TURN.where }, { runningBgShells: { isEmpty: false } }],
+  OR: [{ AND: [turnStateFilter([null]), ENGINE_TURN.where] }, { runningBgShells: { isEmpty: false } }],
 };
 
 /**
@@ -160,12 +162,12 @@ const OUTSIDE_TURN_CARD_SESSIONS: Prisma.SessionWhereInput = {
  * names none while the engine's own turn is generating. A job's card whose job has ended is the reap's, never counted.
  * SubAgent cards are the subagent half's and are not selected here.
  */
-function outsideTurnCards<T extends { backgroundJobId?: string | null; toolUseId?: string | null }>(session: {
-  status: RunStatus;
-  engineTurnActive?: boolean | null;
-  runningBgShells?: readonly string[] | null;
-  approvals?: readonly T[] | null;
-}): T[] {
+function outsideTurnCards<T extends { backgroundJobId?: string | null; toolUseId?: string | null }>(
+  session: Parameters<typeof isSessionGenerating>[0] & {
+    runningBgShells?: readonly string[] | null;
+    approvals?: readonly T[] | null;
+  },
+): T[] {
   const generating = isSessionGenerating(session);
   return (session.approvals ?? []).filter((card) =>
     card.backgroundJobId == null
@@ -186,6 +188,7 @@ export class PushService {
   private readonly apnsCredentials: Partial<Record<ApnsEnvironment, ApnsCredentials>> = {};
   private readonly blockedApnsEnvironments = new Set<ApnsEnvironment>();
   private readonly fcm: FcmTransport;
+  private readonly web: WebPushTransport;
   // Per-owner "needs you" state last pushed to that user's devices, so a reconcile pushes only on a
   // real change and can tell iOS which sessions' banners to clear. In-memory/per-replica; pushes are
   // idempotent so a rare cross-replica double-send is harmless. See docs/cross-platform-badge-sync.md.
@@ -218,12 +221,19 @@ export class PushService {
       }
     }
     this.fcm = new FcmTransport(config);
+    this.web = new WebPushTransport(config);
     if (!this.apnsEnabled) this.log.warn('APNs not configured — iOS pushes disabled');
     if (!this.fcm.enabled) this.log.warn('FCM not configured — Android pushes disabled');
+    if (!this.web.enabled) this.log.warn('Web Push not configured — browser pushes disabled');
   }
 
   private get apnsEnabled(): boolean {
     return Object.keys(this.apnsCredentials).length > 0;
+  }
+
+  /** Some device transport (APNs, FCM or Web Push) is configured. */
+  private get devicePushEnabled(): boolean {
+    return this.apnsEnabled || this.fcm.enabled || this.web.enabled;
   }
 
   /**
@@ -244,7 +254,7 @@ export class PushService {
 
   /** APNs, FCM or Feishu can carry an alert (§6.1). Whether this account has a device or a bound app is `channels`'. */
   private get enabled(): boolean {
-    return this.apnsEnabled || this.fcm.enabled || Boolean(this.feishu);
+    return this.devicePushEnabled || Boolean(this.feishu);
   }
 
   /** The account's registered devices, and its Feishu app when alerts reach its owner there. */
@@ -307,12 +317,13 @@ export class PushService {
   }
 
   private async targets(ownerId: string): Promise<DeviceToken[]> {
-    if (!this.apnsEnabled && !this.fcm.enabled) return [];
+    if (!this.devicePushEnabled) return [];
     return this.withLiveSession(await this.prisma.deviceToken.findMany({ where: { userId: ownerId, OR: [
       ...(this.apnsEnabled ? [{ platform: 'ios', bundleId: this.bundleId,
         environment: { in: ['production', 'sandbox'] } }] : []),
       ...(this.fcm.enabled ? [{ platform: 'android', bundleId: this.fcm.packageName,
         environment: 'production' }] : []),
+      ...(this.web.enabled ? [{ platform: 'web', bundleId: 'web', environment: 'production' }] : []),
     ] } }));
   }
 
@@ -346,7 +357,7 @@ export class PushService {
           id: sessionId,
           // A running turn asks, and so does a SubAgent still running after its parent's turn ended
           // (docs/subagent-design.md §5.3); the "needs you" set below decides whether this card is one.
-          OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
+          OR: [turnStateFilter(['IN_FLIGHT']), { runningSubagents: { isEmpty: false } }],
           ...gates,
         },
         select,
@@ -892,7 +903,7 @@ export class PushService {
       if (tokens.length === 0 && !feishu) {
         // Nothing to reach this account through. Without device push on this server that is the
         // server's answer, not the account's: registering a device would change nothing.
-        return this.apnsEnabled || this.fcm.enabled
+        return this.devicePushEnabled
           ? { delivered: false, reason: 'no devices are registered for this account' }
           : { delivered: false, reason: 'push is not configured on this server' };
       }
@@ -950,7 +961,7 @@ export class PushService {
    * device that did not accept it, so this answers rather than throws.
    */
   async notifyOwner(ownerId: string, input: { title: string; message: string; priority: NotifyPriority; url?: string }): Promise<OwnerNotificationResult> {
-    if (!this.apnsEnabled && !this.fcm.enabled) return { delivered: false, reason: 'PUSH_NOT_CONFIGURED' };
+    if (!this.devicePushEnabled) return { delivered: false, reason: 'PUSH_NOT_CONFIGURED' };
     const tokens = await this.targets(ownerId);
     if (tokens.length === 0) return { delivered: false, reason: 'NO_DEVICES' };
     const body = JSON.stringify({
@@ -1748,8 +1759,8 @@ export class PushService {
       this.prisma.session.findMany({
         where: {
           ownerId,
-          status: RunStatus.RUNNING,
-          // A LANDING row is never RUNNING; named anyway, so no status scan can ever count one.
+          ...turnStateFilter(['IN_FLIGHT']),
+          // A LANDING row never has a turn in flight; named anyway, so no scan can ever count one.
           sessionKind: 'CONVERSATION',
           completedAt: null,
           archivedAt: null,
@@ -1793,7 +1804,8 @@ export class PushService {
         select: {
           id: true,
           taskId: true,
-          status: true,
+          // isSessionGenerating's (common/session-generating.ts).
+          ...TURN_STATE_SELECT,
           engineTurnActive: true,
           runningBgShells: true,
           approvals: {
@@ -1910,6 +1922,14 @@ export class PushService {
           const res = await this.fcm.send(t.token, { ...data, registrationKey: t.id }, isCurrent);
           if (res.invalidToken) await this.prisma.deviceToken.deleteMany({ where });
           else if (!res.accepted) this.log.warn(`FCM ${res.reason}`);
+          return res.accepted;
+        }
+        if (t.platform === 'web' && this.web.enabled && t.bundleId === 'web' && t.environment === 'production') {
+          const message = webPushMessage(body, pushType, collapseId);
+          if (!message) return false;
+          const res = await this.web.send(t.token, t.webKeys as unknown as WebPushKeys, message, isCurrent);
+          if (res.invalidToken) await this.prisma.deviceToken.deleteMany({ where });
+          else if (!res.accepted) this.log.warn(`Web Push ${res.reason}`);
           return res.accepted;
         }
         if (t.platform !== 'ios' || !this.apnsEnabled || t.bundleId !== this.bundleId
