@@ -3552,7 +3552,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1670 restates 1667's six-argument session_phase_of (an armed retry reads PENDING, held or released) and writes
       // phase alone on the rows with retry_at set that it reads differently. Only `session` is touched; no preserved
       // relation, trigger, function of one or DONE fence changes.
-      '1670_session_phase_retry_pending'],
+      '1670_session_phase_retry_pending',
+      // 1672 creates task_acceptance_round (one EXECUTABLE acceptance round's record), cascading with task and with its
+      // conversation_turn; no preserved relation, row, trigger, function or DONE fence changes.
+      '1672_task_acceptance_round'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
