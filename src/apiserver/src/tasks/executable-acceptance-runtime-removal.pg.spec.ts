@@ -758,7 +758,8 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // `session_listed_at_settle`, which sets the row's own `listed_at` when it settles and writes no other relation.
   // `session` 28 since 1611 added `session_aa_turn_state_from_status` and `session_zz_phase`, which set the row's own
   // `turn_state` and `phase` from its stored word and write no other relation.
-  assert.deepEqual(counts, { run_event: 1, session: 28, task: 37 });
+  // `session` 27 since 1691 dropped the trigger that kept the stored word, with the column.
+  assert.deepEqual(counts, { run_event: 1, session: 27, task: 37 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [
