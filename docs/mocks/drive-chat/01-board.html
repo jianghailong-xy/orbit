@@ -1,0 +1,311 @@
+<!-- DESIGN MOCK (2026-11-26). Drive with a chat docked on the right, for managing the drive by talking to an agent.
+     Follows the wiki chat (docs/wiki-chat-design.md, boards wiki/42, 43, 45) and the shell's grey canvas (right-column-window C).
+     File names, sessions, sizes and dates are demo data.
+     Render: node render.mjs "$PWD/01-board.html" "$PWD/01-board.png" -->
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Drive chat · board</title>
+<style>
+:root{--canvas:#efeff1;--bg:#fff;--t1:#1d1d1f;--t2:#6e6e73;--t3:#a1a1a6;--line:#e6e6ea;--sub:#f5f5f7;--brand:#3b5bdb;--tint:#edf1ff;--amb:#e8590c;--ambt:#fff4e6;--ok:#2b8a3e;--okt:#ebfbee;--red:#c92a2a}
+*{box-sizing:border-box}
+body{margin:0;background:#dcdce0;font:13px/1.45 -apple-system,BlinkMacSystemFont,Inter,'Noto Sans SC',sans-serif;color:var(--t1)}
+.board{width:1560px;padding:40px 60px 60px;background:#fafafa}
+h1{font-size:26px;margin:0 0 6px}
+.lede{color:var(--t2);font-size:14px;max-width:1300px;margin:0 0 28px}
+code,.mono{font-family:'JetBrains Mono',monospace;font-size:12px}
+.fh{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:600;margin:38px 0 12px}
+.fh .n{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--t1);color:#fff;font-size:14px}
+.fh .tag{font-size:12px;font-weight:500;padding:2px 8px;border-radius:10px;background:var(--okt);color:var(--ok)}
+.fh .tag.today{background:#eee;color:var(--t2)}
+/* window */
+.win{position:relative;width:1440px;height:820px;background:var(--canvas);border-radius:12px;border:1px solid #d0d0d6;display:flex;gap:8px;padding:8px 8px 8px 0;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+.sb{width:250px;flex:none;padding:10px 12px;display:flex;flex-direction:column;gap:1px}
+.sb .logo{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600;padding:4px 6px 14px}
+.sb .logo i{width:20px;height:20px;border-radius:50%;background:conic-gradient(var(--brand),#91a7ff,var(--brand))}
+.sb .r{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:7px;font-size:14px}
+.sb .r .ic{width:16px;height:14px;border:1.6px solid #555;border-radius:3px}
+.sb .r.on{background:#fff;border:1.5px solid var(--brand)}
+.sb .r .k{margin-left:auto;color:var(--t3);font-size:12px}
+.sb .gh{color:var(--t2);font-size:13px;padding:14px 8px 4px}
+.sb .gh b{font-weight:400;color:var(--t3);margin-left:4px}
+.panel{background:var(--bg);border-radius:12px;border:1px solid var(--line);overflow:hidden;position:relative;display:flex;flex-direction:column;min-width:0}
+.drive{flex:1}
+.chat{width:400px;flex:none}
+/* drive page */
+.fhd{display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.fhd h2{margin:0;font-size:18px;font-weight:600;margin-right:auto}
+.inp{border:1px solid var(--line);border-radius:7px;padding:5px 10px;color:var(--t3);font-size:12.5px;width:190px}
+.btn{border:1px solid var(--line);border-radius:7px;padding:5px 10px;font-size:12.5px;white-space:nowrap;background:#fff}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.sm{padding:3px 9px;font-size:12px}
+.fb{flex:1;display:flex;min-height:0;position:relative}
+.tree{width:196px;flex:none;border-right:1px solid var(--line);padding:10px 6px}
+.tn{display:flex;align-items:center;gap:6px;height:28px;padding:0 6px;border-radius:6px;font-size:13px;white-space:nowrap}
+.tn.on{background:var(--tint);color:#2c46b8}
+.tn .tw{width:10px;color:var(--t3);font-size:10px}
+.fold{width:15px;height:11px;border-radius:2px;background:#74a7f7;flex:none;position:relative}
+.fold:before{content:'';position:absolute;left:0;top:-2px;width:7px;height:3px;border-radius:1px 1px 0 0;background:#74a7f7}
+.fi{width:12px;height:15px;border:1.4px solid #888;border-radius:2px;flex:none}
+.fi.pdf{border-color:#d9480f}.fi.img{border-color:#2f9e44}.fi.md{border-color:#555}
+.list{flex:1;min-width:0;padding:8px 16px}
+.crumb{color:var(--t2);font-size:12.5px;padding:4px 0 8px}
+.crumb b{color:var(--t1);font-weight:500}
+.lh,.lr{display:grid;grid-template-columns:minmax(0,1fr) 150px 60px 70px;gap:10px;align-items:center}
+.lh{font-size:11.5px;color:var(--t2);padding:6px 8px;border-bottom:1px solid var(--line)}
+.lr{height:36px;padding:0 8px;border-bottom:1px solid #f0f0f2;font-size:13px}
+.lr .nm{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap;overflow:hidden}
+.lr .nm>span:not(.mk):not(.fold){overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lr .w{color:var(--t2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lr .s,.lr .d{color:var(--t2);font-size:12px;text-align:right}
+.lr.sel{background:var(--tint)}
+.lr.chg{background:var(--okt)}
+.lr.gone{color:var(--t3);text-decoration:line-through}
+.mk{font-size:10.5px;padding:1px 6px;border-radius:8px;background:#d3f9d8;color:var(--ok);margin-left:6px;font-weight:500;flex:none}
+.mk.mv{background:#e7f5ff;color:#1864ab}
+.w a,.lk{color:var(--brand);text-decoration:none}
+.pane{width:280px;flex:none;border-left:1px solid var(--line);padding:16px}
+.pane.over{position:absolute;right:0;top:0;bottom:0;background:#fff;box-shadow:-8px 0 24px rgba(0,0,0,.08)}
+.pane h3{margin:10px 0 2px;font-size:15px}
+.pane .sub{color:var(--t2);font-size:12px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:6px 8px;font-size:12px;margin-top:12px}
+.kv .k{color:var(--t2)}
+.prev{height:190px;border-radius:8px;background:var(--sub);border:1px solid var(--line);padding:14px;font-size:9.5px;color:var(--t2);line-height:1.6;overflow:hidden}
+.prev b{display:block;color:var(--t1);font-size:12px;margin-bottom:6px}
+/* chat panel */
+.ch{display:flex;align-items:center;gap:12px;height:46px;padding:0 14px;border-bottom:1px solid var(--line)}
+.ch .t{font-weight:600;font-size:14px;margin-right:auto}
+.ch .t:after{content:' ▾';color:var(--t3);font-size:10px}
+.ch .x{color:var(--t2);font-size:16px;width:16px;text-align:center}
+.runs{padding:8px 14px;font-size:12px;color:var(--t2);border-bottom:1px solid var(--line)}
+.runs span{border:1px solid var(--line);border-radius:6px;padding:2px 8px;color:var(--t1);margin-left:6px}
+.cb{flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden;font-size:13px}
+.hint{margin:auto 30px;text-align:center;color:var(--t2);line-height:1.7}
+.hint ul{text-align:left;color:var(--t2);font-size:12.5px;margin:14px 0 0;padding-left:18px}
+.hint li{margin:4px 0}
+.u{align-self:flex-end;max-width:84%;background:#f1f3f5;border-radius:14px 14px 4px 14px;padding:8px 12px}
+.att{align-self:flex-end;font-size:11.5px;color:var(--t3);margin-top:-8px}
+.a{line-height:1.6}
+.a p{margin:0 0 6px}
+.card{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card .hd{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--okt);font-weight:600;font-size:13px}
+.card .hd .st{margin-left:auto;font-weight:500;font-size:12px;color:var(--ok)}
+.card.wait .hd{background:var(--ambt)}
+.card.wait .hd .st{color:var(--amb)}
+.card .bd{padding:8px 12px;font-size:12.5px}
+.op{display:flex;gap:8px;padding:3px 0;align-items:baseline}
+.op .v{width:92px;flex:none;color:var(--t2);font-size:12px}
+.op .more{color:var(--t2)}
+.card .ft{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--line);align-items:center}
+.card .ft .note{margin-left:auto;font-size:11.5px;color:var(--t3)}
+.comp{margin:0 12px 12px;border:1px solid var(--line);border-radius:14px;padding:8px 10px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;border:1px solid var(--line);background:var(--sub);border-radius:6px;padding:2px 7px}
+.chip i{color:var(--t3);font-style:normal}
+.ph{color:var(--t3);padding:4px 2px 10px;font-size:13.5px}
+.tb{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--t2)}
+.tb b{color:var(--t1);font-weight:600}
+.tb .send{margin-left:auto;width:26px;height:26px;border-radius:50%;background:#ddd}
+.tb .send.on{background:var(--brand)}
+.fab{position:absolute;right:28px;bottom:28px;width:52px;height:52px;border-radius:50%;background:var(--brand);box-shadow:0 6px 16px rgba(59,91,219,.35);display:grid;place-items:center;color:#fff;font-size:20px}
+.badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--amb);color:#fff;font-size:11px;display:grid;place-items:center;border:2px solid #fff;padding:0 4px}
+/* marks */
+.m{position:absolute;width:24px;height:24px;border-radius:50%;background:#e03131;color:#fff;font-size:12.5px;font-weight:700;display:grid;place-items:center;box-shadow:0 0 0 3px rgba(224,49,49,.2);z-index:20}
+/* notes */
+.notes{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:16px;font-size:13.5px;line-height:1.7}
+.notes h4{margin:0 0 6px;font-size:14px}
+.notes ol{margin:0;padding-left:22px}
+.notes li{margin:3px 0}
+table.rules{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px;background:#fff}
+table.rules th,table.rules td{border:1px solid #e2e2e6;padding:7px 10px;text-align:left;vertical-align:top}
+table.rules th{background:#f3f3f5;font-weight:600}
+.q{background:#fff;border:1px solid #e2e2e6;border-left:4px solid var(--amb);border-radius:8px;padding:12px 16px;margin:10px 0}
+.q h4{margin:0 0 6px}
+.q .rec{color:var(--ok);font-weight:600}
+.sec{font-size:20px;font-weight:700;margin:48px 0 8px}
+</style>
+<body><div class="board">
+<h1>Drive · 右侧 Chat 管理文件（设计图 01）</h1>
+<p class="lede">Drive 页右边停靠一个聊天，和 Wiki 的聊天是同一套：一场普通会话、同一个 composer、同一个面板头（标题 ▾ 历史、<code>+</code>、<code>↗</code>、<code>✕</code>），放在灰底上的第二块面板（right-column-window C）。不同的是它管的是文件：查找、归类、改名、移动、建文件夹、移到 Trash，问文件里写了什么。
+界面上的字都是英文；标注用中文。文件名、会话、大小、时间都是示意。</p>
+
+<div class="fh"><span class="n">①</span>今天：Drive 没有聊天 <span class="tag today">Today</span></div>
+<div class="win" id="f1"></div>
+
+<div class="fh"><span class="n">②</span>打开 Drive：聊天默认停靠在右边，新聊天 <span class="tag">Proposal</span></div>
+<div class="win" id="f2"></div>
+<div class="notes">
+  <div><h4>这一帧定的事</h4><ol>
+    <li><b>入口同 Wiki。</b>窗口 ≥ 1200 时打开 Drive 就显示面板，接上最近一场还开着的 Drive 聊天，没有就 New chat。<code>✕</code> 收起后本机记住，回到右下角圆按钮（帧 ⑤）。页头的按钮不动。</li>
+    <li><b>Runs in</b>：只在新聊天出现，发出第一句后收起。默认上次 Drive 聊天用的 workspace；第一次默认 Cloud（agent 直接看得到 <code>~/Files</code>），其余 runner 用 <code>drive_*</code> 工具。</li>
+    <li><b>当前文件夹自动附上</b>，在 composer 附件行最前面，可以叉掉；没显示的不发。</li>
+  </ol></div>
+  <div><h4>空状态的两句</h4><ol>
+    <li><code>Ask about your files, or say how to sort them.</code></li>
+    <li><code>Every change it makes shows here, and can be undone.</code></li>
+    <li>下面三条示例只在新聊天、输入框为空时出现，点一下填进输入框，不直接发。</li>
+  </ol></div>
+</div>
+
+<div class="fh"><span class="n">③</span>选中文件说一句：agent 直接改，聊天里一张改动卡，左边标出改了什么 <span class="tag">Proposal</span></div>
+<div class="win" id="f3"></div>
+<div class="notes">
+  <div><h4>这一帧定的事</h4><ol>
+    <li><b>选中的行变成附件。</b>列表里多选（⌘/⇧ 点）的文件跟着进 composer 的附件行，显示为 <code>12 files</code> 一个芯片，展开看名单。</li>
+    <li><b>你的话就是授权</b>（同 Wiki 11-22 的方案 A）：移动、改名、建文件夹、移到 Trash 都能撤回，agent 说完就做，不再按一次。</li>
+    <li><b>改动卡</b>：一轮里的改动合成一张卡，先写结果（<code>Done · 24 changes</code>），列前几条，<code>Show all</code> 展开；<code>Undo</code> 一次撤回整张卡。</li>
+    <li><b>左边标出改了什么</b>：新文件夹 <code>New</code>、移进来的 <code>Moved</code>、改名的 <code>Renamed</code>，绿底，打开看过就消失（同 Wiki 的 <code>Updated</code>）。</li>
+  </ol></div>
+  <div><h4>agent 不能直接做、要先问的（服务端挡，不靠提示词）</h4><ol>
+    <li><b>覆盖</b>：目标位置已有同名文件。<code>drive_move</code> 今天会直接覆盖，改成聊天会话里遇到同名就拒，agent 用一句话问你（帧 ④ 卡片样式）。</li>
+    <li><b>一轮超过 200 项</b>：变成等你按 <code>Apply</code> 的卡，不先动。</li>
+    <li><b>Trash 里的东西</b>：agent 看不到（D11），清空和恢复只在 Trash 页由你做。</li>
+    <li><b>分享链接</b>：不在聊天里开（D18 规则不变）。</li>
+  </ol></div>
+</div>
+
+<div class="fh"><span class="n">④</span>问内容：带链接回答；点链接在左边打开，详情盖在列表右侧；要你定的事是一张琥珀色卡 <span class="tag">Proposal</span></div>
+<div class="win" id="f4"></div>
+<div class="notes">
+  <div><h4>这一帧定的事</h4><ol>
+    <li><b>只问问题时没有卡，什么都不变。</b>回答里的文件是链接，点了在左边选中并打开详情，不离开聊天。</li>
+    <li><b>聊天开着时详情盖在列表右侧</b>（带阴影，<code>✕</code> 或 Esc 关），不再占一栏：Drive 面板在 1440 窗口里只剩约 760，树 + 列表 + 详情三栏放不下。窗口 ≥ 1760 时照旧三栏并排。</li>
+    <li><b>等你的卡</b>：覆盖同名文件这种只有你能定的，卡上写清两边（大小、谁写的、时间）和 agent 的推荐，<code>Replace</code> / <code>Keep both</code>，被替换的旧文件照旧进版本历史。</li>
+  </ol></div>
+  <div><h4>它在别处长什么样</h4><ol>
+    <li>聊天是 workspace 里的一场普通会话，会话页头有来处标签 <code>From Drive</code>，<code>↗</code> 打开完整会话页。</li>
+    <li>它写的文件在 <b>Last written by</b> 里照规则 6 写 <code>Agent in &lt;聊天标题&gt;</code>，能点回这场聊天。</li>
+    <li>聊天历史（点标题）只列 Drive 聊天，分 Open / Completed，同 Wiki 45 ④。</li>
+  </ol></div>
+</div>
+
+<div class="fh"><span class="n">⑤</span>收起后：右下角圆按钮，四种状态同 Wiki <span class="tag">Proposal</span></div>
+<div class="win" id="f5"></div>
+<div class="notes">
+  <div><h4>圆按钮</h4><ol>
+    <li>平时 <code>Chat</code>；在忙外面一圈 <code>Working…</code>；等你琥珀数字 <code>1 needs you</code>（覆盖要定、超量要 Apply、审批）；改完没看过绿勾 <code>Drive updated</code>。</li>
+    <li>收起后详情回到第三栏，和今天一样。</li>
+    <li>Trash、Storage、分享链接页没有圆按钮。</li>
+  </ol></div>
+  <div><h4>窗口宽度</h4>
+    <table class="rules"><tr><th>窗口宽</th><th>聊天</th><th>文件详情</th></tr>
+    <tr><td>≥ 1760</td><td>右边一栏，默认 400，可拖 320–窗口一半</td><td>第三栏，并排</td></tr>
+    <tr><td>1200–1759</td><td>同上</td><td>盖在列表右侧</td></tr>
+    <tr><td>640–1199</td><td>从右滑出盖住列表，不加遮罩，不自动展开</td><td>同今天</td></tr>
+    <tr><td>&lt; 640</td><td>底部 sheet，半屏 / 全屏</td><td>同今天</td></tr></table>
+  </div>
+</div>
+
+<div class="sec">要动的地方</div>
+<table class="rules">
+<tr><th>哪里</th><th>改什么</th></tr>
+<tr><td><code>src/web/src/pages/DrivePage.tsx</code>、<code>DrivePage.css</code></td><td>挂上聊天宿主；多选；改动标记（New / Moved / Renamed）；聊天开着时详情改成盖在列表上</td></tr>
+<tr><td><code>WikiChatPanel.tsx</code>、<code>WikiChatFab.tsx</code></td><td>把面板和圆按钮从 wiki 里抽成按「来处」配置的宿主（标题、占位文字、附件种类、建聊天的接口），Wiki 和 Drive 共用；composer 仍是 <code>WorkspaceView</code> 里那个</td></tr>
+<tr><td>apiserver（新）</td><td><code>POST /api/drive/chats</code> 与列表（同 wiki 的 <code>chats</code>）；会话来处 <code>drive</code>；附注 <code>&lt;orbit_drive_chat&gt;</code>（当前文件夹、选中的文件、给 agent 的话）；一轮的 drive 改动记成一组，<code>Undo</code> 整组撤回</td></tr>
+<tr><td><code>drive_move</code>、<code>drive_put</code></td><td>来自 Drive 聊天时遇到同名不覆盖，返回可读的错误让 agent 问；一轮超过 200 项转成等 Apply 的卡</td></tr>
+<tr><td>iOS / Mac / Android</td><td>这张只画 web。点头后照 Wiki 的样子补：iPad / Mac 第三栏，iPhone 和 Android 是 sheet</td></tr>
+</table>
+
+<div class="sec">待你定</div>
+<div class="q"><h4>Q1 · 入口</h4>A. 同 Wiki：宽窗口打开 Drive 就停靠，<code>✕</code> 记住收起，收起后右下角圆按钮 <span class="rec">（推荐：两个页面一个习惯）</span><br>B. 默认不开，页头加一个 <code>Chat</code> 按钮</div>
+<div class="q"><h4>Q2 · agent 动文件要不要你按</h4>A. 说了就做，卡上 <code>Undo</code>；只有覆盖同名、一轮超过 200 项要你定 <span class="rec">（推荐：都撤得回，同 Wiki 11-22 的方案 A）</span><br>B. 每次都先出卡，按 <code>Apply</code> 才动<br>C. 移动、改名直接做；移到 Trash 也要按</div>
+<div class="q"><h4>Q3 · 跑在哪台机器</h4>A. 记住上次 Drive 聊天的 workspace，第一次默认 Cloud <span class="rec">（推荐：Cloud 挂着整个 drive，读大文件最快）</span><br>B. 每次新聊天都让你选，不记</div>
+<div class="q"><h4>Q4 · 聊天开着时的文件详情</h4>A. 盖在列表右侧，≥ 1760 才并排 <span class="rec">（推荐）</span><br>B. 收起左边的文件夹树，三栏并排</div>
+
+</div>
+<script>
+const SB = (on='Drive') => `<div class="sb">
+ <div class="logo"><i></i>Orbit</div>
+ ${['Projects','Tasks','Scheduled','Wiki','Drive'].map(x=>`<div class="r${x===on?' on':''}"><span class="ic"></span>${x}${x==='Wiki'?'<span class="k">72</span>':''}</div>`).join('')}
+ <div class="gh">Workspaces<b>18</b></div>
+ ${['orbit-ws01','orbit-ws02','orbit-ws03','orbit-ws04','orbit-ws05','orbit-prod','wikova-data','kiktok','HPC'].map((x,i)=>`<div class="r"><span class="ic"></span>${x}<span class="k">⌘${i+1}</span></div>`).join('')}
+ <div class="gh">Wiki<b>2</b></div><div class="r"><span class="ic"></span>orbit</div><div class="r"><span class="ic"></span>wikova</div>
+</div>`;
+const HEAD = `<div class="fhd"><h2>Drive</h2><span class="inp">Search all of Files</span><span class="btn">New folder</span><span class="btn pri">Upload</span><span class="btn">Trash</span><span class="btn">Storage</span></div>`;
+const TREE = (on) => `<div class="tree">
+ <div class="tn"><span class="tw">▾</span><span class="fold"></span>Files</div>
+ ${[['Orbit UI migration',1],['Documents drive',1],['Datasets',1],['Receipts 2026',1],['2026-10',2,'new'],['2026-11',2,'new'],['Scans',1]].map(([n,d,f])=>
+   (f && on!=='after')?'':`<div class="tn${n===on||(on==='after'&&n==='Receipts 2026')?' on':''}" style="padding-left:${6+d*14}px"><span class="tw">${d===1&&n==='Receipts 2026'&&on==='after'?'▾':'▸'}</span><span class="fold"></span>${n}${f?'<span class="mk">New</span>':''}</div>`).join('')}
+</div>`;
+const LH = `<div class="lh"><span>Name</span><span>Last written by</span><span style="text-align:right">Size</span><span style="text-align:right">Modified</span></div>`;
+const row = (ic,n,w,s,d,cls='',mk='') => `<div class="lr ${cls}"><span class="nm">${ic==='f'?'<span class="fold"></span>':`<span class="fi ${ic}"></span>`}<span>${n}</span>${mk}</span><span class="w">${w}</span><span class="s">${s}</span><span class="d">${d}</span></div>`;
+const SCANS = [
+ ['IMG_4821.jpg','Oct 3'],['IMG_4822.jpg','Oct 3'],['scan 12.pdf','Oct 9'],['scan 13.pdf','Oct 11'],['IMG_4907.jpg','Oct 18'],['receipt (2).pdf','Oct 24'],['IMG_5011.jpg','Nov 2'],['scan 14.pdf','Nov 6'],['IMG_5102.jpg','Nov 12'],['scan 15.pdf','Nov 19']];
+const listToday = (sel) => `<div class="list"><div class="crumb">Files › <b>Scans</b></div>${LH}
+ ${SCANS.map(([n,d],i)=>row(n.endsWith('pdf')?'pdf':'img',n,'You',['240 KB','1.1 MB','88 KB'][i%3],d,sel&&i<sel?'sel':'')).join('')}
+ ${row('pdf','lease-2026.pdf','You','2.3 MB','Sep 30')}${row('md','todo.md','<a>Agent in Weekly review</a>','2 KB','Sep 28')}</div>`;
+const listAfter = `<div class="list"><div class="crumb">Files › <b>Receipts 2026</b></div>${LH}
+ ${row('f','2026-10','<a>Agent in Sort October receipts</a>','6 items','14:32','chg','<span class="mk">New</span>')}
+ ${row('f','2026-11','<a>Agent in Sort October receipts</a>','4 items','14:32','chg','<span class="mk">New</span>')}
+ ${row('f','2026-09','You','8 items','Oct 2')}${row('f','2026-08','You','11 items','Sep 1')}
+ ${row('pdf','2026 summary.xlsx','You','44 KB','Nov 20')}
+ <div class="crumb" style="padding-top:14px">Files › Receipts 2026 › <b>2026-10</b> <span style="color:var(--t3)">(opened below for the board)</span></div>
+ ${row('pdf','2026-10-03 Blue Bottle.pdf','<a>Agent in Sort October receipts</a>','240 KB','14:32','chg','<span class="mk mv">Moved</span>')}
+ ${row('pdf','2026-10-09 Uber.pdf','<a>Agent in Sort October receipts</a>','88 KB','14:32','chg','<span class="mk mv">Moved</span>')}
+ ${row('pdf','2026-10-11 AWS invoice.pdf','<a>Agent in Sort October receipts</a>','1.1 MB','14:32','chg','<span class="mk mv">Moved</span>')}
+ ${row('pdf','2026-10-24 Apple Store.pdf','<a>Agent in Sort October receipts</a>','240 KB','14:32','chg','<span class="mk mv">Moved</span>')}</div>`;
+const PANE = (over) => `<div class="pane${over?' over':''}">${over?'<div style="text-align:right;color:var(--t2);margin:-6px -4px 0">✕</div>':''}
+ <div class="prev"><b>Lease agreement 2026</b>1. Term. This lease begins on January 1, 2026 and ends December 31, 2026…<br>4. Rent. Tenant pays ¥8,500 per month, due on the 1st…<br>11. Renewal. Either party may give notice of non-renewal no later than <span style="background:#fff3bf">60 days</span> before the end of the term…</div>
+ <h3>lease-2026.pdf</h3><div class="sub">PDF · 2.3 MB · 14 pages</div>
+ <div class="kv"><span class="k">Last written</span><span>Sep 30</span><span class="k">By</span><span>You</span><span class="k">Path</span><span class="mono" style="font-size:11px">/Drive/Scans/lease-2026.pdf</span></div>
+ <div style="display:flex;gap:6px;margin-top:14px"><span class="btn sm">Download</span><span class="btn sm pri">Share link…</span><span class="btn sm">⋯</span></div></div>`;
+const CHATHEAD = (t) => `<div class="ch"><span class="t">${t}</span><span class="x">+</span><span class="x">↗</span><span class="x">✕</span></div>`;
+const COMP = (chips, ph, on) => `<div class="comp"><div class="chips">${chips}</div><div class="ph">${ph}</div>
+ <div class="tb"><span style="font-size:16px">+</span><span>Auto</span><span><b>Opus 5.5</b> Default</span><span>◯</span><span class="send${on?' on':''}"></span></div></div>`;
+const chip = (t) => `<span class="chip">${t}<i>×</i></span>`;
+
+const win = (id, inner, marks=[]) => { const el=document.getElementById(id); el.innerHTML = inner + marks.map(([n,x,y])=>`<span class="m" style="left:${x}px;top:${y}px">${n}</span>`).join(''); };
+
+win('f1', SB() + `<div class="panel drive">${HEAD}<div class="fb">${TREE('Scans')}${listToday(0)}${PANE(false)}</div></div>`);
+
+win('f2', SB() + `<div class="panel drive">${HEAD}<div class="fb">${TREE('Scans')}${listToday(0)}</div></div>
+ <div class="panel chat">${CHATHEAD('New chat')}<div class="runs">Runs in<span>Orbit Cloud ▾</span></div>
+ <div class="cb"><div class="hint">Ask about your files, or say how to sort them.<br>Every change it makes shows here, and can be undone.
+  <ul><li>“Sort these receipts into Receipts 2026 by month”</li><li>“What's taking up the most space?”</li><li>“Find the lease and tell me when the notice period ends”</li></ul></div></div>
+ ${COMP(chip('▣ Folder · Scans'),'Ask about your files, or say how to sort them',false)}</div>`,
+ [[1,1130,20],[2,1196,60],[3,1196,698]]);
+
+win('f3', SB() + `<div class="panel drive">${HEAD}<div class="fb">${TREE('after')}${listAfter}</div></div>
+ <div class="panel chat">${CHATHEAD('Sort October receipts')}
+ <div class="cb">
+  <div class="u">Put these receipts into Receipts 2026, one folder per month, and name each file by date and shop.</div>
+  <div class="att">⊕ Orbit attached: Folder · Scans · 12 files</div>
+  <div class="a"><p>Read all 12. 10 are receipts from October and November; I moved them into new folders <a class="lk">2026-10</a> and <a class="lk">2026-11</a> under <a class="lk">Receipts 2026</a>, named <span class="mono">YYYY-MM-DD Shop.pdf</span>. The other two were photos of receipts already scanned as PDFs, so I moved the photos to Trash.</p></div>
+  <div class="card"><div class="hd">Drive changes<span class="st">Done · 24 changes</span></div>
+   <div class="bd">
+    <div class="op"><span class="v">New folder</span><span>Receipts 2026/2026-10, 2026-11</span></div>
+    <div class="op"><span class="v">Moved</span><span>10 files from Scans</span></div>
+    <div class="op"><span class="v">Renamed</span><span>scan 13.pdf → 2026-10-11 AWS invoice.pdf</span></div>
+    <div class="op"><span class="v"></span><span class="more">and 9 more</span></div>
+    <div class="op"><span class="v">To Trash</span><span>IMG_4821.jpg, IMG_4822.jpg</span></div>
+   </div>
+   <div class="ft"><span class="btn sm">Show all</span><span class="btn sm">Undo</span><span class="note">14:32</span></div></div>
+ </div>
+ ${COMP('','Ask about your files, or say how to sort them',false)}</div>`,
+ [[1,1062,74],[2,1150,305],[3,650,138],[4,860,322]]);
+
+win('f4', SB() + `<div class="panel drive">${HEAD}<div class="fb">${TREE('Scans')}
+ <div class="list"><div class="crumb">Files › <b>Scans</b></div>${LH}
+ ${SCANS.slice(0,7).map(([n,d],i)=>row(n.endsWith('pdf')?'pdf':'img',n,'You',['240 KB','1.1 MB','88 KB'][i%3],d)).join('')}
+ ${row('pdf','lease-2026.pdf','You','2.3 MB','Sep 30','sel')}</div>${PANE(true)}</div></div>
+ <div class="panel chat">${CHATHEAD('Lease and rent')}
+ <div class="cb">
+  <div class="u">Find the lease and tell me when the notice period ends.</div>
+  <div class="a"><p><a class="lk">lease-2026.pdf</a> (Scans) §11: notice of non-renewal is due <b>60 days</b> before the term ends on Dec 31, so by <b>Nov 1, 2026</b>. That date has passed; the lease renews for one year unless both sides agree otherwise (§12).</p></div>
+  <div class="u">Move it into Documents/Home, and put last year's there too.</div>
+  <div class="a"><p>Documents/Home already has a <span class="mono">lease-2026.pdf</span>. It's a different file, so I haven't touched it.</p></div>
+  <div class="card wait"><div class="hd">Replace a file?<span class="st">Needs you</span></div>
+   <div class="bd">
+    <div class="op"><span class="v">Moving</span><span>Scans/lease-2026.pdf · 2.3 MB · You, Sep 30</span></div>
+    <div class="op"><span class="v">Already there</span><span>Documents/Home/lease-2026.pdf · 410 KB · You, Jan 4</span></div>
+    <div class="op" style="color:var(--t2)"><span class="v"></span><span>The one there is a 2-page draft. I'd keep both and name the draft <span class="mono">lease-2026 draft.pdf</span>.</span></div>
+   </div>
+   <div class="ft"><span class="btn sm pri">Keep both</span><span class="btn sm">Replace</span><span class="note">lease-2025.pdf is moved</span></div></div>
+ </div>
+ ${COMP(chip('▣ Folder · Scans'),'Reply, or say what to change',false)}</div>`,
+ [[1,1336,196],[2,966,74],[3,1161,370]]);
+
+win('f5', SB() + `<div class="panel drive">${HEAD}<div class="fb">${TREE('Scans')}${listToday(0)}${PANE(false)}</div></div>
+ <div class="fab">✉<span class="badge">1</span></div>
+ <div style="position:absolute;right:92px;bottom:40px;background:#1d1d1f;color:#fff;font-size:12px;padding:5px 9px;border-radius:6px">1 needs you</div>`,
+ [[1,1330,712]]);
+</script>
+</body></html>
