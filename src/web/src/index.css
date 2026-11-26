@@ -30648,10 +30648,12 @@ td > .routing-report-tier + .model-routing-flag {
   color: var(--text-1);
 }
 
-/* A coordinator question still waiting on the owner: orange and heavier-edged, the colour of the
-   `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
+/* A coordinator question still waiting on the owner: the brand tone, solid and heavier-edged.
+   Blue is the product's "somebody is being asked" colour — the same reason the card's mark is
+   brand — and the warning tone stays for what is wrong (owner's pick, 2026-11-26; it replaced
+   the 2026-11-13 orange edge). */
 .approval-card.coordinator-question {
-  border: 1.5px solid var(--warning-solid);
+  border: 1.5px solid var(--brand);
 }
 
 /* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
