@@ -172,8 +172,8 @@ test('§4 R1: the owner\'s own move, with no session, is unchanged', { skip, con
     const session = randomUUID();
     await admin.query(
       `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-         "provider","status","dispatch_origin","updated_at")
-       VALUES ($1,$2,$3,'a run of it','fixture',$2,'claude','RUNNING'::"run_status",
+         "provider","turn_state","dispatch_origin","updated_at")
+       VALUES ($1,$2,$3,'a run of it','fixture',$2,'claude','IN_FLIGHT',
          'USER'::"session_dispatch_origin",now())`, [session, ownerId, workspaceId]);
     await admin.query('UPDATE "session" SET "task_id" = $2::uuid WHERE "id" = $1::uuid', [session, running]);
     const refused = await refusalOf(() => patch(running, { projectId: projectB }));

@@ -26,7 +26,8 @@ import { Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { uuidToBase62 } from '@orbit/shared';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -226,7 +227,7 @@ suite('what the providers page reads about account pools, over HTTP on real Post
     data: {
       title: 'pooled',
       prompt: 'hello',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       ownerId: alice.id,
       creatorId: alice.id,
       workspaceId: alice.workspaceId,

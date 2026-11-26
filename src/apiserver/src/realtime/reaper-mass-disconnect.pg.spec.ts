@@ -42,7 +42,8 @@ import { request as httpRequest } from 'node:http';
 import { createServer, type AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -54,6 +55,7 @@ import { RUNNER_HEARTBEAT_EVERY_MS, RUNNER_SILENT_AFTER_MS } from '../runners/ru
 import { SINGLETON_SWEEPS_LOCK } from './control-plane-leader';
 import { MASS_SILENCE_WINDOW_MS, RUNNER_REAP_AFTER_MS, STARTUP_GRACE_MS } from './reaper.service';
 import '../test-support/daemon-routes-over-http';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const SECOND = 1_000;
@@ -240,7 +242,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: title,
-        provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, runtimeSessionId: randomUUID(),
+        provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', runtimeSessionId: randomUUID(),
         startedAt: new Date(Date.now() - 10 * 60 * SECOND), runClaimedAt: new Date(Date.now() - 10 * 60 * SECOND),
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
         inboxLeaseOwner: process, inboxLeaseGeneration: generation,
@@ -348,7 +350,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
     return row!.at.getTime();
   };
   const sessionOf = (r: Sim) =>
-    db.session.findUniqueOrThrow({ where: { id: r.sessionId }, select: { status: true, error: true, finishedAt: true } });
+    db.session.findUniqueOrThrow({ where: { id: r.sessionId }, select: { ...WORD_SELECT, error: true, finishedAt: true } });
   const signOff = (r: Sim) => db.runner.update({ where: { id: r.runnerId }, data: { status: 'OFFLINE' } });
   /** What the leader's reaper said from `since` on. */
   const reaperSaid = (door: Door, since: number) =>
@@ -360,8 +362,8 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
   /** A reaping of `r`'s run: when its session was finalized `runner offline`, or null while it runs. */
   const reapedAt = async (r: Sim): Promise<number | null> => {
     const s = await sessionOf(r);
-    if (s.status === RunStatus.RUNNING) return null;
-    assert.deepEqual({ status: s.status, error: s.error }, { status: RunStatus.FAILED, error: 'runner offline' }, r.name);
+    if (wordOf(s) === RunStatus.RUNNING) return null;
+    assert.deepEqual({ status: wordOf(s), error: s.error }, { status: RunStatus.FAILED, error: 'runner offline' }, r.name);
     return s.finishedAt!.getTime();
   };
   /**
@@ -414,7 +416,7 @@ test('a mass disconnection reaps no run whose runner comes back, on a cell of tw
     for (const r of fleet) {
       const word = said.find((line) => line.includes(`reaped session ${r.sessionId} `));
       const row = await sessionOf(r);
-      if (word || row.status !== RunStatus.RUNNING) reaped.push(`${r.name} (${word ?? row.status})`);
+      if (word || wordOf(row) !== RunStatus.RUNNING) reaped.push(`${r.name} (${word ?? wordOf(row)})`);
     }
     assert.deepEqual(reaped, [], `${label}: no run is reaped`);
     const seen = back.filter((b) => b.silentMs - RUNNER_REAP_AFTER_MS > SWEEP_EVERY + SWEEP_SLACK).map((b) => b.r);

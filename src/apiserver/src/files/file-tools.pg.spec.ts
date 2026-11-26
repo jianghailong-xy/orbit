@@ -162,7 +162,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     await db.session.create({
       data: {
         id, title, prompt: title, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id,
-        status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${id}`, taskId,
+        turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${id}`, taskId,
       },
     });
     return id;
@@ -233,7 +233,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     created(await upload(api, `/api/runner/sessions/${b62(firstRun)}/attachments`, machine.token, { name: 'reply.png' }), 'a reply image');
     const kept = created(await upload(api, door(firstRun), machine.token, { name: 'kept.png' }), 'a file_upload');
     // One run of a task at a time: the second starts when the first has ended.
-    await db.session.update({ where: { id: firstRun }, data: { status: 'SUCCEEDED', finishedAt: new Date()} });
+    await db.session.update({ where: { id: firstRun }, data: { turnState: null, finishedAt: new Date()} });
     await copyInto(await sessionOf('the second run', inputTaskId));
     const { json } = await list(`?taskId=${b62(inputTaskId)}`);
     assert.deepEqual(

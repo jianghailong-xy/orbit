@@ -30,7 +30,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { API_ERROR_RETRY_BACKOFF_MS, RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -43,6 +44,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -135,7 +137,7 @@ async function fixture(db: PrismaClient, label: string, { task = false } = {}): 
       prompt: '再解集成线 MAIN_SYNC 冲突',
       provider: 'codex',
       model: 'gpt-5.6-sol',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
@@ -204,7 +206,7 @@ test('a Codex run a busy model stopped goes on by itself, and says what stopped 
   const row = (sessionId: string) =>
     db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { status: true, error: true, retryAt: true, retryAttempts: true },
+      select: { ...WORD_SELECT, error: true, retryAt: true, retryAttempts: true },
     });
   const notes = async (taskId: string) =>
     (await db.taskComment.findMany({ where: { taskId }, select: { body: true } })).map((c) => c.body);
@@ -221,7 +223,7 @@ test('a Codex run a busy model stopped goes on by itself, and says what stopped 
     await api.turnComplete({ id: f.runnerId }, f.sessionId, failed(f, CAPACITY));
 
     const after = await row(f.sessionId);
-    assert.equal(after.status, RunStatus.FAILED, 'this run of the session failed, as it did');
+    assert.equal(wordOf(after), RunStatus.FAILED, 'this run of the session failed, as it did');
     assert.equal(after.error, CAPACITY, 'the reason is what stopped it, not what the agent said before');
     assert.ok(onFirstRung(after.retryAt, before), `not armed on the first rung: ${after.retryAt?.toISOString()}`);
     assert.equal(after.retryAttempts, 0, 'arming spends no attempt; the sweep does');

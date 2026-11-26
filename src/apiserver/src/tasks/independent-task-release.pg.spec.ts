@@ -5,11 +5,11 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -19,6 +19,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * Finishing a task releases the NEXT one, including when nothing was waiting on it.
@@ -427,7 +428,7 @@ test("the release does not exceed the project's concurrency budget",
           id: randomUUID(), ownerId: ids.ownerId, creatorId: ids.ownerId, taskId: finished,
           workspaceId: ids.agentId, assignedRunnerId: ids.runnerId,
           title: 'the run that finished it', prompt: 'do the work', provider: 'claude',
-          status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
         },
       });
@@ -704,7 +705,7 @@ async function occupyListSlot(
       id: randomUUID(), title: `occupant-${RUN}`, prompt: 'x',
       ownerId: ids.ownerId, creatorId: ids.ownerId, workspaceId: ids.agentId,
       assignedRunnerId: ids.runnerId,
-      batchId: listId, batchMaxConcurrent: cap, status: 'PENDING',
+      batchId: listId, batchMaxConcurrent: cap, turnState: 'QUEUED',
     },
   });
 }
@@ -787,7 +788,7 @@ async function occupy(db: PrismaClient, ids: World, taskId: string, status: RunS
       id: randomUUID(), ownerId: ids.ownerId, creatorId: ids.ownerId, taskId,
       workspaceId: ids.agentId, assignedRunnerId: ids.runnerId,
       title: `occupant-${RUN}`, prompt: 'do the work', provider: 'claude',
-      status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
 }

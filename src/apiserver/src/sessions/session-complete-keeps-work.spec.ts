@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
 import { RealtimeService } from '../realtime/realtime.service';
 import { KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';

@@ -1,13 +1,11 @@
 /**
  * A held session's turn state, the explicit fact for runner slots and claims (docs/session-status-retirement-plan.md
- * §1.3, §2.1), read NULL-safely for the readers that move off `session.status` (tasks T7 to T12).
+ * §1.3, §2.1), which the readers moved off `session.status` read (tasks T7 to T12).
  *
  * `session.turn_state` is QUEUED, IN_FLIGHT, ABANDONED or null, one for one with the held words PENDING, RUNNING,
- * INTERRUPTED and AWAITING_INPUT. Migration 1611's trigger keeps it from the word on every write of the word, but a
- * held row nothing has written since that migration has none until the backfill (task T3) fills it, and readers may
- * reach production before the backfill has run (project rule, 2026-11-25). So a held row with no turn state reads its
- * STORED word: here (`heldSessionWord`, which legacySessionStatus in session-legacy-words.ts reads too, the Prisma
- * filter and the SQL fragment below) and in that projector's SQL twin, and nowhere else. That read goes with the column's writers (task T14).
+ * INTERRUPTED and AWAITING_INPUT. The writers write it (deploy D3, task T14) and nothing reads the stored word: every
+ * row has been backfilled (task T3) and migration 1652 holds the two spellings equal, so a held row with no turn state
+ * is parked.
  *
  * A leaf: it imports nothing of the projects or tasks modules, nor of common/, so every one of them can import it
  * (common/session-release.ts and the slot helpers beside it read their turn states here).
@@ -31,11 +29,6 @@ const TURN_STATE_OF_HELD_WORD: Readonly<Record<string, TurnState>> = Object.from
   Object.entries(HELD_WORD_OF_TURN_STATE).map(([state, word]) => [word, state as TurnState]),
 );
 
-/** The held word of a turn state, null for parked: what a writer stores beside it while both are written. */
-export function heldWordOf(turn: TurnState | null): RunStatus {
-  return turn === null ? RunStatus.AWAITING_INPUT : HELD_WORD_OF_TURN_STATE[turn];
-}
-
 /**
  * `statusAfterTurnEnqueued` (common/session-scheduling.ts) on the turn state of a held session: a parked or abandoned
  * session's new turn waits for a claim (QUEUED), and one queued or in flight stays where it is.
@@ -44,29 +37,19 @@ export function turnStateAfterTurnEnqueued(turn: TurnState | null): TurnState {
   return turn === 'QUEUED' || turn === 'IN_FLIGHT' ? turn : 'QUEUED';
 }
 
-/** The columns turnStateOf reads. `status` is the fallback the header describes, read for nothing else. */
-export const TURN_STATE_SELECT = { status: true, finishedAt: true, turnState: true } as const;
+/** The columns turnStateOf reads. */
+export const TURN_STATE_SELECT = { finishedAt: true, turnState: true } as const;
 
-/**
- * What turnStateOf reads. A row with no `turnState` key reads as one not yet backfilled: its stored word decides. A row
- * whose turn state was resolved in SQL (sessionTurnStateSql, the fallback included) needs no word: with neither it
- * reads as parked.
- */
+/** What turnStateOf reads. */
 export interface TurnStateFacts {
-  status?: string;
   finishedAt: Date | string | null;
-  turnState?: string | null;
+  turnState: string | null;
 }
 
-/** The word of a held row: its turn state's, or with none its stored word. legacySessionStatus's held branch. */
+/** The word of a held row: its turn state's, AWAITING_INPUT with none. legacySessionStatus's held branch. */
 export function heldSessionWord(facts: TurnStateFacts): RunStatus {
-  if (facts.turnState != null) {
-    return HELD_WORD_OF_TURN_STATE[facts.turnState as TurnState] ?? RunStatus.AWAITING_INPUT;
-  }
-  // No turn state: parked, or not yet backfilled. A parked row stores AWAITING_INPUT, so both read the stored word.
-  const session = facts;
-  const stored = session.status ?? '';
-  return Object.hasOwn(TURN_STATE_OF_HELD_WORD, stored) ? stored as RunStatus : RunStatus.AWAITING_INPUT;
+  return (facts.turnState != null ? HELD_WORD_OF_TURN_STATE[facts.turnState as TurnState] : undefined)
+    ?? RunStatus.AWAITING_INPUT;
 }
 
 /**
@@ -79,9 +62,9 @@ export function turnStateOf(facts: TurnStateFacts): TurnState | null {
 }
 
 /**
- * The turn state a writer stores beside the word it writes (deploy 2 writes both, plan §2.2): the word's own, one for
- * one, null for AWAITING_INPUT and every released word. The mapping of `session_turn_state_of_status` (migration
- * 1611), whose trigger derives it from the word in the same row, and which the CHECK of 1622 holds it to.
+ * The turn state of a held word, one for one, null for AWAITING_INPUT and every released word: what a writer that
+ * decides in words (the runner's turn-complete and finalize, plan §3.2) stores. The mapping of
+ * `session_turn_state_of_status` (migration 1611), which the CHECK of 1652 holds the two spellings to.
  */
 export function turnStateOfWord(word: string): TurnState | null {
   return TURN_STATE_OF_HELD_WORD[word] ?? null;
@@ -95,30 +78,25 @@ export function isParked(facts: TurnStateFacts): boolean {
 /**
  * Prisma filter: held, and its turn state is one of `states` (null for parked), as turnStateOf reads it. Its keys are
  * `finishedAt` and `OR`, so spread it only into a filter that names neither, or put it in an `AND` list. Never null in
- * SQL (the `IN` is asked only beside `turn_state IS NOT NULL`), so a `NOT` of it is the rows it does not match: without
- * that, a row not yet backfilled read NULL there and fell out of both a filter and its negation.
+ * SQL (the `IN` is asked only beside `turn_state IS NOT NULL`), so a `NOT` of it is the rows it does not match.
  */
 export function turnStateFilter(states: ReadonlyArray<TurnState | null>): Prisma.SessionWhereInput {
   const named = states.filter((state): state is TurnState => state !== null);
-  const words: string[] = named.map((state) => HELD_WORD_OF_TURN_STATE[state]);
-  // A row with no turn state reads its stored word: the words of the named states, and for parked every word that
-  // names no turn state, as heldSessionWord reads it.
-  const turnWords = Object.keys(TURN_STATE_OF_HELD_WORD) as RunStatus[];
-  const session: Prisma.SessionWhereInput = states.includes(null)
-    ? { turnState: null, status: { notIn: turnWords.filter((word) => !words.includes(word)) } }
-    : { turnState: null, status: { in: turnWords.filter((word) => words.includes(word)) } };
   return {
     finishedAt: null,
-    OR: [...(named.length > 0 ? [{ turnState: { not: null, in: named } }] : []), session],
+    OR: [
+      ...(named.length > 0 ? [{ turnState: { not: null, in: named } }] : []),
+      ...(states.includes(null) ? [{ turnState: null }] : []),
+    ],
   };
 }
 
 /**
  * Raw SQL: the turn state of the session row the query names `sessionAlias` (a constant, never input), as turnStateOf
  * reads it: NULL when the row is released or parked. Compare it with `=` for a state, `IS NULL` beside `finished_at IS
- * NULL` for parked, and `IS DISTINCT FROM` for a negation. `session_turn_state_of_status` is migration 1611's.
+ * NULL` for parked, and `IS DISTINCT FROM` for a negation. The SQL twin of session_held_turn_state (migration 1671).
  */
 export function sessionTurnStateSql(sessionAlias: string): Prisma.Sql {
   const session = Prisma.raw(sessionAlias);
-  return Prisma.sql`(CASE WHEN ${session}."finished_at" IS NULL THEN COALESCE(${session}."turn_state", session_turn_state_of_status(${session}."status")) END)`;
+  return Prisma.sql`(CASE WHEN ${session}."finished_at" IS NULL THEN ${session}."turn_state" END)`;
 }

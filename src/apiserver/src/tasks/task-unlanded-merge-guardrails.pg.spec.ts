@@ -5,11 +5,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
@@ -293,7 +293,7 @@ async function fixture(
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
     },
@@ -390,7 +390,7 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       // The attempt commits on a worktree branch of its own, past the commit it forked from: work with
@@ -457,7 +457,7 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
   });
   await stack.db.session.update({
     where: { id: sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: new Date()},
+    data: { turnState: null, finishedAt: new Date()},
   });
 
   assert.equal(
@@ -507,7 +507,7 @@ async function recordMerge(
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+      turnState: null, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -579,7 +579,7 @@ async function coordinatorReadsIt(db: PrismaClient, f: Fixture) {
   });
   await db.session.update({
     where: { id: f.coordinatorSessionId },
-    data: { status: RunStatus.AWAITING_INPUT },
+    data: { turnState: null },
   });
 }
 

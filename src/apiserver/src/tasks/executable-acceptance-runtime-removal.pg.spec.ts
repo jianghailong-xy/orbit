@@ -5,12 +5,12 @@ import test from 'node:test';
 import {
   PrismaClient,
   ProjectStatus,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
   TaskVerdict,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -28,6 +28,8 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * The server half of the 0227 removal, against a real PostgreSQL that replayed every migration.
@@ -231,7 +233,7 @@ async function runAcceptance(
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: declared.id,
       workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title: label, prompt: label,
-      provider: 'claude', status: RunStatus.RUNNING, engineTurnActive: true,
+      provider: 'claude', turnState: 'IN_FLIGHT', engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
@@ -654,13 +656,13 @@ suite('(l)(m)(n)(o) ordinary task, session, run_event and child-row writes are u
       data: {
         id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: replacement.id,
         workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title: 'work', prompt: 'work',
-        provider: 'claude', status: RunStatus.PENDING,
+        provider: 'claude', turnState: 'QUEUED',
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },
     });
     for (const status of [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.RUNNING]) {
       assert.equal(
-        (await db.session.update({ where: { id: sessionId }, data: { status } })).status, status);
+        wordOf((await db.session.update({ where: { id: sessionId }, data: { turnState: turnStateOfWord(status) } }))), status);
     }
     await db.session.update({ where: { id: sessionId }, data: { deletedAt: new Date() } });
     const dispatched = await tasks.execute(w.ownerId, replacement.id) as

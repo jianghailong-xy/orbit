@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -79,7 +80,7 @@ test('the session detail answers usage totals over legacy running-total rows and
       data: {
         ownerId, creatorId: ownerId, assignedRunnerId: runnerId, provider: engine, engine,
         model: engine === 'claude' ? OPUS : 'gpt-5.5', costUsd: data.costUsd ?? 0, numTurns: data.numTurns ?? 0,
-        title: 'usage session', prompt: 'spend', status: RunStatus.AWAITING_INPUT,
+        title: 'usage session', prompt: 'spend', turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
       select: { id: true },

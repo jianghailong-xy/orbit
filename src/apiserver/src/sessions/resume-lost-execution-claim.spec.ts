@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 
 import { SessionsService } from './sessions.service';
@@ -157,7 +158,7 @@ const retry = { clientTurnId: 'retry-1', content: 'go on' };
 test('a revive that loses the execution claim is a 409 naming the session that holds it', async () => {
   const { service, holderReads } = fixture({
     id: SIBLING,
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     workspaceId: WORKSPACE,
     startsTaskWork: true,
     cancelRequestedAt: null,
@@ -191,7 +192,7 @@ test('a revive that loses the execution claim is a 409 naming the session that h
 test('the refusal says which of the shapes the holder is', async () => {
   const onAnotherAgent = fixture({
     id: SIBLING,
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     workspaceId: OTHER_WORKSPACE,
     startsTaskWork: true,
     cancelRequestedAt: null,
@@ -206,7 +207,7 @@ test('the refusal says which of the shapes the holder is', async () => {
 
   const ending = fixture({
     id: SIBLING,
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     workspaceId: WORKSPACE,
     startsTaskWork: true,
     cancelRequestedAt: now,

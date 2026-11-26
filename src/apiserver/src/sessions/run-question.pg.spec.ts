@@ -38,10 +38,10 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
   try {
     await db.user.create({ data: { id: ownerId, email: `${ownerId}@question.invalid`, passwordHash: 'x', name: 'Question spec' } });
     const runner = await db.runner.create({ data: { ownerId, name: 'Runner', tokenHash: randomUUID(), status: 'ONLINE' } });
-    const coordinator = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', status: 'AWAITING_INPUT' } });
+    const coordinator = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', turnState: null } });
     const project = await db.project.create({ data: { ownerId, title: 'Automatic', goal: 'Answer run', coordinatorEnabled: true, coordinatorSessionId: coordinator.id, exceptionEscalationSeconds: 300 } });
     const task = await db.task.create({ data: { ownerId, creatorId: ownerId, creatorType: 'USER', title: 'Choose port', projectId: project.id, completionCriterion: 'EVIDENCE_JUDGMENT' } });
-    const run = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Work', provider: 'claude', taskId: task.id, assignedRunnerId: runner.id, status: 'RUNNING', engineTurnActive: true } });
+    const run = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Work', provider: 'claude', taskId: task.id, assignedRunnerId: runner.id, turnState: 'IN_FLIGHT', engineTurnActive: true } });
     const caller = { id: runner.id, ownerId };
     async function ask() { return api.createApproval(caller, run.id, { toolName: 'AskUserQuestion', toolUseId: randomUUID(), input }); }
     const question = await ask();
@@ -126,7 +126,7 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
     assert.equal((await db.approval.findUniqueOrThrow({ where: { id: ordinary.id } })).coordinatorFallback, null);
     assert.notEqual(pushes.at(-1)?.[3], true);
     const outside = await db.task.create({ data: { ownerId, creatorId: ownerId, creatorType: 'USER', title: 'No project', completionCriterion: 'EVIDENCE_JUDGMENT' } });
-    const outsideRun = await db.session.create({ data: { ownerId, creatorId: ownerId, taskId: outside.id, title: 'Standalone run', prompt: 'Work', provider: 'claude', assignedRunnerId: runner.id, status: 'RUNNING' } });
+    const outsideRun = await db.session.create({ data: { ownerId, creatorId: ownerId, taskId: outside.id, title: 'Standalone run', prompt: 'Work', provider: 'claude', assignedRunnerId: runner.id, turnState: 'IN_FLIGHT' } });
     const standalone = await api.createApproval(caller, outsideRun.id, { toolName: 'AskUserQuestion', input });
     assert.equal((await db.approval.findUniqueOrThrow({ where: { id: standalone.id } })).coordinatorFallback, null);
     assert.notEqual(pushes.at(-1)?.[3], true);
@@ -155,10 +155,10 @@ test('A coordinator answers a multi-question run question through POST /runner/s
   try {
     await db.user.create({ data: { id: ownerId, email: `${ownerId}@question.invalid`, passwordHash: 'x', name: 'Question spec' } });
     const runner = await db.runner.create({ data: { ownerId, name: 'Runner', tokenHash: randomUUID(), status: 'ONLINE' } });
-    const coordinator = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', status: 'AWAITING_INPUT' } });
+    const coordinator = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', turnState: null } });
     const project = await db.project.create({ data: { ownerId, title: 'Automatic', goal: 'Answer run', coordinatorEnabled: true, coordinatorSessionId: coordinator.id, exceptionEscalationSeconds: 300 } });
     const task = await db.task.create({ data: { ownerId, creatorId: ownerId, creatorType: 'USER', title: 'Decide', projectId: project.id, completionCriterion: 'EVIDENCE_JUDGMENT' } });
-    const run = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Work', provider: 'claude', taskId: task.id, assignedRunnerId: runner.id, status: 'RUNNING', engineTurnActive: true } });
+    const run = await db.session.create({ data: { ownerId, creatorId: ownerId, title: 'Run', prompt: 'Work', provider: 'claude', taskId: task.id, assignedRunnerId: runner.id, turnState: 'IN_FLIGHT', engineTurnActive: true } });
     const caller = { id: runner.id, ownerId };
     const multi = { questions: [
       { question: 'Which port?', options: [{ label: '3000' }, { label: '4000' }] },

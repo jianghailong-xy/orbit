@@ -27,7 +27,8 @@ import test from 'node:test';
 
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { ClaimedSession } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
@@ -208,11 +209,11 @@ suite('key_gateway_token, end to end on real PostgreSQL', { timeout: 600_000 }, 
     const sessionId = (await sessions.create(ann.id, {
       prompt: 'hello', title: slug, workspaceId: ann.workspaceId, provider: slug, engine: 'claude', model: 'gpt-5.1',
     } as never)).id;
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING, cancelRequestedAt: null } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED', cancelRequestedAt: null } });
     const claimed = await queue.claimSessionForRunner({ id: ann.runnerId });
     assert.ok(claimed, 'the runner was offered no session');
     assert.equal(claimed.sessionId, sessionId);
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
     return { sessionId, claimed };
   }
 

@@ -884,7 +884,7 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
       ops: [{ op: 'challenge', entryId: pub(E_REIN), reason: 'The owner doubts it.' }], rationale: 'r', idempotencyKey: `ended-${RUN}`,
     });
     const id = toUuid(drafted.json.draftId);
-    await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1::uuid`, [chat]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()) WHERE "id" = $1::uuid`, [chat]);
     assert.equal((await card(id)).json.state, 'not_applied');
     const applied = await press(id, 'apply');
     assert.equal(applied.status, 409, applied.text);

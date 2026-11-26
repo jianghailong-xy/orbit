@@ -29,7 +29,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { RunnerInstallState } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -98,7 +99,7 @@ test('POST/GET /api/runner/runners/:id/engine-install: the web’s engine relay,
     await db.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id, title: `${name} orchestrator`,
-        prompt: 'install an engine', provider: 'claude', providerBuiltin: true, status: RunStatus.AWAITING_INPUT,
+        prompt: 'install an engine', provider: 'claude', providerBuiltin: true, turnState: null,
         runtimeSessionId: randomUUID(), startedAt: new Date(), runClaimedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });

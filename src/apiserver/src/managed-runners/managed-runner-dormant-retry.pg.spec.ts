@@ -28,6 +28,7 @@ import { autoRetryEligibleWhere } from '../sessions/auto-retry-eligibility';
 import { SessionsService } from '../sessions/sessions.service';
 import { managedRunnerWorld } from '../test-support/managed-runner-world';
 import { managedRunnerWork } from './managed-runner-work';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -62,6 +63,11 @@ test('a dormant retry arm is not managed-runner work', { skip: !URL, concurrency
       last_turn_outcome: 'FAILED',
       ...extra,
     };
+    // The word as its facts (deploy D3): the turn state of a held word; the release beside a released one is set above.
+    if ('status' in columns) {
+      columns.turn_state = turnStateOfWord(String(columns.status));
+      delete columns.status;
+    }
     const names = Object.keys(columns);
     await sql.query(
       `INSERT INTO "session" (${names.map((n) => `"${n}"`).join(', ')}, "started_at", "updated_at")

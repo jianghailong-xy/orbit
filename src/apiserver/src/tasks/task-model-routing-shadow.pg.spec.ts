@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { CreatorType, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -379,7 +380,7 @@ test('replaying an answered single run or bulk run through a takeover writes no 
 
       // A bulk press over both, after the single run has ended: one fresh item each.
       await services.db.session.update({
-        where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: sessionId }, data: { turnState: null, finishedAt: new Date() },
       });
       const bulk = randomUUID();
       const answer = await services.tasks.batchExecute(target.ownerId, target.taskIds, undefined, bulk);
@@ -467,7 +468,7 @@ test('a press that continues a paused run is not routed', { skip, timeout: 120_0
     const [taskId] = target.taskIds;
     const paused = await runNow(services, target, taskId, randomUUID());
     await services.db.session.update({
-      where: { id: paused }, data: { status: RunStatus.AWAITING_INPUT },
+      where: { id: paused }, data: { turnState: null },
     });
     const press = randomUUID();
 
@@ -494,12 +495,12 @@ test('earlier work runs feed the decision; task and session details carry each r
       const run1 = await runNow(services, target, taskId, randomUUID());
       await services.db.session.update({
         where: { id: run1 },
-        data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date(), model: SONNET, error: 'the engine exited 1' },
+        data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date(), model: SONNET, error: 'the engine exited 1' },
       });
       const run2 = await runNow(services, target, taskId, randomUUID());
       await services.db.session.update({
         where: { id: run2 },
-        data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date(), model: OPUS,
+        data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date(), model: OPUS,
           error: "You've hit your weekly limit · resets 1pm" },
       });
       const run3 = await runNow(services, target, taskId, randomUUID());

@@ -82,11 +82,11 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -199,7 +199,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       startedAt: new Date(),
@@ -550,7 +550,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
         title: `${label} 执行会话`,
         prompt: `${label} 执行会话`,
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: true,
       },
@@ -1010,7 +1010,7 @@ test('the badge says Record as done… once a finished-looking project has waite
       taskId: served.id,
       title: 'The work the ruler asks for',
       prompt: 'Do the work',
-      status: RunStatus.SUCCEEDED,
+      turnState: null,
       startsTaskWork: true,
       finishedAt: new Date(),
       changedFiles: ['work.md'],
@@ -1036,7 +1036,7 @@ test('the badge says Record as done… once a finished-looking project has waite
       title: 'the work the ruler asks for',
       prompt: 'the work the ruler asks for',
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',

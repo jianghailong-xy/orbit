@@ -7,6 +7,7 @@ import {
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
   OPENCODE_RUNNER_UPGRADE_ERROR,
 } from './runner-provider-support';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const RUNNER = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -253,6 +254,7 @@ function reclaimRow(id: string, provider: AgentProvider, status: string) {
     providerBuiltin: true,
     engine: provider as string | null,
     status,
+    turnState: turnStateOfWord(status),
     cancelRequestedAt: null,
     error: null,
     workspace: null,

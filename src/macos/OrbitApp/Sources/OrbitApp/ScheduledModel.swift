@@ -228,6 +228,17 @@ final class ScheduledModel {
         await control(id) { try await self.api.runScheduleNow(id) }
     }
 
+    /// Run now from a run's session: the refusal's sentence, or the session of the run it started (web opens it).
+    func runNowSession(_ id: String) async -> (said: String?, sessionID: String?) {
+        var started: String?
+        let said = await control(id) {
+            let answer = try await self.api.runScheduleNow(id)
+            started = answer.run.sessionId
+            return answer
+        }
+        return (said, said == nil ? started : nil)
+    }
+
     @discardableResult func pause(_ id: String) async -> String? {
         await control(id) { try await self.api.pauseSchedule(id) }
     }

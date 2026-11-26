@@ -4,11 +4,11 @@ import test from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { TaskStatus as SharedTaskStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -22,6 +22,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * The biggest risk in the 0220 removal, taken head-on.
@@ -167,16 +168,16 @@ suite('(e) ordinary session creation and task dispatch still work', async (t) =>
     data: {
       id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, workspaceId,
       assignedRunnerId: runnerId, title: 'work', prompt: 'work', provider: 'claude',
-      status: RunStatus.PENDING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'QUEUED', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
   // ...and the status transitions the revive guard fired on.
   const running = await db.session.update({
-    where: { id: sessionId }, data: { status: RunStatus.RUNNING },
+    where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' },
   });
-  assert.equal(running.status, RunStatus.RUNNING);
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  assert.equal(wordOf(running), RunStatus.RUNNING);
+  await db.session.update({ where: { id: sessionId }, data: { turnState: null } });
+  await db.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
 
   // The real dispatch door, which is what a person pressing Execute reaches.
   await db.session.update({ where: { id: sessionId }, data: { deletedAt: new Date() } });
@@ -204,7 +205,7 @@ suite('(f) run_event writes still work, and the database still owns their ingest
   await db.session.create({
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-      title: 'events', prompt: 'events', provider: 'claude', status: RunStatus.RUNNING,
+      title: 'events', prompt: 'events', provider: 'claude', turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
@@ -269,7 +270,7 @@ suite('(d)(e)(f) conversation turns still write, with no guard left on that tabl
     data: {
       id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, workspaceId,
       assignedRunnerId: runnerId, title: 'turns', prompt: 'turns', provider: 'claude',
-      status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
 

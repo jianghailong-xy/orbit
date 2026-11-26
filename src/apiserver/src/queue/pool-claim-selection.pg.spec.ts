@@ -17,7 +17,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider } from '@prisma/client';
+import { PrismaClient, RunnerStatus, type ModelProvider } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -34,6 +35,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { QueueService } from './queue.service';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts the members' keys and the claim decrypts them; both only need the same secret.
@@ -112,7 +114,7 @@ async function queuedSession(db: PrismaClient, who: Owner, provider: string): Pr
     data: {
       title: 'pool',
       prompt: 'hello',
-      status: RunStatus.PENDING,
+      turnState: 'QUEUED',
       ownerId: who.id,
       creatorId: who.id,
       workspaceId: who.workspaceId,
@@ -165,7 +167,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
   }
   /** The session's next message queued, which is what has the runner claim it again. */
   async function nextTurn(sessionId: string): Promise<void> {
-    await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.PENDING } });
+    await db.session.update({ where: { id: sessionId }, data: { turnState: 'QUEUED' } });
   }
   const token = (claimed: ClaimedSession) => claimed.agent.env?.ANTHROPIC_AUTH_TOKEN;
   const recorded = (sessionId: string) =>
@@ -245,7 +247,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
     assert.equal(await queue.claimSessionForRunner({ id: stranger.runnerId }), null);
     assert.deepEqual(await recorded(theirs), { poolMemberProviderId: null, poolSwitchNotice: null });
     assert.deepEqual(
-      await db.session.findUniqueOrThrow({ where: { id: theirs }, select: { status: true, error: true } }),
+      withWord(await db.session.findUniqueOrThrow({ where: { id: theirs }, select: { ...WORD_SELECT, error: true } })),
       { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR },
     );
   });
@@ -294,7 +296,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
     await nextTurn(sessionId);
     assert.equal(await queue.claimSessionForRunner({ id: me.runnerId }), null);
     assert.deepEqual(
-      await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true, error: true } }),
+      withWord(await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ...WORD_SELECT, error: true } })),
       { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR },
     );
   });

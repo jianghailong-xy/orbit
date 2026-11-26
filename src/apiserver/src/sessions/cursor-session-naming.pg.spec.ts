@@ -27,7 +27,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, PermissionMode, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -173,7 +174,7 @@ test('P5a Cursor CLI session titles on PostgreSQL', { concurrency: 1, timeout: 3
       ownerId: m.ownerId, creatorId: m.ownerId, workspaceId: m.workspaceId, assignedRunnerId: m.runnerId,
       taskId: task.id, startsTaskWork: true, title: task.title, prompt: PROMPT,
       provider: AgentProvider.CURSOR, providerBuiltin: true, engine: AgentProvider.CURSOR, model: 'default[]',
-      usesRuntimeDefaultModel: true, permissionMode: PermissionMode.ACCEPT_EDITS, status: RunStatus.PENDING,
+      usesRuntimeDefaultModel: true, permissionMode: PermissionMode.ACCEPT_EDITS, turnState: 'QUEUED',
     } })).id;
     const claimed = await claim(m);
     assert.equal(claimed.sessionId, id);

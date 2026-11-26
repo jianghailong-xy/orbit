@@ -167,9 +167,9 @@ test('the trigger reads the settled tasks after the cursor by index, answering w
         [ownerId, workspaceId, SETTLED_TASKS],
       );
       const taskSessions = `INSERT INTO "session"("id", "title", "prompt", "owner_id", "creator_id", "workspace_id", "dispatch_origin",
-                               "status", "task_id", "last_turn_at", "created_at", "updated_at", "finished_at")
+                               "turn_state", "task_id", "last_turn_at", "created_at", "updated_at", "finished_at")
          SELECT gen_random_uuid(), t."title", $pad, $1::uuid, $1::uuid, $2::uuid, 'USER',
-                'SUCCEEDED', t."id", t."updated_at", t."updated_at", t."updated_at", t."updated_at"
+                NULL, t."id", t."updated_at", t."updated_at", t."updated_at", t."updated_at"
            FROM "task" t
           WHERE t."owner_id" = $1::uuid AND t."status" = 'DONE'
           ORDER BY t."updated_at" LIMIT $3::int`;
@@ -177,9 +177,9 @@ test('the trigger reads the settled tasks after the cursor by index, answering w
       await sql.query(taskSessions.replace('$pad', pad('t."title"', sessionPad)), [ownerId, workspaceId, SESSIONS]);
       await sql.query(
         `INSERT INTO "session"("id", "title", "prompt", "owner_id", "creator_id", "workspace_id", "dispatch_origin",
-                               "status", "last_turn_at", "created_at", "updated_at", "finished_at")
+                               "turn_state", "last_turn_at", "created_at", "updated_at", "finished_at")
          SELECT gen_random_uuid(), 'loose ' || i, ${pad("'l' || i", sessionPad)}, $1::uuid, $1::uuid, $2::uuid, 'USER',
-                'SUCCEEDED', timestamp '2026-08-01' + make_interval(mins => i),
+                NULL, timestamp '2026-08-01' + make_interval(mins => i),
                 timestamp '2026-08-01' + make_interval(mins => i), timestamp '2026-08-01' + make_interval(mins => i),
                 timestamp '2026-08-01' + make_interval(mins => i)
            FROM generate_series(1, $3::int) AS i`,
@@ -218,7 +218,7 @@ test('the trigger reads the settled tasks after the cursor by index, answering w
       await db.session.create({
         data: {
           id: running, title: 'running', prompt: 'p', ownerId, creatorId: ownerId, dispatchOrigin: 'USER',
-          status: 'RUNNING', workspaceId, assignedRunnerId: runnerId,
+          turnState: 'IN_FLIGHT', workspaceId, assignedRunnerId: runnerId,
         },
       });
       const [settled] = (await sql.query(

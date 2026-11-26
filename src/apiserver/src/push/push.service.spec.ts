@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { SessionEndReason, uuidToBase62 } from '@orbit/shared';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { PushService } from './push.service';
 import { releaseFactsOf } from '../common/session-release-shapes.fixture';
 import { findingCollapseId, findingCopy } from '../schedules/schedule-attention';
@@ -1081,7 +1081,7 @@ test('notify from an Automatic task run reaches the coordinator without alerting
       return { placement: 'queued' };
     } }) },
   });
-  const live = { status: 'RUNNING', endReason: null, completedAt: null, archivedAt: null,
+  const live = { turnState: 'IN_FLIGHT', finishedAt: null, status: 'RUNNING', endReason: null, completedAt: null, archivedAt: null,
     deletedAt: null, cancelRequestedAt: null, retryAt: null };
   (harness.prisma as any).$queryRaw = async () => [];
   harness.prisma.session.findFirst = async (q: any) => {
@@ -1089,7 +1089,7 @@ test('notify from an Automatic task run reaches the coordinator without alerting
     if (q.select.task) return { title: 'Run', agentNotifiedAt: harness.rang.sessions.get(run) ?? null, task: { id: taskId, title: 'Build', project: {
       id: randomUUID(), coordinatorEnabled: true, coordinatorSessionId: coordinator, exceptionEscalationSeconds: 7200,
     } } };
-    if (q.select.status) return live;
+    if (q.select.turnState) return live;
     return { id: q.where.id, title: 'Run', taskId, workspace: null, permissionMode: 'default', engine: 'codex', owner: { preferences: {} } };
   };
   const result = await harness.service.notifyAgentMessage({ ...agentInput, sessionId: run, message: 'Ready to review' });
@@ -1132,7 +1132,7 @@ for (const unavailable of ['missing', 'ended', 'paused', 'fused', 'refused']) {
       if (q.select.task) return { title: 'Run', task: { id: randomUUID(), title: 'Build', project: {
         id: randomUUID(), coordinatorEnabled: true, coordinatorSessionId: unavailable === 'missing' ? null : coordinator, exceptionEscalationSeconds: 7200,
       } } };
-      if (q.select.status) return { status: unavailable === 'ended' ? 'COMPLETED' : 'RUNNING', endReason: null,
+      if (q.select.turnState) return { status: unavailable === 'ended' ? 'COMPLETED' : 'RUNNING', turnState: 'IN_FLIGHT', finishedAt: null, endReason: null,
         completedAt: unavailable === 'ended' ? new Date() : null, archivedAt: null, deletedAt: null,
         cancelRequestedAt: null, retryAt: unavailable === 'paused' ? new Date() : null };
       return null;

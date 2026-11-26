@@ -32,7 +32,8 @@ import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { JwtService } from '@nestjs/jwt';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver';
@@ -146,7 +147,7 @@ test('Feishu: an app acts only on its own account — naming another account\'s 
   await db.session.create({
     data: {
       id: bSession, ownerId: B.id, creatorId: B.id, workspaceId: B.workspaceId, assignedRunnerId: B.runnerId, title: `B's secret session ${RUN}`,
-      prompt: 'the work', provider: 'claude', status: RunStatus.RUNNING, engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
+      prompt: 'the work', provider: 'claude', turnState: 'IN_FLIGHT', engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(), runtimeSessionId: randomUUID(),
     },
   });

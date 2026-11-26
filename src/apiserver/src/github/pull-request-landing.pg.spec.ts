@@ -60,7 +60,8 @@ process.env.PUBLIC_ORIGIN = 'https://orbit.example.test';
 import assert from 'node:assert/strict';
 import { createHmac, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   INTEGRATION_PULL_REQUEST_CAPABILITY, PUSH_AS_ME_CAPABILITY, SESSION_MERGE_PULL_REQUEST_CAPABILITY, type IntegrationCheckResult,
   type IntegrationJobCommand,
@@ -375,7 +376,7 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
       data: {
         id: randomUUID(), ownerId, creatorId: ownerId, taskId: task.id, workspaceId: workspace.workspaceId,
         assignedRunnerId: workspace.runnerId, title: `ran ${label}`, prompt: 'do the work', branch,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, baseSha: SHA(`base-${label}`), startsTaskWork: true,
+        isolationStatus: 'worktree', turnState: null, baseSha: SHA(`base-${label}`), startsTaskWork: true,
         worktreeBranch: branch, worktreeDirty: false,
         changedFiles: WORK_REPORTED as never, createdAt: new Date(Date.now() - 2 * 86_400_000), finishedAt: new Date(Date.now() - 2 * 86_400_000),
       },
@@ -733,7 +734,7 @@ test('§4.6: a session\'s Merge lands through its pull request', { skip: !URL_, 
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId: cloud.workspaceId, assignedRunnerId: cloud.runnerId,
       title: 'Tidy the settings page', prompt: 'tidy it', branch: `orbit/tidy-${sessionId.slice(0, 6)}`, isolationStatus: 'worktree',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000),
+      turnState: null, finishedAt: new Date(Date.now() - 60_000),
       mergeStatus: 'pending', mergeOperationId: randomUUID(), mergeTarget: 'main',
     },
   });
@@ -1127,7 +1128,7 @@ test('(13) a session\'s Merge pushes as the owner once per operation', { skip: !
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId: ws.workspaceId, assignedRunnerId: ws.runnerId,
       title: 'Merge as me', prompt: 'merge', branch: `orbit/me-${sessionId.slice(0, 6)}`, isolationStatus: 'worktree',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000),
+      turnState: null, finishedAt: new Date(Date.now() - 60_000),
       mergeStatus: 'pending', mergeOperationId: operationId, mergeOperationOwner: leaseOwner, mergeTarget: 'main',
     },
   });
@@ -1344,7 +1345,7 @@ test('(15) §16 Q1: the owner\'s token is retired once the push reports back, an
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId: ws.workspaceId, assignedRunnerId: ws.runnerId,
       title: 'Retire after a merge', prompt: 'merge', branch: `orbit/ret-${sessionId.slice(0, 6)}`, isolationStatus: 'worktree',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000),
+      turnState: null, finishedAt: new Date(Date.now() - 60_000),
       mergeStatus: 'pending', mergeOperationId: operationId, mergeOperationOwner: leaseOwner, mergeTarget: 'main',
     },
   });
@@ -1667,7 +1668,7 @@ test('§4.6 under D5: a session\'s Merge whose check fails is handed the log as 
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId: cloud.workspaceId, assignedRunnerId: cloud.runnerId,
         title: label, prompt: 'do it', branch: `orbit/s-${sessionId.slice(0, 6)}`, isolationStatus: 'worktree',
-        status: RunStatus.AWAITING_INPUT, mergeStatus: 'pending', mergeOperationId: randomUUID(), mergeTarget: 'main',
+        turnState: null, mergeStatus: 'pending', mergeOperationId: randomUUID(), mergeTarget: 'main',
       },
     });
     const head = SHA(`${label}-head-1`);

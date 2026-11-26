@@ -2,13 +2,16 @@
  * THE PROJECTS, TASKS AND TASK-LISTS READERS ON THE FACTS, AGAINST POSTGRESQL (task T11 of
  * docs/session-status-retirement-plan.md, §2.1 and §2.4):
  *
- *   (1) the turn state helpers (sessions/session-turn-state.ts) select, for every stored word, exactly the rows the
- *       old word sets selected, with turn_state as migration 1611's trigger keeps it AND with turn_state NULL, as a
- *       held row nothing has written since that migration has until the backfill (task T3): Prisma, TypeScript, SQL
- *   (2) every SQL predicate T11 rewrote answers, row by row, what the predicate it replaced answered
- *   (3) the readers themselves, on rows with turn_state NULL, give today's answers: the idle-run check
- *       (task-run-idle.ts), the project's ready-to-run queue (project-ready-to-run.ts) and the attempt-ended wake fact
- *       (task-exception-input.producer.ts), whose `sessionStatus` is the derived word (plan §3.4)
+ *   (1) the turn state helpers (sessions/session-turn-state.ts) select, for every word, exactly the rows the old word
+ *       sets selected: Prisma, TypeScript, SQL
+ *   (2) every SQL predicate T11 rewrote answers, row by row, what the predicate it replaced answered on the stored
+ *       word, which since deploy D3 (task T14) migration 1671's trigger writes from the facts
+ *   (3) the readers themselves give today's answers: the idle-run check (task-run-idle.ts), the project's ready-to-run
+ *       queue (project-ready-to-run.ts) and the attempt-ended wake fact (task-exception-input.producer.ts), whose
+ *       `sessionStatus` is the derived word (plan §3.4)
+ *
+ * The rows with turn_state NULL beside a word that names a turn, which the NULL fallback read until T14, no longer
+ * exist: 1652 validated session_turn_state_agrees_chk, and the fallback went with T14.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/projects/session-turn-state-readers.pg.spec.ts
  *
@@ -35,7 +38,7 @@ import { assertCoordinatorPgUrlIsIsolated } from './coordinator-pg-test-safety';
 import { readProjectReadyToRun } from './project-ready-to-run';
 import { findIdleRuns } from './task-run-idle';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
-import { ALLOW_UNFILLED_SESSIONS } from '../test-support/unfilled-sessions';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -78,26 +81,24 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   return { ownerId, runnerId, workspaceId: workspace.id, projectId: project.id };
 }
 
-/** A session stored with `word`. `unfilled`: turn_state cleared afterwards, as on a row not yet backfilled. */
+/** A session at `word`: its turn state, or its release. */
 async function session(
   db: PrismaClient,
   ids: World,
   title: string,
   word: RunStatus,
-  options: { unfilled?: boolean; data?: Partial<Prisma.SessionUncheckedCreateInput> } = {},
+  options: { data?: Partial<Prisma.SessionUncheckedCreateInput> } = {},
 ): Promise<string> {
   const released = RELEASED_WORDS.includes(word);
   const { id } = await db.session.create({
     data: {
-      ownerId: ids.ownerId, creatorId: ids.ownerId, title, prompt: title, status: word,
+      ownerId: ids.ownerId, creatorId: ids.ownerId, title, prompt: title, turnState: turnStateOfWord(word),
       dispatchOrigin: SessionDispatchOrigin.USER, provider: 'claude', providerBuiltin: true,
       workspaceId: ids.workspaceId, assignedRunnerId: ids.runnerId, startedAt: new Date(),
       ...(released ? { finishedAt: new Date(), lastTurnOutcome: word === RunStatus.FAILED ? 'FAILED' : 'ANSWERED' } : {}),
       ...options.data,
     },
   });
-  // The word trigger fires on `status` alone, so this leaves the row as one nothing has written since 1611.
-  if (options.unfilled) await db.$executeRawUnsafe('UPDATE session SET turn_state = NULL WHERE id = $1::uuid', id);
   return id;
 }
 
@@ -111,28 +112,23 @@ async function task(db: PrismaClient, ids: World, title: string, extra: Partial<
   return created.id;
 }
 
-test('projects, tasks and task lists read the facts, and a row with no turn_state reads as today', { skip, timeout: 300_000 }, async (t) => {
+test('projects, tasks and task lists read the facts, and answer as the stored word did', { skip, timeout: 300_000 }, async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const db = prismaClientFor(URL!);
   t.after(() => db.$disconnect());
-  await db.$executeRawUnsafe(ALLOW_UNFILLED_SESSIONS);
 
-  await t.test('(1) the helpers select what the old word sets selected, filled and unfilled', async () => {
+  await t.test('(1) the helpers select what the old word sets selected', async () => {
     const ids = await world(db, 'helpers');
-    // Every word, and every held word twice more: unfilled, and unfilled with an end recorded.
+    // Every word, and every held word once more with an end recorded.
     const rows: Array<{ title: string; word: RunStatus }> = [];
     for (const word of [...HELD_WORDS, ...RELEASED_WORDS]) {
-      await session(db, ids, `${word} filled`, word);
-      rows.push({ title: `${word} filled`, word });
+      await session(db, ids, word, word);
+      rows.push({ title: word, word });
     }
     for (const word of HELD_WORDS) {
-      await session(db, ids, `${word} unfilled`, word, { unfilled: true });
-      await session(db, ids, `${word} unfilled ended`, word, { unfilled: true, data: { endReason: 'cancelled' } });
-      rows.push({ title: `${word} unfilled`, word }, { title: `${word} unfilled ended`, word });
+      await session(db, ids, `${word} ended`, word, { data: { endReason: 'cancelled' } });
+      rows.push({ title: `${word} ended`, word });
     }
-    const unfilled = await db.session.count({ where: { ownerId: ids.ownerId, turnState: null, finishedAt: null } });
-    // Every unfilled held row, and the filled AWAITING_INPUT one (parked has no turn state).
-    assert.equal(unfilled, HELD_WORDS.length * 2 + 1);
 
     for (const { code, words, states } of TRANSLATIONS) {
       const found = await db.session.findMany({
@@ -148,30 +144,25 @@ test('projects, tasks and task lists read the facts, and a row with no turn_stat
         FROM session s WHERE s.owner_id = ${ids.ownerId}::uuid`);
     const bySql = new Map(sql.map((row) => [row.title, row]));
     for (const row of read) {
-      const expected = RELEASED_WORDS.includes(row.status as RunStatus) ? null : TURN_STATE_OF_WORD[row.status];
+      const word = rows.find((r) => r.title === row.title)!.word;
+      const expected = RELEASED_WORDS.includes(word) ? null : TURN_STATE_OF_WORD[word];
       assert.equal(turnStateOf(row), expected, `${row.title}: turnStateOf`);
-      // A row read without the column (a hand-built one, as the unit specs build them) reads its stored word.
-      assert.equal(turnStateOf({ status: row.status, finishedAt: row.finishedAt }), expected, `${row.title}: no key`);
       assert.equal(bySql.get(row.title)!.state, expected, `${row.title}: sessionTurnStateSql`);
     }
     const full = await db.session.findMany({ where: { ownerId: ids.ownerId }, select: { title: true, ...LEGACY_STATUS_SELECT } });
     for (const row of full) {
       const stored = bySql.get(row.title)!;
       assert.equal(stored.word, legacySessionStatus(row), `${row.title}: legacySessionStatusSql is the projector`);
-      if (row.finishedAt == null) assert.equal(stored.word, stored.stored, `${row.title}: a held row keeps its word`);
+      // The stored word is migration 1671's, from the same facts (deploy D3).
+      assert.equal(stored.stored, stored.word, `${row.title}: the stored word is the projector's`);
     }
   });
 
   await t.test('(2) each rewritten SQL predicate answers what the one it replaced answered, row by row', async () => {
     const ids = await world(db, 'predicates');
     for (const word of [...HELD_WORDS, ...RELEASED_WORDS]) {
-      for (const unfilled of [false, true]) {
-        for (const endReason of [null, 'cancelled']) {
-          if (unfilled && RELEASED_WORDS.includes(word)) continue;
-          await session(db, ids, `${word} ${unfilled ? 'unfilled' : 'filled'} ${endReason ?? 'no end'}`, word, {
-            unfilled, data: { endReason },
-          });
-        }
+      for (const endReason of [null, 'cancelled']) {
+        await session(db, ids, `${word} ${endReason ?? 'no end'}`, word, { data: { endReason } });
       }
     }
     const ts = sessionTurnStateSql('s');
@@ -195,56 +186,45 @@ test('projects, tasks and task lists read the facts, and a row with no turn_stat
              (CASE WHEN s.finished_at IS NULL THEN s.status::text END) AS "heldWordOld",
              (CASE WHEN s.finished_at IS NULL THEN ${legacySessionStatusSql('s')} END) AS "heldWordNew"
         FROM session s WHERE s.owner_id = ${ids.ownerId}::uuid`);
-    assert.equal(rows.length, HELD_WORDS.length * 4 + RELEASED_WORDS.length * 2);
+    assert.equal(rows.length, HELD_WORDS.length * 2 + RELEASED_WORDS.length * 2);
     const differences = rows.flatMap((row) => ['readyState', 'readyOrder', 'budget', 'paused', 'escalation', 'heldWord']
       .filter((name) => row[`${name}Old`] !== row[`${name}New`])
       .map((name) => `${row.title}: ${name} was ${String(row[`${name}Old`])}, is ${String(row[`${name}New`])}`));
     assert.deepEqual(differences, []);
   });
 
-  await t.test('(3) the readers on rows with no turn_state', async () => {
+  await t.test('(3) the readers', async () => {
     const ids = await world(db, 'readers');
     const now = new Date();
     const longAgo = new Date(now.getTime() - 2 * 3_600_000);
 
-    // The idle-run check: a parked run is idle, an interrupted one is not, filled or not.
+    // The idle-run check: a parked run is idle, an interrupted one is not.
     const idle: Record<string, boolean> = {};
     for (const word of [RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED]) {
-      for (const unfilled of [false, true]) {
-        const label = `${word} ${unfilled ? 'unfilled' : 'filled'}`;
-        const taskId = await task(db, ids, `idle ${label}`, { status: 'IN_PROGRESS' });
-        const sessionId = await session(db, ids, `idle ${label}`, word, {
-          unfilled, data: { taskId, startsTaskWork: true, lastTurnAt: longAgo },
-        });
-        idle[label] = (await findIdleRuns(db as unknown as PrismaService, now, { sessionId })).length === 1;
-      }
+      const taskId = await task(db, ids, `idle ${word}`, { status: 'IN_PROGRESS' });
+      const sessionId = await session(db, ids, `idle ${word}`, word, {
+        data: { taskId, startsTaskWork: true, lastTurnAt: longAgo },
+      });
+      idle[word] = (await findIdleRuns(db as unknown as PrismaService, now, { sessionId })).length === 1;
     }
-    assert.deepEqual(idle, {
-      'AWAITING_INPUT filled': true, 'AWAITING_INPUT unfilled': true,
-      'INTERRUPTED filled': false, 'INTERRUPTED unfilled': false,
-    });
+    assert.deepEqual(idle, { AWAITING_INPUT: true, INTERRUPTED: false });
 
-    // The ready-to-run queue: a queued run reads QUEUED and a running one RUNNING, filled or not.
+    // The ready-to-run queue: a queued run reads QUEUED and a running one RUNNING.
     const queueWorld = await world(db, 'queue');
     const runState: Record<string, string | undefined> = {};
     const tasks = new Map<string, string>();
     for (const word of [RunStatus.PENDING, RunStatus.RUNNING]) {
-      for (const unfilled of [false, true]) {
-        const label = `${word} ${unfilled ? 'unfilled' : 'filled'}`;
-        const taskId = await task(db, queueWorld, `queue ${label}`, { status: 'IN_PROGRESS' });
-        await session(db, queueWorld, `queue ${label}`, word, { unfilled, data: { taskId, startsTaskWork: true } });
-        tasks.set(label, taskId);
-      }
+      const taskId = await task(db, queueWorld, `queue ${word}`, { status: 'IN_PROGRESS' });
+      await session(db, queueWorld, `queue ${word}`, word, { data: { taskId, startsTaskWork: true } });
+      tasks.set(word, taskId);
     }
     const queue = await readProjectReadyToRun(db as unknown as PrismaService, queueWorld.ownerId, queueWorld.projectId, 10);
     for (const [label, taskId] of tasks) runState[label] = queue.items.find((item) => item.taskId === taskId)?.runState;
-    assert.deepEqual(runState, {
-      'PENDING filled': 'QUEUED', 'PENDING unfilled': 'QUEUED', 'RUNNING filled': 'RUNNING', 'RUNNING unfilled': 'RUNNING',
-    });
-    assert.deepEqual([queue.queuedCount, queue.runningCount], [2, 2]);
+    assert.deepEqual(runState, { PENDING: 'QUEUED', RUNNING: 'RUNNING' });
+    assert.deepEqual([queue.queuedCount, queue.runningCount], [1, 1]);
 
     // The attempt-ended wake fact names the derived word: a failure reads FAILED; an end that was asked for, whose
-    // run then failed, reads CANCELLED (plan §3.4, C2), where the stored word says FAILED.
+    // run then failed, reads CANCELLED (plan §3.4, C2), where deploy 2 stored FAILED.
     const producer = new TaskExceptionInputProducer(db as unknown as PrismaService, {} as never);
     const failed = await task(db, ids, 'ended failed');
     const failedRun = await session(db, ids, 'ended failed', RunStatus.FAILED, { data: { taskId: failed, startsTaskWork: true } });

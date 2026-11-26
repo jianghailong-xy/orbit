@@ -115,8 +115,8 @@ test('a forked task refused at dispatch is recorded and not re-dispatched', { sk
     await establishProjectContractForPgTest(prisma, w.ownerId, w.projectId, label);
     await admin.query(
       `INSERT INTO "session" ("id","owner_id","workspace_id","assigned_runner_id","title","prompt","creator_id",
-         "provider","status","dispatch_origin","updated_at")
-       VALUES ($1,$2,$3,$4,'Refactor the claim path','fixture',$2,'claude','RUNNING'::"run_status",
+         "provider","turn_state","dispatch_origin","updated_at")
+       VALUES ($1,$2,$3,$4,'Refactor the claim path','fixture',$2,'claude','IN_FLIGHT',
          'USER'::"session_dispatch_origin",now())`,
       [w.forkingSessionId, w.ownerId, w.workspaceA, w.runnerA],
     );

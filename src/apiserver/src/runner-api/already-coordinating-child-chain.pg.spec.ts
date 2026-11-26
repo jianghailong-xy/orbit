@@ -31,11 +31,11 @@ import { JwtService } from '@nestjs/jwt';
 import {
   type PrismaClient,
   type Runner,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 
@@ -129,7 +129,7 @@ test('ALREADY_COORDINATING: reconcile, ask, one child, and the child coordinates
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title, prompt: title, provider: 'claude', providerBuiltin: true, engine: 'claude',
-        status: RunStatus.RUNNING, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
+        turnState: 'IN_FLIGHT', startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       },
     });

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
+import { writtenWord } from '../test-support/session-word';
 
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const RUNNER = '22222222-2222-4222-8222-222222222222';
@@ -15,7 +16,7 @@ function harness(generation: string | null = GENERATION, liveTurn = false) {
   let state = {
     id: SESSION, provider: 'codex', providerBuiltin: true, ownerId: OWNER,
     inboxLeaseGeneration: generation, inboxLeaseOwner: generation ? OWNER : null,
-    status: RunStatus.RUNNING as RunStatus, codexAccount: 'default', engineTurnActive: liveTurn,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING as RunStatus, codexAccount: 'default', engineTurnActive: liveTurn,
   };
   let retired = false;
   let committed = false;
@@ -77,7 +78,7 @@ test('pause commits its waiting state before telling a warm runner to release ow
   await assert.rejects(h.dequeue(), ConflictException);
   const result = h.snapshot();
   assert.equal(result.committed, true, '409 must not roll back the pause');
-  assert.equal(result.state.status, RunStatus.PENDING);
+  assert.equal(writtenWord(result.state), RunStatus.PENDING);
   assert.equal(result.state.inboxLeaseOwner, null, 'heartbeat must also detach the old supervisor');
   assert.equal(result.state.inboxLeaseGeneration, GENERATION, 'retain the retired generation as an activation fence');
   assert.equal(result.retired, true);
@@ -90,7 +91,7 @@ test('a live turn keeps ownership and its permit until it finishes', async () =>
   const h = harness(GENERATION, true);
   assert.equal(await h.dequeue(), null);
   const result = h.snapshot();
-  assert.equal(result.state.status, RunStatus.RUNNING);
+  assert.equal(writtenWord(result.state), RunStatus.RUNNING);
   assert.equal(result.state.inboxLeaseOwner, OWNER);
   assert.equal(result.retired, false);
   assert.deepEqual(result.announcements, []);

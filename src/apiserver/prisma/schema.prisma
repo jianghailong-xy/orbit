@@ -13,22 +13,10 @@ datasource db {
   provider = "postgresql"
 }
 
-enum RunStatus {
-  PENDING
-  RUNNING
-  SUCCEEDED
-  FAILED
-  CANCELLED
-  // Interactive sessions (Route B). Appended last to match ALTER TYPE ADD VALUE.
-  AWAITING_INPUT
-  INTERRUPTED
-  // NOTE: the `run_status` DB type still carries a now-unused 'PARKED' label — Postgres has
-  // no ALTER TYPE ... DROP VALUE, and rebuilding the type would rewrite/lock `session`. It is
-  // absent here on purpose: migration 0071 backfilled every PARKED row to CANCELLED and no
-  // code path writes it any more, so no row can carry a value this enum can't decode.
-
-  @@map("run_status")
-}
+// The column session.status and its type run_status are no longer in the model (deploy D3,
+// docs/session-status-retirement-plan.md §4.1, §4.3): no server code reads or writes them. Migration
+// 1671's trigger keeps the stored word from the facts for a rollback to deploy-2 code, and deploy D4
+// drops both. The protocol's words are `RunStatus` of @orbit/shared.
 
 enum RunnerStatus {
   ONLINE
@@ -2259,8 +2247,6 @@ model Session {
   /// the creating door, never from a title; the workspace default (workspace-provider.ts) counts only
   /// PERSON, through the partial index `session_workspace_person_opened_idx` (SQL only).
   openedBy             String    @default("PERSON") @map("opened_by")
-  // PENDING = created, claimable by its assigned runner.
-  status               RunStatus @default(PENDING)
   // billing, accrued per turn
   numTurns             Int       @default(0) @map("num_turns")
   costUsd              Float     @default(0) @map("cost_usd")
@@ -2790,17 +2776,13 @@ model Session {
   /// The opening Orbit drew for it, as the schedule was when the conversation was opened (`ScheduleChangeOpening`).
   scheduleChangeOpening Json?     @map("schedule_change_opening")
 
-  @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
   // caller names no provider (workspaces/workspace-provider.ts).
   @@index([workspaceId, createdAt(sort: Desc)])
-  @@index([batchId, status])
   @@index([parentSessionId])
-  // The claim queue's tree cap: a tree's active turns.
-  @@index([rootSessionId, status])
+  // The five indexes on `status` (session_status_idx and the four beside it) stay in the database, unused, until
+  // deploy D4 drops them with the column; their replacements on the facts are migrations 1627 to 1633.
   @@index([ownerId])
-  @@index([ownerId, status, taskId], map: "session_owner_status_task_idx")
-  @@index([status])
   // The session's Settings panel (docs/mocks/session-settings, migration 0700). `env` is the
   // session's own variables, a string→string map laid over the workspace's when the engine starts;
   // null is none. `envChangedAt` is when it last changed, `envAppliedAt` when an engine last started

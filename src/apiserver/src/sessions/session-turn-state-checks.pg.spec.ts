@@ -25,7 +25,8 @@
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-turn-state-checks.pg.spec.ts
  *
- * Run it on a database of its own, as run-pg-spec.sh does: (4) takes constraints away and puts them back.
+ * Run it on a database of its own, as run-pg-spec.sh does: it rolls migration 1671 (deploy D3) back first
+ * (scripts/session-status-from-facts-down.sql), and (4) takes constraints away and puts them back.
  */
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
@@ -110,6 +111,9 @@ test('D2: the agreement CHECKs, phase NOT NULL, the partial indexes, the fill an
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
   t.after(() => sql.end().catch(() => undefined));
+  // The database deploy D2 left: migration 1671 (D3) rolled back, as its down script does it. What this file holds to
+  // account are D2's CHECKs, whose deploy-1 writes (the word alone) D3's trigger would not keep the facts beside.
+  await sql.query(readFileSync(join(SCRIPTS, 'session-status-from-facts-down.sql'), 'utf8'));
 
   const owner = randomUUID();
   await sql.query(`INSERT INTO "user" ("id", "email", "name") VALUES ($1, $2, 'checks')`,
