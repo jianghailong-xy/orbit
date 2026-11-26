@@ -76,8 +76,9 @@
   --scrollbar-hover: #565a62;
   --text-1: #c9ced5;
   --text-2: #a7adb6;
-  --text-3: #8b9099;
-  --text-4: #71767f;
+  /* text-4 holds 4.5:1 on --bg-base; text-3 sits a step above it (board dark-palette, item B). */
+  --text-3: #9a9fa8;
+  --text-4: #858a93;
   --dot-idle: #4a4e56;
   --brand: #5b8cff;
   --brand-strong: #7aa2ff;
@@ -138,6 +139,49 @@
 }
 :root[data-theme='dark'] .scroll-to-bottom {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+/* Board dark-palette (docs/mocks/dark-palette). The session list sits one step below the
+   conversation: sidebar --bg-sunken < list < conversation --bg-base. Its sticky section heads paint the
+   list's colour behind them, so they follow it. */
+:root[data-theme='dark'] .app-shell .workspace-split > .session-col:not(.session-project-column, .ss-column),
+:root[data-theme='dark'] .app-shell .workspace-split > .session-col:not(.session-project-column, .ss-column) .session-section-head {
+  background: #1c1c1f;
+}
+/* The composer's prompt reads in the quietest text colour rather than the field's own grey. */
+:root[data-theme='dark'] .composer-field textarea.orbit-textarea::placeholder {
+  -webkit-text-fill-color: var(--text-4);
+}
+/* New session is a plain bordered button: in dark, blue already means the selected row, your own
+   messages and links. */
+:root[data-theme='dark'] .session-new,
+:root[data-theme='dark'] .session-new.active {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-1);
+}
+:root[data-theme='dark'] .session-new:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+:root[data-theme='dark'] .session-new-kbd {
+  border-color: var(--border);
+  color: var(--text-3);
+  opacity: 1;
+}
+/* Inline code is a light chip rather than a dark hole in the text. A block's code stays bare. */
+:root[data-theme='dark'] .md code {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-subtle);
+}
+:root[data-theme='dark'] .md pre code {
+  background: transparent;
+  border: 0;
+}
+/* A needs-you count is an amber number without its pill, quieter when many workspaces carry one.
+   The collapsed rail keeps its solid badge, which has no row text to stand beside. */
+:root[data-theme='dark'] .tp-count.needs-you {
+  background: transparent;
+  padding: 1px 2px;
 }
 /* highlight.js (github.css is the light base) — recolour tokens for dark */
 :root[data-theme='dark'] .hljs {
