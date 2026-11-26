@@ -1,3 +1,5 @@
+import { listingRows } from './sessionListingData';
+
 /**
  * Which sessions' events can move a read that declares the `session` entity (`meta.sessionReach` beside
  * `meta.entities`). The control-plane stream reads a view again for a `session.*`, `approval.*` or
@@ -57,11 +59,12 @@ export interface SessionSubject {
   lifecycle: boolean;
 }
 
-/** The ids of the rows a list read holds; none for anything that is not a list of rows. */
+/** The ids of the rows a list read holds — a listing's (lib/sessionListingData) included; none for anything that is
+ *  not a list of rows. */
 export const heldIds = (data: unknown): string[] =>
   Array.isArray(data)
     ? data.flatMap((row) => (row && typeof (row as { id?: unknown }).id === 'string' ? [(row as { id: string }).id] : []))
-    : [];
+    : listingRows(data).map((row) => row.id);
 
 const strings = (values: readonly unknown[]): string[] =>
   values.filter((value): value is string => typeof value === 'string' && value !== '');
