@@ -8,6 +8,8 @@ import type { SessionMoveTargets } from '@orbit/shared';
 import type { Runner } from './TasksSidePanel';
 import { ToastViewport } from './ToastViewport';
 import { clearToasts } from '../lib/toastStore';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 
 /**
  * Session folders and Move on the web (docs/session-folders-move-design.md §3–§5, §7), through the
@@ -112,6 +114,7 @@ let client: QueryClient | null = null;
 let folders: Array<{ id: string; workspaceId: string; name: string }> = [];
 let rows: Array<ReturnType<typeof row>> = [];
 let listCalls: string[] = [];
+let listingCalls: string[] = [];
 let ended = false;
 let location = '';
 
@@ -294,6 +297,7 @@ beforeEach(() => {
   folders = [RELEASE, WIKI, ELSEWHERE];
   rows = [LOOSE, NOTES, BUILD, CURSOR];
   listCalls = [];
+  listingCalls = [];
   ended = false;
   location = '';
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
@@ -349,6 +353,10 @@ beforeEach(() => {
     if (path.startsWith('/sessions?')) {
       listCalls.push(path);
       return reply(path.includes('view=open') || !path.includes('view=') ? rows : []);
+    }
+    if (path.startsWith('/sessions/listing?')) {
+      listingCalls.push(path);
+      return reply(answerListing(listingRules, rows, folders, path));
     }
     if (path.startsWith('/sessions/')) {
       if (path.includes('/events/page')) return reply({ events: [], hasMore: false });
@@ -420,8 +428,11 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     expect(wiki.querySelector('.session-folder-count')?.textContent).toBe('1');
     expect(wiki.querySelector('.session-folder-needs')).toBeNull();
     expect(wiki.querySelector('.session-folder-activity')).toBeNull();
-    // A workspace with folders reads its whole list: a folder's count and page need every session.
-    expect(listCalls.some((p) => !p.includes('limit='))).toBe(true);
+    // A workspace with folders reads its listing a page at a time, the folder rows' counts the server's: never
+    // its whole list.
+    expect(listingCalls.length).toBeGreaterThan(0);
+    expect(listingCalls.every((p) => p.includes('limit=40'))).toBe(true);
+    expect(listCalls.filter((p) => !p.includes('scheduled=1') && !p.includes('limit='))).toEqual([]);
   });
 
   it('pages the list as before in a workspace without folders', async () => {

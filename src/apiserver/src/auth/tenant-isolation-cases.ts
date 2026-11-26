@@ -1421,6 +1421,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'GET /sessions query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
   'GET /sessions query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
   'GET /sessions/search query folderId': { request: (of) => ({ params: {}, query: { folderId: of.folderId } }) },
+  'GET /sessions/listing query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
+  'GET /sessions/listing query folderId': {
+    request: (of, mine) => ({ params: {}, query: { workspaceId: mine.workspaceId, folderId: of.folderId } }),
+  },
   'GET /sessions query runnerId': { request: (of) => ({ params: {}, query: { runnerId: of.runnerId } }) },
   // The attempt a landing page names: B reads its own landing with A's job in the query, and is
   // answered as if it named nothing — the job is resolved within that landing and nowhere else.

@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { conversationProjectPage, setConversationProjectPage } from '../lib/conversationProjectPage';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 import type { Runner } from './TasksSidePanel';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
 import { SessionSearch } from './SessionSearch';
@@ -347,6 +349,10 @@ beforeEach(() => {
       return reply(inScope.filter((r) => r.lifecycleState === lifecycle &&
         (!params.has('projectId') || r.projectMembership?.projectId === params.get('projectId')))
         .sort((a, b) => Date.parse(b.listedAt ?? b.lastTurnAt) - Date.parse(a.listedAt ?? a.lastTurnAt)));
+    }
+    if (path.startsWith('/sessions/listing?')) {
+      listCalls.push(path);
+      return reply(answerListing(listingRules, [...rows, ...remoteRows], folders, path));
     }
     if (path.startsWith('/sessions/project-placement?')) {
       // What the server answers (SessionsService.projectPlacement), from every workspace's rows.
@@ -1702,7 +1708,10 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await openSessions();
     const list = page()!.querySelector('.workspace-sessions')!;
     const card = list.querySelector('.session-project-page-card')!;
-    expect(list.firstElementChild, 'the card scrolls with the list, first in it').toBe(card);
+    // The column is drawn as items (SessionListWindow): the card leads its top block, the column's first item.
+    const top = list.querySelector('.session-list-item')?.firstElementChild;
+    expect(top?.classList.contains('session-list-top')).toBe(true);
+    expect(top?.firstElementChild, 'the card scrolls with the list, first in it').toBe(card);
     expect(card.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
     expect(card.querySelector('a')).toBeNull();
     await click(page()?.querySelector('.session-project-page-open'), 'the header’s Open Project');

@@ -40,6 +40,7 @@ import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { isSessionTerminal } from '../lib/sessionState';
 import { useToast } from '../lib/toast';
 import { useRefreshSessionLists } from '../lib/useControlPlane';
+import { fileInListings } from '../lib/sessionListingData';
 import { ProviderTile } from './ProviderGallery';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Dialog } from './ui/Dialog';
@@ -80,6 +81,9 @@ export function useSessionFolderFiling() {
     qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
       Array.isArray(old) ? old.map((s) => (s.id === session.id ? { ...s, folderId: destination } : s)) : old,
     );
+    // A list read a page at a time: the entry leaves the pages it is no longer filed in, and the folder rows'
+    // counts follow it (lib/sessionListingData).
+    fileInListings(qc, { id: session.id, from: session.folderId ?? null, to: destination });
     try {
       await moveSession(session.id, { folderId: destination });
       message.success(movedToFolderToast(folder, origin));
