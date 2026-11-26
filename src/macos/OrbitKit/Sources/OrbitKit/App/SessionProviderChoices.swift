@@ -548,7 +548,7 @@ public enum SessionProviderChoices {
     private static let keyVendors: [String: String] = [
         "anthropic": "Anthropic", "openai": "OpenAI", "gemini": "Google Gemini", "deepseek": "DeepSeek",
         DshRuntime.presetSlug: "DeepSeek", "moonshot": "Moonshot", CursorRuntime.keyPreset: "Cursor", "glm": "Z.AI",
-        "minimax": "MiniMax", "qwen": "Qwen",
+        "minimax": "MiniMax", "qwen": "Qwen", "qwen-coding-plan": "Qwen",
     ]
 
     /// A key as a sentence names it, lowercase for the middle of one: `the DeepSeek key “DeepSeek 2”` —

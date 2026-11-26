@@ -27,6 +27,6 @@ UPDATE "session" s
                    WHERE "turn_state" IS DISTINCT FROM session_turn_state_of_status("status")
                       OR "phase" IS DISTINCT FROM session_phase_of("finished_at", session_turn_state_of_status("status"),
                                                                     "engine_turn_active", "running_subagents",
-                                                                    "running_bg_jobs")
+                                                                    "running_bg_jobs", "retry_at")
                    ORDER BY "id" LIMIT 500
                    FOR UPDATE SKIP LOCKED);

@@ -256,6 +256,39 @@ describe('the Retry button on a run that a provider outage killed', { timeout: 6
     expect(vi.mocked(resumeSession).mock.calls[0][1]).toBe('Continue where you left off.');
   });
 
+  // The card names the provider the way the composer does, never by its slug: "The claude API" read as
+  // a typo, and a key's slug ("qwen") is not the name its owner gave it (DashScope 406, 2026-11-13).
+  it('names an engine sign-in by its CLI', async () => {
+    await mount(TAIL_WITHOUT_THE_MESSAGE);
+
+    expect(card().textContent).toContain('The Claude Code API could not answer');
+    expect(card().textContent).not.toContain('The claude API');
+  });
+
+  it('names a key by its own label', async () => {
+    const timedOut = 'API Error: 406 Post "https://dashscope-intl.aliyuncs.com/apps/anthropic/v1/messages": read tcp '
+      + '[fdbd:dc53:2a:630::37]:38248->[64:ff9b::2fec:75bf]:443: read: connection timed out';
+    const qwen = { ...SESSION, provider: 'qwen', engine: 'claude', model: 'qwen3.7-max' };
+    const key = { slug: 'qwen', label: 'Qwen (Model Studio)', runtime: 'claude', presetSlug: 'qwen', engines: ['claude'],
+      models: [{ value: 'qwen3.7-max', label: 'Qwen3.7 Max' }], defaultModel: 'qwen3.7-max' };
+    const fallback = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((path: string, ...rest: unknown[]) => {
+      if (path === '/providers') return Promise.resolve([key]) as Promise<never>;
+      if (path.startsWith(`/sessions/${SESSION_PUBLIC}`) && !path.slice(`/sessions/${SESSION_PUBLIC}`.length)) {
+        return Promise.resolve(qwen) as Promise<never>;
+      }
+      if (path === '/sessions' || path.startsWith('/sessions?')) return Promise.resolve([qwen]) as Promise<never>;
+      return (fallback as (...a: unknown[]) => Promise<never>)(path, ...rest);
+    }) as typeof fallback);
+    await mount([...TAIL_WITHOUT_THE_MESSAGE.slice(0, 3), { seq: 3_004, type: 'assistant', payload: { text: timedOut } }]);
+
+    await act(async () => {
+      await vi.waitFor(() => expect(card().textContent).toContain('The Qwen (Model Studio) API could not answer'),
+        { timeout: 20_000, interval: 20 });
+    });
+    expect(card().textContent).not.toContain('The qwen API');
+  });
+
   it('asks nobody when the message is right there in the window', async () => {
     await mount([
       { seq: 3_001, type: 'user', payload: { text: 'try that again' } },

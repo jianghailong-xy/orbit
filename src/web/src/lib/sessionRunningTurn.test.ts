@@ -32,7 +32,9 @@ const TABLE: [string, string, string, string[], boolean, boolean, boolean][] = [
   ['released by a failed turn', 'FAILED', 'Idle', ['FAILED'], false, false, false],
   ['released by End', 'ENDED', 'Idle', ['ENDED'], false, false, false],
   ['a task run that finished', 'SUCCEEDED', 'Idle', ['FINISHED'], false, false, false],
-  ['released with a retry armed', 'FAILED', 'Idle', ['RETRYING'], false, false, false],
+  // Waiting for retry counts as running (the owner, 2026-11-26): the word is Running; the run is still the failed
+  // release, with no Stop and the waiting pace.
+  ['released with a retry armed', 'FAILED', 'Running', ['RETRYING'], false, false, false],
 ];
 
 describe('the fixtures are the server shape', () => {
