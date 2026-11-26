@@ -68,17 +68,31 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
   server can push to.
 - `{"delivered": false, "reason": "NOT_ACCEPTED"}`: APNs and FCM accepted it for none of your devices.
 
+## Paging a workspace’s session list
+
+`GET /api/sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limit=40][&after=<cursor>]`
+answers one page of the list as top-level entries, with an ETag answered `304` when nothing moved:
+
+| Field | Meaning |
+| --- | --- |
+| `folders` | The folder rows, `{ folderId, rowCount, needsYou, running, jobs }`: only on a first page without `folderId`. |
+| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator }`, in list order (in Open: Pinned, then Needs you, then Working, then the rest, each newest listed first, as the web's sections draw them); a project's `running` / `jobs` say whether a member it holds runs / has a background job moving. |
+| `next` | The `after` of the following page, or `null` at the end. |
+| `restarted` | `true` when `after` was written under an order the list no longer has (Completed switches order on whether any session is held by a project): this is the first page again, with its `folders`, and replaces the pages already read. Absent otherwise. |
+
+`limit` is 1 to 200 (40 when absent); a malformed `after` is refused `400`.
+
 ## Summary
 
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 586 |
+| `user` | 587 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **921** |
+| **Total** | **922** |
 
 ## Public routes
 
@@ -566,6 +580,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/sessions/import` | body `Object` | `SessionsController.importSession` |
 | `POST` | `/api/sessions/import-batch` | body `Object` | `SessionsController.importBatch` |
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
+| `GET` | `/api/sessions/listing` | query `after`, `folderId`, `limit`, `view`, `workspaceId` | `SessionsController.listing` |
 | `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
 | `GET` | `/api/sessions/search` | query `folderId`, `limit`, `q` | `SessionsController.search` |
