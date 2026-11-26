@@ -273,6 +273,27 @@ describe('TasksSidePanel workspace rows', () => {
     expect(block).toMatch(/\.tp-workspace-runner \{\n {4}flex: none;\n {4}max-width: 60%;/);
   });
 
+  it("draws the workspace's machine in the icon column in place of the folder", () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="Orbit Cloud"
+        machineIcon={<span data-machine="cloud" />}
+        active={false}
+        offline={false}
+        running={false}
+        jobs={0}
+        needsYou={0}
+        onOpen={() => undefined}
+      />,
+    );
+    expect(html).toMatch(/tp-workspace-icon"[^>]*><span data-machine="cloud">/);
+    expect(html).not.toContain('anticon-folder');
+    // The list picks the cloud for Orbit Cloud and the reported OS for any other machine.
+    expect(source).toContain('<CloudOutlined aria-hidden="true" data-machine="cloud" />');
+    expect(source).toContain('<MachineOsIcon runner={runner} />\n                      ) : undefined;');
+  });
+
   it('puts a folder in the shared first-level icon column and keeps the collapsed rail unchanged', () => {
     const html = renderToStaticMarkup(
       <WorkspaceRow
