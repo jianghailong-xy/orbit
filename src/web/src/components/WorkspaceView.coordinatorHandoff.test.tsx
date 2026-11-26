@@ -38,6 +38,7 @@ const { api, getSession, getSessionEventPage, getSessionRetryMessage, listQueued
 const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
 const { encodeId } = await import('../lib/idCodec');
+const { TASK_COLUMN_QUERY } = await import('../lib/useMediaQuery');
 
 const RUNNER_ID = '0195c0de-0000-7000-8000-0000000000e1';
 const WORKSPACE = encodeId('0195c0de-0000-7000-8000-0000000000e2');
@@ -527,6 +528,90 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await act(async () => title().click());
     await waitFor(() => expect(taskOpen()).toBe(false));
     expect(title().getAttribute('aria-expanded')).toBe('true');
+  });
+
+  describe('the task run sidebar in its own run conversation (docs/task-run-sidebar-design.md, D2 = B)', () => {
+    const TASK = '0195c0de-0000-7000-8000-0000000000f1';
+    const taskRun = () => session({ title: 'Task: Fix the red checks', taskId: TASK, taskTitle: 'Fix the red checks' });
+    const taskOpen = () => new URLSearchParams(search).get('task');
+    /** A window `width` px wide: min-width and max-width queries answer for it, nothing else matches. */
+    const windowWidth = (width: number) => vi.stubGlobal('matchMedia', (query: string) => {
+      const bounds = [...query.matchAll(/\((min|max)-width:\s*(\d+)px\)/g)];
+      const matches = bounds.length > 0 && !/hover|pointer|prefers/.test(query)
+        && bounds.every(([, side, px]) => (side === 'min' ? width >= Number(px) : width <= Number(px)));
+      return {
+        matches, media: query, onchange: null,
+        addListener: () => {}, removeListener: () => {},
+        addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+      };
+    });
+    /** A storage that keeps what it is given, for the remembered close. */
+    const store = new Map<string, string>();
+    beforeEach(() => {
+      store.clear();
+      vi.stubGlobal('localStorage', {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => void store.set(k, v),
+        removeItem: (k: string) => void store.delete(k),
+      });
+    });
+    const remount = async () => {
+      const mountedRoot = root;
+      await act(async () => mountedRoot?.unmount());
+      container?.remove();
+      await mount();
+    };
+    const wide = Number(/min-width:\s*(\d+)px/.exec(TASK_COLUMN_QUERY)![1]);
+
+    it('opens the task beside its own run conversation by default on a window wide enough to dock it', async () => {
+      windowWidth(wide);
+      detail = taskRun();
+      await mount();
+      await waitFor(() => expect(taskOpen()).toBe(encodeId(TASK)));
+      const badge = mounted().querySelector<HTMLButtonElement>('.workspace-title-line button.coordinator-badge-link')!;
+      await waitFor(() => expect(badge.getAttribute('aria-pressed')).toBe('true'));
+    });
+
+    it('remembers a close in that conversation, and opening it again forgets the close', async () => {
+      windowWidth(wide);
+      detail = taskRun();
+      await mount();
+      await waitFor(() => expect(taskOpen()).toBe(encodeId(TASK)));
+      const badge = () => mounted().querySelector<HTMLButtonElement>('.workspace-title-line button.coordinator-badge-link')!;
+      await act(async () => badge().click());
+      await waitFor(() => expect(taskOpen()).toBeNull());
+      expect(JSON.parse(store.get('orbit.taskRunSidebarClosed') ?? '[]')).toEqual([encodeId(SESSION)]);
+
+      // Back in the same conversation later: it stays closed.
+      await remount();
+      await settle();
+      await settle();
+      expect(taskOpen()).toBeNull();
+      expect(badge().getAttribute('aria-pressed')).toBe('false');
+
+      // Opened again by hand, the close is forgotten and the next visit opens it by default.
+      await act(async () => badge().click());
+      await waitFor(() => expect(taskOpen()).toBe(encodeId(TASK)));
+      expect(JSON.parse(store.get('orbit.taskRunSidebarClosed') ?? '[]')).toEqual([]);
+    });
+
+    it('opens nothing by itself below the docking width, where the task would lie over the conversation', async () => {
+      windowWidth(wide - 1);
+      detail = taskRun();
+      await mount();
+      await settle();
+      await settle();
+      expect(taskOpen()).toBeNull();
+    });
+
+    it('opens nothing by itself in a conversation that is no task\'s run', async () => {
+      windowWidth(wide);
+      detail = session();
+      await mount();
+      await settle();
+      await settle();
+      expect(taskOpen()).toBeNull();
+    });
   });
 
   it('02-3: opens the successor with the note card and the waits that moved here', async () => {
