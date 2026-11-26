@@ -1129,6 +1129,10 @@ function legacyWithheldMessage(count: number): string {
     : `Orbit held back the diffs of ${count} files while it checked this runner for a removed secret. No secret was found in them.`;
 }
 
+/** The runner's key for a Claude workflow agent's call: `<Workflow call id>:workflow-agent:<agent id>`
+ *  (runner-go claude_workflow_transcript.go). */
+const WORKFLOW_AGENT_KEY = ':workflow-agent:';
+
 function buildTranscript(
   events: RunEvent[],
   turnImages?: Record<string, TurnImage[]>,
@@ -1143,14 +1147,35 @@ function buildTranscript(
   // result can't be matched by id. Fall back to the most recently opened tool that
   // still has no result — results arrive right after their call in those streams.
   let lastOpenTool: ToolNode | undefined;
-  // Sub-workspace events land inside their spawning Task's children; everything else
-  // (and any event whose parent we haven't seen) goes to the top level.
-  const into = (parentId?: string): Node[] => {
-    if (parentId) {
-      const t = byId.get(parentId);
-      if (t) return t.children;
-    }
-    return roots;
+  // The event being read: where a stand-in call is drawn (standInCall).
+  let seqNow = 0;
+  // Stand-in calls not yet met by their own tool_use, which takes the stand-in's place when it comes.
+  const standIns = new Set<ToolNode>();
+  // A sub-agent's events whose call is older than the loaded window (a tail page that starts in the
+  // middle of a long workflow or Agent run) nest under a stand-in for that call, drawn where the
+  // first of them is. Without it, the agent's replies and steps read as the session's own, and the
+  // result it handed back drew as a raw JSON dump. Loading the older page rebuilds the transcript
+  // with the real call. `childId` is the call being nested, if it is one: a Claude workflow agent's
+  // key is its Workflow call's id + WORKFLOW_AGENT_KEY, which says what the missing call was.
+  const standInCall = (id: string, childId?: string): ToolNode => {
+    const node: ToolNode = {
+      kind: 'tool',
+      seq: seqNow,
+      id,
+      name: childId?.startsWith(id + WORKFLOW_AGENT_KEY) ? 'Workflow' : 'Agent',
+      input: {},
+      children: [],
+    };
+    byId.set(id, node);
+    standIns.add(node);
+    const cut = id.indexOf(WORKFLOW_AGENT_KEY);
+    (cut > 0 ? into(id.slice(0, cut), id) : roots).push(node);
+    return node;
+  };
+  // Sub-workspace events land inside their spawning Task's children; top-level events go to the top level.
+  const into = (parentId?: string, childId?: string): Node[] => {
+    if (!parentId) return roots;
+    return (byId.get(parentId) ?? standInCall(parentId, childId)).children;
   };
   // A task retry re-sends the exact brief that opened the run, but its new user event has no
   // `taskStart` payload of its own. Keep the control-plane snapshot from that run only while a
@@ -1388,6 +1413,7 @@ function buildTranscript(
   // bg_run call, so neither half draws, and its result must not fall to whichever call is still open.
   const runnerJobLaunches = new Set<string>();
   for (const ev of events) {
+    seqNow = ev.seq;
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
     const legacy =
@@ -1630,28 +1656,45 @@ function buildTranscript(
           runnerJobLaunches.add(String(p.id));
           break;
         }
+        const id = String(p.id ?? '');
+        const standIn = byId.get(id);
         const node: ToolNode = {
           kind: 'tool',
           seq: ev.seq,
-          id: String(p.id ?? ''),
+          id,
           name: String(p.name ?? 'tool'),
           input: p.input,
           truncated: ev.truncated,
           children: [],
           ts: ev.ts,
         };
-        if (node.id) byId.set(node.id, node);
-        openTools.push({ node, parent });
         agentWorked();
-        into(parent).push(node);
+        if (standIn && standIns.has(standIn)) {
+          // A call its own events got here before: it is the stand-in, from now on with its name and input.
+          standIns.delete(standIn);
+          Object.assign(standIn, { name: node.name, input: node.input, truncated: node.truncated, ts: node.ts });
+          openTools.push({ node: standIn, parent });
+          lastOpenTool = standIn;
+          break;
+        }
+        if (id) byId.set(id, node);
+        openTools.push({ node, parent });
+        into(parent, id).push(node);
         lastOpenTool = node;
         break;
       }
       case 'tool_result': {
         if (p.toolUseId && runnerJobLaunches.has(String(p.toolUseId))) break;
-        const t =
-          (p.toolUseId ? byId.get(String(p.toolUseId)) : undefined) ??
-          (lastOpenTool && !lastOpenTool.result ? lastOpenTool : undefined);
+        const toolUseId = p.toolUseId ? String(p.toolUseId) : '';
+        // Only a result that names no call (a legacy stream) falls to the call still open: one that
+        // names a call older than the loaded window belongs to that call, not to whichever is open.
+        // A workflow agent's is drawn in a stand-in for its call, as the agent's other events are.
+        const t = toolUseId
+          ? byId.get(toolUseId) ??
+            (parent && toolUseId.startsWith(parent + WORKFLOW_AGENT_KEY) ? standInCall(toolUseId) : undefined)
+          : lastOpenTool && !lastOpenTool.result
+            ? lastOpenTool
+            : undefined;
         if (t) {
           t.result = { content: p.content, isError: !!p.isError, seq: ev.seq, truncated: ev.truncated, ts: ev.ts };
           removeOpenTool(t);
