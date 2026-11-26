@@ -14,8 +14,8 @@ import { TURN_STATE_SELECT, turnStateOf, type TurnStateFacts } from '../sessions
  * `heldFilter`, which the TypeScript readers read (plan step 4.2), and the raw SQL fragments `sessionReleasedSql` /
  * `sessionHeldSql` (plan step 4.3). As status sets, the same members every hand-copied live/terminal set held, for
  * the readers that have not moved onto the facts yet (docs/session-status-retirement-plan.md, tasks T10 to T12).
- * session_release_fact_chk (migrations 1401, 1402) makes the two the same rows: a status is terminal exactly when
- * `finished_at` is set. The partial indexes on `finished_at IS NULL` (migrations 1628, 1633) are the held rows' access
+ * The two are the same rows: a projected word is terminal exactly when `finished_at` is set (the database held the
+ * stored word to that until deploy D4 dropped it, migration 1691). The partial indexes on `finished_at IS NULL` (migrations 1628, 1633) are the held rows' access
  * paths, so no reader states the held statuses beside the column for the planner any more.
  */
 
@@ -233,7 +233,7 @@ export function reportsSuccessWithNoEnd(current: { cancelRequestedAt: Date | nul
  * Whether the session's run is over: released, or held with its turn abandoned and an end recorded (ABANDONED, what
  * INTERRUPTED said: the runner was stopped under the turn; with an end reason, the session itself was ended; plan
  * §2.1: E). The SESSION_RUN_TERMINAL watch leaf asks exactly this, and sessionHasEnded asks it after the filing facts.
- * Under session_release_fact_chk it answers, for every stored row, what "the derived run state is SUCCEEDED, FAILED or
+ * It answers, for every row, what "the derived run state is SUCCEEDED, FAILED or
  * ENDED" answered. A row read with TURN_STATE_SELECT; one not yet backfilled reads its stored word there.
  */
 export function runIsOver(session: TurnStateFacts & { endReason: string | null }): boolean {

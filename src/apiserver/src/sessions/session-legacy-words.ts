@@ -12,8 +12,8 @@
  *   P3  a LANDING container with no end asked                                    SUCCEEDED or CANCELLED, by its landing
  *   P4  its task ended DONE (`task_done`) and it had started                     SUCCEEDED
  *   P5  anything else                                                            CANCELLED
- * The released kinds that read another word than the one stored before deploy D3 are the plan's §3.4 (C1-C8). Since
- * D3 the stored word is this one: migration 1671's trigger writes it from the same facts, for rollback only.
+ * The released kinds that read another word than the one stored before deploy D3 are the plan's §3.4 (C1-C8). No word
+ * is stored since deploy D4 (migration 1691): this projector and its SQL twin are where the words come from.
  */
 import { Prisma } from '@prisma/client';
 import { RunStatus, SessionEndReason } from '@orbit/shared';
