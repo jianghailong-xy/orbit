@@ -707,7 +707,7 @@ import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSess
 import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
-import { useOpenTaskOverPage } from '../lib/taskInPlace';
+import { useCloseTaskOverPage, useOpenTaskOverPage, useTaskOverPage } from '../lib/taskInPlace';
 import {
   OPTIMIZE_SHORTCUT,
   optimizedSendOf,
@@ -2559,6 +2559,8 @@ export function WorkspaceView({
   const navigate = useNavigate();
   // A task opens over this conversation, not on its own page (lib/taskInPlace).
   const openTaskOverPage = useOpenTaskOverPage();
+  const taskOverPage = useTaskOverPage();
+  const closeTaskOverPage = useCloseTaskOverPage();
   const [searchParams, setSearchParams] = useSearchParams();
   // How this console names its machine: Orbit Cloud for the account's managed runner (machineName).
   const managedRunnerId = useManagedRunnerId() ?? managed?.status.runnerId ?? null;
@@ -3502,6 +3504,9 @@ export function WorkspaceView({
   // Session settings as a column (docs/mocks/session-settings-column): on a wide screen, in the project column's
   // slot, which it takes while it is open (one column at a time); on a phone a sheet instead.
   const settingsColumnShown = settingsOpen && !isMobile && !!selected && !selectedTrashed;
+  // Whether this session's own task is open beside (or over) it: the Task badge reads pressed then.
+  const selectedTaskOpen =
+    !!selected?.taskId && taskOverPage != null && routeId(taskOverPage) === routeId(selected.taskId);
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
   // Whether a public link opens this conversation right now: the detail's open link once it has
   // been read, the list row's flag until then. The Trash pauses a link, so a trashed one is not.
@@ -11205,7 +11210,11 @@ export function WorkspaceView({
                     type="button"
                     className="workspace-name workspace-name-button"
                     aria-expanded={settingsOpen}
-                    onClick={() => setSettingsOpen((open) => !open)}
+                    onClick={() => {
+                      // One column at a time beside the conversation (docs/mocks/session-task-column).
+                      if (!settingsOpen && taskOverPage) closeTaskOverPage();
+                      setSettingsOpen((open) => !open);
+                    }}
                   >
                     <span className="workspace-name-text">{selected.title}</span>
                     <RightOutlined className="workspace-name-chevron" aria-hidden />
@@ -11241,7 +11250,17 @@ export function WorkspaceView({
                     type="button"
                     className="coordinator-badge coordinator-badge-link"
                     aria-label={selected.taskTitle ? `Task · Open task ${selected.taskTitle}` : 'Task · Open task'}
-                    onClick={() => openTaskOverPage(encodeId(selected.taskId))}
+                    // A second press closes the task beside the conversation (docs/mocks/session-task-column);
+                    // opening it takes the column session settings had.
+                    aria-pressed={selectedTaskOpen}
+                    onClick={() => {
+                      if (selectedTaskOpen) {
+                        closeTaskOverPage();
+                        return;
+                      }
+                      setSettingsOpen(false);
+                      openTaskOverPage(encodeId(selected.taskId));
+                    }}
                   >
                     Task
                     <RightOutlined aria-hidden />

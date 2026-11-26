@@ -500,6 +500,35 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(new URLSearchParams(search).get('task')).toBeTruthy());
   });
 
+  it('the Task badge toggles its task beside the conversation, one column at a time with session settings', async () => {
+    // docs/mocks/session-task-column: pressed while the task is open, a second press closes it, and the
+    // task and session settings never stand side by side.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const badge = () => line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link')!;
+    const title = () => line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
+    const taskOpen = () => new URLSearchParams(search).get('task') != null;
+
+    await act(async () => title().click());
+    await waitFor(() => expect(title().getAttribute('aria-expanded')).toBe('true'));
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(true));
+    expect(title().getAttribute('aria-expanded')).toBe('false');
+    await waitFor(() => expect(badge().getAttribute('aria-pressed')).toBe('true'));
+
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(false));
+    expect(badge().getAttribute('aria-pressed')).toBe('false');
+
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(true));
+    await act(async () => title().click());
+    await waitFor(() => expect(taskOpen()).toBe(false));
+    expect(title().getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('02-3: opens the successor with the note card and the waits that moved here', async () => {
     detail = session({
       projectId: PROJECT,
