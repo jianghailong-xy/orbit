@@ -29,6 +29,8 @@ import (
 // subject and is relayed to the runner. A StreamOpen request comes the same way (streams.go), and so does a
 // BackgroundJobTailRequest (bgtail.go).
 //
+// The same connection carries the nodes' asks of each other for a runner process's heartbeat facts (facts.go).
+//
 // The gateway connects as its own NATS user, with the nkey seed in LINK_NATS_SEED (nkey.go, nats.conf).
 
 const (
@@ -83,6 +85,8 @@ func startHintRelay(g *gateway, url string) (*hintRelay, error) {
 	}
 	nc, err := nats.Connect(url, append(auth,
 		nats.Name("orbit-link-gateway "+nodeName()),
+		// The answers to its asks of the other nodes for a process's facts (facts.go) come back here.
+		nats.CustomInboxPrefix(factPeerInboxPrefix),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(2*time.Second),
@@ -116,6 +120,10 @@ func startHintRelay(g *gateway, url string) (*hintRelay, error) {
 	h.nc = nc
 	if nc.IsConnected() {
 		m.natsConnected.set(1)
+	}
+	// Every node hears every ask for a process's facts, and the one that holds them answers (facts.go).
+	if _, err := nc.Subscribe(factPeerSubjectPrefix+"*", g.answerPeer); err != nil {
+		h.log.Warn("subscribing to the other nodes' asks for heartbeat facts failed; their runners send their facts whole", "err", err)
 	}
 	go h.run()
 	return h, nil

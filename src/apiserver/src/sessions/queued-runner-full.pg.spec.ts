@@ -184,4 +184,37 @@ test('queuedReason runner_at_capacity: a runner full of turns and background-job
     assert.equal(got.queuedReason, 'runner_offline');
     assert.equal(got.queuedHeldByJobs, null);
   });
+
+  await t.test('(7) background jobs alone fill the runner; a holder\'s own message is not held by its own job', async () => {
+    const r = await runner(alice.id, 'jobs-only', { maxConcurrent: 3 });
+    const jobs = [
+      await session(alice.id, r, 'a build', RunStatus.AWAITING_INPUT),
+      await session(alice.id, r, 'a watch script', RunStatus.AWAITING_INPUT),
+      await session(alice.id, r, 'a remote submit', RunStatus.AWAITING_INPUT),
+    ];
+    const queued = await session(alice.id, r, 'the next message', RunStatus.PENDING);
+    const own = await session(alice.id, r, 'a message to a session with its own job', RunStatus.PENDING);
+    await holders(r.id, [...jobs.slice(0, 2), own]);
+    // Two holders and the third's own message: for that one, its own job holds nothing against it.
+    const ownRow = await row(aliceToken, own);
+    assert.equal(ownRow.queuedReason, null, 'a session was held by its own background job');
+    await db.runnerPresence.update({ where: { runnerId: r.id }, data: { backgroundJobSessionIds: [...jobs, own] } });
+    const got = await row(aliceToken, queued);
+    assert.equal(got.queuedReason, 'runner_at_capacity', 'four job holders on three slots: the runner is full');
+    assert.equal(got.queuedLimit, 3);
+    assert.equal(got.queuedHeldByJobs, 4);
+  });
+
+  await t.test('(8) a full runner counted for a session with a job of its own: its own job is not counted (2/2, not 3/2)', async () => {
+    const r = await runner(alice.id, 'own-job-full', { maxConcurrent: 2 });
+    await session(alice.id, r, 'a turn', RunStatus.RUNNING);
+    const other = await session(alice.id, r, 'another session\'s build', RunStatus.AWAITING_INPUT);
+    const own = await session(alice.id, r, 'a message to a session with a build of its own', RunStatus.PENDING);
+    await holders(r.id, [other, own]);
+    const got = await row(aliceToken, own);
+    assert.equal(got.queuedReason, 'runner_at_capacity');
+    assert.equal(got.queuedActive, 2, 'the session\'s own job was counted against its own message');
+    assert.equal(got.queuedLimit, 2);
+    assert.equal(got.queuedHeldByJobs, 1);
+  });
 });

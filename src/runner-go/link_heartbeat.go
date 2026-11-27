@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"orbit/linkpb"
@@ -19,9 +20,12 @@ import (
 // body (HeartbeatRequest) as one Fact, the member's JSON with its SHA-256. The mapping is the one the gateway forwards
 // by (src/link-gateway/README.md), so the heartbeat route reads the body it always read.
 //
-// A part travels whole only when the gateway does not hold it: the first beat on a connection, a part that changed
-// since it was last sent whole, and a part the gateway asks for (HeartbeatAck.want_facts), which is sent at once.
-// Otherwise its digest alone stands for it, and the gateway fills it in from what that connection sent before.
+// A part travels whole only when the gateway does not hold it: a part that changed since it was last sent whole, a
+// part the gateway asks for (HeartbeatAck.want_facts), which is sent at once, and every part on the first beat of a
+// connection to a gateway that keeps them per connection. Otherwise its digest alone stands for it, and the gateway
+// fills it in from what it was sent before. A gateway whose Welcome says process_facts keeps them for the process,
+// across its connections and its gateway nodes (docs/runner-link-design.md §15.17): the first beat on a new
+// connection to it sends whole only what changed, and what it no longer holds it asks for.
 //
 // The HeartbeatAck's reconcile_json is the heartbeat route's answer, a HeartbeatResponse, which the runner applies: every
 // command keeps its contract. An ack with no reconcile_json reconciled nothing, and the beat failed.
@@ -102,7 +106,7 @@ func (m *linkMode) heartbeat(ctx context.Context, body, out interface{}) error {
 		}
 		ack, err := conn.beat(ctx, hb)
 		if errors.Is(err, errLinkConnEnded) {
-			continue // sent again, whole, on the next connection
+			continue // sent again on the next connection, whole what this one may not have taken
 		}
 		if err != nil {
 			return err
@@ -148,20 +152,25 @@ func (c *linkWorkConn) beat(ctx context.Context, hb *linkpb.Heartbeat) (*linkpb.
 		ProcessId: hb.GetProcessId(), Draining: hb.GetDraining(), IdleCapacity: hb.GetIdleCapacity(),
 		SessionIds: hb.GetSessionIds(), SupportedProviders: hb.GetSupportedProviders(), BeatId: c.work.beatSeq.Add(1),
 	}
+	var whole []*linkpb.Fact
 	for _, f := range hb.GetFacts() {
-		if c.facts[f.GetKind()] == f.GetSha256() {
+		if c.facts.held(f) {
 			frame.Facts = append(frame.Facts, &linkpb.Fact{Kind: f.GetKind(), Sha256: f.GetSha256()})
 			continue
 		}
 		frame.Facts = append(frame.Facts, f)
-		c.facts[f.GetKind()] = f.GetSha256()
+		whole = append(whole, f)
 	}
+	// A beat that ends with its connection before it is answered may not have reached the gateway: what it sent whole
+	// goes whole again.
+	ended := func() { c.facts.forget(whole) }
 	select {
 	case <-c.acks: // an ack no beat on this connection waits for
 	default:
 	}
 	c.pending = &linkBeat{id: frame.GetBeatId(), sent: time.Now()}
 	if _, err := c.send(&linkpb.Frame{Body: &linkpb.Frame_Heartbeat{Heartbeat: frame}}); err != nil {
+		ended()
 		_ = c.ws.CloseNow()
 		if !linkWaitEnded(ctx, c) {
 			return nil, ctx.Err()
@@ -179,6 +188,7 @@ func (c *linkWorkConn) beat(ctx context.Context, hb *linkpb.Heartbeat) (*linkpb.
 			c.work.slowBeat(c, frame.GetBeatId(), took)
 			return ack, nil
 		case <-c.done:
+			ended()
 			return nil, errLinkConnEnded
 		case <-ctx.Done():
 			return nil, fmt.Errorf("heartbeat %d got no answer on connection %s before its call gave up; the connection carries on, and the next beat waits for this one's answer: %w",
@@ -231,7 +241,46 @@ func (c *linkWorkConn) answersPending(ack *linkpb.HeartbeatAck) bool {
 // for go whole in it.
 func (c *linkWorkConn) settle(ack *linkpb.HeartbeatAck) {
 	c.pending = nil
-	for _, kind := range ack.GetWantFacts() {
-		delete(c.facts, kind)
+	c.facts.drop(ack.GetWantFacts())
+}
+
+// linkFactRecord is, by kind, the digest of each heartbeat part a gateway was sent whole: of one connection, or of the
+// process when its gateway keeps them for the process (linkWork.facts), which two connections may share while one
+// replaces the other.
+type linkFactRecord struct {
+	mu  sync.Mutex
+	sha map[string]string
+}
+
+func newLinkFactRecord() *linkFactRecord { return &linkFactRecord{sha: map[string]string{}} }
+
+// held reports whether the gateway holds f by its digest, and records that it will once f is sent whole.
+func (r *linkFactRecord) held(f *linkpb.Fact) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.sha[f.GetKind()] == f.GetSha256() {
+		return true
+	}
+	r.sha[f.GetKind()] = f.GetSha256()
+	return false
+}
+
+// forget unrecords facts sent whole that the gateway may not have taken, unless a later beat recorded another digest.
+func (r *linkFactRecord) forget(facts []*linkpb.Fact) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, f := range facts {
+		if r.sha[f.GetKind()] == f.GetSha256() {
+			delete(r.sha, f.GetKind())
+		}
+	}
+}
+
+// drop unrecords the kinds the gateway asked for.
+func (r *linkFactRecord) drop(kinds []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, kind := range kinds {
+		delete(r.sha, kind)
 	}
 }

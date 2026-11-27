@@ -99,6 +99,13 @@ the same delay.
 | The connection token in `Authorization: Bearer`. | `401 UNAUTHENTICATED`, with a `reason`. |
 | The runner's connection slots. | `429 TOO_MANY_CONNECTIONS`, `Retry-After: 30`. |
 
+The upgrade accepts permessage-deflate without context takeover when the runner offers it (runners since
+docs/runner-link-design.md §15.17 do), and answers `server_no_context_takeover; client_no_context_takeover` even to an
+offer with context takeover: each message is compressed alone, from pooled writers, so no connection keeps a 1.2 MB
+writer of its own. Messages under 512 bytes go uncompressed. A runner that offers nothing, as every older one, gets an
+uncompressed connection, as before (`TestCompressionIsNegotiatedOnlyWithARunnerThatOffersIt`). The 256 KiB read limit
+holds what a message inflates to, not its compressed size.
+
 The token is checked without asking any database:
 
 - The apiserver's four checks, in its order and with its reasons, apply first: `MALFORMED`, `SIGNATURE`, `AUDIENCE`
@@ -369,11 +376,28 @@ A `Heartbeat` is forwarded to `POST /runner/heartbeat` as the body a runner post
 `TestAHeartbeatIsForwardedAsTheBodyTheHeartbeatRouteTakes` holds it to. `status` is `ONLINE`, `version` is Hello's, `leaseOwner` is the connection's process, `idleCapacity`,
 `draining` and `supervisedSessionIds` are the typed fields, and each `Fact`'s JSON is the member it is named after.
 
-A Fact may come by digest alone. The connection keeps the last full value of each kind (64 kinds, 4 MiB), and fills in a
-digest it holds. If a beat names a digest it does not hold, or a part that is not JSON, the beat is **not forwarded**:
-its `HeartbeatAck` names those kinds in `want_facts` and carries no reconcile and no hints, and the runner sends those
-parts whole in its next beat, at once. An absent heartbeat member keeps or clears what the server holds, so a body
-missing one would say something the runner did not.
+A Fact may come by digest alone. The gateway keeps the last full value of each kind (64 kinds, 4 MiB) for the runner
+**process**, the runner and the link token's `leaseOwner`, not for one connection (`facts.go`,
+docs/runner-link-design.md §15.17). Every connection of that process on the node fills in a digest from it, and it stays
+15 minutes after the process's last connection on the node ends. Welcome says so with `process_facts`, and a runner
+that reads it sends the first beat on a new connection by digest alone for every part it sent whole before; one older
+than the field sends everything whole on each connection, which is forwarded as always. Content is interned, so parts
+alike across runners (model catalogs, engines, commands) are held once.
+
+A digest the node does not hold, because the process's earlier connections went to another node or this one restarted,
+is asked of the other nodes first: a request on `lfx.<runnerId>` naming the process and each kind's digest, a
+`Heartbeat` with only `process_id` and digest-only `facts`, answered on the asker's own inbox (`_LFX.>`). A node holding
+that process's fact by the same digest answers with its content, as a `Heartbeat` with those facts whole, and stays
+silent when it holds none. The asker uses an answered part only if its SHA-256 is the digest asked for, keeps it, and
+forwards the beat. It waits 250 ms at most: no answer (no node holds them, NATS is down, or an older node that does not
+listen) leaves the part unknown.
+
+If a beat still names a digest no node holds, or a part that is not JSON, the beat is **not forwarded**: its
+`HeartbeatAck` names those kinds in `want_facts` and carries no reconcile and no hints, and the runner sends those parts
+whole in its next beat, at once. An absent heartbeat member keeps or clears what the server holds, so a body missing one
+would say something the runner did not. So a node that restarted, where nobody holds the process's parts, costs one
+digest-only beat and one whole one; `TestAFactNoNodeHoldsIsAskedOfTheRunner` holds the gateway to it, and
+`TestAnotherNodeFillsAProcessFactsFromTheNodeThatHoldsThem` to the answer from another node.
 
 Beats are forwarded one at a time per connection; one waiting its turn is replaced by a newer one. The `HeartbeatAck`
 of a forwarded beat carries the mode, the route's answer as `reconcile_json`, and `hints`:
@@ -543,11 +567,13 @@ public half of its nkey, each allowed only what it does:
 | User | Publishes | Subscribes |
 | --- | --- | --- |
 | the apiserver | `rnr.>`: hints and turn prefix requests | `ses.*.live`, and `_INBOX.>` for its requests' answers |
-| the gateway | `ses.*.live`, `vnc.>` (byte streams' `.up`), and the answer to a request it received | `rnr.>`, `vnc.>` (byte streams' `.down`) |
+| the gateway | `ses.*.live`, `vnc.>` (byte streams' `.up`), `lfx.*` (asks for a process's heartbeat facts), and the answer to a request it received | `rnr.>`, `vnc.>` (byte streams' `.down`), `lfx.*`, and `_LFX.>`, its own inbox for the answers to those asks |
 
 A client without a seed cannot connect. The gateway connects with `LINK_NATS_SEED`; `link-gateway nkey` makes a pair.
 `scripts/runner-link/nats-auth-check.sh` holds a real nats-server running `nats.conf` to that table
-(`TestNATSAuthorizationOnARealServer`).
+(`TestNATSAuthorizationOnARealServer`). A NATS still running an older `nats.conf` refuses the `lfx.*` and `_LFX.>`
+grants: the gateway logs the permission violations, its asks go unanswered, and runners send their parts whole when
+asked, as before.
 
 ## Metrics
 
@@ -576,7 +602,10 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_backend_call_duration_seconds` | histogram | — (retries included) |
 | `link_heartbeat_forwards_total` | counter | `result`: forwarded, want_facts, refused, failed, superseded, other_process, unencodable |
 | `link_heartbeat_forward_duration_seconds` | histogram | — |
-| `link_heartbeat_facts_total` | counter | `result`: whole, cached, unknown_digest, invalid_json, digest_mismatch, ignored |
+| `link_heartbeat_facts_total` | counter | `result`: whole, cached (a digest the node held), peer (a digest another node held), unknown_digest (asked of the runner), invalid_json, digest_mismatch, ignored |
+| `link_fact_processes` | gauge | — (runner processes whose facts the node holds: those connected, and those gone less than 15 minutes) |
+| `link_fact_peer_asks_total` | counter | `result`: answered, partial, no_answer, malformed |
+| `link_fact_peer_answers_total` | counter | — (asks of another node this node answered) |
 | `link_welcome_lookups_total` | counter | `result`: answered, failed (no answer), refused (not 2xx), malformed; all but answered send a Welcome without sessions and release |
 | `link_event_batches_total` | counter | `result`: stored, credit_exceeded (past the connection's credit), queue_full (no room in the ingest queue), gap, malformed, no_answer, refused, refused_retryable, failed_behind, empty |
 | `link_events_stored_total` | counter | — (events stored and acknowledged) |

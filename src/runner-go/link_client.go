@@ -383,6 +383,10 @@ type linkConn struct {
 	onFrame func(*linkConn, *linkpb.Frame)
 }
 
+// linkCompressionThreshold is the smallest message the runner compresses: below it, a heartbeat by digest and most
+// live batches, deflate saves nothing worth its CPU (docs/runner-link-design.md §15.17).
+const linkCompressionThreshold = 512
+
 // dialLink opens a connection to linkURL with token, says hello and waits for Welcome. An upgrade refused with an
 // HTTP status comes back as a *linkHTTPError, and a Close in place of Welcome as a *linkCloseError.
 func dialLink(ctx context.Context, client *http.Client, linkURL, token string, hello *linkpb.Hello,
@@ -390,9 +394,11 @@ func dialLink(ctx context.Context, client *http.Client, linkURL, token string, h
 	slot := &linkSocketSlot{}
 	dctx, cancel := context.WithTimeout(context.WithValue(ctx, linkSocketSlotKey{}, slot), linkDialTimeout)
 	ws, resp, err := websocket.Dial(dctx, linkURL, &websocket.DialOptions{
-		HTTPClient:      client,
-		HTTPHeader:      http.Header{"Authorization": {"Bearer " + token}},
-		CompressionMode: websocket.CompressionDisabled,
+		HTTPClient: client,
+		HTTPHeader: http.Header{"Authorization": {"Bearer " + token}},
+		// permessage-deflate without context takeover, when the gateway accepts it (docs/runner-link-design.md §15.17):
+		// event batches go at half their size. A gateway from before it accepts none, and the link runs uncompressed.
+		CompressionMode: websocket.CompressionNoContextTakeover, CompressionThreshold: linkCompressionThreshold,
 	})
 	cancel()
 	if err != nil {

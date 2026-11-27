@@ -157,6 +157,9 @@ export function waitingNoticeFor(session?: WaitingSource | null): WaitingNotice 
   // RunNeverStartedCard) is what stands in this slot. Without this, a row that still says RUNNING
   // under a refusal drew "Starting … usually seconds" over a session nobody will start.
   if (sessionSourceRefused(session)) return null;
+  // A claim a full runner keeps waiting for its slot is no start: no engine has been asked to start it, and it is
+  // said as the queued wait it is (slotWaitGate), by the queued card's tag.
+  if (session.enginePhase === 'waiting_for_slot') return null;
   if (sessionRunStateOf(session) === 'RUNNING' && isCompacting(session))
     return {
       kind: 'compacting',

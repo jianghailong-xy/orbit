@@ -167,6 +167,14 @@ export interface ClaimingRunner {
    * claim takes any session as it always has; an empty list takes none.
    */
   onlySessionIds?: readonly string[];
+  /**
+   * A full runner's claim scope (runner-go sessionPool.claimScope): every slot of the runner is taken, by turns and by
+   * sessions its background jobs hold, so an ordinary claim may take only the sessions named — those held by a
+   * background job of their own, whose message the slot their job holds admits — and a Run now claim may take any.
+   * Empty takes no ordinary claim. Absent, the claim is the runner's ordinary one. Sent only to a server whose heartbeat
+   * answer says `capacityClaims`.
+   */
+  fullScope?: readonly string[];
 }
 
 /**
@@ -549,6 +557,11 @@ export class QueueService {
             -- and this claim makes it RUNNING again. No other session is claimed while it drains.
             AND (${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[] IS NULL
               OR s.id = ANY(${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[]))
+            -- A full runner names the only sessions an ordinary claim may take (ClaimingRunner.fullScope): it would
+            -- have to hand any other back. Run now's overflow claim is not held to it.
+            AND (${overflow}::boolean
+              OR ${runner.fullScope ? [...runner.fullScope] : null}::uuid[] IS NULL
+              OR s.id = ANY(${runner.fullScope ? [...runner.fullScope] : null}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
             -- Settings › Translation (sessions/turn-translation.ts): a new or revived session whose only
@@ -708,7 +721,11 @@ export class QueueService {
             AND (${overflow}::boolean OR ${scopedClaim}::boolean OR (
               -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
               -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
-              ${runnerActiveTurns(runnerId)}
+              -- Plus the slots other sessions' background jobs hold, which the runner admits a turn
+              -- against (runnerBackgroundHeldSessions): counted by turns alone, a runner whose jobs and
+              -- turns fill it was handed a claim it could not start, and the row read RUNNING, "Getting
+              -- the session ready", until a turn ended, instead of queued behind a full runner.
+              ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId, Prisma.sql`s.id`)}
                 < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runnerId})
               -- Batch-run cap, independent of the runner cap above: a closed set the user
               -- dispatched together, with the cap they chose for it.
@@ -735,7 +752,7 @@ export class QueueService {
               AND EXISTS (
                 SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
                   AND ${OVER_CAPACITY_V1} = ANY(r.capabilities)
-                  AND ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId)}
+                  AND ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId, Prisma.sql`s.id`)}
                       < r."max_concurrent" + r."burst_concurrent"
               )
             ))

@@ -283,6 +283,9 @@ type Transport struct {
 	// under it (sessionPool.returnHeldSlot, §7.3), waiting for the control plane's answer, so its callers run it on a
 	// goroutine of their own. Set by runLoop with draining; nil on every other transport.
 	returnHeldSlot func(sessionID string)
+	// fullClaimScope is, on a full runner, the claim scope its next claim sends (sessionPool.claimScope); ok is false
+	// while a slot is free or for an older control plane. Set by runLoop; nil on every other transport.
+	fullClaimScope func() (scope []string, ok bool)
 	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
 	observerMu sync.Mutex
 	observer   func(transportEvent)
@@ -555,6 +558,12 @@ func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs, scope
 	path := "/runner/sessions/claim"
 	if len(scope) > 0 {
 		path = linkWithQuery(path, "drainScope", strings.Join(scope, ","))
+	} else if t.fullClaimScope != nil {
+		// A full runner says which claims it can still start (sessionPool.claimScope), so that it is never handed one it
+		// cannot: an empty scope takes only a Run now claim.
+		if full, ok := t.fullClaimScope(); ok {
+			path = linkWithQuery(path, "fullScope", strings.Join(full, ","))
+		}
 	}
 	err := t.do(ids.with(ctx), "GET", path, nil, &r, fetchCallTimeout)
 	ids.settle(err)
@@ -973,6 +982,23 @@ func (t *Transport) releaseTurnLeases(ctx context.Context, sessionID, leaseGener
 	}
 	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/release-leases", body, nil, 15*time.Second)
 }
+
+// returnFullSlot gives back the claim of a session this full runner cannot start (POST
+// /runner/sessions/:id/return-slot, reason runner_full): the control plane puts the session back in its queue, where it
+// reads queued behind a full runner, unless a turn was already handed out under the claim. The answer is the session's
+// status after it, and whether the slot was given back.
+func (t *Transport) returnFullSlot(ctx context.Context, sessionID string) (string, bool, error) {
+	var r struct {
+		Status   string `json:"status"`
+		Returned bool   `json:"returned"`
+	}
+	err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/return-slot",
+		map[string]string{"leaseOwner": t.leaseOwner, "reason": returnSlotReasonRunnerFull}, &r, 15*time.Second)
+	return r.Status, r.Returned, err
+}
+
+// returnSlotReasonRunnerFull is the reason a full runner gives back a claim for (returnFullSlot).
+const returnSlotReasonRunnerFull = "runner_full"
 
 // returnSlot gives back the slot this process holds for a session under which no turn runs, while its pool drains
 // for an update (POST /runner/sessions/:id/return-slot, docs/runner-update-drain-design.md §7.3). The answer is the

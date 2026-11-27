@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -61,6 +62,14 @@ type fakeWorkGateway struct {
 	beatDelay time.Duration
 	// oldAcks makes it a gateway older than HeartbeatAck.beat_id: its acks name no beat.
 	oldAcks bool
+	// processFacts makes it a gateway that keeps the facts a process sent whole across its connections, and says so in
+	// Welcome.process_facts (src/link-gateway/facts.go); unset, it keeps them per connection, as a gateway older than
+	// that field does. processHeld is what it holds, by process; a test may clear it, as a gateway node that restarted
+	// or another node holds nothing.
+	processFacts bool
+	processHeld  map[string]map[string]fakeWorkFact
+	// loseBeat, when it says so, loses a beat as a gateway that never read it would: neither recorded nor answered.
+	loseBeat func(c *fakeWorkConn, hb *linkpb.Heartbeat) bool
 	// beforeAck, when set, runs just before a beat's HeartbeatAck is sent.
 	beforeAck func(c *fakeWorkConn, hb *linkpb.Heartbeat)
 	// onStream, when set, takes each byte stream frame a connection carries (link_streams_test.go), on its reading
@@ -70,6 +79,11 @@ type fakeWorkGateway struct {
 	onMessage func(c *fakeWorkConn, data []byte)
 	// pings counts the pings the runner's connections sent.
 	pings atomic.Int64
+	// compression is how it accepts permessage-deflate: off (the zero value), as a gateway from before
+	// docs/runner-link-design.md §15.17 does, or as the gateway does now. wireIn counts the bytes its connections read,
+	// TLS included.
+	compression websocket.CompressionMode
+	wireIn      atomic.Int64
 
 	conns      []*fakeWorkConn
 	upgrades   []time.Time
@@ -78,6 +92,31 @@ type fakeWorkGateway struct {
 	arrivals   []fakeWorkBeatAt // every beat as it came, answered or not
 	answers    []fakeWorkBeatAt // every beat as it was answered
 	superseded int
+}
+
+// fakeCountingListener counts the bytes its connections read.
+type fakeCountingListener struct {
+	net.Listener
+	n *atomic.Int64
+}
+
+func (l fakeCountingListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return fakeCountingConn{Conn: c, n: l.n}, nil
+}
+
+type fakeCountingConn struct {
+	net.Conn
+	n *atomic.Int64
+}
+
+func (c fakeCountingConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	c.n.Add(int64(n))
+	return n, err
 }
 
 // fakeWorkBeatAt is a beat by its id, on a connection, at a time.
@@ -102,6 +141,7 @@ type fakeWorkConn struct {
 	writeMu    sync.Mutex
 	outID      uint64
 	facts      map[string]fakeWorkFact // what a connection's beats sent whole, by kind
+	offered    string                  // the extensions the runner's upgrade request offered
 	// beatq holds the beat waiting for the connection's heartbeat worker, once beats are answered late (beatDelay).
 	beatq    chan *linkpb.Heartbeat
 	beatOnce sync.Once
@@ -139,6 +179,7 @@ func newFakeWorkGateway(t *testing.T) *fakeWorkGateway {
 	t.Helper()
 	g := &fakeWorkGateway{t: t, mode: linkpb.Mode_MODE_LINK}
 	g.Server = httptest.NewUnstartedServer(http.HandlerFunc(g.serve))
+	g.Server.Listener = fakeCountingListener{Listener: g.Server.Listener, n: &g.wireIn}
 	g.StartTLS()
 	t.Cleanup(func() {
 		g.mu.Lock()
@@ -182,17 +223,22 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{OnPingReceived: func(context.Context, []byte) bool {
-		g.pings.Add(1)
-		return true
-	}})
+	g.mu.Lock()
+	compression := g.compression
+	g.mu.Unlock()
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: compression, CompressionThreshold: 512,
+		OnPingReceived: func(context.Context, []byte) bool {
+			g.pings.Add(1)
+			return true
+		}})
 	if err != nil {
 		return
 	}
 	ws.SetReadLimit(16 << 20)
 	g.mu.Lock()
 	c := &fakeWorkConn{g: g, id: fmt.Sprintf("c-%016x", len(g.conns)+1), ws: ws, status: -1, done: make(chan struct{}),
-		token: strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), facts: map[string]fakeWorkFact{}}
+		token: strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), facts: map[string]fakeWorkFact{},
+		offered: r.Header.Get("Sec-WebSocket-Extensions")}
 	g.conns = append(g.conns, c)
 	g.mu.Unlock()
 	defer close(c.done)
@@ -238,7 +284,8 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	c.hello, c.welcomed = first.GetHello(), time.Now()
 	welcome := &linkpb.Welcome{ProtocolVersion: 1, Mode: g.mode, HeartbeatIntervalMs: 30000,
-		Limits: &linkpb.Limits{MaxFrameBytes: linkMaxFrameBytes}, Hints: &linkpb.HintState{}, ConnectionId: c.id}
+		Limits: &linkpb.Limits{MaxFrameBytes: linkMaxFrameBytes}, Hints: &linkpb.HintState{}, ConnectionId: c.id,
+		ProcessFacts: g.processFacts}
 	if g.ingest != nil {
 		g.ingest.welcome(c, welcome)
 	}
@@ -303,6 +350,10 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 // (beatDelay), forwarded by the connection's heartbeat worker, one beat at a time.
 func (g *fakeWorkGateway) onBeat(c *fakeWorkConn, hb *linkpb.Heartbeat) {
 	g.mu.Lock()
+	if lose := g.loseBeat; lose != nil && lose(c, hb) {
+		g.mu.Unlock()
+		return
+	}
 	g.arrivals = append(g.arrivals, fakeWorkBeatAt{conn: c.id, id: hb.GetBeatId(), at: time.Now()})
 	delay := g.beatDelay
 	g.mu.Unlock()
@@ -353,9 +404,20 @@ func (g *fakeWorkGateway) answerBeat(c *fakeWorkConn, hb *linkpb.Heartbeat) {
 	mode := g.mode
 	members := map[string]json.RawMessage{}
 	var want []string
+	held := c.facts
+	if g.processFacts {
+		process := strings.ToLower(c.hello.GetProcessId())
+		if g.processHeld == nil {
+			g.processHeld = map[string]map[string]fakeWorkFact{}
+		}
+		if g.processHeld[process] == nil {
+			g.processHeld[process] = map[string]fakeWorkFact{}
+		}
+		held = g.processHeld[process]
+	}
 	for _, f := range hb.GetFacts() {
 		if len(f.GetJson()) == 0 {
-			if cached, ok := c.facts[f.GetKind()]; ok && cached.sha == f.GetSha256() {
+			if cached, ok := held[f.GetKind()]; ok && cached.sha == f.GetSha256() {
 				members[f.GetKind()] = cached.json
 			} else {
 				want = append(want, f.GetKind())
@@ -364,7 +426,7 @@ func (g *fakeWorkGateway) answerBeat(c *fakeWorkConn, hb *linkpb.Heartbeat) {
 		}
 		sum := sha256.Sum256(f.GetJson())
 		if hex.EncodeToString(sum[:]) == f.GetSha256() {
-			c.facts[f.GetKind()] = fakeWorkFact{sha: f.GetSha256(), json: append([]byte(nil), f.GetJson()...)}
+			held[f.GetKind()] = fakeWorkFact{sha: f.GetSha256(), json: append([]byte(nil), f.GetJson()...)}
 		}
 		members[f.GetKind()] = f.GetJson()
 	}
