@@ -80,6 +80,7 @@ import { RenameField } from '../components/RenameField';
 import { Menu } from '../components/ui/Menu';
 import { Switch } from '../components/ui/Switch';
 import { Tooltip } from '../components/ui/Tooltip';
+import { ScheduledChatButton, useScheduledChatPanel } from '../components/ScheduledChatPanel';
 import '../components/Scheduled.css';
 
 const C = SCHEDULE_COPY;
@@ -488,6 +489,9 @@ export function ScheduledPage(): JSX.Element {
 
   const [quickText, setQuickText] = useState('');
   const [inspectorWidth, startInspectorResize, inspectorResizing] = useInspectorWidth();
+  // The page's chat (docs/scheduled-chat-design.md §2, §3): docked on the right, opened by the tools row's Chat button.
+  const chat = useScheduledChatPanel({ workspaceFilter });
+  const chatButton = <ScheduledChatButton open={chat.open} onPress={chat.toggle} />;
   const quickAdd = (
     <QuickAdd
       text={quickText}
@@ -503,7 +507,7 @@ export function ScheduledPage(): JSX.Element {
     />
   );
 
-  return (
+  return chat.render(
     <div
       className={`sched-page${inspectorResizing ? ' is-resizing' : ''}`}
       style={inspectorWidth != null ? ({ '--sched-inspector-width': `${inspectorWidth}px` } as CSSProperties) : undefined}
@@ -515,6 +519,8 @@ export function ScheduledPage(): JSX.Element {
         </header>
         {empty && !workspaceFilter ? (
           <>
+            {/* No list to filter yet: the tools row holds the Chat button alone. */}
+            <div className="sched-tools">{chatButton}</div>
             <p className="sched-lead">{C.empty.lead}</p>
             {quickAdd}
             <ul className="sched-examples" data-schedule-examples="">
@@ -551,6 +557,7 @@ export function ScheduledPage(): JSX.Element {
                 />
                 {C.page.showPastRuns}
               </label>
+              {chatButton}
             </div>
             {scheduleItems.length > 0 ? (
               <div className="sched-waiting-list" data-schedule-waiting="">
@@ -615,7 +622,7 @@ export function ScheduledPage(): JSX.Element {
           ]}
         />
       ) : null}
-    </div>
+    </div>,
   );
 }
 

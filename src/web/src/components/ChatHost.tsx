@@ -19,6 +19,7 @@ import {
   WIKI_CHAT_FOCUS_NEEDS_YOU,
   WIKI_CHAT_NEW_PARAM,
   WIKI_CHAT_PARAM,
+  readChatHostShown,
   readWikiChatClosed,
   readWikiChatOpen,
   readWikiChatWidth,
@@ -28,10 +29,12 @@ import {
   wikiChatLayout,
   wikiChatPanelWidth,
   wikiChatSearch,
+  writeChatHostShown,
   writeWikiChatClosed,
   writeWikiChatOpen,
   writeWikiChatWidth,
   type ChatHostList,
+  type ChatPanelRange,
   type ChatHostStore,
   type WikiChatAttachAction,
   type WikiChatAttachments,
@@ -65,8 +68,16 @@ export interface ChatHostOptions {
   list: { data: ChatHostList | null | undefined; isPending: boolean };
   /** The page wears the chat at all (the Wiki: every page but Settings). */
   shown: boolean;
-  /** The round button's look, from the chats read. */
-  fab: { state: WikiChatFabState; label: string; count: number };
+  /** The round button's look, from the chats read. Absent on a page that draws its own button (`opens: 'on-press'`). */
+  fab?: { state: WikiChatFabState; label: string; count: number };
+  /**
+   * How the panel opens. `by-default` (the Wiki, Drive): the round button, and shown by default where it docks unless
+   * hidden with ✕. `on-press` (Scheduled, design D3 A): no round button; the page's own button opens and closes it
+   * (`toggle`), it never opens by itself, and whether it was left open is kept on the device (`store.shown`).
+   */
+  opens?: 'by-default' | 'on-press';
+  /** Where a wide panel's drag is held; absent, 320 to half the window. */
+  range?: ChatPanelRange | null;
   /** The chat the button opens, and the panel by default. */
   toOpen: (chats: ChatHostList['chats'] | undefined) => string;
   /** A width the panel keeps until it is dragged; null for a third of the window. */
@@ -94,10 +105,12 @@ export interface ChatHostOptions {
  * with no scrim and is not opened by default; under 640 it is a sheet.
  */
 export function useChatHost(options: ChatHostOptions) {
-  const { scope, store, list, shown, fab, toOpen, fixedWidth = null, frameClass } = options;
+  const { scope, store, list, shown, toOpen, fixedWidth = null, frameClass, range = null } = options;
+  const fab = options.fab ?? { state: 'idle' as WikiChatFabState, label: '', count: 0 };
+  const onPress = options.opens === 'on-press';
   const location = useLocation();
   const navigate = useNavigate();
-  const fabShown = shown && list.data !== null;
+  const fabShown = !onPress && shown && list.data !== null;
 
   const asked = new URLSearchParams(location.search).get(WIKI_CHAT_PARAM);
   const kept = scope ? readWikiChatOpen(scope, store.open) : null;
@@ -111,8 +124,11 @@ export function useChatHost(options: ChatHostOptions) {
   // not shown by default, opening help closes a panel that is open, and opening the panel closes help.
   const help = useHelpDrawer();
   const { closeHelp } = help;
-  // Shown by default: only where it docks, on a page that has the panel, and not once hidden with ✕.
-  const byDefault = asked === null && kept === null && shown && wikiChatDocks(layout) && !closed && !help.open;
+  // Shown by default: only where it docks, on a page that has the panel, and not once hidden with ✕. A panel that opens
+  // on a press is shown only when it was left open on this device, at any width.
+  const leftOpen = onPress && scope !== null && !!store.shown && readChatHostShown(scope, store.shown);
+  const byDefault = asked === null && kept === null && shown && !help.open
+    && (onPress ? leftOpen : wikiChatDocks(layout) && !closed);
   const chats = list.data?.chats;
   const defaultChat = byDefault && list.data ? toOpen(chats) : null;
   const chat = asked ?? kept ?? defaultChat;
@@ -152,8 +168,13 @@ export function useChatHost(options: ChatHostOptions) {
     if (opened && (asked || kept)) go(null);
   }, [help.open, asked, kept, go]);
 
+  // A panel that opens on a press names its chat in the address once it is shown, so a reload keeps that chat.
+  useLayoutEffect(() => {
+    if (onPress && defaultChat !== null && asked === null) go(defaultChat);
+  }, [onPress, defaultChat, asked, go]);
+
   const [dragged, setDragged] = useState<number | null>(() => readWikiChatWidth(store.width));
-  const width = wikiChatPanelWidth(layout, dragged, windowWidth, fixedWidth);
+  const width = wikiChatPanelWidth(layout, dragged, windowWidth, fixedWidth, range);
 
   // The panel's top: under the Wiki's head while the head is on screen, then the top of the page's scroll. A desktop
   // draws the head in the directory's column; folding the column away brings the head row back, so it measures again.
@@ -190,6 +211,28 @@ export function useChatHost(options: ChatHostOptions) {
     [closeHelp, go],
   );
 
+  /** Whether the panel is left open on this device (a panel that opens on a press). */
+  const setShown = useCallback(
+    (next: boolean) => scope && store.shown && writeChatHostShown(scope, next, store.shown),
+    [scope, store.shown],
+  );
+  /** Close the panel: ✕, or a second press of the page's button. The chat goes on. */
+  const close = useCallback(() => {
+    // ✕ is the owner saying no: kept on the device until the button opens the panel again (board 45, Q1 A).
+    if (onPress) setShown(false);
+    else setClosed(true);
+    go(null);
+  }, [onPress, setShown, setClosed, go]);
+  /** The page's own button (`opens: 'on-press'`): closes an open panel, else opens the chat `toOpen` names. */
+  const toggle = useCallback(() => {
+    if (open) {
+      close();
+      return;
+    }
+    setShown(true);
+    openChat(toOpen(chats));
+  }, [open, close, setShown, openChat, toOpen, chats]);
+
   const render = (
     children: ReactNode,
     panel: {
@@ -224,20 +267,17 @@ export function useChatHost(options: ChatHostOptions) {
               list={list.data}
               layout={layout}
               width={width}
+              range={range}
               top={top}
               attachments={panel.attachments}
               dispatch={panel.dispatch}
               cards={shownChat ? (panel.cards ?? null) : null}
               focus={focus}
               onChat={go}
-              onClose={() => {
-                // ✕ is the owner saying no: kept on the device until the button opens the panel again (board 45, Q1 A).
-                setClosed(true);
-                go(null);
-              }}
+              onClose={close}
               onResize={(next, done) => {
                 setDragged(next);
-                if (done) writeWikiChatWidth(wikiChatPanelWidth('wide', next, windowWidth) ?? next, store.width);
+                if (done) writeWikiChatWidth(wikiChatPanelWidth('wide', next, windowWidth, null, range) ?? next, store.width);
               }}
             />
           )}
@@ -260,7 +300,7 @@ export function useChatHost(options: ChatHostOptions) {
     );
   };
 
-  return { chat, open, shownChat, chats, go, openChat, closeHelp, render };
+  return { chat, open, shownChat, chats, go, openChat, closeHelp, toggle, render };
 }
 
 /** Where the panel's top is: below the Wiki's head while it shows, else the top of the page's own scroll. */

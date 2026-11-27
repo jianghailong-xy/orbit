@@ -13,6 +13,23 @@
   background: var(--bg-raised); font: inherit; cursor: pointer;
 }
 .sched-past-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---- The page's chat (docs/scheduled-chat-design.md §2, §6; board scheduled-chat 01 parts 1–2) ---- */
+/* The chat's host around the page: the page fills it as it filled the view. */
+.wk-chat-frame.is-sched,
+.wk-chat-frame.is-sched > .wk-chat-host { height: 100%; min-height: 0; }
+.wk-chat-frame.is-sched > .wk-chat-host { display: flex; }
+/* The Chat button: the tools row's last, at its far right; pressed while the panel is open. */
+.sched-chat-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-raised); color: var(--text-1); font: inherit; cursor: pointer;
+}
+.sched-chat-btn:hover { border-color: var(--brand-border); }
+.sched-chat-btn[aria-pressed='true'] { border-color: var(--brand-border); background: var(--brand-tint); color: var(--brand); font-weight: 600; }
+.sched-chat-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.sched-tools > .sched-chat-btn:first-child { margin-left: auto; }
+/* Orbit's opening reads as the chat's first paragraph, not a centred empty state. */
+.wk-chat-frame.is-sched .wk-chat-empty { margin: 6px 2px; text-align: left; }
 .sched-lead { color: var(--text-2); margin: 22px 0 4px; font-size: 14px; }
 
 .sched-group { margin-top: 20px; }

@@ -9,7 +9,15 @@ import {
   type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+  type QueryKey,
+  type UseInfiniteQueryOptions,
+} from '@tanstack/react-query';
 import {
   ArrowRightOutlined,
   CaretDownOutlined,
@@ -129,6 +137,7 @@ import {
   wikiChatShownFiles,
   wikiChatWorkspaceName,
   type ChatHostList,
+  type ChatPanelRange,
   type WikiChatAttachAction,
   type WikiChatAttachments,
   type WikiChatCreate,
@@ -179,6 +188,8 @@ export interface ChatOrigin {
     chooseWorkspace: string;
     /** Under a new chat's empty state while its box is empty: each fills the box and sends nothing. */
     examples?: readonly string[];
+    /** A last line of a new chat's empty state, under the examples (Scheduled: what applies at once). */
+    closing?: string;
   };
   /** The chats read, made fresh after a chat is made or a row's action. */
   listKey: QueryKey;
@@ -192,7 +203,20 @@ export interface ChatOrigin {
   space?: WikiSpaceRow;
   /** Drive: the chat shows its change cards and overwrite questions, each with its turn. */
   cards?: boolean;
+  /** The history the title opens, one page at a time, searched by title; absent, the Wiki space's or the Drive chats. */
+  history?: (q: string) => ChatHistoryOptions;
 }
+
+/** One page of a chats history at a time, by its offset. */
+export type ChatHistoryOptions = UseInfiniteQueryOptions<ChatHostList, Error, InfiniteData<ChatHostList, unknown>, QueryKey, number>;
+
+/** What an origin with no history of its own reads in its place: never run (it is not enabled). */
+const noHistory = (q: string): ChatHistoryOptions => ({
+  queryKey: ['chat-history', 'none', q],
+  queryFn: () => Promise.reject(new Error('No history')),
+  initialPageParam: 0,
+  getNextPageParam: () => undefined,
+});
 
 /**
  * The panel the round button opens (design §4.1, board 42 ①): docked on the right of the page, or over it, or a
@@ -211,6 +235,7 @@ export function WikiChatPanel({
   list,
   layout,
   width,
+  range = null,
   top,
   attachments,
   dispatch,
@@ -227,6 +252,8 @@ export function WikiChatPanel({
   list: ChatHostList | null | undefined;
   layout: WikiChatLayout;
   width: number | null;
+  /** Where a wide panel is dragged between; absent, 320 to half the window. */
+  range?: ChatPanelRange | null;
   /** Where the panel's top is, in the window: under the Wiki's head until that scrolls away. */
   top: number;
   attachments: WikiChatAttachments;
@@ -268,7 +295,7 @@ export function WikiChatPanel({
         }
       }}
     >
-      {layout === 'wide' && <WikiChatResizer width={width ?? WIKI_CHAT_WIDTH.panel.initial} onResize={onResize} />}
+      {layout === 'wide' && <WikiChatResizer width={width ?? WIKI_CHAT_WIDTH.panel.initial} range={range} onResize={onResize} />}
       {layout === 'sheet' && (
         <button type="button" className="wk-chat-grab" aria-label={WIKI_CHAT_RESIZE} onClick={() => setSheetFull((full) => !full)}>
           <span />
@@ -353,7 +380,15 @@ export function WikiChatPanel({
 }
 
 /** The left edge of a wide panel, dragged between 320 and 560 (design §4.1). */
-function WikiChatResizer({ width, onResize }: { width: number; onResize: (width: number, done: boolean) => void }) {
+function WikiChatResizer({
+  width,
+  range,
+  onResize,
+}: {
+  width: number;
+  range: ChatPanelRange | null;
+  onResize: (width: number, done: boolean) => void;
+}) {
   const start = useRef<{ x: number; width: number } | null>(null);
   const move = (event: ReactPointerEvent<HTMLDivElement>, done: boolean) => {
     if (!start.current) return;
@@ -366,8 +401,8 @@ function WikiChatResizer({ width, onResize }: { width: number; onResize: (width:
       role="separator"
       aria-orientation="vertical"
       aria-label={WIKI_CHAT_RESIZE}
-      aria-valuemin={WIKI_CHAT_WIDTH.panel.min}
-      aria-valuemax={wikiChatPanelMax(typeof window === 'undefined' ? WIKI_CHAT_WIDTH.wide : window.innerWidth)}
+      aria-valuemin={range?.min ?? WIKI_CHAT_WIDTH.panel.min}
+      aria-valuemax={range?.max ?? wikiChatPanelMax(typeof window === 'undefined' ? WIKI_CHAT_WIDTH.wide : window.innerWidth)}
       aria-valuenow={width}
       onPointerDown={(event) => {
         start.current = { x: event.clientX, width };
@@ -401,10 +436,11 @@ function WikiChatHistory({
   const [q, setQ] = useState('');
   const [completedOpen, setCompletedOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
-  // The space's chats on the Wiki, the Drive chats on Drive: each read only where it is the history.
+  // The space's chats on the Wiki, else the origin's own (Drive's, Scheduled's): each read only where it is the history.
   const wikiPages = useInfiniteQuery({ ...wikiChatHistoryQuery(origin.space?.id ?? '', q.trim()), enabled: !!origin.space });
-  const drivePages = useInfiniteQuery({ ...driveChatHistoryQuery(q.trim()), enabled: !origin.space });
-  const pages = origin.space ? wikiPages : drivePages;
+  const drivePages = useInfiniteQuery({ ...driveChatHistoryQuery(q.trim()), enabled: !origin.space && !origin.history });
+  const ownPages = useInfiniteQuery({ ...(origin.history ?? noHistory)(q.trim()), enabled: !origin.space && !!origin.history });
+  const pages = origin.space ? wikiPages : origin.history ? ownPages : drivePages;
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
@@ -1076,6 +1112,7 @@ function WikiChatNew({
                 ))}
               </ul>
             )}
+            {origin.copy.closing && <div className="wk-chat-closing">{origin.copy.closing}</div>}
           </div>
         )}
         {statusCards.map((card) => (
