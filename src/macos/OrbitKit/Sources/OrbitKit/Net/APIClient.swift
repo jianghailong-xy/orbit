@@ -429,8 +429,11 @@ public final class APIClient: @unchecked Sendable {
                       query: limit.map { [URLQueryItem(name: "limit", value: String($0))] } ?? [])
     }
 
+    /// Ended with its caller: a first message that waited out its answer deadline (`UserBubble.answerTimeout`)
+    /// takes the HTTP request with it, and the server answers Retry's repeat of its `clientRequestId` with the
+    /// session the first made.
     public func createSession(_ req: CreateSessionRequest) async throws -> Session {
-        try await post("sessions", body: req)
+        try await postCancellable("sessions", body: req)
     }
 
     /// Start (or return) the server-owned repair conversation attached to a merge recovery.
@@ -439,7 +442,7 @@ public final class APIClient: @unchecked Sendable {
     }
 
     public func sendTurn(sessionID: String, _ req: SessionTurnRequest) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/turns", body: req)
+        try await postCancellable("sessions/\(sessionID)/turns", body: req)
     }
 
     /// The user turns no transcript event draws yet, oldest first, each with its `placement`: the
@@ -467,7 +470,7 @@ public final class APIClient: @unchecked Sendable {
     /// The reply names the turn the follow-up was filed as — an ordinary queued `message`, never a
     /// steer. Accepting it is not a claim the engine stopped: the transcript's `interrupt` event is.
     public func interruptAndSend(sessionID: String, _ req: SessionInterruptRequest) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/interrupt", body: req)
+        try await postCancellable("sessions/\(sessionID)/interrupt", body: req)
     }
 
     // Lifecycle: gracefully end (settles CANCELLED but stays dormant/resumable), move between
@@ -2434,7 +2437,7 @@ public final class APIClient: @unchecked Sendable {
     }
 
     public func resume(sessionID: String, _ req: ResumeRequest) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/resume", body: req)
+        try await postCancellable("sessions/\(sessionID)/resume", body: req)
     }
 
     public func updateConfig(sessionID: String, _ req: ConfigUpdateRequest) async throws {
@@ -2920,6 +2923,15 @@ public final class APIClient: @unchecked Sendable {
 
     private func post<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
         let data = try await send(makeRequest(path, method: "POST", body: body))
+        return try decoder.decode(T.self, from: data)
+    }
+
+    /// A message's send: a composer that waited out its answer (`UserBubble.answerTimeout`) ends the
+    /// request rather than leaving it open, so a cancelled caller takes the HTTP work with it (web
+    /// parity: `answerDeadline` aborts the fetch). The server is idempotent on the request's
+    /// `clientTurnId`, so a request that did arrive before it was ended is answered again by Retry.
+    private func postCancellable<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
+        let data = try await send(makeRequest(path, method: "POST", body: body), cancellationAware: true)
         return try decoder.decode(T.self, from: data)
     }
 

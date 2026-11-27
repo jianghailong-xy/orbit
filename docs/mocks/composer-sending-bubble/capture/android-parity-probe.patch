@@ -1,0 +1,97 @@
+diff --git a/src/android/app/src/androidTest/kotlin/io/orbitd/android/composer/ComposerDeviceTest.kt b/src/android/app/src/androidTest/kotlin/io/orbitd/android/composer/ComposerDeviceTest.kt
+index 888538c4b7..5601f795b1 100644
+--- a/src/android/app/src/androidTest/kotlin/io/orbitd/android/composer/ComposerDeviceTest.kt
++++ b/src/android/app/src/androidTest/kotlin/io/orbitd/android/composer/ComposerDeviceTest.kt
+@@ -529,6 +529,49 @@ class ComposerDeviceTest {
+         capture("resume-accepted")
+     }
+ 
++    // Parity-board probe (docs/mocks/composer-sending-bubble/04-native-parity.html): today's send states, photographed.
++    @Test fun parityTurnStates() = journey("parity-turn") {
++        login()
++        control("""{"postDelay":6}"""); ready()
++        compose.onNodeWithTag("composer-input").performTextInput("Ship the quarterly report")
++        clickSendWhenEnabled()
++        compose.waitUntil(10000) { model.state.value.draft.pending != null }
++        Thread.sleep(1500); compose.waitForIdle(); capture("sending")
++        compose.waitUntil(20000) { !model.state.value.busy && model.state.value.draft.pending == null }
++        control("""{"postDelay":0}"""); Thread.sleep(2500); compose.waitForIdle(); capture("sent")
++        control("""{"losses":100}"""); ready()
++        compose.onNodeWithTag("composer-input").performTextInput("Second message that never gets an answer")
++        clickSendWhenEnabled()
++        compose.waitUntil(30000) { !model.state.value.busy && model.state.value.error != null }
++        Thread.sleep(1000); compose.waitForIdle(); capture("not-sent-unanswered")
++        File(evidence,"parity-turn-state.txt").writeText("pending=${model.state.value.draft.pending != null} error=${model.state.value.error} notice=${model.state.value.notice} text=${model.state.value.draft.text}\n")
++    }
++    @Test fun parityRefused() = journey("parity-refused") {
++        login()
++        compose.onNodeWithTag("composer-input").performTextInput("Ship the quarterly report")
++        control("""{"rejectTurnOnce":true}"""); clickSendWhenEnabled()
++        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.error != null }
++        Thread.sleep(800); compose.waitForIdle(); capture("refused")
++    }
++    @Test fun parityNewSession() = journey("parity-new") {
++        login(); compose.onNodeWithContentDescription("Back").performClick()
++        compose.startNewSession()
++        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
++        compose.onNodeWithTag("composer-input").performTextInput("Build me a release checklist")
++        control("""{"postDelay":8}"""); Thread.sleep(2000)
++        clickSendWhenEnabled()
++        Thread.sleep(2500); compose.waitForIdle(); capture("new-sending")
++        awaitCreatedSession()
++    }
++    @Test fun parityNewSessionNotSent() = journey("parity-new-lost") {
++        login(); compose.onNodeWithContentDescription("Back").performClick()
++        compose.startNewSession()
++        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
++        compose.onNodeWithTag("composer-input").performTextInput("Build me a release checklist")
++        control("""{"createLost":true}"""); Thread.sleep(2000)
++        clickSendWhenEnabled()
++        Thread.sleep(6000); compose.waitForIdle(); capture("new-not-sent")
++    }
+     @Test fun explicit413RestoresEditableMessageAndAttachment() = journey("oversize-rejection") {
+         login()
+         compose.runOnIdle { model.importAttachment(StagedAttachment("oversize-file","retained.txt","text/plain"),
+diff --git a/src/android/scripts/composer-fixture.py b/src/android/scripts/composer-fixture.py
+index 589f5472e4..2a157e6664 100644
+--- a/src/android/scripts/composer-fixture.py
++++ b/src/android/scripts/composer-fixture.py
+@@ -21,7 +21,7 @@ class State:
+         self.rows=[]; self.turns={}; self.attachments={}; self.calls=[]; self.attempts={}; self.controls=[]
+         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
+         self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]; self.discussion=False
+-        self.rejectTurnOnce=False; self.rejectTurnStatus=409; self.sendEvents=[]
++        self.rejectTurnOnce=False; self.postDelay=0; self.createLost=False; self.rejectTurnStatus=409; self.sendEvents=[]
+         # A07c scenarios: fields over the session, the runner, the account's providers/pools, the retry door's answer.
+         self.extraDetail={}; self.runnerExtra={}; self.providers=None; self.pools=[]; self.retryMessage={'text':'last failed message'}
+         # GET /users/me, for a scenario that needs the account's preferences (translation): None answers as before.
+@@ -64,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
+         if path=='/__control':
+             with state.lock:
+                 if body.get('reset'): state.reset()
+-                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus',
++                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus','postDelay','createLost',
+                           'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me','queuedTurns']:
+                     if k in body: setattr(state,k,body[k])
+                 # Account events (a clone's `agent.changed` frame) to relay once on the next poll of /api/events.
+@@ -88,6 +88,12 @@ class Handler(BaseHTTPRequestHandler):
+             for field in ['codexAccount','claudeAccount']:
+                 if field in body and not re.fullmatch(r'default|[0-9a-f]{8}',body[field]):
+                     return self.reply({'message':f'{field} must be default or an account id'},400)
++            time.sleep(state.postDelay)
++            if state.createLost:
++                self.close_connection=True
++                try: self.connection.shutdown(socket.SHUT_RDWR)
++                except OSError: pass
++                return
+             state.creations.append(body); return self.reply({'id':CREATED})
+         if path=='/api/attachments':
+             time.sleep(state.uploadDelay)
+@@ -101,6 +107,7 @@ class Handler(BaseHTTPRequestHandler):
+             return self.reply({'id':key})
+         if path.endswith('/turns') and method=='POST' or path.endswith('/resume'):
+             key=body['clientTurnId']
++            time.sleep(state.postDelay)
+             with state.lock:
+                 state.attempts[key]=state.attempts.get(key,0)+1
+                 if key in state.turns and state.turns[key]['request']!=body: return self.reply({'message':'same key changed body'},409)

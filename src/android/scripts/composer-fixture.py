@@ -22,7 +22,7 @@ class State:
         self.rows=[]; self.turns={}; self.attachments={}; self.calls=[]; self.attempts={}; self.controls=[]
         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
         self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]; self.discussion=False
-        self.rejectTurnOnce=False; self.rejectTurnStatus=409; self.sendEvents=[]
+        self.rejectTurnOnce=False; self.rejectTurnStatus=409; self.postDelay=0; self.createDelay=0; self.sendEvents=[]
         # A07c scenarios: fields over the session, the runner, the account's providers/pools, the retry door's answer.
         self.extraDetail={}; self.runnerExtra={}; self.providers=None; self.pools=[]; self.retryMessage={'text':'last failed message'}
         # GET /users/me, for a scenario that needs the account's preferences (translation): None answers as before.
@@ -70,7 +70,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/__control':
             with state.lock:
                 if body.get('reset'): state.reset()
-                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus',
+                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus','postDelay','createDelay',
                           'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me','queuedTurns',
                           'driveChats','driveFab','driveGroups','driveQuestions']:
                     if k in body: setattr(state,k,body[k])
@@ -118,7 +118,11 @@ class Handler(BaseHTTPRequestHandler):
             for field in ['codexAccount','claudeAccount']:
                 if field in body and not re.fullmatch(r'default|[0-9a-f]{8}',body[field]):
                     return self.reply({'message':f'{field} must be default or an account id'},400)
-            state.creations.append(body); return self.reply({'id':CREATED})
+            # An answer on its way (seconds), as for a turn; a repeat of a clientRequestId is answered with the session the first made.
+            time.sleep(state.createDelay)
+            with state.lock:
+                if not any(c.get('clientRequestId')==body.get('clientRequestId') for c in state.creations): state.creations.append(body)
+            return self.reply({'id':CREATED})
         if path=='/api/attachments':
             time.sleep(state.uploadDelay)
             if state.uploadFailures>0: state.uploadFailures-=1; return self.reply({'message':'injected upload failure'},503)
@@ -131,6 +135,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({'id':key})
         if path.endswith('/turns') and method=='POST' or path.endswith('/resume'):
             key=body['clientTurnId']
+            # An answer on its way (seconds): the Sending… bubble's wait, or — past 20 s — one the device ends.
+            time.sleep(state.postDelay)
             with state.lock:
                 state.attempts[key]=state.attempts.get(key,0)+1
                 if key in state.turns and state.turns[key]['request']!=body: return self.reply({'message':'same key changed body'},409)

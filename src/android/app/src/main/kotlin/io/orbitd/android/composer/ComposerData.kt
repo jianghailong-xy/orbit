@@ -31,10 +31,16 @@ internal fun JsonObject.strings(key: String) = (get(key) as? JsonArray).orEmpty(
 data class StagedAttachment(val id: String, val name: String, val mime: String, val size: Int = 0,
     val uri: String? = null, val source: String = "file", val remoteId: String? = null)
 
-/** Written BEFORE a POST. Endpoint and body are immutable across lost responses and cold starts. */
+/** Written BEFORE a POST. Endpoint and body are immutable across lost responses and cold starts. [afterSeq]: the newest seq the
+ * conversation held at the press, after which its echo is looked for (web `pending.afterSeq`); null where it was not known, and then
+ * no echo settles it. */
 @Serializable
 data class PendingSend(val clientTurnId: String, val endpoint: String, val body: JsonObject,
-    val text: String, val attachments: List<StagedAttachment> = emptyList())
+    val text: String, val attachments: List<StagedAttachment> = emptyList(), val afterSeq: Long? = null)
+
+/** A message the server took, drawn as the ordinary bubble until what the server made of it is on screen: the queue's listing names
+ * its turn, or its echo lands (web's accepted bubble after `dropPendingSend`). Not saved: after a restart the server's rows draw it. */
+data class SentMessage(val turnId: String, val words: String, val attachments: List<StagedAttachment>, val afterSeq: Long?)
 
 @Serializable
 data class ComposerDraft(val text: String = "", val selectionStart: Int = 0, val selectionEnd: Int = 0,
@@ -70,6 +76,11 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
     val catalog: ComposerCatalog? = null,
     val catalogLoading: Boolean = false, val catalogError: String? = null,
     val acknowledgementPending: Boolean = false,
+    /** The outbox's message on its way: its bubble reads `Sending…` while this holds, and `Not sent` — with [notSentReason] under it
+     * where one is known — once it does not (docs/mocks/composer-sending-bubble). */
+    val sending: Boolean = false, val notSentReason: String? = null,
+    /** The message the server took last, until its own row draws it ([SentMessage]). */
+    val sent: SentMessage? = null,
     /** What the provider picked for the session will do, and when, until the next message goes ([EngineCopy.switchNote]). */
     val switchNote: String? = null,
     /** The tray's presses, by canonical turn id (docs/mocks/steer-tray): a Withdraw — or a Put back's discard of a receipt — asked and
