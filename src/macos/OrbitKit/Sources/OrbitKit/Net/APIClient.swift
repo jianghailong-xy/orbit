@@ -429,8 +429,11 @@ public final class APIClient: @unchecked Sendable {
                       query: limit.map { [URLQueryItem(name: "limit", value: String($0))] } ?? [])
     }
 
+    /// Ended with its caller: a first message that waited out its answer deadline (`UserBubble.answerTimeout`)
+    /// takes the HTTP request with it, and the server answers Retry's repeat of its `clientRequestId` with the
+    /// session the first made.
     public func createSession(_ req: CreateSessionRequest) async throws -> Session {
-        try await post("sessions", body: req)
+        try await postCancellable("sessions", body: req)
     }
 
     /// Start (or return) the server-owned repair conversation attached to a merge recovery.
