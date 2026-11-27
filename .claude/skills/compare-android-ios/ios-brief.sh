@@ -5,7 +5,7 @@
 #   ios-brief.sh PAGE_FLAG UNTIL_TEXT BRANCH
 #     PAGE_FLAG   the probe landing arguments, one string: "-probe.draft", "-probe.session S2", "-probe.list"
 #                 (section B2 says how to add a landing for another page)
-#     UNTIL_TEXT  words that are on the page once it has drawn, e.g. "Send a task to get started."
+#     UNTIL_TEXT  words that are on the page once it has drawn, e.g. "Runs in:" (the new session page's place pill)
 #     BRANCH      throwaway branch for the hand-back, e.g. probe/compare-new-session
 set -euo pipefail
 flag="${1:?page flag}"; until="${2:?until text}"; branch="${3:?branch}"

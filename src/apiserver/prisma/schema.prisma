@@ -1316,6 +1316,10 @@ model RunnerPresence {
   /// The link gateway node holding the runner's connection. Null over HTTP.
   gatewayId     String?  @map("gateway_id")
   lastBeatAt    DateTime @map("last_beat_at")
+  /// When the beating process last opened a link connection: its Welcome, written by the welcome route; event batches
+  /// and RPCs do not write it. Null until one does (migration 1750). Presence counts it only up to 5 min past
+  /// `lastBeatAt` (runners/runner-presence.ts runnerPresentAt).
+  lastHeardAt   DateTime? @map("last_heard_at")
   /// What carried the beat: 'HTTP' (POST /api/runner/heartbeat) or 'LINK' (the link gateway).
   linkState     String   @map("link_state")
   /// The runner's hash of the facts it reports (model catalogue, skills, engine state, repository
@@ -2219,7 +2223,7 @@ model Session {
   // must be preserved until first claim snapshots it.
   usesRuntimeDefaultModel Boolean @default(false) @map("uses_runtime_default_model")
   permissionMode       String?   @map("permission_mode")
-  // The owner's intent above; this is the mode the session's engine is actually running in (migration 1735):
+  // The owner's intent above; this is the mode the session's engine is actually running in (migration 1755):
   // read from the engine where it says (Claude Code's init frame, a set_permission_mode acknowledgement), else the
   // mode the runner was handed. Null until the next claim. Written only by sessions/actual-permission-mode.ts, which
   // logs each change in session_permission_mode_change. The mode ceiling rules compare it (owner ruling R3).
@@ -3211,7 +3215,7 @@ model RunEvent {
 }
 
 /// Every change of the mode a session's engine is actually running in (session.actual_permission_mode,
-/// migration 1735), with what caused it: CLAIM (the mode a claim handed the runner), OWNER_PICK (the owner's config
+/// migration 1755), with what caused it: CLAIM (the mode a claim handed the runner), OWNER_PICK (the owner's config
 /// change, `client` naming the app when known), ENGINE_REPORT (the engine said it runs in another mode), RUNNER_CORRECTION
 /// (the runner switched the engine itself), RESPAWN (the engine came back from a re-spawn in this mode) or ORBIT_CHANGE
 /// (a config change Orbit made). Append-only; the cause CHECK lives in the migration.

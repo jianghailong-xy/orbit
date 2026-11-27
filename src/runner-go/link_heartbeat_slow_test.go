@@ -344,6 +344,55 @@ func TestAnUnansweredBeatEndsItsConnectionAndTheReconnectsBackOff(t *testing.T) 
 	if attempt != 0 {
 		t.Fatalf("after a reconciled beat the backoff is at attempt %d, want 0", attempt)
 	}
+	linkYoungEndWaitsUpToEightSeconds(t, r)
+}
+
+// linkYoungEndWaitsUpToEightSeconds ends the current connection, younger than a minute, with the backoff just started
+// over: cut by the gateway, the next one is opened at once, as a call the cut lost is to be sent again (§5.6); judged
+// dead by the runner itself, the wait before the next has a ceiling of 8 s rather than under 1 s (§15.13, §15.15).
+func linkYoungEndWaitsUpToEightSeconds(t *testing.T, r *linkWorkRig) {
+	t.Helper()
+	r.m.work.mu.Lock()
+	r.m.work.youngBackoff = linkYoungBackoff
+	r.m.work.mu.Unlock()
+	floor := fmt.Sprintf("within %s at least after a connection that lasted", linkYoungBackoff)
+	open := r.g.open()
+	cut := open[len(open)-1]
+	welcomed := len(r.g.welcomed())
+	cut.drop()
+	var line string
+	linkWaitFor(t, 5*time.Second, "the cut logged", func() bool {
+		for _, l := range r.logs.all() {
+			if strings.Contains(l, "connection "+cut.id+" ended") {
+				line = l
+				return true
+			}
+		}
+		return false
+	})
+	if strings.Contains(line, floor) {
+		t.Fatalf("a young connection the gateway cut waits for the floor: %s", line)
+	}
+	r.g.waitWelcomed(t, welcomed+1)
+	linkWaitFor(t, 5*time.Second, "the next connection adopted", func() bool {
+		cur := r.m.work.current()
+		return cur != nil && cur.id != cut.id
+	})
+	cur := r.m.work.current()
+	cur.fail("a write's deadline, in the test")
+	_ = cur.ws.CloseNow()
+	linkWaitFor(t, 5*time.Second, "the runner's own end logged with the floor", func() bool {
+		for _, l := range r.logs.all() {
+			if strings.Contains(l, "connection "+cur.id+" ended") {
+				line = l
+				return true
+			}
+		}
+		return false
+	})
+	if !strings.Contains(line, floor) {
+		t.Fatalf("a young connection the runner judged dead is followed by no floor: %s", line)
+	}
 }
 
 // Connections that end before they carry a reconciled beat are each followed by a longer wait; a Welcome alone does
@@ -370,4 +419,5 @@ func TestTheReconnectBackoffStartsOverOnlyOnceABeatIsReconciled(t *testing.T) {
 	if attempt != 0 {
 		t.Fatalf("a reconciled beat left the backoff at attempt %d", attempt)
 	}
+	linkYoungEndWaitsUpToEightSeconds(t, r)
 }

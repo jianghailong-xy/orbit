@@ -279,17 +279,15 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
         LazyColumn(Modifier.weight(1f).testTag("task-detail"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item(key = "head") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.Top) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            task.obj("project")?.let { project ->
-                                Text("▦ ${project.text("title").orEmpty()}" + if (project.text("status") == "CANCELLED") "  Cancelled" else "",
-                                    Modifier.clickable(role = Role.Button) { project.text("id")?.let { open(OrbitRoute(Destination.PROJECT, it)) } }.testTag("task-project"),
-                                    color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-                                if (project.text("status") == "CANCELLED") Text(TaskDetailCopy.projectCancelledNote, style = MaterialTheme.typography.bodySmall,
-                                    color = muted)
-                            }
-                            SelectionContainer { Text(task.text("title") ?: "Untitled task", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
-                        }
+                    // The first row: the project (when there is one) on the left, ⋯ on the right. The title is the row under it and
+                    // has the page's whole width, as on the web panel and iOS (docs/mocks/task-panel-header, A).
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val project = task.obj("project")
+                        if (project != null) {
+                            Text("▦ ${project.text("title").orEmpty()}" + if (project.text("status") == "CANCELLED") "  Cancelled" else "",
+                                Modifier.weight(1f).clickable(role = Role.Button) { project.text("id")?.let { open(OrbitRoute(Destination.PROJECT, it)) } }.testTag("task-project"),
+                                color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        } else Spacer(Modifier.weight(1f))
                         Box {
                             TextButton(onClick = { menu = true }, modifier = Modifier.testTag("task-menu").semantics { contentDescription = "Task actions" }) { Text("⋯", style = MaterialTheme.typography.titleLarge) }
                             DropdownMenu(menu, { menu = false }) {
@@ -324,6 +322,10 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                             }
                         }
                     }
+                    task.obj("project")?.takeIf { it.text("status") == "CANCELLED" }?.let {
+                        Text(TaskDetailCopy.projectCancelledNote, style = MaterialTheme.typography.bodySmall, color = muted)
+                    }
+                    SelectionContainer { Text(task.text("title") ?: "Untitled task", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
                     // The status line: one status (with how long a run has been going), who has the task, what its newest run is on, and
                     // what its runs have cost. When it was filed is on the Activity timeline. Wraps rather than squeezing a word a line.
                     FlowRow(Modifier.testTag("task-status-line"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -331,15 +333,16 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                         TaskStatusPill(TaskDetailLogic.headPill(task))
                         task.obj("assignee")?.let { assignee -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Avatar(assignee.text("name")); Text(assignee.text("name") ?: TaskListCopy.unassigned, maxLines = 1, style = MaterialTheme.typography.bodySmall) } }
-                        task.objects("sessions").firstNotNullOfOrNull { it.text("model")?.takeIf(String::isNotEmpty) }?.let {
-                            Text("· ${modelName(it, task, data)}", style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 1) }
-                        TaskDetailLogic.totalCost(task)?.let { Text("· $it", style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 1) }
+                        // Model and cost are one item with the dot between them, so a wrapped line never starts with "·".
+                        listOfNotNull(task.objects("sessions").firstNotNullOfOrNull { it.text("model")?.takeIf(String::isNotEmpty) }?.let { modelName(it, task, data) },
+                            TaskDetailLogic.totalCost(task)).takeIf { it.isNotEmpty() }?.let {
+                            Text(it.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 1) }
                     }
                     TaskJudgment.chip(task)?.let { chip ->
                         Text("${if (chip.isGate) "◈" else "✓"} ${chip.text}", Modifier.testTag("task-judgment").background(
                             if (chip.isGate) LocalOrbitColors.current.needsYou.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50))
                             .padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelMedium,
-                            color = if (chip.isGate) LocalOrbitColors.current.needsYou else muted)
+                            color = if (chip.isGate) LocalOrbitColors.current.needsYou else muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (!connected) OfflineNote()
                     data.loadError?.let { TaskErrorBanner(it, retry = { scope.launch { load() } }) { data.loadError = null } }

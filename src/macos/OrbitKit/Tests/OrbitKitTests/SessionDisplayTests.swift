@@ -258,6 +258,24 @@ final class SessionDisplayTests: XCTestCase {
         XCTAssertEqual(SessionDisplay.marks(facts(released: true, outcome: .failed, endReason: "ended")), [.ended])
     }
 
+    /// A move let it go (board docs/mocks/session-move-released): drawn as the idle session it was —
+    /// no Ended mark, the idle word and glyph — while still released, so a send resumes it.
+    func testASessionAMoveLetGoReadsAsTheIdleSessionItWas() throws {
+        XCTAssertEqual(SessionDisplay.marks(facts(released: true, outcome: .answered, endReason: "moved")), [])
+        XCTAssertTrue(SessionDisplay.releasedByMove(facts(released: true, endReason: "moved")))
+        XCTAssertFalse(SessionDisplay.releasedByMove(facts(released: true, endReason: "ended")))
+        XCTAssertFalse(SessionDisplay.releasedByMove(facts(endReason: "moved")), "held: nothing to hide")
+        let data = try JSONSerialization.data(withJSONObject: [
+            "id": "s", "title": "t", "status": "CANCELLED", "phase": "IDLE", "released": true,
+            "lastTurnOutcome": "ANSWERED", "endReason": "moved", "workFinished": false])
+        let s = try JSONDecoder().decode(Session.self, from: data)
+        XCTAssertEqual(SessionDisplay.state(s.displayFacts), .idle)
+        XCTAssertEqual(SessionDisplay.marks(s.displayFacts), [])
+        XCTAssertEqual(s.displayRunState, .awaitingInput)
+        XCTAssertNotEqual(SessionStatusGlyph.make(for: s).label, "Ended")
+        XCTAssertEqual(s.released, true, "still released: the next message resumes it")
+    }
+
     func testPendingApprovalsAloneMakeNeedsYou() {
         XCTAssertEqual(SessionDisplay.marks(facts(.running, activity: "TURN", pendingApprovals: 2)), [.needsYou])
     }

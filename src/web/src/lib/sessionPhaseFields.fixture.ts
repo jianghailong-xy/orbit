@@ -55,6 +55,11 @@ export const SITUATIONS: Record<string, Payload> = {
     id: 's', status: 'CANCELLED', runStatus: 'CANCELLED', runState: 'ENDED', endReason: 'ended',
     phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: resumable,
   },
+  // A move to another workspace let it go (endReason moved): drawn as held idle, resumed on the next message.
+  'released by a move': {
+    id: 's', status: 'CANCELLED', runStatus: 'CANCELLED', runState: 'ENDED', endReason: 'moved',
+    phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: resumable,
+  },
   'a task run that finished': {
     id: 's', status: 'SUCCEEDED', runStatus: 'SUCCEEDED', runState: 'SUCCEEDED', endReason: 'task_done',
     phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: resumable,

@@ -1,4 +1,4 @@
--- 1735 — the mode a session is actually running in, and every change of it.
+-- 1755 — the mode a session is actually running in, and every change of it.
 --
 -- `session.permission_mode` is the owner's intent: only an explicit pick writes it, never a normalization
 -- (owner ruling, project 350NMcNDulzkqRAFFUsXZ). What the session's engine really runs in is a separate fact,

@@ -169,7 +169,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       burstConcurrent: true,
       version: true,
       lastHeartbeatAt: true,
-      presence: { select: { lastBeatAt: true, backgroundJobSessionIds: true } },
+      presence: { select: { lastBeatAt: true, lastHeardAt: true, backgroundJobSessionIds: true } },
       enrolledAt: true,
       position: true,
       runsAsRoot: true,

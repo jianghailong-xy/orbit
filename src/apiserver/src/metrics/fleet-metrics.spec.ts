@@ -23,6 +23,7 @@ const ROW = {
   runners_silent: 2,
   runners_offline: 5,
   oldest_beat_age_seconds: 41.5,
+  runners_reconcile_stale: 7,
   sessions_queued: 4,
   sessions_running: 6,
   tasks_queued: 2,
@@ -88,7 +89,7 @@ test('a read that failed says up 0 and is not kept: the next scrape reads again'
 test('every gauge is served, each state of its closed set present, and nothing else is a label', async () => {
   resetFleetGauges();
   const body = await renderFleetMetrics(asReader(database()));
-  for (const name of ['orbit_runners', 'orbit_runner_oldest_heartbeat_age_seconds', 'orbit_sessions', 'orbit_tasks']) {
+  for (const name of ['orbit_runners', 'orbit_runner_oldest_heartbeat_age_seconds', 'orbit_runner_reconcile_stale', 'orbit_sessions', 'orbit_tasks']) {
     assert.match(body, new RegExp(`^# TYPE ${name} gauge$`, 'm'));
   }
   assert.match(body, /^orbit_runners\{state="online"\} 3$/m);
@@ -96,14 +97,15 @@ test('every gauge is served, each state of its closed set present, and nothing e
   assert.match(body, /^orbit_runners\{state="silent"\} 2$/m);
   assert.match(body, /^orbit_runners\{state="offline"\} 5$/m);
   assert.match(body, /^orbit_runner_oldest_heartbeat_age_seconds 41\.5$/m);
+  assert.match(body, /^orbit_runner_reconcile_stale 7$/m);
   assert.match(body, /^orbit_sessions\{state="queued"\} 4$/m);
   assert.match(body, /^orbit_sessions\{state="running"\} 6$/m);
   assert.match(body, /^orbit_tasks\{state="queued"\} 2$/m);
   assert.match(body, /^orbit_tasks\{state="running"\} 3$/m);
 
-  // The whole label space, and so the series count, is fixed by the code: 4 runner states, 2 + 2 work states, 2 unlabelled.
+  // The whole label space, and so the series count, is fixed by the code: 4 runner states, 2 + 2 work states, 3 unlabelled.
   const samples = body.split('\n').filter((line) => line && !line.startsWith('#'));
-  assert.equal(samples.length, 1 + RUNNER_STATES.length + 1 + WORK_STATES.length * 2);
+  assert.equal(samples.length, 1 + RUNNER_STATES.length + 2 + WORK_STATES.length * 2);
   for (const line of samples) {
     assert.match(line, /^orbit_[a-z_]+(?:\{state="(?:online|draining|silent|offline|queued|running)"\})? [0-9.]+$/, line);
   }

@@ -19,7 +19,7 @@ differences. Don't change product code during a comparison unless the person ask
 | Android journey | `newSessionUsesWorkspaceDraftAndNavigatesAfterCreation` | `rg -n '@Test fun' src/android/app/src/androidTest/kotlin/io/orbitd/android/composer/ComposerDeviceTest.kt` |
 | Android capture | `new-session-draft` | the `capture("…")` in that journey. If the page has none, add one line once the page has settled (client-screenshots A0) |
 | iOS landing flag | `-probe.draft` | `-probe.session S1`, `-probe.list` and `-probe.machine runner\|claude` exist. Anything else gets a branch in ProbeArgs (client-screenshots B2) |
-| iOS "drawn" words | `Send a task to get started.` | words on the page that only show once it has loaded |
+| iOS "drawn" words | `Runs in:` (the place pill's label) | words on the page that only show once it has loaded |
 | Hand-back branch | `probe/compare-new-session` | `probe/compare-<page>`, deleted at step 3 |
 
 **iOS shows the Mac's HEAD.** The Mac SubAgent builds whatever the Mac's checkout holds and cannot see this one. If the
@@ -29,7 +29,7 @@ always shows this checkout, uncommitted changes included.
 ## 1. Start iOS first (it is the slow side, ~15–25 min)
 
 ```bash
-bash .claude/skills/compare-android-ios/ios-brief.sh -probe.draft "Send a task to get started." probe/compare-new-session > /tmp/ios-brief.txt
+bash .claude/skills/compare-android-ios/ios-brief.sh -probe.draft "Runs in:" probe/compare-new-session > /tmp/ios-brief.txt
 ```
 
 Send the brief to the Mac with Orbit's `delegate`. Load it with ToolSearch `select:mcp__orbit__delegate` if it's

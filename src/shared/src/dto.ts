@@ -150,7 +150,8 @@ export interface SessionMoveTargets {
   folders: SessionMoveFolder[];
   /** Why the session cannot move to another workspace at all; null when it can. */
   reason: string | null;
-  /** Idle but not ended: it has to be ended before it moves (the panel's End and Move). */
+  /** Still held (idle, or already being let go): the move releases it first, on the server. Kept for older clients that end
+   *  it themselves; newer ones read it only for a coordinator's confirmation. */
   needsEnd: boolean;
   /** The branch its changes stay on in the old workspace's repository. */
   branch: string | null;
@@ -243,7 +244,7 @@ export interface AgentExecConfig {
 
 /**
  * What changed the mode a session's engine is actually running in (`session_permission_mode_change.cause`,
- * migration 1735):
+ * migration 1755):
  *  - CLAIM: a claim handed the runner this mode (for an engine that reports none, that is the mode it runs in);
  *  - OWNER_PICK: the owner's config change reached the engine (`client` names the app when the request said);
  *  - ENGINE_REPORT: the engine said it runs in another mode than the one recorded (Claude Code's init frame);
@@ -277,7 +278,7 @@ export interface SessionPermissionModeChange {
 
 /**
  * The session detail's and list row's word on its mode. `permissionMode` is the owner's intent and is never
- * rewritten by normalization; `actualPermissionMode` is what the engine runs in (null until a claim since 1735,
+ * rewritten by normalization; `actualPermissionMode` is what the engine runs in (null until a claim since 1755,
  * and absent from an older server). Clients that read neither keep working: both are additions.
  */
 export interface SessionPermissionModeFacts {

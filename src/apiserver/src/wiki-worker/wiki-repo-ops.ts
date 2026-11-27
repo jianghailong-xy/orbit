@@ -32,7 +32,7 @@ import { stripNul } from '../runner-api/strip-nul';
 import { postgresSqlState } from '../tasks/task-supersession';
 import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { wikiJsonIsStorable, wikiStoredText, wikiTextFromStored, wikiTextIsStorable, wikiTextIsWellFormed } from './wiki-stored-text';
-import { RUNNER_BEATS, RUNNER_OFFLINE_AFTER_MS, runnerLastBeatAt } from '../runners/runner-presence';
+import { RUNNER_BEATS, RUNNER_OFFLINE_AFTER_MS, runnerPresentAt } from '../runners/runner-presence';
 
 /**
  * The `wiki_repo_op` table and the space's snapshot cache (migration 0402, contract `repoOps`,
@@ -1594,8 +1594,8 @@ export async function readWikiRepoReadiness(
       pending,
     };
   }
-  // Heard from within three missed 30-second beats, the window the runner list reads a machine as offline by.
-  const lastBeatAt = runnerLastBeatAt(runnerRow);
+  // Present within three missed 30-second beats, the window the runner list reads a machine as offline by.
+  const lastBeatAt = runnerPresentAt(runnerRow);
   const online = !!lastBeatAt && now.getTime() - lastBeatAt.getTime() < RUNNER_OFFLINE_AFTER_MS;
   const reported = !!runnerRow.capabilitiesReportedAt;
   const capability = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_CAPABILITY);

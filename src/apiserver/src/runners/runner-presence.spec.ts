@@ -8,11 +8,14 @@ import {
   RunnerPresenceService,
   RUNNER_BEATS,
   RUNNER_DURABLE_BEAT_EVERY_MS,
+  RUNNER_HEARD_CAP_MS,
   RUNNER_OFFLINE_AFTER_MS,
   durableBeatDue,
+  runnerBeatIsOnline,
   runnerIsOnline,
   runnerLastBeatAt,
-  withRunnerLastBeat,
+  runnerPresentAt,
+  withRunnerPresence,
 } from './runner-presence';
 
 /**
@@ -70,13 +73,48 @@ test('a presence row is what makes a runner whose own record is stale read as on
   assert.equal(runnerIsOnline({ ...runner, presence: null }, NOW), false, 'without it, the record alone is four minutes old');
 });
 
-test('a client is shown the last beat as lastHeartbeatAt, and never the presence row it came from', () => {
-  const shown = withRunnerLastBeat({
+test('a client is shown when the runner was last present as lastHeartbeatAt, and never the presence row it came from', () => {
+  const shown = withRunnerPresence({
     id: 'r', status: 'ONLINE', lastHeartbeatAt: ago(4 * 60_000), presence: { lastBeatAt: ago(20_000) },
   });
   assert.deepEqual(shown, { id: 'r', status: 'ONLINE', lastHeartbeatAt: ago(20_000) });
   assert.equal('presence' in shown, false);
-  assert.deepEqual(RUNNER_BEATS, { lastHeartbeatAt: true, presence: { select: { lastBeatAt: true } } });
+  const heard = withRunnerPresence({
+    id: 'r', status: 'ONLINE', lastHeartbeatAt: ago(4 * 60_000), presence: { lastBeatAt: ago(2 * 60_000), lastHeardAt: ago(5_000) },
+  });
+  assert.deepEqual(heard, { id: 'r', status: 'ONLINE', lastHeartbeatAt: ago(5_000) }, 'heard since its beat: what clients read offline by');
+  assert.deepEqual(RUNNER_BEATS, { lastHeartbeatAt: true, presence: { select: { lastBeatAt: true, lastHeardAt: true } } });
+});
+
+test('present is the latest of the beat, the heard capped five minutes past that beat, and the runner’s own record', () => {
+  assert.equal(RUNNER_HEARD_CAP_MS, 5 * 60_000);
+  const at = (beatAgo: number | null, heardAgo: number | null, recordAgo: number | null = null) => runnerPresentAt({
+    lastHeartbeatAt: recordAgo === null ? null : ago(recordAgo),
+    presence: beatAgo === null ? null : { lastBeatAt: ago(beatAgo), lastHeardAt: heardAgo === null ? null : ago(heardAgo) },
+  })?.getTime() ?? null;
+  assert.equal(at(60_000, 5_000), NOW - 5_000, 'heard since its beat');
+  assert.equal(at(60_000, 2 * 60_000), NOW - 60_000, 'heard before its beat: the beat');
+  assert.equal(at(60_000, null), NOW - 60_000, 'never heard: the beat alone, not five minutes past it');
+  assert.equal(at(10 * 60_000, 1_000), NOW - 5 * 60_000, 'heard long after its beat: no more than five minutes past it');
+  assert.equal(at(10 * 60_000, 1_000, 30_000), NOW - 30_000, 'the record is later still');
+  assert.equal(at(null, null, 30_000), NOW - 30_000);
+  assert.equal(at(null, null, null), null);
+  // A beat-only reader is not moved by the heard.
+  assert.equal(runnerLastBeatAt({ presence: { lastBeatAt: ago(60_000), lastHeardAt: ago(5_000) } })?.getTime(), NOW - 60_000);
+});
+
+test('a runner reconnecting with no beat landing is online until its last beat + 5 min, and offline by 5 min + 90 s', () => {
+  const beat = NOW;
+  const heardAt = (t: number) => ({ status: 'ONLINE', lastHeartbeatAt: null, presence: { lastBeatAt: new Date(beat), lastHeardAt: new Date(t) } });
+  for (const t of [beat + 60_000, beat + 4 * 60_000, beat + RUNNER_HEARD_CAP_MS]) {
+    assert.equal(runnerIsOnline(heardAt(t), t), true, `heard ${(t - beat) / 1000} s past its beat`);
+    assert.equal(runnerBeatIsOnline(heardAt(t), t), t - beat <= RUNNER_OFFLINE_AFTER_MS, 'by beats alone it is offline after 90 s');
+  }
+  // Heard on, still: present stays at beat + 5 min, so it reads offline 90 s later however lately it was heard.
+  const later = beat + RUNNER_HEARD_CAP_MS + RUNNER_OFFLINE_AFTER_MS;
+  assert.equal(runnerIsOnline(heardAt(later), later), true, 'at 5 min + 90 s exactly, the line itself');
+  assert.equal(runnerIsOnline(heardAt(later + 1), later + 1), false, 'past it: offline');
+  assert.equal(runnerIsOnline({ ...heardAt(beat + 60_000), status: 'OFFLINE' }, beat + 60_000), false, 'signed off is offline');
 });
 
 test('the runner’s own record is rewritten when it is missing or five minutes old, and not before', () => {

@@ -24,7 +24,7 @@ import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-prov
 import { dispatchKeyRow } from '../providers/engine-provider';
 import { runAccessLevel, scheduleRunDisallowedTools, scheduleRunPermissionMode } from '../schedules/schedule-access';
 import type { PrismaService } from '../prisma/prisma.service';
-import { runnerIsOnline, runnerOfflineSql } from '../runners/runner-presence';
+import { RUNNER_PRESENCE, runnerIsOnline, runnerOfflineSql } from '../runners/runner-presence';
 import { routeSubagent, subagentCandidateRefusal, subagentRunnableModels } from '../tasks/model-routing';
 import { engineState, taskRouteReads } from '../tasks/task-route-decision';
 import { normalizeRepoUrl } from '../wiki/wiki.service';
@@ -82,7 +82,7 @@ const CANDIDATE_SELECT = {
   workDirIsGit: true,
   subagentsEnabled: true,
   runnerId: true,
-  runner: { select: { id: true, status: true, capabilities: true, lastHeartbeatAt: true, presence: { select: { lastBeatAt: true } } } },
+  runner: { select: { id: true, status: true, capabilities: true, lastHeartbeatAt: true, presence: { select: RUNNER_PRESENCE } } },
 } satisfies Prisma.WorkspaceSelect;
 type CandidateRow = Prisma.WorkspaceGetPayload<{ select: typeof CANDIDATE_SELECT }>;
 
