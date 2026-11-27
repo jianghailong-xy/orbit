@@ -515,6 +515,10 @@ export function ScheduledPage(): JSX.Element {
   const closeChatRef = useRef<(edit: (search: string) => string) => void>(() => {});
   const chatHost = useMemo(
     () => ({
+      find: (id: string) => {
+        const row = schedules.find((s) => sameResourceId(s.id, id));
+        return row ? { id: row.id, title: row.title, state: row.state } : null;
+      },
       openSchedule: (id: string) => {
         // Below 1200 the chat slides over the page: the same address change selects the row and closes it.
         if (window.innerWidth < SLIDE_OVER_BELOW) closeChatRef.current((search) => withSelection(search, id));
@@ -523,7 +527,7 @@ export function ScheduledPage(): JSX.Element {
     }),
     // `select` reads the address as it is when called.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [params],
+    [params, schedules],
   );
   const chat = useScheduledChatPanel({
     workspaceFilter,

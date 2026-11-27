@@ -7,6 +7,8 @@ import { createContext, useContext } from 'react';
  */
 export interface ScheduleChatHost {
   openSchedule: (scheduleId: string) => void;
+  /** One of this account's schedules in the page's current list, by id; null for any other id. */
+  find: (scheduleId: string) => { id: string; title: string; state: string } | null;
 }
 export const ScheduleChatHostContext = createContext<ScheduleChatHost | null>(null);
 export const useScheduleChatHost = (): ScheduleChatHost | null => useContext(ScheduleChatHostContext);
