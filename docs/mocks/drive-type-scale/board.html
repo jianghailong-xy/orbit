@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Drive · type scale and rhythm</title>
+<style>
+* { box-sizing:border-box; }
+body { margin:0; background:#e6e7ea; font:14px/1.5 -apple-system,Inter,"Noto Sans SC",sans-serif; -webkit-font-smoothing:antialiased; color:#1f2329; }
+.board { width:2000px; padding:36px 40px 48px; background:#e6e7ea; }
+h1.bt { font-size:25px; margin:0 0 6px; }
+.lede { color:#55555e; margin:0 0 22px; max-width:1500px; }
+.fh { font-weight:700; font-size:15px; margin:0 0 10px; display:flex; gap:10px; align-items:center; }
+.fh .n { display:inline-flex; width:22px; height:22px; border-radius:50%; border:1.5px solid #1f2329; align-items:center; justify-content:center; font-size:12px; }
+.top { display:grid; grid-template-columns:1560px 1fr; gap:28px; align-items:start; margin-bottom:36px; }
+.side { background:#fff; border-radius:14px; padding:16px 18px; font-size:13px; color:#3d3d45; line-height:1.6; }
+.side h3 { margin:14px 0 6px; font-size:14.5px; color:#1f2329; } .side h3:first-child { margin-top:0; }
+.side ol { margin:0; padding-left:18px; } .side li { margin-bottom:6px; }
+.spec { width:100%; border-collapse:collapse; font-size:12.5px; }
+.spec td, .spec th { padding:4px 4px; border-bottom:1px solid #eceef1; text-align:left; vertical-align:top; }
+.spec th { color:#8f959e; font-weight:500; }
+.spec .was { color:#cf3b35; white-space:nowrap; } .spec .now { color:#1a7f37; font-weight:600; white-space:nowrap; }
+.mk { display:inline-flex; width:18px; height:18px; border-radius:50%; background:#e0453a; color:#fff; font:700 11px/18px Inter,sans-serif; justify-content:center; align-items:center; flex:none; box-shadow:0 0 0 2px #fff; }
+.mk.abs { position:absolute; z-index:5; }
+
+/* ---------- the window: tokens copied from src/web/src/index.css ---------- */
+.win { --bg-base:#fff; --bg-raised:#fff; --bg-hover:#f5f6f7; --bg-sunken:#f7f8fa; --border:#dee0e3; --border-subtle:#eceef1;
+       --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3; --brand:#3370ff; --brand-strong:#245ae0;
+       --brand-tint:#eaf1ff; --brand-border:#bcd3ff; --success:#1a7f37; --warning:#c2710c; --warning-bg:#fff4e6;
+       --canvas:color-mix(in srgb, var(--text-1) 5%, var(--bg-base));
+       position:relative; display:grid; grid-template-columns:268px 1fr; height:900px; background:var(--canvas);
+       border-radius:12px; overflow:hidden; box-shadow:0 1px 0 #d5d5da, 0 8px 30px rgba(0,0,0,.08); color:var(--text-1); }
+.win.dark { --bg-base:#202023; --bg-raised:#2b2b2e; --bg-hover:#343437; --bg-sunken:#17171a; --border:#424246; --border-subtle:#343437;
+       --text-1:#c9ced5; --text-2:#a7adb6; --text-3:#9a9fa8; --text-4:#858a93; --brand:#5b8cff; --brand-strong:#7aa2ff;
+       --brand-tint:rgba(91,140,255,.16); --brand-border:rgba(91,140,255,.32); --success:#4ac26b; --warning:#e0a23b; --warning-bg:rgba(250,140,22,.15);
+       --canvas:var(--bg-sunken); }
+svg { display:block; flex:none; }
+.ic { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.ic.sm { width:16px; height:16px; }
+
+/* app nav: unchanged, drawn for context */
+.nav { padding:14px 10px; font-size:14px; }
+.nav .brand { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:700; padding:2px 8px 14px; }
+.nav .brand i { width:20px; height:20px; border-radius:50%; background:linear-gradient(135deg,#6ea0ff,#3370ff); display:block; }
+.nav .it { display:flex; align-items:center; gap:10px; height:36px; padding:0 8px; border-radius:6px; color:var(--text-1); }
+.nav .it.on { background:var(--brand-tint); color:var(--brand); }
+.nav .it .k { margin-left:auto; color:var(--text-4); font-size:12px; }
+.nav .it .b { margin-left:auto; color:var(--warning); background:var(--warning-bg); font-size:12px; font-weight:600; border-radius:9px; padding:0 6px; }
+.nav .gh { color:var(--text-3); font-size:13px; font-weight:600; padding:16px 8px 4px; }
+.nav .gh span { font-weight:400; margin-left:4px; }
+
+/* the panel */
+.panel { margin:8px 8px 8px 0; background:var(--bg-base); border:1px solid var(--border-subtle); border-radius:12px;
+         box-shadow:0 1px 2px rgba(0,0,0,.04); display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+.head { display:flex; align-items:center; gap:12px; padding:24px 24px 16px; }
+.head .crumb { display:flex; align-items:center; gap:6px; font-size:20px; font-weight:600; min-width:0; }
+.head .crumb .up { color:var(--text-3); font-weight:500; }
+.head .crumb .sep { color:var(--text-4); font-weight:400; }
+.head .acts { margin-left:auto; display:flex; gap:8px; align-items:center; }
+.search { display:flex; align-items:center; gap:8px; width:280px; height:34px; padding:0 10px; border:1px solid var(--border);
+          border-radius:8px; color:var(--text-4); font-size:14px; }
+.search kbd { margin-left:auto; font:12px Inter,sans-serif; color:var(--text-3); border:1px solid var(--border); border-radius:5px; padding:0 5px; }
+.btn { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 12px; border:1px solid var(--border); border-radius:8px;
+       font-size:14px; color:var(--text-1); background:var(--bg-base); white-space:nowrap; }
+.btn.pri { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:500; }
+.btn.icon { width:34px; padding:0; justify-content:center; color:var(--text-2); }
+
+.body { flex:1; min-height:0; display:grid; grid-template-columns:240px minmax(0,1fr); }
+.body.pane { grid-template-columns:240px minmax(0,1fr) 360px; }
+.tree { padding:4px 12px 12px 16px; font-size:14px; border-right:1px solid var(--border-subtle); }
+.tr { display:flex; align-items:center; gap:8px; height:34px; padding:0 8px; border-radius:6px; white-space:nowrap; color:var(--text-1); }
+.tr .tg { width:14px; color:var(--text-4); font-size:10px; text-align:center; }
+.tr.on { background:var(--brand-tint); color:var(--brand); font-weight:500; }
+.tr.on .fd { color:var(--brand); }
+.tr.l2 { padding-left:30px; }
+.fd { color:var(--text-3); }
+.fdf { color:var(--brand); }
+
+.list { padding:0 24px 24px; position:relative; min-width:0; }
+table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:14px; }
+th { text-align:left; font-weight:500; font-size:13px; color:var(--text-3); height:36px; padding:0 10px; border-bottom:1px solid var(--border-subtle); }
+td { height:48px; padding:0 10px; border-bottom:1px solid var(--border-subtle); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+col.c-w { width:340px; } col.c-s { width:96px; } col.c-m { width:120px; } col.c-x { width:40px; }
+th.r, td.r { text-align:right; }
+.nm { display:flex; align-items:center; gap:10px; min-width:0; }
+.nm span { overflow:hidden; text-overflow:ellipsis; }
+.wr { color:var(--text-2); font-size:13.5px; display:flex; align-items:center; gap:6px; min-width:0; }
+.wr span { overflow:hidden; text-overflow:ellipsis; }
+.wr .ag { color:var(--text-3); }
+tr.hov td { background:var(--bg-hover); }
+tr.hov .wr span { color:var(--brand); text-decoration:underline; text-underline-offset:3px; }
+tr.sel td { background:var(--brand-tint); }
+td.dim { color:var(--text-3); font-size:13.5px; }
+td.none { color:var(--text-4); }
+.more { color:var(--text-3); text-align:center; font-weight:700; letter-spacing:1px; }
+.thumb { width:22px; height:22px; border-radius:4px; background:linear-gradient(135deg,#9fc3ff,#4f7de8 60%,#2b4fb8); flex:none; }
+.thumb.g { background:linear-gradient(135deg,#bfe8c9,#4fae6c); }
+.doc { width:18px; height:22px; border:1.4px solid var(--text-3); border-radius:3px; flex:none; position:relative; }
+.foot { color:var(--text-3); font-size:13px; padding:12px 10px 0; }
+
+/* tray, session-card style */
+.tray { position:absolute; right:24px; bottom:24px; width:380px; background:var(--bg-raised); border:1px solid var(--border);
+        border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,.08), 0 16px 40px rgba(0,0,0,.14); font-size:14px; }
+.tray .th { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--border-subtle); font-weight:600; }
+.tray .th .a { margin-left:auto; display:flex; gap:14px; font-weight:400; font-size:13px; color:var(--brand); }
+.tray .tl { padding:4px 16px 6px; }
+.tray .ti { display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--border-subtle); }
+.tray .ti:last-child { border-bottom:0; }
+.tray .st { width:18px; height:18px; margin-top:2px; }
+.tray .ok { color:var(--success); } .tray .warn { color:var(--warning); }
+.tray .t1 { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tray .t1 .to { color:var(--text-3); }
+.tray .t2 { color:var(--text-3); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tray .t2 .w { color:var(--warning); } .tray .t2 a { color:var(--brand); }
+.tray .grp { color:var(--text-3); font-size:12.5px; font-weight:600; padding:10px 0 0; }
+
+/* details pane */
+.dp { border-left:1px solid var(--border-subtle); padding:4px 20px 20px; font-size:14px; }
+.dp .pv { height:200px; border-radius:10px; background:linear-gradient(135deg,#9fc3ff,#4f7de8 60%,#2b4fb8); margin-bottom:14px; }
+.dp h4 { margin:0; font-size:16px; font-weight:600; }
+.dp .kind { color:var(--text-3); font-size:13px; margin:2px 0 14px; }
+.dp dl { display:grid; grid-template-columns:104px 1fr; gap:8px 10px; margin:0 0 16px; font-size:13.5px; }
+.dp dt { color:var(--text-3); } .dp dd { margin:0; } .dp dd a { color:var(--brand); text-decoration:none; }
+.dp .row { display:flex; gap:8px; }
+</style></head><body>
+<div class="board">
+<h1 class="bt">Drive · one type scale and rhythm with the session console</h1>
+<p class="lede">The Drive page draws its own small scale (13 px rows, 12 px headers, crumbs and tray, 28 px rows, a ruled 18 px header bar), so next to the session console it reads one size smaller and denser. This board moves it onto the scale the session console and Tasks already use. It keeps the layout, data and actions as they are; only size, spacing, colour weight and column widths change.</p>
+
+<div class="top">
+<div>
+<div class="fh"><span class="n">1</span>Light, wide window: the Drive root with the sync tray open</div>
+<div class="win" id="w1">
+  <nav class="nav">
+    <div class="brand"><i></i>Orbit</div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>Projects<span class="k">⌘P</span></div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>Tasks</div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Scheduled</div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M6 4h11a1 1 0 0 1 1 1v15H7a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1zM5 18a2 2 0 0 1 2-2h11"/></svg>Wiki<span class="b">74</span></div>
+    <div class="it on"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Drive</div>
+    <div class="gh">Workspaces<span>18</span></div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>orbit-ws01<span class="k">⌘1</span></div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>orbit-ws02<span class="k">⌘2</span></div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>orbit-ws03<span class="k">⌘3</span></div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>orbit-ws04<span class="k">⌘4</span></div>
+    <div class="gh">Wiki<span>2</span></div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M6 4h11a1 1 0 0 1 1 1v15H7a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1z"/></svg>orbit<span class="b">74</span></div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M6 4h11a1 1 0 0 1 1 1v15H7a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1z"/></svg>wikova</div>
+  </nav>
+  <main class="panel">
+    <div class="head" style="position:relative">
+      <span class="mk abs" style="left:4px;top:8px">1</span>
+      <div class="crumb">Drive</div>
+      <div class="acts">
+        <span class="mk" style="margin-right:-4px">2</span>
+        <div class="search"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
+        <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
+        <div class="btn pri"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
+        <div class="btn">Trash</div>
+        <div class="btn">Storage</div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="tree" style="position:relative">
+        <span class="mk abs" style="left:-2px;top:10px">3</span>
+        <div class="tr on"><span class="tg">▾</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Drive</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Books</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Lab evidence</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>New folder</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Sync card check</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Video</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>scratch</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>书格</div>
+      </div>
+      <div class="list">
+        <span class="mk abs" style="left:2px;top:50px">4</span>
+        <span class="mk abs" style="left:calc(100% - 640px);top:8px">5</span>
+        <table>
+          <colgroup><col><col class="c-w"><col class="c-s"><col class="c-m"><col class="c-x"></colgroup>
+          <thead><tr><th>Name</th><th>Last written by</th><th class="r">Size</th><th class="r">Modified</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><div class="nm"><svg class="ic fdf" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".14"/></svg><span>Books</span></div></td>
+                <td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div></td><td class="r none">—</td><td class="r dim">Yesterday</td><td class="more"></td></tr>
+            <tr class="hov"><td><div class="nm"><svg class="ic fdf" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".14"/></svg><span>Lab evidence</span></div></td>
+                <td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>Keep a second kernel OOM kill off other sessions while a shmem-heavy victim drains</span></div></td><td class="r none">—</td><td class="r dim">Nov 24</td><td class="more">···</td></tr>
+            <tr><td><div class="nm"><svg class="ic fdf" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".14"/></svg><span>New folder</span></div></td>
+                <td><div class="wr"><span>You</span></div></td><td class="r none">—</td><td class="r dim">Nov 26</td><td class="more"></td></tr>
+            <tr><td><div class="nm"><svg class="ic fdf" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".14"/></svg><span>Sync card check</span></div></td>
+                <td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>Check: Documents sync card</span></div></td><td class="r none">—</td><td class="r dim">Nov 24</td><td class="more"></td></tr>
+            <tr><td><div class="nm"><svg class="ic fdf" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".14"/></svg><span>Video</span></div></td>
+                <td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>同步书格到 Orbit</span></div></td><td class="r none">—</td><td class="r dim">Yesterday</td><td class="more"></td></tr>
+            <tr><td><div class="nm"><svg class="ic fdf" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".14"/></svg><span>scratch</span></div></td>
+                <td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>查找背景标签展示类型</span></div></td><td class="r none">—</td><td class="r dim">Yesterday</td><td class="more"></td></tr>
+            <tr><td><div class="nm"><svg class="ic fdf" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".14"/></svg><span>书格</span></div></td>
+                <td><div class="wr"><svg class="ic sm ag" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg><span>上传书格文件到 Orbit</span></div></td><td class="r none">—</td><td class="r dim">Nov 24</td><td class="more"></td></tr>
+          </tbody>
+        </table>
+        <div class="foot">7 folders</div>
+      </div>
+    </div>
+  </main>
+  <div class="tray">
+    <span class="mk abs" style="left:-9px;top:-9px">6</span>
+    <div class="th">Synced 4 folders<div class="a"><span>Clear finished</span><span>Hide</span></div></div>
+    <div class="tl">
+      <div class="ti"><svg class="ic st warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
+        <div style="min-width:0"><div class="t1">books-stage/ <span class="to">→ Books</span></div><div class="t2">11,271 files · <span class="w">4 failed</span> · <a>Details</a></div></div></div>
+      <div class="ti"><svg class="ic st warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
+        <div style="min-width:0"><div class="t1">anime-stage/ <span class="to">→ Video/鬼灭之刃 游郭篇</span></div><div class="t2">7 files · <span class="w">4 failed</span> · <a>Details</a></div></div></div>
+      <div class="ti"><svg class="ic st ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg>
+        <div style="min-width:0"><div class="t1">anime-stage/ <span class="to">→ Video/鬼灭之刃 游郭篇</span></div><div class="t2">4 files · 4.2 GB · 同步书格到 Orbit</div></div></div>
+      <div class="ti"><svg class="ic st ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg>
+        <div style="min-width:0"><div class="t1">books-stage/ <span class="to">→ Books</span></div><div class="t2">4 files · 566 MB · 同步书格到 Orbit</div></div></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="side">
+<h3>What changes, by mark</h3>
+<ol>
+<li><b>Header.</b> No full-width rule; padding 24px like the session column. The title shows the path: “Drive”, or “Drive / Books” inside a folder, with the parent in grey. It replaces the 12px breadcrumb line above the table, so the page names its place once and not three times.</li>
+<li><b>Controls</b> are 34px high with 14px text. Search is 280px wide and named <b>“Search Drive”</b> (it said “Search all of Files”, an old name).</li>
+<li><b>Tree</b> rows are 34px and 14px, with the same outline folder icons as the app nav. The selected row looks like a selected nav item.</li>
+<li><b>Rows</b> are 48px with 14px names. The table uses fixed column widths: Name takes the remaining space and the other columns stay together on the right, so a wide window no longer opens a gap of about 900px between “Last written by” and Size.</li>
+<li><b>Last written by</b> is grey (text-2), with a small agent glyph in place of the words “Agent in”. The session title turns into a blue underlined link only when you hover the row. Blue is left for selection and actions, as in the session list. The “···” menu also shows only on hover.</li>
+<li><b>Tray</b> uses 14px titles, 13px details and a 12px radius, like a session card. Rows that need attention (failed) come first; finished rows drop the blue session link.</li>
+<li style="list-style:none;margin-left:-18px;color:#646a73">Frame 2: when a file is selected and the details pane opens, the table drops “Last written by” (the pane shows it as “By”), so names are not cut off.</li>
+</ol>
+<h3>Type and spacing</h3>
+<table class="spec">
+<tr><th>Element</th><th>Today</th><th>Proposed</th></tr>
+<tr><td>Page title</td><td class="was">18 / ruled bar</td><td class="now">20 semibold</td></tr>
+<tr><td>Tree row</td><td class="was">13 · 28px</td><td class="now">14 · 34px</td></tr>
+<tr><td>Table row</td><td class="was">13 · ~27px</td><td class="now">14 · 48px</td></tr>
+<tr><td>Column head</td><td class="was">12</td><td class="now">13 · 36px</td></tr>
+<tr><td>Writer, dates</td><td class="was">13 blue / 13</td><td class="now">13.5 grey</td></tr>
+<tr><td>Breadcrumb</td><td class="was">12 line</td><td class="now">in title</td></tr>
+<tr><td>Tray</td><td class="was">12 · r10</td><td class="now">14/13 · r12</td></tr>
+<tr><td>Details pane</td><td class="was">15 / 12 facts</td><td class="now">16 / 13.5</td></tr>
+<tr><td>Gutters</td><td class="was">16–20</td><td class="now">24</td></tr>
+</table>
+<h3>Open for you</h3>
+<ol>
+<li>Writer cell: grey with a link on hover (drawn here), or keep it always blue?</li>
+<li>Folder Size: keep “—”, or show an item count (“12 items”)? The count needs the list API to return it.</li>
+</ol>
+</div>
+</div>
+
+<div class="fh"><span class="n">2</span>Dark, inside a folder with a file selected: the details pane on the same scale; with the pane open, “Last written by” leaves the table because the pane says it</div>
+<div class="win dark" style="width:1560px;height:720px">
+  <nav class="nav">
+    <div class="brand"><i></i>Orbit</div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>Projects<span class="k">⌘P</span></div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>Tasks</div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Scheduled</div>
+    <div class="it"><svg class="ic" viewBox="0 0 24 24"><path d="M6 4h11a1 1 0 0 1 1 1v15H7a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1zM5 18a2 2 0 0 1 2-2h11"/></svg>Wiki<span class="b">74</span></div>
+    <div class="it on"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Drive</div>
+  </nav>
+  <main class="panel">
+    <div class="head">
+      <div class="crumb"><span class="up">Drive</span><span class="sep">/</span>Books</div>
+      <div class="acts">
+        <div class="search"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
+        <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
+        <div class="btn pri"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
+        <div class="btn">Trash</div>
+        <div class="btn">Storage</div>
+      </div>
+    </div>
+    <div class="body pane">
+      <div class="tree">
+        <div class="tr"><span class="tg">▾</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Drive</div>
+        <div class="tr l2 on"><span class="tg">▾</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Books</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Lab evidence</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Video</div>
+        <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>书格</div>
+      </div>
+      <div class="list">
+        <table>
+          <colgroup><col><col class="c-s"><col class="c-m"><col class="c-x"></colgroup>
+          <thead><tr><th>Name</th><th class="r">Size</th><th class="r">Modified</th><th></th></tr></thead>
+          <tbody>
+            <tr class="sel"><td><div class="nm"><span class="thumb"></span><span>cover-001.jpg</span></div></td><td class="r dim">1.2 MB</td><td class="r dim">Yesterday</td><td class="more">···</td></tr>
+            <tr><td><div class="nm"><span class="thumb g"></span><span>cover-002.jpg</span></div></td><td class="r dim">980 KB</td><td class="r dim">Yesterday</td><td class="more"></td></tr>
+            <tr><td><div class="nm"><span class="doc"></span><span>catalog.md</span></div></td><td class="r dim">14 KB</td><td class="r dim">Nov 26</td><td class="more"></td></tr>
+            <tr><td><div class="nm"><span class="doc"></span><span>book-0412.pdf</span></div></td><td class="r dim">212 MB</td><td class="r dim">Yesterday</td><td class="more"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <aside class="dp">
+        <div class="pv"></div>
+        <h4>cover-001.jpg</h4>
+        <div class="kind">JPEG picture · 1600 × 2400</div>
+        <dl>
+          <dt>Size</dt><dd>1.2 MB</dd>
+          <dt>Last written</dt><dd>Yesterday, 21:14</dd>
+          <dt>By</dt><dd><a>Agent in 同步书格到 Orbit</a></dd>
+          <dt>Path</dt><dd style="font-family:'JetBrains Mono',monospace;font-size:12.5px">/Books/cover-001.jpg</dd>
+        </dl>
+        <div class="row"><div class="btn">Download</div><div class="btn">Share link</div><div class="btn icon">···</div></div>
+      </aside>
+    </div>
+  </main>
+</div>
+</div>
+</body></html>
