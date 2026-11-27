@@ -28,5 +28,16 @@ enum ProbeArgs {
             model.selectedSection = .scheduled
             model.nav.path = []
         }
+        // Without XCUITest (a Mac whose testmanagerd cannot be reached): `-probe.inspect <schedule>` selects a row,
+        // `-probe.chat YES` presses the chat's button once the page has read its chats, for `screencapture`.
+        let defaults = UserDefaults.standard
+        if let id = defaults.string(forKey: "probe.inspect") {
+            await model.scheduled?.load()
+            model.scheduled?.inspectedID = id
+        }
+        if defaults.bool(forKey: "probe.chat") {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if model.scheduledChat?.presented == false { model.scheduledChat?.toggleScheduled() }
+        }
     }
 }

@@ -44,9 +44,16 @@ final class ScheduledChatShotTests: ProbeCase {
         #endif
     }
 
-    /// The chat is showing: its conversation's first words are on screen.
+    /// The chat is showing: its panel is in the tree (a sheet at medium height opens scrolled to the conversation's
+    /// end, so the first turn's words may be above the fold).
     private func chatShows(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
-        appears(app, askWords, timeout: timeout)
+        let panel = app.descendants(matching: .any).matching(identifier: "scheduled-chat-panel").firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if panel.exists { return true }
+            Thread.sleep(forTimeInterval: 1)
+        } while Date() < deadline
+        return false
     }
 
     // MARK: iPhone (board 4 ① ② ③)
@@ -94,7 +101,8 @@ final class ScheduledChatShotTests: ProbeCase {
         shot("ios-3-schedule-sheet-chat-back")
 
         press(back)
-        XCTAssertTrue(name.waitForExistence(timeout: 15), "\(tag): ‹ Chat goes back to the conversation")
+        XCTAssertTrue(chatShows(app, timeout: 15), "\(tag): ‹ Chat goes back to the conversation")
+        XCTAssertFalse(back.exists, "\(tag): the schedule's sheet went")
         settle(1.5)
         shot("ios-4-back-in-the-chat")
     }

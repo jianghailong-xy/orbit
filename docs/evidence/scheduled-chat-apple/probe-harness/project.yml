@@ -38,6 +38,7 @@ targets:
           - "HotKeyManager.swift"
           - "UpdaterModel.swift"
           - "RunnerControl.swift"
+          - "MenuBarIcon.swift"
           - "Views/RunnerControlPane.swift"
           - "Views/MenuBarContent.swift"
     dependencies:
