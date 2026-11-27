@@ -26,10 +26,10 @@
   const out = [];
   out.push(`<h1 class="b-title">运行中的权限模式 · ${where}</h1>
   <p class="b-lede">Mode 胶囊显示会话<b>实际在跑</b>的模式（引擎报告的那个），不再是存储的意图加客户端猜测（WorkspaceView.tsx ~8311 的 clampPermissionModeForModel）。意图仍存着、从不被改写；菜单里的 ✓ 标的是意图。差距按 R1 应当罕见且短暂。框内文字均为产品英文文案；壳是手绘的，web 的类名与配色取自 index.css（composer-pill / chat-note / chat-notice / orbit-select-popup）。</p>
-  <div class="b-decide"><h3>待定的三处（每处两个方案，绿色为推荐）</h3><ol>
-    <li><b>A. 差距怎么显示</b>：A1 胶囊内写 “Default → Auto” 加转圈，原因在悬停/点开的菜单头里（推荐）；A2 胶囊只写 “Default”（琥珀色），输入框上方加一行原因。</li>
-    <li><b>B. 对话里的模式变更行</b>：B1 像 “⊘ interrupted” 那样的安静左对齐行，带盾形图标（推荐）；B2 居中分隔线。</li>
-    <li><b>C. 开始前的选择器</b>：C1 有 Auto 的模型不加任何提示，没有 Auto 的模型在 Auto 一行写明并仍可选（推荐）；C2 没有 Auto 的模型直接禁用 Auto，给出 “换到有 Auto 的模型” 的动作。</li></ol></div>`);
+  <div class="b-decide is-decided"><h3>三处已定：主人 2026-11-19 选了 A1、B1、C1（各处的推荐方案）</h3><ol>
+    <li><b>A. 差距怎么显示</b>：<span class="b-tag rec">✓ 选定 A1</span> A1 胶囊内写 “Default → Auto” 加转圈，原因在悬停/点开的菜单头里（推荐）；<span class="b-dropped">A2 胶囊只写 “Default”（琥珀色），输入框上方加一行原因。</span></li>
+    <li><b>B. 对话里的模式变更行</b>：<span class="b-tag rec">✓ 选定 B1</span> B1 像 “⊘ interrupted” 那样的安静左对齐行，带盾形图标（推荐）；<span class="b-dropped">B2 居中分隔线。</span></li>
+    <li><b>C. 开始前的选择器</b>：<span class="b-tag rec">✓ 选定 C1</span> C1 有 Auto 的模型不加任何提示，没有 Auto 的模型在 Auto 一行写明并仍可选（推荐）；<span class="b-dropped">C2 没有 Auto 的模型直接禁用 Auto，给出 “换到有 Auto 的模型” 的动作。</span></li></ol></div>`);
 
   // ① running == intent
   out.push(
