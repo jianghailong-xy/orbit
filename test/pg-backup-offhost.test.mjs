@@ -1002,13 +1002,12 @@ test('and what it counts is what changed, on whichever passes ran, the same with
   }
 });
 
-test('a target in step is asked what it always was: its two listings and one segment, this archive\'s two, and the one pass', () => {
+test('a target in step is asked what it always was: its two listings and one segment, this archive\'s base backups, and the one pass', () => {
   const result = round({ prepare: inStep });
   const { archive, target } = result.dirs;
   assert.deepEqual(result.rsyncCalls.map((call) => call.replace(/ -e ssh -p 22 -i \S+ -o BatchMode=yes -o ConnectTimeout=15( -o \S+)*/, ' -e ssh').replace(/\/wal\/[0-9A-F]{24}\.gz \S+\/segment$/, '/wal/<smallest> <scratch>')), [
     `--list-only --timeout=600 -e ssh ${target}/wal/`,
     `--list-only --timeout=600 -e ssh -r ${target}/base/`,
-    `--list-only ${archive}/wal/`,
     `--timeout=600 -e ssh ${target}/wal/<smallest> <scratch>`,
     `--list-only -r ${archive}/base/`,
     `-a --delete --timeout=600 --itemize-changes --exclude .staging-* --exclude /metrics/ -e ssh ${archive}/ ${target}/`,

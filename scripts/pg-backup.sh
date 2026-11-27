@@ -200,27 +200,37 @@ target_is_ours() {
     log "ERROR: off-host sync to $SYNC_TARGET failed: could not read the target: $remote_base"
     return 1
   fi
+  archive_owns "$SYNC_TARGET" fetch_rsync
+}
+
+# A segment of the rsync target, to $2. What went wrong on stdout.
+fetch_rsync() { rsync --timeout=600 -e "ssh $ssh_opts" "$SYNC_TARGET/wal/$1" "$2" >/dev/null 2>"$rsync_stderr" || { rsync_said; return 1; }; }
+
+# The rest of target_is_ours, for target $1 whatever it is: given its listings of wal/ and base/ in $remote_wal and
+# $remote_base, as rsync --list-only prints them (the size second, the name last), and a command $2 that fetches one of
+# its segments to a file.
+archive_owns() {
   held="$(printf '%s\n' "$remote_base" | awk 'NF && $NF != "." {sub("/.*", "", $NF); print $NF}' | LC_ALL=C sort -u | tr '\n' ' ' | tail -c 200)"
   remote_segments="$(printf '%s\n' "$remote_wal" | segment_lines)"
   if [ -z "$remote_segments" ]; then
     if [ -n "$held" ]; then
-      log "ERROR: refusing off-host sync to $SYNC_TARGET: it holds base backups and no WAL to tell whose they are (${held% }), and --delete would replace them. $(replace_target_advice)"
+      log "ERROR: refusing off-host sync to $1: it holds base backups and no WAL to tell whose they are (${held% }), and --delete would replace them. $(replace_target_advice)"
       return 1
     fi
     return 0
   fi
 
   if ! here="$(psql -Atc 'select system_identifier from pg_control_system()' 2>&1)"; then
-    log "ERROR: off-host sync to $SYNC_TARGET skipped: could not read this cluster's system identifier: $(printf '%s' "$here" | tr '\n' ' ' | tail -c 200)"
+    log "ERROR: off-host sync to $1 skipped: could not read this cluster's system identifier: $(printf '%s' "$here" | tr '\n' ' ' | tail -c 200)"
     return 1
   fi
-  local_segments="$(rsync --list-only "$WAL_DIR/" | segment_lines)"
+  local_segments="$(ls -1A "$WAL_DIR" | segment_lines)"
   newest_here="$(printf '%s\n' "$local_segments" | newest_segment)"
   newest_there="$(printf '%s\n' "$remote_segments" | newest_segment)"
   # Old WAL copied back under a new cluster: its segments would pass as the target's own below.
   archived="$(segment_system_id "$WAL_DIR/$newest_here")"
   if [ "$archived" != "$here" ]; then
-    log "ERROR: refusing off-host sync to $SYNC_TARGET: the newest WAL in $ARCHIVE_DIR ($newest_here) belongs to cluster ${archived:-unknown}, and this one is $here, and --delete would carry that to the target. $(replace_target_advice)"
+    log "ERROR: refusing off-host sync to $1: the newest WAL in $ARCHIVE_DIR ($newest_here) belongs to cluster ${archived:-unknown}, and this one is $here, and --delete would carry that to the target. $(replace_target_advice)"
     return 1
   fi
 
@@ -228,9 +238,9 @@ target_is_ours() {
   there=""
   for segment in $(printf '%s\n' "$remote_segments" | tr -d , | sort -n -k2 | head -n 3 | awk '{print $NF}'); do
     rm -f "$scratch/segment"
-    if ! rsync --timeout=600 -e "ssh $ssh_opts" "$SYNC_TARGET/wal/$segment" "$scratch/segment" >/dev/null 2>"$rsync_stderr"; then
+    if ! why="$("$2" "$segment" "$scratch/segment")"; then
       rm -rf "$scratch"
-      log "ERROR: off-host sync to $SYNC_TARGET failed: could not read $segment from the target: $(rsync_said)"
+      log "ERROR: off-host sync to $1 failed: could not read $segment from the target: $why"
       return 1
     fi
     there="$(segment_system_id "$scratch/segment")"
@@ -238,13 +248,13 @@ target_is_ours() {
   done
   rm -rf "$scratch"
   if [ "$there" != "$here" ]; then
-    log "ERROR: refusing off-host sync to $SYNC_TARGET: its archive belongs to cluster ${there:-unknown} (newest segment $newest_there) and this one is $here (newest segment $newest_here), and --delete would replace it. $(replace_target_advice)"
+    log "ERROR: refusing off-host sync to $1: its archive belongs to cluster ${there:-unknown} (newest segment $newest_there) and this one is $here (newest segment $newest_here), and --delete would replace it. $(replace_target_advice)"
     return 1
   fi
 
   # This cluster's, and further on than this archive: a timeline or a segment this archive has never held.
   if [ "$(printf '%s\n%s\n' "$newest_here" "$newest_there" | LC_ALL=C sort | tail -n1)" != "$newest_here" ]; then
-    log "ERROR: refusing off-host sync to $SYNC_TARGET: it holds WAL newer than $ARCHIVE_DIR (newest segment $newest_there there, $newest_here here), and --delete would remove it. $(replace_target_advice)"
+    log "ERROR: refusing off-host sync to $1: it holds WAL newer than $ARCHIVE_DIR (newest segment $newest_there there, $newest_here here), and --delete would remove it. $(replace_target_advice)"
     return 1
   fi
   shared_segments="$(printf '%s\n%s\n' "$remote_segments" "$local_segments" | awk '{print $NF}' | LC_ALL=C sort | uniq -d)"
