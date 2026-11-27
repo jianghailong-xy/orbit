@@ -1,4 +1,6 @@
+import type { SessionSlotWait } from '@orbit/shared';
 import type { QueuedGate } from './runnerSlots';
+import { sessionRunStateOf, type SessionStateSource } from './sessionState';
 
 /**
  * What a queued message says while a full runner, run or batch holds it (docs/mocks/queued-card-runner-full,
@@ -75,6 +77,33 @@ export const BATCH_FULL_TAG = 'batch full';
  * went PENDING), so the line adds no clock; which gate is full is the row's tooltip, where there is one.
  */
 export const CAPACITY_HELD_LINE = 'Waiting for a free slot';
+
+/** A claimed session as the runner keeps it waiting for its slot (enginePhase `waiting_for_slot`). */
+export interface SlotWaitSource extends SessionStateSource {
+  enginePhase?: string | null;
+  enginePhaseSince?: string | null;
+  runClaimedAt?: string | null;
+  slotWait?: SessionSlotWait | null;
+}
+
+/**
+ * The full runner's gate for a claimed session it keeps waiting for a slot: a full runner gives such a claim back, and
+ * the session waits queued behind it (runner_at_capacity); the claim it could not give back — a message already handed
+ * out under it, another process's lease — is named instead (enginePhase `waiting_for_slot`, with the runner's counts).
+ * Either way it is the same wait, so it is said in the same words, by the same tag: `Queued · runner full`, the
+ * popover's counts and "This message is sent as soon as one frees up." Null for every other session.
+ */
+export function slotWaitGate(session?: SlotWaitSource | null): CapacityGate | null {
+  if (!session || session.enginePhase !== 'waiting_for_slot' || sessionRunStateOf(session) !== 'RUNNING') return null;
+  const counts = session.slotWait;
+  return {
+    queuedReason: 'runner_at_capacity',
+    queuedActive: counts?.active ?? null,
+    queuedLimit: counts?.limit ?? null,
+    queuedHeldByJobs: counts?.heldByJobs ?? null,
+    lastTurnAt: session.enginePhaseSince ?? session.runClaimedAt ?? null,
+  };
+}
 
 /** Whether a full runner, run or batch holds this queued session. */
 export function isCapacityHeld(gate?: QueuedGate | null): boolean {
