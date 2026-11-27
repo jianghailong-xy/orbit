@@ -16,7 +16,7 @@ import { isReportedEngine, sanitizeRunnerEngines } from '../common/runner-engine
 import { runnerOs } from '../common/runner-platform';
 import { signedOutEngineRefusal, type EnginePreflightRunner } from '../sessions/engine-signin-preflight';
 import { lastProviderByWorkspace, DEFAULT_AGENT_PROVIDER } from '../workspaces/workspace-provider';
-import { runnerIsOnline } from './runner-presence';
+import { RUNNER_PRESENCE, runnerIsOnline } from './runner-presence';
 import { heldFilter, isReleased } from '../common/session-release';
 import { LEGACY_STATUS_SELECT, legacySessionStatus, readLandingSettlements } from '../sessions/session-legacy-words';
 
@@ -111,7 +111,7 @@ export const AGENT_FIX_RUNNER_SELECT = {
   hostname: true,
   status: true,
   lastHeartbeatAt: true,
-  presence: { select: { lastBeatAt: true } },
+  presence: { select: RUNNER_PRESENCE },
   engines: true,
   accountNames: true,
   accountPauses: true,

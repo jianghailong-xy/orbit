@@ -15,10 +15,21 @@ import { APISERVER_PROCESS_LOCK_PREFIX, ControlPlaneLeader } from '../realtime/c
  * emptied in a crash or a failover leaves the runner's own record to answer. Registering writes
  * neither: a runner that has never beaten was never heard from, and reads offline.
  *
+ * Presence is more than the beats (docs/runner-link-design.md §15.16): a runner whose link keeps dropping
+ * and reconnecting sends a Hello on every new connection, and the welcome route keeps when it was last
+ * heard so (`last_heard_at`, migration 1750; recordRunnerLinkOpened), though its heartbeats are lost to a
+ * weak network. Only the Welcome counts: events and RPCs on a stable connection do not, so a process
+ * whose work loop is stuck while its engine still emits events goes offline 90 s after its last beat, as
+ * it always has. And a Welcome counts for no more than RUNNER_HEARD_CAP_MS past the last beat: a process
+ * whose beats never land still goes offline. So two readings: when the runner is present
+ * (runnerPresentAt, runnerPresenceSql: beat or Welcome), which every reader of "is it there" asks, and
+ * when it last beat (runnerLastBeatAt, runnerLastBeatSql: beats only), which only a reader of what a
+ * heartbeat carries asks — a managed runner's telemetry, a delivery that rides the heartbeat's answer.
+ *
  * Every reader of liveness goes through here: a Prisma read selects RUNNER_BEATS beside the runner's
- * other fields and asks runnerIsOnline / runnerLastBeatAt; raw SQL splices runnerLastBeatSql or
- * runnerOfflineSql; a payload that shows a runner to a client carries runnerLastBeatAt as its
- * `lastHeartbeatAt`, which is what every client has always read it from.
+ * other fields and asks runnerIsOnline / runnerPresentAt; raw SQL splices runnerPresenceSql or
+ * runnerOfflineSql; a payload that shows a runner to a client carries runnerPresentAt as its
+ * `lastHeartbeatAt`, which is what every client has always read it from (and reads offline by).
  */
 
 /**
@@ -46,13 +57,24 @@ export const RUNNER_SILENT_AFTER_MS = 1.5 * RUNNER_HEARTBEAT_EVERY_MS;
  */
 export const RUNNER_DURABLE_BEAT_EVERY_MS = 5 * 60_000;
 
+/**
+ * How far past its last beat a Welcome keeps a runner present (runnerPresentAt): above the runner's own rule that ends
+ * a connection after three minutes of unanswered beats (runner-go link_heartbeat.go), so a runner that keeps
+ * reconnecting with no beat ever landing goes offline at most RUNNER_HEARD_CAP_MS + RUNNER_OFFLINE_AFTER_MS after its
+ * last beat. Anything a heartbeat's answer hands out is never withheld from a runner shown present for longer than that.
+ */
+export const RUNNER_HEARD_CAP_MS = 5 * 60_000;
+
 /** What carried a beat (`runner_presence.link_state`, whose CHECK names the same two). */
 export type RunnerLinkState = 'HTTP' | 'LINK';
 
-/** Selected beside a runner's other fields wherever its liveness is read: both records of its beats. */
+/** What a runner's presence row is read with wherever its liveness is: its last beat, and when it was last heard. */
+export const RUNNER_PRESENCE = { lastBeatAt: true, lastHeardAt: true } as const satisfies Prisma.RunnerPresenceSelect;
+
+/** Selected beside a runner's other fields wherever its liveness is read: both records of its beats, and its heard. */
 export const RUNNER_BEATS = {
   lastHeartbeatAt: true,
-  presence: { select: { lastBeatAt: true } },
+  presence: { select: RUNNER_PRESENCE },
 } as const satisfies Prisma.RunnerSelect;
 
 type Instant = Date | string | null | undefined;
@@ -60,11 +82,11 @@ type Instant = Date | string | null | undefined;
 /**
  * A runner as its liveness is read: a row read with RUNNER_BEATS — its own record and its presence
  * row — or a payload whose `lastHeartbeatAt` already carries a reading (the session list's rows,
- * which runnerLastBeatSql filled). Either way the later beat is the one that counts.
+ * which runnerPresenceSql filled). Either way the later one is the one that counts.
  */
 export interface RunnerBeats {
   lastHeartbeatAt?: Instant;
-  presence?: { lastBeatAt: Instant } | null;
+  presence?: { lastBeatAt: Instant; lastHeardAt?: Instant } | null;
 }
 
 function epochMs(at: Instant): number {
@@ -72,20 +94,49 @@ function epochMs(at: Instant): number {
   return at ? Date.parse(at) : NaN;
 }
 
-/** When the runner was last heard from; null when it never was. */
+function latest(...instants: number[]): Date | null {
+  const known = instants.filter(Number.isFinite);
+  return known.length === 0 ? null : new Date(Math.max(...known));
+}
+
+/**
+ * When the runner last beat: the later of its presence row's beat and its own record. Beats only — what a reader of
+ * something a heartbeat carries asks (a managed runner's telemetry); whether the runner is there is runnerPresentAt's.
+ * Null when it never beat.
+ */
 export function runnerLastBeatAt(runner: RunnerBeats | null | undefined): Date | null {
-  const live = epochMs(runner?.presence?.lastBeatAt);
-  const recorded = epochMs(runner?.lastHeartbeatAt);
-  if (Number.isFinite(live) && Number.isFinite(recorded)) return new Date(Math.max(live, recorded));
-  if (Number.isFinite(live)) return new Date(live);
-  return Number.isFinite(recorded) ? new Date(recorded) : null;
+  return latest(epochMs(runner?.presence?.lastBeatAt), epochMs(runner?.lastHeartbeatAt));
+}
+
+/**
+ * When the runner was last present: its last beat, or its last link Welcome (`last_heard_at`) if later —
+ * but never more than RUNNER_HEARD_CAP_MS past the presence row's beat — or its own record of a beat, the latest of
+ * the three. Null when it was never heard from.
+ */
+export function runnerPresentAt(runner: RunnerBeats | null | undefined): Date | null {
+  const beat = epochMs(runner?.presence?.lastBeatAt);
+  const heard = Number.isFinite(beat) ? Math.min(epochMs(runner?.presence?.lastHeardAt), beat + RUNNER_HEARD_CAP_MS) : NaN;
+  return latest(beat, heard, epochMs(runner?.lastHeartbeatAt));
 }
 
 /**
  * The rule every reader decides "online" by: not signed off — OFFLINE is what a runner reports about
- * itself on its way out — and heard from within RUNNER_OFFLINE_AFTER_MS.
+ * itself on its way out — and present within RUNNER_OFFLINE_AFTER_MS (runnerPresentAt).
  */
 export function runnerIsOnline(
+  runner: ({ status: string } & RunnerBeats) | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  if (!runner || runner.status === 'OFFLINE') return false;
+  const present = runnerPresentAt(runner);
+  return present !== null && present.getTime() >= now - RUNNER_OFFLINE_AFTER_MS;
+}
+
+/**
+ * runnerIsOnline by beats alone (runnerLastBeatAt): for a request only a heartbeat's answer delivers, which a runner
+ * heard but not beating would not receive until a beat lands (the Codex rate-limit reset).
+ */
+export function runnerBeatIsOnline(
   runner: ({ status: string } & RunnerBeats) | null | undefined,
   now: number = Date.now(),
 ): boolean {
@@ -95,19 +146,19 @@ export function runnerIsOnline(
 }
 
 /**
- * A runner row read with RUNNER_BEATS as a client is shown it: `lastHeartbeatAt` is its last beat
- * (runnerLastBeatAt), and the presence row it was read from stays behind.
+ * A runner row read with RUNNER_BEATS as a client is shown it: `lastHeartbeatAt` is when it was last
+ * present (runnerPresentAt), and the presence row it was read from stays behind.
  */
-export function withRunnerLastBeat<T extends RunnerBeats>(
+export function withRunnerPresence<T extends RunnerBeats>(
   runner: T,
 ): Omit<T, 'presence' | 'lastHeartbeatAt'> & { lastHeartbeatAt: Date | null } {
   const { presence: _presence, lastHeartbeatAt: _recorded, ...rest } = runner;
-  return { ...rest, lastHeartbeatAt: runnerLastBeatAt(runner) };
+  return { ...rest, lastHeartbeatAt: runnerPresentAt(runner) };
 }
 
 /**
  * The runner aliased `runner` in the enclosing SQL, its last beat: the later of its presence row and
- * its own record, as runnerLastBeatAt reads them. NULL when it was never heard from.
+ * its own record, as runnerLastBeatAt reads them. Beats only. NULL when it never beat.
  */
 export function runnerLastBeatSql(runner: string): Prisma.Sql {
   const r = Prisma.raw(runner);
@@ -115,12 +166,34 @@ export function runnerLastBeatSql(runner: string): Prisma.Sql {
 }
 
 /**
+ * The presence row aliased `presence`, when it was last present: its beat, or its heard capped at RUNNER_HEARD_CAP_MS
+ * past that beat if later. The CASE is not decoration: LEAST skips a NULL, so LEAST(NULL, beat + cap) would read a row
+ * never heard as present until five minutes past its beat.
+ */
+function presenceRowPresentSql(presence: string): Prisma.Sql {
+  const p = Prisma.raw(presence);
+  // The cap is a literal, not a bind: every statement that splices this keeps the binds it had before heard existed.
+  const cap = Prisma.raw(`interval '${RUNNER_HEARD_CAP_MS} milliseconds'`);
+  return Prisma.sql`GREATEST(${p}."last_beat_at", CASE WHEN ${p}."last_heard_at" IS NOT NULL THEN LEAST(${p}."last_heard_at", ${p}."last_beat_at" + ${cap}) END)`;
+}
+
+/**
+ * The runner aliased `runner` in the enclosing SQL, when it was last present, as runnerPresentAt reads it: the latest
+ * of its presence row's beat, its heard capped at RUNNER_HEARD_CAP_MS past that beat, and its own record. NULL when it
+ * was never heard from.
+ */
+export function runnerPresenceSql(runner: string): Prisma.Sql {
+  const r = Prisma.raw(runner);
+  return Prisma.sql`GREATEST((SELECT ${presenceRowPresentSql('presence')} FROM "runner_presence" presence WHERE presence."runner_id" = ${r}."id"), ${r}."last_heartbeat_at")`;
+}
+
+/**
  * runnerIsOnline's negation in SQL, on Postgres' clock, for the runner aliased `runner`: signed off,
- * never heard from, or silent for longer than RUNNER_OFFLINE_AFTER_MS.
+ * never heard from, or not present for longer than RUNNER_OFFLINE_AFTER_MS (runnerPresenceSql).
  */
 export function runnerOfflineSql(runner: string): Prisma.Sql {
   const r = Prisma.raw(runner);
-  return Prisma.sql`(${r}."status" = 'OFFLINE' OR COALESCE(${runnerLastBeatSql(runner)}, '-infinity'::timestamp) < now() - (${RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond'))`;
+  return Prisma.sql`(${r}."status" = 'OFFLINE' OR COALESCE(${runnerPresenceSql(runner)}, '-infinity'::timestamp) < now() - (${RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond'))`;
 }
 
 /**
@@ -201,8 +274,17 @@ export async function markRunnersChanged(
  * after the last beat is kept by that beat in any case (runner-api/link-heartbeat.ts). Decided on the token's own `iat`
  * and this database's clock, so a runner or gateway of any version renews alike.
  *
- * One statement on the primary key, which writes nothing when it would change nothing, or for a renewal; nothing for a
- * runner with no presence row.
+ * The Welcome is also the one call presence counts besides the heartbeat (migration 1750, docs/runner-link-design.md
+ * §15.16): a runner whose link keeps dropping says Hello on every connection while its beats are lost. So the same
+ * statement sets `last_heard_at` to now wherever the row is the calling process's over the link (LINK, and `process_id`
+ * the token's lease owner: a new process never refreshes an old one's presence) — a renewal and a welcome sent again
+ * included — after reading the instants it keeps from the row as it stood: the last the runner was heard with before
+ * this connection is the later of its last beat and its last Welcome, GREATEST(last_beat_at, last_heard_at), and so is
+ * the renewal's test that the process is still heard. Event batches and RPCs write nothing here: on a stable connection
+ * a stuck work loop whose engine still emits events must go offline on its beats alone.
+ *
+ * One statement on the primary key, which writes nothing when it would change nothing; nothing for a runner with no
+ * presence row: after a failover empties the UNLOGGED table, nothing is heard until the next beat recreates it.
  */
 export async function recordRunnerLinkOpened(
   prisma: Pick<PrismaService, '$executeRaw'>,
@@ -211,15 +293,19 @@ export async function recordRunnerLinkOpened(
 ): Promise<void> {
   const silent = Prisma.sql`(${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')`;
   const mintedAt = connection.tokenMintedAt ?? 0;
-  await prisma.$executeRaw`
-    UPDATE "runner_presence" SET "lost_at" = "last_beat_at"
-     WHERE "runner_id" = ${runnerId}::uuid AND "lost_at" IS DISTINCT FROM "last_beat_at"
-       AND NOT COALESCE(
-             "link_state" = 'LINK'
-         AND "process_id"::text = lower(${connection.leaseOwner})
-         AND "last_beat_at" >= (now() AT TIME ZONE 'UTC') - ${silent}
+  const heardBefore = Prisma.sql`GREATEST("last_beat_at", "last_heard_at")`;
+  const sameProcess = Prisma.sql`("link_state" = 'LINK' AND "process_id"::text = lower(${connection.leaseOwner}))`;
+  const renewal = Prisma.sql`COALESCE(
+             ${sameProcess}
+         AND ${heardBefore} >= (now() AT TIME ZONE 'UTC') - ${silent}
          AND (to_timestamp(${mintedAt}::float8) AT TIME ZONE 'UTC') >= (now() AT TIME ZONE 'UTC') - ${silent},
-           false)
+           false)`;
+  const keepsLoss = Prisma.sql`(NOT ${renewal} AND "lost_at" IS DISTINCT FROM ${heardBefore})`;
+  await prisma.$executeRaw`
+    UPDATE "runner_presence"
+       SET "lost_at" = CASE WHEN ${keepsLoss} THEN ${heardBefore} ELSE "lost_at" END,
+           "last_heard_at" = CASE WHEN COALESCE(${sameProcess}, false) THEN (now() AT TIME ZONE 'UTC') ELSE "last_heard_at" END
+     WHERE "runner_id" = ${runnerId}::uuid AND (${keepsLoss} OR COALESCE(${sameProcess}, false))
   `;
 }
 
@@ -454,7 +540,7 @@ export class RunnerPresenceService implements OnModuleInit, OnModuleDestroy {
         SELECT beats."at", beats."at" < ${silentLine} AS "silent",
                CASE WHEN beats."at" < ${silentLine} THEN beats."at" ELSE beats."lostAt" END AS "lost"
           FROM (
-            SELECT ${runnerLastBeatSql('r')} AS "at",
+            SELECT ${runnerPresenceSql('r')} AS "at",
                    (SELECT presence."lost_at" FROM "runner_presence" presence WHERE presence."runner_id" = r."id") AS "lostAt"
               FROM "runner" r
              WHERE r."status" <> 'OFFLINE'

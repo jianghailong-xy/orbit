@@ -38,7 +38,7 @@ import { DEFAULT_AGENT_PROVIDER, lastProviderByWorkspace } from '../workspaces/w
 import { codexResetLogLine } from './codex-reset-log';
 import { countCodexResetAdmission } from './codex-reset-metrics';
 import { CodexRateLimitResetRepository } from './codex-rate-limit-reset.repository';
-import { RUNNER_BEATS, runnerIsOnline } from './runner-presence';
+import { RUNNER_BEATS, runnerBeatIsOnline } from './runner-presence';
 
 /**
  * How many times one confirmation re-reads after losing an insert. One is what a single concurrent
@@ -134,7 +134,8 @@ export class CodexRateLimitResetService {
             now,
             accountOverride: context?.override === true,
             activeOperation: active !== null,
-            runnerOnline: runnerIsOnline(runner, now.getTime()),
+            // Beats only: the reset is handed out in a heartbeat's answer, which a runner heard but not beating does not get.
+            runnerOnline: runnerBeatIsOnline(runner, now.getTime()),
             runnerCapabilities: runner.capabilities,
             heartbeatLeaseOwner: runner.heartbeatLeaseOwner,
             runnerDraining: runner.heartbeatDraining === true,

@@ -479,8 +479,8 @@ import {
 import {
   RUNNER_BEATS,
   runnerIsOnline,
-  runnerLastBeatSql,
-  withRunnerLastBeat,
+  runnerPresenceSql,
+  withRunnerPresence,
 } from '../runners/runner-presence';
 import { PULL_REQUEST_VIEW_SELECT, pullRequestViewOf } from '../projects/pull-request-landing';
 
@@ -5493,8 +5493,8 @@ export class SessionsService {
         s.assigned_runner_id AS "runnerId",
         r.name  AS "runnerName",
         r.status AS "runnerStatus",
-        -- Its last beat, from either record of it (runners/runner-presence.ts).
-        ${runnerLastBeatSql('r')} AS "runnerLastHeartbeatAt",
+        -- When it was last present: a beat from either record of it, or heard over the link (runners/runner-presence.ts).
+        ${runnerPresenceSql('r')} AS "runnerLastHeartbeatAt",
         s.task_id AS "taskId",
         t.title   AS "taskTitle",
         cp.id     AS "projectId",
@@ -6072,7 +6072,7 @@ export class SessionsService {
       ? await readLandingView(this.prisma, ownerId, session.id)
       : undefined;
     // As clients have always read it: `lastHeartbeatAt` is its last beat, from either record of it.
-    const assignedRunner = session.assignedRunner && servedRunner(withRunnerLastBeat(session.assignedRunner));
+    const assignedRunner = session.assignedRunner && servedRunner(withRunnerPresence(session.assignedRunner));
     // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
     // tell (docs/provider-engine-contract.md §6.1).
     const engine = await sessionEngine(this.prisma, session);
