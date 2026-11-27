@@ -2620,6 +2620,12 @@ final class AppModel {
         show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
+    /// The draft's folder, picked from its place pill (docs/mocks/new-session-place): the same
+    /// workspace's draft, filed in `folderID` or in none.
+    func composeInFolder(_ folderID: String?, of agentID: String) {
+        nav.fileDraft(agentID: agentID, folderID: folderID)
+    }
+
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
     /// macOS sidebar row, the compact drawer row, and ⌘1…⌘9. Switching to a *different* agent pops
     /// that section's stack, so its pane opens on the session list (the console and the draft on it

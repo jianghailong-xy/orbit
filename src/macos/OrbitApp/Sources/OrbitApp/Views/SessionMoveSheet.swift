@@ -2,8 +2,7 @@ import SwiftUI
 import OrbitKit
 
 /// The Move panel (docs/session-folders-move-design.md §4): where a session row's Move — swiped, or
-/// Move… from its long-press menu — files the session. A native sheet in the style of the workspace
-/// switcher (`AgentSwitchSheet`): Move over the session's title, Done, and the folders of the
+/// Move… from its long-press menu — files the session. A native sheet: Move over the session's title, Done, and the folders of the
 /// session's workspace — No Folder, each folder with how many of the list's sessions are in it, and
 /// New Folder…. The folder the session is in is ticked; a tap moves it there at once and closes the
 /// panel, and the app's toast says where it went (`AppModel.moveSession`).
@@ -243,7 +242,7 @@ struct SessionMoveSheet: View {
     }
 
     /// A tap files the session there and closes the panel; on the ticked row it only closes it.
-    /// Dismiss first, then move, in `AgentSwitchSheet`'s order.
+    /// Dismiss first, then move, so the sheet never tears down through a view the move has rebuilt.
     private func choose(_ option: SessionMoveFolderOption) {
         dismiss()
         guard !option.isCurrent else { return }
