@@ -12,19 +12,19 @@ import (
 	"testing"
 )
 
-// recordedEmits is an emitFn that keeps what it was handed.
-type recordedEmits struct {
+// correctionEvents is an emitFn that keeps every event it was handed, payload and all.
+type correctionEvents struct {
 	mu     sync.Mutex
 	events []RunEvent
 }
 
-func (r *recordedEmits) emit(eventType string, payload map[string]interface{}) {
+func (r *correctionEvents) emit(eventType string, payload map[string]interface{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events = append(r.events, RunEvent{Type: eventType, Payload: payload})
 }
 
-func (r *recordedEmits) all() []RunEvent {
+func (r *correctionEvents) all() []RunEvent {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]RunEvent(nil), r.events...)
@@ -58,7 +58,7 @@ func TestRealClaudeRefusesTheAutoCorrectionOnAModelWithoutAuto(t *testing.T) {
 	if pending == nil {
 		t.Fatal("an engine spawned in Auto that settled on Default was not asked for Auto")
 	}
-	var emitted recordedEmits
+	var emitted correctionEvents
 	modeFix.report(context.Background(), p.rt, pending, emitted.emit, p.sessionID)
 
 	events := emitted.all()
@@ -96,7 +96,7 @@ func TestRealClaudeTakesTheAutoCorrectionFromDefault(t *testing.T) {
 	if pending == nil {
 		t.Fatal("an engine judged as spawned in Auto that settled on Default was not asked for Auto")
 	}
-	var emitted recordedEmits
+	var emitted correctionEvents
 	modeFix.report(context.Background(), p.rt, pending, emitted.emit, p.sessionID)
 
 	events := emitted.all()

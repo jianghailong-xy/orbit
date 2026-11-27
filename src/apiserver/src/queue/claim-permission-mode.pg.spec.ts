@@ -21,7 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { mock, test } from 'node:test';
 
 import { Logger } from '@nestjs/common';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
 import {
   AgentProvider,
   PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE,
@@ -153,7 +153,7 @@ test('the mode a claim hands the runner, and every substitution it still makes',
         provider: AgentProvider.CLAUDE,
         engine: AgentProvider.CLAUDE,
         model: WITH_AUTO,
-        status: RunStatus.PENDING,
+        turnState: 'QUEUED',
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...fields,
       },
