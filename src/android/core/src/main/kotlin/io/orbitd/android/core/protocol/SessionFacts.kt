@@ -48,6 +48,13 @@ object SessionFacts {
     fun failed(o: JsonObject): Boolean = released(o) == true && afterRelease(o) == "FAILED"
 
     /** Not released, yet being ended after an interrupted turn: "Interrupted" until the release lands. */
+    /** Released by a move to another workspace (`endReason` moved): the server let it go so its runner could commit what it left,
+     * which the person who moved it is not told. Drawn as a held idle session — no Ended mark, its idle word and glyph, no resume
+     * line — and still resumed by the next message (board docs/mocks/session-move-released; web `sessionReleasedByMove`). */
+    fun releasedByMove(released: Boolean?, endReason: String?): Boolean = released == true && endReason == MOVED
+    fun releasedByMove(o: JsonObject): Boolean = releasedByMove(released(o), endReason(o))
+    const val MOVED = "moved"
+
     fun endingAfterInterrupt(released: Boolean?, endReason: String?, lastTurnOutcome: String?): Boolean =
         released == false && endReason != null && lastTurnOutcome == "INTERRUPTED"
 }

@@ -8,10 +8,10 @@ import OrbitKit
 /// to and how the conversation carries over.
 ///
 /// A tap asks first, always, since the session leaves its workspace (`Move to <workspace>?`, its body
-/// put together from the server's answer). The button is Move, or End and Move for a session that is
-/// idle but not ended — which the app ends, waits on, then moves (`AppModel.moveSession(_:to:…)`),
-/// the panel saying which step it is on. Moved, the panel closes on the app's toast; refused, an alert
-/// says why and the panel reads the server's answer again.
+/// put together from the server's answer). The button is Move: one request, which on a session still
+/// held waits while the server lets it go (`AppModel.moveSession(_:to:…)`), the panel saying Moving….
+/// Moved, the panel closes on the app's toast; refused, an alert says why and the panel reads the
+/// server's answer again.
 struct SessionMoveTargetPage: View {
     @Environment(AppModel.self) private var app
     let session: Session
@@ -19,7 +19,7 @@ struct SessionMoveTargetPage: View {
     let workspace: Agent
     /// The workspace the row was opened for, as the panel had it then.
     let target: SessionMoveTarget
-    /// The panel's latest answer: what the confirmation says and whether it ends the session first.
+    /// The panel's latest answer: what the confirmation says.
     let answer: SessionMoveTargets
     /// Closes the panel: Done, and a move that went through.
     let close: () -> Void
@@ -29,7 +29,7 @@ struct SessionMoveTargetPage: View {
     /// The folder a tap picked — nil inside for No Folder — while its confirmation is up.
     @State private var picked: Pick?
     /// The step a confirmed move is on; nil when none is under way.
-    @State private var phase: SessionWorkspaceMove.Phase?
+    @State private var moving = false
     /// Why the last move didn't go through, shown as an alert.
     @State private var failure: String?
     /// New Folder…'s name prompt, its draft, the wait on the server, and a refusal.
@@ -70,12 +70,12 @@ struct SessionMoveTargetPage: View {
             }
             .disabled(blocked != nil)
         }
-        .disabled(creating || phase != nil)
+        .disabled(creating || moving)
         .safeAreaInset(edge: .bottom) {
-            if let phase {
+            if moving {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text(SessionMoveCopy.progress(phase))
+                    Text(SessionMoveCopy.moving)
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
@@ -87,18 +87,18 @@ struct SessionMoveTargetPage: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .navigationBarBackButtonHidden(phase != nil)
-        .interactiveDismissDisabled(phase != nil)
+        .navigationBarBackButtonHidden(moving)
+        .interactiveDismissDisabled(moving)
         .toolbar {
             ToolbarItem(placement: .principal) { title }
             ToolbarItem(placement: .confirmationAction) {
                 Button(SessionMoveCopy.done) { close() }
-                    .disabled(phase != nil)
+                    .disabled(moving)
             }
         }
         .alert(SessionMoveCopy.confirmTitle(current, answer), isPresented: confirming, presenting: picked) { pick in
             Button(SessionMoveCopy.cancel, role: .cancel) {}
-            Button(SessionMoveCopy.confirmAction(answer)) { move(pick) }
+            Button(SessionMoveCopy.confirmAction) { move(pick) }
                 .keyboardShortcut(.defaultAction)
         } message: { _ in
             Text(SessionMoveCopy.confirmMessage(answer, to: current, from: workspace.name))
@@ -172,14 +172,13 @@ struct SessionMoveTargetPage: View {
         .contentShape(Rectangle())
     }
 
-    /// The confirmed move: the panel says which step it is on, closes once the session is there, and
-    /// otherwise says why it isn't and reads the server's answer again.
+    /// The confirmed move: the panel says Moving…, closes once the session is there, and otherwise
+    /// says why it isn't and reads the server's answer again.
     private func move(_ pick: Pick) {
-        phase = answer.needsEnd ? .ending : .moving
+        moving = true
         Task {
-            let refused = await app.moveSession(session.id, to: current, folder: pick.folder?.id,
-                                                endingFirst: answer.needsEnd) { phase = $0 }
-            phase = nil
+            let refused = await app.moveSession(session.id, to: current, folder: pick.folder?.id)
+            moving = false
             if let refused {
                 failure = refused
                 await reload()

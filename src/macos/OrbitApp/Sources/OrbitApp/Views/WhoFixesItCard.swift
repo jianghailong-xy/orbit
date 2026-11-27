@@ -49,7 +49,7 @@ struct WhoFixesItBody: View {
     /// Change workspace…'s sheet, the row it handed back, and a move under way.
     @State private var changing = false
     @State private var changingTo: WhoFixesChangePick?
-    @State private var changePhase: SessionWorkspaceMove.Phase?
+    @State private var changeMoving = false
     /// The hand-over note's flip: "Translated · Show original" ↔ "Original · Show translation".
     @State private var showOriginal = false
 
@@ -285,10 +285,10 @@ struct WhoFixesItBody: View {
                     coordinatorPress(press, reading: reading)
                 }
             }
-            if let changePhase {
+            if changeMoving {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text(SessionMoveCopy.progress(changePhase)).font(.orbitLabel).foregroundStyle(.secondary)
+                    Text(SessionMoveCopy.moving).font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }
             if let note = ExceptionCards.coordinatorRowNote(row, reading,
@@ -370,13 +370,13 @@ struct WhoFixesItBody: View {
                         changing = true
                     } label: { Text(press.label) }
                 }
-                .disabled(repairing || changePhase != nil)
+                .disabled(repairing || changeMoving)
             }
         case .startNewCoordinator:
             weighted(press.tier) {
                 Button { startNewCoordinator(inWorkspace: nil) } label: { Text(press.label) }
             }
-            .disabled(repairing || changePhase != nil)
+            .disabled(repairing || changeMoving)
         case .setUpCoordinator:
             if let projectID = console.projectID {
                 weighted(press.tier) {
@@ -711,16 +711,14 @@ struct WhoFixesItBody: View {
         }
     }
 
-    /// Move conversation, as the project page moves it: End it first when the server says so, then
-    /// into the picked workspace's No Folder.
+    /// Move conversation, as the project page moves it: into the picked workspace's No Folder.
     private func moveConversation(to pick: CoordinatorChangeRow, targets: SessionMoveTargets) {
         guard let sessionID = CoordinatorChangeLogic.conversationID(status),
               let target = targets.targets.first(where: { $0.workspaceId == pick.workspaceId }) else { return }
-        changePhase = targets.needsEnd ? .ending : .moving
+        changeMoving = true
         Task {
-            let refused = await model.moveSession(sessionID, to: target, folder: nil,
-                                                  endingFirst: targets.needsEnd) { changePhase = $0 }
-            changePhase = nil
+            let refused = await model.moveSession(sessionID, to: target, folder: nil)
+            changeMoving = false
             if let refused { console.statusMessage = refused }
             await console.refreshRulerQuestions(force: true)
             await readStatus()
@@ -732,7 +730,7 @@ struct WhoFixesItBody: View {
         let from = status?.coordination.workspaceName
         if pick.row.way == .move, let targets = pick.targets {
             return CoordinatorChangeCopy.moveParagraphs(
-                to: pick.row.name, from: from ?? "", needsEnd: targets.needsEnd,
+                to: pick.row.name, from: from ?? "",
                 files: SessionMoveCopy.filesSentence(targets, from: from ?? ""))
         }
         return CoordinatorChangeCopy.newParagraphs(to: pick.row.name, from: from,

@@ -113,6 +113,17 @@ public enum SessionDisplay {
         }
     }
 
+    /// The end reason a move to another workspace releases a session with (`POST /sessions/:id/move`).
+    public static let movedEndReason = "moved"
+
+    /// Released by a move: the server let it go so its runner could commit what it left, which the
+    /// person who moved it is not told. Drawn as a held idle session — no Ended mark, its idle word and
+    /// glyph — and still resumed by the next message (board docs/mocks/session-move-released; web
+    /// `sessionReleasedByMove`).
+    public static func releasedByMove(_ f: SessionDisplayFacts) -> Bool {
+        f.released == true && f.endReason == movedEndReason
+    }
+
     /// A release the server counts as a failure (decision D9): released, the last turn failed, and
     /// nobody asked for an end.
     static func releasedByFailure(_ f: SessionDisplayFacts) -> Bool {
@@ -132,7 +143,7 @@ public enum SessionDisplay {
         // An idle session a watch or wake-up will resume is just Idle: no mark (the owner, 2026-11-27).
         if !released && f.waitingOn == .wake && f.phase != .idle { out.append(.willResume) }
         if released && f.workFinished == true { out.append(.finished) }
-        if released && f.workFinished != true && !releasedByFailure(f) { out.append(.ended) }
+        if released && f.workFinished != true && !releasedByFailure(f) && !releasedByMove(f) { out.append(.ended) }
         return out
     }
 

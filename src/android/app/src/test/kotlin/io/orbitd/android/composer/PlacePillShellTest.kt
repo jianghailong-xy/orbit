@@ -8,8 +8,8 @@ import org.junit.Test
 
 /**
  * Where a new session runs, under the engine (docs/mocks/new-session-place, option A; web's `PlacePill`): one pill naming the workspace,
- * and the folder only once one is picked; its one menu lists the workspaces, then this workspace's folders under None, and a folder
- * picked there is the one the session is created in.
+ * and the folder only once one is picked; its menu lists the workspaces alone, a workspace with folders opening them in place of the list
+ * under None (board 02, option D), and a folder picked there is the one the session is created in.
  */
 class PlacePillShellTest : ComposerShellTest() {
     private val folder = "34A07cComposerFoldr001"
@@ -29,10 +29,13 @@ class PlacePillShellTest : ComposerShellTest() {
         assertFalse("no folder state is said", shows("No folder"))
 
         compose.onNode(pill).performClick()
+        // The workspaces alone; this one opens its folders in place of the list.
+        await { has(hasText("Alpha") and menu) }
+        assertFalse(has(hasText("Releases") and menu))
+        compose.onNode(hasText("Alpha") and menu and hasClickAction()).performClick()
         await { has(hasText("Releases") and menu) }
-        assertTrue(has(hasText("WORKSPACE") and menu))
-        assertTrue(has(hasText("Alpha") and menu))
-        assertTrue(has(hasText("FOLDER IN ALPHA · OPTIONAL") and menu))
+        assertTrue(has(hasText("Workspaces") and menu))
+        assertTrue(has(hasText("FOLDERS IN ALPHA") and menu))
         assertTrue(has(hasText("None") and menu))
 
         compose.onNode(hasText("Releases") and menu).performClick()
@@ -44,11 +47,13 @@ class PlacePillShellTest : ComposerShellTest() {
         assertEquals(folder, ComposerShell.body("POST sessions")!!["folderId"]?.jsonPrimitive?.content)
     }
 
-    @Test fun aWorkspaceWithNoFoldersListsTheWorkspacesAlone() {
+    @Test fun aWorkspaceWithNoFoldersIsPickedFromItsRow() {
         signIn(); openDraft()
         await { has(pill) }
         compose.onNode(pill).performClick()
-        await { has(hasText("WORKSPACE") and menu) }
-        assertFalse(has(hasText("None") and menu))
+        await { has(hasText("Alpha") and menu) }
+        compose.onNode(hasText("Alpha") and menu and hasClickAction()).performClick()
+        await { !has(menu) }
+        assertFalse(shows("None"))
     }
 }

@@ -77,6 +77,12 @@ export type SessionMarkSource = SessionStateSource & {
   runningBgCount?: number | null;
 };
 
+/** Released by a move to another workspace (`endReason` moved): the server let it go so its runner could commit what it
+ *  left, which the person who moved it is not told about. Every surface draws it as a held idle session: no Ended mark,
+ *  its idle word and icon, no ended banner; sending to it still resumes it (board docs/mocks/session-move-released). */
+export const sessionReleasedByMove = (session: SessionStateSource): boolean =>
+  session.released === true && session.endReason === 'moved';
+
 /** A release the server counts as a failure (decision D9): released, the last turn failed, and nobody asked for an end. */
 const releasedByFailure = (session: SessionStateSource): boolean =>
   session.released === true && !session.endReason && session.lastTurnOutcome === 'FAILED';
@@ -101,7 +107,7 @@ export function sessionMarks(session: SessionMarkSource): SessionMark[] | null {
   // An idle session a watch or wake-up will resume is just Idle: no mark (the owner, 2026-11-27).
   if (!released && waitingOn === 'WAKE' && phaseOf(session) !== 'IDLE') out.push('WILL_RESUME');
   if (released && session.workFinished === true) out.push('FINISHED');
-  if (released && session.workFinished !== true && !failure) out.push('ENDED');
+  if (released && session.workFinished !== true && !failure && !sessionReleasedByMove(session)) out.push('ENDED');
   return out;
 }
 

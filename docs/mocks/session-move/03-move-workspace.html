@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="board.css"><script src="icons.js"></script></head>
 <body>
 <h1>搬到其他 Workspace：搬走的是对话，代码留在原地</h1>
-<p class="lede">下一条消息在新 Workspace 的目录、runner 和设置下继续这段对话。到目前为止的改动留在原 Workspace 仓库里这个会话的分支上，不删除，也不带走。会话要先结束才能搬：结束时 runner 会把没提交的改动收成一次提交。空闲的会话一步完成 <b>End and Move</b>。</p>
+<p class="lede">下一条消息在新 Workspace 的目录、runner 和设置下继续这段对话。到目前为止的改动留在原 Workspace 仓库里这个会话的分支上，不删除，也不带走。搬之前服务端会先释放会话（原 runner 把没提交的改动收成一次提交），这一步用户看不到：按钮就是 <b>Move</b>，搬完会话照常是空闲的（2026-11-27 更新，见 docs/mocks/session-move-released）。</p>
 
 <div class="row3">
   <!-- ① drill down -->
@@ -37,7 +37,7 @@
 
   <!-- ② confirm -->
   <div class="col">
-    <div class="cap"><span class="tag new">新增</span>② 确认（空闲会话：End and Move）</div>
+    <div class="cap"><span class="tag new">新增</span>② 确认（空闲会话也是 Move）</div>
     <div class="device"><div class="screen">
       <div class="island"></div>
       <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
@@ -56,15 +56,14 @@
       <div class="alert" style="width:318px">
         <div class="at">Move to wikova-develop?</div>
         <div class="am">The conversation moves with it. Your next message continues it in wikova-develop.<br><br>
-          <b>3 changed files</b> aren’t merged into main yet. They stay on branch <b>orbit/review-import-3fa21c</b> in orbit.<br><br>
-          The session ends first.</div>
-        <div class="ab"><div>Cancel</div><div class="pri">End and Move</div></div>
+          <b>3 changed files</b> aren’t merged into main yet. They stay on branch <b>orbit/review-import-3fa21c</b> in orbit.</div>
+        <div class="ab"><div>Cancel</div><div class="pri">Move</div></div>
       </div>
       <div class="home"></div>
     </div></div>
     <ul class="notes">
       <li>正文按情况拼：有没合并的改动就点名文件数和分支；换 runner 的 Claude 会话加一句 <i>Earlier parts of the conversation are summarized for the agent.</i></li>
-      <li>已经结束的会话按钮是 <b>Move</b>；空闲没结束的是 <b>End and Move</b>：先结束（原 runner 收尾提交），再搬。</li>
+      <li>按钮都是 <b>Move</b>。空闲的会话由服务端先释放（原 runner 收尾提交）再搬，进度只写 <i>Moving…</i>，搬完不显示 Ended。</li>
       <li>搬完 toast <b>Moved to wikova-develop</b>，会话从当前列表消失，出现在那边。</li>
     </ul>
   </div>
@@ -109,8 +108,8 @@
   <table>
     <tr><th>情况</th><th>结果</th><th>原因</th></tr>
     <tr><td>正在跑 / 有排队的消息 / 在等审批</td><td class="no">不能</td><td>先停下。搬家要等原 runner 收尾提交。</td></tr>
-    <tr><td>正在结束 / 合并或提交进行中 / 合并修复没处理完 / 等自动重试</td><td class="mid">暂时不能</td><td>等它做完再试。</td></tr>
-    <tr><td>空闲，还没结束</td><td class="mid">能，End and Move</td><td>先结束（原 runner 必须在线），再搬。</td></tr>
+    <tr><td>合并或提交进行中 / 合并修复没处理完 / 等自动重试</td><td class="mid">暂时不能</td><td>等它做完再试。</td></tr>
+    <tr><td>空闲（含正在结束）</td><td class="ok">能</td><td>服务端先释放再搬，原 runner 必须在线；用户只看到 Move。</td></tr>
     <tr><td>已结束 / 已完成（Completed）</td><td class="ok">能</td><td>—</td></tr>
     <tr><td>回收站 / 导入中 / 任务的执行会话 / 项目的协调会话</td><td class="no">不能</td><td>回收站先恢复；任务和项目的会话归属由任务、项目决定。</td></tr>
     <tr><td>派生出来的子会话</td><td class="ok">能</td><td>子会话本来就可以建在别的 Workspace。</td></tr>

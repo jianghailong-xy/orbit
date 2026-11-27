@@ -3,7 +3,7 @@ import { RightOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ENGINE_CLI_NAMES, isEngine, type SessionMoveTargets } from '@orbit/shared';
-import { api, endSession, getSession, getSessionMoveTargets, moveSession } from '../api';
+import { api, getSessionMoveTargets, moveSession } from '../api';
 import {
   CHANGE_COPY,
   changeMoveParagraphs,
@@ -18,9 +18,8 @@ import {
 } from '../lib/coordinatorWorkspace';
 import { encodeId } from '../lib/idCodec';
 import { runnersQuery, workspacesQuery } from '../lib/queries';
-import { moveFilesSentence, movedToWorkspaceToast, runWorkspaceMove, type MovePhase } from '../lib/sessionFolders';
+import { moveFailureText, moveFilesSentence, movedToWorkspaceToast } from '../lib/sessionFolders';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
-import { isSessionTerminal } from '../lib/sessionState';
 import { useToast } from '../lib/toast';
 import { useRefreshSessionLists } from '../lib/useControlPlane';
 import { ProviderTile } from './ProviderGallery';
@@ -93,7 +92,7 @@ export function CoordinatorChangeDialog({
   const message = useToast();
   const refreshSessionLists = useRefreshSessionLists();
   const [picked, setPicked] = useState<ChangeRow | null>(null);
-  const [phase, setPhase] = useState<MovePhase | 'starting' | null>(null);
+  const [phase, setPhase] = useState<'moving' | 'starting' | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
   const sessionId = coordinator.sessionId;
@@ -138,14 +137,13 @@ export function CoordinatorChangeDialog({
   const moveConversation = async (to: ChangeRow): Promise<void> => {
     if (!sessionId || !answer) return;
     setFailure(null);
-    const why = await runWorkspaceMove({
-      endingFirst: answer.needsEnd,
-      end: () => endSession(sessionId),
-      ended: async () => isSessionTerminal(await getSession(sessionId)),
-      // Into the target's No Folder: the project page does not file conversations.
-      move: () => moveSession(sessionId, { folderId: null, workspaceId: to.workspaceId }),
-      phase: setPhase,
-    });
+    setPhase('moving');
+    // One request: the server lets an idle coordinator go first and waits for it (SessionsService.releaseForMove).
+    // Into the target's No Folder: the project page does not file conversations.
+    const why = await moveSession(sessionId, { folderId: null, workspaceId: to.workspaceId }).then(
+      () => null,
+      moveFailureText,
+    );
     setPhase(null);
     settle();
     if (why) {
@@ -175,7 +173,7 @@ export function CoordinatorChangeDialog({
   const progress = phase && (
     <div className="move-dialog-progress" role="status">
       <Spinner size="small" aria-hidden />
-      {phase === 'ending' ? 'Ending the session…' : phase === 'moving' ? 'Moving…' : 'Starting…'}
+      {phase === 'moving' ? 'Moving…' : 'Starting…'}
     </div>
   );
 
@@ -185,7 +183,6 @@ export function CoordinatorChangeDialog({
       ? changeMoveParagraphs({
           to: picked.name,
           from: from ?? '',
-          needsEnd: answer!.needsEnd,
           files: moveFilesSentence(answer!, from ?? ''),
         })
       : changeNewParagraphs({ to: picked.name, from, outgoing: coordinator.outgoing, reason: picked.reason });
