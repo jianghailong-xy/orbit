@@ -79,6 +79,7 @@ const SESSION = {
 const IDLE: RunEvent[] = [
   { seq: 1, type: 'user', turnId: 'turn-1', ts: '2026-10-15T09:40:00Z', payload: { text: 'export last night' } },
   { seq: 2, type: 'assistant', turnId: 'turn-1', ts: '2026-10-15T09:41:00Z', payload: { text: 'Done, the export finished.' } },
+  { seq: 3, type: 'turn_end', turnId: 'turn-1', ts: '2026-10-15T09:41:01Z', payload: {} },
 ];
 
 class FakeEventSource {
@@ -236,7 +237,7 @@ async function pressEnter(box: HTMLTextAreaElement): Promise<void> {
     box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   });
 }
-const accepted = { turnId: 'turn-2', seq: 3, kind: 'message', placement: 'accepted' } as never;
+const accepted = { turnId: 'turn-2', seq: 4, kind: 'message', placement: 'accepted' } as never;
 
 describe('a message sent from the composer', { timeout: 60_000 }, () => {
   it('leaves the box at the press and waits as a Sending… bubble, then becomes the ordinary bubble', async () => {
@@ -249,6 +250,8 @@ describe('a message sent from the composer', { timeout: 60_000 }, () => {
     await waitForUi(() => expect(bubble()?.textContent).toContain('Sending…'));
     expect(composer()!.value).toBe('');
     expect(bubble()!.querySelector('.chat-sending')).not.toBeNull();
+    // Nothing is working yet: the server has not taken it, so no turn clock runs under it.
+    expect([...mounted().querySelectorAll('.chat-turn-head')].some((h) => h.textContent?.startsWith('Working'))).toBe(false);
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][1]).toBe(WORDS);
 
@@ -269,6 +272,7 @@ describe('a message sent from the composer', { timeout: 60_000 }, () => {
 
     await waitForUi(() => expect(bubble()?.textContent).toContain('Not sent'));
     expect(toasts()).not.toContain("Couldn't send");
+    expect([...mounted().querySelectorAll('.chat-turn-head')].some((h) => h.textContent?.startsWith('Working'))).toBe(false);
     expect(composer()!.value).toBe('');
 
     await click(buttonIn(bubble(), 'Retry')!);
@@ -322,7 +326,7 @@ describe('a message sent from the composer', { timeout: 60_000 }, () => {
       stream = FakeEventSource.open.find((es) => !es.closed && es.url.startsWith(`/api/sessions/${SESSION_PUBLIC}/events`));
       expect(stream).toBeTruthy();
     });
-    const echo = { seq: 3, type: 'user', turnId: 'turn-2', ts: '2026-10-15T09:43:00Z', payload: { text: WORDS } };
+    const echo = { seq: 4, type: 'user', turnId: 'turn-2', ts: '2026-10-15T09:43:00Z', payload: { text: WORDS } };
     await act(async () => stream!.onmessage?.({ data: JSON.stringify(echo) }));
     await waitForUi(() => expect(bubble()?.textContent ?? '').not.toContain('Not sent'));
     expect(mounted().querySelectorAll('.chat-user-wrap').length).toBe(2);

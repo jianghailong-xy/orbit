@@ -2242,9 +2242,12 @@ function NodeList({
   const turnFoot = useContext(TurnStatusFootCtx);
   const renderItem = (item: NodeListItem) => {
     const seqs = item.kind === 'node' ? [item.node.seq] : item.nodes.map((node) => node.seq);
-    // The row a turn opens with, under its message and over everything the turn writes.
+    // The row a turn opens with, under its message and over everything the turn writes. A message
+    // the server has not taken (Sending… / Not sent) has opened no turn yet, so nothing is working.
     const head =
-      item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
+      item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead
+        && item.node.delivery !== PENDING_SEND_DELIVERY.sending
+        && item.node.delivery !== PENDING_SEND_DELIVERY.notSent ? (
         <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
       ) : null;
     return [

@@ -13108,7 +13108,8 @@ export function WorkspaceView({
           showStop={showStop}
           onStop={() => selected && control.mutate(selected.id)}
           canSend={canSend && !handingOver}
-          sending={send.isPending}
+          // A send waiting as a bubble says Sending… there; the button need not say it too.
+          sending={send.isPending && !send.variables?.pendingKey}
           onSend={onSend}
           queueOffered={queueOffered}
           defaultSendIntent={defaultSendIntent}
