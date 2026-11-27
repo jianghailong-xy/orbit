@@ -192,6 +192,9 @@ type fakeStep struct {
 	// Omitted leaves the key out entirely, which is a real shape too: it is what a runner
 	// sees from a process that has emitted an init handshake with nothing in it to gate on.
 	Version string `json:"version,omitempty"`
+	// PermissionMode is the mode a system_init or system_status frame names (`permissionMode`): the mode
+	// the CLI settled on, which need not be the one it was spawned with. Omitted leaves the key out.
+	PermissionMode string `json:"permissionMode,omitempty"`
 	// RequestID of a control_request to emit, or of the control_response to await. Empty
 	// on an emitted control_response means "answer the last control_request awaited".
 	RequestID string                 `json:"requestId,omitempty"`
@@ -443,13 +446,20 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 		if s.Version != "" {
 			init["claude_code_version"] = s.Version
 		}
+		if s.PermissionMode != "" {
+			init["permissionMode"] = s.PermissionMode
+		}
 		return marshalFrame(init), nil
 	case "system_status":
 		subtype := s.Subtype
 		if subtype == "" {
 			subtype = "status"
 		}
-		return marshalFrame(map[string]interface{}{"type": "system", "subtype": subtype, "session_id": sessionID, "model": model}), nil
+		status := map[string]interface{}{"type": "system", "subtype": subtype, "session_id": sessionID, "model": model}
+		if s.PermissionMode != "" {
+			status["permissionMode"] = s.PermissionMode
+		}
+		return marshalFrame(status), nil
 	case "assistant":
 		return assistantFrame(sessionID, map[string]interface{}{"type": "text", "text": s.Text}), nil
 	case "text_delta":
