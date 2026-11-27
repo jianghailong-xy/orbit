@@ -5,8 +5,8 @@ import Foundation
 // (docs/mocks/composer-sending-bubble, board 04-native-parity; web parity: `.chat-sending` and
 // `UserBubble`'s `Sending…` in Transcript.tsx). Then it is the ordinary bubble, the same row.
 //
-// A send the server refused, or did not answer within `answerTimeout`, keeps its bubble too: still
-// dimmed, its foot reading `⚠ Not sent · Retry · Put back in the composer`, with the reason beside
+// A send the server refused, or did not answer within `answerTimeout`, keeps its bubble too: at
+// full strength, its foot reading `⚠ Not sent · Retry · Put back in the composer`, with the reason beside
 // it (web parity: `markNotSent` in pendingSend.ts and `UserBubble`'s not-sent foot).
 
 extension UserBubble {
@@ -33,6 +33,8 @@ extension UserBubble {
     public var isSending: Bool { isUntaken && notSentReason == nil }
     /// Refused, or unanswered in time: `Not sent`, with Retry and Put back.
     public var isNotSent: Bool { isUntaken && notSentReason != nil }
+    /// How strongly the message is drawn: dimmed only while it is on its way; `Not sent` is at full strength.
+    public var strength: Double { isSending ? Self.sendingOpacity : 1 }
 }
 
 extension TranscriptState {

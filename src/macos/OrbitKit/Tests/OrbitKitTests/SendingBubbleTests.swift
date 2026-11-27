@@ -48,6 +48,7 @@ final class SendingBubbleTests: XCTestCase {
         XCTAssertTrue(r.state.tailIsSending)
         XCTAssertEqual(UserBubble.sendingLabel, "Sending…")
         XCTAssertEqual(UserBubble.sendingOpacity, 0.62, "web `.chat-sending`")
+        XCTAssertEqual(bubble.strength, UserBubble.sendingOpacity, "dimmed while on its way")
     }
 
     func testAcceptanceTurnsTheSameBubbleIntoTheOrdinaryOne() {
@@ -153,9 +154,8 @@ final class SendingBubbleTests: XCTestCase {
 
     func testTheBubbleDrawsSendingDimmedAndNoDotsRunUnderIt() throws {
         let bubble = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/MessageBubbles.swift")
-        XCTAssertTrue(bubble.contains("bubble.isUntaken ? UserBubble.sendingOpacity : 1"), "on its way, or Not sent")
         XCTAssertTrue(bubble.contains("Text(UserBubble.sendingLabel)"))
-        XCTAssertEqual(bubble.components(separatedBy: ".opacity(strength)").count - 1, 3,
+        XCTAssertEqual(bubble.components(separatedBy: ".opacity(bubble.strength)").count - 1, 3,
                        "the pictures, the files and the words")
         let console = try source("src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift")
         XCTAssertTrue(console.contains("guard !state.tailIsSending else { return false }"))

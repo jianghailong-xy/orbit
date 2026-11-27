@@ -65,9 +65,6 @@ struct UserBubbleView: View {
         return foot
     }
 
-    /// The message dims while the server has not taken it — on its way, or `Not sent`; its foot row
-    /// stays at full strength.
-    private var strength: Double { bubble.isUntaken ? UserBubble.sendingOpacity : 1 }
     private var images: [TurnAttachment] { bubble.attachments.filter(\.isImage) }
     /// This bubble's images as viewer pages, keyed the way `SessionPreviewImages` keys them.
     private var pages: [PreviewImage] {
@@ -112,10 +109,10 @@ struct UserBubbleView: View {
                         .font(.orbitMeta).foregroundStyle(.secondary)
                 }
                 if !images.isEmpty {
-                    imageBlock.opacity(strength)
+                    imageBlock.opacity(bubble.strength)
                 }
                 if !files.isEmpty {
-                    attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }.opacity(strength)
+                    attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }.opacity(bubble.strength)
                 }
                 // The bubble is the person's words; the note delivery appended stays out of it.
                 if !bubble.text.isEmpty {
@@ -133,7 +130,7 @@ struct UserBubbleView: View {
                         // the bubble where the address was), so the bubble grows to the row for it —
                         // where every other message still sizes to its own words.
                         .frame(maxWidth: showsCard ? .infinity : nil, alignment: .leading)
-                        .opacity(strength)
+                        .opacity(bubble.strength)
                 }
                 if long {
                     Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
