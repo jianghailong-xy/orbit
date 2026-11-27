@@ -733,6 +733,7 @@ import {
   runningOverLimitTag,
   type CapacityGate,
   type RunningOverLimit,
+  slotWaitGate,
 } from '../lib/queuedCapacity';
 import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSessionStream';
 import { SessionConversation } from './SessionConversation';
@@ -1508,6 +1509,9 @@ export const sessionLine = (
   // produced nothing since the wait began, so that preview would echo the message back as though it
   // were being answered (see waitingNoticeFor). Blue, because this is progress — just not the
   // agent's yet.
+  // A claim a full runner keeps waiting for its slot reads as the queued wait it is, in the queued row's own words.
+  const slotWait = live ? slotWaitGate(s) : null;
+  if (slotWait) return { text: CAPACITY_HELD_LINE, tone: 'queued', hint: capacityHeldHint(slotWait, machine, Date.now()) };
   if (live && waitingNoticeFor(s)) return { text: `${startingLabel(s)}…`, tone: 'running' };
   if (live && isGenerating(s, state)) {
     if (s.lastToolUse && SUBAGENT_LAUNCH_TOOLS.has(fmtTool(s.lastToolUse)) && (s.runningSubagentCount ?? 0) > 0)
@@ -2324,6 +2328,8 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   // Where `Waiting for your confirmation` would be, while the report is with its reviewer (§5 N3).
   if (session.confirmationUnderReview) return UNDER_REVIEW;
   if (state === 'SUCCEEDED') return 'Finished';
+  const slotWait = slotWaitGate(session);
+  if (slotWait) return queuedLabel(slotWait);
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
   if (state === 'AWAITING_INPUT') {
@@ -5508,10 +5514,11 @@ export function WorkspaceView({
       ? (selectedStartingSession as QueuedGate)
       : null;
   // Held by a full runner, run or batch: each waiting message says so (board queued-card-runner-full).
+  // So is a claim the full runner keeps waiting for its slot (slotWaitGate): the same wait, the same tag.
   const capacityGate: CapacityGate | null =
     selectedIsQueued && isCapacityHeld(selectedStartingSession)
       ? (selectedStartingSession as CapacityGate)
-      : null;
+      : slotWaitGate(selectedStartingSession);
   const selectedIsStarting = selected ? sessionIsStarting(selectedStartingSession) : false;
   // Starting or compacting — see waitingNoticeFor. Its `since` is the clock the notice counts from.
   const selectedWaiting = selected ? waitingNoticeFor(selectedStartingSession) : null;

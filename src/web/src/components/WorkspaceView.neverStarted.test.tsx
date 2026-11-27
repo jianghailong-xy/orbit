@@ -216,20 +216,6 @@ describe('a refused run reads as over', () => {
   });
 });
 
-describe('a claimed run waiting for a free slot', () => {
-  it('reads as waiting for a slot, not as starting, counted from when the wait began', () => {
-    expect(waitingNoticeFor(WAITING_FOR_SLOT)).toEqual({ kind: 'waiting_for_slot', since: '2026-11-27T08:00:31.000Z' });
-    expect(statusLabel(WAITING_FOR_SLOT)).toBe('Waiting for slot');
-    expect(sessionLine(WAITING_FOR_SLOT, true)).toEqual({ text: 'Waiting for slot…', tone: 'running' });
-  });
-
-  it('is the ordinary starting wait once the slot is granted and the phase is gone', () => {
-    const granted = { ...WAITING_FOR_SLOT, enginePhase: null, enginePhaseSince: null, slotWait: null };
-    expect(waitingNoticeFor(granted)).toEqual({ kind: 'starting', since: '2026-11-27T08:00:30.000Z' });
-    expect(statusLabel(granted)).toBe('Starting');
-  });
-});
-
 describe('a session whose run never started', { timeout: 60_000 }, () => {
   let container: HTMLDivElement | null = null;
   let root: Root | null = null;
@@ -428,24 +414,28 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
     expect(mounted().querySelector('.workspace-sub')).toBeNull();
   });
 
-  it('says a claimed run is waiting for a free slot, with the slots background jobs hold, not that it is getting ready', async () => {
+  it('says a claim the full runner keeps waiting is queued behind it, as the approved queued card says it', async () => {
+    // The message handed out under the claim, not on the transcript yet: the active view lists it, and the tray tags it.
+    vi.mocked(listQueuedTurns).mockImplementation(async () => [{
+      turnId: '0195c0de-0000-7000-8000-0000000000b1', kind: 'message', placement: 'accepted', status: 'IN_FLIGHT',
+      content: 'Carry on with the V1 yield loop.', createdAt: '2026-11-27T08:00:05.000Z', attachments: [],
+    }] as never);
     await mount(WAITING_FOR_SLOT, false);
-    // The notice keeps its ordinary ten quiet seconds (STARTING_NOTICE_DELAY_MS), then names the wait.
     await act(async () => {
-      await vi.waitFor(() => expect(mounted().querySelector('.chat-queued-state')).not.toBeNull(), {
-        timeout: 20_000,
-        interval: 100,
-      });
+      await vi.waitFor(() => expect(mounted().textContent).toContain('runner full'), { timeout: 20_000, interval: 50 });
     });
-    const notice = mounted().querySelector('.chat-queued-state')!.textContent ?? '';
-    expect(notice).toContain('Runner full — waiting for a free slot (4/4)');
-    expect(notice).toContain('Every slot on this runner is taken, 4 of them by sessions running background jobs.');
-    expect(notice).toContain('Your message starts as soon as one frees up.');
+    const tag = mounted().querySelector('button.chat-runner-updating-reason');
+    expect(tag?.textContent).toBe('runner full');
+    expect(tag?.closest('.chat-runner-updating')?.textContent).toBe('Queued·runner full');
+    await act(async () => (tag as HTMLButtonElement).click());
+    expect(document.querySelector('.runner-updating-pop')?.textContent).toContain(
+      'is using all 4 slots: 0 sessions are running a turn and 4 hold a slot with a background job. This message is sent as soon as one frees up.',
+    );
     expect(mounted().textContent).not.toContain('Getting the session ready');
     expect(card()).toBeNull();
   });
 
-  it('says a claim the full runner gave back is queued behind the full runner, with its count', async () => {
+  it('says a claim the full runner gave back is queued behind it, with its count, and nothing more', async () => {
     await mount(RUNNER_FULL_QUEUED, false);
     await act(async () => {
       await vi.waitFor(() => expect(mounted().textContent).toContain('Runner at capacity (4/4)'), { timeout: 20_000, interval: 50 });
@@ -453,6 +443,7 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
     const page = mounted().textContent ?? '';
     expect(page).toContain('Runner full');
     expect(page).not.toContain('Getting the session ready');
+    expect(page).not.toContain('waiting_for_slot');
     expect(card()).toBeNull();
   });
 
