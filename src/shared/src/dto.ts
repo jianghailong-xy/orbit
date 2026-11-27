@@ -1713,7 +1713,9 @@ export interface RunnerHeartbeatResponse {
   drainScopedClaims?: boolean;
   /** This server takes a full runner's claim scope (`GET /runner/sessions/claim?fullScope=`: an ordinary claim only for
    *  the sessions named, a Run now claim for any) and a claim given back because the runner is full (return-slot
-   *  `reason: runner_full`). Absent from an older server, which a runner asks as before. */
+   *  `reason: runner_full`). Said to a beat that names background-job holders (`backgroundJobSessionIds`), the
+   *  sessions that fill a runner its turn count reads as having room. Absent otherwise, and from an older server: a
+   *  runner then asks as before, and names a claim it cannot start as it waits. */
   capacityClaims?: boolean;
   /** This server's operator says every replica serves SESSION_RELEASE_V1 (the switch ORBIT_SESSION_RELEASE_V1): a runner
    *  may declare it on its turn-complete and release reports. Absent from an older server and while the switch is

@@ -2267,7 +2267,7 @@ export class RunnerApiController {
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
       return quietHeartbeatAnswer(row, {
         cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised), draining: dto?.draining === true,
-        sessionRelease: sessionReleaseOffered(),
+        sessionRelease: sessionReleaseOffered(), backgroundHolders: (dto?.backgroundJobSessionIds?.length ?? 0) > 0,
       });
     }
     // The full reconcile reads the runner row the guard would have read; the beat statement admitted it.
@@ -3124,8 +3124,9 @@ export class RunnerApiController {
       // which is what a runner draining for an update claims with. A runner that sees no such word sends none.
       ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
       // This server takes a full runner's claim scope and its returned claims (GET sessions/claim?fullScope=,
-      // return-slot reason runner_full). A word about this server, said on every answer.
-      capacityClaims: true,
+      // return-slot reason runner_full). Said to a beat that names background-job holders, the sessions that can fill
+      // a runner its turn count reads as having room; without them the claim gate counts what the runner counts.
+      ...((dto?.backgroundJobSessionIds?.length ?? 0) > 0 ? { capacityClaims: true } : {}),
       // While the operator's switch says every replica serves it (run-release.ts sessionReleaseOffered): a runner may
       // report a failed turn and its release as two reports. Absent, a runner declares nothing.
       ...(sessionReleaseOffered() ? { sessionReleaseV1: true } : {}),

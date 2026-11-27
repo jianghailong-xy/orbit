@@ -231,7 +231,7 @@ export const HEARTBEAT_DELIVERIES = {
   },
   capacityClaims: {
     how: 'EVERY_BEAT',
-    reads: 'nothing: a word about this server (a full runner\'s claim scope and its returned claims), which the quiet answer carries as the full one does',
+    reads: "the beat's own backgroundJobSessionIds: a word about this server (a full runner's claim scope and its returned claims), said to a beat that names background-job holders, which the quiet answer carries as the full one does",
   },
   sessionReleaseV1: {
     how: 'EVERY_BEAT',
@@ -595,7 +595,9 @@ export function linkBeatVerdict(
  */
 export function quietHeartbeatAnswer(
   row: Pick<LinkBeatRow, 'maxConcurrent' | 'burstConcurrent' | 'minFreeDiskMb'>,
-  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints; draining?: boolean; sessionRelease?: boolean },
+  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & {
+    linkHints?: RunnerLinkHints; draining?: boolean; sessionRelease?: boolean; backgroundHolders?: boolean;
+  },
 ): RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } {
   return {
     cancelSessionIds: [],
@@ -609,8 +611,9 @@ export function quietHeartbeatAnswer(
     // As the full answer says it, to a draining beat: a runner draining for an update reads its absence as an
     // older server (runner-go drainClaimScope).
     ...(extra.draining ? { drainScopedClaims: true } : {}),
-    // As the full answer says it: a full runner names the claims it can start, and gives back one it cannot.
-    capacityClaims: true,
+    // As the full answer says it, to a beat that names background-job holders: a full runner names the claims it can
+    // start, and gives back one it cannot.
+    ...(extra.backgroundHolders ? { capacityClaims: true } : {}),
     // As the full answer says it: a runner that reads no such word declares SESSION_RELEASE_V1 on nothing it sends.
     ...(extra.sessionRelease ? { sessionReleaseV1: true } : {}),
     ...(extra.cursorKeyChecks && extra.cursorKeyChecks.length > 0 ? { cursorKeyChecks: extra.cursorKeyChecks } : {}),
