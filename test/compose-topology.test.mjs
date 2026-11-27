@@ -156,6 +156,12 @@
 // sets it. No service, mount or port is added. The account owner approved all six lines on 2026-11-19 (in session
 // 34zBKhFsZ22eRi985pbrK: "Approve them and add them to the baseline"), and the blocks below pin them.
 //
+// Web Push to browsers (62c49e4e5c, docs/web-push-design.md) then added three apiserver environment lines,
+// WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY and WEB_PUSH_SUBJECT: the VAPID key pair and its contact, each empty unless the
+// host's .env sets it, and empty disables browser notifications. No service, mount or port is added. It reached main
+// without a pin here, which left this file red there. The account owner approved the three lines on 2026-11-27 (in
+// session 354bD7rmAscc6Yi0PBsEI: "Fix both of these"), and the block below pins them.
+//
 // On 2026-11-19 the Orbit Cloud browser's switch (project 34z8OKBXxDRYsIZwzJ35E, docs/runner-browser-design.md §2)
 // gained its apiserver environment line, ORBIT_MANAGED_RUNNER_BROWSER_ENABLED, off unless the host's .env says true,
 // right after the managed runners' switch (Orbit task 3507XXbnib94qfwmCPaOA, filed by that project's coordinator).
@@ -534,6 +540,13 @@ const APPROVED_APISERVER_BLOCKS = [
     '      APNS_SANDBOX_KEY_ID: "${APNS_SANDBOX_KEY_ID:-}"',
     '      APNS_PRODUCTION_KEY: "${APNS_PRODUCTION_KEY:-}"',
     '      APNS_PRODUCTION_KEY_ID: "${APNS_PRODUCTION_KEY_ID:-}"',
+  ],
+  // Web Push to browsers (2026-11-27, the top of this file), each empty unless the host's .env sets it. The lines come
+  // right after FCM's, before the runner link's.
+  [
+    '      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"',
+    '      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"',
+    '      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-}"',
   ],
   // The runner link's connection tokens (2026-10-25, the top of this file): the Ed25519 signing key, the link
   // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
