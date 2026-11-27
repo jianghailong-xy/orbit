@@ -22,6 +22,8 @@ internal const val CHAT_CREATE = "chat-create:"
 
 /** A send that makes a session — the draft's `POST /sessions` or a page chat's door: never replayed when its answer is lost. */
 internal fun isCreate(endpoint: String): Boolean = endpoint == "create" || endpoint.startsWith(CHAT_CREATE)
+/** Whether a send waits as a Sending… / Not sent bubble and may be retried: all but a chat door's create, which cannot be replayed. */
+internal fun bubbled(endpoint: String): Boolean = !endpoint.startsWith(CHAT_CREATE)
 
 internal suspend fun <T> threeTries(read: suspend () -> T): T {
     repeat(2) { attempt ->

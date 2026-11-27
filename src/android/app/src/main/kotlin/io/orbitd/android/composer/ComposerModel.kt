@@ -261,7 +261,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     door!!.createBody(content, id, if (config["model"] == null && seedModel != null) JsonObject(config + ("model" to JsonPrimitive(seedModel))) else config,
                         draft.attachments.mapNotNull { it.remoteId })
                 } else if (target != null) {
-                    buildCreateBody(detail, content, shell, draft.attachments, seedModel)
+                    buildCreateBody(detail, content, shell, draft.attachments, seedModel, id)
                 } else buildJsonObject {
                     if (endpoint == "resume") {
                         draft.resumeConfig.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
@@ -274,9 +274,9 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 }, optimizedTranslation)
                 val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments, afterSeq = seenSeq)
                 // The words leave the box for their bubble; whatever was typed or attached since the press stays.
-                mutable.update { it.copy(draft = it.draft.afterSend(draft).copy(pending = pending), sending = !isCreate(endpoint), notSentReason = null) }
+                mutable.update { it.copy(draft = it.draft.afterSend(draft).copy(pending = pending), sending = bubbled(endpoint), notSentReason = null) }
                 try { persist() } catch (e: Exception) {
-                    // Nothing has left the device. In particular, create has no replay contract.
+                    // Nothing has left the device.
                     restoreUnsent(pending)
                     throw e
                 }
@@ -318,9 +318,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             return
         }
         val pending = state.value.draft.pending ?: return
-        // The existing create-session door has no public idempotency contract. Never replay an
-        // ambiguous create and accidentally start a second agent. Existing turns remain replayable.
-        if (isCreate(pending.endpoint)) return
+        // A chat door's create has no idempotency contract: never replay it into a second chat. POST /sessions does (clientRequestId).
+        if (!bubbled(pending.endpoint)) return
         // The bubble reads Sending… again from the press, under the same key.
         mutable.update { it.copy(busy = true, error = null, sending = true, notSentReason = null) }
         launch { try { persist(); transmit(pending) } finally { mutable.update { it.copy(busy = false, sending = false) } } }
@@ -329,7 +328,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
      * with them, and the outbox empty. Nothing is sent; a send from the box is a new message under a new key. */
     fun putBackUnsent() {
         val pending = state.value.draft.pending ?: return
-        if (!state.value.loaded || state.value.sending || isCreate(pending.endpoint)) return
+        if (!state.value.loaded || state.value.sending || !bubbled(pending.endpoint)) return
         mutable.update { now ->
             if (now.draft.pending != pending) return@update now
             val under = if (pending.text.isBlank()) now.draft else now.draft.under(pending.text)
@@ -369,11 +368,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
      * request is out, and `Not sent` — with why — when the server refuses it or has not answered in 20 s, at which point the request is
      * ended (owner decision 3, as web's `answerDeadline`). Either way it stays in the outbox for Retry, under the same clientTurnId, and
      * is never put back by itself. A refusal with a card of its own (a task held by another run) keeps today's handling: a refused first
-     * POST — which proves the message was not taken — puts the words back in the box, and the refusal goes on to its card. A create
-     * keeps today's handling throughout.
+     * POST — which proves the message was not taken — puts the words back in the box, and the refusal goes on to its card. A chat door's create
+     * keeps today's handling throughout; POST /sessions is drawn and retried as a message is, its clientRequestId making a repeat safe.
      */
     private suspend fun transmit(pending: PendingSend, firstAttempt: Boolean = false) {
-        val bubble = !isCreate(pending.endpoint)
+        val bubble = bubbled(pending.endpoint)
         if (bubble) mutable.update { it.copy(sending = true, notSentReason = null) }
         val accepted = try {
             // OkHttp's own 10 s read timeout would end a slow answer first, as "Can't reach Orbit": the transport waits past the
@@ -618,11 +617,14 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         shell: Boolean,
         attachments: List<StagedAttachment>,
         seedModel: String?,
+        clientRequestId: String,
     ): JsonObject {
         val config = state.value.draft.resumeConfig
         return buildJsonObject {
             config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
             if (config["model"] == null) seedModel?.let { put("model", it) }
+            // The press's PendingSend id: POST /sessions answers a repeat of it with the session the first made, so Retry is safe.
+            put("clientRequestId", clientRequestId)
             put("workspaceId", target!!.workspaceId)
             target.folderId?.let { put("folderId", it) }
             put("prompt", content)

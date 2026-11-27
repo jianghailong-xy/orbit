@@ -288,8 +288,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                 }
                 if (!session.canCompose()) Text("Reconnect to send. Your draft is saved.", style = MaterialTheme.typography.bodySmall)
                 // A message into the session waits in the conversation as its bubble, Retry in its foot (owner decision 1, 2026-11-27);
-                // only a create, which has no bubble here yet, still says it above the box.
-                draft.pending?.takeIf { isCreate(it.endpoint) }?.let { pending ->
+                // only a chat's create, which has no bubble,, still says it above the box.
+                draft.pending?.takeIf { !bubbled(it.endpoint) }?.let { pending ->
                     Text("Delivery unconfirmed: ${pending.text.take(120)}", style = MaterialTheme.typography.bodySmall)
                     Text("Creation is unconfirmed. Check this workspace's sessions before creating another session.")
                 }

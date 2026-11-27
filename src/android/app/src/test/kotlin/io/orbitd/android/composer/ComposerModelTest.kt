@@ -27,6 +27,8 @@ class ComposerModelTest {
         val uploadStarts = Channel<Unit>(Channel.UNLIMITED)
         var deny = false
         var createLost = false
+        var createHeld: CompletableDeferred<Unit>? = null
+        var createsEnded = 0
         var rejectTurn = false
         var rejectionStatus = 409
         /** Holds each POST of a turn, after the server took it, until completed: an answer on its way, or (never completed) none. */
@@ -47,6 +49,7 @@ class ComposerModelTest {
                 call.path.first() == "workspaces" -> """{"id":"w","provider":"codex","runnerId":"r","enabled":true}"""
                 call.path == listOf("sessions") && call.method == HttpMethod.POST -> {
                     if (createLost) throw NetworkException()
+                    createHeld?.let { held -> try { held.await() } catch (ended: CancellationException) { createsEnded++; throw ended } }
                     if (failCreateAckSave) failSave = true
                     """{"id":"created-session"}"""
                 }
@@ -100,7 +103,10 @@ class ComposerModelTest {
         suspend fun cold(): ComposerModel { session = auth(); session.restore(); return model() }
     }
 
-    @Test fun creationKeepsWorkspaceFolderAndAccountAndNeverBlindlyReplaysAmbiguousCreate() = runTest {
+    private fun createPosts(rig: Rig) = rig.calls.filter { it.path == listOf("sessions") && it.method == HttpMethod.POST }
+    private fun createBody(request: ApiRequest) = Wire.json.parseToJsonElement(request.body!!.decodeToString()).jsonObject
+
+    @Test fun creationKeepsWorkspaceFolderAndAccountAndItsClientRequestIdAcrossARestart() = runTest {
         val rig = Rig(this); rig.start()
         val target = DraftTarget("w", "folder")
         var model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
@@ -111,10 +117,11 @@ class ComposerModelTest {
         assertEquals("create", saved.endpoint)
         assertEquals("folder", saved.body.text("folderId")); assertEquals("w", saved.body.text("workspaceId"))
         assertEquals("second", saved.body.text("codexAccount")); assertNull(saved.body["clientTurnId"])
+        assertEquals("the press's id travels as clientRequestId", saved.clientTurnId, saved.body.text("clientRequestId"))
         model.close(); model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
         assertEquals(saved, model.state.value.draft.pending)
-        model.retrySend(); model.send(); runCurrent()
-        assertEquals(1, rig.calls.count { it.path == listOf("sessions") && it.method == HttpMethod.POST })
+        model.send(); runCurrent()
+        assertEquals("Send is off while one waits", 1, createPosts(rig).size)
         val other = DraftTarget("w", "other-folder")
         val next = ComposerModel(rig.session, rig.handle, other.key, backgroundScope, other); runCurrent()
         assertTrue(next.state.value.draft.text.isEmpty()); assertNull(next.state.value.draft.pending)
@@ -386,6 +393,48 @@ class ComposerModelTest {
         assertEquals(1, rig.calls.count { it.path.last() == "resume" && it.method == HttpMethod.POST })
         println("409: pending=${model.state.value.draft.pending?.endpoint}, text=${model.state.value.draft.text}, endpoints=${rig.calls.filter { it.method == HttpMethod.POST }.map { it.path }}")
         assertNull("A definitive rejection must release pending so the message can resume", model.state.value.draft.pending)
+    }
+    @Test fun aNewSessionsFirstMessageWaitsAsSendingAndOpensTheSessionOnSuccess() = runTest {
+        val rig = Rig(this); rig.start(); val target = DraftTarget("w")
+        val model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
+        model.edit("Build me a thing", 0, 0); runCurrent()
+        rig.createHeld = CompletableDeferred(); model.send(); runCurrent()
+        assertTrue("its bubble reads Sending…", model.state.value.sending)
+        assertEquals("the words left the box", "", model.state.value.draft.text)
+        val pending = model.state.value.draft.pending!!
+        assertEquals(pending.clientTurnId, createBody(createPosts(rig).single()).text("clientRequestId"))
+        rig.createHeld!!.complete(Unit); runCurrent()
+        assertEquals("the session opens", "created-session", model.state.value.draft.createdSessionId)
+        assertNull(model.state.value.draft.pending); assertFalse(model.state.value.sending)
+    }
+    @Test fun retryOfANotSentCreateResendsTheSameClientRequestIdAndOpensTheSession() = runTest {
+        val rig = Rig(this); rig.start(); val target = DraftTarget("w")
+        val model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
+        model.edit("Build me a thing", 0, 0); runCurrent()
+        rig.createLost = true; model.send(); runCurrent()
+        assertFalse(model.state.value.sending); assertNotNull("Not sent", model.state.value.notSentReason)
+        // Send is off while one reads Not sent.
+        model.edit("another", 0, 0); runCurrent(); model.send(); runCurrent()
+        assertEquals(1, createPosts(rig).size)
+        rig.createLost = false; model.retrySend(); runCurrent()
+        val posts = createPosts(rig)
+        assertEquals(2, posts.size)
+        assertEquals(createBody(posts[0]), createBody(posts[1]))
+        assertNotNull(createBody(posts[1]).text("clientRequestId"))
+        assertEquals("created-session", model.state.value.draft.createdSessionId)
+        assertNull(model.state.value.draft.pending)
+    }
+    @Test fun aRefusedOrUnansweredCreateReadsNotSentAndPutBackReturnsTheWords() = runTest {
+        val rig = Rig(this); rig.start(); val target = DraftTarget("w")
+        val model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
+        model.edit("Build me a thing", 0, 0); runCurrent()
+        rig.createHeld = CompletableDeferred(); model.send(); runCurrent()
+        advanceTimeBy(PendingSendCopy.ANSWER_TIMEOUT_MS + 1); runCurrent()
+        assertEquals(PendingSendCopy.NOT_ANSWERED, model.state.value.notSentReason)
+        assertEquals(1, rig.createsEnded)
+        model.putBackUnsent(); runCurrent()
+        assertNull(model.state.value.draft.pending)
+        assertEquals("Build me a thing", model.state.value.draft.text)
     }
     @Test fun zeroPostCreateDiskFailureMustRemainSendable() = runTest {
         val rig = Rig(this); rig.start(); val target = DraftTarget("w")
