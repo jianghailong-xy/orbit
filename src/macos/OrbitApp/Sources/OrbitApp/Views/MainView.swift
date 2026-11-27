@@ -726,12 +726,10 @@ struct SectionDetail: View {
         case .wiki:
             WikiDetailPane().wikiChatHost()   // the chat's third column beside the page (wiki-chat design §9)
         case .drive:
-            #if os(macOS)
-            // The inspector beside the list (board 03-mac ①), Trash's summary or Storage's rankings.
-            DriveDetailColumn()
-            #else
-            ContentUnavailableView(section.title, systemImage: section.systemImage)
-            #endif
+            // The Drive chat's third column, open by default (board drive-chat 02 ① ②); folded away, the inspector
+            // beside the list on a Mac (board 03-mac ①), Trash's summary or Storage's rankings, and the iPad's empty
+            // Drive, each with the round button.
+            DriveChatColumn()
         case .scheduled:
             #if os(iOS)
             // The detail is the page's own bottom panel.
