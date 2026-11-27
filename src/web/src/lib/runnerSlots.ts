@@ -80,9 +80,10 @@ export const STARTING_NOTICE_DELAY_MS = 10_000;
 /** Which phase the runner reported for a starting session, if it reported one. */
 export interface EnginePhase {
   enginePhase?: string | null;
-  /** Beside enginePhase `waiting_for_slot` only: the runner's limit, and the slots background jobs hold of it.
-   *  Absent from an older control plane, and then the copy names no numbers. */
-  slotWait?: { heldByJobs: number; limit: number } | null;
+  /** Beside enginePhase `waiting_for_slot` only: what holds the runner's slots other than this session, the part
+   *  of it sessions running background jobs hold, and the runner's limit. Absent from an older control plane, and
+   *  then the copy names no numbers. */
+  slotWait?: { active: number; heldByJobs: number; limit: number } | null;
 }
 
 /**
@@ -99,26 +100,28 @@ export const COMPACTING_DESCRIPTION =
   'The conversation no longer fits, so the engine is summarizing it before it can read your message. This can take a few minutes.';
 
 /**
- * Copy for a claimed turn the runner has no slot for yet: the runner holds the session, and has not
- * asked any engine to start it, because its turns and the slots background jobs hold fill it. The
- * runner says so (enginePhase `waiting_for_slot`, src/runner-go/session_pool.go waitActive), and
- * this is the one starting wait the reader's own machine explains: "Getting the session ready …
- * usually seconds" here once stood for half an hour over four background jobs. Background jobs
- * never take a runner's last slot, so the wait ends when a turn running there does, or a job.
+ * Copy for a claimed turn the runner has no slot for yet: every slot of the runner is taken, by turns and
+ * by sessions its background jobs hold, and no engine has been asked to start this one. A full runner
+ * gives such a claim back, and the session reads queued behind it ("Runner full"); this is the rare claim
+ * it could not give back — a message was already handed to a warm engine, or the control plane is older —
+ * which the runner names instead (enginePhase `waiting_for_slot`, src/runner-go/session_pool.go
+ * waitActive). "Getting the session ready … usually seconds" here once stood for half an hour behind four
+ * background jobs. The counts are the runner's: what holds its slots other than this session, and its
+ * limit, as the queued card counts them.
  */
 export const WAITING_FOR_SLOT_LABEL = PENDING_SLOT_LABEL;
-export const WAITING_FOR_SLOT_TITLE = PENDING_SLOT_TITLE;
+
+export function waitingForSlotTitle(slotWait?: EnginePhase['slotWait']): string {
+  const counted = slotWait ? ` (${slotWait.active}/${slotWait.limit})` : '';
+  return `Runner full — waiting for a free slot${counted}`;
+}
 
 export function waitingForSlotDescription(slotWait?: EnginePhase['slotWait']): string {
   const starts = 'Your message starts as soon as one frees up.';
-  if (!slotWait) return `Every slot on this runner is in use. ${starts}`;
-  const { heldByJobs, limit } = slotWait;
-  // Background jobs never take a runner's last slot, so a one-slot runner is full by a turn alone.
-  if (limit <= 1) return `This runner's only slot is in use by a running turn. ${starts}`;
-  const slots = `All ${limit} slots on this runner are in use`;
-  if (heldByJobs <= 0) return `${slots} by running turns. ${starts}`;
-  const held = heldByJobs === 1 ? '1 of them by a background job' : `${heldByJobs} of them by background jobs`;
-  return `${slots}, ${held}. ${starts}`;
+  const held = slotWait?.heldByJobs ?? 0;
+  if (held <= 0) return `Every slot on this runner is taken. ${starts}`;
+  const by = held === 1 ? '1 of them by a session running a background job' : `${held} of them by sessions running background jobs`;
+  return `Every slot on this runner is taken, ${by}. ${starts}`;
 }
 
 /**
@@ -139,7 +142,7 @@ const isWaitingForSlot = (session?: EnginePhase | null): boolean =>
   session?.enginePhase === 'waiting_for_slot';
 
 export function startingTitle(session?: EnginePhase | null): string {
-  if (isWaitingForSlot(session)) return WAITING_FOR_SLOT_TITLE;
+  if (isWaitingForSlot(session)) return waitingForSlotTitle(session?.slotWait);
   return isCompacting(session) ? COMPACTING_TITLE : STARTING_TITLE;
 }
 

@@ -257,21 +257,19 @@ describe('when the runner names what a starting session is doing', () => {
   // Allowed to name a cause exactly because the runner said so — the same division of labour as
   // queuedReason, where only the server can see which gate holds a queued row.
   it('says compaction when compaction is what it is', () => {
-    const waiting = { enginePhase: 'waiting_for_slot', slotWait: { heldByJobs: 1, limit: 2 } };
-    expect(startingTitle(waiting)).toBe('Waiting for a free slot');
+    const waiting = { enginePhase: 'waiting_for_slot', slotWait: { active: 2, heldByJobs: 1, limit: 2 } };
+    expect(startingTitle(waiting)).toBe('Runner full — waiting for a free slot (2/2)');
     expect(startingLabel(waiting)).toBe('Waiting for slot');
     expect(startingDescription(waiting)).toBe(
-      'All 2 slots on this runner are in use, 1 of them by a background job. Your message starts as soon as one frees up.',
+      'Every slot on this runner is taken, 1 of them by a session running a background job. Your message starts as soon as one frees up.',
     );
-    expect(startingDescription({ enginePhase: 'waiting_for_slot', slotWait: { heldByJobs: 0, limit: 1 } })).toBe(
-      "This runner's only slot is in use by a running turn. Your message starts as soon as one frees up.",
-    );
-    expect(startingDescription({ enginePhase: 'waiting_for_slot', slotWait: { heldByJobs: 0, limit: 3 } })).toBe(
-      'All 3 slots on this runner are in use by running turns. Your message starts as soon as one frees up.',
+    expect(startingDescription({ enginePhase: 'waiting_for_slot', slotWait: { active: 3, heldByJobs: 0, limit: 3 } })).toBe(
+      'Every slot on this runner is taken. Your message starts as soon as one frees up.',
     );
     // An older control plane sends the phase without the numbers.
+    expect(startingTitle({ enginePhase: 'waiting_for_slot' })).toBe('Runner full — waiting for a free slot');
     expect(startingDescription({ enginePhase: 'waiting_for_slot' })).toBe(
-      'Every slot on this runner is in use. Your message starts as soon as one frees up.',
+      'Every slot on this runner is taken. Your message starts as soon as one frees up.',
     );
     const compacting = { enginePhase: 'compacting' };
     expect(startingTitle(compacting)).toBe(COMPACTING_TITLE);

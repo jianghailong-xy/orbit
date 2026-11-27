@@ -156,10 +156,10 @@ const CURSOR_RUNNER = {
 } satisfies Runner;
 
 /**
- * A claimed run the runner has no slot for yet (runner cdvn0, 2026-11-27): the claim landed while its turns and
- * background jobs filled the machine, so no engine was asked to start, and the page said "Getting the session ready"
- * for half an hour. The runner names the wait (enginePhase waiting_for_slot), and the list row carries the slots the
- * jobs hold of the limit.
+ * A claimed run the runner has no slot for (runner cdvn0, 2026-11-27): four sessions running background jobs filled
+ * its four slots, no engine was asked to start, and the page said "Getting the session ready" for half an hour. A full
+ * runner now gives such a claim back, and the session reads queued behind it (RUNNER_FULL_QUEUED); a claim it could
+ * not give back is named by the runner (enginePhase waiting_for_slot), with the runner's counts on the list row.
  */
 const WAITING_FOR_SLOT = {
   ...BASE,
@@ -170,7 +170,20 @@ const WAITING_FOR_SLOT = {
   enginePhase: 'waiting_for_slot',
   enginePhaseSince: '2026-11-27T08:00:31.000Z',
   runClaimedAt: '2026-11-27T08:00:30.000Z',
-  slotWait: { heldByJobs: 3, limit: 4 },
+  slotWait: { active: 4, heldByJobs: 4, limit: 4 },
+};
+
+/** The same session once the full runner gave its claim back: queued, the server naming the full runner. */
+const RUNNER_FULL_QUEUED = {
+  ...BASE,
+  title: 'V1 yield and exit: waits that loop',
+  status: 'PENDING',
+  numTurns: 4,
+  engineStartedAt: '2026-11-27T07:58:02.000Z',
+  queuedReason: 'runner_at_capacity',
+  queuedActive: 4,
+  queuedLimit: 4,
+  queuedHeldByJobs: 4,
 };
 
 class FakeEventSource {
@@ -425,10 +438,21 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
       });
     });
     const notice = mounted().querySelector('.chat-queued-state')!.textContent ?? '';
-    expect(notice).toContain('Waiting for a free slot');
-    expect(notice).toContain('All 4 slots on this runner are in use, 3 of them by background jobs.');
+    expect(notice).toContain('Runner full — waiting for a free slot (4/4)');
+    expect(notice).toContain('Every slot on this runner is taken, 4 of them by sessions running background jobs.');
     expect(notice).toContain('Your message starts as soon as one frees up.');
     expect(mounted().textContent).not.toContain('Getting the session ready');
+    expect(card()).toBeNull();
+  });
+
+  it('says a claim the full runner gave back is queued behind the full runner, with its count', async () => {
+    await mount(RUNNER_FULL_QUEUED, false);
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().textContent).toContain('Runner at capacity (4/4)'), { timeout: 20_000, interval: 50 });
+    });
+    const page = mounted().textContent ?? '';
+    expect(page).toContain('Runner full');
+    expect(page).not.toContain('Getting the session ready');
     expect(card()).toBeNull();
   });
 
