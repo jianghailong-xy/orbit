@@ -112,7 +112,7 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 会话自身：
 
 - 搬之前必须先**释放**（没有 runner 在托管它）。只有释放时 runner 才会收尾提交；没释放就改归属，原 runner 会直接撒手，未提交的改动会被晾在原机器上。
-  - 空闲但还没释放的会话：由服务端在 move 里先释放、等释放完成再搬（2026-11-27 起），用户只看到 `Move` 和 `Moving…`，不出现“结束会话”的字样。已经在释放中的会话（已请求结束）同样等它释放完再搬。
+  - 空闲但还没释放的会话：由服务端在 move 里先释放、等释放完成再搬（2026-11-27 起），用户只看到 `Move` 和 `Moving…`，不出现“结束会话”的字样。释放时写结束原因 `moved`（其余行为与 `ended` 相同）：各端把这样释放的会话画成普通的空闲会话，不显示 Ended 标记、不显示 “Session ended…” 提示，下一条消息照常恢复它（见 docs/mocks/session-move-released，2026-11-27 定）。已经在释放中的会话（已请求结束）同样等它释放完再搬。
   - 正在跑、有排队的消息、在等审批：不能搬，写 `Stop the session first.`
 - 不能搬：回收站里的会话；任务的执行会话（归属跟着任务走，暂停的执行会话也按 Workspace 找回）；项目为单件事开的判断会话（`dispatch_origin = PROJECT_COORDINATOR`）；还在导入中的会话。
 - 暂时不能搬，过一会儿再试：合并或提交进行中、合并修复还没处理完、等自动重试；服务端等释放超过 45 秒（`The session’s work is still being saved, so it wasn’t moved. Try again in a moment.`）。
