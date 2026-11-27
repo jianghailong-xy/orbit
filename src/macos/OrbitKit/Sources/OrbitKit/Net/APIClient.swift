@@ -351,6 +351,16 @@ public final class APIClient: @unchecked Sendable {
         return try await get("sessions/\(sessionID)/events/page", query: q, timeout: timeout)
     }
 
+    /// The session's permission-mode changes recorded just before the one numbered `before` (its `seq`), oldest first:
+    /// the page older than the newest ones its detail carries, read as the transcript pages back (web parity:
+    /// `getSessionPermissionModeChanges`).
+    public func permissionModeChanges(sessionID: String, before: Int,
+                                      limit: Int? = nil) async throws -> SessionPermissionModeChangePage {
+        var q = [URLQueryItem(name: "before", value: String(before))]
+        if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
+        return try await get("sessions/\(sessionID)/permission-mode-changes", query: q)
+    }
+
     /// The page of a session's history around one record — a turn, an event or a tool call, by its
     /// id in either spelling — for a link that opens the session at that record (`SessionRecordLink`).
     /// The page names the `anchor` the record resolved to and carries a cursor each way. A record that

@@ -89,6 +89,92 @@ final class SessionPermissionModeTests: XCTestCase {
         XCTAssertEqual(rows.map(\.id), [cards[0].id, "message", cards[1].id, cards[2].id, "transcript-bottom"])
     }
 
+    /// Since migration 1780: each change's seq, the detail's word that older ones exist, and a page of them. Repeated
+    /// transitions in one millisecond are rows apart and each drawn once, in the order they were recorded.
+    func testRepeatedTransitionsAtOneMomentAreEachDrawnOnceInOrder() throws {
+        let detail = try session(#"""
+        {"id":"s","status":"RUNNING","permissionMode":"auto","actualPermissionMode":"auto",
+         "actualPermissionModeAt":"2026-11-22T12:00:02.000Z","permissionModeChangesHasMore":true,
+         "permissionModeChanges":[
+           {"fromMode":"auto","toMode":"plan","cause":"OWNER_PICK","client":"web","at":"2026-11-22T12:00:02.000Z","seq":41},
+           {"fromMode":"plan","toMode":"auto","cause":"OWNER_PICK","client":"ios","at":"2026-11-22T12:00:02.000Z","seq":42},
+           {"fromMode":"auto","toMode":"plan","cause":"OWNER_PICK","client":"web","at":"2026-11-22T12:00:02.000Z","seq":43},
+           {"fromMode":"plan","toMode":"auto","cause":"OWNER_PICK","client":"ios","at":"2026-11-22T12:00:02.000Z","seq":44}
+         ]}
+        """#)
+        XCTAssertEqual(detail.permissionModeChangesHasMore, true)
+        XCTAssertNil(try session(#"{"id":"s","status":"RUNNING"}"#).permissionModeChangesHasMore)
+        let changes = try XCTUnwrap(detail.permissionModeChanges)
+        XCTAssertEqual(changes.map(\.seq), [41, 42, 43, 44])
+        XCTAssertEqual(Set(changes.map(\.rowID)).count, 4)
+        let cards = changes.map { DeliveredDecisionCard(kind: .permissionModeChange($0), placement: .at($0.at)) }
+        var state = TranscriptState()
+        state.items = [.user(UserBubble(id: "message", text: "Hello", ts: "2026-11-22T12:00:01.000Z",
+                                        pending: false, queued: false))]
+        let rows = TranscriptRows.build(state: state, statusCards: [], canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: cards)
+        XCTAssertEqual(rows.map(\.id), ["message"] + cards.map(\.id) + ["transcript-bottom"])
+
+        let page = try JSONDecoder().decode(SessionPermissionModeChangePage.self, from: Data(#"""
+        {"changes":[{"fromMode":null,"toMode":"auto","cause":"CLAIM","client":null,"at":"2026-11-22T11:59:00.000Z","seq":7}],
+         "hasMore":false}
+        """#.utf8))
+        XCTAssertEqual(page.changes.map(\.seq), [7])
+        XCTAssertFalse(page.hasMore)
+    }
+
+    func testHistoryHoldsEachChangeOnceAsTheTranscriptPagesBack() {
+        let held = ModeChangeHistory().adopt(numbered(11...60), hasMore: true)
+        XCTAssertEqual(held.changes.map(\.seq), Array(11...60))
+        XCTAssertTrue(held.hasMore)
+        XCTAssertEqual(held.adopt(numbered(11...60), hasMore: true), held)
+        // A change that falls out of the newest fifty stays; the new ones are added once.
+        let grown = ModeChangeHistory(changes: numbered(1...60), hasMore: false).adopt(numbered(13...62), hasMore: true)
+        XCTAssertEqual(grown.changes.map(\.seq), Array(1...62))
+        XCTAssertFalse(grown.hasMore)
+        // A detail that no longer reaches what is held starts it again, so nothing in between is missed.
+        let restarted = ModeChangeHistory(changes: numbered(1...60), hasMore: false).adopt(numbered(71...120), hasMore: true)
+        XCTAssertEqual(restarted.changes.map(\.seq), Array(71...120))
+        XCTAssertTrue(restarted.hasMore)
+        // A page goes only onto the oldest it was read for.
+        let paged = held.withOlder(before: 11, SessionPermissionModeChangePage(changes: numbered(1...10), hasMore: false))
+        XCTAssertEqual(paged.changes.map(\.seq), Array(1...60))
+        XCTAssertFalse(paged.hasMore)
+        XCTAssertEqual(held.withOlder(before: 5, SessionPermissionModeChangePage(changes: numbered(1...4), hasMore: false)), held)
+        // An older server's changes, which carry no seq, are held as the detail says and page nothing.
+        let unnumbered = [change(from: nil, to: "auto", cause: "CLAIM")]
+        XCTAssertEqual(ModeChangeHistory().adopt(unnumbered, hasMore: true), ModeChangeHistory(changes: unnumbered))
+    }
+
+    func testHistoryReadsOlderOnlyAsFarBackAsTheTranscript() {
+        let held = ModeChangeHistory(changes: numbered(11...60), hasMore: true)
+        XCTAssertFalse(held.needsOlder(oldestRowAt: stamp(30), reachesStart: false))
+        XCTAssertTrue(held.needsOlder(oldestRowAt: stamp(11), reachesStart: false))
+        XCTAssertTrue(held.needsOlder(oldestRowAt: stamp(5), reachesStart: false))
+        XCTAssertTrue(held.needsOlder(oldestRowAt: stamp(30), reachesStart: true))
+        XCTAssertFalse(held.needsOlder(oldestRowAt: nil, reachesStart: true))
+        XCTAssertFalse(ModeChangeHistory(changes: numbered(11...60)).needsOlder(oldestRowAt: stamp(5), reachesStart: true))
+        // Read off a transcript: its oldest row with a clock, and whether it has paged back to the start.
+        var state = TranscriptState()
+        state.items = [.user(UserBubble(id: "m", text: "Hi", ts: stamp(30), pending: false, queued: false))]
+        state.maxSeq = 4
+        state.hasMoreOlder = true
+        XCTAssertFalse(held.needsOlder(in: state))
+        state.hasMoreOlder = false
+        XCTAssertTrue(held.needsOlder(in: state))
+    }
+
+    private func stamp(_ seconds: Int) -> String {
+        String(format: "2026-11-27T05:%02d:%02d.000Z", seconds / 60, seconds % 60)
+    }
+
+    private func numbered(_ seqs: ClosedRange<Int>) -> [SessionPermissionModeChange] {
+        seqs.map { seq in
+            SessionPermissionModeChange(fromMode: seq % 2 == 1 ? "auto" : "plan", toMode: seq % 2 == 1 ? "plan" : "auto",
+                                        cause: "OWNER_PICK", client: "ios", at: stamp(seq), seq: seq)
+        }
+    }
+
     private func autoHint(model: String) -> String? {
         SessionModeDisplay.autoStartHint(model: model, engine: "claude", provider: "claude",
                                         configured: [], catalog: nil)

@@ -690,8 +690,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let permissionMode: String?
     public let actualPermissionMode: String?
     public let actualPermissionModeAt: String?
-    /// The detail carries history; the list omits it.
+    /// The detail carries history (its newest changes); the list omits it.
     public let permissionModeChanges: [SessionPermissionModeChange]?
+    /// The detail's word that older changes than those are recorded (`APIClient.permissionModeChanges`); nil from an
+    /// older server and on a list row.
+    public let permissionModeChangesHasMore: Bool?
     public let effort: String?
     /// Whether the session runs in the runtime's fast lane — Claude Code's `/fast`, Codex's
     /// "priority" service tier. Offered only where `AgentDefaults.fastModeAvailable` says the lane
@@ -967,6 +970,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         actualPermissionMode = try values.decodeIfPresent(String.self, forKey: .actualPermissionMode)
         actualPermissionModeAt = try values.decodeIfPresent(String.self, forKey: .actualPermissionModeAt)
         permissionModeChanges = try values.decodeIfPresent([SessionPermissionModeChange].self, forKey: .permissionModeChanges)
+        permissionModeChangesHasMore = try? values.decodeIfPresent(Bool.self, forKey: .permissionModeChangesHasMore)
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
@@ -1026,6 +1030,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
                 actualPermissionMode: String? = nil, actualPermissionModeAt: String? = nil,
                 permissionModeChanges: [SessionPermissionModeChange]? = nil,
+                permissionModeChangesHasMore: Bool? = nil,
                 effort: String? = nil, fastMode: Bool? = nil, source: String? = nil, runSource: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 lastAssistantText: String? = nil,
@@ -1106,6 +1111,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.actualPermissionMode = actualPermissionMode
         self.actualPermissionModeAt = actualPermissionModeAt
         self.permissionModeChanges = permissionModeChanges
+        self.permissionModeChangesHasMore = permissionModeChangesHasMore
         self.effort = effort
         self.fastMode = fastMode
         self.source = source
