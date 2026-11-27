@@ -137,10 +137,10 @@ export function useChatHost(options: ChatHostOptions) {
   const reserving = byDefault && list.isPending;
 
   const go = useCallback(
-    (next: string | null) => {
+    (next: string | null, edit?: (search: string) => string) => {
       if (scope) writeWikiChatOpen(scope, next, store.open);
       navigate(
-        { pathname: location.pathname, search: wikiChatSearch(location.search, next), hash: location.hash },
+        { pathname: location.pathname, search: wikiChatSearch(edit ? edit(location.search) : location.search, next), hash: location.hash },
         { replace: true, state: location.state },
       );
     },
@@ -217,11 +217,11 @@ export function useChatHost(options: ChatHostOptions) {
     [scope, store.shown],
   );
   /** Close the panel: ✕, or a second press of the page's button. The chat goes on. */
-  const close = useCallback(() => {
+  const close = useCallback((edit?: (search: string) => string) => {
     // ✕ is the owner saying no: kept on the device until the button opens the panel again (board 45, Q1 A).
     if (onPress) setShown(false);
     else setClosed(true);
-    go(null);
+    go(null, edit);
   }, [onPress, setShown, setClosed, go]);
   /** The page's own button (`opens: 'on-press'`): closes an open panel, else opens the chat `toOpen` names. */
   const toggle = useCallback(() => {
@@ -274,7 +274,7 @@ export function useChatHost(options: ChatHostOptions) {
               cards={shownChat ? (panel.cards ?? null) : null}
               focus={focus}
               onChat={go}
-              onClose={close}
+              onClose={() => close()}
               onResize={(next, done) => {
                 setDragged(next);
                 if (done) writeWikiChatWidth(wikiChatPanelWidth('wide', next, windowWidth, null, range) ?? next, store.width);
@@ -300,7 +300,7 @@ export function useChatHost(options: ChatHostOptions) {
     );
   };
 
-  return { chat, open, shownChat, chats, go, openChat, closeHelp, toggle, render };
+  return { chat, open, shownChat, chats, go, openChat, closeHelp, toggle, close, render };
 }
 
 /** Where the panel's top is: below the Wiki's head while it shows, else the top of the page's own scroll. */

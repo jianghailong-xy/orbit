@@ -9,7 +9,7 @@
  * SessionComposer, useChatHost); only what differs is here.
  */
 import { infiniteQueryOptions, queryOptions, type QueryClient, type QueryKey } from '@tanstack/react-query';
-import type { SchedulePageChatOpenAnswer, SchedulePageChatResponse } from '@orbit/shared';
+import type { SchedulePageChatContext, SchedulePageChatOpenAnswer, SchedulePageChatResponse } from '@orbit/shared';
 import { api, type SessionListItem } from '../api';
 import { sessionsQuery } from './queries';
 import { viewerTimezone } from './schedules';
@@ -17,10 +17,12 @@ import { sameResourceId } from './watches';
 import { firstOpenableWorkspace, type OrderableWorkspace } from './workspaceOrder';
 import {
   WIKI_CHAT_NEW_PARAM,
+  wikiChatShownSchedule,
   type ChatHostList,
   type ChatHostStore,
   type ChatPanelRange,
   type WikiChatCreate,
+  type WikiChatAttachments,
   type WikiChatRow,
   type WikiChatWorkspace,
 } from './wikiChat';
@@ -79,9 +81,20 @@ export const createScheduledChat = (body: Pick<WikiChatCreate, 'workspaceId' | '
     body: { workspaceId: body.workspaceId, text: body.content },
   });
 
-/** What a message carries of the page (design §4.2): the workspace the list is filtered to. */
-export function scheduledChatContext(workspaceFilter: string | null): { context: { scheduleFilter: string } } | undefined {
-  return workspaceFilter ? { context: { scheduleFilter: workspaceFilter } } : undefined;
+/**
+ * What a message carries of the page (design §2.4, §4.2): the workspace the list is filtered to, and the schedule whose
+ * chip is on — ids alone; delivery reads what they name. A chip crossed out is not sent.
+ */
+export function scheduledChatContext(
+  workspaceFilter: string | null,
+  attachments?: WikiChatAttachments,
+): { context: SchedulePageChatContext } | undefined {
+  const selected = attachments ? wikiChatShownSchedule(attachments) : null;
+  const context: SchedulePageChatContext = {
+    ...(workspaceFilter ? { scheduleFilter: workspaceFilter } : {}),
+    ...(selected ? { scheduleId: selected.id } : {}),
+  };
+  return context.scheduleFilter || context.scheduleId ? { context } : undefined;
 }
 
 // ── Where a new chat runs (design §5) ───────────────────────────────────────────────────────────

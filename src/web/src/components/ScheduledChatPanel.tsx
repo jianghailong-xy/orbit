@@ -1,4 +1,4 @@
-import { useMemo, useReducer, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useReducer, type JSX, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CommentOutlined } from '@ant-design/icons';
 import type { SchedulePageChatResponse } from '@orbit/shared';
@@ -6,7 +6,8 @@ import { useChatHost } from './ChatHost';
 import type { ChatOrigin } from './WikiChatPanel';
 import { meQuery, runnersQuery, sessionsQuery, workspacesQuery } from '../lib/queries';
 import { driveChatWorkspace } from '../lib/driveChat';
-import { WIKI_CHAT_NO_ATTACHMENTS, wikiChatAttach } from '../lib/wikiChat';
+import { WIKI_CHAT_NO_ATTACHMENTS, sendChatTurn, wikiChatAttach, wikiChatFab, type WikiChatSchedule } from '../lib/wikiChat';
+import type { ScheduleChatHost } from '../lib/scheduleChatHost';
 import {
   SCHEDULED_CHAT_BUTTON,
   SCHEDULED_CHAT_CHOOSE_WORKSPACE,
@@ -40,7 +41,20 @@ type WorkspaceRow = { id: string; name: string; createdAt: string; position?: nu
  * - its history is the account's Scheduled chats; its width 400, dragged between 400 and 480 (§6);
  * - at 1200–1439 the app sidebar folds to its icon rail, below 1200 it slides over the page, below 640 it is a sheet.
  */
-export function useScheduledChatPanel({ workspaceFilter }: { workspaceFilter: string | null }) {
+export function useScheduledChatPanel({
+  workspaceFilter,
+  selected,
+  host: scheduleHost,
+  onChanged,
+}: {
+  workspaceFilter: string | null;
+  /** The row selected in the list: it rides along as the composer's chip. */
+  selected: WikiChatSchedule | null;
+  /** Opens a schedule's row in the inspector (closing the slide-over where the page is narrow). */
+  host: ScheduleChatHost;
+  /** A change the chat made: the page flashes the row. */
+  onChanged: (scheduleId: string) => void;
+}) {
   const qc = useQueryClient();
   const me = useQuery(meQuery());
   const sessions = useQuery(sessionsQuery());
@@ -85,6 +99,12 @@ export function useScheduledChatPanel({ workspaceFilter }: { workspaceFilter: st
   // Orbit's opening is read while the panel is open: a closed panel reads nothing of its own.
   const opening = useQuery({ ...scheduledChatQuery(), enabled: host.open });
   const [attachments, dispatch] = useReducer(wikiChatAttach, WIKI_CHAT_NO_ATTACHMENTS);
+  // The selected row follows into the composer as a chip until the message is sent (design §2.4).
+  const selectedId = selected?.id ?? null;
+  const selectedTitle = selected?.title ?? '';
+  useEffect(() => {
+    dispatch({ type: 'schedule', schedule: selectedId ? { id: selectedId, title: selectedTitle } : null });
+  }, [selectedId, selectedTitle]);
   const words = opening.data?.opening;
   const origin = useMemo<ChatOrigin>(
     () => ({
@@ -106,26 +126,66 @@ export function useScheduledChatPanel({ workspaceFilter }: { workspaceFilter: st
         void qc.invalidateQueries({ queryKey: ['sessions'] });
         return created;
       },
-      turnContext: () => scheduledChatContext(workspaceFilter),
+      turnContext: (sent) => scheduledChatContext(workspaceFilter, sent),
+      schedules: { host: scheduleHost, changed: onChanged },
       choices,
       history: (q) => scheduledChatHistoryQuery(qc, q),
     }),
-    [words, choices, workspaceFilter, qc],
+    [words, choices, workspaceFilter, qc, scheduleHost, onChanged],
   );
+
+  /**
+   * While the panel is open the quick-add line's sentence goes into the chat (design §2.8): a new chat opens with it in
+   * the Runs in workspace, an open one takes it as its next message with the page's view — one composer, one set of
+   * workspace rules.
+   */
+  const sendIntoChat = async (text: string): Promise<void> => {
+    const open = host.shownChat;
+    if (!open) {
+      if (!defaultWorkspace) throw new Error(SCHEDULED_CHAT_NO_WORKSPACE);
+      const created = await createScheduledChat({ workspaceId: defaultWorkspace.id, content: text });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      host.openChat(created.sessionId);
+      return;
+    }
+    await sendChatTurn(open, text, scheduledChatContext(workspaceFilter, attachments));
+    dispatch({ type: 'sent' });
+    void qc.invalidateQueries({ queryKey: ['session', open] });
+  };
 
   return {
     open: host.open,
     toggle: host.toggle,
+    close: host.close,
+    sendIntoChat,
+    /** The header button's state, read from the chats listed: a ring while a turn runs, an amber count while a card waits. */
+    button: wikiChatFab(listData?.fab),
     render: (children: ReactNode) => host.render(children, { origin, attachments, dispatch }),
   };
 }
 
-/** The header's Chat button (board 1 ①): at the far right of the tools row, pressed while the panel is open. */
-export function ScheduledChatButton({ open, onPress }: { open: boolean; onPress: () => void }): JSX.Element {
+/**
+ * The header's Chat button (board 1 ①, 3 ①): at the far right of the tools row, pressed while the panel is open. A ring
+ * goes round it while a turn runs, and an amber count says how many cards wait.
+ */
+export function ScheduledChatButton({
+  open,
+  onPress,
+  state = 'idle',
+  count = 0,
+}: {
+  open: boolean;
+  onPress: () => void;
+  state?: 'idle' | 'working' | 'needs_you' | 'updated';
+  count?: number;
+}): JSX.Element {
   return (
-    <button type="button" className="sched-chat-btn" aria-pressed={open} data-schedule-chat="" onClick={onPress}>
-      <CommentOutlined aria-hidden="true" />
+    <button type="button" className="sched-chat-btn" aria-pressed={open} data-schedule-chat="" data-state={state} onClick={onPress}>
+      {state === 'working' ? <span className="sched-chat-ring" data-chat-ring="" aria-hidden="true" /> : <CommentOutlined aria-hidden="true" />}
       {SCHEDULED_CHAT_BUTTON}
+      {state === 'needs_you' && count > 0 ? (
+        <span className="sched-chat-count" data-chat-count="" aria-label={`${count} waiting`}>{count > 99 ? '99+' : count}</span>
+      ) : null}
     </button>
   );
 }

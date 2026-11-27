@@ -22,6 +22,7 @@ import {
   ArrowRightOutlined,
   CaretDownOutlined,
   CaretRightOutlined,
+  CalendarOutlined,
   CloseOutlined,
   DownOutlined,
   EllipsisOutlined,
@@ -56,6 +57,9 @@ import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import { ApprovalPanel } from './ApprovalPanel';
 import { PendingTray } from './PendingTray';
 import { SessionConversation } from './SessionConversation';
+import { useSessionScheduleCards, useSessionScheduleInserts } from './ScheduleCards';
+import { useRunNowInserts } from './ScheduleChatExtras';
+import { ScheduleChatHostContext, type ScheduleChatHost } from '../lib/scheduleChatHost';
 import type { TurnImage } from './Transcript';
 import {
   composerModelMenuItems,
@@ -135,6 +139,7 @@ import {
   wikiChatSendError,
   wikiChatShown,
   wikiChatShownFiles,
+  wikiChatShownSchedule,
   wikiChatWorkspaceName,
   type ChatHostList,
   type ChatPanelRange,
@@ -203,6 +208,12 @@ export interface ChatOrigin {
   space?: WikiSpaceRow;
   /** Drive: the chat shows its change cards and overwrite questions, each with its turn. */
   cards?: boolean;
+  /**
+   * Scheduled: the chat draws the schedule inserts the session page draws (change lines with Undo, the envelope's cards
+   * with Allow / Keep) and the agent's Run now offer. `host` opens a schedule's row; `changed` is told of each change the
+   * chat makes while it is open, to re-read and flash the row.
+   */
+  schedules?: { host: ScheduleChatHost; changed: (scheduleId: string) => void };
   /** The history the title opens, one page at a time, searched by title; absent, the Wiki space's or the Drive chats. */
   history?: (q: string) => ChatHistoryOptions;
 }
@@ -816,9 +827,19 @@ function useChatDraft(sessionId: string | null, canAttach: boolean) {
 function wikiChatChips(attachments: WikiChatAttachments, dispatch: Dispatch<WikiChatAttachAction>): ReactNode {
   const { page, quote } = wikiChatShown(attachments);
   const files = wikiChatShownFiles(attachments);
-  if (!page && !quote && !files) return null;
+  const schedule = wikiChatShownSchedule(attachments);
+  if (!page && !quote && !files && !schedule) return null;
   return (
     <>
+      {schedule && (
+        <span className="composer-pill composer-file wk-chat-chip" data-kind="schedule">
+          <CalendarOutlined className="composer-file-icon ic" />
+          <span className="composer-file-name l">{schedule.title}</span>
+          <button type="button" className="composer-file-remove x" aria-label={wikiChatRemove(schedule.title)} onClick={() => dispatch({ type: 'crossSchedule' })}>
+            <CloseOutlined />
+          </button>
+        </span>
+      )}
       {page && (
         <span className="composer-pill composer-file wk-chat-chip" data-kind={page.kind === 'folder' ? 'folder' : 'page'}>
           {page.kind === 'folder' ? <FolderOutlined className="composer-file-icon ic" /> : <ReadOutlined className="composer-file-icon ic" />}
@@ -1580,6 +1601,29 @@ function WikiChatSession({
 
   const { decide, untranslated } = useApprovalDecisions(sessionId, setApprovals);
   const driveCards = useDriveChatCards(origin.cards ? sessionId : null, stream.transcriptEvents);
+  const schedules = origin.schedules ?? null;
+  const scheduleCards = useSessionScheduleCards(schedules ? sessionId : null);
+  const scheduleInserts = useSessionScheduleInserts(schedules ? sessionId : null, scheduleCards, stream.transcriptEvents, null);
+  const runNowInserts = useRunNowInserts(schedules ? sessionId : null, stream.transcriptEvents);
+  const chatInserts = useMemo(
+    () => [...driveCards.inserts, ...scheduleInserts, ...runNowInserts],
+    [driveCards.inserts, scheduleInserts, runNowInserts],
+  );
+  // A change the chat makes while it is open re-reads the schedule list and flashes the row, once. What the conversation
+  // already held when it was opened is not a change of this view.
+  const seenRecords = useRef<Set<string> | null>(null);
+  const changed = schedules?.changed;
+  useEffect(() => {
+    if (!scheduleCards || !changed) return;
+    const keys = scheduleCards.records.map((record) => `${record.scheduleId}:${record.revision}`);
+    const seen = seenRecords.current;
+    seenRecords.current = new Set(keys);
+    if (!seen) return;
+    const fresh = scheduleCards.records.filter((record) => !seen.has(`${record.scheduleId}:${record.revision}`));
+    if (fresh.length === 0) return;
+    void qc.invalidateQueries({ queryKey: ['schedules'] });
+    for (const record of fresh) changed(record.scheduleId);
+  }, [scheduleCards, changed, qc]);
 
   // The card the chat was opened at: one named, or the first that needs the owner (design §3).
   const focusCard = useMemo(() => {
@@ -1635,12 +1679,13 @@ function WikiChatSession({
     <>
       {runner && runner.online === false && <div className="wk-chat-note">{wikiChatOffline(machineNameOf(runner))}</div>}
       <div className="wk-chat-body" ref={bodyRef}>
+        <ScheduleChatHostContext.Provider value={schedules?.host ?? null}>
         <SessionConversation
           sessionId={sessionId}
           stream={stream}
           live={live}
           turnImages={turnImages}
-          inserts={driveCards.inserts}
+          inserts={chatInserts}
           authErrorHelp={null}
           autoRetryHelp={null}
           restoreUndelivered={restoreUndelivered}
@@ -1650,6 +1695,7 @@ function WikiChatSession({
           answeredQuestions={null}
           wikiChat={wikiCards}
         />
+        </ScheduleChatHostContext.Provider>
         {driveCards.rest}
         {!session?.deletedAt &&
           approvals.map((approval) => (

@@ -307,6 +307,7 @@ import { startHistoryImport } from '../lib/claudeHistoryImport';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
+import { sessionOriginTag } from '@orbit/shared';
 import { useDriveEnabled } from '../lib/driveSwitch';
 import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
@@ -1652,6 +1653,9 @@ export function SessionTitleRow({
   return (
     <div className="session-title-row">
       <div className="session-title">{s.title}</div>
+      {s.chatOrigin === 'SCHEDULE_CHAT' && (
+        <span className="session-origin-tag" data-origin="SCHEDULE_CHAT">{sessionOriginTag(s.chatOrigin)}</span>
+      )}
       {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
         <Tooltip
           content={s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'}

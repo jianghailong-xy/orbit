@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -86,6 +86,8 @@ import '../components/Scheduled.css';
 const C = SCHEDULE_COPY;
 const K = CONDITION_COPY;
 const REPEAT = '↻';
+/** Below this width the chat slides over the page (design §6). */
+const SLIDE_OVER_BELOW = 1200;
 const LAST_WORKSPACE_KEY = 'orbit:scheduled-quick-add-workspace';
 
 interface WorkspaceRow {
@@ -108,6 +110,15 @@ type Selection =
 
 /** A pick from a row's menu, which the inspector it opens carries out. */
 type RowAsk = { id: string; action: 'run' | 'pause' | 'resume' | 'rename' | 'delete' };
+
+/** The address with one schedule selected, as `select` writes it. */
+function withSelection(search: string, id: string): string {
+  const p = new URLSearchParams(search);
+  p.delete('draft');
+  p.delete('pending');
+  p.set('id', id);
+  return p.toString();
+}
 
 function selectionOf(params: URLSearchParams): Selection {
   const id = params.get('id');
@@ -154,6 +165,8 @@ interface RowView {
   time: string;
   cls: string;
   selected: boolean;
+  /** The chat just changed this schedule: the row flashes once. */
+  flash?: boolean;
   onSelect: () => void;
   /** A row that never shows as selected (a past run, a task that opens elsewhere): Up/Down step over it. */
   noCursor?: true;
@@ -168,7 +181,7 @@ function Row({ row, onMenu }: { row: RowView; onMenu?: (event: ReactMouseEvent, 
   return (
     <button
       type="button"
-      className={`sched-row${row.cls}${row.selected ? ' is-selected' : ''}`}
+      className={`sched-row${row.cls}${row.selected ? ' is-selected' : ''}${row.flash ? ' is-flash' : ''}`}
       data-row-focus=""
       aria-pressed={row.selected}
       data-row={row.key}
@@ -490,14 +503,43 @@ export function ScheduledPage(): JSX.Element {
   const [quickText, setQuickText] = useState('');
   const [inspectorWidth, startInspectorResize, inspectorResizing] = useInspectorWidth();
   // The page's chat (docs/scheduled-chat-design.md §2, §3): docked on the right, opened by the tools row's Chat button.
-  const chat = useScheduledChatPanel({ workspaceFilter });
-  const chatButton = <ScheduledChatButton open={chat.open} onPress={chat.toggle} />;
+  // A change the chat made flashes its row once (board scheduled-chat 01 ①); a name or Open in a change line selects the
+  // row and opens the inspector, and below 1200 px, where the chat slides over the page, closes the slide-over.
+  const [flash, setFlash] = useState<{ id: string; n: number } | null>(null);
+  const onChanged = useCallback((id: string) => setFlash((cur) => ({ id, n: (cur?.n ?? 0) + 1 })), []);
+  useEffect(() => {
+    if (!flash) return undefined;
+    const timer = window.setTimeout(() => setFlash(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
+  const closeChatRef = useRef<(edit: (search: string) => string) => void>(() => {});
+  const chatHost = useMemo(
+    () => ({
+      openSchedule: (id: string) => {
+        // Below 1200 the chat slides over the page: the same address change selects the row and closes it.
+        if (window.innerWidth < SLIDE_OVER_BELOW) closeChatRef.current((search) => withSelection(search, id));
+        else select({ kind: 'schedule', id });
+      },
+    }),
+    // `select` reads the address as it is when called.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [params],
+  );
+  const chat = useScheduledChatPanel({
+    workspaceFilter,
+    selected: selectedSchedule ? { id: selectedSchedule.id, title: selectedSchedule.title } : null,
+    host: chatHost,
+    onChanged,
+  });
+  closeChatRef.current = chat.close;
+  const chatButton = <ScheduledChatButton open={chat.open} onPress={chat.toggle} state={chat.button.state} count={chat.button.count} />;
   const quickAdd = (
     <QuickAdd
       text={quickText}
       onText={setQuickText}
       workspaces={workspaces.data ?? []}
       initialWorkspaceId={workspaceFilter}
+      into={chat.open ? chat.sendIntoChat : undefined}
       onSent={(draft) => {
         setPending((rows) => [...rows, draft]);
         awaitDraftFrom(draft.sessionId);
@@ -567,7 +609,13 @@ export function ScheduledPage(): JSX.Element {
             {sections.map((section) => (
               <section key={`${section.key}:${section.title}`} className="sched-group" data-group={section.key}>
                 <h2>{section.title}{section.subtitle ? <small>{section.subtitle}</small> : null}</h2>
-                {section.rows.map((row) => <Row key={row.key} row={row} onMenu={openRowMenu} />)}
+                {section.rows.map((row) => (
+                  <Row
+                    key={row.key}
+                    row={flash && row.schedule && sameResourceId(row.schedule.id, flash.id) ? { ...row, flash: true } : row}
+                    onMenu={openRowMenu}
+                  />
+                ))}
               </section>
             ))}
             {pendingRowViews.map((row) => <Row key={row.key} row={row} />)}
@@ -673,21 +721,29 @@ function useInspectorWidth(): [number | null, (event: ReactMouseEvent<HTMLElemen
 }
 
 /** The line at the end of the list: one sentence and the workspace it goes to (board 1/2 ③ ⑤). Not a form. */
-function QuickAdd({ text, onText: setText, workspaces, initialWorkspaceId, onSent }: {
+function QuickAdd({ text, onText: setText, workspaces, initialWorkspaceId, into, onSent }: {
   text: string;
   onText: (text: string) => void;
   workspaces: WorkspaceRow[];
   initialWorkspaceId: string | null;
+  /** While the page's chat is open the sentence goes into it, and no draft card is asked for. */
+  into?: (text: string) => Promise<void>;
   onSent: (draft: PendingDraft) => void;
 }): JSX.Element {
   const [chosen, setChosen] = useState<string | null>(() => initialWorkspaceId ?? localStorage.getItem(LAST_WORKSPACE_KEY));
   const workspace = workspaces.find((w) => sameResourceId(w.id, chosen ?? '')) ?? workspaces[0] ?? null;
   const send = useMutation({
-    mutationFn: (body: { workspaceId: string; text: string }) =>
-      api<ScheduleDraftAnswer>('/schedules/drafts', { method: 'POST', body }),
+    mutationFn: async (body: { workspaceId: string; text: string }) => {
+      if (into) {
+        await into(body.text);
+        return null;
+      }
+      return api<ScheduleDraftAnswer>('/schedules/drafts', { method: 'POST', body });
+    },
     onSuccess: (answer, body) => {
-      localStorage.setItem(LAST_WORKSPACE_KEY, body.workspaceId);
       setText('');
+      if (!answer) return;
+      localStorage.setItem(LAST_WORKSPACE_KEY, body.workspaceId);
       onSent({ sessionId: answer.sessionId, text: body.text, workspaceId: body.workspaceId });
     },
   });
@@ -695,8 +751,8 @@ function QuickAdd({ text, onText: setText, workspaces, initialWorkspaceId, onSen
     if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
     event.preventDefault();
     const sentence = text.trim();
-    if (!sentence || !workspace || send.isPending) return;
-    send.mutate({ workspaceId: workspace.id, text: sentence });
+    if (!sentence || (!workspace && !into) || send.isPending) return;
+    send.mutate({ workspaceId: workspace?.id ?? '', text: sentence });
   };
   const error = scheduleErrorText(send.error);
   return (

@@ -106,7 +106,7 @@ export function schedulePageChatNote(input: SchedulePageChatNoteInput): string {
     'Name every schedule you change by its title.',
     'Ask in words before you delete or end more than one schedule.',
     'When you rewrite the prompt of a schedule that may do more than check (it opens pull requests or lands changes), show the before and after in your reply.',
-    'Do not call schedule_run_now. Offer "Run now" as a button for the person to press.',
+    'Do not call schedule_run_now. Offer "Run now" as a button for the person to press: write the link [Run now](orbit-run-now:<schedule id>) in your reply and the page draws the button.',
     '</orbit_schedules>',
   );
   return lines.join('\n');

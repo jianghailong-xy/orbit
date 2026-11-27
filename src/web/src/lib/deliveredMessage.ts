@@ -156,6 +156,7 @@ const TAG_LABEL: Record<string, string> = {
   'list-conditions': 'list conditions',
   'orbit-session-message': 'session message',
   'orbit-session-reply': 'session reply',
+  orbit_schedules: 'Scheduled view',
 };
 
 /** Routine blocks describeNote leaves unnamed when naming a generic Orbit event. */
