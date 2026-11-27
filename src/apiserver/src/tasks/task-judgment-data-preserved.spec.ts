@@ -3564,7 +3564,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // indexes), points three session functions at the eight-argument projector, and re-creates the 13 session triggers
       // without `status` in their column lists. Only `session` is touched; no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
-      '1711_session_status_drop'],
+      '1711_session_status_drop',
+      // 1730 adds the nullable `session.client_request_id` (no row is rewritten) and a partial unique index on
+      // (owner_id, client_request_id) over the rows that carry one. Only `session` is touched; no trigger, function of
+      // one, preserved relation or DONE fence changes.
+      '1730_session_client_request_id'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

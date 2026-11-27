@@ -38,6 +38,10 @@ export interface SessionLandingSummary {
 export interface CreateSessionDto {
   /** Optional display title; defaults to a slice of the prompt. */
   title?: string;
+  /** The caller's key for this request (8 to 100 of A–Z, a–z, 0–9 and `-`, such as a UUID): a repeat with the same
+   *  key answers with the session the first one made instead of opening a second (migration 1730). The web composer
+   *  sends one with a new session's first message so its Retry is safe. Never an address. */
+  clientRequestId?: string;
   /** First user message — seeds the session's first turn. May be '' when `attachmentIds` carry
    *  the message on their own (never for `shell`). */
   prompt: string;

@@ -2034,6 +2034,10 @@ model WorkspacePermissionRule {
 // calls, and llm usage hang directly off the Session.
 model Session {
   id                   String    @id @default(uuid(7)) @db.Uuid
+  /// The key a person's POST /sessions carried, so a repeat of the same request (a Retry whose first answer was
+  /// lost) returns the session it made instead of opening a second. Unique per owner over the rows that have one
+  /// (1730's partial index `session_owner_client_request_key`, which Prisma cannot declare). Never an address.
+  clientRequestId      String?   @map("client_request_id")
   title                String
   /// True while the project this Session coordinates owns its display title. A manual session
   /// rename clears this in the same UPDATE as the new title, so later project renames cannot take
