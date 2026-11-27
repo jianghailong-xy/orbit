@@ -12,6 +12,7 @@ import type {
   ReplyTranslationRetryResponse,
   SessionGuestPerson,
   SessionGuestSuggestion,
+  SessionPermissionModeChange,
   TranslationActionResponse,
   TurnTranslation,
   SubagentRoutingReport,
@@ -2133,6 +2134,14 @@ export interface SessionDetail {
    *  which can move to another one the engine runs (docs/provider-engine-contract.md §6.1). */
   engine?: string | null;
   provider?: string | null;
+  /** The owner's intent: the stored mode, which normalization never rewrites (SessionPermissionModeFacts). */
+  permissionMode?: string | null;
+  /** The mode the session's engine is actually running in, and when it was recorded: null until a claim records
+   *  one; optional, because an older server does not send it. */
+  actualPermissionMode?: string | null;
+  actualPermissionModeAt?: string | null;
+  /** How the mode running came to be: the newest changes, oldest first, each with what made it. */
+  permissionModeChanges?: SessionPermissionModeChange[];
   /** The session's Agent Tools report (lib/agentTools): what its engine was given from Orbit and took, in the
    *  engine's own words. Null until the runner sends one; optional, because an older server does not send it. */
   agentTools?: AgentToolsReport | null;

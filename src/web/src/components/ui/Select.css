@@ -34,6 +34,8 @@
 .orbit-choice-positioner { min-width: var(--orbit-choice-anchor-width, var(--anchor-width)); max-width: var(--orbit-dropdown-room, var(--available-width)); }
 /* The dropdown is drawn as the menus are: a rounder card with a hairline edge and roomy rows (Floating.css). */
 .orbit-select-popup { position: relative; left: var(--orbit-dropdown-subpixel, 0px); padding: 8px; border: 1px solid var(--border-subtle); border-radius: 18px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04); }
+.orbit-select-header { box-sizing: border-box; width: 0; min-width: 100%; padding: 8px 12px 9px; margin-bottom: 4px; border-bottom: 1px solid var(--border-subtle); color: var(--text-2); font-size: 12.5px; line-height: 1.45; white-space: normal; }
+.orbit-select-header b { color: var(--warning); font-weight: 600; }
 .orbit-select-list { max-height: min(304px, var(--available-height)); overflow-y: auto; overscroll-behavior: contain; outline: none; }
 .orbit-select-option { padding: 7px 12px; min-height: 38px; font-size: 15px; border-radius: 10px; cursor: pointer; outline: none; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .orbit-select-option-label { display: block; overflow: hidden; text-overflow: ellipsis; }
