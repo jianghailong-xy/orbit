@@ -198,9 +198,10 @@ class ProjectRowWaitingShellTest {
         await { read() }
         settle()
         shot("project-row-waiting-member-from-menu")
-        val again = bounds(compose.onNodeWithTag("transcript-list"))
+        // At the end, where a row's open is not (theMemberOpensOnTheTopOfItsWaitingCard: "the transcript is not at its end").
+        // Not also "the card's head is off screen": the command folds to its first lines, and since Allow & remember says
+        // `echo` rather than quoting all 62 lines, the whole card fits on screen at the tail.
         assertTrue("the menu's open is at the transcript's end", atTheEnd())
-        assertFalse("and not at the card's head", commandHead().any { it.top < again.bottom && it.bottom > again.top })
     }
 
     /** Where the command's own text is — not a button's label that quotes it. */
