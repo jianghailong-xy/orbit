@@ -158,11 +158,19 @@ public enum ScheduledChatLogic {
         case closeSchedule
     }
 
-    /// A schedule's name in a change line (board 4 ③, design §0.5): in a column the chat stays and the schedule opens
-    /// beside it; in a sheet the chat folds away and the schedule's own sheet opens with ‹ Chat at its head.
-    public static func nameTapped(_ scheduleID: String, sheet: Bool) -> [Step] {
-        sheet ? [.closeChat, .openSchedule(id: scheduleID, backToChat: true)]
-              : [.openSchedule(id: scheduleID, backToChat: false)]
+    /// How the chat is shown: a column beside the page, sliding over the inspector (a Mac under 1200 points), or a
+    /// sheet (an iPhone, a compact iPad).
+    public enum Presentation: Equatable, Sendable { case column, overlay, sheet }
+
+    /// A schedule's name in a change line (board 4 ③, design §0.5, §6): in a column the chat stays and the schedule
+    /// opens beside it; sliding over the inspector, the chat closes and the inspector shows the schedule; in a sheet the
+    /// chat folds away and the schedule's own sheet opens with ‹ Chat at its head.
+    public static func nameTapped(_ scheduleID: String, presentation: Presentation) -> [Step] {
+        switch presentation {
+        case .column: return [.openSchedule(id: scheduleID, backToChat: false)]
+        case .overlay: return [.closeChat, .openSchedule(id: scheduleID, backToChat: false)]
+        case .sheet: return [.closeChat, .openSchedule(id: scheduleID, backToChat: true)]
+        }
     }
 
     /// ‹ Chat on a schedule's sheet: back to the conversation it came from.
@@ -174,6 +182,8 @@ public enum ScheduledChatLogic {
     public struct RunNowOffer: Equatable, Sendable, Identifiable {
         public let scheduleID: String
         public let turnID: String
+        /// The assistant message that offered it.
+        public let messageID: String
         /// Stable across reads: the message and the schedule.
         public let id: String
     }
@@ -188,7 +198,7 @@ public enum ScheduledChatLogic {
             let text = bubble.text.isEmpty ? bubble.streamingText : bubble.text
             var seen = Set<String>()
             for id in offeredIDs(text) where seen.insert(id).inserted {
-                offers.append(RunNowOffer(scheduleID: id, turnID: bubble.turnId ?? turn ?? "",
+                offers.append(RunNowOffer(scheduleID: id, turnID: bubble.turnId ?? turn ?? "", messageID: bubble.id,
                                           id: "run-now:\(bubble.id):\(id)"))
             }
         }
@@ -216,5 +226,68 @@ public enum ScheduledChatLogic {
     public static func runNowShown(_ schedule: ScheduleView?) -> Bool {
         guard let schedule else { return false }
         return schedule.state != "ENDED"
+    }
+
+    /// A Run now card the transcript draws: the offer, and the schedule's title as the server's list has it.
+    public struct RunNowCard: Equatable, Sendable, Identifiable {
+        public let id: String
+        public let scheduleID: String
+        public let title: String
+        public let turnID: String
+        /// The assistant message whose link the card stands for.
+        public let messageID: String
+    }
+
+    /// The cards a conversation draws (the web's `useRunNowInserts` + `RunNowOffer`): in a Scheduled page chat alone
+    /// (`chatOrigin`), one per offer whose id names one of the listed schedules that has not ended, titled by the list.
+    /// An id the list does not hold, or a schedule that ended, draws nothing.
+    public static func runNowCards(_ items: [TranscriptItem], chatOrigin: String?, schedules: [ScheduleView]) -> [RunNowCard] {
+        guard chatOrigin == origin else { return [] }
+        var listed: [String: ScheduleView] = [:]
+        for schedule in schedules { listed[PublicID.storageKey(schedule.id)] = schedule }
+        return runNowOffers(items).compactMap { offer in
+            guard let schedule = listed[PublicID.storageKey(offer.scheduleID)], runNowShown(schedule) else { return nil }
+            return RunNowCard(id: offer.id, scheduleID: offer.scheduleID, title: schedule.title, turnID: offer.turnID,
+                              messageID: offer.messageID)
+        }
+    }
+
+    /// The answer's words with each `[label](orbit-run-now:<id>)` link taken out whose card is drawn (`drawn`, schedule
+    /// ids), so the offer reads once: the card stands in the link's place. A link no card is drawn for stays, inert.
+    public static func withoutDrawnOffers(_ text: String, drawn: Set<String>) -> String {
+        guard !drawn.isEmpty, text.contains("\(runNowScheme):") else { return text }
+        let keys = Set(drawn.map(PublicID.storageKey))
+        let pattern = try! NSRegularExpression(pattern: #"\[[^\]\n]*\]\(\#(runNowScheme):([A-Za-z0-9_-]+)\)"#)
+        var out = text
+        for match in pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+            guard let idRange = Range(match.range(at: 1), in: text), keys.contains(PublicID.storageKey(String(text[idRange]))),
+                  let whole = Range(match.range, in: out) else { continue }
+            out.removeSubrange(whole)
+        }
+        // A line the link stood on alone goes with it.
+        let lines = out.components(separatedBy: "\n")
+        var kept: [String] = []
+        for line in lines {
+            let blank = line.trimmingCharacters(in: .whitespaces).isEmpty
+            if blank, let last = kept.last, last.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+            kept.append(blank ? "" : line)
+        }
+        return kept.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: the Mac's layout (design §6)
+
+    /// Where the Mac shows the chat: a third column beside the inspector when list, inspector and chat fit — from 1200
+    /// points, the source list folding as on the web's 1200–1439 band — else sliding over the inspector, so no column
+    /// is squeezed under its minimum.
+    public enum MacLayout: Equatable, Sendable { case column, overlay }
+
+    /// The window width from which the Mac shows three columns (list 400 + inspector 320 + chat 400, with room).
+    public static let columnWindowMin: Double = 1200
+    /// The inspector's narrowest (design §6).
+    public static let inspectorMin: Double = 320
+
+    public static func macLayout(windowWidth: Double) -> MacLayout {
+        windowWidth >= columnWindowMin ? .column : .overlay
     }
 }

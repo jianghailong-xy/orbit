@@ -1,0 +1,34 @@
+{
+  "sessionId": "354zfIXDCMY10mXloUYjO",
+  "opening": {
+    "counts": {
+      "total": 4,
+      "active": 2,
+      "paused": 2,
+      "held": 0,
+      "failing": 0
+    },
+    "next": {
+      "scheduleId": "354zfINSjQzqpqwHNtyry",
+      "title": "Codex stable check",
+      "at": "2026-11-27T22:00:00.000Z",
+      "timezone": "Asia/Shanghai",
+      "workspaceId": "354zfIEywr4FQDQdryIxs",
+      "workspaceName": "apiserver",
+      "schedulePublicId": "354zfINSjQzqpqwHNtyry",
+      "workspacePublicId": "354zfIEywr4FQDQdryIxs",
+      "agentId": "354zfIEywr4FQDQdryIxs",
+      "agentName": "apiserver"
+    },
+    "summary": "You have 4 scheduled tasks: 2 active, 2 paused, none failing.",
+    "nextText": "Next: Codex stable check, today at 06:00 on apiserver.",
+    "examplesLead": "Ask about them, or tell me what to change. For example:",
+    "examples": [
+      "Pause everything on my laptop until Monday",
+      "Why did the last run take so long?",
+      "Every weekday at 09:00, check a changelog and tell me what's new"
+    ],
+    "closing": "Moving a time, rewording what a task checks or how it reports applies at once, and you can undo it. More runs, longer runs, more access or another workspace need your Allow."
+  },
+  "sessionPublicId": "354zfIXDCMY10mXloUYjO"
+}

@@ -77,7 +77,7 @@ final class ScheduledChatLogicTests: XCTestCase {
 
     func testRunsInStartsOnTheFilterElseTheFirstWorkspaceWithAMachine() {
         let a = WikiChatWorkspace(id: "w1", name: "dev-box")
-        let b = WikiChatWorkspace(id: "w2", name: "orbit-ws01")
+        let b = WikiChatWorkspace(id: "w2", name: "mac-mini")
         XCTAssertEqual(ScheduledChatLogic.defaultWorkspace(filter: "w2", choices: [a, b])?.id, "w2")
         XCTAssertEqual(ScheduledChatLogic.defaultWorkspace(filter: "gone", choices: [a, b])?.id, "w1")
         XCTAssertEqual(ScheduledChatLogic.defaultWorkspace(filter: nil, choices: [a, b])?.id, "w1")
@@ -146,9 +146,12 @@ final class ScheduledChatLogicTests: XCTestCase {
     }
 
     func testANameInAChangeLineOpensTheScheduleBesideAColumnAndInPlaceOfASheet() {
-        XCTAssertEqual(ScheduledChatLogic.nameTapped("sch1", sheet: false),
+        XCTAssertEqual(ScheduledChatLogic.nameTapped("sch1", presentation: .column),
                        [.openSchedule(id: "sch1", backToChat: false)], "the column stays; the inspector opens")
-        XCTAssertEqual(ScheduledChatLogic.nameTapped("sch1", sheet: true),
+        XCTAssertEqual(ScheduledChatLogic.nameTapped("sch1", presentation: .overlay),
+                       [.closeChat, .openSchedule(id: "sch1", backToChat: false)],
+                       "sliding over the inspector, the chat closes and the inspector shows the schedule (design §6)")
+        XCTAssertEqual(ScheduledChatLogic.nameTapped("sch1", presentation: .sheet),
                        [.closeChat, .openSchedule(id: "sch1", backToChat: true)],
                        "the sheet folds, then the schedule's own sheet opens with ‹ Chat")
         XCTAssertEqual(ScheduledChatLogic.backToChat(), [.closeSchedule, .openChat])
@@ -169,6 +172,52 @@ final class ScheduledChatLogicTests: XCTestCase {
         XCTAssertEqual(offers.map(\.scheduleID), ["sch_1", "sch-2"])
         XCTAssertEqual(offers.map(\.turnID), ["turn1", "turn1"])
         XCTAssertEqual(Set(offers.map(\.id)).count, 2)
+    }
+
+    private func schedule(_ id: String, _ title: String, state: String = "ACTIVE") -> ScheduleView {
+        ScheduleView(id: id, title: title, rule: .daily(time: "06:00"), timezone: "UTC", workspaceId: "w1",
+                     workspaceName: "dev-box", accessLevel: "CHECK_ONLY", state: state)
+    }
+
+    private func answer(_ text: String, id: String = "a1", turn: String = "t1") -> TranscriptItem {
+        var bubble = AssistantBubble(id: id, text: "", streamingText: "", seq: 3)
+        bubble.text = text
+        bubble.turnId = turn
+        return .assistant(bubble)
+    }
+
+    func testRunNowCardsInAScheduledChatAloneForListedLiveSchedulesTitledByTheList() {
+        let listed = [schedule("sch1", "Codex stable check"), schedule("sch9", "Old audit", state: "ENDED")]
+        // The agent's own words name the schedule "Something else"; the card says the list's title.
+        let items = [answer("Run [Something else](orbit-run-now:sch1), [x](orbit-run-now:sch9), [y](orbit-run-now:nope)")]
+        let cards = ScheduledChatLogic.runNowCards(items, chatOrigin: "SCHEDULE_CHAT", schedules: listed)
+        XCTAssertEqual(cards.map(\.scheduleID), ["sch1"], "an ended schedule and an id the list does not hold draw nothing")
+        XCTAssertEqual(cards.first?.title, "Codex stable check", "titled by the server's list, never the agent's text")
+        XCTAssertEqual(cards.first?.turnID, "t1")
+        XCTAssertEqual(cards.first?.messageID, "a1")
+        XCTAssertTrue(ScheduledChatLogic.runNowCards(items, chatOrigin: nil, schedules: listed).isEmpty,
+                      "an ordinary session draws no Run now")
+        XCTAssertTrue(ScheduledChatLogic.runNowCards(items, chatOrigin: "WIKI_CHAT", schedules: listed).isEmpty,
+                      "nor does another chat")
+    }
+
+    func testTheLinkGivesWayToItsCardSoTheOfferReadsOnce() {
+        let text = "I don't press Run now for you: it's yours.\n\n[Run now](orbit-run-now:sch1)\n\nOr [Run now](orbit-run-now:nope)."
+        XCTAssertEqual(ScheduledChatLogic.withoutDrawnOffers(text, drawn: ["sch1"]),
+                       "I don't press Run now for you: it's yours.\n\nOr [Run now](orbit-run-now:nope).",
+                       "the drawn card's link goes with its line; a link no card stands for stays")
+        XCTAssertEqual(ScheduledChatLogic.withoutDrawnOffers(text, drawn: []), text, "nothing drawn, nothing taken")
+        XCTAssertEqual(ScheduledChatLogic.withoutDrawnOffers("No offer.", drawn: ["sch1"]), "No offer.")
+    }
+
+    func testTheMacShowsThreeColumnsFrom1200AndSlidesTheChatOverBelow() {
+        XCTAssertEqual(ScheduledChatLogic.macLayout(windowWidth: 1460), .column)
+        XCTAssertEqual(ScheduledChatLogic.macLayout(windowWidth: 1200), .column)
+        XCTAssertEqual(ScheduledChatLogic.macLayout(windowWidth: 1199), .overlay)
+        XCTAssertEqual(ScheduledChatLogic.macLayout(windowWidth: 1010), .overlay)
+        XCTAssertEqual(ScheduledChatLogic.macLayout(windowWidth: 0), .overlay, "before the width is read, nothing is squeezed")
+        XCTAssertGreaterThanOrEqual(ScheduledChatLogic.columnWindowMin, 400 + ScheduledChatLogic.inspectorMin + 400,
+                                    "list 400 + inspector + chat 400 fit from the column width on")
     }
 
     func testRunNowIsDrawnOnlyForAListedScheduleThatHasNotEnded() {
