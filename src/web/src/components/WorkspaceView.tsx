@@ -636,7 +636,7 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { sessionDisplayState, sessionDisplayText, sessionMarks } from '../lib/sessionDisplay';
+import { sessionDisplayState, sessionDisplayText, sessionMarks, sessionReleasedByMove } from '../lib/sessionDisplay';
 import { SessionMarkChips, SessionStateGlyph } from './SessionStateDisplay';
 import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
@@ -12777,7 +12777,9 @@ export function WorkspaceView({
               {selected &&
                 !selectedTrashed &&
                 !scheduleRunCard &&
-                isSessionTerminal(selectedSession ?? selected) && (
+                isSessionTerminal(selectedSession ?? selected) &&
+                // A move let it go; nothing tells its reader it ended (sessionReleasedByMove).
+                !sessionReleasedByMove(selectedSession ?? selected) && (
                 <div className="chat-note">
                   {sessionEndedBanner(
                     selectedSession ?? selected,
