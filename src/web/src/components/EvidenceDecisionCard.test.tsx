@@ -28,6 +28,7 @@ import {
   DECISION_SEND_BACK_HINT,
   EVIDENCE_DECISION_ALREADY_DECIDED,
   EVIDENCE_DECISION_RECORDED_HEADING,
+  evidenceSubmittedLine,
   EVIDENCE_DECISION_STALE_HEADING,
   EVIDENCE_DECISION_SUPERSEDED,
   EVIDENCE_DECISION_UNREAD_HEADING,
@@ -300,6 +301,18 @@ describe('the card is drawn from the row the pending read published', () => {
     // The fourth is folded and COUNTED, not dropped.
     expect(html).not.toContain(escaped(GAPS[3]));
     expect(html).toContain(decisionGapsMore(1));
+  });
+
+  it('says when the version was submitted beside its mark, and nothing from a row without the time', () => {
+    const at = new Date();
+    at.setHours(19, 59, 0, 0);
+    const timed = row({ submittedAt: at.toISOString() });
+    const html = card(evidenceDecisionStanding(queue([timed]), PROJECT_ID, timed));
+    expect(html).toContain(`<span class="evidence-decision-submitted">${escaped(evidenceSubmittedLine(timed.submittedAt!))}</span>`);
+    expect(evidenceSubmittedLine(at.toISOString(), at)).toBe(`submitted ${at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
+
+    const untimed = row();
+    expect(card(evidenceDecisionStanding(queue([untimed]), PROJECT_ID, untimed))).not.toContain('evidence-decision-submitted');
   });
 
   it('carries the criterion’s own text, not only its key, and leads the card with it', () => {

@@ -1,4 +1,4 @@
-import { CheckOutlined, CodeOutlined, FolderOutlined, StopOutlined } from '@ant-design/icons';
+import { CheckOutlined, CodeOutlined, FolderOutlined } from '@ant-design/icons';
 import { useState, type ComponentPropsWithRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { AgentProvider } from '@orbit/shared';
@@ -65,14 +65,24 @@ export interface NewSessionPlace {
   onPickFolder: (id: string | null) => void;
 }
 
+/** Past this many rows the place menu gets a search box (docs/mocks/new-session-place ③). */
+const PLACE_SEARCH_FROM = 9;
+
 /** A component rather than a wrapped element, so the popover's trigger props reach the button through
  *  the tooltip. */
-function PlaceChip({ icon, label, ...props }: ComponentPropsWithRef<'button'> & { icon: ReactNode; label: string }) {
+function PlaceButton({ place, label, ...props }: ComponentPropsWithRef<'button'> & { place: NewSessionPlace; label: string }) {
   return (
     <Tooltip content={label} truncatedOnly>
       <button {...props}>
-        {icon}
-        <span className="np-place-name">{label}</span>
+        <CodeOutlined />
+        <span className="np-place-name">{place.workspace.name}</span>
+        {place.folder && (
+          <>
+            <span className="np-place-slash">/</span>
+            <FolderOutlined />
+            <span className="np-place-name">{place.folder.name}</span>
+          </>
+        )}
         <span className="np-chev">▾</span>
       </button>
     </Tooltip>
@@ -80,47 +90,30 @@ function PlaceChip({ icon, label, ...props }: ComponentPropsWithRef<'button'> & 
 }
 
 /**
- * The hero's second line (docs/mocks/new-session-top ②⑤): `in [workspace ▾] › [folder ▾]`, each a menu, so
- * where the session runs is read and changed under the engine rather than in a header line far from it.
+ * Under the engine (docs/mocks/new-session-place, option A): one bordered pill that says where the
+ * session runs, `[workspace] / [folder] ▾`, naming the folder only when one is picked (a folder is a
+ * sidebar group, so none is the quiet default rather than a "No folder" state). It opens one menu: the
+ * workspaces, then this workspace's folders. A pick closes it: another workspace opens its own draft, whose
+ * folders the menu lists once it is opened again.
  */
-function PlaceLine({ place }: { place: NewSessionPlace }) {
-  const [open, setOpen] = useState<'workspace' | 'folder' | null>(null);
-  const menu = (
-    which: 'workspace' | 'folder',
-    icon: ReactNode,
-    label: string,
-    rows: ReactNode,
-  ) => (
-    <Popover
-      title={null}
-      trigger={
-        <PlaceChip
-          type="button"
-          className={`np-place-chip${open === which ? ' open' : ''}`}
-          aria-haspopup="menu"
-          aria-expanded={open === which}
-          aria-label={`${which === 'workspace' ? 'Workspace' : 'Folder'}: ${label}`}
-          icon={icon}
-          label={label}
-        />
-      }
-      side="bottom"
-      open={open === which}
-      onOpenChange={(next) => setOpen(next ? which : null)}
-      arrow={false}
-      popupClassName="np-pop"
-    >
-      <div className="np-list np-place-list">{rows}</div>
-    </Popover>
-  );
+function PlacePill({ place }: { place: NewSessionPlace }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const label = place.folder ? `${place.workspace.name} / ${place.folder.name}` : place.workspace.name;
+  const searchable = place.workspaces.length + place.folders.length + 1 >= PLACE_SEARCH_FROM;
+  const needle = searchable ? query.trim().toLowerCase() : '';
+  const matches = (name: string) => !needle || name.toLowerCase().includes(needle);
+  const workspaces = place.workspaces.filter((w) => matches(w.name));
+  const folders = place.folders.filter((f) => matches(f.name));
   const row = (key: string, icon: ReactNode, name: string, on: boolean, pick: () => void) => (
     <button
       key={key}
       type="button"
-      className={`np-row${on ? ' on' : ''}`}
+      className={`np-row${on ? ' on' : ''}${icon ? '' : ' np-place-none'}`}
       data-row-focus=""
       onClick={() => {
-        setOpen(null);
+        setOpen(false);
+        setQuery('');
         if (!on) pick();
       }}
     >
@@ -131,30 +124,54 @@ function PlaceLine({ place }: { place: NewSessionPlace }) {
   );
   return (
     <div className="np-place">
-      <span className="np-place-in">in</span>
-      {menu(
-        'workspace',
-        <CodeOutlined />,
-        place.workspace.name,
-        place.workspaces.map((w) =>
-          row(w.id, <CodeOutlined />, w.name, w.id === place.workspace.id, () => place.onPickWorkspace(w.id))),
-      )}
-      {place.folders.length > 0 && (
-        <>
-          <span className="np-place-sep">›</span>
-          {menu(
-            'folder',
-            place.folder ? <FolderOutlined /> : <StopOutlined />,
-            place.folder?.name ?? 'No folder',
-            <>
-              {row('none', <StopOutlined />, 'No folder', !place.folder, () => place.onPickFolder(null))}
-              <div className="np-sep" />
-              {place.folders.map((f) =>
-                row(f.id, <FolderOutlined />, f.name, f.id === place.folder?.id, () => place.onPickFolder(f.id)))}
-            </>,
+      <Popover
+        title={null}
+        trigger={
+          <PlaceButton
+            type="button"
+            className={`np-place-pill${open ? ' open' : ''}`}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            aria-label={`Runs in: ${label}`}
+            place={place}
+            label={label}
+          />
+        }
+        side="bottom"
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery('');
+        }}
+        arrow={false}
+        popupClassName="np-pop"
+      >
+        <div className="np-list np-place-list">
+          {searchable && (
+            <input
+              className="np-place-search"
+              type="search"
+              placeholder="Find a workspace or folder"
+              aria-label="Find a workspace or folder"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
           )}
-        </>
-      )}
+          {workspaces.length > 0 && <div className="np-place-head">Workspace</div>}
+          {workspaces.map((w) =>
+            row(w.id, <CodeOutlined />, w.name, w.id === place.workspace.id, () => place.onPickWorkspace(w.id)))}
+          {place.folders.length > 0 && (!needle || folders.length > 0) && (
+            <>
+              {workspaces.length > 0 && <div className="np-sep" />}
+              <div className="np-place-head">{`Folder in ${place.workspace.name} · optional`}</div>
+              {!needle && row('none', null, 'None', !place.folder, () => place.onPickFolder(null))}
+              {folders.map((f) =>
+                row(f.id, <FolderOutlined />, f.name, f.id === place.folder?.id, () => place.onPickFolder(f.id)))}
+            </>
+          )}
+          {workspaces.length === 0 && folders.length === 0 && <div className="np-place-empty">No matches</div>}
+        </div>
+      </Popover>
     </div>
   );
 }
@@ -361,7 +378,7 @@ export function NewSessionProviderHero({
           {list}
         </Popover>
       )}
-      {place && <PlaceLine place={place} />}
+      {place && <PlacePill place={place} />}
       {fixSummary ??
         fallbackSummary ??
         (projectIntent ? (

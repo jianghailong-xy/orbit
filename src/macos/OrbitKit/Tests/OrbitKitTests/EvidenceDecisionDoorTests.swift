@@ -102,12 +102,13 @@ final class EvidenceDecisionDoorTests: XCTestCase {
                      revision: String = "3",
                      projectId: String? = EvidenceDecisionDoorTests.project,
                      decidable: Bool = true,
-                     independent: Bool = true) -> EvidenceDecisionRow {
+                     independent: Bool = true,
+                     submittedAt: String? = nil) -> EvidenceDecisionRow {
         EvidenceDecisionRow(
             taskId: taskId, title: "改掉 update() 的头注释", projectId: projectId,
             criterion: EvidenceDecisionCriterion(key: "6KG2mjp63PrtVvGwxRLvFY",
                                                  text: "提交一条完成证据后…"),
-            evidenceRevision: revision, ageSeconds: 1200, claim: "改掉了头注释。",
+            evidenceRevision: revision, submittedAt: submittedAt, ageSeconds: 1200, claim: "改掉了头注释。",
             gaps: ["没跑 pg spec"], citations: [],
             decidability: EvidenceDecisionDecidability(
                 decidable: decidable,
@@ -239,6 +240,17 @@ final class EvidenceDecisionDoorTests: XCTestCase {
         XCTAssertTrue(EvidenceDecisions.isOpen(now))
         XCTAssertEqual(EvidenceDecisions.heading(now), EvidenceDecisions.askHeading)
         XCTAssertNil(EvidenceDecisions.staleExplanation(now))
+    }
+
+    /// The head says when the version was submitted, in the receipts' clock (web
+    /// `evidenceSubmittedLine`); a row without the time, or a card with no row, says nothing.
+    func testTheHeadSaysWhenTheVersionWasSubmitted() {
+        let at = "2026-09-16T11:59:30.000Z"
+        let timed = standing([row(submittedAt: at)])
+        let expected = OwnerConfirmations.receiptTime(at)!
+        XCTAssertEqual(EvidenceDecisions.submittedLine(timed), "submitted \(expected)")
+        XCTAssertNil(EvidenceDecisions.submittedLine(standing([row()])))
+        XCTAssertNil(EvidenceDecisions.submittedLine(standing([])))
     }
 
     /// Gone from the read, and nothing later has taken its place: it was answered somewhere else.

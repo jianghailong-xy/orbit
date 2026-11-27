@@ -23,6 +23,7 @@ import { SessionsService } from './sessions.service';
 import { turnStateOfWord } from './session-turn-state';
 import type { LegacyStatusFacts } from './session-legacy-words';
 import { WORD_SELECT, sessionWord, wordOf, fixtureFacts } from '../test-support/session-word';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 /**
  * ONE LIVE RUN PER TASK, RELEASE B: the rehearsal before 1444 drops 0130's index, and the drop itself.
@@ -447,6 +448,9 @@ test('one live run per task, release B (migration 1444): rehearsal before and af
   ownClient = sql;
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The column session.status was dropped in deploy D4 (migration 1711): this file rehearses deploys it
+  // was part of, on the database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const database = ((await sql.query('SELECT current_database() AS d')).rows[0] as { d: string }).d;
   const a = stack(url);
   const b = stack(url);

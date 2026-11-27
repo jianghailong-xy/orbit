@@ -740,6 +740,8 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     await until(() => expect(column()).not.toBeNull());
     const close = column()!.querySelector('.session-project-page-header .session-folder-back')!;
     expect(close.getAttribute('aria-label')).toBe('Hide project sessions');
+    // The ✕ ends the bar, top-right, as every other panel's does (owner 2026-11-27).
+    expect(close.closest('.session-project-page-header')!.lastElementChild).toBe(close);
     await click(close, 'the column ✕');
     await until(() => expect(column()).toBeNull());
     expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
@@ -1144,6 +1146,7 @@ describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
     expect(head.textContent).toContain('Project Alpha');
     expect(head.textContent).toContain('Project · 2 sessions');
     expect(head.querySelector('.session-folder-back')?.getAttribute('aria-label')).toBe('Hide project sessions');
+    expect(head.lastElementChild?.classList.contains('session-folder-back')).toBe(true);
     expect(sheet()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
     expect(sheet()!.querySelector('.session-project-coordinator .session-row.active .session-title')?.textContent).toBe(COORDINATOR.title);
     // The list behind keeps the workspace's rows: no page took its place.

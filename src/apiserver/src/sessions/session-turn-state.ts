@@ -1,6 +1,6 @@
 /**
  * A held session's turn state, the explicit fact for runner slots and claims (docs/session-status-retirement-plan.md
- * §1.3, §2.1), which the readers moved off `session.status` read (tasks T7 to T12).
+ * §1.3, §2.1), which the readers moved off the stored status word read (tasks T7 to T12).
  *
  * `session.turn_state` is QUEUED, IN_FLIGHT, ABANDONED or null, one for one with the held words PENDING, RUNNING,
  * INTERRUPTED and AWAITING_INPUT. The writers write it (deploy D3, task T14) and nothing reads the stored word: every
@@ -63,8 +63,8 @@ export function turnStateOf(facts: TurnStateFacts): TurnState | null {
 
 /**
  * The turn state of a held word, one for one, null for AWAITING_INPUT and every released word: what a writer that
- * decides in words (the runner's turn-complete and finalize, plan §3.2) stores. The mapping of
- * `session_turn_state_of_status` (migration 1611), which the CHECK of 1652 holds the two spellings to.
+ * decides in words (the runner's turn-complete and finalize, plan §3.2) stores. The mapping the dropped column's
+ * backfill and its agreement CHECK held (migrations 1611 and 1652).
  */
 export function turnStateOfWord(word: string): TurnState | null {
   return TURN_STATE_OF_HELD_WORD[word] ?? null;

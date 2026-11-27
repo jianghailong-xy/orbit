@@ -2587,9 +2587,7 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Will resume"
-     ]
+     "marks": []
     }
    },
    "sessionSummary": {
@@ -2662,9 +2660,7 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Will resume"
-     ]
+     "marks": []
     }
    },
    "taskRun": {
@@ -2699,9 +2695,7 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Will resume"
-     ]
+     "marks": []
     }
    },
    "searchHit": {
@@ -2740,9 +2734,7 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Will resume"
-     ]
+     "marks": []
     }
    }
   },
@@ -5040,9 +5032,7 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Will resume"
-     ]
+     "marks": []
     }
    },
    "sessionSummary": {
@@ -5115,9 +5105,7 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Will resume"
-     ]
+     "marks": []
     }
    },
    "taskRun": {
@@ -5152,9 +5140,7 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Will resume"
-     ]
+     "marks": []
     }
    },
    "searchHit": {
@@ -5193,9 +5179,7 @@
     },
     "web": {
      "state": "Idle",
-     "marks": [
-      "Will resume"
-     ]
+     "marks": []
     }
    }
   },
@@ -6154,8 +6138,7 @@
      "state": "Idle",
      "marks": [
       "Interrupted",
-      "Background",
-      "Will resume"
+      "Background"
      ]
     }
    },
@@ -6231,8 +6214,7 @@
      "state": "Idle",
      "marks": [
       "Interrupted",
-      "Background",
-      "Will resume"
+      "Background"
      ]
     }
    },
@@ -6270,8 +6252,7 @@
      "state": "Idle",
      "marks": [
       "Interrupted",
-      "Background",
-      "Will resume"
+      "Background"
      ]
     }
    },
@@ -6313,8 +6294,7 @@
      "state": "Idle",
      "marks": [
       "Interrupted",
-      "Background",
-      "Will resume"
+      "Background"
      ]
     }
    }

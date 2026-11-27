@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { Client } from 'pg';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 /**
  * 0367 against a real server: `antigravity` stops being a slug anybody's provider can hold.
@@ -59,6 +60,9 @@ test('0367 moves whatever held `antigravity` aside and reserves the name', { ski
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The replayed migration predates deploy D4 (migration 1711), which dropped session.status: it runs on the
+  // database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   t.after(() => sql.end().catch(() => undefined));
 
   const one = async <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>

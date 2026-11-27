@@ -234,15 +234,17 @@ fun DrawerWorkspacesHeading(title: String, trailing: (@Composable () -> Unit)? =
     }
 }
 
-/** iOS `WorkspaceNavigationRow` in its drawer pill: the folder, "name · runner" on one line (a disabled workspace says so after its
+/** iOS `WorkspaceNavigationRow` in its drawer pill: the folder (Orbit Cloud's cloud for a workspace there, board
+ * docs/mocks/workspace-machine-icon B), "name · runner" on one line (a disabled workspace says so after its
  * name), and one trailing slot for its state — how many wait on you, else the running spinner while the drawer shows, else its
  * runner's state (Offline, or a managed runner's Asleep…). An offline runner's folder is dimmed. */
 @Composable
-fun DrawerWorkspaceRow(name: String, runner: String?, disabled: Boolean, stateLabel: String?, waiting: Int, running: Int, live: Boolean,
+fun DrawerWorkspaceRow(name: String, runner: String?, cloud: Boolean = false, disabled: Boolean, stateLabel: String?, waiting: Int, running: Int, live: Boolean,
     selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     // How many run is said whether or not the spinner is drawn: the drawer stays composed while closed.
-    DrawerRow(selected, onClick, modifier.semantics { if (running > 0) stateDescription = "$running running" }, icon = R.drawable.ic_workspace,
+    DrawerRow(selected, onClick, modifier.semantics { if (running > 0) stateDescription = "$running running" },
+        icon = if (cloud) R.drawable.ic_cloud else R.drawable.ic_workspace,
         iconTint = if (stateLabel != null && !selected) secondary.copy(alpha = 0.6f) else null,
         trailing = when {
             waiting > 0 -> ({ NeedsYouCount(waiting) })

@@ -623,10 +623,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Will resume"
-   ],
-   "line": "Idle · Will resume",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -657,10 +655,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Will resume"
-   ],
-   "line": "Idle · Will resume",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -1241,10 +1237,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Will resume"
-   ],
-   "line": "Idle · Will resume",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -1275,10 +1269,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Will resume"
-   ],
-   "line": "Idle · Will resume",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -1522,10 +1514,9 @@
    "state": "Idle",
    "icon": "circle",
    "marks": [
-    "Interrupted",
-    "Will resume"
+    "Interrupted"
    ],
-   "line": "Idle · Interrupted · Will resume",
+   "line": "Idle · Interrupted",
    "completed": false
   },
   "payload": {
@@ -1557,10 +1548,9 @@
    "state": "Idle",
    "icon": "circle",
    "marks": [
-    "Interrupted",
-    "Will resume"
+    "Interrupted"
    ],
-   "line": "Idle · Interrupted · Will resume",
+   "line": "Idle · Interrupted",
    "completed": false
   },
   "payload": {

@@ -4,8 +4,8 @@
  *
  *   (1) the turn state helpers (sessions/session-turn-state.ts) select, for every word, exactly the rows the old word
  *       sets selected: Prisma, TypeScript, SQL
- *   (2) every SQL predicate T11 rewrote answers, row by row, what the predicate it replaced answered on the stored
- *       word, which since deploy D3 (task T14) migration 1671's trigger writes from the facts
+ *   (2) every SQL predicate T11 rewrote answers, row by row, what the predicate it replaced answered on the word, here
+ *       the word the facts give (test-support wordSql): the stored column was dropped in deploy D4 (task T15)
  *   (3) the readers themselves give today's answers: the idle-run check (task-run-idle.ts), the project's ready-to-run
  *       queue (project-ready-to-run.ts) and the attempt-ended wake fact (task-exception-input.producer.ts), whose
  *       `sessionStatus` is the derived word (plan §3.4)
@@ -34,6 +34,7 @@ import {
   turnStateOf,
   type TurnState,
 } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 import { assertCoordinatorPgUrlIsIsolated } from './coordinator-pg-test-safety';
 import { readProjectReadyToRun } from './project-ready-to-run';
 import { findIdleRuns } from './task-run-idle';
@@ -139,8 +140,8 @@ test('projects, tasks and task lists read the facts, and answer as the stored wo
     }
 
     const read = await db.session.findMany({ where: { ownerId: ids.ownerId }, select: { title: true, ...TURN_STATE_SELECT } });
-    const sql = await db.$queryRaw<Array<{ title: string; state: string | null; word: string; stored: string }>>(Prisma.sql`
-      SELECT s.title, ${sessionTurnStateSql('s')} AS state, ${legacySessionStatusSql('s')} AS word, s.status::text AS stored
+    const sql = await db.$queryRaw<Array<{ title: string; state: string | null; word: string }>>(Prisma.sql`
+      SELECT s.title, ${sessionTurnStateSql('s')} AS state, ${legacySessionStatusSql('s')} AS word
         FROM session s WHERE s.owner_id = ${ids.ownerId}::uuid`);
     const bySql = new Map(sql.map((row) => [row.title, row]));
     for (const row of read) {
@@ -153,8 +154,6 @@ test('projects, tasks and task lists read the facts, and answer as the stored wo
     for (const row of full) {
       const stored = bySql.get(row.title)!;
       assert.equal(stored.word, legacySessionStatus(row), `${row.title}: legacySessionStatusSql is the projector`);
-      // The stored word is migration 1671's, from the same facts (deploy D3).
-      assert.equal(stored.stored, stored.word, `${row.title}: the stored word is the projector's`);
     }
   });
 
@@ -166,28 +165,26 @@ test('projects, tasks and task lists read the facts, and answer as the stored wo
       }
     }
     const ts = sessionTurnStateSql('s');
+    const old = Prisma.raw(wordSql('s'));
     const rows = await db.$queryRaw<Array<Record<string, unknown> & { title: string }>>(Prisma.sql`
       SELECT s.title,
              -- project-ready-to-run.ts: the run state and the order of a task's carriers.
-             (CASE s.status WHEN 'PENDING'::run_status THEN 'QUEUED' ELSE 'RUNNING' END) AS "readyStateOld",
+             (CASE ${old} WHEN 'PENDING' THEN 'QUEUED' ELSE 'RUNNING' END) AS "readyStateOld",
              (CASE ${ts} WHEN 'QUEUED' THEN 'QUEUED' ELSE 'RUNNING' END) AS "readyStateNew",
-             (CASE s.status WHEN 'RUNNING'::run_status THEN 0 ELSE 1 END) AS "readyOrderOld",
+             (CASE ${old} WHEN 'RUNNING' THEN 0 ELSE 1 END) AS "readyOrderOld",
              (CASE ${ts} WHEN 'IN_FLIGHT' THEN 0 ELSE 1 END) AS "readyOrderNew",
              -- tasks.service.ts materialisationBudget: a join condition, so NULL is false.
-             COALESCE(s.status IN ('RUNNING', 'PENDING'), false) AS "budgetOld",
+             COALESCE(${old} IN ('RUNNING', 'PENDING'), false) AS "budgetOld",
              COALESCE(${ts} IN ('IN_FLIGHT', 'QUEUED'), false) AS "budgetNew",
              -- tasks.service.ts: the paused run a press continues.
-             (s.status IN ('AWAITING_INPUT'::run_status, 'INTERRUPTED'::run_status)) AS "pausedOld",
+             (${old} IN ('AWAITING_INPUT', 'INTERRUPTED')) AS "pausedOld",
              (s.finished_at IS NULL AND COALESCE(${ts}, 'PARKED') IN ('PARKED', 'ABANDONED')) AS "pausedNew",
              -- open-item-escalation.service.ts: not an INTERRUPTED one whose end was recorded (beside held).
-             (s.finished_at IS NULL AND (s.status <> 'INTERRUPTED' OR s.end_reason IS NULL)) AS "escalationOld",
-             (s.finished_at IS NULL AND (${ts} IS DISTINCT FROM 'ABANDONED' OR s.end_reason IS NULL)) AS "escalationNew",
-             -- tasks.service.ts and task-exception-input.producer.ts: the word, for a held row.
-             (CASE WHEN s.finished_at IS NULL THEN s.status::text END) AS "heldWordOld",
-             (CASE WHEN s.finished_at IS NULL THEN ${legacySessionStatusSql('s')} END) AS "heldWordNew"
+             (s.finished_at IS NULL AND (${old} <> 'INTERRUPTED' OR s.end_reason IS NULL)) AS "escalationOld",
+             (s.finished_at IS NULL AND (${ts} IS DISTINCT FROM 'ABANDONED' OR s.end_reason IS NULL)) AS "escalationNew"
         FROM session s WHERE s.owner_id = ${ids.ownerId}::uuid`);
     assert.equal(rows.length, HELD_WORDS.length * 2 + RELEASED_WORDS.length * 2);
-    const differences = rows.flatMap((row) => ['readyState', 'readyOrder', 'budget', 'paused', 'escalation', 'heldWord']
+    const differences = rows.flatMap((row) => ['readyState', 'readyOrder', 'budget', 'paused', 'escalation']
       .filter((name) => row[`${name}Old`] !== row[`${name}New`])
       .map((name) => `${row.title}: ${name} was ${String(row[`${name}Old`])}, is ${String(row[`${name}New`])}`));
     assert.deepEqual(differences, []);

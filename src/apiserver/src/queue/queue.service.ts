@@ -88,7 +88,6 @@ import {
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
-import { engineNamingJob } from '../sessions/naming';
 import {
   batchActiveTurns,
   overCapacityPassPendingSql,
@@ -496,7 +495,7 @@ export class QueueService {
         }>>(Prisma.sql`
         UPDATE "session" SET
           -- QUEUED to IN_FLIGHT (docs/session-status-retirement-plan.md §1.4). The engine claim guards (migration 1641)
-          -- test exactly this transition; migration 1671's trigger keeps the stored word from it, for rollback only.
+          -- test exactly this transition.
           "turn_state" = 'IN_FLIGHT',
           -- The pass is spent by whichever claim starts its turn. An overflow claim keeps it, so the RUNNING row says
           -- it runs over the limit until that turn ends (turnComplete clears it); an ordinary one started the turn in
@@ -1240,9 +1239,6 @@ export class QueueService {
         ? ((await forkAuthorityBindings(this.prisma, [session])).get(session.id) ?? null)
         : await this.sourceBinding(session.sourceCodebaseId),
     );
-    // A session nothing else will name is named by the engine about to run it (engineNamingJob). An Ask is not:
-    // its title is its first question, and no model is asked for another (help-ask.ts; board 03).
-    const naming = session.helpAsk == null ? engineNamingJob(session, provider, configuredRow) : undefined;
     return {
       sessionId: session.id,
       provider,
@@ -1398,7 +1394,8 @@ export class QueueService {
         env: exec.env,
       },
       source,
-      ...(naming ? { naming } : {}),
+      // No `naming`: a session is titled only on the server's DeepSeek key (SessionsService.beautifySessionLater),
+      // never by the engine running it on the session's own provider.
     };
   }
 

@@ -369,7 +369,6 @@ import {
   type SessionSwitch,
 } from '../providers/engine-provider';
 import { ownsModel, withPreset } from '../providers/preset-overlay';
-import { sessionHeldKey } from '../providers/held-key';
 import {
   newTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
@@ -483,6 +482,9 @@ import {
   withRunnerLastBeat,
 } from '../runners/runner-presence';
 import { PULL_REQUEST_VIEW_SELECT, pullRequestViewOf } from '../projects/pull-request-landing';
+
+/** A POST /sessions request's own key (CreateSessionDto.clientRequestId): a UUID fits, as does any opaque token like it. */
+const CLIENT_REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,100}$/;
 
 /**
  * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
@@ -1447,6 +1449,15 @@ export class SessionsService {
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
+    // A repeat of a request that already made its session answers with that session, before anything is checked
+    // against the state of now or written: the first one's answer may have been lost on the way back (migration 1730).
+    if (dto.clientRequestId !== undefined) {
+      if (typeof dto.clientRequestId !== 'string' || !CLIENT_REQUEST_ID_PATTERN.test(dto.clientRequestId)) {
+        throw new BadRequestException('clientRequestId must be 8 to 100 letters, digits or hyphens');
+      }
+      const made = await this.sessionMadeByRequest(ownerId, dto.clientRequestId);
+      if (made) return made;
+    }
     // CreateSessionDto is an interface, so nothing upstream checked the type: a string "false" must not
     // quietly keep a worktree the caller asked to leave out.
     if (dto.worktree != null && typeof dto.worktree !== 'boolean') {
@@ -1919,6 +1930,7 @@ export class SessionsService {
     const insertSession = (client: PrismaService | Prisma.TransactionClient, madeWorkspaceId?: string) => client.session.create({
       data: {
         ...(opts?.id ? { id: opts.id } : {}),
+        ...(dto.clientRequestId ? { clientRequestId: dto.clientRequestId } : {}),
         title,
         titleManagedByProject: opts?.titleManagedByProject ?? false,
         titleBeforeProjectManagement: null,
@@ -2033,6 +2045,12 @@ export class SessionsService {
           ? this.createWithHeldOpening(insertSession, heldFrom)
           : this.writeFenced(opts?.fence, (client) => insertSession(client))
     ).catch(async (e: unknown) => {
+      // The same request twice at once: the other one's INSERT won the key's index, so this one answers with the
+      // session that one made. Re-read rather than parsed out of the error, as below.
+      if (dto.clientRequestId && e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        const made = await this.sessionMadeByRequest(ownerId, dto.clientRequestId);
+        if (made) return { replayed: made } as const;
+      }
       // The folder checked above was deleted before this INSERT reached it: the same 400 as naming
       // a deleted one. Re-read rather than parsed out of the error, so a P2003 about any other key
       // this INSERT names is left saying what it was really about.
@@ -2046,6 +2064,7 @@ export class SessionsService {
       }
       throw e;
     });
+    if ('replayed' in session) return session.replayed;
     // Scope the compose-page uploads to this session now that it exists. They stay
     // turn-less until the runner seeds the first turn (queue.service links them to it),
     // and cascade-delete with the session. A session that made its workspace did this, and the
@@ -2119,6 +2138,23 @@ export class SessionsService {
       promptByOrbit: _promptByOrbit,
       // Read by the workspace default (workspace-provider.ts), not by clients.
       openedBy: _openedBy,
+      // The create request's own key, not something about the session.
+      clientRequestId: _clientRequestId,
+      ...publicSession
+    } = session;
+    return withSessionState(publicSession);
+  }
+
+  /** The session an earlier POST /sessions with this key made, answered as `create` answered it then (migration 1730). */
+  private async sessionMadeByRequest(ownerId: string, clientRequestId: string) {
+    const session = await this.prisma.session.findFirst({ where: { ownerId, clientRequestId } });
+    if (!session) return null;
+    const {
+      titleManagedByProject: _titleManagedByProject,
+      titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      promptByOrbit: _promptByOrbit,
+      openedBy: _openedBy,
+      clientRequestId: _clientRequestId,
       ...publicSession
     } = session;
     return withSessionState(publicSession);
@@ -2671,9 +2707,6 @@ export class SessionsService {
         select: {
           id: true,
           ownerId: true,
-          provider: true,
-          providerBuiltin: true,
-          model: true,
           title: true,
           runtimeSessionId: true,
         },
@@ -2709,23 +2742,21 @@ export class SessionsService {
 
   /**
    * Background naming for a session that started with a prompt-derived title: a cleaner display
-   * title, plus a couple of semantic tags to file it under. Asked of DeepSeek on the server's key
-   * when one is configured; otherwise of the session's own provider, when the server holds its key
-   * (sessionHeldKey). A session on an engine's own sign-in has no key here, and is named by its runner
-   * through that engine instead (the claim's `naming`). The shared bounded queue prevents a create
+   * title, plus a couple of semantic tags to file it under. Asked only of DeepSeek on the server's
+   * key: without DEEPSEEK_API_KEY nothing is asked, and the session keeps the title cut from its
+   * prompt; the session's own provider is never spent on naming. The shared bounded queue prevents a create
    * burst from fanning out calls. Swap the title only while it is still the exact fallback we wrote,
    * so a user rename (or any concurrent change) is never clobbered. Re-publishes the session so live
    * clients pick up both. Fire-and-forget: never awaited, swallows all errors.
    */
   private async beautifySessionLater(
-    session: { id: string; ownerId: string; provider: string; providerBuiltin: boolean; model: string | null },
+    session: { id: string; ownerId: string },
     prompt: string,
     fallbackTitle: string,
   ): Promise<void> {
     const { id: sessionId, ownerId } = session;
     try {
-      const key = process.env.DEEPSEEK_API_KEY?.trim() ? undefined : await sessionHeldKey(this.prisma, session);
-      if (key === null) return;
+      if (!process.env.DEEPSEEK_API_KEY?.trim()) return;
       // The owner's own vocabulary, offered to the model as reuse candidates. System tags are
       // colors ("Red"), not semantics, so they are never candidates and are never auto-applied.
       const known = await this.prisma.sessionTag.findMany({
@@ -2737,7 +2768,6 @@ export class SessionsService {
       const { title, tags } = await enqueueBeautifySession({
         prompt,
         knownTags: known.map((t) => t.name),
-        key,
       });
       let changed = false;
       if (title && title !== fallbackTitle) {

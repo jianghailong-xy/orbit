@@ -98,7 +98,8 @@ export function sessionMarks(session: SessionMarkSource): SessionMark[] | null {
   if (!released && phaseOf(session) === 'IDLE' && session.lastTurnOutcome === 'INTERRUPTED')
     out.push('INTERRUPTED');
   if (!released && (session.activity === 'BACKGROUND_JOB' || (session.runningBgCount ?? 0) > 0)) out.push('BACKGROUND');
-  if (!released && waitingOn === 'WAKE') out.push('WILL_RESUME');
+  // An idle session a watch or wake-up will resume is just Idle: no mark (the owner, 2026-11-27).
+  if (!released && waitingOn === 'WAKE' && phaseOf(session) !== 'IDLE') out.push('WILL_RESUME');
   if (released && session.workFinished === true) out.push('FINISHED');
   if (released && session.workFinished !== true && !failure) out.push('ENDED');
   return out;

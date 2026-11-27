@@ -7,6 +7,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { SessionsService } from '../sessions/sessions.service';
 import { BackgroundWakeDto } from './background-job-wake';
 import { RunnerApiController } from './runner-api.controller';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 /**
@@ -247,7 +248,7 @@ async function jobsOn(clientTurnId: string): Promise<Array<{ jobId: string; trig
 
 async function sessionStatus(): Promise<string> {
   const { rows } = await admin.query<{ status: string }>(
-    `SELECT status FROM "session" WHERE id = $1::uuid`,
+    `SELECT ${wordSql()} AS status FROM "session" WHERE id = $1::uuid`,
     [SESSION_ID],
   );
   return rows[0].status;
