@@ -383,4 +383,13 @@ describe('the Chat button states (board 3 ①)', () => {
     expect(chatButton().getAttribute('data-state')).toBe('needs_you');
     expect(document.querySelector('[data-chat-count]')!.textContent).toBe('3');
   });
+
+  it('counts an envelope card waiting in a chat, read from the chat’s own cards, ahead of the ring', async () => {
+    openSessions = [asRow('S-open', { status: 'RUNNING', phase: 'RUNNING' })];
+    cards = { run: null, cards: [{ id: 'c1', kind: 'UPDATE', state: 'PENDING' }, { id: 'c2', kind: 'UPDATE', state: 'ALLOWED' }], records: [] };
+    await open('/scheduled');
+    expect(chatButton().getAttribute('data-state')).toBe('needs_you');
+    expect(document.querySelector('[data-chat-count]')!.textContent).toBe('1');
+    expect(document.querySelector('[data-chat-ring]')).toBeNull();
+  });
 });

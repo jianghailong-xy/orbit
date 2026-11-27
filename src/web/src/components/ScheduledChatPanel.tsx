@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useReducer, type JSX, type ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { sessionScheduleCardsQuery } from '../lib/schedules';
 import { CommentOutlined } from '@ant-design/icons';
 import type { SchedulePageChatResponse } from '@orbit/shared';
 import { useChatHost } from './ChatHost';
@@ -84,6 +85,19 @@ export function useScheduledChatPanel({
     [qc],
   );
 
+  // A card the chat put up waits on the person's Allow (design §3): read from each open chat's own schedule cards,
+  // never stored. A chat's row says only that a turn runs or an approval waits.
+  const chatIds = useMemo(() => (listData?.chats ?? []).map((chat) => chat.sessionId), [listData]);
+  const cardReads = useQueries({ queries: chatIds.map((id) => sessionScheduleCardsQuery(id)) });
+  const waitingCards = cardReads.reduce(
+    (n, read) => n + (read.data?.cards ?? []).filter((card) => card.state === 'PENDING').length,
+    0,
+  );
+  const fabCounts = useMemo(
+    () => (listData ? { ...listData.fab, needsYou: listData.fab.needsYou + waitingCards } : undefined),
+    [listData, waitingCards],
+  );
+
   const host = useChatHost({
     scope: me.data?.id ?? null,
     store: SCHEDULED_CHAT_STORE,
@@ -159,7 +173,7 @@ export function useScheduledChatPanel({
     close: host.close,
     sendIntoChat,
     /** The header button's state, read from the chats listed: a ring while a turn runs, an amber count while a card waits. */
-    button: wikiChatFab(listData?.fab),
+    button: wikiChatFab(fabCounts),
     render: (children: ReactNode) => host.render(children, { origin, attachments, dispatch }),
   };
 }
