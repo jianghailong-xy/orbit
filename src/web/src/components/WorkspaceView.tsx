@@ -299,6 +299,7 @@ import {
 } from '../lib/contextSeed';
 import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
+import { pullRequestCard } from './LandingPullRequest';
 import { BrandMark, NewSessionProviderHero, type NewSessionPlace } from './NewSessionProviderHero';
 import { orderWorkspaces, workspaceRunnerId } from '../lib/workspaceOrder';
 import { runnerUpdateIndicator } from '../lib/runnerUpdateIndicator';
@@ -4100,6 +4101,19 @@ export function WorkspaceView({
             detail: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? d.mergeError ?? 'Sync the local checkout from the recovery panel.' : undefined,
             tone: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? 'warning' : 'success',
             icon: 'check',
+          });
+        } else if (status === 'pull_request') {
+          // GitHub refused the push to the target because of its rules, so the runner opened a pull request:
+          // the merge waits on it (design §4.6). Not a failure; the bar shows the pull request's state.
+          const pr = d.mergePullRequest;
+          message.sessionNotice({
+            sessionId: operation.id,
+            sessionTitle: operation.title,
+            event: 'merge-result',
+            headline: pr?.number != null ? `Opened pull request #${pr.number} into ${target}` : `Opened a pull request into ${target}`,
+            detail: pr ? pullRequestCard(pr, target).detail : `${target} requires a pull request. Orbit merges it once the branch's rules pass.`,
+            tone: 'neutral',
+            icon: 'info',
           });
         } else if (status === 'conflict') {
           message.sessionNotice({
