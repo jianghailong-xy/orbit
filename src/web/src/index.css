@@ -21072,80 +21072,107 @@ button.chat-jump-start:hover {
   font-size: 17px;
   color: var(--text-3);
 }
-/* `in [workspace ▾] › [folder ▾]` under the engine (docs/mocks/new-session-top ②⑤): quiet chips, grey on hover,
-   tinted while their menu is open, like the engine's name above them. */
+/* Where the session runs, under the engine (docs/mocks/new-session-place, option A): one bordered pill,
+   `[workspace] / [folder] ▾`, grey on hover, tinted while its menu is open. */
 .np-place {
   display: flex;
-  align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 2px;
-  margin-top: 6px;
+  margin-top: 8px;
   max-width: 100%;
+}
+.np-place-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  max-width: 100%;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.np-place-pill:hover {
+  background: var(--bg-hover);
+}
+.np-place-pill.open {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+  box-shadow: 0 0 0 3px var(--brand-tint);
+}
+.np-place-pill > .anticon {
+  flex: none;
   font-size: 13px;
   color: var(--text-3);
 }
-.np-place-in {
-  margin-right: 2px;
+.np-place-pill.open > .anticon,
+.np-place-pill.open .np-chev {
+  color: var(--brand-strong);
 }
-.np-place-sep {
+.np-place-slash {
   color: var(--text-4);
-}
-.np-place-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  max-width: 220px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: var(--text-2);
-  font: inherit;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.np-place-chip:hover {
-  background: var(--bg-hover);
-}
-.np-place-chip.open {
-  background: var(--brand-tint);
-  color: var(--brand-strong);
-}
-.np-place-chip.open .np-chev {
-  color: var(--brand-strong);
-}
-.np-place-chip > .anticon {
-  flex: none;
-  font-size: 13px;
 }
 .np-place-name {
   min-width: 0;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .np-place-list {
-  width: 260px;
-  max-height: 360px;
+  width: 280px;
+  max-height: 400px;
   overflow-y: auto;
+}
+.np-place-search {
+  width: 100%;
+  height: 32px;
+  margin-bottom: 4px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  outline: none;
+  background: var(--bg-hover);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+.np-place-head {
+  padding: 6px 8px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-place-empty {
+  padding: 8px;
+  font-size: 13px;
+  color: var(--text-3);
 }
 .np-place-list .np-row > .anticon {
   flex: none;
   color: var(--text-3);
 }
-.np-place-check {
+/* "None", the folder section's empty choice: plain text, no icon. */
+.np-row.np-place-none:not(.on) {
+  color: var(--text-2);
+}
+.np-place-list .np-row > .np-place-check {
   margin-left: auto;
   color: var(--brand);
 }
-/* A phone has no room for the icons: the names and their ▾ (board ⑥). */
+/* A phone: each name stops sooner. */
 @media (max-width: 960px) {
-  .np-place-chip > .anticon {
-    display: none;
-  }
-  .np-place-chip {
-    max-width: 160px;
+  .np-place-name {
+    max-width: 130px;
   }
 }
 .np-card {
