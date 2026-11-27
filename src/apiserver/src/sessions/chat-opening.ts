@@ -13,7 +13,7 @@ export function chatFiledItsOpening(session: { wikiChatSpaceId: string | null; o
 /**
  * Which chat door opened a session, for the origin tag its header and its list row draw (@orbit/shared
  * SESSION_ORIGIN_TAGS: From Wiki, From Drive, From Scheduled); null for every other session. The Scheduled page's chat
- * is marked by `schedule_chat_at` (migration 1740) and has no run source of its own.
+ * is marked by `schedule_chat_at` (migration 1760) and has no run source of its own.
  */
 export function sessionChatOrigin(session: {
   wikiChatSpaceId: string | null;

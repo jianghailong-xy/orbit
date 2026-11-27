@@ -3581,11 +3581,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (owner_id, client_request_id) over the rows that carry one. Only `session` is touched; no trigger, function of
       // one, preserved relation or DONE fence changes.
       '1730_session_client_request_id',
-      // 1740 adds the nullable `session.schedule_chat_at` (catalog-only) and a BEFORE UPDATE OF guard that refuses a
-      // change of it; 1741 builds a partial index CONCURRENTLY over the rows that carry one. Only `session` is touched;
+      // 1750 adds the nullable `runner_presence.last_heard_at` (catalog only, no row rewritten) to the UNLOGGED presence
+      // table. No `task`, `session`, ledger table or preserved trigger/function is touched, and no DONE fence changes.
+      '1750_runner_presence_last_heard_at',
+      // 1760 adds the nullable `session.schedule_chat_at` (catalog-only) and a BEFORE UPDATE OF guard that refuses a
+      // change of it; 1761 builds a partial index CONCURRENTLY over the rows that carry one. Only `session` is touched;
       // no row is written, and no preserved relation, trigger, function of one or DONE fence changes.
-      '1740_session_schedule_chat',
-      '1741_session_schedule_chat_index'],
+      '1760_session_schedule_chat',
+      '1761_session_schedule_chat_index'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

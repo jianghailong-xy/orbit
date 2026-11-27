@@ -74,9 +74,12 @@ const (
 	// (abandonLocked).
 	linkTotalOverBytes = 64 << 20
 	// The most one EventBatch carries, in events and in payload bytes. Well inside a frame's 8 MiB once joined from
-	// Chunks, and inside the gateway's reduced credit (8 MiB, 1,000 events).
+	// Chunks, and inside the gateway's reduced credit (8 MiB, 1,000 events). 256 KiB, not more, so that on a slow path
+	// a heartbeat waits behind one batch per session at most once a connection resends what it holds; not less,
+	// because one batch per session is in flight per ack round trip, so the cap is also how fast a session's backlog
+	// drains after an outage (§15.15).
 	linkBatchMaxEvents = 500
-	linkBatchMaxBytes  = 1 << 20
+	linkBatchMaxBytes  = 256 << 10
 	// linkEventFrameCeiling is the largest encoded frame an event may go in, alone: the largest frame one joins from
 	// Chunks (the gateway's maxChunkedFrameBytes, this binary's linkMaxJoinedFrameBytes) less a margin. A larger frame
 	// ends the connection as a protocol error, and the event would end every next one, so an event that would need

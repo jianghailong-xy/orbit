@@ -1,4 +1,4 @@
--- 1740 — the Scheduled page's chat (docs/scheduled-chat-design.md §4.3, D4 A; board docs/mocks/scheduled-chat/). 1741
+-- 1760 — the Scheduled page's chat (docs/scheduled-chat-design.md §4.3, D4 A; board docs/mocks/scheduled-chat/). 1761
 -- builds the index its doors read.
 --
 -- WHAT IT ADDS
@@ -21,7 +21,8 @@
 -- Every existing row reads NULL, so no session is a page chat. An older apiserver writes nothing here, and rolling the
 -- code back leaves the column unread.
 --
--- 1740: the highest number on origin/main and every origin/project/* and origin/orbit/* branch was 1730 (2026-11-27).
+-- 1760: the highest number on origin/main was 1750 and on every origin/project/* and origin/orbit/* branch 1736
+-- (2026-11-27); 1760 leaves room for the ones in flight.
 
 CREATE OR REPLACE FUNCTION session_schedule_chat_guard() RETURNS TRIGGER AS $$
 BEGIN
@@ -53,7 +54,7 @@ BEGIN
     EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
       tries := tries + 1;
       IF tries >= 45 THEN
-        RAISE EXCEPTION '1740: "session" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 1740_session_schedule_chat) and deploy again: it is safe to run twice.'
+        RAISE EXCEPTION '1760: "session" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 1760_session_schedule_chat) and deploy again: it is safe to run twice.'
           USING ERRCODE = 'lock_not_available';
       END IF;
       PERFORM pg_sleep(1);

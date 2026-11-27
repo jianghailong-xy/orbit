@@ -1,5 +1,5 @@
 /**
- * The Scheduled page's chat, server side (schedules/schedule-page-chat.ts; migrations 1740–1741;
+ * The Scheduled page's chat, server side (schedules/schedule-page-chat.ts; migrations 1760–1761;
  * docs/scheduled-chat-design.md §4.1, §4.3, §7, §10 step 1; board docs/mocks/scheduled-chat/), held against the
  * production apiserver — `build/main.js`, the whole AppModule — over a real PostgreSQL that `scripts/run-pg-spec.sh`
  * migrates from empty:
@@ -14,7 +14,7 @@
  *      prompt is the person's words, marked by `schedule_chat_at` (no new run source); GET then names it;
  *   3. re-open: a second POST for that workspace says the words in the open chat and answers `created: false`; another
  *      workspace gets a chat of its own; a completed chat is not reused;
- *   4. the marker column is written once: a later UPDATE of `schedule_chat_at` is refused by 1740's guard;
+ *   4. the marker column is written once: a later UPDATE of `schedule_chat_at` is refused by 1760's guard;
  *   5. the list tag: the chat's detail and its row in its workspace's session list read `chatOrigin: SCHEDULE_CHAT`
  *      ("From Scheduled"); an ordinary session of the same workspace reads null;
  *   6. owner channel only: either door with an acting session is refused SCHEDULE_CHAT_FROM_SESSION; another account's
@@ -232,7 +232,7 @@ test('the Scheduled page chat: an opening that writes nothing, a marked MANUAL s
     assert.notEqual(toUuid(fresh.json.sessionId), chatB);
   });
 
-  await t.test('4. the marker column is written once: 1740 refuses a later change of it', async () => {
+  await t.test('4. the marker column is written once: 1760 refuses a later change of it', async () => {
     await assert.rejects(
       sql.query(`UPDATE "session" SET "schedule_chat_at" = NULL WHERE "id" = $1::uuid`, [chatA]),
       /SCHEDULE_CHAT_IMMUTABLE/u,

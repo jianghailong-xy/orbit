@@ -268,6 +268,7 @@ test('lockstep link-token renewals are no mass disconnection; a real simultaneou
   async function warp(ms: number) {
     await sql.query(
       `UPDATE "runner_presence" SET "last_beat_at" = "last_beat_at" - ($2 * interval '1 millisecond'),
+                                    "last_heard_at" = "last_heard_at" - ($2 * interval '1 millisecond'),
                                     "lost_at" = "lost_at" - ($2 * interval '1 millisecond')
         WHERE "runner_id" = ANY($1::uuid[])`, [ids, ms]);
     await sql.query(
@@ -317,6 +318,9 @@ test('lockstep link-token renewals are no mass disconnection; a real simultaneou
       await beat(m, fresh, 'gw-b');
     }
     const renewalLosses = await Promise.all(renewing.map(lostAt));
+    // A renewal is a call of the runner's work: its welcome records the process heard (migration 1750).
+    const heardAt = await Promise.all(renewing.map(async (m) => (await db.runnerPresence.findUniqueOrThrow({ where: { runnerId: m.id } })).lastHeardAt));
+    for (const [i, at] of heardAt.entries()) assert.ok(at && Date.now() - at.getTime() < MINUTE, `${renewing[i]!.name}'s renewal is heard`);
 
     // Seven minutes on: the quiet runner is past RUNNER_REAP_AFTER_MS, well inside MASS_DISCONNECT_HOLD_MS.
     const later = 7 * MINUTE;

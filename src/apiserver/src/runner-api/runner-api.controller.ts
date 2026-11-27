@@ -621,11 +621,12 @@ import {
 import { readManagedRunnerStorage, type ManagedRunnerStorage } from '../managed-runners/managed-runner-storage';
 import { markUpdateNowCuts, queueUpdateNowContinuation } from '../managed-runners/managed-runner-update-cut';
 import {
-  RUNNER_OFFLINE_AFTER_MS,
+  RUNNER_PRESENCE,
   RunnerPresenceService,
   durableBeatDue,
   recordRunnerBeat,
-  runnerLastBeatAt,
+  runnerIsOnline,
+  runnerPresentAt,
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
@@ -2005,15 +2006,15 @@ export class RunnerApiController {
       maxConcurrent: number;
     },
   ) {
-    // The guard read the runner's own record; its latest beat is in its presence row.
-    const lastBeatAt = runnerLastBeatAt({
+    // The guard read the runner's own record; its latest beat, and when it was last heard, are in its presence row.
+    const beats = {
+      status: runner.status,
       lastHeartbeatAt: runner.lastHeartbeatAt,
       presence: await this.prisma.runnerPresence.findUnique({
         where: { runnerId: runner.id },
-        select: { lastBeatAt: true },
+        select: RUNNER_PRESENCE,
       }),
-    });
-    const fresh = !!lastBeatAt && Date.now() - lastBeatAt.getTime() < RUNNER_OFFLINE_AFTER_MS;
+    };
     const workspaces = await this.prisma.workspace.findMany({
       where: { runnerId: runner.id, deletedAt: null },
       select: {
@@ -2036,8 +2037,8 @@ export class RunnerApiController {
       id: runner.id,
       name: runner.name,
       status: runner.status,
-      online: runner.status !== 'OFFLINE' && fresh,
-      lastHeartbeatAt: lastBeatAt,
+      online: runnerIsOnline(beats),
+      lastHeartbeatAt: runnerPresentAt(beats),
       version: runner.version,
       labels: runner.labels,
       maxConcurrent: runner.maxConcurrent,

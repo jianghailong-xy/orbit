@@ -1,4 +1,4 @@
--- 1741 — finishes 1740: the partial index the Scheduled page chat's doors read (schedules/schedule-page-chat.ts): an
+-- 1761 — finishes 1760: the partial index the Scheduled page chat's doors read (schedules/schedule-page-chat.ts): an
 -- owner's page chats, newest first, so `GET /api/schedules/chat` finds the open one without walking the owner's
 -- sessions.
 --

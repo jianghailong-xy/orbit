@@ -217,6 +217,7 @@ type gatewayMetrics struct {
 	tokenRefusals         *counter
 	disconnects           *counter
 	rtt                   *histogram
+	pingWriteBlocked      *counter
 	framesReceived        *counter
 	framesSent            *counter
 	frameDecodeErrors     *counter
@@ -274,7 +275,7 @@ type gatewayMetrics struct {
 var (
 	handshakeResults  = []string{"ok", "unauthenticated", "rate_limited", "too_many_connections", "draining", "not_websocket", "hello_timeout", "protocol_error", "upgrade_required", "upgrade_failed"}
 	refusalReasons    = []tokenRefusal{refuseMissing, refuseMalformed, refuseSignature, refuseAudience, refuseExpired, refuseClaims, refuseCell, refuseRevoked}
-	disconnectReasons = []string{"client_closed", "connection_lost", "superseded", "ping_timeout", "token_expired", "revoked", "protocol_error", "slow_consumer", "drained", "shutdown", "internal_error"}
+	disconnectReasons = []string{"client_closed", "connection_lost", "superseded", "ping_timeout", "token_expired", "revoked", "protocol_error", "slow_consumer", "drained", "shutdown", "internal_error", "write_timeout"}
 )
 
 func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
@@ -285,6 +286,7 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 		tokenRefusals:     newCounter("link_token_refusals_total", "Connection tokens refused before the upgrade, by reason.", "reason"),
 		disconnects:       newCounter("link_disconnects_total", "Closed connections that had been sent Welcome, by reason.", "reason"),
 		rtt:               newHistogram("link_rtt_seconds", "WebSocket ping round trips.", 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60),
+		pingWriteBlocked:  newCounter("link_ping_write_blocked_total", "WebSocket pings that could not be written within the library's 5 s: those that waited that long for the write lock are tried again at the next interval; one whose write stalled closed its connection (write_timeout)."),
 		framesReceived:    newCounter("link_frames_received_total", "Frames received from runners, by body.", "type"),
 		framesSent:        newCounter("link_frames_sent_total", "Frames sent to runners, by body.", "type"),
 		frameDecodeErrors: newCounter("link_frame_decode_errors_total", "WebSocket messages from runners that did not decode as a Frame."),
@@ -399,7 +401,7 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 	m.all = []collector{
 		&infoGauge{name: "link_gateway_build_info", help: "The gateway's version.", labels: []string{"version"}, values: []string{version}},
 		&gauge{name: "link_gateway_start_time_seconds", help: "When this process started, in Unix seconds.", v: float64(time.Now().Unix())},
-		m.connections, m.handshakes, m.handshakeDuration, m.tokenRefusals, m.disconnects, m.rtt,
+		m.connections, m.handshakes, m.handshakeDuration, m.tokenRefusals, m.disconnects, m.rtt, m.pingWriteBlocked,
 		m.framesReceived, m.framesSent, m.frameDecodeErrors, m.heartbeats, m.draining, m.drainsSent,
 		m.revocations, m.revocationFetches, m.revocationLastSuccess,
 		m.tlsNotAfter, m.tlsReloads, m.tlsHandshakeErrors,

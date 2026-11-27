@@ -21,7 +21,7 @@ type Tx = Prisma.TransactionClient;
 /**
  * The Scheduled page's chat (docs/scheduled-chat-design.md §4.1, §4.3; board docs/mocks/scheduled-chat/): one
  * conversation for all of the account's schedules, docked on the page. It is an ordinary MANUAL session of the
- * workspace the person picked, marked by `session.schedule_chat_at` (migration 1740), the way `wiki_chat_space_id`
+ * workspace the person picked, marked by `session.schedule_chat_at` (migration 1760), the way `wiki_chat_space_id`
  * marks a Wiki chat, and listed in that workspace's sessions with a From Scheduled tag. It has no run source of its
  * own and no powers a session started any other way lacks: it acts through the schedule tools and their envelope.
  *
