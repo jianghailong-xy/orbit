@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LIST_ROWS, listAnswer } from '../test/scheduleFixtures';
+import { chatRow as SERVER_ROW, opening as SERVER_OPENING, openAnswer as SERVER_OPEN_ANSWER, openList } from '../test/scheduledChatFixtures';
 import { readSidebarFolded } from '../lib/sidebarFold';
 
 // The conversation is the session page's own, whose tests own it: here a stand-in that names the session shown.
@@ -48,19 +49,12 @@ const WORKSPACES = [
   { id: 'ws-web', name: 'web', runnerId: 'r-mac', position: 0, createdAt: '2025-02-01T00:00:00.000Z', provider: null, model: null },
   { id: 'ws-baseline', name: 'Orbit baseline', runnerId: null, position: null, createdAt: '2025-03-01T00:00:00.000Z', provider: null, model: null },
 ];
-const OPENING = {
-  counts: { total: 4, active: 2, paused: 2, held: 0, failing: 0 },
-  next: null,
-  summary: 'You have 4 scheduled tasks: 2 active, 2 paused, none failing.',
-  nextText: 'Next: Codex stable check, tomorrow at 06:00 on dev-box.',
-  examplesLead: 'Ask about them, or tell me what to change. For example:',
-  examples: ['Pause everything on orbit-ws04 until Monday', 'Why did the last run take so long?'],
-  closing: 'Moving a time applies at once, and you can undo it.',
-};
 
+// Rows, the opening and the open answer are the server's own (test/scheduledChatFixtures, recorded from this branch's
+// apiserver); a scenario overrides only what it is about.
 type ListRow = Record<string, unknown> & { id: string };
 const chatRow = (id: string, over: Partial<ListRow> = {}): ListRow => ({
-  id, title: `Chat ${id}`, status: 'AWAITING_INPUT', chatOrigin: 'SCHEDULE_CHAT', createdAt: AT, lastTurnAt: AT, ...over,
+  ...SERVER_ROW, id, title: `Chat ${id}`, createdAt: AT, listedAt: AT, ...over,
 });
 
 let me: { id: string };
@@ -80,13 +74,13 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   if (method !== 'GET') {
     const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
     writes.push({ method, path, body });
-    if (path === '/api/schedules/chat') return reply(200, { sessionId: 'S-new', created: true });
+    if (path === '/api/schedules/chat') return reply(200, { ...SERVER_OPEN_ANSWER, sessionId: 'S-new', sessionPublicId: 'S-new' });
     return reply(200, { ok: true });
   }
   reads.push(url);
   if (path === '/api/schedules') return reply(200, listAnswer(LIST_ROWS));
   if (path === '/api/schedules/drafts') return reply(200, { drafts: [] });
-  if (path === '/api/schedules/chat') return reply(200, { sessionId: openChat, opening: OPENING });
+  if (path === '/api/schedules/chat') return reply(200, { ...SERVER_OPENING, sessionId: openChat, sessionPublicId: openChat });
   if (path.startsWith('/api/owner-requests')) return reply(200, { requests: [] });
   if (path === '/api/users/me') return reply(200, { ...me, preferences: { defaultPermissionMode: 'default' } });
   if (path === '/api/workspaces') return reply(200, WORKSPACES);
@@ -98,8 +92,10 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   }
   if (path === '/api/providers') return reply(200, []);
   if (path === '/api/sessions') {
-    const view = new URLSearchParams(query).get('view');
-    return reply(200, view === 'completed' ? completedSessions : openSessions);
+    const params = new URLSearchParams(query);
+    if (params.get('view') === 'completed') return reply(200, completedSessions);
+    // The Open list is read as a delta (`since`): a first read is answered whole, as the server does.
+    return reply(200, params.has('since') ? openList(openSessions) : openSessions);
   }
   const session = /^\/api\/sessions\/([^/]+)$/.exec(path);
   if (session) {
@@ -129,7 +125,7 @@ function windowWidth(width: number): void {
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   me = { id: 'u1' };
-  openSessions = [{ id: 'S-other', title: 'Fix flaky upload test', status: 'RUNNING', chatOrigin: null, createdAt: AT }];
+  openSessions = [chatRow('S-other', { title: 'Fix flaky upload test', status: 'RUNNING', chatOrigin: null })];
   completedSessions = [];
   openChat = null;
   writes = [];
@@ -360,13 +356,14 @@ describe('Runs in (design §5)', () => {
     await open('/scheduled?workspace=ws-apiserver');
     await press(chatButton());
     const empty = document.querySelector('.wk-chat-empty')!.textContent!;
-    expect(empty).toContain('You have 4 scheduled tasks: 2 active, 2 paused, none failing. Next: Codex stable check, tomorrow at 06:00 on dev-box.');
+    expect(empty).toContain('You have 4 scheduled tasks: 2 active, 2 paused, none failing. Next: Codex stable check, tomorrow at 06:00 on apiserver.');
     expect(empty).toContain('Ask about them, or tell me what to change. For example:');
     expect([...document.querySelectorAll('.wk-chat-example')].map((b) => b.textContent)).toEqual([
       '“Pause everything on orbit-ws04 until Monday”',
       '“Why did the last run take so long?”',
+      "“Every weekday at 09:00, check a changelog and tell me what's new”",
     ]);
-    expect(document.querySelector('.wk-chat-closing')?.textContent).toBe('Moving a time applies at once, and you can undo it.');
+    expect(document.querySelector('.wk-chat-closing')?.textContent).toBe(SERVER_OPENING.opening.closing);
     expect(field().getAttribute('placeholder')).toBe('Ask about your schedules, or say what to change…');
 
     const area = field();
@@ -428,7 +425,7 @@ describe('the history (design §3)', () => {
   it('lists this account’s Scheduled chats only, Open and Completed', async () => {
     openSessions = [...openSessions, chatRow('S-open', { title: 'Move the audit' })];
     completedSessions = [chatRow('S-done', { title: 'Pause the watches', lifecycleState: 'COMPLETED', completedAt: AT }),
-      { id: 'S-wiki', title: 'A wiki chat', chatOrigin: 'WIKI_CHAT', createdAt: AT, lifecycleState: 'COMPLETED' }];
+      chatRow('S-wiki', { title: 'A wiki chat', chatOrigin: 'WIKI_CHAT', lifecycleState: 'COMPLETED', completedAt: AT })];
     await open('/scheduled');
     await press(chatButton());
     await press(document.querySelector('.wk-chat-title'));
