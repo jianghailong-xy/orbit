@@ -109,7 +109,8 @@ test('a pinned provider and model travel to the session the task run creates', a
 });
 
 test('resuming the task\'s last session re-applies the pinned model', async () => {
-  const f = runFixture({ provider: 'claude', model: 'claude-haiku-4-5' }, {
+  // A model with Auto: a task pinned to one without is not started on Claude Code (task-run-auto.ts).
+  const f = runFixture({ provider: 'claude', model: 'claude-sonnet-5-5' }, {
     id: 'session-old',
     provider: 'claude',
   });
@@ -118,7 +119,7 @@ test('resuming the task\'s last session re-applies the pinned model', async () =
 
   assert.equal(result.sessionId, 'session-old');
   assert.equal(f.createCalls.length, 0);
-  assert.equal(f.resumeCalls[0][2].model, 'claude-haiku-4-5');
+  assert.equal(f.resumeCalls[0][2].model, 'claude-sonnet-5-5');
 });
 
 test('re-pinning the provider while a run is paused is refused, not silently forked', async () => {

@@ -20,6 +20,7 @@
  *      session exists; a pin with Auto starts, stored and claimed in Auto.
  *  (6) automatic start, dependency sweep: the same pin is not started, no session is created, and the
  *      reason is left on the task once; re-pinned to a model with Auto, the next sweep starts it in Auto.
+ *      A refused task does not keep its runner's slot from the task after it in the same pass.
  *  (7) automatic start, runAt: the same, for a due schedule.
  *  (8) the runtime default: a run that names no model on a runner whose default has no Auto is created
  *      on the runner's first model that has it, by hand and by the sweep; a default with Auto is kept.
@@ -104,7 +105,7 @@ interface Agent {
 async function agent(
   db: PrismaClient,
   label: string,
-  opts: { rows?: Row[]; runtimeDefault?: string; modelRouting?: boolean; ownerId?: string } = {},
+  opts: { rows?: Row[]; runtimeDefault?: string; modelRouting?: boolean; ownerId?: string; maxConcurrent?: number } = {},
 ): Promise<Agent> {
   const ownerId = opts.ownerId ?? randomUUID();
   if (!opts.ownerId) {
@@ -125,7 +126,7 @@ async function agent(
     data: {
       id: runnerId, ownerId, name: runnerName, tokenHash: `hash-${runnerId}`,
       status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(),
-      lastHeartbeatAt: new Date(), maxConcurrent: 8, engines: signedIn,
+      lastHeartbeatAt: new Date(), maxConcurrent: opts.maxConcurrent ?? 8, engines: signedIn,
       runtimeDefaultModels: { claude: opts.runtimeDefault ?? OPUS },
       modelCatalog: {
         claude: (opts.rows ?? STANDARD).map(([value, permissionModes], priority) => ({
@@ -349,6 +350,23 @@ test('task create, pin and start keep every task run on a model that has Auto', 
     assert.equal(run.permissionMode, 'auto');
     assert.equal(model, SONNET);
     assert.equal(permissionMode, 'auto', 'the auto-dispatched run was not claimed in Auto');
+  });
+
+  await t.test("(6b) a refused task does not keep its runner's only slot from the next task in the pass", async () => {
+    const a = await agent(h.db, 'slot', { maxConcurrent: 1 });
+    const prerequisite = await storedTask(h.db, a, 'slot-prereq', { status: TaskStatus.DONE, assigneeId: null });
+    const legacy = await storedTask(h.db, a, 'slot-haiku', {
+      provider: 'claude', engine: 'claude', model: HAIKU, autoRunWhenReady: true,
+    });
+    const pinned = await storedTask(h.db, a, 'slot-opus', {
+      provider: 'claude', engine: 'claude', model: OPUS, autoRunWhenReady: true,
+    });
+    for (const taskId of [legacy, pinned]) {
+      await h.db.taskDependency.create({ data: { taskId, dependsOnTaskId: prerequisite } });
+    }
+    await sweep(h);
+    assert.equal(await sessionsOf(h.db, legacy), 0);
+    assert.equal(await sessionsOf(h.db, pinned), 1, 'the refused task kept the runner slot from the task after it');
   });
 
   await t.test('(7) runAt: a due schedule on a pin without Auto starts nothing and says why; one with Auto starts', async () => {
