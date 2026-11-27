@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
+import { modeChange as change, modeFacts } from '../test/permissionModeFixtures';
 
 /**
  * The mode a session is actually running in, on the real session page, state by state as the approved board
@@ -60,12 +61,10 @@ const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 const T0 = Date.parse('2026-11-27T05:00:00Z');
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
 
-type Change = { fromMode: string | null; toMode: string; cause: string; client: string | null; at: string };
-const change = (cause: string, toMode: string, fromMode: string | null, when: string, client: string | null = null): Change =>
-  ({ cause, toMode, fromMode, client, at: when });
+type Change = ReturnType<typeof change>;
 
-/** A live Claude session, its stored intent and the mode the server recorded it running in. */
-const row = (sid: string, title: string, model: string, permissionMode: string, actual: string, actualAt: string) => ({
+/** A live Claude session and its stored intent, with the mode the server recorded it running in: its newest change's. */
+const row = (sid: string, title: string, model: string, permissionMode: string, changes: Change[]) => ({
   id: sid,
   workspaceId: WORKSPACE_PUBLIC,
   workspace: WORKSPACE,
@@ -78,8 +77,7 @@ const row = (sid: string, title: string, model: string, permissionMode: string, 
   engine: 'claude',
   model,
   permissionMode,
-  actualPermissionMode: actual,
-  actualPermissionModeAt: actualAt,
+  ...modeFacts(changes),
   numTurns: 2,
   createdAt: at(0),
   lastTurnAt: at(300),
@@ -92,29 +90,32 @@ let lastModel: string | null = null;
 
 function serve(): void {
   const correctingAt = ago(4_000);
-  rows = [
-    row(RUNNING, 'Staging migration check', 'claude-opus-5-5', 'auto', 'auto', at(2)),
-    row(CORRECTING, 'Rotate the staging key', 'claude-opus-5-5', 'auto', 'default', correctingAt),
-    row(NO_AUTO, 'Tidy the changelog', 'claude-haiku-4-5', 'auto', 'default', at(1800)),
-    row(HISTORY, 'Drop the probe table', 'claude-opus-5-5', 'auto', 'auto', at(250)),
-    row(ROOT_BYPASS, 'Rebuild the index', 'claude-opus-5-5', 'bypassPermissions', 'auto', at(1)),
-  ];
+  // As the real apiserver recorded them on PostgreSQL (scripts/permission-mode-actual-stack/seed.mjs).
   const changes: Record<string, Change[]> = {
-    [RUNNING]: [change('CLAIM', 'auto', null, at(1)), change('ENGINE_REPORT', 'auto', null, at(2))].slice(0, 1),
+    [RUNNING]: [change('CLAIM', 'auto', null, at(1))],
     [CORRECTING]: [change('CLAIM', 'auto', null, ago(6_000)), change('ENGINE_REPORT', 'default', 'auto', correctingAt)],
     [NO_AUTO]: [change('CLAIM', 'auto', null, at(1)), change('OWNER_PICK', 'default', 'auto', at(1800), 'web')],
     [HISTORY]: [
       change('CLAIM', 'auto', null, at(1)),
       change('ENGINE_REPORT', 'default', 'auto', at(2)),
       change('RUNNER_CORRECTION', 'auto', 'default', at(4)),
-      change('OWNER_PICK', 'plan', 'auto', at(130), 'web'),
-      change('OWNER_PICK', 'acceptEdits', 'plan', at(140), 'ios'),
-      change('OWNER_PICK', 'auto', 'acceptEdits', at(150), 'android'),
-      change('ORBIT_CHANGE', 'default', 'auto', at(160)),
-      change('RESPAWN', 'auto', 'default', at(250)),
+      change('OWNER_PICK', 'plan', 'auto', at(70), 'web'),
+      change('OWNER_PICK', 'acceptEdits', 'plan', at(80), 'ios'),
+      change('OWNER_PICK', 'auto', 'acceptEdits', at(90), 'android'),
+      change('ORBIT_CHANGE', 'default', 'auto', at(210)),
+      change('OWNER_PICK', 'auto', 'default', at(220), 'web'),
+      change('RESPAWN', 'default', 'auto', at(230)),
+      change('RUNNER_CORRECTION', 'auto', 'default', at(232)),
     ],
     [ROOT_BYPASS]: [change('CLAIM', 'auto', null, at(1))],
   };
+  rows = [
+    row(RUNNING, 'Staging migration check', 'claude-opus-5-5', 'auto', changes[RUNNING]),
+    row(CORRECTING, 'Rotate the staging key', 'claude-opus-5-5', 'auto', changes[CORRECTING]),
+    row(NO_AUTO, 'Tidy the changelog', 'claude-haiku-4-5', 'auto', changes[NO_AUTO]),
+    row(HISTORY, 'Drop the probe table', 'claude-opus-5-5', 'auto', changes[HISTORY]),
+    row(ROOT_BYPASS, 'Rebuild the index', 'claude-opus-5-5', 'bypassPermissions', changes[ROOT_BYPASS]),
+  ];
   details = Object.fromEntries(rows.map((r) => [r.id as string, { ...r, permissionModeChanges: changes[r.id as string] }]));
   const conversation = [
     { seq: 1, type: 'user', turnId: 't1', ts: at(0), payload: { text: 'Run the staging migration check and tell me what fails.' } },
@@ -342,13 +343,15 @@ describe('the mode a session is actually running in (docs/mocks/permission-mode-
       'Run the staging',
       '⛉ Mode set back to Auto by the runner — Claude had started in Default',
       'Ran it against',
-      'Good. Now drop',
       '⛉ Mode set to Plan by you, on the web',
       '⛉ Mode set to Accept Edits by you, on iOS',
       '⛉ Mode set to Auto by you, on Android',
-      '⛉ Mode set to Default by Orbit',
+      'Good. Now drop',
       'Dropped it. Nothing',
-      '⛉ Claude restarted; mode Auto re-applied',
+      '⛉ Mode set to Default by Orbit',
+      '⛉ Mode set to Auto by you, on the web',
+      '⛉ Claude restarted in Default',
+      '⛉ Mode set back to Auto by the runner — Claude had restarted in Default',
     ]);
     const line = mounted().querySelector('.chat-mode-line')!;
     expect(line.querySelector('svg.chat-mode-line-icon')).not.toBeNull();

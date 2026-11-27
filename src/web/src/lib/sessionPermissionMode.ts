@@ -251,13 +251,17 @@ export function modeChangeLines(
         if (next?.cause === 'RUNNER_CORRECTION') return;
         line('Claude started in ', because);
         return;
-      case 'RUNNER_CORRECTION':
-        if (change.fromMode) line('Mode set back to ', ` by the runner — Claude had started in ${permissionModeLabel(change.fromMode)}`);
+      case 'RUNNER_CORRECTION': {
+        // What it corrected: Claude's start, or its re-spawn when that is the change before.
+        const how = changes[i - 1]?.cause === 'RESPAWN' ? 'restarted' : 'started';
+        if (change.fromMode) line('Mode set back to ', ` by the runner — Claude had ${how} in ${permissionModeLabel(change.fromMode)}`);
         else line('Mode set to ', ' by the runner');
         return;
+      }
       case 'RESPAWN':
-        if (gap) line('Claude restarted in ', because);
-        else line('Claude restarted; mode ', ' re-applied');
+        // Back in the mode asked for, the intent was applied again; in another, that is what it came back in.
+        if (change.toMode === intent) line('Claude restarted; mode ', ' re-applied');
+        else line('Claude restarted in ', because);
         return;
       case 'ORBIT_CHANGE':
         line('Mode set to ', ` by Orbit${because}`);

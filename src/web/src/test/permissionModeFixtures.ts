@@ -1,0 +1,32 @@
+import type { PermissionModeChangeCause, SessionPermissionModeChange } from '@orbit/shared';
+
+/**
+ * A session's mode facts as the apiserver answers them, for the tests of the running-mode states
+ * (docs/mocks/permission-mode-actual). scripts/permission-mode-actual-stack/fixture-diff.mjs holds
+ * these to a real response of this checkout's apiserver on PostgreSQL:
+ *  - a change is exactly { fromMode, toMode, cause, client, at }: `at` an ISO instant with
+ *    milliseconds; `client` the app for OWNER_PICK, 'orbit' for ORBIT_CHANGE (the setconfig turn's
+ *    sender), null for every other cause (sessions/actual-permission-mode.ts);
+ *  - the session's actualPermissionMode is its newest change's toMode, and actualPermissionModeAt that
+ *    change's instant: one statement writes both (recordActualPermissionMode), each with its own
+ *    clock_timestamp(), so the server's session stamp can read up to a millisecond earlier;
+ *  - the detail carries the changes, oldest first; an Open list row carries the two facts only.
+ */
+export function modeChange(
+  cause: PermissionModeChangeCause,
+  toMode: string,
+  fromMode: string | null,
+  at: string,
+  client?: string | null,
+): SessionPermissionModeChange {
+  return { fromMode, toMode, cause, client: client ?? (cause === 'ORBIT_CHANGE' ? 'orbit' : null), at };
+}
+
+/** The mode facts a session row carries beside its intent, as the newest change wrote them. */
+export function modeFacts(changes: readonly SessionPermissionModeChange[]): {
+  actualPermissionMode: string | null;
+  actualPermissionModeAt: string | null;
+} {
+  const newest = changes.at(-1);
+  return { actualPermissionMode: newest?.toMode ?? null, actualPermissionModeAt: newest?.at ?? null };
+}

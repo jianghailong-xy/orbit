@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SessionPermissionModeChange } from '@orbit/shared';
+import { modeChange } from '../test/permissionModeFixtures';
 import {
   autoMenuNote,
   MODE_SWITCH_WINDOW_MS,
@@ -13,17 +13,18 @@ import {
  * them (docs/mocks/permission-mode-actual; the owner's A1, B1 and C1 of 2026-11-19).
  */
 
-const NOW = Date.parse('2026-11-27T09:00:30Z');
+const NOW = Date.parse('2026-11-27T09:00:30.000Z');
 const OPUS: ModeFacts = { intent: 'auto', engine: 'claude', modelHasAuto: true, modelLabel: 'Opus 5.5' };
 const HAIKU: ModeFacts = { intent: 'auto', engine: 'claude', modelHasAuto: false, modelLabel: 'Haiku 4.5' };
 
+/** A change as the server records it (test/permissionModeFixtures.ts). */
 const change = (
-  cause: SessionPermissionModeChange['cause'],
+  cause: Parameters<typeof modeChange>[0],
   toMode: string,
   fromMode: string | null = null,
-  at = '2026-11-27T09:00:00Z',
-  client: string | null = null,
-): SessionPermissionModeChange => ({ cause, toMode, fromMode, client, at });
+  at = '2026-11-27T09:00:00.000Z',
+  client?: string | null,
+) => modeChange(cause, toMode, fromMode, at, client);
 
 /** A line as the reader sees it: the mode in brackets where it is bold. */
 const said = (lines: ReturnType<typeof modeChangeLines>) => lines.map((l) => `${l.before}[${l.mode}]${l.after}${l.gap ? ' (gap)' : ''}`);
@@ -40,30 +41,30 @@ describe('the Mode capsule (A1)', () => {
   });
 
   it('② short gap: Claude started in Default and the runner is switching it — "Default → Auto" with its reason', () => {
-    const latest = change('ENGINE_REPORT', 'default', 'auto', '2026-11-27T09:00:20Z');
+    const latest = change('ENGINE_REPORT', 'default', 'auto', '2026-11-27T09:00:20.000Z');
     const capsule = modeCapsule({ ...OPUS, actual: 'default', latest, now: NOW });
     expect(capsule).toMatchObject({ mode: 'default', gap: 'switching', label: 'Default → Auto', to: 'Auto' });
     expect(capsule.reason).toEqual({
       lead: 'Running in Default.',
       rest: 'Claude started below the Auto you asked for; the runner is switching it to Auto now.',
     });
-    expect(capsule.switchingUntil).toBe(Date.parse('2026-11-27T09:00:20Z') + MODE_SWITCH_WINDOW_MS);
+    expect(capsule.switchingUntil).toBe(Date.parse('2026-11-27T09:00:20.000Z') + MODE_SWITCH_WINDOW_MS);
   });
 
   it('② a re-spawn that came back below Auto is switched back the same way', () => {
-    const latest = change('RESPAWN', 'default', 'auto', '2026-11-27T09:00:20Z');
+    const latest = change('RESPAWN', 'default', 'auto', '2026-11-27T09:00:20.000Z');
     expect(modeCapsule({ ...OPUS, actual: 'default', latest, now: NOW }).gap).toBe('switching');
   });
 
   it('② a switch that has not happened in its window is not "switching now" any more: the gap lasts, amber', () => {
-    const latest = change('ENGINE_REPORT', 'default', 'auto', '2026-11-27T08:59:00Z');
+    const latest = change('ENGINE_REPORT', 'default', 'auto', '2026-11-27T08:59:00.000Z');
     const capsule = modeCapsule({ ...OPUS, actual: 'default', latest, now: NOW });
     expect(capsule).toMatchObject({ gap: 'lasting', label: 'Default', to: null, switchingUntil: null });
     expect(capsule.reason?.rest).toBe('Claude started below the Auto you asked for, and the runner hasn’t switched it back.');
   });
 
   it('② lasting gap: a model with no Auto runs Default, and the reason names the model and the way back', () => {
-    const latest = change('OWNER_PICK', 'default', 'auto', '2026-11-27T08:50:00Z', 'web');
+    const latest = change('OWNER_PICK', 'default', 'auto', '2026-11-27T08:50:00.000Z', 'web');
     const capsule = modeCapsule({ ...HAIKU, actual: 'default', latest, now: NOW });
     expect(capsule).toMatchObject({ mode: 'default', gap: 'lasting', label: 'Default' });
     expect(capsule.reason).toEqual({
@@ -122,12 +123,12 @@ describe('the transcript line for a mode change (B1), one per cause', () => {
   it('the owner, with the app they were on', () => {
     const lines = modeChangeLines(
       [
-        change('OWNER_PICK', 'auto', 'plan', '2026-11-27T14:02:00Z', 'web'),
-        change('OWNER_PICK', 'acceptEdits', 'auto', '2026-11-27T14:06:00Z', 'ios'),
-        change('OWNER_PICK', 'plan', 'acceptEdits', '2026-11-27T14:07:00Z', 'macos'),
-        change('OWNER_PICK', 'auto', 'plan', '2026-11-27T14:09:00Z', 'android'),
-        change('OWNER_PICK', 'plan', 'auto', '2026-11-27T14:10:00Z', 'terminal'),
-        change('OWNER_PICK', 'auto', 'plan', '2026-11-27T14:11:00Z', null),
+        change('OWNER_PICK', 'auto', 'plan', '2026-11-27T14:02:00.000Z', 'web'),
+        change('OWNER_PICK', 'acceptEdits', 'auto', '2026-11-27T14:06:00.000Z', 'ios'),
+        change('OWNER_PICK', 'plan', 'acceptEdits', '2026-11-27T14:07:00.000Z', 'macos'),
+        change('OWNER_PICK', 'auto', 'plan', '2026-11-27T14:09:00.000Z', 'android'),
+        change('OWNER_PICK', 'plan', 'auto', '2026-11-27T14:10:00.000Z', 'terminal'),
+        change('OWNER_PICK', 'auto', 'plan', '2026-11-27T14:11:00.000Z', null),
       ],
       { ...OPUS, actual: 'auto' },
     );
@@ -144,9 +145,9 @@ describe('the transcript line for a mode change (B1), one per cause', () => {
   it('a runner correction says what Claude had started in, in one line with the report it corrected', () => {
     const lines = modeChangeLines(
       [
-        change('CLAIM', 'auto', null, '2026-11-19T03:04:52Z'),
-        change('ENGINE_REPORT', 'default', 'auto', '2026-11-19T03:04:53Z'),
-        change('RUNNER_CORRECTION', 'auto', 'default', '2026-11-19T03:04:55Z'),
+        change('CLAIM', 'auto', null, '2026-11-19T03:04:52.000Z'),
+        change('ENGINE_REPORT', 'default', 'auto', '2026-11-19T03:04:53.000Z'),
+        change('RUNNER_CORRECTION', 'auto', 'default', '2026-11-19T03:04:55.000Z'),
       ],
       { ...OPUS, actual: 'auto' },
     );
@@ -160,8 +161,18 @@ describe('the transcript line for a mode change (B1), one per cause', () => {
   });
 
   it('a re-spawn', () => {
-    const lines = modeChangeLines([change('RESPAWN', 'auto', 'default', '2026-11-27T14:21:00Z')], { ...OPUS, actual: 'auto' });
+    const lines = modeChangeLines([change('RESPAWN', 'auto', 'default', '2026-11-27T14:21:00.000Z')], { ...OPUS, actual: 'auto' });
     expect(said(lines)).toEqual(['Claude restarted; mode [Auto] re-applied']);
+  });
+
+  it('a re-spawn that came back below Auto, then the runner’s correction of it', () => {
+    const changes = [change('RESPAWN', 'default', 'auto', '2026-11-27T14:21:00.000Z'), change('RUNNER_CORRECTION', 'auto', 'default', '2026-11-27T14:21:02.000Z')];
+    expect(said(modeChangeLines(changes, { ...OPUS, actual: 'auto' }))).toEqual([
+      'Claude restarted in [Default]',
+      'Mode set back to [Auto] by the runner — Claude had restarted in Default',
+    ]);
+    // Before the correction, the re-spawn is the gap's line.
+    expect(said(modeChangeLines(changes.slice(0, 1), { ...OPUS, actual: 'default' }))).toEqual(['Claude restarted in [Default], not Auto (gap)']);
   });
 
   it('claim-time substitutions: Bypass on a root runner, a scheduled run, a resume', () => {
@@ -176,7 +187,7 @@ describe('the transcript line for a mode change (B1), one per cause', () => {
 
   it('a pick of a model with no Auto says so, amber while the gap stands', () => {
     const lines = modeChangeLines(
-      [change('OWNER_PICK', 'auto', null, '2026-11-27T14:02:00Z', 'web'), change('OWNER_PICK', 'default', 'auto', '2026-11-27T14:30:00Z', 'web')],
+      [change('OWNER_PICK', 'auto', null, '2026-11-27T14:02:00.000Z', 'web'), change('OWNER_PICK', 'default', 'auto', '2026-11-27T14:30:00.000Z', 'web')],
       { ...HAIKU, actual: 'default' },
     );
     expect(said(lines)).toEqual(['Mode set to [Auto] by you, on the web', 'Mode now [Default] — you picked Haiku 4.5, which has no Auto (gap)']);
@@ -187,7 +198,7 @@ describe('the transcript line for a mode change (B1), one per cause', () => {
   });
 
   it('only the change behind a gap still open is amber, and no line of a session not running is', () => {
-    const changes = [change('ENGINE_REPORT', 'default', 'auto', '2026-11-27T09:00:00Z'), change('OWNER_PICK', 'plan', 'default', '2026-11-27T09:05:00Z', 'web')];
+    const changes = [change('ENGINE_REPORT', 'default', 'auto', '2026-11-27T09:00:00.000Z'), change('OWNER_PICK', 'plan', 'default', '2026-11-27T09:05:00.000Z', 'web')];
     expect(modeChangeLines(changes, { ...OPUS, intent: 'auto', actual: 'plan' }).map((l) => l.gap)).toEqual([false, true]);
     expect(modeChangeLines(changes, { ...OPUS, intent: 'auto', actual: null }).map((l) => l.gap)).toEqual([false, false]);
   });

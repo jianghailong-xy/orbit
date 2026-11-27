@@ -40,7 +40,9 @@ const workspaceOf = (runner, lastModel) => ({
   id: uid(2), name: 'orbit', runnerId: runner.id, createdAt: before(600),
   lastEngine: 'claude', lastProvider: 'claude', provider: 'claude', lastModel, model: null, effort: null,
 });
-const change = (cause, toMode, fromMode, at, client = null) => ({ cause, toMode, fromMode, client, at });
+// Shaped as the apiserver answers (src/web/src/test/permissionModeFixtures.ts, held to a real answer by
+// scripts/permission-mode-actual-stack/fixture-diff.mjs): Orbit's own changes name `orbit` as their client.
+const change = (cause, toMode, fromMode, at, client) => ({ fromMode, toMode, cause, client: client ?? (cause === 'ORBIT_CHANGE' ? 'orbit' : null), at });
 const CONVERSATION = [
   { seq: 1, type: 'user', ts: before(40), payload: { text: 'Run the staging migration check and tell me what fails.' } },
   { seq: 2, type: 'assistant', ts: before(36), payload: { text: 'Ran it against staging: 14 of 14 checks passed. The slowest step was the index rebuild on `sessions` (41 s).' } },
@@ -54,7 +56,10 @@ const LONGER = [
 ];
 
 /** A live Claude session: its stored intent, the mode the server recorded it running in, and how that came to be. */
-function sessionOf({ n, title, model, intent, actual, actualAt, changes, events = CONVERSATION, runner }) {
+function sessionOf({ n, title, model, intent, changes, events = CONVERSATION, runner }) {
+  // What the engine runs in is the newest change's, as the server writes both in one statement.
+  const actual = changes.at(-1)?.toMode ?? null;
+  const actualAt = changes.at(-1)?.at ?? null;
   const workspace = workspaceOf(runner, model);
   return {
     id: uid(10 + n), workspaceId: workspace.id, workspace, runnerId: runner.id, assignedRunnerId: runner.id,
@@ -71,27 +76,27 @@ const scene = (name, frame, caption, s) => SCENES.push({ name, frame, caption, .
 {
   const runner = runnerOf();
   const running = sessionOf({
-    n: 1, title: 'Staging migration check', model: 'claude-opus-5-5', intent: 'auto', actual: 'auto', actualAt: before(40),
+    n: 1, title: 'Staging migration check', model: 'claude-opus-5-5', intent: 'auto',
     changes: [change('CLAIM', 'auto', null, before(40))], runner,
   });
   scene('1a-running', '01-web-01', '①a The engine runs in Auto: the capsule says Auto.', { runner, session: running });
   scene('1b-running-menu', '01-web-02', '①b The menu: the check is on Auto; no head.', { runner, session: running, open: 'menu' });
 
   const correcting = sessionOf({
-    n: 2, title: 'Staging migration check', model: 'claude-opus-5-5', intent: 'auto', actual: 'default', actualAt: iso(NOW - 4_000),
+    n: 2, title: 'Staging migration check', model: 'claude-opus-5-5', intent: 'auto',
     changes: [change('CLAIM', 'auto', null, iso(NOW - 6_000)), change('ENGINE_REPORT', 'default', 'auto', iso(NOW - 4_000))], runner,
   });
   scene('2-a1-switching', '01-web-03', 'A1, short: "Default → Auto" with a spinner; hovering says why.', { runner, session: correcting, open: 'hover' });
 
   const noAuto = sessionOf({
-    n: 3, title: 'Staging migration check', model: 'claude-haiku-4-5', intent: 'auto', actual: 'default', actualAt: before(20),
+    n: 3, title: 'Staging migration check', model: 'claude-haiku-4-5', intent: 'auto',
     changes: [change('CLAIM', 'auto', null, before(40)), change('OWNER_PICK', 'default', 'auto', before(20), 'web')], runner,
   });
   scene('2-a1-lasting', '01-web-04', 'A1, lasting: "Default" with a dot; the menu head says why and how to get Auto back.', { runner, session: noAuto, open: 'menu' });
   scene('2-a1-lasting-drawer', '01-web-04', 'The Agent tools drawer says the same mode and gap.', { runner, session: noAuto, open: 'drawer' });
 
   const history = sessionOf({
-    n: 4, title: 'Staging migration check', model: 'claude-opus-5-5', intent: 'auto', actual: 'auto', actualAt: before(5),
+    n: 4, title: 'Staging migration check', model: 'claude-opus-5-5', intent: 'auto',
     changes: [
       change('CLAIM', 'auto', null, before(40)),
       change('ENGINE_REPORT', 'default', 'auto', iso(NOW - 40 * 60_000 + 2_000)),
@@ -114,7 +119,7 @@ const scene = (name, frame, caption, s) => SCENES.push({ name, frame, caption, .
 {
   const runner = runnerOf(true);
   const rootBypass = sessionOf({
-    n: 5, title: 'Staging migration check', model: 'claude-opus-5-5', intent: 'bypassPermissions', actual: 'auto', actualAt: before(40),
+    n: 5, title: 'Staging migration check', model: 'claude-opus-5-5', intent: 'bypassPermissions',
     changes: [change('CLAIM', 'auto', null, before(40))], runner,
   });
   scene('3-b1-claim-root', '01-web-07', 'B1: a claim-time substitution, Bypass on a root runner.', { runner, session: rootBypass, open: 'menu' });
