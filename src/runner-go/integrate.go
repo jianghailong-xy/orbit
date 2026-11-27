@@ -507,10 +507,18 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 	// the empty branch's answer took, and the absorb's own merge commit, which a source can only be if
 	// it carries that absorb (sourceCarriesTheAbsorb), and then J-S2 did not make it.
 	if isAncestor(scratch, sourceSha, containedIn) {
-		// Nothing to land, and the absorb commit is discarded with the worktree: a merge of
-		// upstream that carries no task work is not this job's to push.
+		// Nothing of the task's to land.
 		result.State, result.Phase = "ALREADY_LANDED", "REBASE"
-		return result
+		if isAncestor(scratch, sourceSha, targetSha) {
+			// The target holds the source already, and any absorb is discarded with the worktree: a
+			// merge of upstream that carries no task work is not this job's to push.
+			return result
+		}
+		// The answer rests on the main sync J-S2 just made (③): the source reached the upstream
+		// another way (a batch queue, a merge on GitHub) and the target has it only through that
+		// sync. Dropping it is what left INV-A's line 309 commits behind main on 2026-11-27, under
+		// a receipt saying the work was there, and its dependent refused DEPENDENCY_BASE_NOT_LANDED.
+		return pushMainSync(stop, cmd, repoRoot, scratch, remote, local, result, report, progress)
 	}
 
 	// ── J-S4 REBASE or MERGE ──────────────────────────────────────────────────────────────────
@@ -690,25 +698,13 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 
 	// ── J-S6 PUSH ─────────────────────────────────────────────────────────────────────────────
 	report("PUSH", nil)
-	if progress != nil {
-		// §2.2 J-T4's push boundary: a v2 claim asks before it pushes and pushes only on a clear
-		// answer. Nothing about the tree changes between here and the push — the check that would
-		// refuse it (J-S6a) already ran above.
-		switch progress.reportPush(stop, integrationPushFacts{
-			TestedSha: tested, TestedTreeSha: treeSha,
-			SourceSha: result.SourceSha, TargetShaBefore: targetSha,
-		}) {
-		case integrationPushReportCancelled:
-			return integrationResult{State: "CANCELLED", Phase: "PUSH"}
-		case integrationPushReportStopped:
-			return integrationResult{Stopped: true, Phase: "PUSH"}
-		case integrationPushReportInterrupted:
-			return integrationResult{Interrupted: true, Phase: "PUSH"}
-		case integrationPushReportUnreachable:
-			return errorResult("PUSH", "PUSH_REPORT_UNREACHABLE", map[string]any{
-				"detail": "the synchronous PUSH report could not be delivered within the lease window; nothing was pushed",
-			})
-		}
+	// §2.2 J-T4's push boundary. Nothing about the tree changes between here and the push — the
+	// check that would refuse it (J-S6a) already ran above.
+	if stopped, ok := askBeforePush(stop, progress, integrationPushFacts{
+		TestedSha: tested, TestedTreeSha: treeSha,
+		SourceSha: result.SourceSha, TargetShaBefore: targetSha,
+	}); !ok {
+		return stopped
 	}
 	// mergeLock, not only the per-target lock above: this is the same repository root's refs that
 	// a session's own "merge to main" moves, and the two must not interleave.
@@ -801,6 +797,112 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		result.PushedAs, result.BypassedRules = pushedAsOwner, bypassedRulesOf(ownerSaid)
 	}
 	result.State, result.Phase = "LANDED", "VERIFY"
+	return result
+}
+
+// askBeforePush is §2.2 J-T4's push boundary: a v2 claim (progress set) asks before it pushes and pushes
+// only on a clear answer. False with the result to return when the answer is anything else.
+func askBeforePush(stop context.Context, progress *integrationProgress, facts integrationPushFacts) (integrationResult, bool) {
+	if progress == nil {
+		return integrationResult{}, true
+	}
+	switch progress.reportPush(stop, facts) {
+	case integrationPushReportCancelled:
+		return integrationResult{State: "CANCELLED", Phase: "PUSH"}, false
+	case integrationPushReportStopped:
+		return integrationResult{Stopped: true, Phase: "PUSH"}, false
+	case integrationPushReportInterrupted:
+		return integrationResult{Interrupted: true, Phase: "PUSH"}, false
+	case integrationPushReportUnreachable:
+		return errorResult("PUSH", "PUSH_REPORT_UNREACHABLE", map[string]any{
+			"detail": "the synchronous PUSH report could not be delivered within the lease window; nothing was pushed",
+		}), false
+	}
+	return integrationResult{}, true
+}
+
+// pushMainSync is J-S3's ALREADY_LANDED when the target holds the source only through the main sync J-S2
+// just made (③): that sync is pushed, so the line holds what the answer — and the receipt written from it
+// — says, and a dependent started from the line's tip finds its prerequisite there (G5). It answers
+// ALREADY_LANDED still, naming the commit the line ended at as `landedSha`.
+//
+// Forward only, like every landing: the upstream tip itself when the line has no commits of its own — a
+// fast-forward, because a merge commit there would put a mirror of main one empty commit ahead of it — and
+// the merge J-S2 made otherwise, whose first parent is the line's tip. No check runs: the push carries no
+// task work, and its tree is the upstream's, or the line's and the upstream's merged cleanly, which is
+// the very sync the DEPENDENCY_BASE_NOT_LANDED card tells a person to push by hand. A landing that goes
+// through a pull request keeps the old answer and pushes nothing: a bare sync is not one to open a pull
+// request for.
+func pushMainSync(stop context.Context, cmd IntegrationJobCommand, repoRoot, scratch, remote string, local bool, result integrationResult, report integrationReporter, progress *integrationProgress) integrationResult {
+	if landsThroughPullRequest(cmd.LandVia, cmd.LandingRef, local) {
+		return result
+	}
+	targetSha := result.TargetShaBefore
+	sync := result.MainSyncSha
+	if isAncestor(scratch, targetSha, result.UpstreamSha) {
+		sync = result.UpstreamSha
+	}
+	treeSha, _ := git(scratch, "rev-parse", sync+"^{tree}")
+
+	report("PUSH", nil)
+	if stopped, ok := askBeforePush(stop, progress, integrationPushFacts{
+		TestedSha: sync, TestedTreeSha: treeSha,
+		SourceSha: result.SourceSha, TargetShaBefore: targetSha,
+	}); !ok {
+		return stopped
+	}
+	if refusal := secretPushRefusalOf(repoRoot, []string{sync}, targetSha); refusal != "" {
+		result.State, result.Phase, result.ErrorCode = "ERROR", "PUSH", "PUSH_REJECTED"
+		result.ErrorDetail = map[string]any{"detail": refusal}
+		return result
+	}
+	mergeLock.Lock()
+	unlockCheckout := lockMainCheckout(repoRoot)
+	_, pushErr := pushIntegrationTarget(nil, repoRoot, scratch, remote, cmd.TargetRef, sync, targetSha, local)
+	if pushErr == nil {
+		advanceLocalRef(repoRoot, cmd.TargetRef, sync)
+	}
+	unlockCheckout()
+	mergeLock.Unlock()
+	if pushErr != nil {
+		// The same answers as J-S6's: a line that moved is fetched again by the loop around this job.
+		stderr := gitStderr(pushErr)
+		if cmd.LandVia != "" && isProtectedRefusal(stderr) {
+			return protectedPushResult(result, stderr)
+		}
+		result.State, result.Phase, result.ErrorCode = "ERROR", "PUSH", "PUSH_REJECTED"
+		if isNonFastForward(stderr) {
+			result.ErrorCode = "TARGET_MOVED"
+		}
+		result.ErrorDetail = map[string]any{"detail": clip(stderr, 2000)}
+		return result
+	}
+
+	report("VERIFY", nil)
+	if !local {
+		if err := integrationFetch(repoRoot, remote, cmd.TargetRef); err != nil {
+			result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
+			result.ErrorDetail = map[string]any{"detail": "could not read the target back: " + gitStderr(err)}
+			return result
+		}
+	}
+	landed, _ := integrationTip(repoRoot, remote, cmd.TargetRef, local)
+	landedTree, _ := git(repoRoot, "rev-parse", landed+"^{tree}")
+	if landed != sync || landedTree != treeSha {
+		result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
+		result.ErrorDetail = map[string]any{
+			"expectedSha": sync, "actualSha": landed,
+			"expectedTree": treeSha, "actualTree": landedTree,
+		}
+		return result
+	}
+	result.LandedSha, result.LandedTreeSha = landed, landedTree
+	if ahead, err := git(repoRoot, "rev-list", "--count", result.UpstreamSha+".."+landed); err == nil {
+		if n, convErr := strconv.Atoi(strings.TrimSpace(ahead)); convErr == nil {
+			result.AheadOfUpstream = &n
+		}
+	}
+	result.Phase = "VERIFY"
 	return result
 }
 
