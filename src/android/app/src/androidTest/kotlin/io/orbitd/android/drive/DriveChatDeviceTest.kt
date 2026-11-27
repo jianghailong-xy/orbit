@@ -105,7 +105,7 @@ class DriveChatDeviceTest {
         capture("10a-title-menu")
         compose.onNodeWithTag("chat-new").performClick()
         await { compose.onAllNodesWithTag("chat-example").fetchSemanticsNodes().size == 3 && exists("drive-chat-folder-chip") }
-        await { compose.onAllNodesWithText("Orbit Cloud").fetchSemanticsNodes().isNotEmpty() }
+        await { exists("drive-chat-runs-in") }
         compose.onNodeWithText("Folder · Scans").assertExists()
         SystemClock.sleep(1200)
         capture("10-new-chat-half")
@@ -152,7 +152,7 @@ class DriveChatDeviceTest {
         capture("12b-kept-both")
     }
 
-    private fun exists(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+    private fun exists(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun await(timeout: Long = 20_000, condition: () -> Boolean) = compose.waitUntil(timeout, condition)
     private fun drawerRow(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
     private fun login(setup: String) {
