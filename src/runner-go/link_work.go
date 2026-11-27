@@ -120,6 +120,10 @@ type linkWork struct {
 	browser atomic.Bool
 	// streams is the byte streams open on the link's connections (link_streams.go).
 	streams *linkStreams
+	// facts is, by kind, the digest of each heartbeat part sent whole on a connection to a gateway that keeps them for
+	// this process across its connections (Welcome.process_facts): its first beat on the next one, to that node or
+	// another, sends them by digest alone (link_heartbeat.go).
+	facts *linkFactRecord
 }
 
 // browserOffered reports whether the last Welcome offered this runner the managed runner browser.
@@ -136,9 +140,11 @@ type linkWorkConn struct {
 	// pending is the beat sent on the connection whose HeartbeatAck has not come, nil for none: a connection carries
 	// one beat at a time (link_heartbeat.go). Guarded by beatMu.
 	pending *linkBeat
-	// facts holds, by kind, the digest of each heartbeat part the gateway was last sent whole on this connection: it
-	// keeps them per connection, so they go by digest alone until it asks for one (want_facts).
-	facts map[string]string
+	// facts holds, by kind, the digest of each heartbeat part the gateway was last sent whole, so they go by digest
+	// alone until it asks for one (want_facts): the process's own record (linkWork.facts) when the Welcome says the
+	// gateway keeps them for the process (process_facts), and this connection's alone when it keeps them per
+	// connection, as a gateway older than that field does.
+	facts *linkFactRecord
 
 	retired atomic.Pointer[string] // why the runner itself ended the connection
 	// welcomedAt is when the connection was welcomed: one that ends younger than linkYoungConn is followed by a wait
@@ -164,6 +170,7 @@ func newLinkWork(m *linkMode, client *linkClient, log func(...any)) *linkWork {
 		m: m, client: client, log: log, now: time.Now, pingEvery: linkWorkPingEvery, pingTimeout: linkWorkPingTimeout,
 		beatStuckAfter: linkBeatStuckAfter, youngConn: linkYoungConn, youngBackoff: linkYoungBackoff,
 		changed: make(chan struct{}), calls: map[string]*linkCall{}, events: make(chan linkWorkEvent, 16),
+		facts: newLinkFactRecord(),
 	}
 	w.streams = newLinkStreams(w)
 	return w
@@ -397,7 +404,7 @@ func (w *linkWork) setCurrent(prev, next *linkWorkConn) {
 
 // dial opens one connection, with a goroutine pinging it.
 func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
-	conn := &linkWorkConn{work: w, ready: make(chan struct{}), acks: make(chan *linkpb.HeartbeatAck, 1), facts: map[string]string{}}
+	conn := &linkWorkConn{work: w, ready: make(chan struct{}), acks: make(chan *linkpb.HeartbeatAck, 1), facts: newLinkFactRecord()}
 	lc, err := w.client.connect(ctx, func(_ *linkConn, f *linkpb.Frame) {
 		<-conn.ready
 		w.onFrame(conn, f)
@@ -407,6 +414,9 @@ func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
 		return nil, err
 	}
 	conn.linkConn = lc
+	if lc.welcome.GetProcessFacts() {
+		conn.facts = w.facts
+	}
 	conn.welcomedAt = w.now()
 	close(conn.ready)
 	go w.pinger(conn)
