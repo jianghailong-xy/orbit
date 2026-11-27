@@ -145,6 +145,13 @@ td.none { color:var(--text-4); }
 .st-card { background:#fff; border-radius:12px; padding:14px 14px 16px; }
 .st-card h5 { margin:0 0 2px; font-size:13.5px; } .st-card p { margin:0 0 10px; color:#646a73; font-size:12.5px; line-height:1.5; min-height:56px; }
 .st-card .win { display:block; height:auto; box-shadow:none; border-radius:0; background:#fff; padding:0 4px; }
+
+.ic.xs { width:14px; height:14px; }
+.trq { display:flex; align-items:center; gap:5px; margin-top:4px; color:var(--text-3); font-size:12.5px; }
+.trq .sw { width:7px; height:7px; border-radius:2px; background:#a8acb3; margin:0 1px; }
+.win.dark .trq .sw { background:#6b7078; }
+.trq .go { color:var(--text-4); }
+.trq .v { margin-left:auto; color:var(--text-4); }
 </style></head><body>
 <div class="board">
 <h1 class="bt">Drive · one type scale and rhythm with the session console</h1>
@@ -193,11 +200,11 @@ td.none { color:var(--text-4); }
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>scratch</div>
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>书格</div>
         <div class="sp"></div>
-        <div class="tr" style="position:relative"><span class="mk abs" style="left:-22px;top:8px">7</span><span class="tg"></span><svg class="ic sm" viewBox="0 0 24 24"><path d="M5 7h14M10 4h4M7 7l1 13h8l1-13"/></svg>Trash<span class="sz">3.1 GB</span></div>
         <div class="meter hov" style="position:relative"><span class="mk abs" style="left:-22px;top:12px">8</span>
           <div class="lab"><span>Storage</span><b>47.1 GB</b></div>
           <div class="bar"><i class="c-drive" style="flex:41.6"></i><i class="c-trash" style="flex:3.1"></i><i class="c-other" style="flex:2.4"></i></div>
-          <div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#a8acb3">Trash</span><span style="--dot:#0d9488">Other</span></div>
+          <div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#0d9488">Other</span></div>
+          <div class="trq" style="position:relative"><span class="mk abs" style="left:-30px;top:3px">7</span><i class="sw"></i><span>Trash</span><span class="go">›</span><span class="v">3.1 GB</span></div>
           <div class="tip" style="left:212px;bottom:0"><div><span class="k">Drive</span>41.6 GB</div><div><span class="k">Trash</span>3.1 GB</div><div><span class="k">Other files</span>2.4 GB</div><div style="border-top:1px solid #3a3f47;margin-top:4px;padding-top:4px"><span class="k">No limit set</span>Open Storage ›</div></div>
         </div>
       </div>
@@ -254,8 +261,8 @@ td.none { color:var(--text-4); }
 <li><b>Rows</b> are 48px with 14px names. The table uses fixed column widths: Name takes the remaining space and the other columns stay together on the right, so a wide window no longer opens a gap of about 900px between “Last written by” and Size.</li>
 <li><b>Last written by</b> is grey (text-2), with a small agent glyph in place of the words “Agent in”. The session title turns into a blue underlined link only when you hover the row. Blue is left for selection and actions, as in the session list. The “···” menu also shows only on hover.</li>
 <li><b>Tray</b> uses 14px titles, 13px details and a 12px radius, like a session card. Rows that need attention (failed) come first; finished rows drop the blue session link.</li>
-<li><b>Trash</b> moves out of the header to the foot of the tree, a place you go to like a folder, with its size on the right. Things can be dropped on it.</li>
-<li><b>Storage meter</b> sits under Trash and opens Storage. It reads <code>GET /drive/usage</code>, which the Storage page already calls. With no limit set (the default) the bar is the account’s total split into Drive, Trash and Other, with no grey track, so it does not read as “full”. Hover shows the numbers. States: frame 3.</li>
+<li><b>Trash</b> is not a folder row or a button. It is the grey segment’s own legend line under the storage bar (“■ Trash › 3.1 GB”, 12.5px grey), so it appears once, that turns blue on hover and opens Trash. While you drag a file it becomes a drop target. Row menus keep “Move to Trash”, and the toast’s Undo is the usual way back.</li>
+<li><b>Storage meter</b> sits at the foot of the tree and opens Storage. It reads <code>GET /drive/usage</code>, which the Storage page already calls. With no limit set (the default) the bar is the account’s total split into Drive, Trash and Other, with no grey track, so it does not read as “full”. Hover shows the numbers. States: frame 3.</li>
 <li style="list-style:none;margin-left:-18px;color:#646a73">Frame 2: when a file is selected and the details pane opens, the table drops “Last written by” (the pane shows it as “By”), so names are not cut off.</li>
 </ol>
 <h3>Type and spacing</h3>
@@ -308,11 +315,11 @@ td.none { color:var(--text-4); }
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Video</div>
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>书格</div>
         <div class="sp"></div>
-        <div class="tr"><span class="tg"></span><svg class="ic sm" viewBox="0 0 24 24"><path d="M5 7h14M10 4h4M7 7l1 13h8l1-13"/></svg>Trash<span class="sz">3.1 GB</span></div>
         <div class="meter">
           <div class="lab"><span>47.1 GB of 100 GB</span><b>47%</b></div>
           <div class="bar track"><i class="c-drive" style="width:41.6%"></i><i class="c-trash" style="width:3.1%"></i><i class="c-other" style="width:2.4%"></i></div>
-          <div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#6b7078">Trash</span><span style="--dot:#2dd4bf">Other</span></div>
+          <div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#2dd4bf">Other</span></div>
+          <div class="trq"><i class="sw"></i><span>Trash</span><span class="go">›</span><span class="v">3.1 GB</span></div>
         </div>
       </div>
       <div class="list">
