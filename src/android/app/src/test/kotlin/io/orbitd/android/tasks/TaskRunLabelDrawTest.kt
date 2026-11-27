@@ -59,7 +59,7 @@ class TaskRunLabelDrawTest {
         9 to ("IDLE" to listOf("FINISHED")), 11 to ("IDLE" to listOf("FAILED")), 13 to ("IDLE" to listOf("ENDED")),
         15 to ("RUNNING" to listOf("BACKGROUND")), 17 to ("RUNNING" to listOf("NEEDS_YOU")), 19 to ("QUEUED" to listOf("ON_HOLD")),
         21 to ("IDLE" to listOf("ENDED")), 23 to ("IDLE" to listOf("ENDED")), 25 to ("IDLE" to listOf("INTERRUPTED")),
-        27 to ("RUNNING" to listOf()), 29 to ("RUNNING" to listOf()), 31 to ("IDLE" to listOf("WILL_RESUME")), 33 to ("IDLE" to listOf()),
+        27 to ("RUNNING" to listOf()), 29 to ("RUNNING" to listOf()), 31 to ("IDLE" to listOf()), 33 to ("IDLE" to listOf()),
         35 to ("IDLE" to listOf("ENDED")),
     )
     private val words = mapOf("QUEUED" to "Queued", "RUNNING" to "Running", "IDLE" to "Idle")

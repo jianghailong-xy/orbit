@@ -11,14 +11,13 @@
 // renamed, unmatched, skipped, marked todo, failing, or a test process that did not start, is a non-zero
 // exit. The guards are scripts/test-dsh-routing.mjs's (TAP), scripts/test-dsh-provider-gate.mjs's runLogged
 // and scripts/test-dsh-runtime-environment.mjs's (Go), reused as they are and checked here against this
-// script's own names before they are trusted. The PostgreSQL scenarios run through scripts/run-pg-spec.sh on a
-// throwaway server, which also compiles the API server's test tree the application scenarios then run from.
+// script's own names before they are trusted. The application scenarios run from the API server's test tree,
+// which this script compiles first.
 // The Go scenarios run with every real engine CLI, Cursor's own commands and the download tools replaced on
 // PATH by stubs that fail, and the runner user's real ~/.cursor family is fingerprinted before and after.
 // The contract's §14.4 is read last for the commit trailer P8 recorded.
 import assert from 'node:assert/strict';
 import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { homedir, tmpdir, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,41 +33,23 @@ import {
 import { userCursorPaths } from './test-cursor-runner-install.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const require = createRequire(import.meta.url);
 
 // Exact mandatory scenario names, independent of what the test runners happen to discover. The task's three
 // scenarios, and where each is shown:
 //   1. a Cursor CLI session opened without a title, whose first turn leads with Orbit's instructions, ends up
-//      titled from the person's first message: the server's title cut from P8's message and the claim that
-//      asks against it; the runner's first prompt carrying the instructions; and the runner reporting none of
+//      titled from the person's first message: the server's title cut from P8's message; the runner's first prompt carrying the instructions; and the runner reporting none of
 //      the names Cursor CLI gave such conversations in P5c's and P0's recordings — "Orbit Agent Instructions",
 //      "Agent Instructions" and titles that read like summaries, in the turn or after it, in a new conversation
 //      or one reopened in place of an unspoken one — so the session keeps the title it was created with;
-//   2. a task's title, a person's rename and DeepSeek's title are not replaced, by the P5a follow-up's rules:
-//      the rule, the real claim and report on PostgreSQL, the report's compare-and-set, and the runner
-//      reporting nothing when its claim did not ask;
+//   2. a task's title, a person's rename and DeepSeek's title are not replaced: the report's compare-and-set,
+//      and the runner reporting nothing when its claim did not ask (the server's claims no longer ask; a session
+//      is titled only on the server's DeepSeek key);
 //   3. a session resumed with session/load, whose prompts carry no instructions, is unchanged: its prompts are
 //      the person's alone, its replay names nothing, and a title Cursor CLI gives it is reported when asked.
-export const pgCases = {
-  'sessions/cursor-session-naming': [
-    'P5a a Cursor CLI session nothing else names is claimed with naming, and the title its runner reports lands',
-    "P5a a Cursor CLI session that runs a task keeps the task's title",
-    "P5a a person's rename stands over Cursor CLI's title, made before the claim or after it",
-    "P5a DeepSeek's title stands: a Cursor CLI session the server names is claimed without naming",
-    'P5a Claude Code and Codex sessions are claimed with naming as before, and their titles land',
-    'P5a Cursor CLI session titles on PostgreSQL',
-  ],
-};
-
 export const apiCases = {
-  // P8's untitled session: the title cut from its message, and the claim that asks for a name against it.
+  // P8's untitled session: the title cut from its message.
   'sessions/cursor-session-title-prefix': [
-    'D-P8-2 an untitled Cursor CLI session carries the title cut from its first message, and its claim asks for a name against it',
-  ],
-  // The rule the claim asks by, engine by engine.
-  'sessions/cursor-session-naming': [
-    'P5a Cursor CLI is asked to name a session nothing else names, as Claude Code and Codex are, and no other engine is',
-    'P5a a title a task, a project, a person or DeepSeek gave is not handed to Cursor CLI, Claude Code or Codex to replace',
+    'D-P8-2 an untitled Cursor CLI session carries the title cut from its first message',
   ],
   // The report's compare-and-set: the title the claim carried, or nothing.
   'runner-api/session-naming': [
@@ -148,11 +129,6 @@ export function assertContract(text) {
   for (const fact of contractFacts) assert.ok(section.includes(fact), `§14.4 does not say ${JSON.stringify(fact)}`);
 }
 
-/** The TAP log run-pg-spec.sh keeps for the n-th spec it is given (0-based index). */
-export function pgLogName(index, file) {
-  return `${index + 1}-${path.basename(file)}.pg.spec.tap`;
-}
-
 function tap(names) {
   return `TAP version 13\n${names.map((name, index) => `ok ${index + 1} - ${name}\n`).join('')}1..${names.length}\n`
     + `# tests ${names.length}\n# pass ${names.length}\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n`;
@@ -174,7 +150,7 @@ const json = (events) => `${events.map((event) => JSON.stringify(event)).join('\
  */
 export function checkGuards(scratch) {
   const refused = (label, run) => assert.throws(run, undefined, `the guard accepted ${label}`);
-  for (const names of [...Object.values(pgCases), ...Object.values(apiCases)]) {
+  for (const names of Object.values(apiCases)) {
     assertTapResults(tap(names), names);
     for (const name of names) {
       refused(`a missing ${name}`, () => assertTapResults(tap(names.filter((other) => other !== name)), names));
@@ -229,38 +205,17 @@ export function checkGuards(scratch) {
   refused('a contract with two §14.4', () => assertContract(`${contract}\n### 14.4 提交署名（D2）\n`));
 
   // Each file named once, each scenario once, and every file where the script looks for it.
-  for (const table of [pgCases, apiCases, goCases]) {
+  for (const table of [apiCases, goCases]) {
     for (const [file, names] of Object.entries(table)) {
       assert.ok(names.length > 0, `${file} names no scenario`);
       assert.equal(new Set(names).size, names.length, `${file} names a scenario twice`);
     }
   }
-  for (const file of Object.keys(pgCases)) assert.ok(existsSync(path.join(root, `src/apiserver/src/${file}.pg.spec.ts`)), `missing ${file}.pg.spec.ts`);
   for (const file of Object.keys(apiCases)) assert.ok(existsSync(path.join(root, `src/apiserver/src/${file}.spec.ts`)), `missing ${file}.spec.ts`);
   for (const file of Object.keys(goCases)) assert.ok(existsSync(path.join(root, 'src/runner-go', file)), `missing src/runner-go/${file}`);
   for (const recording of recordings) {
     assert.ok(existsSync(path.join(root, 'src/runner-go/testdata/cursor', recording, 'stdout.jsonl')), `missing the recording ${recording}`);
   }
-  assert.equal(pgLogName(0, 'sessions/cursor-session-naming'), '1-cursor-session-naming.pg.spec.tap');
-}
-
-async function prismaEngineEnvironment() {
-  if (process.env.PRISMA_SCHEMA_ENGINE_BINARY) return {};
-  // Reuse an installed or version-matched cached engine on offline worktrees, as
-  // scripts/test-dsh-provider-gate.mjs does; otherwise leave Prisma's own discovery alone.
-  const platform = await require('@prisma/get-platform').getBinaryTargetForCurrentPlatform();
-  const version = require('@prisma/engines-version').enginesVersion;
-  const candidates = [
-    path.join(path.dirname(require.resolve('@prisma/engines/package.json')), `schema-engine-${platform}`),
-    path.join(homedir(), '.cache/prisma/master', version, platform, 'schema-engine'),
-  ];
-  for (const candidate of candidates) {
-    try {
-      accessSync(candidate, constants.X_OK);
-      return { PRISMA_SCHEMA_ENGINE_BINARY: candidate };
-    } catch { /* Prisma can use its normal discovery if this candidate is absent. */ }
-  }
-  return {};
 }
 
 async function runAcceptance() {
@@ -274,28 +229,16 @@ async function runAcceptance() {
     checkGuards(scratch);
     process.stdout.write('PASS the reused guards refuse missing, unmatched, skipped, todo, failed and unstarted scenarios.\n');
 
-    const pgFiles = Object.keys(pgCases);
-    const output = runLogged('bash', ['scripts/run-pg-spec.sh', ...pgFiles.map((file) => `src/apiserver/src/${file}.pg.spec.ts`)],
-      path.join(scratch, 'postgres.log'), {
-        env: { ...await prismaEngineEnvironment(), RUN_PG_SPEC_LOG_DIR: scratch, RUN_PG_SPEC_TEST_ISOLATION: 'none' },
-        timeout: 1_800_000,
-      });
-    process.stdout.write(output);
-    pgFiles.forEach((file, index) => {
-      const log = path.join(scratch, pgLogName(index, file));
-      assert.ok(existsSync(log), `PostgreSQL runner produced no scenario log for ${file}`);
-      assertTapResults(readFileSync(log, 'utf8'), pgCases[file]);
-      for (const name of pgCases[file]) process.stdout.write(`PASS ${name}\n`);
-      total += pgCases[file].length;
-    });
+    const api = path.join(root, 'src/apiserver');
+    runLogged(path.join(root, 'node_modules/.bin/tsc'), ['-p', 'tsconfig.test.json'], path.join(scratch, 'api-tsc.log'), { cwd: api, timeout: 10 * 60_000 });
 
-    // From the test tree run-pg-spec.sh just compiled, in the package directory `npm test` runs them from.
+    // From the test tree just compiled, in the package directory `npm test` runs them from.
     for (const [file, names] of Object.entries(apiCases)) {
       const spec = path.join(root, `src/apiserver/build/${file}.spec.js`);
       assert.ok(existsSync(spec), `missing compiled test file: ${spec}`);
       // In-process, so the named cases are visible (Node 26 process isolation can report a file wrapper).
       const result = runLogged(process.execPath, ['--test', '--test-isolation=none', '--test-reporter=tap', spec],
-        path.join(scratch, 'node.log'), { cwd: path.join(root, 'src/apiserver') });
+        path.join(scratch, 'node.log'), { cwd: api });
       process.stdout.write(result);
       assertTapResults(result, names);
       total += names.length;

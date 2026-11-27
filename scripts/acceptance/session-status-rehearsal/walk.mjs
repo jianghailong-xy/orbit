@@ -6,15 +6,18 @@
 // runner's slot count, refusals, the payload words), with session ids replaced by the scenario's own names, so two
 // passes compare line by line (compare.mjs).
 //
-//   node walk.mjs <label> --api <base URL> --code d1|d2
+//   node walk.mjs <label> --api <base URL> --code d1|d2|d3|d4
 //
-// --code says which code writes the statement rows (S5, S6): d1 the word only, d2 the word and turn_state, as each
-// deploy's writer does. The first pass registers the runner and its workspace ($LM_DIR/walk-state.json keeps them).
+// --code says which code writes the statement rows (S5, S6): d1 the word only, d2 the word and turn_state, d3 and d4
+// turn_state only, as each deploy's writer does. A d3 or d4 pass reads each row's word from its facts through the
+// projector's SQL (scripts/lib/session-word.mjs), so it runs on a database with or without session.status; a d1 or d2
+// pass reads the stored column, which is what those deploys decided by. The first pass registers the runner and its workspace ($LM_DIR/walk-state.json keeps them).
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sessionWordSql } from '../../lib/session-word.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..', '..');
@@ -27,10 +30,13 @@ const label = args[0];
 const opt = (name) => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 const API = opt('--api');
 const CODE = opt('--code');
-if (!label || !API || !['d1', 'd2'].includes(CODE) || !PROJECT || !S || !OUT) {
-  console.error('usage: walk.mjs <label> --api <base> --code d1|d2   (env LM_PROJECT, LM_DIR, OUT)');
+if (!label || !API || !['d1', 'd2', 'd3', 'd4'].includes(CODE) || !PROJECT || !S || !OUT) {
+  console.error('usage: walk.mjs <label> --api <base> --code d1|d2|d3|d4   (env LM_PROJECT, LM_DIR, OUT)');
   process.exit(2);
 }
+/** SQL for the status word of the session row the query names `row`: the stored column for a D1 or D2 pass, the
+ *  projector over the row's facts from D3 on. */
+const wordOf = (row) => (CODE === 'd1' || CODE === 'd2' ? `${row}.status` : sessionWordSql(row));
 const SCRATCH = `${S}/ops-out`;
 mkdirSync(SCRATCH, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -119,7 +125,7 @@ async function newSession(name, prompt) {
   names.set(id, name); pidOf.set(name, s.id); uuidOf.set(name, id);
   return name;
 }
-const ROW = (ids) => `select coalesce(json_agg(json_build_object('id', id, 'status', status, 'turn_state', turn_state, 'phase', phase,
+const ROW = (ids) => `select coalesce(json_agg(json_build_object('id', id, 'status', ${wordOf('s')}, 'turn_state', turn_state, 'phase', phase,
   'released', finished_at is not null, 'end_reason', end_reason, 'outcome', last_turn_outcome,
   'open_turns', (select count(*) from conversation_turn t where t.session_id = s.id and t.answered_at is null)) order by title), '[]')
   from session s where id in (${ids.map((i) => `'${i}'`).join(',')})`;
@@ -142,10 +148,10 @@ async function snap(...list) {
   }
   return out;
 }
-const word = (name) => value(`select status || '/' || coalesce(turn_state, '-') || '/' || coalesce(phase, '-') from session where id = '${uuidOf.get(name)}'`);
-const parked = (name) => until(`${name} parked with every turn answered`, () => value(`select finished_at is null and status = 'AWAITING_INPUT'
+const word = (name) => value(`select ${wordOf('session')} || '/' || coalesce(turn_state, '-') || '/' || coalesce(phase, '-') from session where id = '${uuidOf.get(name)}'`);
+const parked = (name) => until(`${name} parked with every turn answered`, () => value(`select finished_at is null and ${wordOf('s')} = 'AWAITING_INPUT'
   and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null) from session s where id = '${uuidOf.get(name)}'`) === 't', 120_000);
-const isWord = (name, w) => until(`${name} ${w}`, () => value(`select status from session where id = '${uuidOf.get(name)}'`) === w, 120_000, 250);
+const isWord = (name, w) => until(`${name} ${w}`, () => value(`select ${wordOf('session')} from session where id = '${uuidOf.get(name)}'`) === w, 120_000, 250);
 const released = (name, timeoutMs = 120_000) => until(`${name} released`, () => value(`select finished_at is not null from session where id = '${uuidOf.get(name)}'`) === 't', timeoutMs, 500);
 const send = (name, content) => attempt('POST', `/sessions/${pidOf.get(name)}/turns`, T, { clientTurnId: randomUUID(), content });
 const refusal = (r) => (r.ok ? 'ok' : `${r.status} ${r.body?.code ?? r.body?.error ?? ''}`.trim());
@@ -198,7 +204,7 @@ await setRunner({ maxConcurrent: 2, burstConcurrent: 1 });
 await scenario('S1 slots', async () => {
   for (const x of ['a', 'b', 'c']) flag(`${label}-s1-${x}`, true);
   for (const x of ['a', 'b', 'c']) await newSession(`S1 ${x}`, `E2E-HOLD-WHILE ${label}-s1-${x}`);
-  await until('two of S1 running', () => Number(value(`select count(*) from session where id in (${['a', 'b', 'c'].map((x) => `'${uuidOf.get(`S1 ${x}`)}'`).join(',')}) and status = 'RUNNING'`)) === 2, 120_000);
+  await until('two of S1 running', () => Number(value(`select count(*) from session where id in (${['a', 'b', 'c'].map((x) => `'${uuidOf.get(`S1 ${x}`)}'`).join(',')}) and ${wordOf('session')} = 'RUNNING'`)) === 2, 120_000);
   await sleep(4_000);
   const full = await snap('S1 a', 'S1 b', 'S1 c');
   const queued = ['a', 'b', 'c'].find((x) => full[`S1 ${x}`].status === 'PENDING');
@@ -220,9 +226,9 @@ await scenario('S1 slots', async () => {
 await scenario('S3 run now', async () => {
   for (const x of ['a', 'b', 'c', 'd']) flag(`${label}-s3-${x}`, true);
   for (const x of ['a', 'b', 'c', 'd']) await newSession(`S3 ${x}`, `E2E-HOLD-WHILE ${label}-s3-${x}`);
-  await until('two of S3 running', () => Number(value(`select count(*) from session where title like '${label} S3 %' and status = 'RUNNING'`)) === 2, 120_000);
+  await until('two of S3 running', () => Number(value(`select count(*) from session where title like '${label} S3 %' and ${wordOf('session')} = 'RUNNING'`)) === 2, 120_000);
   await sleep(3_000);
-  const queued = ['a', 'b', 'c', 'd'].filter((x) => value(`select status from session where id = '${uuidOf.get(`S3 ${x}`)}'`) === 'PENDING');
+  const queued = ['a', 'b', 'c', 'd'].filter((x) => value(`select ${wordOf('session')} from session where id = '${uuidOf.get(`S3 ${x}`)}'`) === 'PENDING');
   const first = await attempt('POST', `/sessions/${pidOf.get(`S3 ${queued[0]}`)}/run-now`, T);
   if (first.ok) await isWord(`S3 ${queued[0]}`, 'RUNNING').catch(() => null);
   await sleep(2_000);
@@ -284,9 +290,9 @@ await scenario('S7 turn complete', async () => {
   await sleep(1_000);
   const withQueued = await snap(a);
   flag(`${label}-s7`, false);
-  const seqA = await trace([a], async () => value(`select status = 'AWAITING_INPUT' and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null) from session s where id = '${uuidOf.get(a)}'`) === 't', 120_000);
+  const seqA = await trace([a], async () => value(`select ${wordOf('s')} = 'AWAITING_INPUT' and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null) from session s where id = '${uuidOf.get(a)}'`) === 't', 120_000);
   const b = await newSession('S7 single', 'Say hello');
-  const seqB = await trace([b], async () => value(`select status = 'AWAITING_INPUT' and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null) from session s where id = '${uuidOf.get(b)}'`) === 't', 120_000);
+  const seqB = await trace([b], async () => value(`select ${wordOf('s')} = 'AWAITING_INPUT' and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null) from session s where id = '${uuidOf.get(b)}'`) === 't', 120_000);
   const c = await newSession('S7 failed', 'E2E-FAIL: the build tool crashed (exit 2)');
   await released(c);
   return { queuedSend: refusal(queuedSend), withQueued, followUpWords: seqA[a], singleWords: seqB[b],
@@ -353,7 +359,7 @@ await scenario('S10 dispatch pause', async () => {
   await sleep(10_000);
   const whilePaused = { ...(await snap(n)), payload: await payload(n) };
   const off = await attempt('PUT', '/admin/dispatch-pause', T, { paused: false });
-  const seq = await trace([n], async () => value(`select status = 'AWAITING_INPUT' and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null) from session s where id = '${uuidOf.get(n)}'`) === 't', 120_000);
+  const seq = await trace([n], async () => value(`select ${wordOf('s')} = 'AWAITING_INPUT' and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null) from session s where id = '${uuidOf.get(n)}'`) === 't', 120_000);
   return { pause: refusal(on), whilePaused, unpause: refusal(off), words: seq[n] };
 });
 
@@ -370,8 +376,9 @@ await scenario('S6 runner restart', async () => {
   const p = await newSession('S6 queued', 'Say hello');
   await sleep(2_000);
   // writer #1 (managed-runners/managed-runner-manager.ts commitStopped): the out-of-memory stop, as each deploy writes it
-  const both = CODE === 'd2' ? `, turn_state = 'ABANDONED'` : '';
-  value(`update session set status = 'INTERRUPTED'${both}, error = 'Stopped because the machine ran out of memory twice while this turn was running. Send a message to continue.',
+  const moved = [CODE === 'd1' || CODE === 'd2' ? `status = 'INTERRUPTED'` : null, CODE === 'd1' ? null : `turn_state = 'ABANDONED'`]
+    .filter(Boolean).join(', ');
+  value(`update session set ${moved}, error = 'Stopped because the machine ran out of memory twice while this turn was running. Send a message to continue.',
     last_turn_outcome = 'INTERRUPTED', engine_turn_active = false, retry_at = null, retry_claimed_at = null, updated_at = now() where id = '${uuidOf.get(x)}'`, true);
   const before = await snap(a, x, r, p);
   const logFrom = existsSync(`${S}/logs/runner.log`) ? readFileSync(`${S}/logs/runner.log`).length : 0;
@@ -382,7 +389,7 @@ await scenario('S6 runner restart', async () => {
   await sleep(8_000);
   const afterRestart = await snap(a, x, r, p);
   flag(`${label}-s6-r`, false);
-  await until('S6 queued answered', () => value(`select status = 'AWAITING_INPUT' and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null) from session s where id = '${uuidOf.get(p)}'`) === 't', 180_000).catch(() => null);
+  await until('S6 queued answered', () => value(`select ${wordOf('s')} = 'AWAITING_INPUT' and not exists (select 1 from conversation_turn t where t.session_id = s.id and t.answered_at is null) from session s where id = '${uuidOf.get(p)}'`) === 't', 180_000).catch(() => null);
   const settled = await snap(a, x, r, p);
   const logLines = readFileSync(`${S}/logs/runner.log`).subarray(logFrom).toString('utf8').split('\n')
     .filter((l) => /reclaim|takeover|resum|cold|active/i.test(l)).map((l) => {

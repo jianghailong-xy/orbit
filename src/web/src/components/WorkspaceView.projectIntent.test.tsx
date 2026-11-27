@@ -195,8 +195,8 @@ describe('New Session project intent', () => {
     );
     expect(intent.querySelectorAll('button[aria-label="Dismiss project intent"]')).toHaveLength(1);
     // A project names its workspace and no folder.
-    await waitForUi(() => expect(one('.np-place button[aria-label="Workspace: orbit"]')).toBeTruthy());
-    expect(container?.querySelector('.np-place button[aria-label^="Folder:"]')).toBeNull();
+    await waitForUi(() => expect(one('.np-place button[aria-label="Runs in: orbit"]')).toBeTruthy());
+    expect(container?.querySelector('.np-place-slash')).toBeNull();
   });
 
   it('uses the empty-state hierarchy when the route has no intent', async () => {
@@ -206,7 +206,7 @@ describe('New Session project intent', () => {
     // docs/mocks/new-session-top: the model is the composer's to say, where it runs is said under the
     // engine, and a wide window's draft has no header above them.
     expect(container?.querySelector('.np-current-model')).toBeNull();
-    await waitForUi(() => expect(one('.np-place button[aria-label="Workspace: orbit"]')).toBeTruthy());
+    await waitForUi(() => expect(one('.np-place button[aria-label="Runs in: orbit"]')).toBeTruthy());
     expect(container?.querySelector('.workspace-header')).toBeNull();
     expect(container?.querySelector('.composer-project-intent')).toBeNull();
     expect(container?.querySelector('.np-title')).toBeNull();

@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New session · where it runs</title>
+<style>
+  :root{--text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;--text-4:#a8acb3;--border:#dee0e3;--border-subtle:#eceef1;
+    --brand:#3370ff;--brand-tint:#ebf1ff;--brand-strong:#245bdb;--bg-hover:#f2f3f5;--mark:#e5484d}
+  *{box-sizing:border-box}
+  body{margin:0;background:#eef0f3;font-family:-apple-system,BlinkMacSystemFont,Inter,'Noto Sans SC',sans-serif;color:var(--text-1)}
+  .board{width:1960px;padding:44px 48px 48px}
+  h1{margin:0 0 6px;font-size:30px;letter-spacing:-.01em}
+  .lede{font-size:16px;color:#4a505a;margin-bottom:30px;line-height:1.6;max-width:1700px}
+  .row{display:flex;gap:40px;margin-bottom:40px;align-items:flex-start}
+  .col{width:912px;flex:none}
+  .cap{font-size:20px;font-weight:650;margin-bottom:4px}
+  .tag{display:inline-block;font-size:13px;font-weight:600;padding:2px 8px;border-radius:6px;margin-left:8px;vertical-align:3px}
+  .tag.rec{background:#e3f6ea;color:#1f7a3f}.tag.alt{background:#fff;color:#646a73;border:1px solid #d4d7dc}
+  .capsub{font-size:14.5px;color:#4a505a;margin-bottom:12px;line-height:1.55}
+  .shot{position:relative;width:912px;height:560px;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 24px rgba(0,0,0,.08)}
+  .shot>img{position:absolute;left:-78px;top:-40px;width:1068px}
+  .notes{margin:14px 0 0;padding-left:22px;font-size:14.5px;line-height:1.65;color:#30353c}
+  .notes li{margin-bottom:4px}
+  .m{position:absolute;width:28px;height:28px;border-radius:50%;background:var(--mark);color:#fff;font:700 15px/28px Inter,sans-serif;text-align:center;box-shadow:0 0 0 3px #fff;z-index:5}
+  .ring{position:absolute;border:3px solid var(--mark);border-radius:10px}
+
+  /* hero */
+  .hero{position:absolute;left:0;right:0;top:90px;display:flex;flex-direction:column;align-items:center;text-align:center}
+  .mark{width:112px;height:112px;border-radius:29px;background:linear-gradient(135deg,#d97757,#c15f3c);box-shadow:0 10px 28px rgba(193,95,60,.34);display:flex;align-items:center;justify-content:center}
+  .name{margin-top:22px;display:inline-flex;align-items:center;gap:8px;font-size:28px;font-weight:650}
+  .chev{font-size:11px;color:var(--text-4)}
+  .empty{margin-top:26px;font-size:24px;color:var(--text-3)}
+  .ic{width:20px;height:20px;flex:none;color:var(--text-3)}
+
+  /* A: one place pill */
+  .pill{margin-top:16px;display:inline-flex;align-items:center;gap:9px;height:46px;padding:0 18px;border:1px solid var(--border);border-radius:23px;background:#fff;font-size:21px;color:var(--text-1);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .pill.open{border-color:#adc6ff;background:var(--brand-tint);box-shadow:0 0 0 3px rgba(51,112,255,.12)}
+  .pill .slash{color:var(--text-4);margin:0 2px}
+  .pill .dim{color:var(--text-2)}
+  .pill .chev{margin-left:2px}
+
+  /* menu */
+  .pop{position:absolute;background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.14);padding:6px;font-size:16px;text-align:left;z-index:3}
+  .search{display:flex;align-items:center;gap:8px;height:38px;margin:2px 2px 6px;padding:0 10px;border-radius:9px;background:#f5f6f7;color:var(--text-4);font-size:14.5px}
+  .hd{font-size:12px;color:var(--text-3);padding:8px 10px 4px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  .it{display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;border-radius:8px;color:var(--text-1)}
+  .it.on{background:var(--brand-tint);font-weight:600}
+  .it.hover{background:var(--bg-hover)}
+  .it.sub{padding-left:38px}
+  .it .ck{margin-left:auto;color:var(--brand);font-weight:700}
+  .it .meta{margin-left:auto;color:var(--text-4);font-size:13px;font-weight:400}
+  .it.muted{color:var(--text-2)}
+  .sp{height:1px;background:var(--border-subtle);margin:5px 4px}
+
+  /* A states strip */
+  .states{position:absolute;inset:0;padding:26px 24px;display:grid;grid-template-columns:170px 1fr;row-gap:22px;align-items:center;font-size:14.5px}
+  .states .lbl{color:var(--text-2);line-height:1.4}
+  .states .pill{margin-top:0}
+  .states .lbl b{color:var(--text-1);display:block;font-weight:600}
+
+  /* B: labelled fields */
+  .fields{margin-top:18px;display:flex;gap:12px}
+  .field{width:236px;height:58px;border:1px solid var(--border);border-radius:12px;padding:8px 14px;text-align:left;display:flex;flex-direction:column;justify-content:center}
+  .field .k{font-size:12.5px;color:var(--text-3)}
+  .field .v{display:flex;align-items:center;gap:7px;font-size:16.5px;margin-top:2px}
+  .field .v .chev{margin-left:auto}
+  .field.ghost{border-style:dashed;color:var(--text-3)}
+  .field.ghost .v{color:var(--text-3)}
+
+  /* C: composer */
+  .comp{position:absolute;left:28px;right:28px;bottom:26px;height:112px;border:1px solid #c9cdd4;border-radius:24px;background:#fff}
+  .comp .ph{position:absolute;left:24px;top:20px;font-size:17px;color:var(--text-4)}
+  .comp .bar{position:absolute;left:16px;right:16px;bottom:12px;display:flex;align-items:center;gap:10px;font-size:14.5px;color:var(--text-2)}
+  .comp .plus{font-size:22px;width:32px;text-align:center}
+  .comp .cchip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--border);border-radius:15px;color:var(--text-1)}
+  .comp .cchip .ic{width:15px;height:15px}
+  .comp .r{margin-left:auto;display:flex;gap:14px;align-items:center}
+  .comp .send{width:34px;height:34px;border-radius:50%;background:#d7dae0}
+
+  /* phone */
+  .phone{position:relative;width:300px;height:560px;border-radius:36px;background:#fff;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 24px rgba(0,0,0,.08);flex:none}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.14);padding:10px 10px 22px;font-size:15px}
+  .grab{width:38px;height:5px;border-radius:3px;background:#d4d7dc;margin:0 auto 8px}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.28)}
+
+  table{border-collapse:collapse;width:100%;font-size:14.5px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  th,td{padding:10px 14px;border-bottom:1px solid #eceef1;text-align:left;vertical-align:top;line-height:1.55}
+  th{background:#f6f7f9;font-weight:650;color:#30353c}
+  .panel{background:#fff;border-radius:12px;padding:18px 22px;box-shadow:0 1px 2px rgba(0,0,0,.05);font-size:14.5px;line-height:1.7}
+  .panel h3{margin:0 0 8px;font-size:17px}
+  .decide{border-left:4px solid #f5a623}
+  code{font-family:'JetBrains Mono',monospace;font-size:13px;background:#f2f3f5;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="star" viewBox="0 0 24 24"><path fill="#fff" d="M12 2l1.2 7.3L19 4.6l-4.6 5.8L22 12l-7.6 1.6 4.6 5.8-5.8-4.7L12 22l-1.2-7.3L5 19.4l4.6-5.8L2 12l7.6-1.6L5 4.6l5.8 4.7z"/></symbol>
+  <symbol id="ws" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7l2 1.5L5 10"/></g></symbol>
+  <symbol id="fd" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.4" d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z"/></symbol>
+  <symbol id="sr" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></g></symbol>
+</svg>
+<div class="board">
+  <h1>New session · where it runs (Web)</h1>
+  <div class="lede">Only the line under the engine changes: <code>in [workspace ▾] › [folder ▾]</code> in <code>NewSessionProviderHero.tsx</code>. Engine card, empty copy and composer stay as they are.
+  A <b>workspace</b> is where the session runs. A <b>folder</b> is only a sidebar group for sessions, so it is optional and is not a directory. Panels are drawn at 1:1 around the hero.</div>
+
+  <!-- Row 1 -->
+  <div class="row">
+    <div class="col">
+      <div class="cap">① Today</div>
+      <div class="capsub">Your screenshot, with three problems marked.</div>
+      <div class="shot">
+        <img src="00-today.png" alt="">
+        <div class="ring" style="left:202px;top:318px;width:44px;height:36px"></div>
+        <div class="m" style="left:186px;top:302px">1</div>
+        <div class="ring" style="left:504px;top:318px;width:182px;height:36px"></div>
+        <div class="m" style="left:690px;top:302px">2</div>
+        <div class="ring" style="left:472px;top:318px;width:30px;height:36px"></div>
+        <div class="m" style="left:470px;top:366px">3</div>
+      </div>
+      <ol class="notes">
+        <li><b>It reads as a caption, not as controls.</b> The chips are grey 13px text with no border, sitting under a 22px title. Only the two small ▾ marks show they can be clicked. "in" floats on its own.</li>
+        <li><b>"⊘ No folder" looks like an error.</b> The prohibition sign means blocked. It also states the default in the negative, about something that is optional anyway (a sidebar group).</li>
+        <li><b>"›" suggests one path, but it is two menus.</b> Changing both takes two trips, and the folder list depends on the workspace you just picked.</li>
+      </ol>
+    </div>
+
+    <div class="col">
+      <div class="cap">② Option A: one place pill<span class="tag rec">Recommended</span></div>
+      <div class="capsub">One bordered control that says where the session runs. It names the folder only when one is picked; when none is picked it shows nothing for the folder.</div>
+      <div class="shot">
+        <div class="hero">
+          <div class="mark"><svg width="62" height="62"><use href="#star"/></svg></div>
+          <div class="name">Claude Code <span class="chev">▾</span></div>
+          <div class="pill"><svg class="ic"><use href="#ws"/></svg>tea-cli @ SG<span class="chev">▾</span></div>
+          <div class="empty">Send a task to get started.</div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>It looks like a button: a 1px border and full-strength text, at the same text size as today's line.</li>
+        <li>Drop "in" and "›". The pill alone says where the session runs; the menu sorts out the hierarchy.</li>
+        <li>No folder picked = the pill shows only the workspace, so there is no "No folder" and no ⊘.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Row 2 -->
+  <div class="row">
+    <div class="col">
+      <div class="cap">③ Option A · the menu</div>
+      <div class="capsub">One menu with two sections. Picking a workspace keeps the menu open, so you can then pick a folder in it. Picking a folder closes the menu.</div>
+      <div class="shot" style="height:640px">
+        <div class="hero" style="top:24px">
+          <div class="mark" style="width:80px;height:80px;border-radius:21px"><svg width="44" height="44"><use href="#star"/></svg></div>
+          <div class="name" style="margin-top:14px;font-size:24px">Claude Code <span class="chev">▾</span></div>
+          <div class="pill open"><svg class="ic" style="color:var(--brand-strong)"><use href="#ws"/></svg>tea-cli @ SG<span class="slash">/</span><svg class="ic" style="color:var(--brand-strong)"><use href="#fd"/></svg>Releases<span class="chev">▾</span></div>
+        </div>
+        <div class="pop" style="left:276px;top:226px;width:360px">
+          <div class="search"><svg class="ic" style="width:15px;height:15px"><use href="#sr"/></svg>Find a workspace or folder</div>
+          <div class="hd">Workspace</div>
+          <div class="it on"><svg class="ic"><use href="#ws"/></svg>tea-cli @ SG<span class="ck">✓</span></div>
+          <div class="it hover"><svg class="ic"><use href="#ws"/></svg>orbit-ws01</div>
+          <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-macos</div>
+          <div class="sp"></div>
+          <div class="hd">Folder in tea-cli @ SG · optional</div>
+          <div class="it muted">None</div>
+          <div class="it on"><svg class="ic"><use href="#fd"/></svg>Releases<span class="ck">✓</span></div>
+          <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Session</div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>The search box only appears when there are more than 8 rows in total. It filters both sections.</li>
+        <li>"None" is plain text with no icon, at the top of the folder section, like the empty choice in any select.</li>
+        <li>A workspace with no folders has no folder section, so the menu is just the workspace list.</li>
+        <li>Keyboard: ↑/↓ moves across both sections, and Enter on a workspace keeps the menu open.</li>
+      </ul>
+    </div>
+
+    <div class="col">
+      <div class="cap">④ Option A · states, and on a phone</div>
+      <div class="capsub">How the pill reads in each case. On a phone the same two sections open as a bottom sheet.</div>
+      <div style="display:flex;gap:24px">
+        <div class="shot" style="width:588px;height:640px">
+          <div class="states">
+            <div class="lbl"><b>No folder</b>the default</div>
+            <div><span class="pill"><svg class="ic"><use href="#ws"/></svg>tea-cli @ SG<span class="chev">▾</span></span></div>
+            <div class="lbl"><b>Folder picked</b></div>
+            <div><span class="pill"><svg class="ic"><use href="#ws"/></svg>tea-cli @ SG<span class="slash">/</span><svg class="ic"><use href="#fd"/></svg>Releases<span class="chev">▾</span></span></div>
+            <div class="lbl"><b>Long names</b>each part cut with "…"; hover shows the full path</div>
+            <div><span class="pill"><svg class="ic"><use href="#ws"/></svg><span style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">orbit-build-singapore-02</span><span class="slash">/</span><svg class="ic"><use href="#fd"/></svg><span style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Quarterly release checks</span><span class="chev">▾</span></span></div>
+            <div class="lbl"><b>Hover</b></div>
+            <div><span class="pill" style="background:var(--bg-hover);border-color:#c9cdd4"><svg class="ic"><use href="#ws"/></svg>tea-cli @ SG<span class="chev">▾</span></span></div>
+            <div class="lbl"><b>Running session</b>place is fixed</div>
+            <div><span class="pill" style="border-color:transparent;box-shadow:none;color:var(--text-2)"><svg class="ic"><use href="#ws"/></svg>tea-cli @ SG</span></div>
+          </div>
+        </div>
+        <div class="phone" style="height:640px">
+          <div class="hero" style="top:90px">
+            <div class="mark" style="width:64px;height:64px;border-radius:17px"><svg width="36" height="36"><use href="#star"/></svg></div>
+            <div class="name" style="font-size:19px;margin-top:12px">Claude Code <span class="chev">▾</span></div>
+            <div class="pill" style="font-size:15px;height:34px"><svg class="ic" style="width:15px"><use href="#ws"/></svg>tea-cli @ SG<span class="chev">▾</span></div>
+          </div>
+          <div class="scrim"></div>
+          <div class="sheet">
+            <div class="grab"></div>
+            <div class="hd">Workspace</div>
+            <div class="it on"><svg class="ic"><use href="#ws"/></svg>tea-cli @ SG<span class="ck">✓</span></div>
+            <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-ws01</div>
+            <div class="sp"></div>
+            <div class="hd">Folder · optional</div>
+            <div class="it muted on" style="font-weight:600;color:var(--text-1)">None<span class="ck">✓</span></div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Releases</div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Session</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3 -->
+  <div class="row">
+    <div class="col">
+      <div class="cap">⑤ Option B: two labelled fields<span class="tag alt">Alternative</span></div>
+      <div class="capsub">Like a form: each control has a name, and the folder field is dashed while it is empty.</div>
+      <div class="shot">
+        <div class="hero">
+          <div class="mark"><svg width="62" height="62"><use href="#star"/></svg></div>
+          <div class="name">Claude Code <span class="chev">▾</span></div>
+          <div class="fields">
+            <div class="field"><div class="k">Workspace</div><div class="v"><svg class="ic"><use href="#ws"/></svg>tea-cli @ SG<span class="chev">▾</span></div></div>
+            <div class="field ghost"><div class="k">Folder</div><div class="v">+ Add to a folder</div></div>
+          </div>
+          <div class="empty">Send a task to get started.</div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Pro: the clearest of the three. Nobody has to guess what "tea-cli @ SG" means.</li>
+        <li>Con: twice as heavy as A. It turns a quiet start screen into a form, and it is still two menus.</li>
+      </ul>
+    </div>
+
+    <div class="col">
+      <div class="cap">⑥ Option C: move it into the composer<span class="tag alt">Alternative</span></div>
+      <div class="capsub">The engine stays alone in the middle. Where the session runs becomes a chip next to "+", where it is seen right before sending.</div>
+      <div class="shot">
+        <div class="hero">
+          <div class="mark"><svg width="62" height="62"><use href="#star"/></svg></div>
+          <div class="name">Claude Code <span class="chev">▾</span></div>
+          <div class="empty">Send a task to get started.</div>
+        </div>
+        <div class="comp">
+          <div class="ph">Send this workspace a task…</div>
+          <div class="bar"><span class="plus">+</span>
+            <span class="cchip"><svg class="ic"><use href="#ws"/></svg>tea-cli @ SG<span class="chev">▾</span></span>
+            <span>Auto</span>
+            <span class="r"><span><b style="color:var(--text-1)">Opus 5.5</b> Default</span><span>2%</span><span class="send"></span></span></div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Pro: it sits where your eyes are when you send, as the model does.</li>
+        <li>Con: the composer row is already full (model, usage, language, send), and on a phone it would wrap. It also undoes the earlier decision (new-session-top ②) to put it under the engine.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <table>
+        <tr><th></th><th>A · one pill</th><th>B · two fields</th><th>C · in composer</th></tr>
+        <tr><td>Looks clickable</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>"No folder" state</td><td>Not shown</td><td>"+ Add to a folder"</td><td>Not shown</td></tr>
+        <tr><td>Menus to change both</td><td>1</td><td>2</td><td>1</td></tr>
+        <tr><td>Visual weight</td><td>Light</td><td>Heavy</td><td>Lightest in the middle; crowds the composer</td></tr>
+        <tr><td>Fixes ①②③</td><td>①②③</td><td>①② (③ only partly)</td><td>①②③</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <div class="panel decide">
+        <h3>To decide</h3>
+        <ol style="margin:0;padding-left:20px">
+          <li><b>A, B or C?</b> I recommend A.</li>
+          <li><b>Hide the folder when none is picked?</b> With A, nothing in the pill hints that folders exist until the menu is opened. If that matters, add a faint <code>+ Folder</code> after the workspace name.</li>
+          <li><b>Web only, or macOS/iOS/Android too?</b> I suggest Web first; the others follow once you have seen the built version.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

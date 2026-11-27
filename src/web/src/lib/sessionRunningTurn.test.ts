@@ -26,7 +26,7 @@ const TABLE: [string, string, string, string[], boolean, boolean, boolean][] = [
   ["parked with the engine's own turn", 'AWAITING_INPUT', 'Running', [], true, true, true],
   ['parked with a sub-agent running', 'AWAITING_INPUT', 'Running', [], true, false, true],
   ['running a job with no turn', 'AWAITING_INPUT', 'Running', ['BACKGROUND'], true, false, true],
-  ['will wake', 'AWAITING_INPUT', 'Idle', ['WILL_RESUME'], false, false, false],
+  ['will wake', 'AWAITING_INPUT', 'Idle', [], false, false, false],
   ['held idle', 'AWAITING_INPUT', 'Idle', [], false, false, false],
   ['interrupted', 'INTERRUPTED', 'Idle', ['INTERRUPTED'], false, false, false],
   ['released by a failed turn', 'FAILED', 'Idle', ['FAILED'], false, false, false],

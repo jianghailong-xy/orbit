@@ -56,6 +56,7 @@ import type { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { RunnerApiController } from './runner-api.controller';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -256,7 +257,7 @@ test('P6a a Cursor CLI account’s usage limit on PostgreSQL', { skip, concurren
    *  `pg` would read as local time: read as epoch. */
   async function row(sessionId: string) {
     const r = await sql.query(
-      `SELECT status, cursor_account, pool_switch_notice, error, retry_attempts,
+      `SELECT ${wordSql()} AS status, cursor_account, pool_switch_notice, error, retry_attempts,
               (EXTRACT(EPOCH FROM retry_at) * 1000)::float8 AS retry_ms
          FROM "session" WHERE id = $1::uuid`,
       [sessionId],

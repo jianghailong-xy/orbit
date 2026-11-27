@@ -105,14 +105,15 @@ const WATCH = {
   expiryDeliveries: [],
 };
 
-/** Interrupted, a process left up, a retry armed: the list row's facts for a case that draws three marks. */
+/** An approval waiting, interrupted, a process left up: the list row's facts for a case that draws three marks. */
 const THREE = {
   ...row(encodeId('0195c0de-0000-7000-8000-0000000000c6'), 'Three marks', 'Stopped halfway.'),
   status: 'INTERRUPTED',
   phase: 'IDLE',
   released: false,
   lastTurnOutcome: 'INTERRUPTED',
-  waitingOn: 'WAKE',
+  waitingOn: 'PERSON',
+  pendingApprovals: 1,
   endReason: null,
   workFinished: false,
   runningBgCount: 1,
@@ -270,7 +271,7 @@ describe('the session list row with three marks', { timeout: 60_000 }, () => {
     });
 
     const chips = [...listRow(THREE.title).querySelectorAll('.session-marks .session-mark')];
-    expect(chips.map((chip) => chip.textContent)).toEqual(['Interrupted', 'Background', 'Will resume']);
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Needs you', 'Interrupted', 'Background']);
   });
 
   it('lets the chips wrap under a readable line, in a row that grows with them', () => {

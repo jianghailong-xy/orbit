@@ -149,6 +149,31 @@ final class SessionFolderNavigationTests: XCTestCase {
         XCTAssertEqual(nav.path, [.compose(agentID: "a1", folderID: nil)])
     }
 
+    /// The draft's place pill (docs/mocks/new-session-place): a draft with its own frame is refiled in
+    /// place, whatever is under it, and never stacked on itself.
+    func testPickingADraftsFolderRefilesTheDraftInPlace() {
+        var nav = NavState(section: .agents)
+        nav.enterFolder(release)
+        nav.openDraft(agentID: "a1", folderID: release.folderID)
+
+        nav.fileDraft(agentID: "a1", folderID: polish.folderID)
+        XCTAssertEqual(nav.path, [.folder(release), .compose(agentID: "a1", folderID: "f2")])
+
+        nav.fileDraft(agentID: "a1", folderID: nil)
+        XCTAssertEqual(nav.path, [.folder(release), .compose(agentID: "a1", folderID: nil)],
+                       "None files it in no folder; Back still returns to the page under it")
+    }
+
+    /// The draft an iPad draws at its pane's root has no frame: a pick opens one as ✎ would.
+    func testPickingAFolderForTheFramelessDraftOpensOne() {
+        var nav = NavState(section: .agents)
+        nav.enterFolder(release)
+
+        nav.fileDraft(agentID: "a1", folderID: polish.folderID)
+
+        XCTAssertEqual(nav.path, [.folder(release), .compose(agentID: "a1", folderID: "f2")])
+    }
+
     // MARK: - Switching workspaces (owner, 2026-10-27)
 
     private let bugs = SessionFolderAddress(folderID: "f3", agentID: "a2", view: .open)

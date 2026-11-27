@@ -439,7 +439,7 @@ test('Feishu open access: someone in the availability scope direct-messages the 
     assert.deepEqual(repliesTo(sent.messageId), [words], `${limit}: delivered once`);
   }
   const openCounts = async () => (await sql.query<{ running: number; today: number }>(
-    `SELECT count(*) FILTER (WHERE s."status" IN ('PENDING', 'RUNNING') AND s."deleted_at" IS NULL)::int AS "running",
+    `SELECT count(*) FILTER (WHERE s."turn_state" IN ('QUEUED', 'IN_FLIGHT') AND s."deleted_at" IS NULL)::int AS "running",
             count(*) FILTER (WHERE s."id" IS NOT NULL)::int AS "today"
        FROM "feishu_thread" t LEFT JOIN "session" s ON s."id" = t."session_id"
       WHERE t."app_id" = $1 AND t."open_access_open_id" IS NOT NULL`, [X.appId])).rows[0]!;

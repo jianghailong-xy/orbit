@@ -13,10 +13,9 @@ datasource db {
   provider = "postgresql"
 }
 
-// The column session.status and its type run_status are no longer in the model (deploy D3,
-// docs/session-status-retirement-plan.md §4.1, §4.3): no server code reads or writes them. Migration
-// 1671's trigger keeps the stored word from the facts for a rollback to deploy-2 code, and deploy D4
-// drops both. The protocol's words are `RunStatus` of @orbit/shared.
+// A session stores no status word: deploys D3 and D4 (migrations 1671 and 1711;
+// docs/session-status-retirement-plan.md §4.1, §4.3) took the stored one and its enum type away. The words the API
+// answers are `RunStatus` of @orbit/shared, derived from the facts.
 
 enum RunnerStatus {
   ONLINE
@@ -2040,6 +2039,10 @@ model WorkspacePermissionRule {
 // calls, and llm usage hang directly off the Session.
 model Session {
   id                   String    @id @default(uuid(7)) @db.Uuid
+  /// The key a person's POST /sessions carried, so a repeat of the same request (a Retry whose first answer was
+  /// lost) returns the session it made instead of opening a second. Unique per owner over the rows that have one
+  /// (1730's partial index `session_owner_client_request_key`, which Prisma cannot declare). Never an address.
+  clientRequestId      String?   @map("client_request_id")
   title                String
   /// True while the project this Session coordinates owns its display title. A manual session
   /// rename clears this in the same UPDATE as the new title, so later project renames cannot take
@@ -2793,8 +2796,8 @@ model Session {
   // caller names no provider (workspaces/workspace-provider.ts).
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([parentSessionId])
-  // The five indexes on `status` (session_status_idx and the four beside it) stay in the database, unused, until
-  // deploy D4 drops them with the column; their replacements on the facts are migrations 1627 to 1633.
+  // The indexes on `status` went with the column (deploy D4, migration 1711); their replacements on the facts are
+  // migrations 1627 to 1633.
   @@index([ownerId])
   // The session's Settings panel (docs/mocks/session-settings, migration 0700). `env` is the
   // session's own variables, a string→string map laid over the workspace's when the engine starts;
@@ -5207,6 +5210,23 @@ model ProjectOrphanNotice {
 
   @@unique([projectId, orphanKey], map: "project_orphan_notice_project_key")
   @@map("project_orphan_notice")
+}
+
+/// One decision card the account owner was pushed about once it became theirs (migration 1720,
+/// PushService.notifyDecisionCards, push/owner-cards.ts). The key names the card and its version, so a
+/// card is pushed once whatever the number of sweeps or restarts. History rather than foreign keys.
+model OwnerCardPush {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  cardKey   String   @map("card_key")
+  /// EVIDENCE | OWNER_CONFIRMATION | CRITERIA_DECISION | STANDARD_SET | DONE_REQUEST | RECORD_AS_DONE
+  kind      String
+  /// The conversation the card is drawn in, which the push opened.
+  sessionId String?  @map("session_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, cardKey], map: "owner_card_push_owner_key")
+  @@map("owner_card_push")
 }
 
 /// One time a project's coordinator spent more on its own than the project allows, and what became of

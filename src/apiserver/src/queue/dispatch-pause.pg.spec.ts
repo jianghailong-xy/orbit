@@ -44,6 +44,7 @@ import { configureProjectIntegration } from '../projects/project-integration-lin
 import { TasksService } from '../tasks/tasks.service';
 import '../test-support/daemon-routes-over-http';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -258,7 +259,7 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
   const heartbeat = () =>
     runner('POST', '/api/runner/heartbeat', { leaseOwner, status: 'ONLINE' }, { 'x-orbit-runner-capabilities': INTEGRATION_JOB_CLAIM });
   const statusOf = async (sessionId: string) =>
-    (await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
+    (await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
   const turnStatusOf = async (turnId: string) =>
     (await sql.query<{ status: string }>(`SELECT "status" FROM "conversation_turn" WHERE "id" = $1::uuid`, [turnId])).rows[0].status;
   const jobStateOf = async (jobId: string) =>

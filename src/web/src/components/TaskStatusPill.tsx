@@ -22,7 +22,7 @@ export function taskStatusLabel(status: string, running?: boolean, queued?: bool
 /**
  * A task row's live run as the session facts lib/sessionDisplay reads. A server that says whether the task's queued run
  * is held (`queuedOnHold`) has the facts. A task's row carries the run as `running` / `queued`, `runReason` and
- * `queuedOnHold`: a WAITING run is parked on a watch, a wake-up or a retry (Idle, Will resume), a BACKGROUND_JOB one
+ * `queuedOnHold`: a WAITING run is parked on a watch, a wake-up or a retry (Idle, no mark), a BACKGROUND_JOB one
  * wears Background, a held queue On hold. The run's other facts are not on the row. Null with no live run, and from an
  * older server.
  */

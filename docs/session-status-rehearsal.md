@@ -636,3 +636,211 @@ on every observation but time.
    runner binary. The runner was the head's, which is the same as D2's.
 5. **A quiet host.** Load average 25–58 for most of the run, from other work. It shows in the claim delays and in the
    trace samples, not in any outcome.
+
+## Rehearsal of D3 to D4, the rollback and forward again (task T17, 2026-11-27)
+
+This run rehearses deploy D4 (plan §4.1; task T15, migration `1711_session_status_drop`), which drops `session.status`
+and `run_status`. It ran on the HPC seeded copy, with a rollback to D3.1 and a second move forward. Nothing touched
+production. The stack was isolated: loopback only, the Compose project `orbit-link-t17`, state under `/mnt/tmp/t17`.
+The whole run, image builds included, held the HPC heavy-work lock (bgj_318eeffffb3b). Every number below comes from a
+runner-hosted job, named by its `bgj_` id. The kit is on the branch (`scripts/acceptance/session-status-rehearsal/`,
+commit e736688333, README "D3 to D4"). The records are the attachment `354bXlbo2lvokjEQPjoZO` (`t17-records.tgz`).
+
+**Releases.** All four images were built from a `git archive` of each commit (bgj_318eeffffb3b):
+
+| Side | Commit | What it is | Last migration | Run now gate reads `s.status` |
+|---|---|---|---|---|
+| d2 | `5a08c866c4` | D2, used only to write the copy | 1669 | yes |
+| d3 | `feeb45cf16` | D3, live on production until D3.1 | 1671 | yes |
+| d31 | `7474f16158` | D3.1, live on production since 2026-11-27T00:35Z | 1671 | no |
+| d4 | `483049739d` | the project head: D3.1 + T15 | 1711 | no |
+
+The last two columns were read from each image (its migrations folder and `dist/sessions/queued-gate.js`;
+bgj_4c8d70fbe37b). `src/runner-go` and `src/link-gateway` are the same at D3, D3.1 and D4 (an empty diff, the same job). The runners are a `go build` of the head, and their only engine is the fake claude.
+
+**The copy (step 1).** A fresh database was migrated by D2 code (1669). With both apiservers stopped, the plans seed
+(33 s), the 57 projector shapes (592 rows) and the four C8 rows (`seed-c8.sql`) went in, as D2's writers leave them.
+The D2-era seed scripts write the word, and at D3 nothing derives `turn_state` from it any more (1671 dropped 1611's
+trigger), so they cannot seed a D3 database directly. Both slots were then replaced by D3.1, whose first boot applied
+1670 and **1671 (17 ms)**. That left 101,954 sessions with every §3.4 kind, at D3.1, as production is now
+(bgj_2ee5136975df).
+
+**Topology and load.** Two apiserver slots ran on one database, `apiserver` (A) and `apiserver-b` (B), and the link
+gateway forwarded the runners' calls to both. Each release change was the upgrade skill's hand-over without a gap
+(SKILL.md "Without a gap"). `apiserver-next`, from the new release, started beside both serving slots and answered to
+`apiserver` too. It applied the migrations as it booted, while the old release served. A, then B, was stopped
+(graceful, exit 0 each time, 4.2–4.5 s; the D3 replica 5.6 s) and started again from the new release. Then `-next` stopped. Three kinds of
+load ran from step 1 to the end:
+- **API and runner load** (`load.mjs`). A second runner (`max_concurrent` 3) claimed through the link gateway. The
+  owner's calls went straight to each serving container in turn, every 1.5 s: a new session (a claim, a turn, a park),
+  the session lists, follow-ups, ends (releases), the runner list, and task runs that were batch-stopped (cancels). The
+  lists were `GET /sessions`, `/sessions/compact`, `?status=AWAITING_INPUT`, `/sessions/listing` and the Completed view,
+  each with the Run now gate's read. Every answer was recorded with the release that gave it.
+- **Statement-level writer loop** (`writer-loop.cjs`, `WRITER_CODE=d3 WRITER_CYCLE=parked`). Event-ingestion updates ran
+  every 100 ms, and the cycle moved `turn_state` between parked and queued. No lock timeout was set. In T16 and T17a the
+  reaper released the cycled rows that were left RUNNING, so this cycle never leaves one RUNNING. It changed rows in
+  every window below.
+- **Lock sampler** (`sample-locks.sh`, every 0.2 s). Its positive control saw the planted 2.8 s wait
+  (bgj_2e5a8b729c55).
+
+### Timeline and timings
+
+| Step | What ran | Took | Job |
+|---|---|---|---|
+| 1. Copy at D3.1 | D2 seed, then both slots to D3.1: 1671 applied at A's boot, B "No pending migrations" | 1671: 17 ms | bgj_2ee5136975df |
+| Load on, baseline walks | writer loop, sampler, load; walks `wd31`, `wd31-s8r` (A), `wd31r` (B) | — | bgj_2e5a8b729c55, bgj_19f94c34bf15 |
+| **2. D3.1 → D4** | `-next` (D4) started beside A and B (D3.1): **1711 applied at its boot in 69 ms** (`_prisma_migrations` 01:41:42.686–.755). It was healthy 3.9 s after start. Walks `h1-mix` through A (D3.1) and `h1-mix-d4` through `-next` (D4) ran, both after 1711. Then A, then B replaced by D4 (no migration pending), and `-next` stopped | overlap 01:41:45.6–01:45:18.0 (3 min 32 s) | bgj_19f94c34bf15 |
+| 3. D4 alone | walks `wd4`, `wd4-s8r` (A); rechecks of `wd31` and `h1-mix` through B; census | — | bgj_f1079d575978 |
+| **4. Rollback** | `scripts/session-status-drop-down.sql` while both D4 slots served under load: **the `DO` statement took 15,031 ms**, then 1711's `_prisma_migrations` row was deleted (4 ms). Then `-next` (D3.1) beside the D4 slots ("707 migrations found … No pending migrations"), A and B to D3.1, and `-next` stopped. Walks `wrb`, `wrb-s8r` (A). Then a D3 replica (`feeb45cf16`, answering as `apiserver-b`, so the link gateway sent it runner calls too) ran beside the D3.1 slots: walk `wfeeb` through it, and a recheck of `wd4` | down script 15.0 s; hand-over 01:50:16.7–01:50:38.4 | bgj_2da9550313f7 |
+| **5. Forward to D4 again** | `-next` (D4) beside A and B (D3.1): **1711 applied again in 248 ms** (01:56:14.966–15.214), healthy 4.0 s after start. Walk `h2-mix` through A (D3.1) after it. Then A and B to D4, and `-next` stopped. Walk `wf` (A) | overlap 01:56:17.6–01:57:55.1 | bgj_3cf00e58cf21 |
+| Load off, records | load, writer and sampler stopped; `windows.mjs` over the windows below | — | bgj_2c9898ca1a05 |
+| Teardown | `rehearse.sh down`, then the one slot container `down` left (the kit's `down` now removes it) and the network | — | bgj_7af502ba53d4, bgj_856c97844476 |
+
+### HTTP errors on either release (the hand-overs)
+
+From `load-calls.jsonl`, by the release that answered (bgj_2c9898ca1a05). Status 0 means no connection: a call sent to
+a container while it stopped, which the load sent again to the next target.
+
+| Window | Release: calls (session lists) | 5xx | Other HTTP errors | No connection |
+|---|---|---|---|---|
+| D3.1 alone (01:36:10–01:41:41) | D3.1: 1,235 (788) | **0** | 0 | 0 |
+| 1711 at `-next`'s boot (01:41:41.7–45.6) | D3.1: 13 (9) | **0** | 0 | 0 |
+| **D3.1 beside D4, column gone (01:41:42.8–01:45:18.0)** | **D3.1: 533 (344)**; D4: 278 (174) | **0** | 0 | D3.1: 16, all while A or B was stopping |
+| D4 alone (01:45:18–01:49:57) | D4: 1,055 (676) | **0** | 0 | 6, while `-next` stopped |
+| Down script (01:49:57.1–01:50:12.3) | none answered inside it: the calls waited (below) | — | — | — |
+| Rollback hand-over (01:50:12–01:50:31) | D3.1: 25 (18); D4: 61 (37) | **0** | 0 | D4: 16, while A or B was stopping |
+| D3.1 after the rollback (01:50:31–01:54:30) | D3.1: 924 (590) | **0** | 0 | 6, while `-next` stopped |
+| D3.1 beside D3 (01:54:30–01:56:05) | D3.1: 255 (164); D3: 121 (81) | **0** | D3: 20 × 404 on `/sessions/listing` | D3: 8, while it stopped |
+| **D3.1 beside D4 after the second 1711 (01:56:15.2–01:57:55.1)** | **D3.1: 254 (156)**; D4: 136 (90) | **0** | 0 | D3.1: 14, while A or B was stopping |
+| D4 alone again (01:57:55–02:01:17) | D4: 490 (314) | **0** | 0 | 8, while `-next` stopped |
+| **The whole run** | D3.1: 3,233 (2,065); D4: 2,020 (1,291); D3: 122 (81) | **0** | the 20 × 404 above | 75 |
+
+- **D3.1 needs no column.** It answered 787 calls after 1711 had dropped the column (500 of them session lists, each
+  with the Run now gate's read), across both forward hand-overs, with no 5xx and no other HTTP error. The walk
+  `h1-mix` through D3.1 then equalled the baseline in full (below).
+- **The 404s are not the schema's.** `GET /sessions/listing` was added by `2fe3659bdf`, after `feeb45cf16`. D3 has no
+  such route, so `listing` matched `GET /sessions/:id`, which answered "session not found". Every other D3 call
+  answered 2xx.
+- One D3 call ended in a 10 s connect timeout at 01:56:14. It had been sent as that container stopped.
+- Answers by release and status over the whole run: D3.1 2,346 × 200, 860 × 201, 36 × no connection; D4 1,438 × 200,
+  552 × 201, 30 × no connection; D3 58 × 200, 35 × 201, 20 × 404, 9 × no connection (bgj_4c8d70fbe37b).
+
+### Lock waits
+
+"Waiters" counts distinct backends seen waiting, and each wait is the waiter's statement time when sampled, so it is an
+upper bound (bgj_2c9898ca1a05).
+
+| Window | Waiters | Longest waits |
+|---|---|---|
+| D3.1 alone | 1 | 124 ms, an app read behind an app `UPDATE session` (row lock) |
+| **1711 at `-next`'s boot (69 ms)** | **0** | none. No writer-loop statement took over 100 ms in it (bgj_4c8d70fbe37b). 1711 is shorter than one sampler period, so the writer's times are the better measure here |
+| D3.1 beside D4 | 2 | 132 ms and 36 ms, the claim's advisory lock behind a claim (`QUEUED to IN_FLIGHT`) |
+| D4 alone | 3 | ≤ 38 ms, the same advisory lock, and row locks |
+| **Down script (15.0 s)** | **21** | **14.8 s**: app reads (`SELECT … FROM session`, a project open-item read joining it), the writer loop's `UPDATE session` (14,976 ms) and an app `INSERT INTO session` (13.7 s), each waiting for its lock on `session` behind the down script's `DO` block. That block holds ACCESS EXCLUSIVE while it rewrites every row and builds the six indexes |
+| Rollback hand-over, D3.1 after it, D3.1 beside D3 | 0 | none |
+| **Second 1711 at `-next`'s boot (248 ms)** | **1** | 18 ms, the writer loop's `UPDATE session` behind the migration. Its longest statement there was 156 ms (bgj_4c8d70fbe37b) |
+| D3.1 beside D4 after the second 1711 | 2 | 146 ms, the claim's advisory lock |
+| D4 alone again | 6 | ≤ 302 ms: row locks, the claim's advisory lock, and 107 ms of a runner claim behind an autovacuum of `runner_presence`'s TOAST (as in T17a) |
+
+- **1711 takes its locks without a queue.** On 102,000 rows it ran in 69 ms the first time and 248 ms the second. It
+  held up one writer statement for at most 156 ms. Its `DO` block's 2 s × 45 tries were never needed.
+- **The down script stops writers for its whole run.** Every statement on `session` waited until it committed: 15.0 s
+  here on 102,549 rows. The API calls that waited answered once it committed (the slowest a `POST /sessions` of
+  13.9 s), and none failed. The script's header says "seconds on a table of 100,000 rows". Here that meant 15 s, on a
+  host at load average 26–48 with I/O pressure. On production that is a 15 s or longer stop of every session write and
+  read while a rollback runs, so it belongs in the rollback's plan.
+- **The writer loop.** It ran 13,933 ingest updates (7,117 rows changed), 0 errors, p50 3 ms, p99 24 ms; its maximum,
+  14,976 ms, is the down script. The parked cycle ran 2,786 statements (1,290 rows changed), 0 errors, maximum 427 ms.
+  It changed rows in every window, both 1711 boots included: 8 rows in each 4 s boot window, 168 and 76 in the
+  overlaps. The share of cycle statements that changed a row fell from about 70% to about 40% after the first walks,
+  so some of the ten cycled sessions stopped matching (released or claimed). That was not measured further.
+- **Slow calls not explained by a lock.** Two `POST /sessions` on D4 alone took 15.8 s (01:58:52) and 12.3 s
+  (02:00:32), with no lock wait sampled (bgj_4c8d70fbe37b lists the slowest calls). The host was busy with other work
+  toward the end of the run: the 5-minute averages read just after it were load 34 and I/O pressure "full" 18.8%
+  (bgj_4c8d70fbe37b). A direct read at 02:01:48, outside a job, showed load 48, and the copy's postgres log showed a
+  checkpoint that took 270 s to write 2,934 buffers.
+
+### Censuses
+
+`census.cjs` ran in two releases' images in one exported snapshot (`rehearse.sh census-pair`), so both projectors
+counted the very rows. `census-same` then compared every (word, runState, sessionState, end reason, outcome, kind,
+import, filing) line between them. Where the column exists, the census compares the stored word with the projector's.
+Where it does not, it reports the projector's words and checks `phase` against `deriveSessionPhase`.
+
+| When | Column | Rows | Word changed (§3.4 kinds) | Not a §3.4 kind | Held changed | phase off / NULL | Projectors, line for line | Job |
+|---|---|---|---|---|---|---|---|---|
+| D2, after the seed | yes | 101,954 | 379 | **0** | **0** | **0** / **0** | (D2 only) | bgj_2ee5136975df |
+| D3.1, after 1671 (step 1) | yes | 101,954 | 379 | **0** | **0** | **0** / **0** | D3.1 = D4: **0 of 69 lines differ** | bgj_2ee5136975df |
+| after 1711, D3.1 beside D4 | **no** | 102,351 | — | — | — | **0** / **0** | D4 = D3.1: **0 of 67 differ** | bgj_19f94c34bf15 |
+| D4 alone (step 3) | no | 102,540 | — | — | — | **0** / **0** | D4 = D3.1: **0 of 67 differ** | bgj_f1079d575978 |
+| after the down script, D4 serving | yes, restored | 102,549 | **0** | **0** | **0** | **0** / **0** | D4 = D3.1: **0 of 69 differ** | bgj_2da9550313f7 |
+| D3.1 after the rollback | yes | 102,725 | **0** | **0** | **0** | **0** / **0** | D3.1 = D3: **0 of 69 differ** | bgj_2da9550313f7 |
+| after forward again (step 5) | no | 102,891 | — | — | — | **0** / **0** | D4 = D3.1: **0 of 68 differ** | bgj_3cf00e58cf21 |
+
+- **The 379 at D3.1** are the released rows of the §3.4 kinds that no write had touched since D2: C4/C5 325, C1/C2/C3 35,
+  C3 (`task_done`) 5, C6 5, C7 5, C8 4. 1671 writes no row, so they kept D2's word, as T17a found (383 there).
+- **The down script stores the facts' word.** After it, every row's stored word was the projector's (0 changed, 0 NULL,
+  `session_aa_status_from_facts` back). The 379 rows came back with the facts' word, as its header says: D2's own words
+  are gone with D4.
+- The projectors of D3, D3.1 and D4 gave every row the same words in every census, with and without the column.
+
+### The walk (plan §7.3) on each release
+
+These are the kit's `walk.mjs` scenarios: S1, S3–S10, S11, S12 and, in its own pass, S8r. They were driven through the
+owner's API at the replica named, and read back from the database through the projector's SQL (`--code d3|d4`). Every
+pass was compared with the D3.1 baseline `wd31` by `compare.mjs`, on every observation but time.
+
+| Pass | Releases serving | API through | Against `wd31` | Job |
+|---|---|---|---|---|
+| `wd31` | D3.1, D3.1 | A | the baseline: every scenario passes | bgj_2e5a8b729c55 |
+| `wd31r` | D3.1, D3.1 | B | 1 difference, in S7's word trace | bgj_19f94c34bf15 |
+| `h1-mix` | A, B D3.1; `-next` D4, after 1711 | A (D3.1) | **0 differences** | bgj_19f94c34bf15 |
+| `h1-mix-d4` | the same | `-next` (D4) | 1 difference, in S10's word trace | bgj_19f94c34bf15 |
+| `wd4` | D4, D4 | A | **0 differences** | bgj_f1079d575978 |
+| recheck of `wd31`, `h1-mix` | D4 | B | payloads **equal** to what D3.1 served | bgj_f1079d575978 |
+| `wrb` | D3.1, D3.1 after the down script | A | **0 differences** | bgj_2da9550313f7 |
+| `wfeeb` | A, B D3.1; D3 `feeb45cf16` as `apiserver-b` | D3 | **0 differences** | bgj_2da9550313f7 |
+| recheck of `wd4` | D3 | D3 | payloads **equal** to what D4 served | bgj_2da9550313f7 |
+| `h2-mix` | A, B D3.1; `-next` D4, after the second 1711 | A (D3.1) | 1 difference, in S10's word trace | bgj_3cf00e58cf21 |
+| `wf` | D4, D4 after forward again | A | 1 difference, in S7's word trace | bgj_3cf00e58cf21 |
+| `wd4-s8r`, `wrb-s8r` against `wd31-s8r` | D4; D3.1 after the rollback | A | **equal** | bgj_f1079d575978, bgj_2da9550313f7 |
+
+- **Claims, runner slots and dispatch were the same as D3.1's in every pass.** S1's slot counts, S3's first Run now
+  started and the second refused, S4's parked session with a background job holding no slot, S5's sub-agent taking none,
+  S6's reclaim and takeover after a runner restart, S8's ends, S9's execution claim with a second Run refused and batch
+  stop releasing CANCELLED, S10's pause, and S11's `?status=` filters were equal in every pass, through D3.1, D4 and D3,
+  before and after 1711. They were equal too while D3.1 and D4 served the same database. In S10 nothing was claimed while
+  paused, in every pass: after 10 s the session was PENDING / QUEUED with no open turn (bgj_4c8d70fbe37b). By a direct
+  query before teardown (not a `bg_run` job), each pass's prompt was claimed 10.16–10.57 s after its session was made,
+  and answered 0.27–0.99 s later.
+- **The trace differences are sampling, not behaviour.** S7 and S10 record the word every 200 ms through `docker exec`
+  until the session parks. `wd31r` (D3.1 against D3.1) and `wf` missed S7's last park sample. `h1-mix-d4` and `h2-mix`
+  sampled S10's PENDING before the claim, which the other passes did not catch. Every other observation of those
+  scenarios (rows, slots, payloads, refusals) was equal.
+- **S8r, an end the runner does not honour** (§3.4 C1), served the same payload at D3.1, at D4 and at D3.1 after the
+  rollback.
+- **The legacy wire words are unchanged.** S12's payloads were equal pass for pass. The rechecks gave equal payloads:
+  D3.1's sessions read through D4, and D4's sessions through D3. The censuses gave every row the same words through
+  three releases' projectors. The golden `session-payloads-legacy.golden.json` spec was not run here; the census
+  through the projector stands in for it.
+
+### What this does not establish
+
+1. **Production's rows and timings.** The copy is the plans seed and the projector shapes (C8 added by hand), not a
+   backup. 1711 took 69 ms and 248 ms on 102,000 rows on a shared host. On production it takes its locks between
+   production's statements. The down script's 15 s is this host's, under load average 26–48. Production's rollback time
+   was not measured.
+2. **The web gateway's hand-over.** The owner's calls went straight to each container, and the runners' calls through
+   the link gateway's names. The web gateway was not pointed at `-next` as the upgrade skill's nginx handover does. The
+   web, the native apps and any older runner binary were not run.
+3. **Clients.** The criterion speaks of server and client code. This run shows the server side only: D3.1 and D4 serve
+   a database without the column, and D3 and D3.1 serve it again after the down script. It shows nothing of the clients'
+   own code, beyond the legacy wire words they read being unchanged.
+4. **Not run:** the §4.5 plans at D4, S2 (batch cap and spawn tree), S5's Merge hold, S11's `session_create --wait` and
+   imports, the golden legacy-payload spec, D2 code after a rollback past D3 (the from-facts down script), and a
+   stop-then-start deploy.
+5. **The writer loop's cycled sessions.** Its share of statements that changed a row fell from about 70% to about 40%.
+   It changed rows in every window, but which of its ten sessions stopped matching was not traced.
+6. **Three readings outside a `bg_run` job**, all taken before teardown: S10's claim and answer times, the load average
+   of 48 at 02:01:48, and the 270 s checkpoint in the copy's postgres log. Neither the stack nor its database is left
+   to read them again.
