@@ -15,16 +15,18 @@ import { modeChange as change, modeFacts } from '../test/permissionModeFixtures'
  *     lasts, the reason at the head of the menu, and the menu's check still on the intent;
  *  ③ the transcript records each change where it happened, with who or what made it;
  *  ④ before a session starts, the mode it will start in: Auto stays selectable on a model with no Auto (C1).
+ *  ⑤ a session with more changes than its detail carries: the older ones are read as the transcript pages back,
+ *     and each is drawn once where it happened, even where several share one moment.
  * The Agent tools drawer says the same mode and gap.
  */
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
-  return { ...actual, api: vi.fn(), getSessionEventPage: vi.fn(), getSession: vi.fn() };
+  return { ...actual, api: vi.fn(), getSessionEventPage: vi.fn(), getSession: vi.fn(), getSessionPermissionModeChanges: vi.fn() };
 });
 vi.mock('../lib/transcriptStore', () => ({ loadTranscript: async () => null, saveTranscript: async () => {} }));
 
-const { api, getSession, getSessionEventPage } = await import('../api');
+const { api, getSession, getSessionEventPage, getSessionPermissionModeChanges } = await import('../api');
 const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
 const { encodeId } = await import('../lib/idCodec');
@@ -37,6 +39,7 @@ const CORRECTING = id(2);
 const NO_AUTO = id(3);
 const HISTORY = id(4);
 const ROOT_BYPASS = id(5);
+const LONG = id(6);
 
 const ALL_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions'];
 const runnerWith = (runsAsRoot = false): Runner =>
@@ -87,6 +90,11 @@ let rows: Record<string, unknown>[] = [];
 let details: Record<string, Record<string, unknown>> = {};
 let events: Record<string, unknown[]> = {};
 let lastModel: string | null = null;
+/** LONG's every change, as the server holds them, and the `before` of each page of them asked for. */
+let longChanges: Change[] = [];
+let modePagesAsked: number[] = [];
+/** LONG's older transcript page answers when this is resolved: the transcript has paged back to the start. */
+let releaseOlderEvents: () => void = () => {};
 
 function serve(): void {
   const correctingAt = ago(4_000);
@@ -109,14 +117,28 @@ function serve(): void {
     ],
     [ROOT_BYPASS]: [change('CLAIM', 'auto', null, at(1))],
   };
+  // 61 changes: the claim, then thirty rounds of the owner moving to Plan on the web and back to Auto on Android in the
+  // same millisecond, twenty before the first reply and ten after the second question. The detail carries the newest 50,
+  // the oldest of them at 0:15.
+  longChanges = [change('CLAIM', 'auto', null, at(1), null, 1)];
+  for (let round = 0; round < 30; round += 1) {
+    const when = round < 20 ? at(10 + round) : at(110 + round);
+    longChanges.push(
+      change('OWNER_PICK', 'plan', 'auto', when, 'web', longChanges.length + 1),
+      change('OWNER_PICK', 'auto', 'plan', when, 'android', longChanges.length + 2),
+    );
+  }
+  changes[LONG] = longChanges.slice(-50);
   rows = [
     row(RUNNING, 'Staging migration check', 'claude-opus-5-5', 'auto', changes[RUNNING]),
     row(CORRECTING, 'Rotate the staging key', 'claude-opus-5-5', 'auto', changes[CORRECTING]),
     row(NO_AUTO, 'Tidy the changelog', 'claude-haiku-4-5', 'auto', changes[NO_AUTO]),
     row(HISTORY, 'Drop the probe table', 'claude-opus-5-5', 'auto', changes[HISTORY]),
     row(ROOT_BYPASS, 'Rebuild the index', 'claude-opus-5-5', 'bypassPermissions', changes[ROOT_BYPASS]),
+    row(LONG, 'Flip the flag', 'claude-opus-5-5', 'auto', changes[LONG]),
   ];
   details = Object.fromEntries(rows.map((r) => [r.id as string, { ...r, permissionModeChanges: changes[r.id as string] }]));
+  details[LONG].permissionModeChangesHasMore = true;
   const conversation = [
     { seq: 1, type: 'user', turnId: 't1', ts: at(0), payload: { text: 'Run the staging migration check and tell me what fails.' } },
     { seq: 2, type: 'assistant', turnId: 't1', ts: at(60), payload: { text: 'Ran it against staging: 14 of 14 checks passed.' } },
@@ -215,7 +237,24 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.mocked(getSessionEventPage).mockReset();
-  vi.mocked(getSessionEventPage).mockImplementation(async (sid: string) => ({ events: events[sid] ?? [], hasMore: false }) as never);
+  modePagesAsked = [];
+  const olderEvents = new Promise<void>((resolve) => {
+    releaseOlderEvents = resolve;
+  });
+  vi.mocked(getSessionEventPage).mockImplementation((async (sid: string, opts: { before?: number }) => {
+    if (sid !== LONG) return { events: events[sid] ?? [], hasMore: false };
+    // LONG opens on its second question; the page before it waits until the test lets the transcript reach the start.
+    if (opts.before === undefined) return { events: (events[sid] ?? []).slice(2), hasMore: true };
+    await olderEvents;
+    return { events: (events[sid] ?? []).filter((e) => (e as { seq: number }).seq < opts.before!), hasMore: false };
+  }) as never);
+  vi.mocked(getSessionPermissionModeChanges).mockReset();
+  vi.mocked(getSessionPermissionModeChanges).mockImplementation(async (_sid: string, opts: { before?: number } = {}) => {
+    // As GET /sessions/:id/permission-mode-changes pages them: the 50 just before `before`, oldest first.
+    modePagesAsked.push(opts.before!);
+    const older = longChanges.filter((c) => c.seq! < opts.before!);
+    return { changes: older.slice(-50), hasMore: older.length > 50 };
+  });
   vi.mocked(getSession).mockReset();
   vi.mocked(getSession).mockImplementation(async (sid: string) => details[sid] as never);
   apiMock.mockReset();
@@ -405,5 +444,39 @@ describe('the mode a session is actually running in (docs/mocks/permission-mode-
     expect(section.querySelector('.agent-tools-mode-gap')?.textContent).toBe(
       'Running in Default. You asked for Auto, but Haiku 4.5 has no Auto. Pick a model with Auto to get it back.',
     );
+  });
+
+  it('⑤ more changes than the detail carries: the older ones are read as the transcript pages back, each drawn once', async () => {
+    await mount(`/sessions/${LONG}`, 'Auto');
+    const lines = () => mounted().querySelectorAll('.chat-mode-line');
+    await act(async () => {
+      await vi.waitFor(() => expect(lines().length).toBe(50), { timeout: 10_000, interval: 20 });
+    });
+    // The detail's oldest change (at 0:15) is older than the oldest event loaded (the question at 2:00): nothing more
+    // is needed for the window shown, so nothing more is read.
+    await settle();
+    expect(modePagesAsked).toEqual([]);
+
+    // The transcript pages back to the start: the changes before the detail's are read with it, from its oldest.
+    await act(async () => releaseOlderEvents());
+    await act(async () => {
+      await vi.waitFor(() => expect(lines().length).toBe(60), { timeout: 10_000, interval: 20 });
+    });
+    expect(modePagesAsked).toEqual([longChanges[11].seq]);
+    const round = ['⛉ Mode set to Plan by you, on the web', '⛉ Mode set to Auto by you, on Android'];
+    expect(transcript()).toEqual([
+      'Run the staging',
+      // The claim's plain first mode says nothing; the twenty rounds before the first reply, each pair in its order.
+      ...Array.from({ length: 20 }, () => round).flat(),
+      'Ran it against',
+      'Good. Now drop',
+      ...Array.from({ length: 10 }, () => round).flat(),
+      'Dropped it. Nothing',
+    ]);
+    // Each line once, by the change it draws, and each at its own moment.
+    const times = [...lines()].map((l) => l.querySelector('time')?.getAttribute('dateTime'));
+    expect(times).toEqual(longChanges.slice(1).map((c) => c.at));
+    await settle();
+    expect(modePagesAsked).toHaveLength(1);
   });
 });

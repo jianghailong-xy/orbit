@@ -36,13 +36,16 @@ for (const s of Object.values(state.sessions)) {
   const changes = detail.permissionModeChanges;
   if (!Array.isArray(changes)) { differ(`${s.key} detail.permissionModeChanges`, changes, 'an array'); continue; }
   // Each change, rebuilt by the fixture builder from what the server recorded.
-  const rebuilt = changes.map((c) => modeChange(c.cause, c.toMode, c.fromMode, c.at, c.cause === 'OWNER_PICK' ? c.client : undefined));
+  const rebuilt = changes.map((c) => modeChange(c.cause, c.toMode, c.fromMode, c.at, c.cause === 'OWNER_PICK' ? c.client : undefined, c.seq));
   changes.forEach((c, i) => {
     if (!same(Object.keys(c), Object.keys(rebuilt[i]))) differ(`${s.key} change ${i} keys`, Object.keys(c), Object.keys(rebuilt[i]));
     if (!same(c, rebuilt[i])) differ(`${s.key} change ${i} (${c.cause})`, c, rebuilt[i]);
     if (!INSTANT.test(c.at)) differ(`${s.key} change ${i} at`, c.at, 'an ISO instant with milliseconds');
   });
   if (!same(changes.map((c) => c.at), [...changes.map((c) => c.at)].sort())) differ(`${s.key} order`, changes.map((c) => c.at), 'oldest first');
+  if (!changes.every((c, i) => Number.isInteger(c.seq) && (i === 0 || c.seq > changes[i - 1].seq))) {
+    differ(`${s.key} seq`, changes.map((c) => c.seq), 'an integer each, rising in the order they were recorded');
+  }
   // The session's own facts are its newest change's, as the fixtures make them. Its stamp is the same statement's own
   // clock_timestamp() (recordActualPermissionMode calls it for the session row, then for the change row), so it may read up
   // to a millisecond earlier than the change's; the fixtures use the change's instant, the other end of that range.
