@@ -416,7 +416,7 @@ import {
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
 import { DriveFilePicker } from './drive/DriveFilePicker';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, PendingSendCtx, Transcript, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -651,7 +651,7 @@ import { coordinatorDeliverySentence, parseCoordinatorDelivery } from '../lib/co
 import { trashNoteWhen } from '../lib/trashNote';
 import { transcriptPlaceholder } from '../lib/transcriptPaint';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
-import { type AcceptedUserTurn, queuedTurnEvent } from '../lib/acceptedUserTurn';
+import { type AcceptedUserTurn, acceptedUserTurnEvent, queuedTurnEvent } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
 import { commitFailureCopy, resolveCommitPrompt } from '../lib/commitFailure';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
@@ -817,6 +817,9 @@ interface ComposerSendVars {
   /** The pending bubble's own key on the wire, kept for its Retry so a send that did arrive is not
    *  taken twice. */
   clientTurnId?: string;
+  /** A new session's first message waiting as a bubble: the create request's own key, so its Retry
+   *  answers with the session a lost answer may already have made (migration 1730). */
+  clientRequestId?: string;
 }
 
 /** A send's files, as a pending bubble draws them and as Put back stages them again. */
@@ -3380,6 +3383,9 @@ export function WorkspaceView({
   const sendOperationRef = useRef<LogicalSendToken | null>(null);
   // Each pending bubble's send, by its key: what its Retry sends again and its Put back returns.
   const pendingSendsRef = useRef(new Map<string, ComposerSendVars>());
+  // A new session's first message while it waits for its session: drawn on the new-session page in
+  // the provider hero's place, as the conversation's first bubble, until the session opens.
+  const [draftPending, setDraftPending] = useState<AcceptedUserTurn | null>(null);
   const resolveConflictOperationRef = useRef<LogicalSendToken | null>(null);
   const resolveCommitOperationRef = useRef<LogicalSendToken | null>(null);
   // Images already sent, keyed by their turnId. The runner echoes only the turn's text,
@@ -7275,7 +7281,8 @@ export function WorkspaceView({
           // Composed on a folder's page: the session starts in that folder.
           ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
           ...vars.optimized,
-        });
+          ...(vars.clientRequestId ? { clientRequestId: vars.clientRequestId } : {}),
+        }, signal);
         // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
         // default, possibly clamped for this provider (Auto -> Default on a model that can't run
         // it), and writing that back would erase the workspace's real stored mode.
@@ -7307,6 +7314,7 @@ export function WorkspaceView({
       if (vars.pendingKey) {
         pendingSendsRef.current.delete(vars.pendingKey);
         setAcceptedUserTurns((current) => dropPendingSend(current, vars.pendingKey as string));
+        setDraftPending((turn) => (turn?.key === vars.pendingKey ? null : turn));
       }
       // Work for a managed runner that is not up asks it to wake: show that now, not at the next poll.
       // Up is the managed status's own READY: a runner that has just gone to sleep still reads online
@@ -7465,6 +7473,7 @@ export function WorkspaceView({
           // words go back into the box, as they stood before there were pending bubbles.
           pendingSendsRef.current.delete(key);
           setAcceptedUserTurns((current) => dropPendingSend(current, key));
+          setDraftPending((turn) => (turn?.key === key ? null : turn));
           restoreUndelivered?.(vars.content, pendingAttachmentsOf(vars));
           setHandedOverTo(null);
           // Its answer resends from the box, as any conflict's does, under the same key on the wire.
@@ -7473,6 +7482,7 @@ export function WorkspaceView({
         }
         // Anything else is said on the bubble, which offers Retry and Put back; no toast.
         setAcceptedUserTurns((current) => markNotSent(current, key, e.message));
+        setDraftPending((turn) => (turn?.key === key ? markNotSent([turn], key, e.message)[0] : turn));
         return;
       }
       setText((draft) => composerDraftAfterSend(draft, false));
@@ -8561,10 +8571,30 @@ export function WorkspaceView({
   // with one it is on its way to that workspace's page.
   const sendFromComposer = (vars: ComposerSendVars): void => {
     if (machineDraft) return;
-    // A message to a session that exists leaves the box now and waits in the transcript as its own
-    // bubble (lib/pendingSend). A new session's first message keeps the box until the session
-    // exists — there is no transcript to wait in yet, and its create is not keyed for a safe
-    // Retry. A `!cmd` settles into a Bash card rather than a bubble, so it keeps the box as well.
+    // A message leaves the box now and waits as its own bubble (lib/pendingSend): in the transcript of
+    // a session that exists, or — a new session's first message — on the new-session page, keyed so
+    // its Retry opens no second session. A `!cmd` settles into a Bash card rather than a bubble, so
+    // it keeps the box.
+    if (!selected && !vars.shell && !vars.held) {
+      const clientRequestId = compatibleUuid();
+      const key = `pending:${clientRequestId}`;
+      const pendingVars = { ...vars, clientRequestId, pendingKey: key };
+      pendingSendsRef.current.set(key, pendingVars);
+      setDraftPending({
+        key,
+        sessionId: '',
+        source: 'local',
+        text: vars.content,
+        acceptedAt: new Date().toISOString(),
+        attachments: pendingAttachmentsOf(vars),
+        pending: { state: 'sending', afterSeq: 0 },
+      });
+      setText('');
+      setComposerRefs({});
+      setImages([]);
+      send.mutate(pendingVars);
+      return;
+    }
     if (selected && !vars.shell && !vars.held) {
       const clientTurnId = compatibleUuid();
       const key = `pending:${clientTurnId}`;
@@ -8595,6 +8625,9 @@ export function WorkspaceView({
   const retryPendingSend = (key: string): void => {
     const vars = pendingSendsRef.current.get(key);
     if (!vars || send.isPending) return;
+    setDraftPending((turn) =>
+      turn?.key === key && turn.pending ? { ...turn, pending: { state: 'sending', afterSeq: 0 } } : turn,
+    );
     setAcceptedUserTurns((current) =>
       current.map((turn) =>
         turn.key === key && turn.pending
@@ -8609,8 +8642,14 @@ export function WorkspaceView({
     if (!vars) return;
     pendingSendsRef.current.delete(key);
     setAcceptedUserTurns((current) => dropPendingSend(current, key));
+    setDraftPending((turn) => (turn?.key === key ? null : turn));
     restoreUndelivered?.(vars.content, pendingAttachmentsOf(vars));
   };
+  // The first message's bubble, as the one event of the conversation it opens.
+  const draftPendingEvents = useMemo(
+    () => (draftPending ? [acceptedUserTurnEvent(draftPending, 1) as RunEvent] : []),
+    [draftPending],
+  );
   const pendingSendActions = useRef({ retry: retryPendingSend, putBack: putBackPendingSend });
   pendingSendActions.current = { retry: retryPendingSend, putBack: putBackPendingSend };
   const pendingSend = useMemo(
@@ -8837,7 +8876,9 @@ export function WorkspaceView({
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
-      !loadingSession;
+      !loadingSession &&
+      // One first message at a time (decision Ⓐ): one that reads Not sent is retried or put back first.
+      !(!selected && draftPending);
   // The single send button morphs into a Stop while the session has something to stop AND the
   // composer is empty — interrupting it. With content typed it stays Send, so a follow-up can
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
@@ -12766,7 +12807,13 @@ export function WorkspaceView({
               className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
-              {!machineDraft && (
+              {draftPending ? (
+                // The first message, waiting for its session: the conversation it opens, drawn from its
+                // first bubble on, in the hero's place.
+                <PendingSendCtx.Provider value={pendingSend}>
+                  <Transcript events={draftPendingEvents} />
+                </PendingSendCtx.Provider>
+              ) : !machineDraft && (
                 <NewSessionProviderHero
                   current={currentDraftEngine}
                   engines={draftEngines}

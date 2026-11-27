@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveSessionTurn } from '../api';
 import type { Runner } from './TasksSidePanel';
@@ -31,6 +31,7 @@ vi.mock('../api', async (importOriginal) => {
     cancelQueuedTurn: vi.fn(),
     steerQueuedTurn: vi.fn(),
     sendTurn: vi.fn(),
+    createInteractiveSession: vi.fn(),
   };
 });
 // jsdom has no IndexedDB, and a cached transcript would seed the window instead of the stub.
@@ -45,6 +46,8 @@ const apiMock = vi.mocked(api);
 const cancelMock = vi.mocked(cancelQueuedTurn);
 const steerMock = vi.mocked(steerQueuedTurn);
 const sendMock = vi.mocked(sendTurn);
+const { createInteractiveSession } = await import('../api');
+const createMock = vi.mocked(createInteractiveSession);
 const { WorkspaceView } = await import('./WorkspaceView');
 const { ToastViewport } = await import('./ToastViewport');
 const { clearToasts } = await import('../lib/toastStore');
@@ -141,6 +144,8 @@ beforeEach(() => {
   cancelMock.mockReset();
   steerMock.mockReset();
   sendMock.mockReset();
+  createMock.mockReset();
+  where = '';
   vi.mocked(listQueuedTurns).mockImplementation(async () => queue);
   vi.mocked(getSessionEventPage).mockImplementation(async () => ({ events, hasMore: false }) as never);
   apiMock.mockImplementation((path: string) => {
@@ -157,6 +162,14 @@ beforeEach(() => {
       if (path.includes('/turns') || path.includes('/approvals') || path.includes('/background')) return reply([]);
       if (path.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
       return reply(SESSION);
+    }
+    // The session a first message opens: its own detail, an empty conversation, nothing else yet.
+    const other = /^\/sessions\/([^/?]+)(\/[^?]*)?/.exec(path);
+    if (other && other[1] !== SESSION_PUBLIC && !['listing', 'counts'].includes(other[1])) {
+      if (!other[2]) return reply({ ...SESSION, id: other[1], status: 'PENDING' });
+      if (other[2] === '/events/page') return reply({ events: [], hasMore: false });
+      if (other[2] === '/created-tasks') return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
+      return reply([]);
     }
     if (path.startsWith('/sessions')) return reply([SESSION]);
     if (path.startsWith('/tasks/evidence-decisions/pending')) {
@@ -200,7 +213,13 @@ afterEach(async () => {
   }
 });
 
-async function mountSession(ready: () => void): Promise<void> {
+let where = '';
+function Where() {
+  where = useLocation().pathname;
+  return null;
+}
+
+async function mountSession(ready: () => void, entry = `/sessions/${SESSION_PUBLIC}`): Promise<void> {
   const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   const nextContainer = document.createElement('div');
   const nextRoot = createRoot(nextContainer);
@@ -211,8 +230,11 @@ async function mountSession(ready: () => void): Promise<void> {
   await act(async () => {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
-        <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-          <WorkspaceView runner={RUNNER} />
+        <MemoryRouter initialEntries={[entry]}>
+          <Routes>
+            <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
+          </Routes>
+          <Where />
           <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -330,5 +352,58 @@ describe('a message sent from the composer', { timeout: 60_000 }, () => {
     await act(async () => stream!.onmessage?.({ data: JSON.stringify(echo) }));
     await waitForUi(() => expect(bubble()?.textContent ?? '').not.toContain('Not sent'));
     expect(mounted().querySelectorAll('.chat-user-wrap').length).toBe(2);
+  });
+});
+
+describe("a new session's first message", { timeout: 60_000 }, () => {
+  const NEW_PAGE = `/workspaces/${WORKSPACE_PUBLIC}/new`;
+  const NEW_SESSION = encodeId('0195c0de-0000-7000-8000-000000000044');
+
+  it('leaves the box at the press and waits on the new-session page as a Sending… bubble, then opens the session', async () => {
+    let answer: (value: { id: string }) => void = () => {};
+    createMock.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    await mountSession(() => expect(composer()).not.toBeNull(), NEW_PAGE);
+    await pressEnter(await type(WORDS));
+
+    await waitForUi(() => expect(bubble()?.textContent).toContain('Sending…'));
+    expect(composer()!.value).toBe('');
+    expect(createMock).toHaveBeenCalledTimes(1);
+    const body = createMock.mock.calls[0][0];
+    expect(body.prompt).toBe(WORDS);
+    expect(body.clientRequestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(createMock.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
+
+    await act(async () => answer({ id: NEW_SESSION }));
+    await waitForUi(() => expect(where).toBe(`/sessions/${NEW_SESSION}`));
+  });
+
+  it('says Not sent when refused, and Retry sends the same request key, so a lost answer opens no second session', async () => {
+    createMock.mockRejectedValueOnce(new Error('The control plane is restarting'));
+    createMock.mockResolvedValueOnce({ id: NEW_SESSION });
+    await mountSession(() => expect(composer()).not.toBeNull(), NEW_PAGE);
+    await pressEnter(await type(WORDS));
+
+    await waitForUi(() => expect(bubble()?.textContent).toContain('Not sent'));
+    expect(toasts()).not.toContain("Couldn't send");
+    // One first message at a time: a second one waits until this one is retried or put back.
+    await type('something else');
+    expect(mounted().querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.disabled).toBe(true);
+
+    await click(buttonIn(bubble(), 'Retry')!);
+    await waitForUi(() => expect(createMock).toHaveBeenCalledTimes(2));
+    expect(createMock.mock.calls[1][0].clientRequestId).toBe(createMock.mock.calls[0][0].clientRequestId);
+    await waitForUi(() => expect(where).toBe(`/sessions/${NEW_SESSION}`));
+  });
+
+  it('puts the words back in the composer on Put back, and the page is the new-session page again', async () => {
+    createMock.mockRejectedValueOnce(new Error('Workspace is busy'));
+    await mountSession(() => expect(composer()).not.toBeNull(), NEW_PAGE);
+    await pressEnter(await type(WORDS));
+    await waitForUi(() => expect(bubble()?.textContent).toContain('Not sent'));
+
+    await click(buttonIn(bubble(), 'Put back in the composer')!);
+    await waitForUi(() => expect(composer()!.value).toBe(WORDS));
+    expect(bubble()).toBeUndefined();
+    expect(where).toBe(NEW_PAGE);
   });
 });

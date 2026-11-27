@@ -565,9 +565,13 @@ export const createInteractiveSession = (body: {
   /** Prompt optimizer (D2): the opening message is still exactly what Use put in the box. */
   skipTranslation?: true;
   optimizedTranslation?: string;
-}) =>
+  /** This request's own key: a repeat with the same one answers with the session the first made (migration 1730),
+   *  so the composer's Retry of a first message whose answer was lost opens no second session. */
+  clientRequestId?: string;
+}, signal?: AbortSignal) =>
   api<{ id: string; workspaceId?: string | null }>('/sessions', {
     method: 'POST',
+    signal,
     body: {
       ...body,
       // Shell-launched sessions get a `$ …` title so they read as a command in the list. A
