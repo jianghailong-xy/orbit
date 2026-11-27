@@ -11,7 +11,7 @@ const WT = '/root/.orbit/worktrees/01a21af9-8392-702c-9ed9-8303a2813b27';
 const KIT = '/var/tmp/sending-bubble-mock';
 const { chromium } = await import(`${WT}/node_modules/playwright/index.mjs`);
 const { installFixtures, installFixedDate } = await import(`${WT}/src/web/ui-migration/fixtures.mjs`);
-const { SESSION_PATH } = await import(`${WT}/src/web/ui-migration/session-fixtures.mjs`);
+const { SESSION_PATH, WORKSPACE } = await import(`${WT}/src/web/ui-migration/session-fixtures.mjs`);
 
 const OUT = `${KIT}/shots`;
 mkdirSync(OUT, { recursive: true });
@@ -44,7 +44,7 @@ function serve(tree) {
 }
 
 /** `send`: 'hold' (never answered until released), or a function answering the route. */
-async function open(browser, tree) {
+async function open(browser, tree, path = SESSION_PATH) {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 860 }, deviceScaleFactor: 2, colorScheme: 'light', locale: 'en-US',
     timezoneId: 'UTC', reducedMotion: 'reduce', serviceWorkers: 'block',
@@ -60,11 +60,16 @@ async function open(browser, tree) {
     if (control.mode === 'refuse') return route.fulfill({ status: 400, json: { message: REFUSED } });
     held.push(route); // answered (or abandoned) by the scene
   });
+  await page.route('**/api/sessions', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    if (control.mode === 'refuse') return route.fulfill({ status: 503, json: { message: 'The control plane is restarting' } });
+    held.push(route);
+  });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`http://127.0.0.1:${PORTS[tree]}${SESSION_PATH}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://127.0.0.1:${PORTS[tree]}${path}`, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => document.fonts.ready);
-  await page.locator('.chat-assistant').first().waitFor();
+  if (path === SESSION_PATH) await page.locator('.chat-assistant').first().waitFor();
   await page.locator('.composer-field textarea').waitFor();
   await page.waitForTimeout(500);
   return { context, page, errors, control };
@@ -80,7 +85,8 @@ async function typeIn(page, words) {
 
 async function shoot(page, name) {
   const comp = await rect(page.locator('.workspace-composer'));
-  const firstAssistant = await rect(page.locator('.chat-assistant').first());
+  const top = page.locator('.chat-assistant').first();
+  const firstAssistant = (await top.count()) ? await rect(top) : { y: (await rect(page.locator('.workspace-scroll-wrap'))).y + 16 };
   const x = comp.x - 16, right = comp.right + 16;
   const y = Math.max(0, firstAssistant.y - 16), bottom = comp.bottom + 12;
   await page.screenshot({ path: `${OUT}/${name}.png`, clip: { x, y, width: right - x, height: bottom - y } });
@@ -91,7 +97,48 @@ const hoverFoot = async (page) => {
   await page.waitForTimeout(1600);
 };
 
+const NEW_PATH = `/workspaces/${WORKSPACE.id}/new`;
 const SCENES = {
+  async newBefore(browser) {
+    const { context, page, errors } = await open(browser, 'after', NEW_PATH);
+    await typeIn(page, WORDS);
+    await page.mouse.move(5, 5);
+    await shoot(page, 'new-before');
+    await context.close();
+    return errors;
+  },
+  async newToday(browser) {
+    const { context, page, errors } = await open(browser, 'today', NEW_PATH);
+    await typeIn(page, WORDS);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(1500);
+    await page.mouse.move(5, 5);
+    await shoot(page, 'new-today');
+    await context.close();
+    return errors;
+  },
+  async newSending(browser) {
+    const { context, page, errors } = await open(browser, 'after', NEW_PATH);
+    await typeIn(page, WORDS);
+    await page.keyboard.press('Enter');
+    await page.locator('.chat-sending').waitFor();
+    await page.waitForTimeout(400);
+    await page.mouse.move(5, 5);
+    await shoot(page, 'new-sending');
+    await context.close();
+    return errors;
+  },
+  async newRefused(browser) {
+    const { context, page, errors, control } = await open(browser, 'after', NEW_PATH);
+    control.mode = 'refuse';
+    await typeIn(page, WORDS);
+    await page.keyboard.press('Enter');
+    await page.locator('.chat-undelivered').waitFor();
+    await hoverFoot(page);
+    await shoot(page, 'new-refused');
+    await context.close();
+    return errors;
+  },
   async today(browser) {
     const { context, page, errors } = await open(browser, 'today');
     await typeIn(page, WORDS);
