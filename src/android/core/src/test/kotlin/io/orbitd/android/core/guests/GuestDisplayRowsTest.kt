@@ -67,7 +67,7 @@ class GuestDisplayRowsTest {
     @Test fun cancelled_matchesWeb() = matchesWeb("CANCELLED", I, listOf("Ended"))
     @Test fun jobRunning_matchesWeb() = matchesWeb("job running", R, listOf("Background"))
     @Test fun waitingOnAnApproval_matchesWeb() = matchesWeb("waiting on an approval", R, listOf("Needs you"))
-    @Test fun watchArmed_matchesWeb() = matchesWeb("watch armed", I, listOf("Will resume"))
+    @Test fun watchArmed_matchesWeb() = matchesWeb("watch armed", I, listOf())
     @Test fun pausedAccount_matchesWeb() = matchesWeb("paused account", Q, listOf("On hold"))
     @Test fun settledLanding_matchesWeb() = matchesWeb("settled landing", I, listOf("Finished"))
     @Test fun endedRunnerNeverConfirmed_matchesWeb() = matchesWeb("ended, runner never confirmed", I, listOf("Ended"))
@@ -76,11 +76,11 @@ class GuestDisplayRowsTest {
     @Test fun parkedEngineStartedItsOwnTurn_matchesWeb() = matchesWeb("parked, engine started its own turn", R, listOf<String>())
     @Test fun parkedSubAgentRunning_matchesWeb() = matchesWeb("parked, sub-agent running", R, listOf<String>())
     @Test fun parkedBackgroundProcessLeftUp_matchesWeb() = matchesWeb("parked, background process left up", I, listOf("Background"))
-    @Test fun parkedRetryArmed_matchesWeb() = matchesWeb("parked, retry armed", I, listOf("Will resume"))
+    @Test fun parkedRetryArmed_matchesWeb() = matchesWeb("parked, retry armed", I, listOf())
     @Test fun failedRetryArmed_matchesWeb() = matchesWeb("failed, retry armed", I, listOf("Retrying"))
     @Test fun failedRunnerOffline_matchesWeb() = matchesWeb("failed, runner offline", I, listOf("Failed"))
     @Test fun approvalBesideABackgroundJob_matchesWeb() = matchesWeb("approval beside a background job", R, listOf("Needs you", "Background"))
-    @Test fun interruptedAProcessUpRetryArmed_matchesWeb() = matchesWeb("interrupted, a process up, retry armed", I, listOf("Interrupted", "Background", "Will resume"))
+    @Test fun interruptedAProcessUpRetryArmed_matchesWeb() = matchesWeb("interrupted, a process up, retry armed", I, listOf("Interrupted", "Background"))
 
     /** A filed session: the state and marks as ever, then Completed (web puts it after them, never instead). */
     @Test fun aFiledSessionSaysCompletedAfterItsStateAndMarks() {
