@@ -35,9 +35,13 @@ p = ".nsn-probe/run.sh"
 s = open(p).read()
 a = s.index("IPHONE_UDID=$(xcrun simctl list devices available -j")
 b = s.index('echo "==> iPhone $IPHONE_UDID')
-s = s[:a] + """IPHONE_UDID=$(xcrun simctl list devices available | grep -m1 'iPhone 17 Pro (' | grep -oE '[0-9A-F-]{36}')
+s = s[:a] + """IPHONE_UDID=${NSN_UDID:-$(xcrun simctl list devices available | grep -m1 'iPhone 17 Pro (' | grep -oE '[0-9A-F-]{36}')}
 [ -n "$IPHONE_UDID" ] || { echo "no iPhone 17 Pro simulator"; exit 1; }
 """ + s[b:]
 open(p, "w").write(s)
 PY
+# Another run on this Mac may hold 8765: NSN_PORT moves the stub, and every place that names it, elsewhere.
+if [ -n "${NSN_PORT:-}" ]; then
+  grep -rl 8765 .nsn-probe --include=run.sh --include=stub.py --include=*.swift | xargs sed -i '' "s/8765/$NSN_PORT/g"
+fi
 bash .nsn-probe/run.sh
