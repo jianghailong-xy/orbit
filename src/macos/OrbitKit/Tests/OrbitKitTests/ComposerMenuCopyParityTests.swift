@@ -98,6 +98,10 @@ final class ComposerMenuCopyParityTests: XCTestCase {
     /// menu offers has to be one of the five both ends draw.
     private static let nativeOnlyLabels = ["Paste image"]
 
+    /// Items both ends offer only while a server switch is on, so they sit outside the five: the drive picker,
+    /// offered while Drive is on (docs/mocks/drive, 01-ios ⑭) — the web's `drive` item. Native label → web key.
+    private static let switchedLabels = ["Drive": "drive"]
+
     /// The labels the native menu offers, in order.
     private func nativeLabels() throws -> [String] {
         var labels: [String] = []
@@ -116,17 +120,17 @@ final class ComposerMenuCopyParityTests: XCTestCase {
     /// The labels both ends are supposed to share, in order: the native menu minus its
     /// platform-only tail.
     private func sharedNativeLabels() throws -> [String] {
-        try nativeLabels().filter { !Self.nativeOnlyLabels.contains($0) }
+        try nativeLabels().filter { !Self.nativeOnlyLabels.contains($0) && Self.switchedLabels[$0] == nil }
     }
 
     /// Each web menu item's own source, keyed by the item's key. An item is read from its `key:`
     /// line to its closing `},` — the one two spaces left of the `key:`, wherever the JSX around
     /// the menu happens to indent it; an item that no longer ends that way fails the parse rather
     /// than quietly matching nothing.
-    private func webItems() throws -> [String: Substring] {
+    private func webItems(_ keys: [String] = keys) throws -> [String: Substring] {
         let source = try source(Self.webComposer)
         var items: [String: Substring] = [:]
-        for key in Self.keys {
+        for key in keys {
             let marker = "key: '\(key)',"
             let hits = source.components(separatedBy: marker).count - 1
             guard hits == 1, let start = source.range(of: marker) else {
@@ -199,6 +203,20 @@ final class ComposerMenuCopyParityTests: XCTestCase {
         }
     }
 
+    /// A switched item says the same word at both ends: the native `+` menu's Drive is the web's `drive` item.
+    func testTheSwitchedItemsSayWhatTheWebSays() throws {
+        let native = try nativeLabels()
+        let items = try webItems(Array(Self.switchedLabels.values))
+        for (label, key) in Self.switchedLabels {
+            XCTAssertTrue(native.contains(label), "the native `+` menu no longer offers \(label.debugDescription)")
+            guard let item = items[key], let at = item.range(of: "label:") else {
+                throw ParityError.unparsed("the web item '\(key)' has no `label:`")
+            }
+            XCTAssertEqual(quotedLiterals(in: item[at.upperBound...]).first, label,
+                           "the web composer's '\(key)' item is not labelled \(label.debugDescription)")
+        }
+    }
+
     /// The two attach items read one word and nothing else, and are offered unconditionally —
     /// which is how the native menu has always drawn them. A state-dependent label or a gate
     /// reappearing at one end is how the two ends drifted apart in the first place.
@@ -221,9 +239,9 @@ final class ComposerMenuCopyParityTests: XCTestCase {
 
         // Read from the attach items onward: the native menu does gate Command and Skill, and that
         // gate is its own business.
-        // The first attach item, named for what it does since 530a6f9569 (Upload Image, Upload File).
-        guard let first = menu.range(of: "Label(\"Upload Image\"") else {
-            throw ParityError.unparsed("the native `addMenu` offers no `Upload Image` item")
+        // The first attach item (Image, then File).
+        guard let first = menu.range(of: "Label(\"Image\"") else {
+            throw ParityError.unparsed("the native `addMenu` offers no `Image` item")
         }
         XCTAssertFalse(
             menu[first.lowerBound...].contains(".disabled"),

@@ -2625,7 +2625,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored runner reads
       // NULL in both.
       '0461_runner_region',
-      // Orbit Files' storage layer (0462, docs/orbit-files-design.md §2.1; files/files.service.ts): a new table
+      // Drive' storage layer (0462, docs/drive-design.md §2.1; files/files.service.ts): a new table
       // `file_blob` (sha256 primary key, size_bytes, storage, last_referenced_at, with three CHECKs) holds one row per
       // stored content; `attachment` gains seven nullable columns (sha256 with a foreign key to file_blob ON DELETE
       // RESTRICT and an index, retention, expires_at, expired_at, pinned_at, file_bundle_id, evidence_id), `data` drops
@@ -2640,16 +2640,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // trigger, type, index or constraint is created, replaced or dropped, so it is not another writer of the DONE
       // fence. No INSERT, UPDATE or DELETE: every binding stays in its space.
       '0463_wiki_workspace_left_out',
-      // Orbit Files' label (0464, docs/orbit-files-design.md §2.3): one nullable column on `attachment`, which is not a
+      // Drive' label (0464, docs/drive-design.md §2.3): one nullable column on `attachment`, which is not a
       // preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
       // triggers/functions is named, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
       '0464_attachment_label',
-      // Orbit Files' test report summary (0465, docs/orbit-files-design.md §2.5): one nullable JSONB column on
+      // Drive' test report summary (0465, docs/drive-design.md §2.5): one nullable JSONB column on
       // `attachment`, which is not a preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object
       // nor any of the six preserved triggers/functions is named, so it is not another writer of the DONE fence. No
       // INSERT, UPDATE or DELETE.
       '0465_attachment_test_report_summary',
-      // 0466 is Orbit Files' retention (docs/orbit-files-design.md §2.8): three nullable columns on `file_blob`, two
+      // 0466 is Drive' retention (docs/drive-design.md §2.8): three nullable columns on `file_blob`, two
       // partial indexes on `attachment`, and one UPDATE that gives the rows `file_upload` wrote before it, cited by a version
       // already let go of, the `expires_at` they would have had, reading the ledger's revisions and decisions and writing
       // neither. No ledger table is written,
@@ -3238,7 +3238,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
       // or DONE fence changes.
       '1273_owner_request_settings_change',
-      // 1283 creates drive_staging, drive_staging_chunk and drive_version_chunk (Orbit Files drive); no existing row is
+      // 1283 creates drive_staging, drive_staging_chunk and drive_version_chunk (drive); no existing row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1283_drive_chunk_store',
       // 1290 adds nullable managed_runner.update_requested_at, update_requested_by and update_completed_at (no
@@ -3253,11 +3253,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // session and time of the last write), and marks OWNER the bindings whose landing check was already
       // set; project_codebase is not a preserved relation, and no trigger, function or DONE fence changes.
       '1310_project_landing_check_set_by',
-      // 1327 creates drive_entry, drive_version, drive_trash_group, drive_commit and drive_change (Orbit Files drive name
+      // 1327 creates drive_entry, drive_version, drive_trash_group, drive_commit and drive_change (drive name
       // layer) and adds foreign keys from 1283's drive tables to them; no existing row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1327_drive_name_layer',
-      // 1339 creates drive_mount_credential (Orbit Files drive, the mount daemon's credential); no existing row is
+      // 1339 creates drive_mount_credential (drive, the mount daemon's credential); no existing row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1339_drive_mount_credential',
       // 1340 adds drive_entry_id and drive_version_id to share_link, replaces its one-root CHECK and adds two foreign keys
@@ -3348,11 +3348,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1434 rewrites runner.repos_root from /var/lib/orbit/home to /home/orbit for managed runners only (6a7106f95b): an
       // UPDATE of runner rows, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1434_managed_runner_repos_root_home_orbit',
-      // 1437 (renumbered from 1317 to sit after main's migrations) adds two nullable columns on session,
-      // actual_permission_mode and actual_permission_mode_at, and a new append-only table session_permission_mode_change
-      // (cascades with its session); no row is written, and no preserved relation, trigger, function or DONE fence changes.
-      '1437_session_actual_permission_mode',
-      // 1438 creates drive_removed_entry (Orbit Files drive: the file a replacing rename removed, §3.2) and its index; no
+      // 1438 creates drive_removed_entry (drive: the file a replacing rename removed, §3.2) and its index; no
       // existing row is written, and no preserved relation, trigger, function or DONE fence changes. Numbered past every
       // migration on main and the project and task branches (1437 the highest) when it was written.
       '1438_drive_removed_entry',
@@ -3420,22 +3416,188 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1491_feishu_details_by_default',
+      // 1492 adds two columns to runner for a Default sign-out on the account-removal relay: account_remove_action, a
+      // nullable TEXT, and account_remove_force, a BOOLEAN with a constant false default (both catalog-only); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1465 on its task branch, it
+      // was renumbered after main took 1465 and 1491.
+      '1492_runner_account_sign_out',
+      // 1493 adds four nullable session columns (failure_kind, failure_scope, failure_said, admission_failure) with no
+      // default, CHECK, index or backfill; no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1493_session_failure_kind',
+      // 1494 creates account_health (docs/routing-account-health-design.md §6): a new table, its partial unique index on
+      // the live row and three foreign-key indexes. No existing row, trigger or judgment column is touched.
+      '1494_account_health',
+      // 1495 adds the nullable session.account_health_effect with a CHECK on its three values and no default, index or
+      // backfill; no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      '1495_session_account_health_effect',
       // 1501 adds four nullable work-session columns and three checks on project_open_item, and widens
       // project_integration_job_retry_failure_class_chk to admit CONFLICT (revision 42, §12.4, R1); no row is
       // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1444 on the project
       // line, it was renumbered after main took 1444.
       '1501_open_item_work_session',
+      // 1527 lands on a protected GitHub branch through a pull request (docs/design/protected-branch-landing.md §7). Of
+      // the preserved relations it adds two nullable columns to session (merge_pull_request_id, merge_owner_token_for)
+      // and widens session_merge_receipt_recorded_by_check by SERVER, a CHECK every stored row passes; it writes no row
+      // of either. Beside them: nullable workspace and project_integration_job columns, the PULL_REQUEST job state in
+      // project_integration_job_state_chk, J3's index and project_integration_job_terminal_guard (a function of that
+      // table, none of the preserved ones), PULL_REQUEST in project_integration_job_event_kind_chk,
+      // github_app_config.webhook_secret_enc, and the new github_pull_request and github_webhook_delivery tables. No
+      // DONE fence changes. It takes its locks in short tries inside one DO.
+      '1527_pull_request_landing',
       // 1537 adds a nullable managed_runner.current_image_version (no default); `managed_runner` is none of the
       // preserved relations, no row is written, and no trigger, function or DONE fence changes.
       '1537_managed_runner_current_image_version',
-      // 1540 adds a partial index on activity. No preserved relation or row is changed.
+      // 1538 adds nullable owner_request.change_spec, two CHECKs and a partial unique index on owner_request; 1547 adds
+      // a nullable github_pull_request.review_announced_at. Neither table is a preserved relation, no row is
+      // written, and no trigger, function or DONE fence changes.
+      '1538_owner_request_change',
+      '1547_pull_request_review_announced',
+      // 1550 rewrites the access token scope `files` to `documents` in personal_access_token.scopes and
+      // pat_device_login.scopes: two UPDATEs of those tables only, none of the preserved relations, no row added or
+      // removed, and no table, column, trigger, function or DONE fence changes.
+      '1550_pat_scope_documents',
+      // 1551 renames the ten drive_* tables (1283, 1327, 1339, 1438) to document_*, with their constraints, indexes and
+      // the drive_change sequence: catalog renames only, so no row is written or removed and nothing is created, and
+      // no column, value or reference changes. None of them is a preserved relation, and no trigger, function or DONE
+      // fence names them.
+      '1551_documents_tables',
+      // 1560 creates document_sync (docs/drive-directory-sync-design.md S4): a new table with two foreign-key keys and
+      // two indexes. No existing row, trigger, function or DONE fence is touched.
+      '1560_document_sync',
+      // 1561 adds a nullable concurrency ceiling to managed_runner. It writes no rows and
+      // changes no preserved relation, trigger, function or DONE fence.
+      '1561_managed_runner_oom_recovery',
+      // 1562 adds two nullable columns to session (wiki_chat_prompt_digest, wiki_chat_contents_version) in short lock
+      // tries; `session` is not a preserved relation, no row is written, and no trigger, function or DONE fence changes.
+      '1562_wiki_chat_delivery_markers',
+      // 1573 restates owner_request's kind CHECK with PROJECT_REOPEN, restates 1273's payload CHECK under a kind-neutral
+      // name admitting PROJECT_REOPEN, and adds one CHECK and one partial unique index on owner_request. Not a preserved
+      // relation; no row is written, and no trigger, function or DONE fence changes.
+      '1573_owner_request_project_reopen',
+      // 1574 adds three nullable columns to wiki_chat_draft (auto_queued_at, held, held_by_id), two checks, a partial index,
+      // and loosens its undone, seen and told checks; no preserved relation, row, trigger, function or DONE fence changes.
+      '1574_wiki_chat_draft_auto',
+      // 1582 widens the enqueue event cause CHECK to admit MAIN_SYNC_HELD and adds its LAND_TASK-only twin of 0518's
+      // baseline CHECK (docs/design/project-line-upstream-sync.md §5); no preserved rows or DONE fence changes.
+      '1582_integration_main_sync_held',
+      // 1590 rewrites the access token scopes `documents` and `files` to `drive` in personal_access_token.scopes and
+      // pat_device_login.scopes: two UPDATEs of those tables only, none of the preserved relations, no row added or
+      // removed, and no table, column, trigger, function or DONE fence changes.
+      '1590_pat_scope_drive',
+      // 1592 renames the ten document_* tables back to drive_* and document_sync to drive_sync, with their
+      // constraints, indexes and the document_change sequence: catalog renames only, so no row is written or removed
+      // and nothing is created, and no column, value or reference changes. None of them is a preserved relation, and
+      // no trigger, function or DONE fence names them.
+      '1592_drive_tables',
+      // 1600 creates project_text_translation (a project's title and criteria in the owner's language), keyed by and
+      // cascading with project; no preserved relation, row, trigger, function or DONE fence changes.
+      '1600_project_text_translation',
+      // 1601 adds one NOT NULL boolean, by_owner, to schedule_run with a constant default (whether the owner pressed a
+      // Run now); no row is rewritten, and no preserved relation, trigger, function or DONE fence changes.
+      '1601_schedule_run_by_owner',
+      // 1611 adds session.turn_state and session.phase with their value CHECKs, two functions and two BEFORE triggers
+      // that set only those two columns of the row being written, from its stored word; 1612 validates the CHECKs. No
+      // row is written by either, and no preserved relation, trigger of one, function of one or DONE fence changes.
+      '1611_session_turn_state_phase',
+      '1612_session_turn_state_phase_validate',
+      // 1621 adds one read-only SQL function, session_legacy_status, over its arguments alone: no table, row,
+      // trigger or DONE fence changes.
+      '1621_session_legacy_status',
+      // 1622 adds session's two turn_state CHECKs, NOT VALID; 1627-1634 build partial indexes on session. Constraints and
+      // indexes only: no row is written or checked, and no preserved relation, trigger, function or DONE fence changes.
+      '1622_session_turn_state_checks',
+      '1627_session_runner_turn_state_idx',
+      '1628_session_runner_held_idx',
+      '1629_session_batch_in_flight_idx',
+      '1631_session_root_in_flight_idx',
+      '1632_session_over_capacity_queued_idx',
+      '1633_session_owner_held_task_idx',
+      '1634_session_released_failed_idx',
+      // 1641 adds one read-only SQL function over a session row (session_held_turn_state), replaces the bodies of nine
+      // trigger functions (the five engine guards, open_list_bump_owner, session_listed_at_on_settle,
+      // session_request_recipient_ended, task_supersession_live_session_guard) and re-creates three ended-triggers
+      // with the same column lists, so each reads turn_state, finished_at and the projector's word instead of
+      // session.status (retirement plan §4.2, task T6). No row is written, no preserved relation is created, altered
+      // or dropped, and the DONE fence is unchanged.
+      '1641_session_triggers_read_facts',
+      // 1643 adds one nullable column, idle_seen_at, to schedule_run; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1643_schedule_run_idle_seen_at',
+      // 1651 fills session.turn_state and session.phase on the rows that have none (`session` is not a preserved
+      // relation), refuses a filled row that disagrees with its word, then swaps session's NULL-tolerant turn_state CHECK
+      // for the strict one and adds a phase NOT NULL helper CHECK, NOT VALID; 1652-1654 validate the three; 1655 sets
+      // session.phase NOT NULL and drops the helper. No preserved relation, trigger, function or DONE fence changes.
+      '1651_session_turn_state_strict_checks',
+      '1652_session_turn_state_agrees_validate',
+      '1653_session_turn_state_released_validate',
+      '1654_session_phase_not_null_validate',
+      '1655_session_phase_set_not_null',
+      // 1656 adds one nullable column, web_keys, to device_token; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1656_device_token_web_keys',
+      // 1667 adds a six-argument session_phase_of (a released row with retry_at set reads RUNNING), points
+      // session_phase_from_facts at it, re-creates session_zz_phase to fire on retry_at as well, and writes phase alone
+      // on the released rows with retry_at set. Only `session` is touched; no preserved relation, trigger, function or
+      // DONE fence changes.
+      '1667_session_phase_retry_running',
+      // 1668 creates `help_ask_conversation` only, with foreign keys to `user` and `task`; no existing table,
+      // trigger, function or DONE fence is touched.
+      '1668_help_ask_conversation',
+      // 1669 adds `codex_rate_limit_reset_operation.account_slot` (NOT NULL DEFAULT 'default', so no row is rewritten),
+      // a CHECK on it, and replaces that table's own guard function to list the column as immutable. Only that table is
+      // touched; no `task`, `session`, ledger table or preserved trigger/function is named, so it is not another writer
+      // of the DONE fence.
+      '1669_codex_reset_operation_account_slot',
+      // 1670 restates 1667's six-argument session_phase_of (an armed retry reads PENDING, held or released) and writes
+      // phase alone on the rows with retry_at set that it reads differently. Only `session` is touched; no preserved
+      // relation, trigger, function of one or DONE fence changes.
+      '1670_session_phase_retry_pending',
+      // 1671 (deploy D3) adds an eight-argument session_legacy_status and points the nine-argument one at it, drops the
+      // stored-word fallback from session_held_turn_state, replaces session_aa_turn_state_from_status (and its function)
+      // with session_aa_status_from_facts, which writes session.status from the facts, and re-creates nine session
+      // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1671_session_status_from_facts',
+      // 1680 adds a nullable session.drive_chat_prompt_digest and conversation_turn.drive_context (catalog-only) and
+      // widens session_opened_by_check by 'DRIVE_CHAT' NOT VALID; 1681 validates it and builds a partial index
+      // CONCURRENTLY. No row is written, and no preserved relation's trigger, function or DONE fence changes.
+      '1680_drive_chat_session',
+      '1681_drive_chat_session_index',
+      // 1700 creates four new tables for a Drive chat's changes (drive_chat_change_group, drive_chat_change,
+      // drive_chat_held_change, drive_chat_question), each with foreign keys to "user" and, for the group and the
+      // question, "session". No row is written, and no preserved relation's trigger, function or DONE fence changes.
+      '1700_drive_chat_change_group',
+      // 1711 (deploy D4) drops session.status, the type run_status and what exists only for them (1671's trigger and
+      // function, session_turn_state_of_status, the nine-argument session_legacy_status, the two word CHECKs, six
+      // indexes), points three session functions at the eight-argument projector, and re-creates the 13 session triggers
+      // without `status` in their column lists. Only `session` is touched; no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1711_session_status_drop',
+      // 1720 creates `owner_card_push` only (the decision-card push ledger), with no foreign key; no existing table,
+      // trigger, function or DONE fence is touched.
+      '1720_owner_card_push',
+      // 1730 adds the nullable `session.client_request_id` (no row is rewritten) and a partial unique index on
+      // (owner_id, client_request_id) over the rows that carry one. Only `session` is touched; no trigger, function of
+      // one, preserved relation or DONE fence changes.
+      '1730_session_client_request_id',
+      // 1735 adds two nullable columns on session, actual_permission_mode and actual_permission_mode_at, and a new
+      // append-only table session_permission_mode_change (cascades with its session); no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes. Written as 1317, renumbered to 1437 to sit after main's
+      // migrations, and to 1735 after main took 1438-1730 (1730 the highest on main then), below the project's 1740,
+      // which alters this table.
+      '1735_session_actual_permission_mode',
+      // 1736 adds a partial index on activity. No preserved relation or row is changed.
       // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, to 1495 after main took
-      // 1491, and to 1540 after other branches took 1495 (1537 the highest on any branch then).
-      '1540_default_permission_mode_audit',
+      // 1491, to 1540 after other branches took 1495, and to 1736 after main took 1547-1730 (1730 the highest on main
+      // then).
+      '1736_default_permission_mode_audit',
       // 1740 adds the nullable session_permission_mode_change.requested_mode and .reason and one check on that table;
       // it is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
-      // Numbered above main's 1730, the highest on any branch when it was written.
+      // Numbered above main's 1730, the highest on any branch when it was written; it stays after 1735, which creates
+      // the table it alters.
       '1740_permission_mode_change_claim_substitution'],
+
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

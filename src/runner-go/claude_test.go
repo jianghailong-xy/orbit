@@ -100,6 +100,8 @@ func TestIsAPIErrorAndIsAuthError(t *testing.T) {
 		// Verbatim from FAILED sessions on 2026-11-13; every account was signed in.
 		{"Failed to authenticate. API Error: 403 Attention Required! | Cloudflare", false, false, true},
 		{"Failed to authenticate. API Error: 403 ECONNRESET: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()", false, false, true},
+		// DashScope's gateway timing out on its upstream, 2026-11-13: a raw API error line and a connection failure.
+		{"API Error: 406 Post \"https://dashscope-intl.aliyuncs.com/apps/anthropic/v1/messages\": read tcp [fdbd:dc53:2a:630::37]:38248->[64:ff9b::2fec:75bf]:443: read: connection timed out", true, false, true},
 		// Anchored at the start: a reply quoting one is an ordinary reply.
 		{"The run died on \"Failed to authenticate. API Error: 403 Attention Required! | Cloudflare\" — retrying.", false, false, false},
 		{"all good", false, false, false},

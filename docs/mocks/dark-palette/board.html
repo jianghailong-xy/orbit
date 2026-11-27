@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dark palette review</title>
+<style>
+  body { margin: 0; background: #0f0f11; color: #d6d9de; font: 15px/1.5 -apple-system, BlinkMacSystemFont, Inter, 'PingFang SC', 'Noto Sans SC', sans-serif; }
+  .board { width: 1880px; padding: 40px; box-sizing: border-box; }
+  h1 { margin: 0 0 6px; font-size: 30px; color: #f2f3f5; }
+  h2 { margin: 36px 0 12px; font-size: 20px; color: #f2f3f5; }
+  .lede { color: #a7adb6; max-width: 1300px; margin: 0; }
+  .row { display: flex; gap: 24px; align-items: flex-start; }
+  .frame { flex: 1; min-width: 0; }
+  .frame img { width: 100%; display: block; border: 1px solid #34343a; border-radius: 10px; }
+  .tag { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; color: #f2f3f5; }
+  .tag b { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #3a3a40; font-size: 13px; }
+  .tag.new b { background: #2f6bff; color: #fff; }
+  .zoom { display: grid; grid-template-columns: 150px 1fr 1fr; gap: 12px 20px; align-items: start; }
+  .zoom .label { color: #a7adb6; font-size: 14px; padding-top: 4px; }
+  .zoom .label strong { display: block; color: #f2f3f5; font-size: 15px; }
+  .zoom img { width: 100%; display: block; border: 1px solid #34343a; border-radius: 8px; }
+  .zoom .head { font-weight: 600; color: #a7adb6; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid #2c2c31; }
+  th { color: #a7adb6; font-weight: 600; }
+  code { font: 13px ui-monospace, 'JetBrains Mono', Menlo, monospace; color: #e6e8eb; background: #222227; padding: 1px 5px; border-radius: 4px; }
+  .sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid #ffffff22; }
+  .num { font-variant-numeric: tabular-nums; }
+  .bad { color: #f0837b; } .ok { color: #4ac26b; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .card { background: #18181b; border: 1px solid #2c2c31; border-radius: 10px; padding: 18px 20px; }
+  .card h3 { margin: 0 0 10px; font-size: 16px; color: #f2f3f5; }
+  .card p, .card li { color: #b9bec6; margin: 6px 0; }
+  .decide { border-color: #6b5320; }
+  .decide h3::before { content: 'For you to decide · '; color: #e0a23b; }
+  .opt { display: flex; gap: 18px; margin: 14px 0 4px; }
+  .opt > div { flex: 1; background: #17171a; border: 1px solid #2c2c31; border-radius: 8px; padding: 12px 14px; }
+  .opt .t { font-weight: 600; color: #f2f3f5; margin-bottom: 8px; }
+  .navrow { display: flex; align-items: center; justify-content: space-between; height: 34px; padding: 0 10px; border-radius: 8px; color: #c9ced5; font-size: 14px; }
+  .navrow.sel { background: #23293e; color: #5b8cff; }
+  .pill { border-radius: 999px; padding: 1px 7px; font-weight: 600; font-size: 12px; line-height: 18px; }
+  .a .pill { color: #e0a23b; background: rgba(250, 140, 22, 0.15); }
+  .b .pill { color: #e0a23b; background: transparent; padding: 1px 2px; }
+  .b .navrow .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #e0a23b; margin-right: 6px; vertical-align: 1px; }
+  .rec { color: #4ac26b; font-weight: 600; }
+  ul { padding-left: 20px; margin: 6px 0; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Dark mode palette: today vs proposal</h1>
+  <p class="lede">Both frames are the real web build in dark mode with the UI-test fixtures (1440×860). Frame ② is the same page with <code>capture/proposal.css</code> injected: four small changes, all dark-only, with light mode untouched. Colours and contrast ratios were measured, not estimated.</p>
+
+  <h2>The whole page</h2>
+  <div class="row">
+    <div class="frame"><div class="tag"><b>①</b>Today</div><img src="frames/today.png"></div>
+    <div class="frame"><div class="tag new"><b>②</b>Proposal</div><img src="frames/proposal.png"></div>
+  </div>
+
+  <h2>Up close</h2>
+  <div class="zoom">
+    <div></div><div class="head">① Today</div><div class="head">② Proposal</div>
+    <div class="label"><strong>A · List step</strong><strong>C · New session</strong>The list drops one step below the conversation. New session stops competing with the selected row.</div>
+    <img src="frames/today-step.png"><img src="frames/proposal-step.png">
+    <div class="label"><strong>B · Quiet text</strong>"Working", "just now" and "Worked for 1m" become readable.</div>
+    <img src="frames/today-quiet.png"><img src="frames/proposal-quiet.png">
+    <div class="label"><strong>B · Placeholder</strong>The composer's "Reply…" prompt.</div>
+    <img src="frames/today-placeholder.png"><img src="frames/proposal-placeholder.png">
+    <div class="label"><strong>D · Inline code</strong>Code chips become light chips instead of dark holes in the text.</div>
+    <img src="frames/today-code.png"><img src="frames/proposal-code.png">
+  </div>
+
+  <h2>What changes</h2>
+  <table>
+    <tr><th>#</th><th>What</th><th>Where (dark only)</th><th>Today</th><th>Proposal</th><th>Why</th></tr>
+    <tr><td>A</td><td>Session list background, and its sticky section heads</td><td><code>index.css</code> desktop <code>.workspace-split &gt; .session-col</code>, <code>.session-section-head</code></td>
+      <td><span class="sw" style="background:#202023"></span><code>#202023</code> (same as the conversation)</td>
+      <td><span class="sw" style="background:#1c1c1f"></span><code>#1c1c1f</code></td>
+      <td>Three even steps: sidebar <code>#17171a</code> → list → page <code>#202023</code>. Today the list and the conversation read as one slab.</td></tr>
+    <tr><td>B</td><td><code>--text-4</code> and <code>--text-3</code>; the composer's placeholder</td><td><code>index.css:62</code> dark block; <code>.composer-field textarea::placeholder</code></td>
+      <td class="num"><span class="sw" style="background:#71767f"></span>text-4 <code>#71767f</code> <span class="bad">3.56:1</span> page, <span class="bad">3.09</span> composer<br><span class="sw" style="background:#8b9099"></span>text-3 <code>#8b9099</code> 5.07 page, <span class="bad">4.02</span> your bubble<br>placeholder <code>#606062</code> <span class="bad">~2.6</span></td>
+      <td class="num"><span class="sw" style="background:#858a93"></span>text-4 <code>#858a93</code> <span class="ok">4.68</span> page, 4.90 list<br><span class="sw" style="background:#9a9fa8"></span>text-3 <code>#9a9fa8</code> 6.11 page, <span class="ok">4.85</span> bubble<br>placeholder = text-4, 4.07 composer</td>
+      <td>Small text needs 4.5:1. text-3 moves up with text-4 so the two levels stay apart. text-2 <code>#a7adb6</code> (7.19) stays.</td></tr>
+    <tr><td>C</td><td>New session button</td><td><code>.session-new</code>, <code>.session-new-kbd</code></td>
+      <td>blue tint, blue border, blue text</td><td>transparent, <code>--border</code>, text-1; hover <code>--bg-hover</code></td>
+      <td>Blue already means selection, your messages and links. A blue button above the list outweighs the selected row.</td></tr>
+    <tr><td>D</td><td>Inline code in messages</td><td><code>.md code</code> (not <code>pre code</code>)</td>
+      <td><span class="sw" style="background:#17171a"></span><code>--bg-sunken</code> + <code>--border</code></td><td><code>rgba(255,255,255,.06)</code> + <code>--border-subtle</code></td>
+      <td>Lighter than the text around it, as on most dark surfaces. Also works on the composer and on cards.</td></tr>
+  </table>
+
+  <h2>Open questions and dropped items</h2>
+  <div class="cols">
+    <div class="card decide">
+      <h3>The amber sidebar counts</h3>
+      <p>These are <b>needs-you</b> counts: sessions blocked on an approval from you (<code>TasksSidePanel.tsx:790</code>, <code>.tp-count.needs-you</code>). So amber is the right meaning. The question is only how loud they should be when many workspaces carry one.</p>
+      <div class="opt">
+        <div class="a"><div class="t">A · Keep the amber pill <span class="rec">(recommended)</span></div>
+          <div class="navrow sel"><span>orbit-ws01</span><span class="pill">73</span></div>
+          <div class="navrow"><span>orbit-ws04</span><span class="pill">28</span></div>
+          <div class="navrow"><span>orbit-ws05</span><span class="pill">8</span></div>
+          <p>No change. Something waiting on you should be loud. If 73 feels like noise, that's the count's problem (stale approvals), not the colour's.</p></div>
+        <div class="b"><div class="t">B · Amber number, no fill</div>
+          <div class="navrow sel"><span>orbit-ws01</span><span class="pill">73</span></div>
+          <div class="navrow"><span>orbit-ws04</span><span class="pill">28</span></div>
+          <div class="navrow"><span>orbit-ws05</span><span class="pill">8</span></div>
+          <p>Quieter in a long list. It still reads as "needs you" by colour, but loses its shape at a glance, and the collapsed rail's badge would no longer match.</p></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Dropped from my first review</h3>
+      <ul>
+        <li><b>"Checks failed" shown in blue.</b> A working session's status line is always brand blue. That text was the agent's own progress line, not a failure state. Making it red would mean parsing agent prose, so I'm leaving it.</li>
+        <li><b>Blue outline on the account chip.</b> It doesn't show on a clean load, so it was focus left by a click. To confirm on a Mac: click it, press Esc, and see whether the ring stays.</li>
+      </ul>
+      <h3 style="margin-top:16px">Follow-up, not in this change</h3>
+      <ul>
+        <li><b>Two dark token sets.</b> <code>components/ui/foundation.css:95</code> has its own blues (<code>#2e62dc</code>, <code>#3c89e8</code>, <code>#223d7e</code>), greens and amber, alongside <code>--brand #5b8cff</code> and friends. Nothing on this screen changes visibly, so it gets its own small task: point the <code>--orbit-*</code> dark values at the <code>index.css</code> tokens.</li>
+      </ul>
+      <h3 style="margin-top:16px">Files a build would touch</h3>
+      <p><code>src/web/src/index.css</code> only: the dark token block, plus four dark-scoped rules for A, C and D. No component changes. iOS, macOS and Android aren't covered by this board.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -135,7 +135,7 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertTrue(identity.contains("static let barTitle = Font.body.weight(.medium)"))
         let title = section(identity, from: "struct WorkspaceTitle: View {", to: "struct WorkspaceTitleSwitcher")
         XCTAssertTrue(title.contains(".font(.barTitle)"), "WorkspaceTitle")
-        let switcher = section(identity, from: "struct WorkspaceTitleSwitcher: View {", to: "struct AgentSwitchSheet")
+        let switcher = section(identity, from: "struct WorkspaceTitleSwitcher: View {", to: ".accessibilityLabel(")
         XCTAssertTrue(switcher.contains(".font(.barTitle)"), "WorkspaceTitleSwitcher")
     }
 }

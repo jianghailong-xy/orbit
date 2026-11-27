@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -57,8 +58,12 @@ export class CodexRateLimitResetController {
 
   @PatScope('runners:read', { workspaceConfinable: false })
   @Get(':id/codex-rate-limit-reset')
-  list(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<CodexRateLimitResetOperations> {
-    return this.resets.operationsFor(user.userId, id);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('accountFingerprint') accountFingerprint?: string,
+  ): Promise<CodexRateLimitResetOperations> {
+    return this.resets.operationsFor(user.userId, id, accountFingerprint);
   }
 
   // Either spelling of the operation id: a view names it by public id, a refusal by the stored UUID.

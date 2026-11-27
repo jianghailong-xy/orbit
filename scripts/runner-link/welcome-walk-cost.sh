@@ -57,7 +57,7 @@ while IFS=$'\t' read -r sid runner n; do
             WHERE stored.\"seq\" <> stored.n ORDER BY stored.\"seq\" LIMIT 1),
            (SELECT max(e.\"seq\") FROM \"run_event\" e WHERE e.\"session_id\" = s.id AND e.\"seq\" > 0),
            0)::int AS \"durableSeq\",
-         (s.status IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED') AND s.\"kind\" = 'CONVERSATION'
+         (s.finished_at IS NULL AND s.\"kind\" = 'CONVERSATION'
            AND s.\"inbox_lease_owner\" = '$runner'::uuid) AS \"leaseHeld\"
        FROM \"session\" s
        WHERE s.id = ANY(ARRAY['$sid']::uuid[]) AND s.\"assigned_runner_id\" = '$runner'::uuid"

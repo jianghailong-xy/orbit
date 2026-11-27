@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { asLegacyMainSyncItem } from '../test-support/legacy-main-sync';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { receiveOpenItem } from '../test-support/open-item-delivery';
@@ -203,7 +205,7 @@ async function world(stack: Stack, label: string): Promise<World> {
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -269,7 +271,7 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -339,7 +341,7 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
     const finished = await tx.session.update({
       where: { id: sessionId },
       data: {
-        status: RunStatus.CANCELLED,
+        turnState: null,
         completedAt: new Date(),
         finishedAt: new Date(),
         worktreeBranch: branch,
@@ -391,6 +393,9 @@ async function failFirst(
   await completeTask(stack, w, taskId, `${label}-first`);
   const first = await claim(stack, w);
   assert.equal((await report(stack, w, first, result)).accepted, true);
+  // Revision 45: a MAIN_SYNC conflict now opens the task-less line-sync item. This file pins the LEGACY task-level
+  // item's handling (docs/design/project-line-upstream-sync.md §4.6 item 7), so it is narrowed to one.
+  if (result.phase === 'MAIN_SYNC') await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId });
   const item = await stack.db.projectOpenItem.findFirstOrThrow({
     where: { taskId, kind: { in: ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'] } },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -513,7 +518,7 @@ test('an owner\'s Confirm that writes the reopened DONE while the run is open: t
         data: {
           id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: failed.taskId,
           workspaceId: w.workspaceId, assignedRunnerId: w.runnerId, title: 'reopened work', prompt: 'rework',
-          provider: 'claude', status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          provider: 'claude', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true, startedAt: new Date(), branch, isolationStatus: 'worktree',
           baseSha: '9'.repeat(40), branchSha: '8'.repeat(40),
           changedFiles: [{ path: 'src/reopened.ts', additions: 1, deletions: 0 }],
@@ -539,7 +544,7 @@ test('an owner\'s Confirm that writes the reopened DONE while the run is open: t
         const finished = await tx.session.update({
           where: { id: sessionId },
           data: {
-            status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+            turnState: null, finishedAt: new Date(), 
             worktreeBranch: branch, worktreeDirty: false,
           },
           select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },

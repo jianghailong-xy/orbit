@@ -4,12 +4,12 @@ import test from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskCompletionCriterion,
   TaskCompletionPolicy,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { TRIGGER_WRITE_SOURCES } from '../common/db-write-inventory';
@@ -24,6 +24,8 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * The catalog half of the 0224 removal, against a real PostgreSQL that replayed every migration,
@@ -213,7 +215,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 68,
+  assert.equal(installed.rowCount, 69,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -247,7 +249,9 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + 'once 0850 added `session_help_ask_guard` to `session`, which refuses a write that would make a session an Ask or not, '
     + 'and 67 once 1060 added `condition_ended_with_task` to `task`, which ends a task\'s condition when it is cancelled, '
     + 'done or failed, and 68 once 1490 added `session_listed_at_settle` to `session`, which sets the row\'s own '
-    + '`listed_at` when it settles');
+    + '`listed_at` when it settles, and 70 once 1611 added `session_aa_turn_state_from_status` and `session_zz_phase` '
+    + 'to `session`, which set the row\'s own `turn_state` and `phase` from its stored word, and 69 once 1711 '
+    + 'dropped the trigger that kept the stored word with the column');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }
@@ -315,13 +319,13 @@ suite('(d) ordinary session creation, the status transitions and context attachm
     data: {
       id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, workspaceId,
       assignedRunnerId: runnerId, title: 'work', prompt: 'work', provider: 'claude',
-      status: RunStatus.PENDING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'QUEUED', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
   // ...and every transition the UPDATE guard fired on: status, and starts_task_work itself.
   for (const status of [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.RUNNING]) {
-    const moved = await db.session.update({ where: { id: sessionId }, data: { status } });
-    assert.equal(moved.status, status);
+    const moved = await db.session.update({ where: { id: sessionId }, data: { turnState: turnStateOfWord(status) } });
+    assert.equal(wordOf(moved), status);
   }
   const relinked = await db.session.update({
     where: { id: sessionId }, data: { startsTaskWork: false },
@@ -384,7 +388,7 @@ suite('(e) conversation turns still write, including the coordinator-context sta
     data: {
       id: sessionId, ownerId, creatorId: ownerId, taskId: task.id, workspaceId,
       assignedRunnerId: runnerId, title: 'turns', prompt: 'turns', provider: 'claude',
-      status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
 
@@ -443,7 +447,7 @@ suite('(f) verification tasks are still created and dispatched, and the rule sti
     data: {
       id: liveId, ownerId, creatorId: ownerId, taskId: subject.id, workspaceId,
       assignedRunnerId: runnerId, title: 'live', prompt: 'live', provider: 'claude',
-      status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
   const becameSubject = await db.task.update({

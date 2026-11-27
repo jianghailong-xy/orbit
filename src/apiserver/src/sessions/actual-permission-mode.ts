@@ -11,7 +11,7 @@ import {
 } from '@orbit/shared';
 
 /**
- * The mode a session's engine is actually running in (session.actual_permission_mode, migration 1437), kept apart
+ * The mode a session's engine is actually running in (session.actual_permission_mode, migration 1735), kept apart
  * from `session.permission_mode`, the owner's intent, which only an explicit pick writes.
  *
  * Where it is read from:

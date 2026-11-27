@@ -176,7 +176,9 @@ describe('the collapsed row', () => {
 
     expect(one('.bg-tray-title')?.textContent).toBe(fixture.copy.title);
     expect(one('.ct-one')?.textContent).toBe(task.title);
-    expect(one('.bg-tray-row .status-pill')?.textContent).toBe('Running');
+    // Running and nothing else: the spinner alone at the right edge, where the Agents row draws its own.
+    expect(one('.bg-tray-row .status-pill'), 'no Running pill on the folded row').toBeNull();
+    expect(one('.wt-spacer + .chat-tool-status.running')?.getAttribute('aria-label')).toBe('Running');
     expect(one('.bg-tray-count'), 'one task is named, not counted').toBeNull();
   });
 
@@ -201,8 +203,10 @@ describe('the collapsed row', () => {
         c.band.failed > 0 ? `${c.band.failed} failed` : null,
       );
       const named = c.created!.items.find((item) => item.id === c.band!.row)!;
-      const pill = named.running ? 'Running' : named.queued ? 'Queued' : null;
-      if (pill) expect(one('.wt-spacer + .status-pill')?.textContent, c.name).toBe(pill);
+      if (named.running) {
+        expect(one('.wt-spacer + .chat-tool-status.running'), c.name).not.toBeNull();
+        expect(one('.bg-tray-row .status-pill'), c.name).toBeNull();
+      } else if (named.queued) expect(one('.wt-spacer + .status-pill')?.textContent, c.name).toBe('Queued');
       else expect(one('.wt-spacer + .status-pill'), c.name).not.toBeNull();
       expect(one('.ct-one'), c.name).toBeNull();
     }

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunnerStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { AUTO_ALLOWED_MESSAGE } from '../common/permission-rules';
@@ -104,7 +105,7 @@ async function anotherSession(
     data: {
       id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId,
       assignedRunnerId: f.runnerId, title: 'consent', prompt: 'consent', provider: engine, engine,
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
   return sessionId;

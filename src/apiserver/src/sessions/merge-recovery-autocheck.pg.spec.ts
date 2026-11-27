@@ -19,7 +19,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   RunEventType,
   RunStatus as SharedRunStatus,
@@ -167,8 +168,8 @@ async function parentSession(
       dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(), runtimeSessionId: randomUUID(),
       branch: `orbit/${label}-${id.slice(0, 8)}`, isolationStatus: 'worktree',
       ...(opts.running
-        ? { status: RunStatus.RUNNING, engineTurnActive: true, inboxLeaseOwner: opts.running.leaseOwner }
-        : { status: RunStatus.SUCCEEDED, finishedAt: new Date() }),
+        ? { turnState: 'IN_FLIGHT', engineTurnActive: true, inboxLeaseOwner: opts.running.leaseOwner }
+        : { turnState: null, finishedAt: new Date() }),
       ...(opts.recovery ? { mergeRecovery: opts.recovery as never, mergeStatus: 'conflict', mergeRecoveryAction: 'preview' } : {}),
       ...(opts.merge ?? {}),
     },
@@ -189,7 +190,7 @@ async function childSession(
     data: {
       id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
       title: `${label} child`, prompt: 'Resolve this merge recovery for main.', provider: 'claude', providerBuiltin: true,
-      status: RunStatus.RUNNING, engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: 'IN_FLIGHT', engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(), runtimeSessionId: randomUUID(), source, parentSessionId: parentId,
     },
   });

@@ -9,6 +9,7 @@ import {
   layoutProjectDependencyGraph,
   type ProjectDependencyGraphResponse,
 } from '../lib/projectDependencyGraph';
+import { hoverTooltip } from '../test/tooltipHover';
 
 const stylesPath = [
   resolve(process.cwd(), 'src/index.css'),
@@ -94,7 +95,10 @@ describe('ProjectTasksGraph', () => {
     // name keeps its line while the lower-priority legend is the one item allowed to shrink.
     expect(container.querySelector('.pdg-section-title')?.textContent).toBe('Task graph');
     const legend = container.querySelector<HTMLElement>('.pdg-legend');
-    expect(legend?.title).toBe('Prerequisite → dependent · boxes are parent tasks');
+    // jsdom lays nothing out: give the label a cut-off box so its tip opens.
+    Object.defineProperty(legend!, 'scrollWidth', { value: 500, configurable: true });
+    Object.defineProperty(legend!, 'clientWidth', { value: 200, configurable: true });
+    expect(await hoverTooltip(legend!)).toBe('Prerequisite → dependent · boxes are parent tasks');
 
     const titleRule =
       styles.match(/\.pdg-section-title\.orbit-typography\s*\{([^}]*)\}/)?.[1] ?? '';

@@ -66,51 +66,65 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 	// What the updater last managed to do here, read fresh each probe: the update loop and
 	// `orbit engine-update` both write it, and neither can reach into this snapshot.
 	updates := loadEngineUpdateLog()
-	out := make([]EngineHealthReport, 0, len(specs))
-	for _, spec := range specs {
-		h := checkEngine(spec, servicePath)
-		report := EngineHealthReport{
-			Engine:            spec.bin,
-			Installed:         h.installed,
-			Version:           h.version,
-			Auth:              authWord(h.auth),
-			AuthSource:        h.authSource,
-			PlanUsage:         h.planUsage,
-			InstallationError: h.installError,
-			KimiRegion:        h.kimiRegion,
-			OpenCodeNoKey:     h.openCodeNoKey,
-		}
-		if spec.bin == providerDsh {
-			report.Auth = "unknown"
-			report.Dsh = dshRuntimeHealth(h.version, false, h.installed && h.installError == "" && dshCatalogReadable())
-		}
-		// What every request then declares of Cursor CLI (cursorDeclared): the pinned build, ready.
-		if spec.bin == providerCursor {
-			noteCursorInstallReady(h.installed && h.installError == "")
-		}
-		// An engine that isn't here has no update state worth reporting — the record is about
-		// a binary, and a stale one left by an uninstall would describe something gone.
-		if rec, ok := updates[spec.bin]; ok && h.installed && rec.Status != "" {
-			report.Update = &rec
-		}
-		// An engine whose CLI keeps a login per directory reports one entry per account: the one
-		// the user added, and Default. The engines without accounts simply say nothing here.
-		if kind, ok := accountSlotKindFor(spec.bin); ok && h.installed {
-			defaultAuth := h.auth
-			// Antigravity's Default account is the runner's Google sign-in. A runner that runs agy on
-			// its own GEMINI_API_KEY is signed in as an engine, but that account is not.
-			if spec.bin == providerAntigravity && h.authSource != "google" {
-				defaultAuth = authNo
-			}
-			var usage map[string]*PlanUsage
-			report.Accounts, usage = accountHealthWithUsage(kind, h.path, defaultAuth, h.kimiRegion)
-			if len(usage) > 0 {
-				report.PlanUsage = withAccountUsage(report.PlanUsage, spec.bin, usage)
-			}
-		}
-		out = append(out, report)
+	// One engine's answer does not depend on another's, so every engine is asked at once: asked one after another,
+	// a managed runner's first heartbeat, which waits for this probe (managedStartupBeat), went 8–10 s after its
+	// start in production on 2026-11-25, the sum of every CLI's start; at once it is about the slowest one's.
+	out := make([]EngineHealthReport, len(specs))
+	var wg sync.WaitGroup
+	for i, spec := range specs {
+		wg.Add(1)
+		go func(i int, spec engineSpec) {
+			defer wg.Done()
+			out[i] = probeEngine(spec, servicePath, updates)
+		}(i, spec)
 	}
+	wg.Wait()
 	return out
+}
+
+// probeEngine is probeEngines' answer for one engine.
+func probeEngine(spec engineSpec, servicePath string, updates map[string]EngineUpdateReport) EngineHealthReport {
+	h := checkEngine(spec, servicePath)
+	report := EngineHealthReport{
+		Engine:            spec.bin,
+		Installed:         h.installed,
+		Version:           h.version,
+		Auth:              authWord(h.auth),
+		AuthSource:        h.authSource,
+		PlanUsage:         h.planUsage,
+		InstallationError: h.installError,
+		KimiRegion:        h.kimiRegion,
+		OpenCodeNoKey:     h.openCodeNoKey,
+	}
+	if spec.bin == providerDsh {
+		report.Auth = "unknown"
+		report.Dsh = dshRuntimeHealth(h.version, false, h.installed && h.installError == "" && dshCatalogReadable())
+	}
+	// What every request then declares of Cursor CLI (cursorDeclared): the pinned build, ready.
+	if spec.bin == providerCursor {
+		noteCursorInstallReady(h.installed && h.installError == "")
+	}
+	// An engine that isn't here has no update state worth reporting — the record is about
+	// a binary, and a stale one left by an uninstall would describe something gone.
+	if rec, ok := updates[spec.bin]; ok && h.installed && rec.Status != "" {
+		report.Update = &rec
+	}
+	// An engine whose CLI keeps a login per directory reports one entry per account: the one
+	// the user added, and Default. The engines without accounts simply say nothing here.
+	if kind, ok := accountSlotKindFor(spec.bin); ok && h.installed {
+		defaultAuth := h.auth
+		// Antigravity's Default account is the runner's Google sign-in. A runner that runs agy on
+		// its own GEMINI_API_KEY is signed in as an engine, but that account is not.
+		if spec.bin == providerAntigravity && h.authSource != "google" {
+			defaultAuth = authNo
+		}
+		var usage map[string]*PlanUsage
+		report.Accounts, usage = accountHealthWithUsage(kind, h.path, defaultAuth, h.kimiRegion)
+		if len(usage) > 0 {
+			report.PlanUsage = withAccountUsage(report.PlanUsage, spec.bin, usage)
+		}
+	}
+	return report
 }
 
 // accountHealth asks every added account slot on this machine whether it is signed in. An account's
@@ -374,7 +388,7 @@ func (p *engineHealthProbe) refreshLocked() {
 
 // refreshEngine re-probes one engine and puts its answer in place of the one the snapshot had,
 // leaving every other engine's as it was. A sign-in that just landed changes one engine, and a full
-// refresh asks every CLI on the machine one after another — seconds, more on a loaded box — before
+// refresh asks every CLI on the machine — seconds, more on a loaded box — before
 // the heartbeat can say the engine is signed in. Serialised with refresh, for the reason given there.
 // Before the first full probe there is nothing to put it into, so that one runs instead.
 func (p *engineHealthProbe) refreshEngine(engine string) {

@@ -34,7 +34,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { type PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { type NormalizedRunEvent, RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -205,7 +206,7 @@ test('a background launch that was refused is not counted as a running process',
         title: 'a session watching a build',
         prompt: 'watch the build and tell me when it breaks',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: false,
         assignedRunnerId: runner.id,

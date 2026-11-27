@@ -1,4 +1,5 @@
 import { AlignLeftOutlined, CloseOutlined } from '@ant-design/icons';
+import { Tooltip } from './ui/Tooltip';
 
 /** The card's words. The native clients say the same ones (OrbitKit `RecapCard`, Android's
  *  `RecapCard`), and OrbitKit's copy-parity test holds them to this file. */
@@ -77,9 +78,11 @@ export function SessionRecapCard({
         <span className="chat-recap-text">{text}</span>
       </p>
       <span className="chat-recap-actions">
-        <button type="button" className="chat-recap-hide" aria-label={RECAP_CARD_COPY.hide} title={RECAP_CARD_COPY.hide} onClick={onHide}>
-          <CloseOutlined />
-        </button>
+        <Tooltip content={RECAP_CARD_COPY.hide} align="end">
+          <button type="button" className="chat-recap-hide" aria-label={RECAP_CARD_COPY.hide} onClick={onHide}>
+            <CloseOutlined />
+          </button>
+        </Tooltip>
       </span>
     </div>
   );

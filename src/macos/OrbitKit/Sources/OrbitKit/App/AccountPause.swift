@@ -33,3 +33,10 @@ public struct AccountPauseRequest: Encodable, Sendable {
         }
     }
 }
+
+/// The body of a Default sign-out (`SignOutDefaultDto`): `force` signs out although sessions are running
+/// on Default.
+public struct SignOutDefaultRequest: Encodable, Sendable {
+    public let force: Bool
+    public init(force: Bool) { self.force = force }
+}

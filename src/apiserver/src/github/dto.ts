@@ -35,4 +35,13 @@ export class UpdateGithubAppDto {
   @MinLength(1)
   @MaxLength(20_000)
   privateKey?: string;
+
+  /** The App's webhook secret (docs/design/protected-branch-landing.md §4.7). Omit to keep the saved one. It is never
+   *  read back. */
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MinLength(16)
+  @MaxLength(500)
+  webhookSecret?: string;
 }

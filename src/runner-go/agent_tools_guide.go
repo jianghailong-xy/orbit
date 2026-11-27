@@ -122,7 +122,7 @@ func agentToolsSections() []agentToolsSection {
 				"task_create with startNow: true records the work and starts it on one card.",
 				"runAt starts it once, at a set time; it is not a deadline (that is dueDate).",
 				"startWhen starts it once, when something outside Orbit becomes true (\"when a third OSD is in\"); a schedule with a WHEN rule runs each time it does. The agent writes a read-only check command, runs it once, and the card shows you that command verbatim before anything is created; your runner then runs it unattended, with no secret in it. When you answer a question with \"wait until X\", the agent proposes that card instead of keeping a note to itself, and condition_get reads either one back.",
-				"autoRunWhenReady defaults to true: an assigned task in a started project starts by itself once every prerequisite is DONE. To hold work until you say so, the agent passes autoRunWhenReady: false.",
+				"autoRunWhenReady is required on every create: true makes an assigned task in a started project start by itself once every prerequisite is DONE, and false holds it until you say so.",
 				"Your own \"Create and start\" on the card starts it even if the agent asked for no start, and the agent does not undo that.",
 			},
 			Asks: []string{
@@ -275,9 +275,9 @@ var agentToolsExampleIDs = []string{"record-task", "keep-plan", "delegate-now", 
 func agentToolsExamples() []agentToolsExample {
 	planItems := []interface{}{
 		map[string]interface{}{"ref": "s1", "title": "Add the new columns", "description": "<what to do, the files, the steps>",
-			"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "<what settles it>"},
+			"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "<what settles it>", "autoRunWhenReady": true},
 		map[string]interface{}{"ref": "s2", "title": "Backfill the rows", "description": "<what to do, the files, the steps>",
-			"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "<what settles it>", "dependsOnRefs": []interface{}{"s1"}},
+			"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "<what settles it>", "dependsOnRefs": []interface{}{"s1"}, "autoRunWhenReady": true},
 		map[string]interface{}{"ref": "s3", "title": "Switch the reads over", "description": "<what to do, the files, the steps>",
 			"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "<what settles it>", "dependsOnRefs": []interface{}{"s2"},
 			"autoRunWhenReady": false},
@@ -334,14 +334,14 @@ func agentToolsExamples() []agentToolsExample {
 				{Tool: "task_create", Arguments: map[string]interface{}{
 					"title": "Fix the flaky watch test", "description": "<the failing test, how it fails, where>",
 					"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "<what settles it>",
-					"startNow": true, "idempotencyKey": "fix-flaky-watch-test"}},
+					"autoRunWhenReady": true, "startNow": true, "idempotencyKey": "fix-flaky-watch-test"}},
 				{Tool: "session_create", Arguments: map[string]interface{}{"prompt": "<the whole brief: what, where, how to check>"}},
 			},
 			CLI: [][]string{
 				{"orbit", "task", "start", "<taskId>", "--receipt"},
 				{"orbit", "task", "create", "--title", "Fix the flaky watch test", "--description", "<the failing test, how it fails, where>",
 					"--completion-criterion", "EVIDENCE_JUDGMENT", "--acceptance-criteria", "<what settles it>",
-					"--start-now", "--idempotency-key", "fix-flaky-watch-test", "--receipt"},
+					"--auto-run-when-ready=true", "--start-now", "--idempotency-key", "fix-flaky-watch-test", "--receipt"},
 				{"orbit", "session", "create", "--prompt", "<the whole brief: what, where, how to check>", "--receipt"},
 			},
 			Proof:    "A started session's id: task_start's receipt names it, a startNow create carries it as start.sessionId, and session_create's receipt is the session itself.",
@@ -380,7 +380,7 @@ type agentToolsPlaybook struct {
 // agentToolsBatchScript is the batch example's whole script: one --tasks document from a text file, a dry run
 // and the write. Its two orbit lines are the example's CLI lines, which the test runs through the parser.
 const agentToolsBatchScript = "jq -R -s 'split(\"\\n\") | map(select(length > 0)) | {tasks: map({title: ., description: (\"Fix: \" + .), " +
-	"completionCriterion: \"EVIDENCE_JUDGMENT\", acceptanceCriteria: \"<what settles it>\", autoRunWhenReady: false})}' issues.txt > plan.json\n" +
+	"completionCriterion: \"EVIDENCE_JUDGMENT\", acceptanceCriteria: \"<what settles it>\", autoRunWhenReady: true})}' issues.txt > plan.json\n" +
 	"orbit task create-batch --tasks-file - --dry-run --json < plan.json\n" +
 	"orbit task create-batch --tasks-file - --idempotency-key issues-txt-part-1 --receipt < plan.json"
 
@@ -394,7 +394,7 @@ func agentToolsPlaybooks() []agentToolsPlaybook {
 				"Pick the record. One item is one task_create. Several related items are one task_create_batch (at most 50). A body of work with its own goal and acceptance, 4 or more dependent steps or several agents over days, may be proposed as project_create first; its card is the person's answer, and a no means tasks.",
 				"Give every item a ref (s1, s2, ...). Order with dependsOnRefs (when an item may run) and nest with parentRef (what it is part of). dependsOnTaskIds and parentTaskId name tasks that already exist.",
 				"Ask the person what would settle each item and pass their words as acceptanceCriteria; declare completionCriterion on every item. If they have not said, ask and end your turn.",
-				"Hold what must not start: autoRunWhenReady: false on that item. startNow: true only on an item they want running now.",
+				"Every item sets autoRunWhenReady: false for what must not start, true for what may. startNow: true only on an item they want running now.",
 				"Unsure where it lands? Call task_create_batch with dryRun: true first: it writes nothing and asks nobody.",
 				"Say in a sentence or two what you are about to file, then call task_create_batch once, keyed with an idempotencyKey derived from the plan.",
 				"Read the receipt: ok: true, outcome: written, items[] in input order, each with its id. Link each as [title](orbit-task:<id>). A declined card is a refusal: do not file it another way.",
@@ -406,7 +406,7 @@ func agentToolsPlaybooks() []agentToolsPlaybook {
 			When:  "The work arrives as a file or a list too long to type: issues in a text file or a CSV, lines of a checklist.",
 			Steps: []string{
 				"Use the CLI's bulk door, by the absolute path your instructions give, never one task_create per line.",
-				"Build one --tasks document of at most 50 items with a script; every item carries title, description, completionCriterion and acceptanceCriteria, and autoRunWhenReady: false when it must wait.",
+				"Build one --tasks document of at most 50 items with a script; every item carries title, description, completionCriterion and acceptanceCriteria, and autoRunWhenReady (false when it must wait).",
 				"Preview it: orbit task create-batch --tasks-file - --dry-run --json writes nothing and says where every item would land.",
 				"Write it: orbit task create-batch --tasks-file - --idempotency-key <a slug of the batch> --receipt. Inside a session it puts one card in front of the person; it exits 0 exactly when it wrote.",
 				"More than 50 items: split them into parts, each with its own key. A part that fails can be sent again with the same key and cannot file twice.",
@@ -465,7 +465,7 @@ var agentToolsFamilyDefs = []struct {
 	{"task-lists", "Task lists", []string{"task_list"}},
 	{"schedules", "Schedules", []string{"schedule"}},
 	{"waits", "Waits", []string{"watch"}},
-	{"files", "Files", []string{"file"}},
+	{"files", "Drive", []string{"file"}},
 	{"subagents", "SubAgents", []string{"subagent"}},
 	{"background", "Background jobs", []string{"background_job", "session"}},
 	// The account's tools are the owner's own Settings (settings_tools.go): settings_propose is a card for them too.

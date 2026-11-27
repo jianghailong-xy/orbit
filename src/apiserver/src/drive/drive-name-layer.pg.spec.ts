@@ -1,5 +1,5 @@
 /**
- * The drive's name layer (docs/orbit-files-drive-technical-design.md §1, §3, §5.4; migration 1327; drive/drive.service.ts),
+ * The drive's name layer (docs/drive-technical-design.md §1, §3, §5.4; migration 1327; drive/drive.service.ts),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, with chunks kept on a files directory of this
  * run's through the chunk door:
  *
@@ -81,7 +81,7 @@ async function refusedWith(promise: Promise<unknown>, status: number, code: stri
   return caught!;
 }
 
-test('Orbit Files drive: the name layer — versions, append, Trash groups, restore with suffixes, the change feed', {
+test('Documents drive: the name layer — versions, append, Trash groups, restore with suffixes, the change feed', {
   skip: !URL, concurrency: 1, timeout: 600_000,
 }, async (t) => {
   const url = URL!;
@@ -399,7 +399,7 @@ test('Orbit Files drive: the name layer — versions, append, Trash groups, rest
     const session = await db.session.create({
       data: {
         title: 'drive writer', prompt: 'drive writer', ownerId: owner, creatorId: owner, workspaceId: workspace.id,
-        assignedRunnerId: runnerId, status: 'AWAITING_INPUT', startedAt: new Date(),
+        assignedRunnerId: runnerId, turnState: null, startedAt: new Date(),
       },
     });
     const id = await fileWith(null, 'attributed.txt', 'x');

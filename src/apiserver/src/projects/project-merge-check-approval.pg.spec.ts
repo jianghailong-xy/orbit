@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { uuidToBase62 } from '@orbit/shared';
-import { RunnerStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -120,7 +121,7 @@ async function project(stack: Stack, label: string): Promise<Fixture> {
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `协调：${label}`, prompt: `协调：${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
   await db.project.create({
@@ -389,7 +390,7 @@ test('a merge check change needs postgres; every case below is a skip without it
       data: {
         id: otherSessionId, ownerId: f.ownerId, creatorId: f.ownerId, assignedRunnerId: f.runnerId,
         title: 'another conversation', prompt: 'another conversation', provider: 'claude',
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
     await stack.db.approval.create({

@@ -6,10 +6,10 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -23,6 +23,7 @@ import { executableAcceptanceFailureReason } from './executable-acceptance-round
 import { AUTO_RUN_RETRY_BACKOFF_MS } from './task-retry-policy';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TasksService } from './tasks.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /**
  * P3 of model routing (docs/model-routing-design.md §3.3): after a run that failed for anything but
@@ -186,7 +187,7 @@ async function end(
 ) {
   // A failure is on the turn the run cut off, copied to lastTurnOutcome (removal step R2): what reads it as one since R7.
   await db.session.update({ where: { id: sessionId }, data: {
-    status, finishedAt: new Date(), ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}), ...data,
+    turnState: turnStateOfWord(status), finishedAt: new Date(), ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}), ...data,
   } });
 }
 

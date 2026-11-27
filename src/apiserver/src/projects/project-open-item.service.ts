@@ -36,6 +36,7 @@ import {
   type ProjectRulingView,
   type RequestProjectDoneBody,
   type OwnerCardTranslation,
+  type ProjectAccountWait,
   type ProjectSignInWait,
   type TaskSignInHold,
   RunEventType,
@@ -127,6 +128,7 @@ import {
 } from './project-integration-job';
 import {
   ProjectIntegrationView,
+  defaultProjectBranchOf,
   projectIntegrationView,
   readInFlightJobs,
   readProjectCodebase,
@@ -178,6 +180,8 @@ import {
   supersedeStaleStartRequest,
 } from './project-start-request';
 import { doorsForOpenItem, openItemDoorMessageNames, sourceJobForOpenItem } from './open-item-doors';
+import { lineSyncDedupeKey } from './line-sync-hold';
+import { uuidToBase62 } from '@orbit/shared';
 import {
   DONE_REQUEST_COORDINATOR_ONLY,
   DONE_REQUEST_DECLINE_NOTE_REQUIRED,
@@ -197,6 +201,7 @@ import {
   supersedeStaleDoneRequest,
 } from './project-done-request';
 import { sessionHeldSql } from '../common/session-release';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL, isInFlightJobState } from './in-flight-job-states';
 
 /**
  * Who is asking for an item to be put in front of the project's coordinator conversation.
@@ -589,6 +594,31 @@ export interface ProjectOpenItems {
   mainBranch: string | null;
   /** The sign-ins the project's held tasks wait for, one per runner and engine (`projectSignInWaits`). */
   signIns: ProjectSignInWait[];
+  /** The tasks held because no account can run them, as one row (`projectAccountWait`). */
+  accountWait: ProjectAccountWait<Date> | null;
+}
+
+/** The hold of one task, as the project row needs it (TasksService.accountHolds). */
+import type { ModelRoutingHold } from '../tasks/model-routing';
+export interface AccountHoldRead {
+  reason: string;
+  until: string;
+}
+
+/**
+ * The project's account holds as its one Needs you row: "N tasks wait for an account" over the sentence of the hold that
+ * lifts first. Null when no task is held.
+ */
+export function projectAccountWait(holds: ReadonlyMap<string, AccountHoldRead>): ProjectAccountWait<Date> | null {
+  if (holds.size === 0) return null;
+  const first = [...holds.values()].sort((a, b) => a.until.localeCompare(b.until))[0];
+  const n = holds.size;
+  return {
+    taskIds: [...holds.keys()],
+    title: n === 1 ? '1 task waits for an account' : `${n} tasks wait for an account`,
+    detailLine: first.reason,
+    until: new Date(first.until),
+  };
 }
 
 /** The one read of TasksService this service makes: the sweep's signed-out holds (TasksService.signInHolds). */
@@ -751,6 +781,28 @@ export class ProjectOpenItemService {
       }
     }
     return reader ? reader.signInHolds(ownerId, scope) : new Map();
+  }
+
+  /** `accountHold` of each of these tasks (TasksService.accountHoldsFor), for a project's task rows; none without a reader. */
+  async accountHoldsFor(ownerId: string, taskIds: readonly string[]): Promise<Map<string, ModelRoutingHold>> {
+    try {
+      const { TasksService } = await import('../tasks/tasks.service.js');
+      const tasks = this.moduleRef?.get(TasksService, { strict: false });
+      return tasks ? await tasks.accountHoldsFor(ownerId, taskIds) : new Map();
+    } catch {
+      return new Map();
+    }
+  }
+
+  /** The project's tasks held for an account (TasksService.accountHolds), one row; none when no reader is reachable. */
+  private async accountWait(ownerId: string, projectId: string): Promise<ProjectAccountWait<Date> | null> {
+    try {
+      const { TasksService } = await import('../tasks/tasks.service.js');
+      const tasks = this.moduleRef?.get(TasksService, { strict: false });
+      return tasks ? projectAccountWait(await tasks.accountHolds(ownerId, projectId)) : null;
+    } catch {
+      return null;
+    }
   }
 
   /** The project's sign-in waits, one per runner and engine. */
@@ -1147,7 +1199,7 @@ export class ProjectOpenItemService {
         where: { id: item.handlingJobId },
         select: { state: true },
       });
-      if (handling && (handling.state === 'QUEUED' || handling.state === 'RUNNING')) return;
+      if (handling && isInFlightJobState(handling.state)) return;
     }
     // THE SWITCH DECIDES AUTOMATIC HAND-OVERS, AND ONLY THOSE. `coordinatorEnabled` is the owner
     // saying the coordinator may not act on its own, and an item handed over by the platform is
@@ -2639,8 +2691,17 @@ export class ProjectOpenItemService {
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true, generation: true, state: true, checks: true, baselineRed: true, phase: true, sourceSha: true,
+          serialKey: true,
         },
       });
+      // docs/design/project-line-upstream-sync.md §4.2: a queued landing held behind the line-sync item goes ahead by
+      // itself once the sync lands, and the refusal names that item.
+      const lineSyncHold = newestLanding?.state === 'QUEUED'
+        ? await tx.projectOpenItem.findFirst({
+          where: { projectId, dedupeKey: lineSyncDedupeKey(newestLanding.serialKey), state: 'OPEN' },
+          select: { id: true },
+        })
+        : null;
       if (expectJobId && newestLanding?.id !== expectJobId) {
         throw new ConflictException({
           code: INTEGRATION_RETRY_NOT_APPLICABLE,
@@ -2678,6 +2739,7 @@ export class ProjectOpenItemService {
         newestLanding: baselineFailure ?? (newestLanding && { ...newestLanding, timedOut: silent?.timedOut === true }),
         openItems,
         ownerBlockers,
+        heldByLineSync: lineSyncHold ? { itemId: uuidToBase62(lineSyncHold.id) } : null,
         // §3.1 M3: only a MAIN_SYNC conflict reads the branch tips, and only facts already on record.
         ...(newestLanding?.state === 'CONFLICT' && newestLanding.phase === 'MAIN_SYNC'
           ? {
@@ -2698,13 +2760,40 @@ export class ProjectOpenItemService {
       }
 
       if (baselineItem && baselineFailure) {
-        const queued = await tx.projectIntegrationJob.findFirstOrThrow({
+        // K5: the baseline result queued the next generation behind the hold, and this retry releases it. A task
+        // filed to fix the OPEN baseline item gets none — it is exempt from the hold — so when its own landing came
+        // back baseline-red under a new (U, T0), the retry queues that generation itself, as J-T1b reruns any other
+        // failure (2026-11-26: findFirstOrThrow here answered the coordinator 500 / P2025).
+        const held = await tx.projectIntegrationJob.findFirst({
           where: { taskId, kind: 'LAND_TASK', state: 'QUEUED' },
           orderBy: [{ generation: 'desc' }],
         });
-        const landing = queued.landingId
-          ? await tx.projectLanding.findUnique({ where: { id: queued.landingId }, select: { sessionId: true } })
+        const landing = held?.landingId
+          ? await tx.projectLanding.findUnique({ where: { id: held.landingId }, select: { sessionId: true } })
           : null;
+        const queued = held
+          ? { jobId: held.id, generation: held.generation, sourceRef: held.sourceRef,
+            landingSessionId: landing?.sessionId ?? null }
+          : await queueLandingRetry(tx, {
+            ownerId,
+            projectId,
+            taskId,
+            retry: {
+              ofJobId: baselineFailure.id,
+              failureClass: decision.failureClass,
+              reason,
+              requestedBySessionId: ownerRequester ? undefined : asking!,
+              requestedByUserId: ownerRequester ?? undefined,
+            },
+          });
+        if (!queued) {
+          throw new ConflictException({
+            code: INTEGRATION_RETRY_NOT_APPLICABLE,
+            message:
+              'the landing could not be queued: the task has no work branch to hand the line, or the '
+              + 'project no longer integrates on a branch of its own.',
+          });
+        }
         const closed = await tx.projectOpenItem.updateMany({
           where: { id: baselineItem.id, state: 'OPEN' },
           data: { state: 'RESOLVED', resolution: 'RETRIED', resolvedAt: new Date(),
@@ -2713,8 +2802,7 @@ export class ProjectOpenItemService {
             resolutionNote: reason },
         });
         if (closed.count === 0) throw new ConflictException('the baseline item is no longer open');
-        return { taskId, jobId: queued.id, generation: queued.generation, sourceRef: queued.sourceRef,
-          landingSessionId: landing?.sessionId ?? null, retryOfJobId: baselineFailure.id,
+        return { taskId, ...queued, retryOfJobId: baselineFailure.id,
           failureClass: decision.failureClass, reason, handlingItemIds: [] };
       }
       const queued = await queueLandingRetry(tx, {
@@ -2790,7 +2878,7 @@ export class ProjectOpenItemService {
   ): Promise<IntegrationRetriedView> {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId },
-      select: { exceptionEscalationSeconds: true },
+      select: { exceptionEscalationSeconds: true, title: true },
     });
     if (!project) throw new NotFoundException('project not found');
     const [job] = await readInFlightJobs(this.prisma, projectId, jobId);
@@ -2821,6 +2909,7 @@ export class ProjectOpenItemService {
       ...(await readProjectIntegrationView(this.prisma, projectId, projectIntegrationView(
         await readProjectCodebase(this.prisma, projectId),
         project.exceptionEscalationSeconds,
+        { id: projectId, title: project.title },
       ))),
       landingSessionId: retried.landingSessionId,
     };
@@ -2880,7 +2969,7 @@ export class ProjectOpenItemService {
       // J3 allows at most one in-flight LAND_TASK per task; the newest is the one that would be
       // stopped, and a task with none has nothing for this door.
       const landing = await tx.projectIntegrationJob.findFirst({
-        where: { projectId, taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
+        where: { projectId, taskId, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] } },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true, state: true, phase: true, progressProtocol: true,
@@ -3061,7 +3150,7 @@ export class ProjectOpenItemService {
         select: { id: true, generation: true, state: true, checks: true, phase: true },
       });
       if (ownerRequester && newestLanding
-        && (newestLanding.state === 'QUEUED' || newestLanding.state === 'RUNNING')) {
+        && isInFlightJobState(newestLanding.state)) {
         return this.skipInFlightLandingCheck(tx, {
           ownerId, projectId, taskId, taskStatus: locked.status, jobId: newestLanding.id, reason,
         });
@@ -3847,6 +3936,7 @@ export class ProjectOpenItemService {
       // BACK to decides one press on every item it owns, and it is one project either way.
       select: {
         id: true,
+        title: true,
         coordinatorSessionId: true,
         coordinatorSession: { select: COORDINATOR_PAUSE_SELECT },
       },
@@ -3969,7 +4059,7 @@ export class ProjectOpenItemService {
     const handlingJobIds = unique(rows.map((row) => row.handlingJobId));
     const inFlight = new Map((handlingJobIds.length > 0
       ? await this.prisma.projectIntegrationJob.findMany({
-          where: { id: { in: handlingJobIds }, state: { in: ['QUEUED', 'RUNNING'] } },
+          where: { id: { in: handlingJobIds }, state: { in: [...IN_FLIGHT_JOB_STATES] } },
           select: { id: true, kind: true, generation: true, state: true },
         })
       : []).map((job) => [job.id, job]));
@@ -4022,7 +4112,11 @@ export class ProjectOpenItemService {
     const deliveredAt = new Map(
       turns.map((turn) => [`${turn.sessionId}:${turn.clientTurnId}`, turn.deliveredAt]),
     );
-    const mainBranch = mainBranchOf(await readProjectCodebase(this.prisma, projectId));
+    const codebase = await readProjectCodebase(this.prisma, projectId);
+    const mainBranch = mainBranchOf(codebase);
+    // Read now rather than filed with the request: the binding's own branch, once it has one, or the
+    // name the project's title gives it today — what a start with no branch named would choose.
+    const defaultProjectBranchName = defaultProjectBranchOf(codebase, project);
     // The owner's language, read only when a question's card is translated: its detail line is served
     // translated too, in that language alone.
     const langs = rows.some((row) => row.kind === 'COORDINATOR_QUESTION' && row.translation)
@@ -4035,8 +4129,8 @@ export class ProjectOpenItemService {
       const question = row.kind === 'COORDINATOR_QUESTION'
         ? (row.payload as unknown as CoordinatorQuestion)
         : null;
-      const startRequest = row.kind === START_REQUEST_KIND
-        ? (row.payload as unknown as ProjectStartRequest)
+      const startRequest: ProjectStartRequest | null = row.kind === START_REQUEST_KIND
+        ? { ...(row.payload as unknown as ProjectStartRequest), defaultProjectBranchName }
         : null;
       const doneRequest = row.kind === DONE_REQUEST_KIND
         ? (row.payload as unknown as DoneRequest)
@@ -4049,7 +4143,7 @@ export class ProjectOpenItemService {
         detailLine: question
           ? questionDetailLine(question)
           : startRequest
-            ? startRequestDetailLine(projectId, startRequest)
+            ? startRequestDetailLine(startRequest, defaultProjectBranchName)
             : doneRequest
               ? doneRequestDetailLine(doneRequest)
               : detailLine(row.kind, row.payload),
@@ -4244,6 +4338,7 @@ export class ProjectOpenItemService {
       closedQuestions: await this.closedQuestions(projectId),
       mainBranch,
       signIns: await this.signInWaits(ownerId, projectId),
+      accountWait: await this.accountWait(ownerId, projectId),
     };
   }
 
@@ -4362,7 +4457,7 @@ export class ProjectOpenItemService {
            SELECT 1
              FROM "project_integration_job" handling
             WHERE handling."id" = item."handling_job_id"
-              AND handling."state" IN ('QUEUED', 'RUNNING')
+              AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
          )`);
     if ((owed?.count ?? 0) === 0) throw new OpenItemNoLongerOwed();
     // One row per item per conversation. A row that was taken back unrun is re-armed rather than

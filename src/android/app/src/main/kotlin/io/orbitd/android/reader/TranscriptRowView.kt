@@ -1,5 +1,7 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.core.drive.DriveChatLogic
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -314,7 +316,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 UserTranslationFoot(turn, flipped, { shownOriginals?.toggle(translationKey) ?: Unit },
                     retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
                     sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null,
-                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = shownOriginals?.let { { it.toggle(hiddenKey) } })
+                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = shownOriginals?.let { { it.toggle(hiddenKey) } },
+                    cancel = cancelHeldMessage(doors, shown))
             } }
             // A delivered translation's press ends the copy/time line; any other state of it is a line of its own under it (iOS `meta`).
             val delivered = turnTranslation?.state == Translation.TurnState.DONE
@@ -324,6 +327,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 if (title != ExternalSender.you) UserTurnSender(title)
                 UserTurnAttachments(atts.filter { it.third }.map { it.first to it.second }, atts.filterNot { it.third }.map { it.first to it.second }, open)
                 if (words.isNotBlank()) UserWordsBubble(words, BilingualShown.userEnglish(shown.personWords(), turnTranslation, showsBoth), open)
+                // A Drive chat's message: the folder and selection delivery told its agent of (board drive-chat 02 ⑪).
+                DriveChatLogic.noteLabel(shown.fields.string("controlPlaneNote"))?.let { OrbitAttachedLine(it) }
                 if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
                 if (words.isNotBlank() || time != null || (delivered && foot != null)) UserTurnMetaLine(lead = {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -478,7 +483,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 UserTranslationFoot(turn, flipped, toggle,
                     retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
                     sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null,
-                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = hide)
+                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = hide, cancel = cancelHeldMessage(doors, shown))
             }
             if (event.type == "assistant") ReplyTranslationFoot(replyTranslation, pendingReply, flipped, toggle,
                 retry = if (doors != null && event.seq > 0) ({ doors.translationAction("events/${event.seq}/translation/retry") }) else null,

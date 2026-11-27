@@ -22,6 +22,7 @@ class SessionListCopyParityTest {
             SessionListCopy.FILTER_BY_TAG to agents, SessionListCopy.GROUP_BY_TAG to agents, SessionListCopy.ALL_TAGS to agents,
             SessionListCopy.SETTINGS to agents, SessionListCopy.LOADING to agents, SessionListCopy.UNTAGGED to agents,
             SessionListCopy.PINNED_SHOWS to agents, SessionListCopy.PINNED_HIDES to agents, SessionListCopy.WORKSPACES_FAILED to agents,
+            SessionListCopy.NEEDS_YOU_SHOWS to agents, SessionListCopy.NEEDS_YOU_HIDES to agents,
             SessionListCopy.REQUEST_FAILED to agents, SessionListCopy.RETRY to agents,
             SessionListCopy.SESSION_EXPIRED to app("AgentsModel.swift"),
             SessionListCopy.UNREACHABLE to shell, SessionListCopy.UNREACHABLE_DETAIL to shell,

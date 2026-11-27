@@ -535,6 +535,8 @@ function cardShape(card: Element, slot: string): string {
   copy.querySelectorAll(slot).forEach((el) => el.remove());
   for (const el of [copy, ...copy.querySelectorAll('*')]) {
     el.removeAttribute('data-seq');
+    // A tooltip trigger's generated id differs between the two drawings; it is not part of the card's shape.
+    if (el.id.startsWith('base-ui-')) el.removeAttribute('id');
     el.classList.remove('is-queued', 'chat-queued');
   }
   return copy.outerHTML;

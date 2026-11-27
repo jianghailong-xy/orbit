@@ -250,17 +250,14 @@ final class SessionMoveWiringTests: XCTestCase {
 
     // MARK: the panel
 
-    /// A native sheet in the workspace switcher's shape: its own navigation stack, Move over the
-    /// session's title, Done at the top right, medium and large detents. One group — the folders of
-    /// the session's workspace — whose rows file the session and close the panel.
-    func testTheMovePanelIsANativeSheetLikeTheWorkspaceSwitcher() throws {
+    /// A native sheet: its own navigation stack, Move over the session's title, Done at the top right,
+    /// medium and large detents. One group — the folders of the session's workspace — whose rows file
+    /// the session and close the panel.
+    func testTheMovePanelIsANativeSheet() throws {
         let sheet = code(try appSource("Views/SessionMoveSheet.swift"))
-        let switcher = code(try slice(try appSource("Views/AgentIdentity.swift"),
-                                      from: "struct AgentSwitchSheet: View {", to: "\n}\n"))
         for part in ["NavigationStack {", ".navigationBarTitleDisplayMode(.inline)",
                      ".presentationDetents([.medium, .large])"] {
             XCTAssertTrue(sheet.contains(part), "the panel has `\(part)`")
-            XCTAssertTrue(switcher.contains(part), "as the workspace switcher does")
         }
         // Done at the top right on iOS, and the default button of the Mac's sheet.
         XCTAssertTrue(sheet.contains("ToolbarItem(placement: .confirmationAction) {"))

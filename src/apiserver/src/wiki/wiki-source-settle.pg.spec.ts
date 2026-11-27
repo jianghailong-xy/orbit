@@ -40,13 +40,14 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { hashPassword } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
@@ -143,9 +144,9 @@ test('a source is settled where its op is: a redacted quote applies, a call not 
   const running = async (sessionId: string) => {
     await sql.query('BEGIN');
     await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
-    await sql.query(`UPDATE "session" SET "status" = 'RUNNING', "run_claimed_at" = now() WHERE "id" = $1::uuid`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = 'IN_FLIGHT', "run_claimed_at" = now() WHERE "id" = $1::uuid`, [sessionId]);
     await sql.query('COMMIT');
-    assert.equal((await sql.query(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status, 'RUNNING');
+    assert.equal((await sql.query(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status, 'RUNNING');
     return sessionId;
   };
   /** A chat, its turn running unless `between` says it waits between turns. */
@@ -639,5 +640,46 @@ test('a source is settled where its op is: a redacted quote applies, a call not 
       refusedAtOnce(await propose(sessionId, cite(`Leases, idle ${what}`, `toolu_result_idle_${what}_${RUN}`, LEASE_QUOTE), `result-idle-${what}`),
         'WIKI_QUOTE_NOT_FOUND', `a ${what} session with no turn running`);
     }
+  });
+
+  // ── 6 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('6. a call that reads the wiki is no source: as a tool_call, as its tool_use or tool_result event, or a Bash `orbit wiki read`; any other call resolves', async () => {
+    await setMode('manual');
+    const plain = await ordinarySession();
+    const READ_WORDS = 'the wiki says leases last 90 seconds';
+    /** A call stored with its two events, as ingestion leaves one. */
+    const stored = async (name: string, input: Prisma.InputJsonObject, id: string) => {
+      const toolUseId = `toolu_${id}_${RUN}`;
+      const seq = Number((await sql.query(`SELECT COALESCE(MAX("seq"), 0)::int + 1 AS n FROM "run_event" WHERE "session_id" = $1::uuid`, [plain])).rows[0].n);
+      const use = await prisma.runEvent.create({ data: { sessionId: plain, seq, type: 'tool_use', payload: { id: toolUseId, name, input } }, select: { id: true } });
+      const result = await prisma.runEvent.create({ data: { sessionId: plain, seq: seq + 1, type: 'tool_result', payload: { toolUseId, content: READ_WORDS, isError: false } }, select: { id: true } });
+      const callRow = await prisma.toolCall.create({ data: { sessionId: plain, name, toolUseId, input, output: READ_WORDS, isError: false, finishedAt: new Date() }, select: { id: true } });
+      return { toolUseId, use: use.id, result: result.id, row: callRow.id };
+    };
+    const before = await writes();
+    for (const [name, input, id] of [
+      ['mcp__orbit__wiki_get', { ids: ['34abc'] }, 'rd_get'],
+      ['mcp__orbit__wiki_search', { query: 'lease' }, 'rd_search'],
+      ['mcp__orbit__wiki_read', { id: '34abc' }, 'rd_read'],
+      ['Bash', { command: 'orbit wiki read 34abc' }, 'rd_cli'],
+    ] as const) {
+      const call = await stored(name, input, id);
+      for (const [what, source] of [
+        ['tool_call by its tool_use_id', { kind: 'tool_call', ref: call.toolUseId, quote: READ_WORDS }],
+        ['tool_call by its row', { kind: 'tool_call', ref: call.row, quote: READ_WORDS }],
+        ['its tool_use event', { kind: 'event', ref: call.use }],
+        ['its tool_result event', { kind: 'event', ref: call.result }],
+      ] as const) {
+        refusedAtOnce(await propose(plain, [add(`Leases, from ${name} ${what}`, [source])], `${id}-${what}`.replace(/\W/gu, '-')),
+          'WIKI_SOURCE_UNRESOLVED', `${name}: ${what}`);
+      }
+    }
+    assert.deepEqual(await writes(), before, 'nothing written');
+
+    // A call of any other tool still resolves, and a card cites it.
+    const fine = await stored('Bash', { command: 'cat lease.conf' }, 'fine_cat');
+    const ok = await propose(plain, [add('Leases, from a file', [{ kind: 'tool_call', ref: fine.toolUseId, quote: READ_WORDS }])], 'fine-cat');
+    assert.equal(ok.status, 200, `a non-wiki call resolves: ${ok.text}`);
+    assert.equal(ok.json.ops[0].status, 'pending', 'and waits for the owner as ever');
   });
 });

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { SessionsService } from './sessions.service';
 import { importForkSessionId } from './import-fork';
+import { writtenWord } from '../test-support/session-word';
 
 /**
  * `SessionsService.importSession` — the control-plane half of `orbit session import`.
@@ -226,7 +227,7 @@ test('the created row is PENDING, resume-shaped, and marked for import', async (
   assert.equal(row.runtimeSessionId, CLAUDE_ID, 'the Claude id is what the runner resumes');
   assert.equal(row.importSourceCwd, '/srv/work');
   assert.equal(row.prompt, '');
-  assert.equal(row.status, 'PENDING');
+  assert.equal(writtenWord(row), 'PENDING');
   assert.equal(row.provider, 'claude');
   assert.equal(row.providerBuiltin, true);
   // No turn has run here and none can until the first message, so the count stays honest; the

@@ -10,11 +10,11 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import type { IntegrationCheckResult } from '@orbit/shared';
@@ -211,7 +211,7 @@ async function world(stack: Stack, label: string): Promise<World> {
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -315,7 +315,7 @@ async function workSession(stack: Stack, w: World, taskId: string, branch: strin
       title: `ran ${branch}`,
       prompt: 'do the work',
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+      turnState: null, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -971,7 +971,7 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
           title: 'attempting it again',
           prompt: 'do the work',
           provider: 'claude',
-          status: RunStatus.RUNNING,
+          turnState: 'IN_FLIGHT',
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           startedAt: new Date(),
@@ -992,7 +992,7 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
           title: 'the attempt that failed',
           prompt: 'do the work',
           provider: 'claude',
-          status: RunStatus.FAILED, 
+          turnState: null, 
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           startedAt: new Date(Date.now() - 180_000),
@@ -1008,7 +1008,7 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
       });
       await stack.db.session.update({
         where: { id: resumedFailure.id },
-        data: { status: RunStatus.PENDING, finishedAt: null},
+        data: { turnState: 'QUEUED', finishedAt: null},
       });
       await stack.db.conversationTurn.create({
         data: {
@@ -1035,7 +1035,7 @@ test('(6) the backstop writes the ending the task’s own edge would have writte
           title: 'the attempt that is still running',
           prompt: 'do the work',
           provider: 'claude',
-          status: RunStatus.RUNNING,
+          turnState: 'IN_FLIGHT',
           dispatchOrigin: SessionDispatchOrigin.USER,
           startsTaskWork: true,
           startedAt: new Date(Date.now() - 180_000),

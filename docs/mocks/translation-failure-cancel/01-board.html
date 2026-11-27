@@ -1,0 +1,77 @@
+<!doctype html><meta charset="utf-8"><style>
+body{margin:0;background:#eef0f3;font-family:Inter,'Noto Sans SC',sans-serif;color:#1d1d1f}
+.board{padding:28px 32px;width:1500px;background:#eef0f3}
+h1{font-size:22px;margin:0 0 6px}.sub{font-size:14px;color:#555;margin-bottom:22px;line-height:1.6}
+.row{display:flex;gap:22px;margin-bottom:24px;align-items:flex-start}
+.cap{font-size:15px;font-weight:600;margin:0 0 4px}.rec{background:#2f7d4f;color:#fff;font-size:12px;border-radius:5px;padding:2px 7px;margin-left:6px}
+.note{font-size:13px;color:#555;margin:0 0 10px;line-height:1.55;min-height:40px}
+.pane{background:#fff;border-radius:14px;padding:18px 20px 14px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.desk{width:560px}.ph{width:353px;border-radius:24px}
+.u{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.ub{background:#edf2ff;border:1.5px dashed #b9c8ee;border-radius:14px;padding:12px 16px;font-size:17px;max-width:75%}
+.ub.ok{border:0;background:#e0e6fa}
+.quote{background:#f2f2f4;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#444;margin-bottom:10px;line-height:1.45}
+.quote b{font-weight:500;color:#777}
+.f{font-size:12.5px;color:#c0392b;text-align:right;line-height:1.5}
+.f a{text-decoration:underline;color:#c0392b;white-space:nowrap}.f .d{color:#aaa;margin:0 4px}
+.f a.new{outline:2px solid #e0533d;outline-offset:2px;border-radius:2px}
+.comp{margin-top:16px;border:1px solid #d8d8dc;border-radius:12px;padding:10px 12px;font-size:15px;min-height:42px;color:#1d1d1f;position:relative}
+.comp .ph2{color:#aaa}.comp .tag{position:absolute;right:10px;bottom:8px;font-size:11px;color:#888}
+.caret{display:inline-block;width:1.5px;height:17px;background:#3366ff;vertical-align:-3px;margin-left:1px}
+.toast{margin-top:10px;font-size:12px;color:#777}
+.w{font-size:13px;color:#999;margin-top:12px}
+table{border-collapse:collapse;font-size:13px;background:#fff;border-radius:10px;overflow:hidden;width:100%}
+td,th{padding:7px 12px;border-bottom:1px solid #eee;text-align:left;vertical-align:top;line-height:1.5}th{background:#f6f6f8;font-weight:600}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#f3f3f5;padding:1px 4px;border-radius:4px}
+.box{width:700px}
+</style>
+<div class="board">
+<h1>翻译失败的消息：加「Cancel」（Web / macOS·iOS / Android 同一改法）</h1>
+<div class="sub">今天翻译失败、没发出去的消息只有 Retry 和 Send as written 两条出路：不想发了就没法撤，消息一直挂在对话里。<br>
+产品上它本来就是“还没交给 Agent 的、我自己的话”，和排队中的消息、刚发还没被 runner 取走的消息是一回事——那两处已经有 <b>Cancel</b>，按了以后话回到输入框，可以改了再发。所以这里用同一个词、同一个行为，不发明新概念。界面文字英文，标注中文；手绘，颜色取自 <code>.chat-translate-foot.is-error</code>。</div>
+
+<div class="row">
+ <div><div class="cap">① 今天</div><div class="note">只能重试或原文发送，没有“算了不发”。</div>
+  <div class="pane desk"><div class="u"><div class="ub"><div class="quote"><b>回复 孙嘉琪：</b>@姜海龙's Feishu CLI 没有13号之后的数据，看看呢<br>收到。这个群的历史我读不到……所以麻烦你补两句：</div>查下这个问题</div>
+  <div class="f">Couldn't translate, so it wasn't sent<span class="d">·</span><a>Retry</a><span class="d">·</span><a>Send as written</a></div></div>
+  <div class="comp"><span class="ph2">Message the agent…</span><span class="tag">Chinese → English</span></div></div></div>
+
+ <div><div class="cap">② 建议：末尾加 Cancel<span class="rec">建议</span></div><div class="note">Cancel 排在最后：前两个是“发出去”，它是“不发”。红框为新增。</div>
+  <div class="pane desk"><div class="u"><div class="ub"><div class="quote"><b>回复 孙嘉琪：</b>@姜海龙's Feishu CLI 没有13号之后的数据，看看呢<br>收到。这个群的历史我读不到……所以麻烦你补两句：</div>查下这个问题</div>
+  <div class="f">Couldn't translate, so it wasn't sent<span class="d">·</span><a>Retry</a><span class="d">·</span><a>Send as written</a><span class="d">·</span><a class="new">Cancel</a></div></div>
+  <div class="comp"><span class="ph2">Message the agent…</span><span class="tag">Chinese → English</span></div></div></div>
+</div>
+
+<div class="row">
+ <div><div class="cap">③ 按了 Cancel 之后</div><div class="note">消息从对话里消失（服务器撤回这条 turn）；回到输入框的是我写的原话（不是译文），图片附件一起回来。输入框里本来有草稿时，原话接在草稿下面，草稿不丢。</div>
+  <div class="pane desk"><div class="w" style="margin-top:0;text-align:center">（上一条 Agent 回复）</div>
+  <div class="comp">查下这个问题<span class="caret"></span><span class="tag">Chinese → English</span></div></div></div>
+
+ <div><div class="cap">④ 手机（iPhone / Android，宽 393）</div><div class="note">放不下一行时原因句整句在上，三个按钮一起换到下一行（今天的折行规则不变，只是多一个按钮）。</div>
+  <div class="pane ph"><div class="u"><div class="ub ok" style="border:1.5px dashed #b9c8ee;background:#edf2ff">再跑一遍全部测试</div>
+  <div class="f" style="max-width:300px">The translator didn't answer in time, so it wasn't sent<br><span class="d">·</span><a>Retry</a><span class="d">·</span><a>Send as written</a><span class="d">·</span><a class="new">Cancel</a></div></div></div></div>
+
+ <div><div class="cap">⑤ 会话的第一条消息：没有 Cancel</div><div class="note">开会话那条是会话的 prompt，服务器不让撤（撤了会话就没内容），所以不画一个必然失败的按钮。</div>
+  <div class="pane ph"><div class="u"><div class="ub ok" style="border:1.5px dashed #b9c8ee;background:#edf2ff">帮我把登录页的跳转修一下</div>
+  <div class="f" style="max-width:300px">Couldn't translate, so it wasn't sent<br><span class="d">·</span><a>Retry</a><span class="d">·</span><a>Send as written</a></div></div></div></div>
+</div>
+
+<div class="row">
+ <div class="box"><div class="cap">规则</div><table>
+ <tr><th>情况</th><th>结果</th></tr>
+ <tr><td>按 Cancel</td><td><code>DELETE /sessions/:id/turns/:turnId</code>（已有接口，排队消息的撤回也走它）→ 消息消失，原话 + 附件回输入框</td></tr>
+ <tr><td>撤回失败（已被处理 / 网络）</td><td>消息留着，提示 “Couldn't cancel the message”</td></tr>
+ <tr><td>会话第一条消息</td><td>不显示 Cancel</td></tr>
+ <tr><td>Translating… / 已送达 / Send as written 之后</td><td>不变，没有这条失败行</td></tr>
+ <tr><td>不弹确认</td><td>话回到输入框，误按可以直接再发，不丢东西</td></tr>
+ </table></div>
+ <div class="box" style="width:740px"><div class="cap">改动的文件 · 待你定</div><table>
+ <tr><th>端</th><th>文件</th></tr>
+ <tr><td>Web</td><td><code>TranslationParts.tsx</code>（失败行）、<code>WorkspaceView.tsx</code>（撤回 + 回填）、<code>lib/translation.ts</code>（文案）</td></tr>
+ <tr><td>macOS / iOS</td><td>OrbitKit <code>Translation.swift</code> 文案 + 失败行视图 + 撤回接线</td></tr>
+ <tr><td>Android</td><td><code>TranslationViews.kt</code>、<code>QueuedTail.kt</code>、<code>TranscriptRowView.kt</code></td></tr>
+ <tr><th colspan="2">待你定</th></tr>
+ <tr><td>词</td><td>用 <b>Cancel</b>（和排队消息一致，建议）；另一个选择是 <b>Edit</b>，更直说“回到输入框改”，但和别处的 Cancel 不一致</td></tr>
+ </table></div>
+</div>
+</div>

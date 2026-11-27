@@ -24,7 +24,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { HttpException } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -36,6 +37,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -117,7 +119,7 @@ test('the batch takeover answers each row as the single takeover does, and takes
       data: {
         id, ownerId: of.ownerId, creatorId: of.ownerId, workspaceId: of.workspaceId,
         assignedRunnerId: opts.runnerId ?? of.runnerId, title: 'batch takeover', prompt: 'hi', provider: 'claude',
-        status: opts.status ?? RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
+        turnState: turnStateOfWord(opts.status ?? RunStatus.RUNNING), dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(),
         ...(opts.status === RunStatus.SUCCEEDED || opts.status === RunStatus.FAILED
           ? { finishedAt: new Date()}
           : opts.status === RunStatus.CANCELLED ? { finishedAt: new Date()} : {}),

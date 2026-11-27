@@ -1,5 +1,5 @@
 /**
- * Two owner routes of the Files page (docs/orbit-files-drive-technical-design.md §3.5, §4.1; board 02-web frame 6, D12),
+ * Two owner routes of the Files page (docs/drive-technical-design.md §3.5, §4.1; board 02-web frame 6, D12),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, with chunks on a files directory of this run's:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-restore-item-download.pg.spec.ts
@@ -46,12 +46,16 @@ import { DRIVE_DOWNLOAD_LINK_NOT_FOUND, DriveDownloadLinks } from './drive-downl
 import { DriveUploadsService } from './drive-uploads.service';
 import { DriveController, DriveDownloadController } from './drive.controller';
 import { DriveService, OWNER_WRITER } from './drive.service';
+import { DriveSyncsService } from './drive-syncs.service';
+
+// Drive is off unless switched on (drive-switch.ts); this harness mounts its controller, so it switches it on.
+process.env.ORBIT_DRIVE_ENABLED = 'true';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
-test('Orbit Files drive: restore one item out of Trash, and the minted download URL', { skip: !URL, concurrency: 1, timeout: 600_000 }, async (t) => {
+test('Documents drive: restore one item out of Trash, and the minted download URL', { skip: !URL, concurrency: 1, timeout: 600_000 }, async (t) => {
   const url = URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
@@ -78,7 +82,7 @@ test('Orbit Files drive: restore one item out of Trash, and the minted download 
       { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: `secret-${RUN}` }) },
       { provide: PrismaService, useValue: db },
       { provide: FilesService, useValue: files },
-      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks,
+      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks, DriveSyncsService,
     ],
   })
   class DriveHarness {}
@@ -98,7 +102,7 @@ test('Orbit Files drive: restore one item out of Trash, and the minted download 
 
   const call = (who: string, method: string, route: string, body?: unknown) => {
     caller = who;
-    return fetch(`${origin}/api/drive${route}`, {
+    return fetch(`${origin}/api/documents${route}`, {
       method,
       headers: { authorization: 'Bearer signed-in', ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -254,7 +258,7 @@ test('Orbit Files drive: restore one item out of Trash, and the minted download 
     const forged = link.path.slice(0, -4) + (link.path.endsWith('AAAA') ? 'BBBB' : 'AAAA');
     const answers = [];
     answers.push(await open(forged));
-    answers.push(await open('/api/drive/dl/not-a-token'));
+    answers.push(await open('/api/documents/dl/not-a-token'));
     // Minted ten minutes ago: expired five minutes later.
     const realNow = Date.now;
     Date.now = () => realNow() - 10 * 60_000;

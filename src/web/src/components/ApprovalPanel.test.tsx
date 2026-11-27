@@ -1128,10 +1128,13 @@ describe('one waiting completion decision on the session page', () => {
       if (path === `/projects/${PROJECT_ID}`) return reply({ id: PROJECT_ID, acceptanceCriteriaItems: [] });
       if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
       if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
+      if (path === '/auth/capabilities') return reply({ managedRunners: { enabled: false }, documents: { enabled: true } });
       if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/watches?following=true' || path === '/wiki/spaces') return reply([]);
       // The session list's Needs you row reads the terminals asking to be approved: none here.
       if (path === '/terminals/requests') return reply({ requests: [] });
       if (path.startsWith('/owner-requests')) return reply({ requests: [] });
+      // The managed-runner gate reads what the server offers: none here.
+      if (path === '/auth/capabilities') return reply({ managedRunners: { enabled: false } });
       unstubbed.push(path);
       return reply([]);
     });
@@ -1282,5 +1285,7 @@ it('shows and remembers the complete command for a check-only scheduled approval
   const approval = { id: 'exact-card', toolName: 'Bash', input: { command, orbitScheduleCheckOnly: true }, status: 'PENDING' } as ApprovalInfo;
   expect(rememberRulesFor(approval)).toEqual([{ toolName: 'Bash', ruleContent: command }]);
   expect(render(approval)).toContain('print(open(&#x27;watched.txt&#x27;).read())');
-  expect(rememberRulesFor({ ...approval, input: { command } })).toEqual([{ toolName: 'Bash', ruleContent: 'python3:*' }]);
+  // An ordinary card remembers prefixes, and none for an interpreter: python3:* would cover every script.
+  expect(rememberRulesFor({ ...approval, input: { command: 'psql -c "select 1" db' } })).toEqual([{ toolName: 'Bash', ruleContent: 'psql:*' }]);
+  expect(rememberRulesFor({ ...approval, input: { command } })).toEqual([]);
 });

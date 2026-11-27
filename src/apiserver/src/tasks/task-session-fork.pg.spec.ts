@@ -141,8 +141,8 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     );
     await admin.query(
       `INSERT INTO "session" ("id","owner_id","workspace_id","assigned_runner_id","title","prompt","creator_id",
-         "provider","status","dispatch_origin","updated_at")
-       VALUES ($1,$2,$3,$4,'Refactor the claim path','fixture',$2,'claude','RUNNING'::"run_status",
+         "provider","turn_state","dispatch_origin","updated_at")
+       VALUES ($1,$2,$3,$4,'Refactor the claim path','fixture',$2,'claude','IN_FLIGHT',
          'USER'::"session_dispatch_origin",now())`,
       [w.forkingSessionId, w.ownerId, w.workspaceA, w.runnerA],
     );
@@ -246,7 +246,7 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     // The attempt fails and the task is retried, carrying a known-good commit of its own. SR12: the
     // retry starts from the same snapshot — PF reads the task's create-time columns, not the attempt.
     await admin.query(
-      `UPDATE "session" SET "status" = 'FAILED', "finished_at" = now() WHERE "id" = $1`,
+      `UPDATE "session" SET "turn_state" = NULL, "finished_at" = now() WHERE "id" = $1`,
       [first.id],
     );
     await admin.query(
@@ -368,8 +368,8 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
 
     // A runner too old for codeless-checkout/v1 is handed the branch up front, so its run is still isolated.
     await admin.query(`UPDATE "runner" SET "capabilities" = '{}' WHERE "id" = $1`, [w.runnerA]);
-    await admin.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()) WHERE "id" IN ($1, $2)`, [run.id, ordinaryRun.id]);
-    await admin.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = COALESCE("finished_at", now()) WHERE "task_id" = $1`, [forkedCodeless.id]);
+    await admin.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()) WHERE "id" IN ($1, $2)`, [run.id, ordinaryRun.id]);
+    await admin.query(`UPDATE "session" SET "turn_state" = NULL, "finished_at" = COALESCE("finished_at", now()) WHERE "task_id" = $1`, [forkedCodeless.id]);
     const older = await startRun(w, (await createForked(w, { title: 'Write more notes', fork: undefined, codeless: true }) as { id: string }).id);
     const oldClaim = await queue.claimSessionForRunner({ id: w.runnerA } as never);
     assert.equal(oldClaim?.sessionId, older.id);
@@ -563,8 +563,8 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     const other = randomUUID();
     await admin.query(
       `INSERT INTO "session" ("id","owner_id","workspace_id","assigned_runner_id","title","prompt","creator_id",
-         "provider","status","dispatch_origin","updated_at")
-       VALUES ($1,$2,$3,$4,'someone else','fixture',$2,'claude','RUNNING'::"run_status",
+         "provider","turn_state","dispatch_origin","updated_at")
+       VALUES ($1,$2,$3,$4,'someone else','fixture',$2,'claude','IN_FLIGHT',
          'USER'::"session_dispatch_origin",now())`,
       [other, w.ownerId, w.workspaceA, w.runnerA],
     );

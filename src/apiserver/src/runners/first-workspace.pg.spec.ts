@@ -41,6 +41,7 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { hashPassword, sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/daemon-routes-over-http';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
@@ -253,7 +254,7 @@ test('a machine with no workspace gets its first one from the conversation', {
   const sessionRow = async (id: string) =>
     (await sql.query(
       `SELECT "workspace_id"::text AS "workspaceId", "assigned_runner_id"::text AS "runnerId", "created_workspace" AS "createdWorkspace",
-              "prompt", "status"
+              "prompt", ${wordSql()} AS status
          FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0];
   const turnsOf = async (sessionId: string) =>
     (await sql.query(`SELECT "kind", "client_turn_id" AS "clientTurnId", "content" FROM "conversation_turn" WHERE "session_id" = $1::uuid`,

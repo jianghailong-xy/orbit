@@ -74,7 +74,10 @@ agents use:
 - The tab is brought to the front, so the owner's browser tab shows it. Once the machine is signed in, the runner
   closes that tab, and only that one (by the target id Chrome gave it), giving Chrome a blank tab first when it was the
   last, since Chrome quits with its last tab (owner, 2026-11-23). A sign-in that failed or was cancelled keeps its tab,
-  for what the page said. The vendor's login stays in the profile either way.
+  for what the page said, and the browser does not stop for idleness while that tab is open (owner, 2026-11-24): an
+  idle stop would take the tab with it, as Chrome starts again with none. The hold ends when the owner closes the tab
+  (the runner looks every 30 s), when a later engine sign-in succeeds, or when the browser stops or Chrome restarts
+  for another reason. The vendor's login stays in the profile either way.
 - The owner's viewer tab of the runner's browser, when the sign-in card opened it (**In the runner's browser**, **Show
   the browser**), closes too once the card says **Signed in**. A page can close only windows it opened, so a viewer
   opened elsewhere, or before the Orbit page was reloaded, stays.

@@ -24,8 +24,8 @@ import { test } from 'node:test';
 
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
-import { PermissionMode } from '@orbit/shared';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { PermissionMode, RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import type { AuthUser } from '../common/current-user.decorator';
@@ -282,7 +282,7 @@ async function account(db: PrismaClient, label: string): Promise<Account> {
       title: SESSION_TITLE,
       prompt: SESSION_TITLE,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
     },

@@ -49,11 +49,37 @@ type driveWriter struct {
 	SessionID string `json:"sessionId,omitempty"`
 }
 
+// driveLink is a Drive file's link for a reply. Transcripts written while Drive was called Drive carry
+// orbit-document:<id>, which every client still reads.
 func driveLink(id string) string { return "orbit-drive:" + id }
 
-// driveMountRelative recognizes the three spellings of a mounted drive path.
+// driveToolAliases are the Drive tools' names while Drive was called Drive. They are still served, so an engine, a
+// saved prompt or a schedule that calls documents_put keeps working, and never listed.
+var driveToolAliases = map[string]string{
+	"documents_put":    "drive_put",
+	"documents_get":    "drive_get",
+	"documents_list":   "drive_list",
+	"documents_move":   "drive_move",
+	"documents_delete": "drive_delete",
+	"documents_sync":   "drive_sync",
+}
+
+// canonicalToolName is the name a call is served under: a Drive tool's Drive name is its Drive one.
+func canonicalToolName(name string) string {
+	if current, ok := driveToolAliases[name]; ok {
+		return current
+	}
+	return name
+}
+
+// driveMountRelative recognizes the spellings of a mounted drive path: ~/Drive, /home/orbit/Drive and the mount; ~/Documents and ~/Files are
+// ordinary local paths. Every root's drive/ is the drive whichever one this Pod has.
 func driveMountRelative(p string) (string, bool) {
-	for _, root := range []string{"~/Files", driveHomePath, driveMountPath} {
+	roots := []string{"~/Drive", driveHomePath, driveMountPath, driveRootPath + "/drive"}
+	for _, legacy := range driveLegacyRootPaths {
+		roots = append(roots, legacy+"/drive")
+	}
+	for _, root := range roots {
 		if p == root || strings.HasPrefix(p, root+"/") {
 			return strings.TrimPrefix(p, root), true
 		}
@@ -73,7 +99,19 @@ func normalizeDrivePath(p string) (string, error) {
 
 func (s *mcpServer) callDriveTool(name string, args map[string]interface{}) (map[string]interface{}, bool) {
 	switch name {
+	case "drive_sync":
+		if s.documentsOff {
+			return toolResult(documentsOffMessage(name), true), true
+		}
+		raw, err := startDriveSyncJob(s.t, strings.TrimSpace(s.sessionID), getString(args, "localPath"), getString(args, "path"), getBool(args, "delete"))
+		if err != nil {
+			return toolResult(err.Error(), true), true
+		}
+		return toolResult(prettyJSON(raw), false), true
 	case "drive_put", "drive_get", "drive_list", "drive_move", "drive_delete":
+		if s.documentsOff {
+			return toolResult(documentsOffMessage(name), true), true
+		}
 		progress := sessionDriveProgress(name, s.callToolUseID)
 		raw, err := runDriveTool(s.t, fileToolContext{sessionID: strings.TrimSpace(s.sessionID), callTimeout: s.callTimeout, progress: progress}, name, args)
 		progress.close()
@@ -153,6 +191,9 @@ func runDriveTool(t *Transport, tool fileToolContext, name string, args map[stri
 }
 
 func driveToolError(name string, err error) error {
+	if documentsDisabledByServer(err) {
+		return errors.New(documentsOffMessage(name))
+	}
 	if failure := driveDoorFailure(err); failure.Message != "" {
 		return fmt.Errorf("%s: %s", name, failure.Message)
 	}
@@ -196,18 +237,35 @@ func putDriveFile(ctx context.Context, t *Transport, tool fileToolContext, local
 	if tool.progress != nil {
 		tool.progress.setSize(info.Size())
 	}
-
-	handleID, err := randomUUID()
+	result, entryPath, err := sendDriveFile(ctx, t, file, p, writer, tool.progress)
 	if err != nil {
 		return nil, err
+	}
+	return struct {
+		ID         string `json:"id"`
+		Path       string `json:"path"`
+		Link       string `json:"link"`
+		SizeBytes  int64  `json:"sizeBytes"`
+		VersionID  string `json:"versionId"`
+		NewVersion bool   `json:"newVersion"`
+	}{result.EntryID, entryPath, driveLink(result.EntryID), result.SizeBytes, result.VersionID, result.NewVersion}, nil
+}
+
+// sendDriveFile writes an open local file to Drive path p, which drive_put and drive_sync share: the
+// folder made first, the file created or overwritten (the previous version kept), its 8 MiB chunks staged, one commit.
+// A non-nil progress counts the bytes as they go up. It answers the commit and the entry's Drive path.
+func sendDriveFile(ctx context.Context, t *Transport, file io.Reader, p string, writer driveWriter, progress *driveProgress) (driveCommitResult, string, error) {
+	handleID, err := randomUUID()
+	if err != nil {
+		return driveCommitResult{}, "", err
 	}
 	commitID, err := randomUUID()
 	if err != nil {
-		return nil, err
+		return driveCommitResult{}, "", err
 	}
 	if parent := path.Dir(p); parent != "/" {
 		if err := driveWrite(ctx, t, "/mkdir", map[string]interface{}{"path": parent, "parents": true, "writer": writer}, nil); err != nil {
-			return nil, err
+			return driveCommitResult{}, "", err
 		}
 	}
 	entry, err := driveStat(ctx, t, p)
@@ -217,14 +275,14 @@ func putDriveFile(ctx context.Context, t *Transport, tool fileToolContext, local
 		mode = "CONTINUE"
 	}
 	if err != nil {
-		return nil, err
+		return driveCommitResult{}, "", err
 	}
 	if entry.Kind == "FOLDER" {
-		return nil, fmt.Errorf("%s is a folder", p)
+		return driveCommitResult{}, "", fmt.Errorf("%s is a folder", p)
 	}
 	var staging struct{ ID string }
 	if err := driveWrite(ctx, t, "/stagings", map[string]interface{}{"entryId": entry.ID}, &staging); err != nil {
-		return nil, err
+		return driveCommitResult{}, "", err
 	}
 	chunks := []driveChunk{}
 	buf := make([]byte, driveChunkSize)
@@ -234,13 +292,13 @@ func putDriveFile(ctx context.Context, t *Transport, tool fileToolContext, local
 			break
 		}
 		if err != nil && err != io.ErrUnexpectedEOF {
-			return nil, err
+			return driveCommitResult{}, "", err
 		}
 		digest := sha256.Sum256(buf[:n])
 		chunk := driveChunk{Index: len(chunks), Size: n, SHA256: hex.EncodeToString(digest[:])}
 		route := fmt.Sprintf("/stagings/%s/chunks/%d", url.PathEscape(staging.ID), chunk.Index)
-		if _, err := t.driveChunkCall(ctx, http.MethodPut, route, buf[:n], chunk.SHA256, 0, tool.progress); err != nil {
-			return nil, err
+		if _, err := t.driveChunkCall(ctx, http.MethodPut, route, buf[:n], chunk.SHA256, 0, progress); err != nil {
+			return driveCommitResult{}, "", err
 		}
 		chunks = append(chunks, chunk)
 	}
@@ -253,16 +311,9 @@ func putDriveFile(ctx context.Context, t *Transport, tool fileToolContext, local
 	}
 	result, err := commitDriveFile(ctx, t, commitID, body)
 	if err != nil {
-		return nil, err
+		return driveCommitResult{}, "", err
 	}
-	return struct {
-		ID         string `json:"id"`
-		Path       string `json:"path"`
-		Link       string `json:"link"`
-		SizeBytes  int64  `json:"sizeBytes"`
-		VersionID  string `json:"versionId"`
-		NewVersion bool   `json:"newVersion"`
-	}{result.EntryID, entry.Path, driveLink(result.EntryID), result.SizeBytes, result.VersionID, result.NewVersion}, nil
+	return result, entry.Path, nil
 }
 
 func commitDriveFile(ctx context.Context, t *Transport, commitID string, body map[string]interface{}) (driveCommitResult, error) {

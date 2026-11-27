@@ -30,11 +30,11 @@ import {
   CreatorType,
   type Prisma,
   type PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, type OwnerAnswerCard } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -109,7 +109,7 @@ test('the turn telling a coordinator the owner’s answer carries an ownerAnswer
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         titleManagedByProject: true, ...data,
@@ -177,7 +177,7 @@ test('the turn telling a coordinator the owner’s answer carries an ownerAnswer
 
   /** What the runner's claim does to a queued conversation, then the polls that hand its next message out. */
   async function deliver(sessionId: string): Promise<{ turnId: string; content: string }> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await prisma.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     for (;;) {
       const handed = await (api as unknown as {
         dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<Record<string, unknown> | null>;

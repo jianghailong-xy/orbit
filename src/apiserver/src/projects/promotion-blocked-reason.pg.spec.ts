@@ -27,7 +27,8 @@ import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type {
   IntegrationCheckResult,
   IntegrationJobCommand,
@@ -200,7 +201,7 @@ test('a blocked candidate carries why it is blocked, as its job answered', {
       data: {
         ownerId, creatorId: ownerId, taskId: task.id, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
         title: 'the work', prompt: 'do the work', branch: `orbit/work-${task.id.slice(0, 8)}`,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, startsTaskWork: true,
+        isolationStatus: 'worktree', turnState: null, startsTaskWork: true,
         finishedAt: new Date(Date.now() - 60_000), worktreeBranch: `orbit/work-${task.id.slice(0, 8)}`,
         worktreeDirty: false, changedFiles: [{ path: 'src/the-work.ts' }] as never,
       },

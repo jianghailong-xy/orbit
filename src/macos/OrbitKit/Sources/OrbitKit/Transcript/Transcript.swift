@@ -306,9 +306,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// the English the engine got (or, while held, the same words). Nil on every message translation
     /// was not involved in.
     public var translation: TurnTranslation?
-    /// The session's opening prompt, while it is the accepted head no runner has echoed yet
-    /// (`QueuedTurnInfo.opening`). The server keeps it, so the held tag offers no Cancel under it
-    /// (`HeldCancel.offers`). False on every other message.
+    /// The session's opening prompt, while no runner has echoed it yet (`QueuedTurnInfo.opening`).
+    /// The server keeps it, so neither the held tag (`HeldCancel.offers`) nor a failed translation's
+    /// line (`SessionTranslation.offersCancel`) offers Cancel under it. False on every other message.
     public var opening: Bool = false
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
@@ -543,6 +543,8 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// `AssistantBubble.ts` is kept: a receipt arrives from a read rather than from the stream and
     /// is placed by comparing clocks.
     public var ts: String?
+    /// The runner's clock on the `tool_result`: with `ts`, how long a Drive transfer took (`DriveTransfer`).
+    public var resultTs: String?
 
     public init(id: String, name: String, input: JSONValue, result: String?,
                 resultImages: [Data] = [], resultHasImage: Bool = false, status: ToolStatus,
@@ -566,7 +568,8 @@ public struct ToolCard: Equatable, Sendable, Codable {
     // Tolerant decode so transcript snapshots written before `resultImages` existed still rehydrate
     // (the key just defaults to empty) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
-        case id, name, input, result, resultImages, resultHasImage, status, inputSeq, inputTruncated, resultSeq, resultTruncated, ts
+        case id, name, input, result, resultImages, resultHasImage, status, inputSeq, inputTruncated, resultSeq, resultTruncated, ts,
+             resultTs
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -584,6 +587,7 @@ public struct ToolCard: Equatable, Sendable, Codable {
         resultSeq = try? c.decodeIfPresent(Int.self, forKey: .resultSeq)
         resultTruncated = (try? c.decodeIfPresent(Bool.self, forKey: .resultTruncated)) ?? false
         ts = try? c.decodeIfPresent(String.self, forKey: .ts)
+        resultTs = try? c.decodeIfPresent(String.self, forKey: .resultTs)
     }
 }
 

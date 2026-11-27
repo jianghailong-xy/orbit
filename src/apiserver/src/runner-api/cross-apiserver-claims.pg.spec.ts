@@ -37,7 +37,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -47,6 +48,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RECAP_MIN_INTERVAL_MS } from '../sessions/recap';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -211,7 +213,7 @@ test('the recap window, the approval alert and the notification limit hold acros
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: label, prompt: 'fix the login flow',
-        provider: 'claude', status: opts.parked ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING, engineTurnActive: true,
+        provider: 'claude', turnState: turnStateOfWord(opts.parked ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING), engineTurnActive: true,
         dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(), runtimeSessionId: randomUUID(),
         ...(opts.recap ?? {}),
       },

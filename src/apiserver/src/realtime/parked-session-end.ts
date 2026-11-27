@@ -1,10 +1,11 @@
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
-import { SessionEndReason, SessionLifecycleState } from '@orbit/shared';
+import { Prisma, TaskStatus } from '@prisma/client';
+import { RunStatus, SessionEndReason, SessionLifecycleState } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 
 import { loggedRetry, withTransactionRetry, type RetryLogger } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
 import { hasPendingWakeSource } from '../sessions/session-request';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import type { RealtimeService } from './realtime.service';
 
 /**
@@ -38,7 +39,8 @@ export async function claimParkedSessionEnd(
   const claimed = await tx.session.updateMany({
     where: {
       id: sessionId,
-      status: RunStatus.AWAITING_INPUT,
+      // Parked: held, with no turn queued, in flight or abandoned.
+      ...turnStateFilter([null]),
       cancelRequestedAt: null,
       task: { status: taskStatus },
       ...(reason === SessionEndReason.TASK_DONE ? { deletedAt: null } : {}),
@@ -120,8 +122,8 @@ export function announceParkedSessionEnd(
  *
  * One transaction per session. The checks are plain reads ahead of the claim, and the claim is its
  * first lock (the session row, rank 30, as the reaper takes it): anything that gives a parked session
- * something to do — a message, a request, a resumed wakeup — queues a turn and moves the row out of
- * AWAITING_INPUT under that same lock, which the claim's own re-check reads. Best effort: a failure is
+ * something to do — a message, a request, a resumed wakeup — queues a turn, so the row is no longer
+ * parked, under that same lock, which the claim's own re-check reads. Best effort: a failure is
  * logged, and the reaper ends the session on its next sweep. Returns the ids it ended.
  */
 export async function endIdleWorkOfDoneTask(
@@ -135,7 +137,7 @@ export async function endIdleWorkOfDoneTask(
       ownerId: input.ownerId,
       taskId: input.taskId,
       startsTaskWork: true,
-      status: RunStatus.AWAITING_INPUT,
+      ...turnStateFilter([null]),
       cancelRequestedAt: null,
       deletedAt: null,
       task: { status: TaskStatus.DONE },

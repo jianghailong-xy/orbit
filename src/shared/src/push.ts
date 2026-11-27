@@ -62,3 +62,37 @@ export interface AndroidPushPayload {
   /** `kind: 'terminal-login'`: the terminal sign-in waiting for the owner's Approve (docs/terminal-session-design.md). */
   terminalLoginID?: string;
 }
+
+/** Browser Web Push contract (docs/web-push-design.md). The push message's data is JSON of WebPushMessage. */
+export const WEB_PUSH_VERSION = 1;
+
+/** POST /push/register from a browser: `token` is the PushSubscription's endpoint, `webKeys` its two keys. */
+export interface WebPushRegistration {
+  platform: 'web';
+  token: string;
+  bundleId: 'web';
+  webKeys: { p256dh: string; auth: string };
+}
+
+/** GET /push/web-config: the VAPID public key to subscribe with, null when this server sends no web push. */
+export interface WebPushConfig {
+  publicKey: string | null;
+}
+
+export type WebPushMessage =
+  | {
+      v: typeof WEB_PUSH_VERSION;
+      type: 'alert';
+      title: string;
+      body: string;
+      /** The notification's tag: a newer alert with the same tag replaces the older one. */
+      tag: string;
+      /** Where a click goes: a path on this site (`/sessions/<id>`), or a notify's own absolute URL. */
+      url: string;
+    }
+  | {
+      v: typeof WEB_PUSH_VERSION;
+      type: 'sync';
+      /** Close the approval notifications (tag `approval-<id>`) of these sessions: they no longer need you. */
+      clearSessions: string[];
+    };

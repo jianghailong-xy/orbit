@@ -1,0 +1,56 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Composer shadow</title>
+<style>
+body{margin:0;background:#eef0f3;font:14px/1.5 -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#1f2329}
+.board{width:1840px;padding:36px;box-sizing:border-box}
+h1{font-size:26px;margin:0 0 4px}.sub{color:#646a73;margin:0 0 24px}
+.grid{display:grid;grid-template-columns:120px repeat(3,1fr);gap:14px 18px;align-items:center}
+.colh{font-weight:600;font-size:17px}.colh small{display:block;font-weight:400;color:#646a73;font-size:12.5px;font-family:'JetBrains Mono',monospace}
+.rowh{font-weight:600;color:#646a73;font-size:13px}
+.f{background:#fff;border-radius:10px;padding:6px;box-shadow:0 0 0 1px #dee0e3}.f img{width:100%;display:block;border-radius:6px}
+.pick{box-shadow:0 0 0 3px #3370ff}
+.tag{display:inline-block;margin-left:6px;padding:0 8px;border-radius:10px;background:#3370ff;color:#fff;font-size:12px;vertical-align:2px}
+.zooms{display:grid;grid-template-columns:120px repeat(3,1fr);gap:14px 18px;margin-top:22px;align-items:start}
+.zooms .f img{image-rendering:pixelated}
+.cap{font-size:12.5px;color:#646a73;margin-top:6px}
+.notes{display:grid;grid-template-columns:1.3fr 1fr;gap:24px;margin-top:28px}
+.card{background:#fff;border-radius:12px;padding:18px 22px;box-shadow:0 0 0 1px #dee0e3}
+.card h3{margin:0 0 8px;font-size:16px}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #eceef1;padding:6px 8px;text-align:left;vertical-align:top}th{color:#646a73;font-weight:600}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#f2f3f5;padding:1px 5px;border-radius:4px}
+.ask{background:#fff7e8;box-shadow:0 0 0 1px #ffd591}
+</style></head><body><div class="board">
+<h1>Composer 边框阴影</h1>
+<p class="sub">真实会话页（本分支 build + ui-migration fixtures，1440 宽，2x）。三列同一页面，只换 <code>.composer-box</code> 的 box-shadow。</p>
+<div class="grid">
+  <div></div>
+  <div class="colh">① 今天<small>0 2px 10px α.05, 0 10px 30px α.04</small></div>
+  <div class="colh">② 去掉阴影，只留描边<span class="tag">推荐</span><small>box-shadow: none（聚焦仍加深描边）</small></div>
+  <div class="colh">③ 小阴影<small>0 1px 3px α.06 · 聚焦 0 2px 6px α.08</small></div>
+  <div class="rowh">浅色 · 未聚焦</div>
+  <div class="f"><img src="frames/light-today-idle.png"></div><div class="f pick"><img src="frames/light-flat-idle.png"></div><div class="f"><img src="frames/light-small-idle.png"></div>
+  <div class="rowh">浅色 · 聚焦</div>
+  <div class="f"><img src="frames/light-today-focus.png"></div><div class="f pick"><img src="frames/light-flat-focus.png"></div><div class="f"><img src="frames/light-small-focus.png"></div>
+  <div class="rowh">深色 · 未聚焦</div>
+  <div class="f"><img src="frames/dark-today-idle.png"></div><div class="f pick"><img src="frames/dark-flat-idle.png"></div><div class="f"><img src="frames/dark-small-idle.png"></div>
+  <div class="rowh">深色 · 聚焦</div>
+  <div class="f"><img src="frames/dark-today-focus.png"></div><div class="f pick"><img src="frames/dark-flat-focus.png"></div><div class="f"><img src="frames/dark-small-focus.png"></div>
+</div>
+<div class="zooms">
+  <div class="rowh">左下角放大 3×（浅色）</div>
+  <div><div class="f"><img src="frames/zoom-light-today.png"></div><div class="cap">框下 16px 全是灰带（242→252），到栏底被硬切成一条线 —— 突兀感就在这里。</div></div>
+  <div><div class="f pick"><img src="frames/zoom-light-flat.png"></div><div class="cap">框下纯白到栏底；和上方 Tasks / Agents 条同一种"1px 描边卡片"。</div></div>
+  <div><div class="f"><img src="frames/zoom-light-small.png"></div><div class="cap">3px 内淡到 254/255，不碰栏底；还留一点浮起感。</div></div>
+</div>
+<div class="notes">
+  <div class="card"><h3>实测（框下方同一列像素，浅色）</h3>
+  <table><tr><th></th><th>框下第 1px</th><th>框下 8px</th><th>到栏底时</th><th>深色</th></tr>
+  <tr><td>① 今天</td><td>242</td><td>249</td><td>252，被栏底切断</td><td>30 vs 32，看不出</td></tr>
+  <tr><td>② 无阴影</td><td>255</td><td>255</td><td>255</td><td>32，看不出</td></tr>
+  <tr><td>③ 小阴影</td><td>249</td><td>255</td><td>255</td><td>31 vs 32，看不出</td></tr></table>
+  <p class="cap">阴影颜色 rgba(31,35,41) 在深色 #2b2b2e 上几乎不可见，三种方案深色下一样；差别只在浅色。</p></div>
+  <div class="card"><h3>改动范围</h3>
+  <p>只改 <code>src/web/src/index.css</code> 的 <code>.composer-box</code>（约 7452 行）与聚焦规则（约 7462 行）的 box-shadow；<code>transition</code> 去掉 box-shadow。描边、圆角、聚焦加深描边、shell 模式红框都不动。</p></div>
+  <div class="card ask" style="grid-column:1/3"><h3>待你定</h3>
+  ② 去掉阴影（推荐：和上面的卡片一致，问题直接消失） 还是 ③ 保留一个小阴影？</div>
+</div>
+</div></body></html>

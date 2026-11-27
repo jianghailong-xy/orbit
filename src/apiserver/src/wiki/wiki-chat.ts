@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   WIKI_CHAT_COPY,
   wikiChatFabCounts,
@@ -18,6 +18,8 @@ import { canonicalRepoUrl } from '../projects/project-criterion-landing';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import type { CreateSessionDto } from '../sessions/dto';
+import { legacySessionStatus, LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
+import { turnStateOf } from '../sessions/session-turn-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { cardsOfChats } from './wiki-chat-cards';
 import { readWikiChatContext } from './wiki-chat-context';
@@ -46,9 +48,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const CHAT_SELECT = {
   id: true,
   title: true,
-  status: true,
-  // The release column: a chat is open while it is held (common/session-release.ts).
-  finishedAt: true,
+  // The word a row carries (session-legacy-words.ts), with the turn state and the release column: a chat is open
+  // while it is held (common/session-release.ts).
+  ...LEGACY_STATUS_SELECT,
   engineTurnActive: true,
   createdAt: true,
   updatedAt: true,
@@ -173,7 +175,7 @@ export class WikiChat {
       this.realtime?.publishWikiChanged(ownerId, space.id);
     }
     const created = await this.prisma.session.findUniqueOrThrow({ where: { id: session.id }, select: CHAT_SELECT });
-    return { sessionId: created.id, chat: chatRow(created, 0, 0, created.status === RunStatus.PENDING || isSessionGenerating(created)) };
+    return { sessionId: created.id, chat: chatRow(created, 0, 0, chatTurnActive(created)) };
   }
 
   /**
@@ -230,7 +232,7 @@ export class WikiChat {
     }));
     const fabOf = (one: (typeof counted)[number]) => ({
       open: one.open,
-      turnActive: one.chat.status === RunStatus.PENDING || isSessionGenerating(one.chat),
+      turnActive: chatTurnActive(one.chat),
       approvals: one.approvals,
       cards: one.cards,
     });
@@ -267,12 +269,17 @@ export class WikiChat {
   }
 }
 
+/** A turn of the chat waits for a claim, or the engine is producing output for it. */
+function chatTurnActive(chat: ChatSession): boolean {
+  return turnStateOf(chat) === 'QUEUED' || isSessionGenerating(chat);
+}
+
 /** One chat as the list names it (contract `chat.list.chats`): how many cards it holds, and how much of `needsYou` is its. */
 function chatRow(chat: ChatSession, needsYou: number, drafts = 0, working = false): WikiChatRow {
   return {
     sessionId: chat.id,
     title: chat.title,
-    status: chat.status,
+    status: legacySessionStatus(chat),
     open: isHeld(chat),
     completed: chat.completedAt !== null,
     working,

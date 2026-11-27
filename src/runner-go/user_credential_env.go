@@ -2,7 +2,8 @@ package main
 
 import "strings"
 
-// userCredentialEnvKey reports the variables that carry a person's own credential: ORBIT_USER_TOKEN,
+// userCredentialEnvKey reports the variables that carry a person's own credential: ORBIT_USER_TOKEN and
+// ORBIT_GIT_CREDENTIAL (the Push as me token),
 // the personal access token the `orbit` CLI acts as its user with (docs/personal-access-token-design.md
 // §7.1). Signing in on a runner machine is supported, so the runner's own environment may hold one, and
 // no agent process is handed it — not from that environment, not from the agent's configuration (§8).
@@ -15,6 +16,10 @@ import "strings"
 func userCredentialEnvKey(key string) bool {
 	switch strings.ToUpper(key) {
 	case "ORBIT_USER_TOKEN":
+		return true
+	// The owner's GitHub token for a Push as me landing, which networkGitCommandEnv puts in that one git
+	// command's environment. No engine, hook or background job is handed it either.
+	case orbitGitCredentialEnv:
 		return true
 	default:
 		return false
@@ -44,5 +49,5 @@ func runnerChildEnv(env []string) []string {
 	if hasPath {
 		kept = envWithValue(kept, "PATH", pathWithManagedRgLast(envValue(kept, "PATH")))
 	}
-	return append(kept, envRunnerChild+"=1")
+	return memoryWatchdogChildEnv(append(kept, envRunnerChild+"=1"))
 }

@@ -356,6 +356,7 @@ public struct ProjectDoneFinding: Codable, Equatable, Sendable {
         case "DONE_TASKS_IN_FLIGHT": template = tasks.count == 1 ? ProjectDone.checkTask : ProjectDone.checkTasks; n = tasks.count
         case "DONE_OWNER_ITEMS_OPEN": template = ProjectDone.checkOwnerItems; n = items.count
         case "DONE_INTEGRATION_IN_FLIGHT": template = ProjectDone.checkLandings; n = jobs.count
+        case "DONE_LANDING_DEFERRED": template = ProjectDone.checkDeferredLandings; n = tasks.count
         default: return message
         }
         return template.replacingOccurrences(of: "{n}", with: String(n)).replacingOccurrences(of: "{main}", with: main)
@@ -524,12 +525,15 @@ public struct ProjectDoneSubject: Equatable, Sendable {
     public let nonCodeMark: NonCodeMark?
     /// The criteria this project moved out to a follow-up (board 02 G).
     public let criteriaMovedOut: [CriterionMovedOut]
+    /// Settings › Translation: the title and criteria in the owner's language, as the document
+    /// carried them — what `shown(owner:showOriginal:)` draws from.
+    public let translation: ProjectTextTranslation?
 
     public init(title: String, status: String?, criteria: [Criterion] = [],
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
                 doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [], upstreamRef: String? = nil,
                 projectID: String? = nil, nonCodeMark: NonCodeMark? = nil,
-                criteriaMovedOut: [CriterionMovedOut] = []) {
+                criteriaMovedOut: [CriterionMovedOut] = [], translation: ProjectTextTranslation? = nil) {
         self.title = title
         self.status = status
         self.criteria = criteria
@@ -541,6 +545,7 @@ public struct ProjectDoneSubject: Equatable, Sendable {
         self.projectID = projectID
         self.nonCodeMark = nonCodeMark
         self.criteriaMovedOut = criteriaMovedOut
+        self.translation = translation
     }
 
     /// `isNonCode`: the mark on the project, or on its derived read.
@@ -600,6 +605,7 @@ public enum ProjectDone {
     public static let checkTask = "1 task is still running"
     public static let checkOwnerItems = "Open owner items: {n}"
     public static let checkLandings = "Landings in flight: {n}"
+    public static let checkDeferredLandings = "Landings waiting for work sessions to finish: {n}"
     public static let findingsHeading = "Orbit can’t prove {n} things"
     public static let findingsAccepted = "These will be kept as the gaps you accepted."
     public static let recordAsDoneAnyway = "Record as done anyway"

@@ -58,7 +58,8 @@ func antigravityCredentialEnvKey(key string) bool {
 // antigravityGoogleCommand is the shared entry for login, auth/usage, and Google model reads.
 // HOME, XDG and the empty working directory last only for this invocation; the Gemini directory
 // persists — Default's, or the account's env names (antigravityGoogleDirIn). An unreachable private
-// D-Bus socket keeps agy away from the system's shared keyring. Only the usage probe keeps agy's log,
+// D-Bus socket keeps agy away from the system's shared keyring, and on macOS SSH_CONNECTION keeps it
+// off the Keychain (antigravityTokenFileOnlyEnv). Only the usage probe keeps agy's log,
 // in this invocation's private temporary directory.
 func antigravityGoogleCommand(ctx context.Context, binPath string, env []string, probeLog bool, args ...string) (*exec.Cmd, func(), error) {
 	dir, err := filepath.Abs(antigravityGoogleDirIn(env))
@@ -118,14 +119,14 @@ func antigravityGoogleCommand(ctx context.Context, binPath string, env []string,
 		}
 		cleanEnv = append(cleanEnv, entry)
 	}
-	cleanEnv = replaceEnv(cleanEnv, map[string]string{
+	cleanEnv = replaceEnv(cleanEnv, antigravityTokenFileOnlyEnv(map[string]string{
 		"HOME": filepath.Join(root, "home"), "PWD": filepath.Join(root, "cwd"),
 		"XDG_CONFIG_HOME": filepath.Join(root, "config"), "XDG_DATA_HOME": filepath.Join(root, "data"),
 		"XDG_CACHE_HOME": filepath.Join(root, "cache"), "XDG_STATE_HOME": filepath.Join(root, "state"),
 		"XDG_RUNTIME_DIR":             filepath.Join(root, "runtime"),
 		"DBUS_SESSION_BUS_ADDRESS":    "unix:path=" + filepath.Join(root, "absent-dbus"),
 		"AGY_CLI_DISABLE_AUTO_UPDATE": "true",
-	})
+	}))
 	logFile := "/dev/null"
 	if probeLog {
 		logFile = filepath.Join(root, "probe.log")
@@ -141,6 +142,9 @@ func antigravityGoogleCommand(ctx context.Context, binPath string, env []string,
 type antigravityGoogleProbe struct {
 	auth  authState
 	usage *PlanUsage
+	// problem is agy's own error from a /usage that did not succeed (result.error, one line), so a
+	// refusal such as an unsupported account region reaches the owner instead of a generic failure.
+	problem string
 }
 
 func probeAntigravityGoogle(ctx context.Context, binPath string, env []string) antigravityGoogleProbe {
@@ -175,6 +179,7 @@ func probeAntigravityGoogle(ctx context.Context, binPath string, env []string) a
 // and absence of init is the only negative answer (contract §16.4–16.6).
 func parseAntigravityGoogleProbe(stdout []byte, stderr string, exitCode int) antigravityGoogleProbe {
 	var sawInit, success bool
+	var problem string
 	var buckets []PlanUsageBucket
 	dec := json.NewDecoder(bytes.NewReader(stdout))
 	for {
@@ -183,17 +188,21 @@ func parseAntigravityGoogleProbe(stdout []byte, stderr string, exitCode int) ant
 			Command *antigravityGoogleUsageCommand `json:"command"`
 			Result  struct {
 				Status  string                         `json:"status"`
+				Error   string                         `json:"error"`
 				Command *antigravityGoogleUsageCommand `json:"command"`
 			} `json:"result"`
 		}
 		if err := dec.Decode(&event); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return antigravityGoogleProbe{auth: authUnknown}
+			return antigravityGoogleProbe{auth: authUnknown, problem: problem}
 		}
 		sawInit = sawInit || event.Event == "init"
 		if event.Event == "result" && event.Result.Status == "SUCCESS" {
 			success = true
+		}
+		if event.Event == "result" && strings.TrimSpace(event.Result.Error) != "" {
+			problem = firstLine(strings.TrimSpace(event.Result.Error))
 		}
 		command := event.Command
 		if event.Event == "result" && event.Result.Command != nil {
@@ -219,9 +228,9 @@ func parseAntigravityGoogleProbe(stdout []byte, stderr string, exitCode int) ant
 	lower := strings.ToLower(stderr)
 	if exitCode == 1 && !sawInit && strings.Contains(lower, "authentication required") &&
 		strings.Contains(lower, "authentication failed or timed out") {
-		return antigravityGoogleProbe{auth: authNo}
+		return antigravityGoogleProbe{auth: authNo, problem: problem}
 	}
-	return antigravityGoogleProbe{auth: authUnknown}
+	return antigravityGoogleProbe{auth: authUnknown, problem: problem}
 }
 
 type antigravityGoogleUsageCommand struct {

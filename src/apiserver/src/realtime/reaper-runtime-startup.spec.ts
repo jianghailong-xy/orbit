@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider } from '@orbit/shared';
 import { ReaperService } from './reaper.service';
 
@@ -9,7 +9,7 @@ function runningSession(overrides: Record<string, unknown> = {}) {
     id: '11111111-1111-4111-8111-111111111111',
     taskId: null,
     assignedRunnerId: '22222222-2222-4222-8222-222222222222',
-    status: RunStatus.RUNNING,
+    turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
     provider: AgentProvider.OPENCODE,
     runtimeSessionId: null,
     claudeSessionId: null,
@@ -48,7 +48,7 @@ test('reaper applies the startup watchdog to OpenCode sessions', async () => {
       null,
       'opencode runtime not initialized',
       {
-        expectedStatuses: [RunStatus.RUNNING],
+        expectedTurnStates: ['IN_FLIGHT'],
         onlyIfNotCancelling: true,
         // The attempt was lost rather than judged, and that is what the project's item records.
         taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
@@ -126,7 +126,7 @@ test('reaper applies the startup watchdog to Antigravity sessions that never rep
       null,
       'antigravity runtime not initialized',
       {
-        expectedStatuses: [RunStatus.RUNNING],
+        expectedTurnStates: ['IN_FLIGHT'],
         onlyIfNotCancelling: true,
         taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
         // Released for a runtime that never came up.

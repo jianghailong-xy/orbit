@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RUNNER_REAP_AFTER_MS, ReaperService } from './reaper.service';
+import { writtenWord } from '../test-support/session-word';
 
 /**
  * A runner is declared offline by ABSENCE: nothing wrote `lastHeartbeatAt` for the reaper's five
@@ -67,6 +68,8 @@ function reaperUnderStorm() {
         return { count: 1 };
       },
       count: async () => 0,
+      // The released row, read back for the STATUS event's word; the event is not asserted here.
+      findUnique: async () => null,
     },
     runner: {
       findUnique: async () => ({
@@ -89,7 +92,7 @@ function reaperUnderStorm() {
           id,
           taskId: null,
           assignedRunnerId: RUNNER_ID,
-          status: RunStatus.RUNNING,
+          turnState: 'IN_FLIGHT', status: RunStatus.RUNNING,
           provider: 'claude',
           providerBuiltin: true,
           runtimeSessionId: 'runtime-1',
@@ -151,7 +154,7 @@ test('still reaps a session whose runner is silent at write time too', async () 
   const reaper = reaperUnderStorm();
   const reaped = await reaper.sweep({ sessions: [A], liveHeartbeatAgeMs: 2 * REAP_AFTER_MS });
   assert.deepEqual(reaped, [A], 'a genuinely gone runner is still reaped');
-  assert.equal(reaper.finalized[0]?.data.status, RunStatus.FAILED);
+  assert.equal(writtenWord(reaper.finalized[0]?.data), RunStatus.FAILED);
   assert.equal(reaper.finalized[0]?.data.error, 'runner offline');
 });
 

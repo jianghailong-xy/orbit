@@ -768,11 +768,23 @@ describe('the guests mark on a session row', () => {
     const row = (s: Record<string, unknown>) =>
       renderToStaticMarkup(<SessionTitleRow session={{ title: 'Retry budget for flaky pg specs', lastTurnAt: new Date().toISOString(), ...s }} />);
     const shown = row({ hasGuests: true, shared: true });
-    expect(shown).toContain(`<span class="session-guests" title="${SESSION_GUESTS_TIP}" aria-label="${SESSION_GUESTS_TIP}">`);
+    expect(shown).toContain(`<span class="session-guests" aria-label="${SESSION_GUESTS_TIP}"`);
     // Beside the globe, both before the time.
     expect(shown.indexOf('session-shared')).toBeLessThan(shown.indexOf('session-guests'));
     expect(shown.indexOf('session-guests')).toBeLessThan(shown.indexOf('session-time'));
     expect(row({ hasGuests: false })).not.toContain('session-guests');
     expect(row({})).not.toContain('session-guests');
+  });
+});
+
+/** The row's time (contracts/session-list-order.fixtures.json): when it was listed, or how long its turn has run. */
+describe('a session row\'s time', () => {
+  it('says when the row was listed, not when it last moved, and how long a running turn has run', async () => {
+    const { sessionRowTime } = await import('./WorkspaceView');
+    const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+    expect(sessionRowTime({ status: 'AWAITING_INPUT', listedAt: ago(2 * 3_600_000), lastTurnAt: ago(1000), createdAt: ago(9e7) })).toBe('2h ago');
+    expect(sessionRowTime({ status: 'AWAITING_INPUT', listedAt: null, lastTurnAt: ago(1000), createdAt: ago(5 * 60_000) })).toBe('5m ago');
+    expect(sessionRowTime({ status: 'RUNNING', listedAt: ago(2 * 3_600_000), currentTurnStartedAt: ago(12 * 60_000) })).toBe('12m');
+    expect(sessionRowTime({ status: 'RUNNING', listedAt: ago(2 * 3_600_000) })).toBe('');
   });
 });

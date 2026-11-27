@@ -27,7 +27,8 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource, type PrismaClient } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin, SessionRunSource, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -161,7 +162,7 @@ test('Feishu: a session\'s replies go back to its chain, and turn-complete never
     try {
       await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
       await sql.query(
-        `UPDATE "session" SET "status" = 'RUNNING', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
+        `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
                 "inbox_lease_generation" = $4::uuid, "started_at" = coalesce("started_at", now())
           WHERE "id" = $1::uuid`,
         [sessionId, runnerId, lease.owner, lease.generation]);
@@ -246,7 +247,7 @@ test('Feishu: a session\'s replies go back to its chain, and turn-complete never
       data: { ownerId, appId: X.appId, collapseKey: `finished-${cardId}`, kind: 'finished', receiveId: ALICE, chatId: CHAT, messageId: cardId, sessionId: session!.id, status: 'SENT', sentAt: new Date() },
     });
     // Parked, as a session whose turn ended is.
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [session!.id]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [session!.id]);
     const r = await dm('Now add a test for it', { root: cardId });
     const turn = await until('the reply as a turn', () => db.conversationTurn.findFirst({ where: { sessionId: session!.id, content: 'Now add a test for it' } }));
 
@@ -279,7 +280,7 @@ test('Feishu: a session\'s replies go back to its chain, and turn-complete never
   });
 
   await t.test('(4) no assistant text, or no chain: no row', async () => {
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [session!.id]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [session!.id]);
     const quiet = await db.conversationTurn.create({ data: { sessionId: session!.id, seq: 100, clientTurnId: randomUUID(), kind: 'message', status: 'PENDING', content: 'quiet' } });
     const done = await runTurn(session!.id, quiet.id, []);
     assert.equal(done.status, 200, done.text);
@@ -288,7 +289,7 @@ test('Feishu: a session\'s replies go back to its chain, and turn-complete never
     const plain = await db.session.create({
       data: {
         ownerId, creatorId: ownerId, workspaceId: workspace.id, assignedRunnerId: runnerId, title: 'not from Feishu', prompt: 'x', provider: 'claude',
-        status: RunStatus.AWAITING_INPUT, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
+        turnState: null, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       },
     });
     const turn = await db.conversationTurn.create({ data: { sessionId: plain.id, seq: 1, clientTurnId: randomUUID(), kind: 'message', status: 'PENDING', content: 'hi' } });
@@ -304,7 +305,7 @@ test('Feishu: a session\'s replies go back to its chain, and turn-complete never
       const groupSession = await db.session.create({
         data: {
           ownerId, creatorId: ownerId, workspaceId: workspace.id, assignedRunnerId: runnerId, title: `group ${detail}`, prompt: 'x', provider: 'claude',
-          status: RunStatus.AWAITING_INPUT, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
+          turnState: null, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
         },
       });
       const topic = `om_topic_${detail}_${RUN}`;

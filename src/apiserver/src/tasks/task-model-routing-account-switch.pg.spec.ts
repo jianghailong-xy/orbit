@@ -4,7 +4,8 @@ import test from 'node:test';
 
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 
 import { modelRoutingEnabled } from '../common/model-routing-switch';
@@ -509,7 +510,7 @@ test('an automatic re-run is held by the engine its pins give it while the accou
 
       // Run 1 stopped at claude's weekly limit, which the runner now reports spent until RESETS.
       await db.session.update({
-        where: { id: run1.id }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', error: WEEKLY_LIMIT, finishedAt: new Date() },
+        where: { id: run1.id }, data: { turnState: null, lastTurnOutcome: 'FAILED', error: WEEKLY_LIMIT, finishedAt: new Date() },
       });
       await db.runner.update({
         where: { id: target.runnerId },
@@ -568,7 +569,7 @@ async function startEngine(services: Services, target: Fixture, sessionId: strin
   const { db, api } = services;
   const engine = { sessionId, leaseOwner: randomUUID(), generation: randomUUID() };
   const session = await claimWrite(db, sessionId, {
-    assignedRunnerId: target.runnerId, status: RunStatus.RUNNING, inboxLeaseOwner: engine.leaseOwner,
+    assignedRunnerId: target.runnerId, turnState: 'IN_FLIGHT', inboxLeaseOwner: engine.leaseOwner,
   });
   assert.equal(session.provider, 'claude', 'a claude engine: the runtime the declared capability is for');
   await queueTurn(db, sessionId, session.prompt, `initial-${sessionId}`);
@@ -604,7 +605,7 @@ async function queueTurn(db: PrismaClient, sessionId: string, content: string, c
 async function turn(services: Services, target: Fixture, engine: Engine): Promise<string> {
   const { db, api } = services;
   // The claim's part: the session is running again.
-  await claimWrite(db, engine.sessionId, { status: RunStatus.RUNNING });
+  await claimWrite(db, engine.sessionId, { turnState: 'IN_FLIGHT'});
   const handed = await (api as unknown as {
     dequeueTurn(
       sessionId: string, runnerId: string, leaseGeneration: string, acceptsSteer: boolean, declared: string[],

@@ -202,10 +202,10 @@ async function seedIdleSession(): Promise<void> {
   await admin.query(
     `INSERT INTO "session"(
        id, title, prompt, owner_id, creator_id, assigned_runner_id, provider,
-       provider_builtin, status, num_turns, updated_at
+       provider_builtin, turn_state, num_turns, updated_at
      ) VALUES (
        $1::uuid, 'wake', 'opening prompt', $2::uuid, $2::uuid, $3::uuid, 'claude',
-       TRUE, 'AWAITING_INPUT', 1, clock_timestamp()
+       TRUE, NULL, 1, clock_timestamp()
      )`,
     [SESSION_ID, OWNER_ID, RUNNER_ID],
   );
@@ -319,7 +319,7 @@ scenario('a wake written into the running turn is listed as a steer, in both vie
     [RUNNER_ID, [SESSION_CURRENT_WORK_ROUTING_V1]],
   );
   try {
-    await admin.query(`UPDATE "session" SET status = 'RUNNING' WHERE id = $1::uuid`, [SESSION_ID]);
+    await admin.query(`UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE id = $1::uuid`, [SESSION_ID]);
     await admin.query(
       `INSERT INTO "conversation_turn"(
          id, session_id, seq, client_turn_id, kind, content, status, delivered_at, lease_deadline_at
@@ -397,7 +397,7 @@ scenario('the block shown queued is the block the runner is handed', async () =>
   // deliverable at all (`active.status = 'RUNNING'` in the inbox predicate); stand in for it here,
   // since what this case is about is the content the claim then builds.
   await admin.query(
-    `UPDATE "session" SET status = 'RUNNING' WHERE id = $1::uuid`,
+    `UPDATE "session" SET "turn_state" = 'IN_FLIGHT' WHERE id = $1::uuid`,
     [SESSION_ID],
   );
   const delivered = await (runnerApi as unknown as {

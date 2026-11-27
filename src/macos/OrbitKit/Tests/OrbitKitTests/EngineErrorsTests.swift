@@ -35,6 +35,12 @@ final class EngineErrorsTests: XCTestCase {
         let blocked = "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare"
         let reset = "Failed to authenticate. API Error: 403 ECONNRESET: The socket connection was closed unexpectedly. "
             + "For more information, pass `verbose: true` in the second argument to fetch()"
+        // DashScope's gateway timing out on its upstream, under a 406 that is not about the request.
+        let timedOut = "API Error: 406 Post \"https://dashscope-intl.aliyuncs.com/apps/anthropic/v1/messages\": read tcp "
+            + "[fdbd:dc53:2a:630::37]:38248->[64:ff9b::2fec:75bf]:443: read: connection timed out"
+        XCTAssertTrue(EngineErrors.isConnectionFailureText(timedOut))
+        XCTAssertTrue(EngineErrors.isRetryableApiErrorText(timedOut))
+        XCTAssertFalse(EngineErrors.isRetryableApiErrorText("API Error: 406 Not Acceptable"))
         for text in [blocked, reset] {
             XCTAssertTrue(EngineErrors.isConnectionFailureText(text))
             XCTAssertTrue(EngineErrors.isRetryableApiErrorText(text))

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentRunView } from '@orbit/shared';
 import { type RunEvent, SubagentRunsCtx, Transcript } from './Transcript';
 import { delegateResultText, delegateRunsSignature, subagentMeta, subagentWhy } from '../lib/subagentRuns';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Orbit's SubAgent (`mcp__orbit__delegate`) drawn as docs/mocks/subagent/02.png: the Agent card's purple
@@ -218,12 +219,12 @@ describe('the SubAgent block', () => {
     expect(detail.textContent).not.toContain('Find them.');
   });
 
-  it('keeps the full reasons and every removed candidate behind the Why: a tooltip and a Details list', () => {
+  it('keeps the full reasons and every removed candidate behind the Why: a tooltip and a Details list', async () => {
     render([FG]);
     const fg = card(1);
     act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
     const why = fg.querySelector('.chat-subagent-why') as HTMLElement;
-    const tooltip = why.getAttribute('title')!;
+    const tooltip = (await hoverTooltip(why))!;
     expect(tooltip.split('\n')[0]).toBe('Tier S, set by the caller: a search');
     expect(tooltip).toContain('Picked claude-sonnet-5-5 · low on claude (Cost)');
     expect(tooltip).toContain("- kimi: kimi is not installed on the parent's runner");
@@ -241,14 +242,14 @@ describe('the SubAgent block', () => {
     expect(fg.querySelector('.chat-tool-detail')).not.toBeNull();
   });
 
-  it("an older run's Why is its reasons, with nothing behind it", () => {
+  it("an older run's Why is its reasons, with nothing behind it", async () => {
     render([run({ why: null, removed: [] })]);
     const fg = card(1);
     act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
     const why = fg.querySelector('.chat-subagent-why')!;
     expect(why.textContent).toBe('Why · Tier S, set by the caller: a search · Optimize For: Cost');
     expect(why.querySelector('.chat-subagent-why-more')).toBeNull();
-    expect(why.getAttribute('title')).toBeNull();
+    expect(await hoverTooltip(why)).toBeNull();
   });
 
   it("shows the result once when the child's own last message already says it", () => {

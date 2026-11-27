@@ -1,6 +1,18 @@
-import { IsIn, IsOptional, IsString, IsUUID, IsUrl, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsIn, IsOptional, IsString, IsUUID, IsUrl, Matches, MaxLength, MinLength, ValidateIf, ValidateNested } from 'class-validator';
 
-/** Register APNs (default) or an Android FCM installation for the current user. */
+/** A browser subscription's two keys (base64url): the P-256 public key and the 16-byte auth secret. */
+export class WebPushKeysDto {
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{86,88}={0,2}$/)
+  p256dh!: string;
+
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{22}={0,2}$/)
+  auth!: string;
+}
+
+/** Register APNs (default), an Android FCM installation, or a browser's Web Push subscription for the current user. */
 export class RegisterDeviceTokenDto {
   /** APNs hex token or opaque FCM registration token. Never trim or rewrite it. */
   @IsString()
@@ -9,7 +21,7 @@ export class RegisterDeviceTokenDto {
   token!: string;
 
   @IsOptional()
-  @IsIn(['ios', 'android'])
+  @IsIn(['ios', 'android', 'web'])
   platform?: string;
 
   /** Which APNs host this token belongs to. */
@@ -25,6 +37,12 @@ export class RegisterDeviceTokenDto {
   @ValidateIf((dto) => dto.platform === 'android' || dto.installationId !== undefined)
   @IsUUID('4')
   installationId?: string;
+
+  /** platform 'web': the subscription's keys; `token` is its endpoint (docs/web-push-design.md). */
+  @ValidateIf((dto) => dto.platform === 'web' || dto.webKeys !== undefined)
+  @ValidateNested()
+  @Type(() => WebPushKeysDto)
+  webKeys?: WebPushKeysDto;
 }
 
 /** Drop a device token (sign-out). */
@@ -35,7 +53,7 @@ export class UnregisterDeviceTokenDto {
   token!: string;
 
   @IsOptional()
-  @IsIn(['ios', 'android'])
+  @IsIn(['ios', 'android', 'web'])
   platform?: string;
 
   /** Echo the Android register response; a late logout cannot remove a newer binding. */

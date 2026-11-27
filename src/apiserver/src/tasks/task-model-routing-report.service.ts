@@ -1,9 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { USAGE_LIMIT_ERROR_MARKERS } from '@orbit/shared';
+import { RunFailureKind } from '@orbit/shared';
+import { failureKindIsSql } from '../common/run-failure-kind-filter';
 import { releaseWasFailureSql } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
-import { MODEL_AT_CAPACITY_ERROR_MARKER } from './model-routing';
 
 export interface ModelRoutingReportGroup {
   policyVersion: number;
@@ -44,15 +44,15 @@ export function sessionUsageUnreported(session: string): Prisma.Sql {
            AND (unreported_mp.owner_id IS NULL OR unreported_mp.owner_id = ${s}.owner_id))))))`;
 }
 
+/** The failure kinds that say nothing of the model: the runner's kind, else the legacy markers (runFailureKind). */
+const LIMIT_FAILURE_KINDS = [RunFailureKind.USAGE_LIMIT, RunFailureKind.CAPACITY] as const;
+
 /**
  * Whether a run failed on a usage limit or a model at capacity: not the model's quality, so neither the report's
  * failure count nor the Model tiers view's first pass counts it, as the router does not.
  */
 export function limitFailure(run: string): Prisma.Sql {
-  const r = Prisma.raw(run);
-  return Prisma.sql`(${releaseWasFailureSql(run)} AND (${Prisma.join(
-    [...USAGE_LIMIT_ERROR_MARKERS, MODEL_AT_CAPACITY_ERROR_MARKER].map((marker) =>
-      Prisma.sql`lower(coalesce(${r}.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))`;
+  return Prisma.sql`(${releaseWasFailureSql(run)} AND ${failureKindIsSql(run, LIMIT_FAILURE_KINDS)})`;
 }
 
 /** One provider × engine × model's done tasks, as the Model tiers view reads them (taskFirstPassByModel). */
@@ -145,7 +145,7 @@ export class TaskModelRoutingReportService {
       -- Filters choose samples, never cut short the history that determines the first run or cost.
       work_runs AS (
         SELECT s.id, s.task_id, ${releaseWasFailureSql('s')} AS run_failed,
-               s.error, s.cost_usd, s.created_at,
+               s.error, s.failure_kind, s.cost_usd, s.created_at,
                ${sessionUsageUnreported('s')} AS usage_unknown,
                row_number() OVER history AS ordinal,
                lead(s.created_at) OVER history AS next_created_at
@@ -156,9 +156,7 @@ export class TaskModelRoutingReportService {
       ),
       assessed_runs AS (
         SELECT w.*,
-               NOT (w.run_failed AND (${Prisma.join(
-                 [...USAGE_LIMIT_ERROR_MARKERS, MODEL_AT_CAPACITY_ERROR_MARKER].map((marker) =>
-                   Prisma.sql`lower(coalesce(w.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))
+               NOT (w.run_failed AND ${failureKindIsSql('w', LIMIT_FAILURE_KINDS)})
                AND (w.run_failed OR EXISTS (
                  SELECT 1 FROM task v
                   WHERE v.owner_id = ${ownerId}::uuid AND v.verifies_task_id = w.task_id

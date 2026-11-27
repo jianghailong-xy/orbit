@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Session list at scale</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  /* Board-local classes carry the sls- prefix: index.css has bare short class names. */
+  html, body { height: auto !important; overflow: visible !important; }
+  body { margin: 0; background: #eef0f3; font-family: Inter, "Noto Sans SC", sans-serif; color: var(--text-1); }
+  .sls-board { width: 1560px; padding: 28px; box-sizing: border-box; }
+  .sls-title { font-size: 22px; font-weight: 750; margin: 0 0 4px; }
+  .sls-sub { font-size: 13px; color: var(--text-2); margin: 0 0 22px; }
+  .b-part { background: var(--bg-base); border: 1px solid #dde0e6; border-radius: 12px; padding: 18px 20px 20px; }
+  .b-part + .b-part { margin-top: 22px; }
+  .sls-h2 { font-size: 16px; font-weight: 700; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .sls-n { width: 22px; height: 22px; border-radius: 50%; background: var(--text-1); color: #fff; font-size: 12px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .sls-lead { font-size: 12.5px; color: var(--text-2); margin: 0 0 14px; line-height: 1.55; }
+  .sls-code { font-family: "JetBrains Mono", monospace; font-size: 11px; background: var(--fill-inset); border-radius: 4px; padding: 0 4px; }
+  .sls-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .sls-lane { border-radius: 10px; padding: 14px 16px; border: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+  .sls-lane.new { border: 1.5px solid var(--brand); background: var(--bg-raised); }
+  .sls-lane h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; }
+  .sls-node { border: 1px solid var(--border); background: var(--bg-raised); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; line-height: 1.5; }
+  .sls-node small { display: block; font-size: 11.5px; color: var(--text-2); }
+  .sls-node.api { border-left: 4px solid var(--brand); }
+  .sls-node.web { border-left: 4px solid var(--success-solid); }
+  .sls-node.dom { border-left: 4px solid var(--warning-solid); }
+  .sls-node.bad { background: var(--error-bg); border-color: var(--error-border); }
+  .sls-down { color: var(--text-4); text-align: center; font-size: 15px; line-height: 1; margin: 3px 0; }
+  .sls-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .sls-tag { font-size: 11.5px; padding: 2px 9px; border-radius: 10px; line-height: 18px; }
+  .sls-tag.bad { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+  .sls-tag.good { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+  .sls-two { display: grid; grid-template-columns: 560px minmax(0, 1fr); gap: 20px; align-items: start; }
+  pre.sls-pre { margin: 0; font-family: "JetBrains Mono", monospace; font-size: 11.5px; line-height: 1.6; background: #1f2329; color: #e6e8eb;
+    border-radius: 10px; padding: 12px 14px; white-space: pre; }
+  pre.sls-pre .c { color: #8b949e; } pre.sls-pre .k { color: #7ee2b8; } pre.sls-pre .s { color: #f2cc8f; }
+  /* a drawn session column */
+  .sls-col { width: 340px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-raised); overflow: hidden; font-size: 13px; }
+  .sls-row { display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-bottom: 1px solid var(--border-subtle); position: relative; }
+  .sls-row .ic { width: 16px; text-align: center; color: var(--text-3); }
+  .sls-row .t { font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sls-row .l { display: block; font-weight: 400; font-size: 11.5px; color: var(--text-2); }
+  .sls-row .r { font-size: 11px; color: var(--text-3); }
+  .sls-row .badge { background: var(--warning-solid); color: #fff; border-radius: 9px; font-size: 10.5px; padding: 0 6px; font-weight: 700; }
+  .sls-sec { font-size: 11px; font-weight: 700; color: var(--text-3); padding: 8px 12px 4px; letter-spacing: .04em; }
+  .sls-mk { position: absolute; right: -30px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%;
+    background: #e5484d; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .sls-colwrap { padding-right: 34px; }
+  .sls-more { padding: 8px 12px; font-size: 11.5px; color: var(--brand); text-align: center; }
+  .sls-notes { margin: 0; padding: 0; list-style: none; }
+  .sls-notes li { position: relative; padding-left: 28px; font-size: 12.5px; line-height: 1.6; }
+  .sls-notes li + li { margin-top: 8px; }
+  .sls-notes li b.m { position: absolute; left: 0; top: 2px; width: 20px; height: 20px; border-radius: 50%; background: #e5484d; color: #fff;
+    font-size: 11px; display: flex; align-items: center; justify-content: center; }
+  /* virtual window */
+  .sls-vw { display: grid; grid-template-columns: 300px 40px 300px minmax(0, 1fr); gap: 14px; align-items: start; }
+  .sls-stack { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-raised); }
+  .sls-slot { height: 15px; border-bottom: 1px solid var(--border-subtle); font-size: 10px; color: var(--text-3); padding-left: 8px; line-height: 15px; }
+  .sls-slot.on { background: var(--brand-tint); color: var(--text-1); }
+  .sls-slot.view { background: var(--brand); color: #fff; }
+  .sls-gap { height: 46px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-3);
+    background: repeating-linear-gradient(45deg, var(--bg-subtle), var(--bg-subtle) 6px, var(--bg-raised) 6px, var(--bg-raised) 12px); }
+  .sls-cap { font-size: 12px; font-weight: 700; margin: 0 0 6px; }
+  table.sls-t { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  table.sls-t th, table.sls-t td { border-bottom: 1px solid var(--border-subtle); padding: 7px 8px; text-align: left; vertical-align: top; line-height: 1.5; }
+  table.sls-t th { font-size: 11.5px; color: var(--text-3); font-weight: 700; }
+  .sls-dec { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .sls-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--bg-raised); font-size: 12.5px; line-height: 1.55; }
+  .sls-card h4 { margin: 0 0 8px; font-size: 13.5px; }
+  .sls-opt { border-radius: 8px; padding: 8px 10px; border: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+  .sls-opt + .sls-opt { margin-top: 8px; }
+  .sls-opt.rec { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .sls-opt b { display: block; }
+  .sls-rec { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; background: var(--brand); color: #fff; margin-left: 4px; }
+</style>
+</head>
+<body>
+<div class="sls-board">
+  <h1 class="sls-title">会话列表：上千条 Open 会话也不卡</h1>
+  <p class="sls-sub">docs/session-list-scale-design.md · 2026-11-26 · A = 服务端按顶层条目分页 · C = 只画看得见的行 · 示例数据为样例</p>
+
+  <!-- ① today vs new -->
+  <section class="b-part" id="part-1">
+    <h2 class="sls-h2"><span class="sls-n">1</span>今天 vs 新：一次打开 workspace 发生什么</h2>
+    <p class="sls-lead">今天有文件夹或项目的 workspace 不分页（<span class="sls-code">WorkspaceView.tsx:3273</span>、<span class="sls-code">BootGate.tsx:175</span>），刷新页面没有游标，必定 <span class="sls-code">full: true</span>。新做法下首读和首屏只跟一页有关。</p>
+    <div class="sls-vs">
+      <div class="sls-lane">
+        <h3>今天</h3>
+        <div class="sls-node api bad">GET /sessions?view=open&amp;workspaceId=…&amp;since=<small>since 为空 → full: true，1348 行全部构建、序列化（估计数 MB）</small></div>
+        <div class="sls-down">↓</div>
+        <div class="sls-node web bad">客户端分组 sessionProjectListing<small>1348 行 × sessionLine / statusGlyphMotion；每一帧 watch、clone 进度、换选中会话都重算一遍</small></div>
+        <div class="sls-down">↓</div>
+        <div class="sls-node dom bad">renderSection → 1348 × SessionListRow<small>没有虚拟化；行没有 memo，每行的菜单、swipe、onOpen 每次渲染都重建</small></div>
+        <div class="sls-tags"><span class="sls-tag bad">读 O(N)</span><span class="sls-tag bad">算 O(N)/帧</span><span class="sls-tag bad">DOM O(N)</span></div>
+      </div>
+      <div class="sls-lane new">
+        <h3>新</h3>
+        <div class="sls-node api">GET /sessions/listing?workspaceId=…&amp;view=open&amp;limit=40<small>folders[]（文件夹计数）+ 40 条顶层条目（会话 / 项目）+ next；版本没动回 304</small></div>
+        <div class="sls-down">↓</div>
+        <div class="sls-node web">客户端只拼页<small>文件夹行用服务端计数；项目行 = 项目条目 + 现有 project-placement 读；不再按全表分组</small></div>
+        <div class="sls-down">↓</div>
+        <div class="sls-node dom">窗口化渲染（约 2 屏的行）<small>行组件 memo；sessionLine 等只在挂载的行里算；滚到底取下一页</small></div>
+        <div class="sls-tags"><span class="sls-tag good">读 O(页)</span><span class="sls-tag good">算 O(可见)/帧</span><span class="sls-tag good">DOM O(可见)</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② A: the listing read -->
+  <section class="b-part" id="part-2">
+    <h2 class="sls-h2"><span class="sls-n">2</span>A · 新读：服务端给"顶层条目"，列表长相不变</h2>
+    <p class="sls-lead">规则逐条照搬客户端今天的 <span class="sls-code">sessionProjectListing</span> / <span class="sls-code">sessionFolderListing</span>，用一份共享夹具 <span class="sls-code">contracts/session-listing.fixtures.json</span> 钉住两边。Trash、按标签筛 / 分组的平列表不进这个读，照旧走 <span class="sls-code">GET /sessions</span> 分页。</p>
+    <div class="sls-two">
+<pre class="sls-pre"><span class="c">GET /sessions/listing?workspaceId=…&amp;view=open&amp;limit=40</span>
+{
+  <span class="k">"folders"</span>: [                         <span class="c">// ① 只在首页给</span>
+    { <span class="k">"folderId"</span>: <span class="s">"…"</span>, <span class="k">"rowCount"</span>: 212,
+      <span class="k">"needsYou"</span>: 2, <span class="k">"running"</span>: true, <span class="k">"jobs"</span>: false }
+  ],
+  <span class="k">"entries"</span>: [
+    { <span class="k">"kind"</span>: <span class="s">"session"</span>, <span class="k">"session"</span>: { …列表行… } },  <span class="c">// ③</span>
+    { <span class="k">"kind"</span>: <span class="s">"project"</span>, <span class="k">"projectId"</span>: <span class="s">"…"</span>,          <span class="c">// ②</span>
+      <span class="k">"placedAt"</span>: <span class="s">"…"</span>,   <span class="c">// 收走的成员里最大的 listedAt</span>
+      <span class="k">"spokeAt"</span>: <span class="s">"…"</span>, <span class="k">"memberCount"</span>: 37,
+      <span class="k">"coordinator"</span>: { …列表行… } | null }
+  ],
+  <span class="k">"next"</span>: <span class="s">"…"</span> | null                <span class="c">// ④ 下一页的 after</span>
+}
+<span class="c">// 文件夹页：同一个读带 &amp;folderId=…，同样分页</span>
+<span class="c">// 新鲜度：ETag = Open 列表版本（scope 加 folderId），没动回 304</span></pre>
+      <div style="display:flex; gap: 26px; align-items:flex-start;">
+        <div class="sls-colwrap">
+          <div class="sls-col">
+            <div class="sls-row"><span class="ic">▸</span><span class="t">Release work<span class="l">212 sessions</span></span><span class="badge">2</span><span class="sls-mk">1</span></div>
+            <div class="sls-row"><span class="ic">▸</span><span class="t">Experiments<span class="l">96 sessions</span></span><span class="sls-mk">1</span></div>
+            <div class="sls-sec">PINNED</div>
+            <div class="sls-row"><span class="ic">◆</span><span class="t">Billing export<span class="l">Coordinator · 3 tasks running</span></span><span class="r">37</span><span class="sls-mk">2</span></div>
+            <div class="sls-sec">TODAY</div>
+            <div class="sls-row"><span class="ic">●</span><span class="t">Fix flaky upload test<span class="l">Waiting for your reply</span></span><span class="r">4m</span><span class="sls-mk">3</span></div>
+            <div class="sls-row"><span class="ic">◆</span><span class="t">Search index rebuild<span class="l">Landing to main · 2 waiting</span></span><span class="r">12m</span><span class="sls-mk">2</span></div>
+            <div class="sls-row"><span class="ic">○</span><span class="t">Draft API notes<span class="l">Recap: outlined the three routes</span></span><span class="r">1h</span><span class="sls-mk">3</span></div>
+            <div class="sls-sec">YESTERDAY</div>
+            <div class="sls-row"><span class="ic">○</span><span class="t">Review metrics alerts<span class="l">Done · 6 files changed</span></span><span class="r">1d</span></div>
+            <div class="sls-more">… 第 40 条之后：滚到底再取 after=next<span class="sls-mk" style="position:static; display:inline-flex; transform:none; margin-left:8px;">4</span></div>
+          </div>
+        </div>
+        <ul class="sls-notes">
+          <li><b class="m">1</b><b>文件夹行</b>：行数（项目算一行）、等你的数、运行中 / 后台任务两种动静，由服务端按 <span class="sls-code">folder_id</span> 数出来，判定复用侧栏 workspace 行的 <span class="sls-code">workspaceSessionCounts</span>，三处不会说两样话。</li>
+          <li><b class="m">2</b><b>项目行</b>：一条项目条目代替它在本 workspace 收走的所有成员；位置取成员里最大的 listedAt，Pinned 跟协调者。第二行要的"谁在等你、跨 workspace 会话数"照旧来自现有的 <span class="sls-code">GET /sessions/project-placement</span>。</li>
+          <li><b class="m">3</b><b>会话行</b>：不在本 workspace 现存文件夹里、也没被项目行收走的会话；协调者在别处的成员照旧是自己的行，带项目标记。行内容与今天的列表行同一个 DTO。</li>
+          <li><b class="m">4</b><b>分页</b>：顺序与今天一致（Pinned 在前，再按 <span class="sls-code">COALESCE(listed_at, created_at) DESC</span>）；滚到底取下一页。流在线时只在 <span class="sls-code">sessions.list_changed</span> 或 60 s 兜底时重读已加载的页。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ C: virtual window -->
+  <section class="b-part" id="part-3">
+    <h2 class="sls-h2"><span class="sls-n">3</span>C · 只画看得见的行，每帧只算挂载的行</h2>
+    <p class="sls-lead">文件夹行、分组标题、会话行、项目行展平成一条带类型的列表，交给窗口化渲染器；视口上下各留约一屏。行的第二行、图标动静、菜单都挪进行组件，只在挂载时算。</p>
+    <div class="sls-vw">
+      <div>
+        <p class="sls-cap">今天：已加载的每一行都在 DOM 里</p>
+        <div class="sls-stack">
+          <div class="sls-slot on">folder · Release work</div><div class="sls-slot on">folder · Experiments</div>
+          <div class="sls-slot view">row 1 ← 视口</div><div class="sls-slot view">row 2</div><div class="sls-slot view">row 3</div><div class="sls-slot view">row 4</div>
+          <div class="sls-slot on">row 5</div><div class="sls-slot on">row 6</div><div class="sls-slot on">row 7</div><div class="sls-slot on">row 8</div>
+          <div class="sls-slot on">row 9</div><div class="sls-slot on">row 10</div><div class="sls-slot on">…</div><div class="sls-slot on">row 1346</div>
+          <div class="sls-slot on">row 1347</div><div class="sls-slot on">row 1348</div>
+        </div>
+      </div>
+      <div style="text-align:center; padding-top:120px; font-size:20px; color:var(--text-3);">→</div>
+      <div>
+        <p class="sls-cap">新：只挂载视口附近</p>
+        <div class="sls-stack">
+          <div class="sls-slot on">folder · Release work</div><div class="sls-slot on">folder · Experiments</div>
+          <div class="sls-slot view">row 1 ← 视口</div><div class="sls-slot view">row 2</div><div class="sls-slot view">row 3</div><div class="sls-slot view">row 4</div>
+          <div class="sls-slot on">row 5（预留一屏）</div><div class="sls-slot on">row 6</div>
+          <div class="sls-gap">占位高度，不挂载</div>
+        </div>
+      </div>
+      <table class="sls-t">
+        <tr><th>今天的行为</th><th>虚拟化后怎么保持</th></tr>
+        <tr><td>方向键上下换会话</td><td>选中屏外的行时先 <span class="sls-code">scrollToIndex</span>，再聚焦</td></tr>
+        <tr><td>滚到底加载下一页</td><td>看最后一个可见索引，接近末尾就取 <span class="sls-code">next</span></td></tr>
+        <tr><td>拖会话到文件夹行</td><td>文件夹行在最上面；拖动时靠近顶部自动上滚</td></tr>
+        <tr><td>手机左右滑、长按菜单</td><td>都在行组件里，不变</td></tr>
+        <tr><td>切 workspace / 视图；从会话返回列表</td><td>回到顶部；返回时恢复滚动位置</td></tr>
+        <tr><td>一帧 watch / clone 进度</td><td>只让对应的那一行重渲染（行 memo + 按 id 稳定的 props）</td></tr>
+        <tr><td>浏览器 ⌘F 页内查找</td><td><b>取舍</b>：找不到没挂载的行；列表有自己的搜索（⌘K、文件夹内搜索）</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ④ landing + decisions -->
+  <section class="b-part" id="part-4">
+    <h2 class="sls-h2"><span class="sls-n">4</span>落地（按依赖排） · 待定 · 要你拍板</h2>
+    <table class="sls-t" style="margin-bottom:16px;">
+      <tr><th style="width:44px;">#</th><th>内容</th><th style="width:140px;">依赖</th><th style="width:380px;">证据</th></tr>
+      <tr><td>T1</td><td>服务端 <span class="sls-code">GET /sessions/listing</span>：顶层条目分页、项目条目、文件夹计数、版本 ETag；共享夹具；普查登记；api-reference</td><td>—</td><td>夹具驱动的 pg spec；1500 会话种子下首页耗时与字节</td></tr>
+      <tr><td>T2</td><td>Web 改读 listing：WorkspaceView、BootGate 的整读换成分页条目；文件夹页同读带 folderId</td><td>T1、T3</td><td>夹具驱动的单测；Vitest 全量；Playwright 文件夹 / 项目 / 拖动 / 方向键</td></tr>
+      <tr><td>T3</td><td>Web 虚拟化 + 每帧只算挂载行</td><td>—（与 T1 并行）</td><td>Vitest 全量；Playwright 方向键、拖动、滑动、加载更多</td></tr>
+      <tr><td>T4</td><td>端到端测量：1500 Open 会话种子，改前 / 改后：首读字节、首屏可交互、一帧 watch 的提交耗时、DOM 行数</td><td>T2、T3</td><td>测量脚本 + 数字表</td></tr>
+    </table>
+    <div class="sls-dec">
+      <div class="sls-card"><h4>D1 · A 的形状</h4>
+        <div class="sls-opt rec"><b>A1 服务端按顶层条目分页<span class="sls-rec">推荐</span></b>首读、首屏只跟一页有关；规则搬到服务端，由共享夹具保证两边一致。</div>
+        <div class="sls-opt"><b>A2 精简索引 + 按需取整行</b>分组仍在客户端，规则不搬；但索引仍是 O(N)（1348 行约 200–400 KB），要维护两层缓存。</div>
+      </div>
+      <div class="sls-card"><h4>D2 · 原生端</h4>
+        <div class="sls-opt rec"><b>只做 Web<span class="sls-rec">推荐</span></b>iOS / macOS / Android 本来就懒渲染，整读只在启动时一次，之后增量常驻；新读是加出来的，以后随时接。</div>
+        <div class="sls-opt"><b>三端一起</b>读法与行为三端一致，本期工作量约翻三倍。</div>
+      </div>
+      <div class="sls-card"><h4>D3 · 虚拟化实现</h4>
+        <div class="sls-opt rec"><b>@tanstack/react-virtual<span class="sls-rec">推荐</span></b>无样式、约 5 KB，动态行高用 measureElement；与在用的 react-query 同一家。</div>
+        <div class="sls-opt"><b>CSS content-visibility: auto</b>零依赖，省布局和绘制；但 React 仍为每一行建元素，渲染代价不降。</div>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

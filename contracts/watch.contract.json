@@ -15,20 +15,20 @@
   "leaves": {
     "SESSION_TURN_SETTLED": {
       "targetKind": "SESSION",
-      "definition": "session.status is not one of UNSETTLED_SESSION_STATUSES (PENDING, RUNNING).",
-      "sourceColumns": ["session.status"],
-      "authority": "src/apiserver/src/common/session-scheduling.ts UNSETTLED_SESSION_STATUSES",
+      "definition": "No turn of the session is queued or in flight: session.turn_state is neither QUEUED nor IN_FLIGHT (a released session has none).",
+      "sourceColumns": ["session.turn_state"],
+      "authority": "docs/session-status-retirement-plan.md section 6; src/apiserver/src/sessions/session-turn-state.ts",
       "isNot": [
-        "SESSION_RUN_TERMINAL: AWAITING_INPUT and INTERRUPTED are settled but not terminal.",
+        "SESSION_RUN_TERMINAL: a parked session (not released, no turn_state) and an abandoned one with no end reason are settled but not terminal.",
         "TASK_DONE: a settled turn says nothing about the task's completion criterion.",
         "SESSION_QUIESCENT: a turn that settled while the session's own background job, subagent or engine turn still runs, or while a watch, wake-up or retry is armed to give it another, is settled but not quiescent."
       ]
     },
     "SESSION_RUN_TERMINAL": {
       "targetKind": "SESSION",
-      "definition": "deriveSessionRunState is one of SUCCEEDED, FAILED, ENDED.",
-      "sourceColumns": ["session.status", "session.end_reason"],
-      "authority": "src/shared/src/enums.ts deriveSessionRunState"
+      "definition": "The run is over: the session is released (finished_at is set), or its turn was abandoned (turn_state ABANDONED) with an end reason recorded. These are the rows whose legacy run state is SUCCEEDED, FAILED or ENDED.",
+      "sourceColumns": ["session.finished_at", "session.turn_state", "session.end_reason"],
+      "authority": "src/apiserver/src/common/session-release.ts runIsOver"
     },
     "SESSION_LIFECYCLE_TERMINAL": {
       "targetKind": "SESSION",
@@ -94,9 +94,10 @@
     "SESSION_QUIESCENT": {
       "targetKind": "SESSION",
       "sinceVersion": 4,
-      "definition": "SESSION_TURN_SETTLED holds, nothing is executing for the session and nothing is armed to wake it. Executing: a dispatched turn, or on a session whose status is open (PENDING, RUNNING, AWAITING_INPUT, INTERRUPTED) the engine's own turn (engine_turn_active), a subagent (running_subagents) or a runner-hosted background job (running_bg_jobs). Armed to wake it: an auto-retry (retry_at) on a session not moved to Completed or Trash, or, on a session that has not ended (its run is not SUCCEEDED, FAILED or ENDED and it is still Open), an ACTIVE RESUME_SESSION watch it observes or a PENDING scheduled wake-up. A watch or a wake-up left on an ended session is stale, because no machine wake reaches an ended session, and does not hold the session unquiet. For a LANDING session, as for SESSION_TURN_SETTLED, only once its landing has ended (completed_at is set).",
+      "definition": "SESSION_TURN_SETTLED holds, nothing is executing for the session and nothing is armed to wake it. Executing: a dispatched turn, or on a session that is not released (finished_at is null) the engine's own turn (engine_turn_active), a subagent (running_subagents) or a runner-hosted background job (running_bg_jobs). Armed to wake it: an auto-retry (retry_at) on a session not moved to Completed or Trash, or, on a session that has not ended (its run is not over, as SESSION_RUN_TERMINAL reads it, and it is still Open), an ACTIVE RESUME_SESSION watch it observes or a PENDING scheduled wake-up. A watch or a wake-up left on an ended session is stale, because no machine wake reaches an ended session, and does not hold the session unquiet. For a LANDING session, as for SESSION_TURN_SETTLED, only once its landing has ended (completed_at is set).",
       "sourceColumns": [
-        "session.status",
+        "session.finished_at",
+        "session.turn_state",
         "session.end_reason",
         "session.completed_at",
         "session.archived_at",
@@ -115,7 +116,7 @@
       "authority": "src/apiserver/src/common/session-working.ts isSessionExecuting and the wake facts; src/apiserver/src/runner-api/background-job-wake.ts sessionHasEnded",
       "decidedBy": "the evaluator's schedule and its hints, as for every status leaf. A background job, a subagent or an engine turn ending announces no hint of its own, so the reconciliation sweep (at most reconcileIntervalMs) is what notices it.",
       "isNot": [
-        "SESSION_TURN_SETTLED: that leaf keeps its meaning, a status that left PENDING and RUNNING, and every watch stored with it is decided as before.",
+        "SESSION_TURN_SETTLED: that leaf keeps its meaning, no turn queued or in flight, and every watch stored with it is decided as before.",
         "SESSION_RUN_TERMINAL: a quiescent session may be waiting for input; nothing about its run is over."
       ]
     }
@@ -269,7 +270,7 @@
         "value": "NEXT_TURN",
         "why": "A wake is new work, never a steer into the turn already running. CURRENT_WORK would be refused as CURRENT_WORK_UNAVAILABLE whenever no live in-flight message exists, which is precisely the common case for a parked observer."
       },
-      "runningObserver": "No special case: an observer that is RUNNING keeps its status and the turn queues behind the running one (statusAfterTurnEnqueued leaves RUNNING alone and moves AWAITING_INPUT/INTERRUPTED to PENDING). Watch never resumes a session concurrently because it never bypasses the queue.",
+      "runningObserver": "No special case: an observer with a turn in flight keeps it and the wake queues behind it (turn_state IN_FLIGHT stays; a parked or abandoned observer moves to QUEUED). Watch never resumes a session concurrently because it never bypasses the queue.",
       "forbidden": "Polling logs or shell transcript text must never be put into the payload.",
       "endTurns": {
         "why": "A session waiting on a watch is told when the watch ends unmatched, or it waits forever (§3, §5). A watch reaches one terminal state, so it owes at most one such turn, and each end's key ends in a word no generation number spells.",
@@ -560,18 +561,18 @@
   "vectors": [
     {
       "id": "awaiting-input-is-settled-not-terminal",
-      "given": { "session": { "status": "AWAITING_INPUT", "endReason": null, "completedAt": null, "deletedAt": null } },
+      "given": { "session": { "finishedAt": null, "turnState": null, "endReason": null, "completedAt": null, "deletedAt": null } },
       "expect": {
         "SESSION_TURN_SETTLED": true,
         "SESSION_RUN_TERMINAL": false,
         "SESSION_LIFECYCLE_TERMINAL": false
       },
-      "why": "AWAITING_INPUT left PENDING/RUNNING, so the turn settled, but the session is alive and still Open."
+      "why": "A parked session has no turn queued or in flight, so the turn settled, but the session is alive and still Open."
     },
     {
       "id": "awaiting-input-is-not-task-done",
       "given": {
-        "session": { "status": "AWAITING_INPUT", "endReason": null },
+        "session": { "finishedAt": null, "turnState": null, "endReason": null },
         "task": { "status": "IN_PROGRESS" }
       },
       "expect": { "SESSION_TURN_SETTLED": true, "TASK_DONE": false, "TASK_TERMINAL": false },
@@ -579,25 +580,25 @@
     },
     {
       "id": "interrupted-bare-is-settled-not-terminal",
-      "given": { "session": { "status": "INTERRUPTED", "endReason": null } },
+      "given": { "session": { "finishedAt": null, "turnState": "ABANDONED", "endReason": null } },
       "expect": { "SESSION_TURN_SETTLED": true, "SESSION_RUN_TERMINAL": false },
-      "why": "A bare INTERRUPTED is a stopped turn on a live, schedulable session."
+      "why": "An abandoned turn with no end reason is a stopped turn on a live, schedulable session."
     },
     {
       "id": "interrupted-with-end-reason-is-terminal",
-      "given": { "session": { "status": "INTERRUPTED", "endReason": "ended" } },
+      "given": { "session": { "finishedAt": null, "turnState": "ABANDONED", "endReason": "ended" } },
       "expect": { "SESSION_TURN_SETTLED": true, "SESSION_RUN_TERMINAL": true },
       "why": "Any recorded endReason means the session itself ended, settling ENDED."
     },
     {
       "id": "succeeded-run-is-not-lifecycle-terminal",
-      "given": { "session": { "status": "SUCCEEDED", "endReason": null, "completedAt": null, "deletedAt": null } },
+      "given": { "session": { "finishedAt": "set", "startedAt": "set", "endReason": "task_done", "completedAt": null, "deletedAt": null } },
       "expect": { "SESSION_RUN_TERMINAL": true, "SESSION_LIFECYCLE_TERMINAL": false },
       "why": "Succeeded-and-Open is a normal state; run outcome and list membership are orthogonal."
     },
     {
       "id": "succeeded-session-does-not-imply-task-done",
-      "given": { "session": { "status": "SUCCEEDED" }, "task": { "status": "OPEN" } },
+      "given": { "session": { "finishedAt": "set", "startedAt": "set", "endReason": "task_done" }, "task": { "status": "OPEN" } },
       "expect": { "SESSION_RUN_TERMINAL": true, "TASK_DONE": false },
       "why": "DONE is the projection of a satisfied criterion, not of a session finishing."
     },
@@ -654,14 +655,14 @@
     },
     {
       "id": "needs-attention-is-independent-of-settled",
-      "given": { "session": { "status": "RUNNING" }, "approvals": ["PENDING"] },
+      "given": { "session": { "finishedAt": null, "turnState": "IN_FLIGHT" }, "approvals": ["PENDING"] },
       "expect": { "SESSION_NEEDS_ATTENTION": true, "SESSION_TURN_SETTLED": false },
       "why": "A session blocked on an approval is asking a human something while its turn is still unsettled; needs-attention and settled are independent axes."
     },
     {
       "id": "completed-session-emits-no-outbox-row",
       "given": {
-        "session": { "status": "SUCCEEDED", "completedAt": "set" },
+        "session": { "finishedAt": "set", "startedAt": "set", "endReason": "task_done", "completedAt": "set" },
         "outboxRow": false
       },
       "expect": { "SESSION_LIFECYCLE_TERMINAL": true, "decidedBy": "reconciliation sweep" },
@@ -699,7 +700,7 @@
     },
     {
       "id": "resume-into-running-session-queues-one-turn",
-      "given": { "observerSession": { "status": "RUNNING" }, "match": "recorded" },
+      "given": { "observerSession": { "finishedAt": null, "turnState": "IN_FLIGHT" }, "match": "recorded" },
       "expect": { "conversationTurns": 1, "concurrentResume": false },
       "why": "Delivery goes through the normal queue, so a running session is never concurrently resumed."
     },
@@ -874,7 +875,7 @@
     {
       "id": "job-quiet-past-the-window",
       "given": {
-        "session": { "status": "AWAITING_INPUT" },
+        "session": { "finishedAt": null, "turnState": null },
         "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 400 }],
         "params": { "seconds": 300 }
       },
@@ -884,7 +885,7 @@
     {
       "id": "job-output-within-the-window",
       "given": {
-        "session": { "status": "AWAITING_INPUT" },
+        "session": { "finishedAt": null, "turnState": null },
         "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 30 }],
         "params": { "seconds": 300 }
       },
@@ -894,7 +895,7 @@
     {
       "id": "silent-runner-is-heard-as-silence",
       "given": {
-        "session": { "status": "AWAITING_INPUT" },
+        "session": { "finishedAt": null, "turnState": null },
         "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 400 }],
         "runner": "stopped reporting 340 seconds ago, when it said the job had been quiet for 60 seconds",
         "params": { "seconds": 300 }
@@ -905,7 +906,7 @@
     {
       "id": "named-job-is-the-only-one-asked",
       "given": {
-        "session": { "status": "AWAITING_INPUT" },
+        "session": { "finishedAt": null, "turnState": null },
         "jobs": [
           { "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 400 },
           { "id": "bgj_9f8e7d6c5b4a", "lastOutputSecondsAgo": 10 }
@@ -917,38 +918,38 @@
     },
     {
       "id": "turn-settled-with-a-job-running-is-not-quiescent",
-      "given": { "session": { "status": "AWAITING_INPUT", "endReason": null }, "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 5 }] },
+      "given": { "session": { "finishedAt": null, "turnState": null, "endReason": null }, "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 5 }] },
       "expect": { "SESSION_TURN_SETTLED": true, "SESSION_QUIESCENT": false },
       "why": "The headline of version 4: a child that ended its turn to wait for its own background job has not finished, so session_await and session_create(wait) keep waiting for it."
     },
     {
       "id": "turn-settled-with-a-subagent-running-is-not-quiescent",
-      "given": { "session": { "status": "AWAITING_INPUT", "endReason": null, "runningSubagents": ["toolu_01"] } },
+      "given": { "session": { "finishedAt": null, "turnState": null, "endReason": null, "runningSubagents": ["toolu_01"] } },
       "expect": { "SESSION_TURN_SETTLED": true, "SESSION_QUIESCENT": false },
       "why": "A subagent reports back into its session, which then has more to do."
     },
     {
       "id": "turn-settled-awaiting-its-own-watch-is-not-quiescent",
-      "given": { "session": { "status": "AWAITING_INPUT", "endReason": null, "hasResumeWatch": true } },
+      "given": { "session": { "finishedAt": null, "turnState": null, "endReason": null, "hasResumeWatch": true } },
       "expect": { "SESSION_TURN_SETTLED": true, "SESSION_QUIESCENT": false },
       "why": "A session that ended its turn on task_await or session_await will be woken by that watch: it is waiting on its own work, not finished."
     },
     {
       "id": "failed-with-a-retry-armed-is-not-quiescent",
-      "given": { "session": { "status": "FAILED", "endReason": null, "retryAt": "in 10 minutes" } },
+      "given": { "session": { "finishedAt": "set", "lastTurnOutcome": "FAILED", "endReason": null, "retryAt": "in 10 minutes" } },
       "expect": { "SESSION_TURN_SETTLED": true, "SESSION_RUN_TERMINAL": true, "SESSION_QUIESCENT": false },
-      "why": "The auto-retry sweep re-sends a FAILED session's turn, so it will run again."
+      "why": "The auto-retry sweep re-sends the failed turn of a released session, so it will run again."
     },
     {
       "id": "ended-session-with-a-stale-watch-is-quiescent",
-      "given": { "session": { "status": "CANCELLED", "endReason": "ended", "hasResumeWatch": true, "hasPendingWakeup": true } },
+      "given": { "session": { "finishedAt": "set", "endReason": "ended", "hasResumeWatch": true, "hasPendingWakeup": true } },
       "expect": { "SESSION_QUIESCENT": true },
       "why": "No machine wake reaches an ended session, so a watch or wake-up left on it wakes nobody and must not keep a parent waiting for ever."
     },
     {
       "id": "ended-job-is-not-quiet",
       "given": {
-        "session": { "status": "AWAITING_INPUT" },
+        "session": { "finishedAt": null, "turnState": null },
         "jobs": [],
         "ended": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": 400 }],
         "params": { "seconds": 300, "jobId": "bgj_0a1b2c3d4e5f" }
@@ -959,7 +960,7 @@
     {
       "id": "unreported-job-is-unknown-not-quiet",
       "given": {
-        "session": { "status": "AWAITING_INPUT" },
+        "session": { "finishedAt": null, "turnState": null },
         "jobs": [{ "id": "bgj_0a1b2c3d4e5f", "lastOutputSecondsAgo": null }],
         "params": { "seconds": 300 }
       },

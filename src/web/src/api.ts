@@ -565,9 +565,13 @@ export const createInteractiveSession = (body: {
   /** Prompt optimizer (D2): the opening message is still exactly what Use put in the box. */
   skipTranslation?: true;
   optimizedTranslation?: string;
-}) =>
+  /** This request's own key: a repeat with the same one answers with the session the first made (migration 1730),
+   *  so the composer's Retry of a first message whose answer was lost opens no second session. */
+  clientRequestId?: string;
+}, signal?: AbortSignal) =>
   api<{ id: string; workspaceId?: string | null }>('/sessions', {
     method: 'POST',
+    signal,
     body: {
       ...body,
       // Shell-launched sessions get a `$ …` title so they read as a command in the list. A
@@ -688,6 +692,8 @@ export const sendTurn = (
   /** Prompt optimizer (D2): the text is still exactly what Use put in the box, so the server sends it
    *  as written or with the optimizer's own translation. Absent for anything else. */
   optimized?: OptimizedSend,
+  /** Ends the request: the composer gives up on an answer after SEND_ANSWER_TIMEOUT_MS. */
+  signal?: AbortSignal,
 ) =>
   api<{
     turnId: string;
@@ -707,6 +713,7 @@ export const sendTurn = (
       ...(kind === 'shell' ? { kind } : {}),
       ...optimized,
     },
+    signal,
   });
 
 /** Upload one image to the control plane (multipart/form-data — the shared `api` helper
@@ -967,6 +974,8 @@ export const resumeSession = (
   stopSessionId?: string,
   /** As sendTurn's: the text is still exactly what the optimizer's Use put in the box (D2). */
   optimized?: OptimizedSend,
+  /** As sendTurn's. */
+  signal?: AbortSignal,
 ) =>
   api<{
     turnId: string;
@@ -991,6 +1000,7 @@ export const resumeSession = (
       ...(stopSessionId ? { stopSessionId } : {}),
       ...optimized,
     },
+    signal,
   });
 
 export interface ApprovalInfo {
@@ -1782,7 +1792,20 @@ export type SharedRoot =
   | (SharedSession & { kind?: 'SESSION' })
   | { kind: 'TASK'; include: ShareInclude; sharedAt: string; root: SharedTask }
   | { kind: 'PROJECT'; include: ShareInclude; sharedAt: string; root: SharedProject; scope: SharedScope }
-  | { kind: 'WIKI'; include: ShareInclude; sharedAt: string; root: SharedWiki };
+  | { kind: 'WIKI'; include: ShareInclude; sharedAt: string; root: SharedWiki }
+  | { kind: 'DRIVE_FILE'; include: ShareInclude; sharedAt: string; root: SharedDriveFile };
+
+/** A Drive file a link shares, pinned to the version shared: its bytes are at `sharedDriveFileUrl`.
+ *  `preview` says the browser can show it as it is (a PDF or a picture). */
+export interface SharedDriveFile {
+  name: string;
+  sizeBytes: number;
+  mimeType: string;
+  preview: boolean;
+}
+
+/** Where a file link's bytes are served (with `Range`), no login needed. */
+export const sharedDriveFileUrl = (token: string): string => `/api/shared/${encodeURIComponent(token)}/content`;
 
 /** One of a project link's tasks (`/s/<token>/t/<id>`): the task as a task link shows its task,
  *  with the link's layers and what it opens. */
@@ -2043,6 +2066,8 @@ export interface TaskRunRoute {
   escalated: boolean;
   /** The router's own sentences, shown as they are. */
   reasons: string[];
+  /** The §7.5 sentence when the run went elsewhere because its pin could not run; else null. */
+  relaxedRun?: string | null;
   policyVersion: number;
   decidedAt: string;
 }
@@ -2269,8 +2294,8 @@ export interface SessionDetail {
 
 /** Fetch one session by id (accepts a base62 public id or a raw UUID). Used to
  *  resolve the runner behind a `/sessions/:id` deep link and show its worktree output. */
-export const getSession = (idOrPublicId: string) =>
-  api<SessionDetail>(`/sessions/${idOrPublicId}`);
+export const getSession = (idOrPublicId: string, signal?: AbortSignal) =>
+  api<SessionDetail>(`/sessions/${idOrPublicId}`, { signal });
 
 /** One session request as it stands now — the state a request card shows (lib/sessionRequest). */
 export const getSessionRequest = (requestId: string) =>

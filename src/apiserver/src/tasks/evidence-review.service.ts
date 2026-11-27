@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { deliverOwedTaskTurn } from './owed-task-turn';
 import { readBlockSender } from '../sessions/session-message';
 import { SessionsService } from '../sessions/sessions.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import {
   EvidenceReviewDeliveryRefused,
   bindEvidenceReviewDelivery,
@@ -104,7 +105,7 @@ export class EvidenceReviewService {
           projectId: null, completionCriterion: 'EVIDENCE_JUDGMENT',
           status: { in: ['OPEN', 'IN_PROGRESS'] },
           creatorSession: {
-            ...(sessionId ? { id: sessionId } : { status: { in: ['AWAITING_INPUT', 'INTERRUPTED'] } }),
+            ...(sessionId ? { id: sessionId } : turnStateFilter([null, 'ABANDONED'])),
           },
         },
         select: {

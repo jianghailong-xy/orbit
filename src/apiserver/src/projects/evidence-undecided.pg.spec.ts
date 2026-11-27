@@ -35,7 +35,6 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
@@ -71,7 +70,6 @@ type CoordinatorState = 'live' | 'down' | 'retry' | 'ended' | 'cancelled';
 function coordinatorColumns(state: CoordinatorState) {
   const failed = state === 'down' || state === 'retry';
   return {
-    status: failed ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
     finishedAt: failed ? new Date() : null,
     // A failure release carries FAILED on its turn (removal step R2), which is what reads it as down since R7.
     lastTurnOutcome: failed ? 'FAILED' : null,
@@ -111,7 +109,7 @@ async function fixture(
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: forTask !== null,
     },

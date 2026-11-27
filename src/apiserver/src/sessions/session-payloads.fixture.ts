@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { Prisma, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
-import { ControlEventType } from '@orbit/shared';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { ControlEventType, RunStatus } from '@orbit/shared';
 
 import type { AttachmentsService } from '../attachments/attachments.service';
 import { LinkPreviewsService } from '../link-previews/link-previews.service';
@@ -12,6 +12,8 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionGuestsService } from '../session-guests/session-guests.service';
 import { TasksService } from '../tasks/tasks.service';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, readLandingSettlements } from './session-legacy-words';
+import { turnStateOfWord } from './session-turn-state';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -26,9 +28,15 @@ import { SessionsService } from './sessions.service';
 
 /** The payload kinds, by the names contracts/session-state.contract.json gives them. */
 export const PAYLOAD_KINDS = [
-  'listRow', 'detail', 'sessionSummary', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead',
+  'listRow', 'detail', 'sessionSummary', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead', 'taskRun',
 ] as const;
 export type PayloadKind = (typeof PAYLOAD_KINDS)[number];
+
+/** A search hit (`GET /sessions/search`, the recents an empty query answers with): the six facts and the Background
+ *  mark's inputs joined it later (task 353YrK2AEGTm6mfl8GrW9), so it is read beside the kinds above and is not one of
+ *  them — the legacy golden (session-payloads-legacy.pg.spec.ts) has no rows for it. Search never answers a LANDING
+ *  row, so the settled landing has none. */
+export const SEARCH_HIT = 'searchHit';
 
 export interface FixtureCase {
   label: string;
@@ -98,6 +106,7 @@ export interface Stack {
   sessions: SessionsService;
   guests: SessionGuestsService;
   previews: LinkPreviewsService;
+  tasks: TasksService;
   realtime: RealtimeService;
 }
 
@@ -114,6 +123,7 @@ export function connect(url: string): Stack {
     sessions,
     guests: new SessionGuestsService(prisma, sessions, {} as AttachmentsService),
     previews: new LinkPreviewsService(prisma, sessions, tasks),
+    tasks,
     realtime,
   };
 }
@@ -123,11 +133,30 @@ export interface World {
   guestId: string;
   /** Session id by case label. */
   ids: Map<string, string>;
+  /** The task each case's session is the run of, by case label (the task detail's `sessions[]`): one live run per task. */
+  taskIds: Map<string, string>;
+}
+
+/** The `project_landing` row of a settled LANDING container, with the project and codebase it hangs from. */
+async function settledLanding(db: PrismaClient, ownerId: string, taskId: string, sessionId: string): Promise<void> {
+  const project = await db.project.create({ data: { ownerId, title: 'payloads project' } });
+  const codebase = await db.projectCodebase.create({
+    data: {
+      ownerId, projectId: project.id, canonicalRepoUrl: `https://github.com/example/payloads-${project.id}`,
+      upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+    },
+  });
+  await db.projectLanding.create({
+    data: {
+      id: randomUUID(), projectId: project.id, ownerId, codebaseId: codebase.id, subject: 'TASK', taskId, sessionId,
+      settledAt: new Date(), settledAs: 'LANDED',
+    },
+  });
 }
 
 /** The owner, an online runner, a workspace, a guest, and one shared conversation per case. */
 export async function buildWorld(db: PrismaClient, run: string): Promise<World> {
-  const w: World = { ownerId: randomUUID(), guestId: randomUUID(), ids: new Map() };
+  const w: World = { ownerId: randomUUID(), guestId: randomUUID(), ids: new Map(), taskIds: new Map() };
   const runnerId = randomUUID();
   const workspaceId = randomUUID();
   for (const [id, who] of [[w.ownerId, 'owner'], [w.guestId, 'guest']] as const) {
@@ -144,20 +173,30 @@ export async function buildWorld(db: PrismaClient, run: string): Promise<World> 
     },
   });
   await db.workspace.create({ data: { id: workspaceId, ownerId: w.ownerId, runnerId, name: 'payloads-agent', enabled: true } });
+  const taskIdOf = (label: string) => {
+    if (!w.taskIds.has(label)) w.taskIds.set(label, randomUUID());
+    return w.taskIds.get(label)!;
+  };
+  const makeTask = (label: string) => db.task.create({ data: { id: taskIdOf(label), ownerId: w.ownerId, creatorId: w.ownerId, creatorType: 'USER', completionCriterion: 'EVIDENCE_JUDGMENT', title: `payloads task ${label} ${run}`, autoRunWhenReady: false } });
   let n = 0;
   for (const c of FIXTURE_CASES) {
     const id = randomUUID();
     n += 1;
+    await makeTask(c.label);
     await db.session.create({
       data: {
         id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId, assignedRunnerId: runnerId,
-        title: `payloads ${c.label}`, prompt: 'hello', provider: 'claude', status: c.status,
+        title: `payloads ${c.label}`, taskId: taskIdOf(c.label), prompt: 'hello', provider: 'claude',
+        // The case's word, as its facts (since deploy D3 the stored word follows them, migration 1671).
+        turnState: turnStateOfWord(c.status),
         dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(Date.now() - 60 * MINUTE), numTurns: 1,
         createdAt: new Date(Date.now() - n * MINUTE),
         ...(RELEASED.has(c.status) ? { finishedAt: new Date() } : {}),
         ...c.row,
       },
     });
+    // A LANDING container's row, which says how it settled: the projector reads it for the container's word.
+    if (c.row?.sessionKind === 'LANDING') await settledLanding(db, w.ownerId, taskIdOf(c.label), id);
     await db.sessionGuest.create({ data: { sessionId: id, userId: w.guestId, ownerId: w.ownerId } });
     await c.arm?.(db, w.ownerId, id);
     w.ids.set(c.label, id);
@@ -168,8 +207,13 @@ export async function buildWorld(db: PrismaClient, run: string): Promise<World> 
 type Payload = Record<string, unknown>;
 
 /** Each case's payload on every kind, by label then kind. */
-export async function readPayloads(stack: Stack, w: World): Promise<Map<string, Record<PayloadKind, Payload>>> {
+export async function readPayloads(
+  stack: Stack,
+  w: World,
+): Promise<Map<string, Record<PayloadKind, Payload> & { [SEARCH_HIT]: Payload | null }>> {
   const ids = [...w.ids.values()];
+  const hits = new Map((await stack.sessions.search(w.ownerId, undefined, 50)).hits
+    .map((hit) => [hit.id, hit as unknown as Payload]));
   const rows = new Map((await stack.sessions.listRowsByIds(w.ownerId, ids)).map((row) => [row.id, row as Payload]));
   const previews = await stack.previews.read(w.ownerId, ids.map((id) => ({ kind: 'session' as const, id })));
   const previewOf = (id: string) => {
@@ -182,9 +226,14 @@ export async function readPayloads(stack: Stack, w: World): Promise<Map<string, 
     buildSessionSummary(id: string): Promise<Payload | null>;
     readEventData(id: string, type: ControlEventType, ev: unknown, ownerId: string): Promise<Payload | null>;
   };
-  const out = new Map<string, Record<PayloadKind, Payload>>();
+  const out = new Map<string, Record<PayloadKind, Payload> & { [SEARCH_HIT]: Payload | null }>();
   for (const [label, id] of w.ids) {
-    const row = await stack.db.session.findUniqueOrThrow({ where: { id }, select: { status: true, endReason: true } });
+    const facts = await stack.db.session.findUniqueOrThrow({ where: { id }, select: { id: true, ...LEGACY_STATUS_SELECT } });
+    const row = {
+      status: legacySessionStatus(facts, (await readLandingSettlements(stack.db, [facts])).get(id)),
+      endReason: facts.endReason,
+    };
+    const taskDetail = (await stack.tasks.get(w.ownerId, w.taskIds.get(label)!)) as unknown as { sessions: Payload[] };
     const need = <T>(value: T | null | undefined, kind: string): T => {
       if (value == null) throw new Error(`${label}: no ${kind} payload`);
       return value;
@@ -200,6 +249,9 @@ export async function readPayloads(stack: Stack, w: World): Promise<Map<string, 
       linkPreview: need(previewOf(id), 'linkPreview'),
       guestRow: need(shared.get(id), 'guestRow'),
       sharedHead: (await stack.sessions.sharedHead(id)) as unknown as Payload,
+      // A run in the task detail's `sessions[]`.
+      taskRun: need(taskDetail.sessions.find((run) => run.id === id), 'taskRun'),
+      [SEARCH_HIT]: hits.get(id) ?? null,
     });
   }
   return out;

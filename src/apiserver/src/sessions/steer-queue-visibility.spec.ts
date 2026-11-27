@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import { coordinatorDeliveryTurnId } from '../projects/coordinator-delivery.service';

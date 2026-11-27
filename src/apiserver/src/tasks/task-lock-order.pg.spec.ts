@@ -18,7 +18,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { TaskStatus } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -264,7 +265,7 @@ suite('the Project → Task → Session acquisition order, on real PostgreSQL', 
       const run = await db.session.create({
         data: {
           ownerId: w.ownerId, creatorId: w.ownerId, title: 'checking', prompt: 'p',
-          taskId: check.id, startsTaskWork: true, status: RunStatus.RUNNING,
+          taskId: check.id, startsTaskWork: true, turnState: 'IN_FLIGHT',
         },
       });
 

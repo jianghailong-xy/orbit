@@ -3,7 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +13,7 @@ import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-tes
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * Retry re-sends a message with the ids of the files it went out with.
@@ -65,7 +67,7 @@ interface Fixture {
 }
 
 /**
- * `stored`: the screenshot as an upload has been kept since Orbit Files (0462) — its bytes in the file
+ * `stored`: the screenshot as an upload has been kept since Drive (0462) — its bytes in the file
  * store, named by sha256, and none in the row. Otherwise a row from before it, its bytes in `data`.
  */
 async function fixture(db: PrismaClient, label: string, status: RunStatus, stored = false): Promise<Fixture> {
@@ -108,7 +110,7 @@ async function fixture(db: PrismaClient, label: string, status: RunStatus, store
       engineTurnActive: false,
       runtimeSessionId: randomUUID(),
       startedAt: new Date(),
-      status,
+      turnState: turnStateOfWord(status),
       ...(isReleasedStatus(status) ? {
         finishedAt: new Date(),
       } : {}),
@@ -191,7 +193,7 @@ test('Retry of a failed run carries its screenshot, as a copy on the new turn',
       // failed too, so the replay meets a terminal run as the first press did.
       await db.session.update({
         where: { id: f.sessionId },
-        data: { status: RunStatus.FAILED, finishedAt: new Date() },
+        data: { turnState: null, finishedAt: new Date() },
       });
       const replayed = await sessions.resume(f.ownerId, f.sessionId, retry) as { turnId: string };
       assert.equal(replayed.turnId, sent.turnId, 'the replay is answered with the turn it queued');
@@ -275,6 +277,41 @@ test('a file of another session is still refused, and nothing is written',
       );
       assert.equal(await db.conversationTurn.count({ where: { sessionId: mine.sessionId } }), 1);
       assert.equal(await db.attachment.count({ where: { sessionId: mine.sessionId } }), 1);
+    } finally {
+      await db.$disconnect();
+    }
+  });
+
+test('a withdrawn message keeps its file on the session, so the put-back sends it again by the same id',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const { db, sessions } = connect();
+    try {
+      // The incident: a queued (or held, untranslated) message with a picture is cancelled; its words
+      // and its file go back to the composer by id; the resend named a file the cascade had deleted.
+      const f = await fixture(db, 'withdraw-keeps', RunStatus.AWAITING_INPUT);
+      await db.attachment.update({ where: { id: f.screenshot }, data: { turnId: null } });
+      const queued = await sessions.createTurn(f.ownerId, f.sessionId, {
+        clientTurnId: randomUUID(),
+        content: 'look at this',
+        attachmentIds: [f.screenshot],
+      });
+      assert.deepEqual((await filesOf(db, queued.turnId)).map((file) => file.id), [f.screenshot]);
+      // Still PENDING: nothing claimed it.
+      await db.session.update({ where: { id: f.sessionId }, data: { turnState: 'QUEUED' } });
+
+      await sessions.cancelQueuedTurn(f.ownerId, f.sessionId, queued.turnId);
+
+      assert.equal(await db.conversationTurn.count({ where: { id: queued.turnId } }), 0, 'the message is gone');
+      const kept = await db.attachment.findUnique({ where: { id: f.screenshot }, select: { sessionId: true, turnId: true } });
+      assert.deepEqual(kept, { sessionId: f.sessionId, turnId: null }, 'its file is staged on the session again');
+
+      const resent = await sessions.createTurn(f.ownerId, f.sessionId, {
+        clientTurnId: randomUUID(),
+        content: 'look at this',
+        attachmentIds: [f.screenshot],
+      });
+      assert.deepEqual((await filesOf(db, resent.turnId)).map((file) => file.id), [f.screenshot], 'sent again, the same file');
     } finally {
       await db.$disconnect();
     }

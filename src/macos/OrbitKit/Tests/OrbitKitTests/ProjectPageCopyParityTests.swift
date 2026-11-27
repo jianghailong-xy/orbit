@@ -180,7 +180,9 @@ final class ProjectPageCopyParityTests: XCTestCase {
         assertSays(web, "{ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}", in: Self.progress)
         assertSays(web, "<div className=\"project-open-item-state is-ready-to-close\">{PROJECT_DONE_COPY.readyToClose}</div>",
                    in: Self.progress)
-        assertSays(web, "title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>", in: Self.progress)
+        // The heading's full text is the app Tooltip's, shown only when the row cuts it off.
+        assertSays(web, "<Tooltip content={PROJECT_DONE_COPY.heading} truncatedOnly>", in: Self.progress)
+        assertSays(web, "<div className=\"project-open-item-title\">{PROJECT_DONE_COPY.heading}</div>", in: Self.progress)
         assertSays(web, "`${PROJECT_DONE_COPY.openItemsDoneRequest} · ${row.doneRequest.gaps.length} ${PROJECT_DONE_COPY.gapsItCouldntProve}`",
                    in: Self.progress)
         assertSays(web, "{PROJECT_DONE_COPY.recordAsDoneRow}", in: Self.progress)
@@ -195,9 +197,9 @@ final class ProjectPageCopyParityTests: XCTestCase {
         // The owner's own Record as done… is a grey hint the Open items count leaves out (the browser
         // since 1f85c0afe): only the request counts as needing the owner.
         assertSays(web, "is-owner is-own-start is-hint project-open-item-done-own", in: Self.progress)
-        // The web counts its sign-in waits among what needs the owner (5cd4114e6, `signIns`); this app draws
-        // no sign-in rows yet, so its own count below is the requests alone.
-        assertSays(web, "`${needsYou.length + signIns.length} need you · oldest first`",
+        // The web counts its sign-in waits (5cd4114e6, `signIns`) and its account wait (`accountWait`) among what
+        // needs the owner; this app draws neither row yet, so its own count below is the requests alone.
+        assertSays(web, "`${needsYou.length + signIns.length + (accountWait ? 1 : 0)} need you · oldest first`",
                    in: Self.progress)
         XCTAssertEqual(ProjectPage.openItemsSummary(status: .open, started: true, items: ProjectOpenItemsView())?.needsYou, 0,
                        "nobody asked: the owner's own row needs nobody")

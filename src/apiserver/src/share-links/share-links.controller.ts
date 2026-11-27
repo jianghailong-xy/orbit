@@ -18,6 +18,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { listParam } from '../wiki/wiki-retrieval';
 import { DriveContentService } from '../drive/drive-content.service';
 import { DriveService } from '../drive/drive.service';
+import { documentsDisabledError, documentsEnabled } from '../drive/drive-switch';
 import { PutShareLinkDto, ShareDriveFileDto, TurnOffShareLinksDto } from './dto';
 import { ShareLinksService } from './share-links.service';
 
@@ -125,6 +126,7 @@ export class ShareLinksController {
    */
   @Post('share-links')
   async shareDriveFile(@CurrentUser() user: AuthUser, @Body() dto: ShareDriveFileDto) {
+    if (!documentsEnabled()) throw documentsDisabledError();
     const version = await this.drive.shareableVersion(user.userId, dto.driveEntryId);
     const check = await this.driveContent.shareCheck(user.userId, version.id);
     const link = await this.links.putDriveFile(user.userId, dto.driveEntryId, version.id, dto.expiresAt);

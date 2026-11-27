@@ -950,6 +950,7 @@ struct TaskRowView: View {
                                   : "Waiting for prerequisites")
                     }
                 }
+                accountHoldLine
                 HStack(spacing: 7) {
                     TaskStatusPill(pill: TaskListLogic.pill(task))
                     Text(task.assignee?.name ?? "Unassigned")
@@ -967,6 +968,16 @@ struct TaskRowView: View {
         }
         .padding(.vertical, 3)
         #endif
+    }
+
+    /// A held task's one quiet line under its title (contract §3): not while it runs or is queued, nor
+    /// when the sign-in hold stands.
+    @ViewBuilder
+    private var accountHoldLine: some View {
+        if TaskAccountHoldCopy.showsOnRow(task.accountHold, signInHold: task.hold, running: task.running == true,
+                                          queued: task.queued == true), let hold = task.accountHold {
+            TaskAccountHoldLine(hold: hold)
+        }
     }
 
     #if os(iOS)
@@ -987,6 +998,7 @@ struct TaskRowView: View {
                         .monospacedDigit()
                 }
             }
+            accountHoldLine
             HStack(spacing: 7) {
                 TaskStatusPill(pill: TaskListLogic.pill(task))
                 phrase
@@ -1555,6 +1567,10 @@ private struct TaskDetailContent: View {
                     .textSelection(.enabled)
                     .accessibilityIdentifier("task-fork-source")
             }
+            // No account that could run it can run now (contract §3): Held, why, and where to fix it.
+            if let hold = task.accountHold {
+                TaskAccountHoldNote(hold: hold)
+            }
             // How this row is judged, which nothing else on the page said.
             if let chip = TaskJudgment.chip(task) { judgmentChip(chip) }
         }
@@ -1637,6 +1653,9 @@ private struct TaskDetailContent: View {
                 if let receipt = status.receipt {
                     Text(receipt).font(.orbitMeta).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                if let job = task.integration?.landTask, let pullRequest = job.pullRequest {
+                    LandingPullRequestBlock(pullRequest: pullRequest, main: TaskLandingLogic.branch(job.targetRef))
                 }
                 if !status.facts.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
@@ -2897,12 +2916,15 @@ private struct TaskDetailContent: View {
     private func runRow(_ session: SessionRef, _ task: TaskItem) -> some View {
         let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection)
         let name: (String) -> String = { runModelName($0, task) }
+        // The state from `phase` and its marks (`SessionDisplay`); nil from an older server.
+        let state = SessionDisplay.state(session.displayFacts)
+        let running = state.map { $0 == .running } ?? (session.resolvedRunState == .running)
         return HStack(spacing: 10) {
             Group {
-                if session.resolvedRunState == .running {
+                if running {
                     ProgressView().controlSize(.small)
                 } else {
-                    Circle().fill(sessionColor(session)).frame(width: 8, height: 8)
+                    Circle().fill(state != nil ? Color.secondary : sessionColor(session)).frame(width: 8, height: 8)
                 }
             }
             .frame(width: 18)
@@ -2917,15 +2939,26 @@ private struct TaskDetailContent: View {
                     }
                 }
                 HStack(spacing: 6) {
-                    // One run of text, so the dot sits evenly between where it stands and what it ran on.
-                    let status = Text(sessionLabel(session))
-                        .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
-                    if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
-                        (status + Text(" · \(ranOn)").foregroundStyle(Color.secondary))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                    if let state {
+                        // The state word, its marks, then what it ran on.
+                        Text(state.word).foregroundStyle(running ? Color.accentColor : Color.secondary)
+                        SessionMarkPills(marks: SessionDisplay.marks(session.displayFacts) ?? [])
+                        if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
+                            Text("· \(ranOn)").foregroundStyle(Color.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     } else {
-                        status
+                        // One run of text, so the dot sits evenly between where it stands and what it ran on.
+                        let status = Text(sessionLabel(session))
+                            .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
+                        if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
+                            (status + Text(" · \(ranOn)").foregroundStyle(Color.secondary))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        } else {
+                            status
+                        }
                     }
                     if let route, route.applied {
                         routeTierTag(route)
@@ -2941,6 +2974,10 @@ private struct TaskDetailContent: View {
                         .font(.orbitSubtext)
                         .foregroundStyle(Color.purple)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                // A pinned run that went elsewhere says which pin, where it ran and why (contract §3).
+                if let relaxed = session.route?.relaxedRun {
+                    RelaxedRunNote(sentence: relaxed)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2976,16 +3013,7 @@ private struct TaskDetailContent: View {
     }
 
     private func sessionLabel(_ session: SessionRef) -> String {
-        switch session.resolvedRunState {
-        case .queued:        return "Queued"
-        case .running:       return "Running"
-        case .awaitingInput: return "Awaiting reply"
-        case .succeeded:     return "Finished"
-        case .failed:        return "Failed"
-        case .interrupted:   return "Interrupted"
-        case .ended:         return "Ended"
-        case .unknown, nil:  return "—"
-        }
+        ShareMarkdown.runLabel(session)
     }
 
     private func sessionColor(_ session: SessionRef) -> Color {

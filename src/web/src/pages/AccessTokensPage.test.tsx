@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type AccessToken, type IssuedAccessToken } from '../api';
 import { ALL_SCOPES, NEVER_EXPIRES, NEVER_EXPIRES_WARNING, READ_SCOPES, fullDate, untilLine } from '../lib/accessTokens';
 import { ago } from '../lib/watches';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Settings → Access tokens (docs/personal-access-token-design.md §9), in a real document over what
@@ -271,7 +272,8 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     // The mark is a tag of its own, on the token that never expires and on no other.
     expect([...page().querySelectorAll('.access-token-never')].map((tag) => tag.textContent)).toEqual([NEVER_EXPIRES]);
     // Where the last use came from carries what made it.
-    expect(page().querySelector('[title="orbit-cli/0.1.220"]')?.textContent).toBe('203.0.113.7');
+    const address = [...page().querySelectorAll('.access-token-sub')].find((line) => line.textContent === '203.0.113.7');
+    expect(await hoverTooltip(address!)).toBe('orbit-cli/0.1.220');
 
     await click(page().querySelectorAll('[role="tab"]')[1], 'Revoked & expired');
     expect(rows().map((row) => [row[0], row[3], row.length])).toEqual([
@@ -360,8 +362,8 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     }
     // Files is its own row, one grant for reading and changing the drive, and not part of read-only.
     expect(form.querySelectorAll('.access-token-scope-row')).toHaveLength(9);
-    expect(row('Files')).toBeTruthy();
-    expect(isChecked(choice(row('Files'), 'checkbox', 'Read & write')!)).toBe(false);
+    expect(row('Drive')).toBeTruthy();
+    expect(isChecked(choice(row('Drive'), 'checkbox', 'Read & write')!)).toBe(false);
     // Notifications too: sending a push to your own apps is not a read.
     expect(isChecked(choice(row('Notifications'), 'checkbox', 'Send')!)).toBe(false);
     expect(isChecked(box('Tasks', 'Write'))).toBe(false);
@@ -369,7 +371,7 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     // Untick every read but the wiki's, then write the wiki, then untick the projects' read again.
     for (const resource of ['Tasks', 'Projects', 'Sessions', 'Workspaces', 'Runners', 'Events']) await click(box(resource, 'Read'), resource);
     await click(box('Wiki', 'Write'), 'Wiki write');
-    await click(choice(row('Files'), 'checkbox', 'Read & write'), 'Files');
+    await click(choice(row('Drive'), 'checkbox', 'Read & write'), 'Files');
     await click(choice(row('Notifications'), 'checkbox', 'Send'), 'Notifications');
     // Writing sessions brings reading them along.
     await click(box('Sessions', 'Write'), 'Sessions write');
@@ -382,7 +384,7 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     await vi.waitFor(() => expect(issueAccessToken).toHaveBeenCalledTimes(1));
     expect(issueAccessToken).toHaveBeenCalledWith({
       name: 'Wiki bot',
-      scopes: ['wiki:read', 'wiki:write', 'files', 'notify'],
+      scopes: ['wiki:read', 'wiki:write', 'drive', 'notify'],
       workspaceIds: [],
       expiresInDays: 90,
     });

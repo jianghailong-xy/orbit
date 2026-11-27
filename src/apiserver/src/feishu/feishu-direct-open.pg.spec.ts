@@ -246,7 +246,7 @@ test('Feishu open access: someone in the availability scope direct-messages the 
     try {
       await sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
       await sql.query(
-        `UPDATE "session" SET "status" = 'RUNNING', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
+        `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', "assigned_runner_id" = $2::uuid, "inbox_lease_owner" = $3::uuid,
                 "inbox_lease_generation" = $4::uuid, "started_at" = coalesce("started_at", now()),
                 "engine_turn_active" = $5, "runtime_session_id" = coalesce("runtime_session_id", $6)
           WHERE "id" = $1::uuid`,
@@ -275,10 +275,10 @@ test('Feishu open access: someone in the availability scope direct-messages the 
       turnId, leaseOwner: lease.owner, status: 'SUCCEEDED', result: 'done', numTurns: 1, costUsd: 0,
     }, { 'x-orbit-runner-caller': 'mcp' });
     assert.equal(done.status, 200, done.text);
-    await sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [sessionId]);
+    await sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [sessionId]);
   }
   /** The session is no longer running, so it holds no "at a time" slot. */
-  const settle = (sessionId: string) => sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [sessionId]);
+  const settle = (sessionId: string) => sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [sessionId]);
 
   let carol: { messageId: string; sessionId: string; eventId: string } | undefined;
 
@@ -439,7 +439,7 @@ test('Feishu open access: someone in the availability scope direct-messages the 
     assert.deepEqual(repliesTo(sent.messageId), [words], `${limit}: delivered once`);
   }
   const openCounts = async () => (await sql.query<{ running: number; today: number }>(
-    `SELECT count(*) FILTER (WHERE s."status" IN ('PENDING', 'RUNNING') AND s."deleted_at" IS NULL)::int AS "running",
+    `SELECT count(*) FILTER (WHERE s."turn_state" IN ('QUEUED', 'IN_FLIGHT') AND s."deleted_at" IS NULL)::int AS "running",
             count(*) FILTER (WHERE s."id" IS NOT NULL)::int AS "today"
        FROM "feishu_thread" t LEFT JOIN "session" s ON s."id" = t."session_id"
       WHERE t."app_id" = $1 AND t."open_access_open_id" IS NOT NULL`, [X.appId])).rows[0]!;

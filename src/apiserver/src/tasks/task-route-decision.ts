@@ -6,7 +6,6 @@ import {
   accountCapWindows,
   cursorUsageRead,
   isEngine,
-  USAGE_LIMIT_ERROR_MARKERS,
   runnerCatalogRow,
   quotaExpiry,
   quotaNearLimit,
@@ -19,6 +18,10 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { runnerAccountPausedUntil } from '../common/account-pause';
+import { runNotCounted } from '../common/run-not-counted';
+import { routingHealthIndex } from '../providers/account-health.service';
+import { runnerSubjectAccount, subjectKey } from '../providers/account-health';
+import { runnerWithHealth } from '../providers/account-health-blocked';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -36,19 +39,22 @@ import { ACCOUNT_CHOICE } from '../providers/account';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
+import { LEGACY_STATUS_SELECT, legacySessionStatus } from '../sessions/session-legacy-words';
 import { blockedRunnerRegion } from '../runners/runner-region';
 import { taskRunSeed } from '../workspaces/start-anchor';
 import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
-  MODEL_AT_CAPACITY_ERROR_MARKER,
   MODEL_ROUTING_LEVELS,
+  baselineHealth,
   priorLevel,
   routeTaskRun,
   type ModelRoutingEngineState,
+  type ModelRoutingHold,
   type ModelRoutingInput,
   type ModelRoutingLevel,
   type ModelRoutingRun,
+  type RoutingHealthEntry,
 } from './model-routing';
 import type { TaskRunRoute } from './task-run-receipt';
 
@@ -89,7 +95,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
     runner: (id: string) => once(`runner:${id}`, () => prisma.runner.findFirst({
       where: { id, ownerId },
       select: {
-        modelCatalog: true, runtimeDefaultModels: true, planUsage: true,
+        id: true, modelCatalog: true, runtimeDefaultModels: true, planUsage: true,
         name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true,
         // The Claude region check's verdict, which rules Claude's own sign-in out as a sign-out does (engineState).
@@ -101,7 +107,18 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
       () => routeEngine(prisma, ownerId, provider, providerBuiltin),
     ),
     deepSeekKey: () => once('deepseek-key', () => defaultDeepSeekKey(prisma, ownerId)),
+    /** The owner's live account health by subject key (docs/routing-account-health-design.md §7.1): one batched read. */
+    health: () => once('health', () => routingHealthIndex(prisma, ownerId, now)),
   };
+}
+
+/** The health index with one account's due trial read as being tried by another run: a dispatch that lost its claim
+ *  routes again with that account excluded (§6.5). */
+export function withTrialHeld(index: ReadonlyMap<string, RoutingHealthEntry[]>, subject: string): Map<string, RoutingHealthEntry[]> {
+  const next = new Map(index);
+  const entries = next.get(subject);
+  if (entries) next.set(subject, entries.map((entry) => (entry.model === null && entry.state === 'trial-due' ? { ...entry, state: 'trial-running' } : entry)));
+  return next;
 }
 
 export type TaskRouteReads = ReturnType<typeof taskRouteReads>;
@@ -312,8 +329,12 @@ export function engineState(
   agent: RouteAgent,
   runner: RouteRunner,
   now: Date,
+  health?: ReadonlyMap<string, RoutingHealthEntry[]>,
 ): ModelRoutingEngineState {
-  const automatic = automaticAccount(engine, agent, runner, now);
+  // Automatic's account skips one account health set aside, as it skips a paused one (§7.6), so a second account on
+  // the engine is the one judged here; with every account out the pick is today's, and health removes the engine.
+  const healthy = runnerWithHealth(runner, 'id' in runner ? (runner.id as string | null) : null, health, now);
+  const automatic = automaticAccount(engine, agent, healthy, now);
   const accounts = {
     codexAccount: agent.codexAccount,
     claudeAccount: agent.claudeAccount,
@@ -330,7 +351,7 @@ export function engineState(
     runner,
     nowMs: now.getTime(),
   }) !== null;
-  const account = runAccount(engine, agent.env, accounts, runner, now);
+  const account = runAccount(engine, agent.env, accounts, healthy, now);
   // Antigravity's reading travels with its engine health, not in planUsage: folded in as every quota reader does.
   const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
   const snapshot = account === null ? undefined : spentPlanUsage(usage, engine, account);
@@ -344,8 +365,14 @@ export function engineState(
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
   // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
   const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
+  // What account health learned of that account on this runner (§6.1, §7.1): the subject the ingest records it under.
+  const subjectAccount = runnerSubjectAccount(account);
+  const entries = health && subjectAccount !== null && 'id' in runner && runner.id
+    ? health.get(subjectKey({ type: 'runner', runnerId: runner.id, engine, account: subjectAccount }))
+    : undefined;
   return {
     signedOut, quota, ...quotaTiming(snapshot, now), ...(quotaUnread ? { quotaUnread } : {}), ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}),
+    ...(entries?.length ? { health: entries } : {}),
   };
 }
 
@@ -367,20 +394,6 @@ async function routeEngines(
   return { verifiedRunEngine: task.verifiesTaskId ? await lastRunEngine(reads, task.verifiesTaskId) : null };
 }
 
-/** `autoRunHoldOff`'s reading: an error naming a spent quota says nothing about the task (§3.3). */
-function quotaFailure(error: string | null): boolean {
-  const text = error?.toLowerCase() ?? '';
-  return USAGE_LIMIT_ERROR_MARKERS.some((marker) => text.includes(marker));
-}
-
-/**
- * "Selected model is at capacity": the provider turned the run away at admission, for minutes and
- * across models, so like a spent quota it says nothing about the task.
- */
-function capacityFailure(error: string | null): boolean {
-  return error?.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER) ?? false;
-}
-
 /**
  * The task's work runs as the router reads them (§3.3): newest first, numbered in the order they
  * were started ("run 1" is the first), each with the tier its own Route Decision named — a shadow
@@ -400,7 +413,7 @@ async function readRunHistory(
     where: { ownerId, taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
-      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true,
+      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, ...LEGACY_STATUS_SELECT, error: true, failureKind: true, accountHealthEffect: true,
       engine: true, provider: true, providerBuiltin: true, ownerId: true, model: true, effort: true,
     },
   });
@@ -427,9 +440,11 @@ async function readRunHistory(
     const judged = (at: Date) => at >= run.createdAt && (!next || at < next);
     return {
       ordinal: index + 1,
-      status: run.status,
-      quotaFailure: failed && quotaFailure(run.error),
-      capacityFailure: failed && capacityFailure(run.error),
+      // The word derived from the facts (plan §3.1); a task's run is never a LANDING container.
+      status: legacySessionStatus(run),
+      // Skipped for escalation when its failure was the account's or the provider's (common/run-not-counted.ts, §7.4).
+      ...(failed && runNotCounted(run) ? { notCounted: runNotCounted(run) } : {}),
+      ...(failed && run.accountHealthEffect === 'TRIAL' ? { trialOf: run.provider } : {}),
       level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
       model: run.model,
       effort: run.effort,
@@ -469,13 +484,36 @@ export interface TaskRouteSubject {
  * Null when the account has smart model selection off (common/model-routing-switch.ts): routing
  * does not exist then, so there is no decision to record, and the run is dispatched as before routing.
  */
+/** What a dispatch acts on before it freezes a plan (docs/routing-account-health-design.md §6.5, §7.5). */
+interface PlannedHealth {
+  /** Nothing can run it now: no run is started, and the task waits. */
+  hold?: ModelRoutingHold;
+  /** The pick's account is due its trial, which the dispatch claims before the run starts. */
+  trial?: { subject: string; scopeModel: string; provider: string };
+}
+
+/**
+ * A planned route, with what the dispatch acts on before it freezes one. With smart model selection off there is no
+ * route, and only what account health says of the baseline's account (`notRouted`): the run is dispatched as before
+ * routing, unless health holds it.
+ */
+export type PlannedTaskRunRoute = (TaskRunRoute & PlannedHealth & { notRouted?: undefined }) | (PlannedHealth & { notRouted: true });
+
+/** The route a plan freezes, without what the dispatch acted on: null when nothing was routed. */
+export function routeOfPlan(planned: PlannedTaskRunRoute | null): TaskRunRoute | null {
+  if (!planned || planned.notRouted) return null;
+  const { hold: _hold, trial: _trial, notRouted: _notRouted, ...route } = planned;
+  return route;
+}
+
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
   task: TaskRouteSubject,
   workspace: { id: string; runnerId: string },
   prompt: string,
-): Promise<TaskRunRoute | null> {
-  if (!modelRoutingEnabled(await reads.owner())) return null;
+  health?: ReadonlyMap<string, RoutingHealthEntry[]>,
+): Promise<PlannedTaskRunRoute | null> {
+  if (!modelRoutingEnabled(await reads.owner())) return baselineHealthPlan(reads, task, workspace, health);
   const { prisma, ownerId } = reads;
   const env = await routeEnvironment(reads, task, workspace.id, workspace.runnerId);
   const agent = await reads.workspace(workspace.id);
@@ -496,6 +534,7 @@ export async function planTaskRunRoute(
     dto: { toolUseId: '', type: 'task', definitionSource: 'builtin' },
     parent: { engine: env.engine, provider: env.provider, model: task.model ?? '', effort },
     now: reads.now,
+    health: health ?? await reads.health(),
   });
   const structuralFeatures = {
     completionCriterion: task.completionCriterion ?? null,
@@ -509,6 +548,7 @@ export async function planTaskRunRoute(
   const optimizeFor = optimizeForOf(await reads.owner());
   const decision = routeTaskRun({
     optimizeFor,
+    relaxBlockedPins: relaxBlockedPinsOf(await reads.owner()),
     features: structuralFeatures,
     task: {
       engine: task.engine ?? null,
@@ -530,9 +570,8 @@ export async function planTaskRunRoute(
     engines,
     pool,
   });
-  // The run the router compared against: the newest one that did not stop at a usage limit or
-  // at a model at capacity.
-  const skipped = history.findIndex((run) => !run.quotaFailure && !run.capacityFailure);
+  // The run the router compared against: the newest one that is counted (§7.4).
+  const skipped = history.findIndex((run) => !run.notCounted);
   const last = skipped < 0 ? undefined : history[skipped];
   const passedOver = skipped < 0 ? history : history.slice(0, skipped);
   const lastLevel = last ? priorLevel(last, env.runtime) : null;
@@ -543,8 +582,9 @@ export async function planTaskRunRoute(
   return {
     policyVersion: decision.policyVersion,
     // Only a decided tier is applied: one that kept the baseline (a model pin, no suggestion, no
-    // provider that can take it) changes nothing.
-    applied: decision.level !== null,
+    // provider that can take it) changes nothing. A pin relaxed off an account health set aside is applied too
+    // (docs/routing-account-health-design.md §7.5): a model pin moves with no tier.
+    applied: decision.level !== null || decision.relaxed === true,
     level: decision.level,
     engine: decision.engine,
     provider: decision.provider,
@@ -572,9 +612,11 @@ export async function planTaskRunRoute(
       optimizeFor,
       priorRuns: history.length,
       priorFailures: history
-        .filter((run) => run.outcome !== 'OK' && !run.quotaFailure && !run.capacityFailure).length,
-      quotaFailuresSkipped: passedOver.filter((run) => run.quotaFailure).length,
-      capacityFailuresSkipped: passedOver.filter((run) => !run.quotaFailure && run.capacityFailure).length,
+        .filter((run) => run.outcome !== 'OK' && !run.notCounted).length,
+      quotaFailuresSkipped: passedOver.filter((run) => run.notCounted === 'usage-limit').length,
+      capacityFailuresSkipped: passedOver.filter((run) => run.notCounted === 'capacity').length,
+      // The rest of what §7.4 does not count: an account's refusal, a lost connection, a failure at admission.
+      accountFailuresSkipped: passedOver.filter((run) => run.notCounted === 'account' || run.notCounted === 'admission').length,
       lastRun: last
         ? { ordinal: last.ordinal, level: lastLevel, model: last.model ?? null, outcome: last.outcome }
         : null,
@@ -583,7 +625,48 @@ export async function planTaskRunRoute(
       verifiedRunEngine: engines.verifiedRunEngine ?? null,
     },
     reasons: decision.reasons,
+    ...(decision.hold ? { hold: decision.hold } : {}),
+    ...(decision.trial ? { trial: decision.trial } : {}),
   };
+}
+
+/** UserPreferences.relaxBlockedPins (docs/routing-account-health-design.md §7.5): on only when written true. */
+export function relaxBlockedPinsOf(owner: { preferences: unknown } | null | undefined): boolean {
+  return (owner?.preferences as { relaxBlockedPins?: unknown } | null | undefined)?.relaxBlockedPins === true;
+}
+
+/**
+ * The plan of a run that is not routed, the owner's smart model selection being off: what account health says of the
+ * account its baseline (or its pins) would spend. A run there is not started while health sets that account aside,
+ * and claims the trial it is due, as a routed one does (§6.5, §7.5); no tier and no relaxation, which are routing.
+ * Null when health has nothing to say: an owner with no live row pays the one read the dispatch makes anyway.
+ */
+async function baselineHealthPlan(
+  reads: TaskRouteReads,
+  task: TaskRouteSubject,
+  workspace: { id: string; runnerId: string },
+  health?: ReadonlyMap<string, RoutingHealthEntry[]>,
+): Promise<PlannedTaskRunRoute | null> {
+  const index = health ?? await reads.health();
+  if (![...index.values()].some((entries) => entries.length > 0)) return null;
+  const env = await routeEnvironment(reads, task, workspace.id, workspace.runnerId);
+  const pool = await subagentRouteInput(reads.prisma as unknown as Prisma.TransactionClient, {
+    ownerId: reads.ownerId,
+    workspaceId: workspace.id,
+    runnerId: workspace.runnerId,
+    dto: { toolUseId: '', type: 'task', definitionSource: 'builtin' },
+    parent: { engine: env.engine, provider: env.provider, model: task.model ?? '', effort: null },
+    now: reads.now,
+    health: index,
+  });
+  const verdict = baselineHealth({
+    task: { engine: task.engine ?? null, provider: task.provider ?? null, model: task.model ?? null },
+    baseline: { engine: env.engine, engines: env.engines, provider: env.provider, model: task.model ?? null, effort: null },
+    history: [],
+    environment: { runtime: env.runtime },
+    pool,
+  });
+  return verdict.hold || verdict.trial ? { notRouted: true, ...verdict } : null;
 }
 
 /**
@@ -629,8 +712,18 @@ export interface TaskRouteSummary {
   /** One tier above the previous run, because that run failed — the ↑ beside the tier. */
   escalated: boolean;
   reasons: string[];
+  /** The §7.5 sentence when the run went elsewhere because its pin could not run (`relaxedRunSentence`); else null. */
+  relaxedRun: string | null;
   policyVersion: number;
   decidedAt: Date;
+}
+
+/**
+ * The §7.5 sentence of a run that went elsewhere because its pin could not run: which pin, where it ran and why, as
+ * model-routing's relaxedPin and samePinnedModel wrote it into the decision's reasons. Null for any other run.
+ */
+export function relaxedRunSentence(reasons: readonly string[] | null | undefined): string | null {
+  return reasons?.find((r) => r.startsWith('Pinned to ') && r.includes("can't run now")) ?? null;
 }
 
 /** The Route Decision behind each of these Sessions; a Session without one is absent from the map. */
@@ -664,6 +757,7 @@ export async function readTaskRouteSummaries(
     applied: row.applied,
     escalated: (row.features as { escalatedFrom?: unknown } | null)?.escalatedFrom != null,
     reasons: row.reasons,
+    relaxedRun: relaxedRunSentence(row.reasons),
     policyVersion: row.policyVersion,
     decidedAt: row.createdAt,
   }]));

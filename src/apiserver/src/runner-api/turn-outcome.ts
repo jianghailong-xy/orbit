@@ -1,4 +1,4 @@
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 /** `conversation_turn.outcome` and `session.last_turn_outcome` (migration 1201 and its CHECKs). */
 export type TurnOutcome = 'ANSWERED' | 'FAILED' | 'INTERRUPTED' | 'CANCELLED';

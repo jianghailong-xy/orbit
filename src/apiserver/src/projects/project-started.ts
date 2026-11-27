@@ -110,7 +110,9 @@ export function projectPausedTurnId(projectId: string, pausedAt: Date): string {
  *  against changed, or a task serving one of them was reopened after it was recorded. */
 export type ProjectReopenReason =
   | { kind: 'CRITERIA_CHANGED'; currentDigest: string }
-  | { kind: 'SERVING_TASK_REOPENED'; taskId: string; taskTitle: string };
+  | { kind: 'SERVING_TASK_REOPENED'; taskId: string; taskTitle: string }
+  /** The owner answered Reopen on a PROJECT_REOPEN card (docs/project-reopen-request-design.md §4.2). */
+  | { kind: 'OWNER_REOPENED_ON_REQUEST'; requestId: string; plannedWork: string };
 
 /** The one turn that says this owner's record was reopened, keyed by the record and the reason. It
  *  deliberately has no start card. */
@@ -121,7 +123,7 @@ function projectReopenedTurnId(
 ): string {
   const fact = reason.kind === 'CRITERIA_CHANGED'
     ? `criteria:${reason.currentDigest}`
-    : `task:${reason.taskId}`;
+    : reason.kind === 'SERVING_TASK_REOPENED' ? `task:${reason.taskId}` : `request:${reason.requestId}`;
   return `${PROJECT_STARTED_TURN_PREFIX}reopened:${projectId}:${doneAt.getTime()}:${fact}`;
 }
 
@@ -131,6 +133,16 @@ function projectReopenedMessage(input: {
   projectTitle: string;
   reason: ProjectReopenReason;
 }): string {
+  if (input.reason.kind === 'OWNER_REOPENED_ON_REQUEST') {
+    return [
+      'From Orbit · project reopened',
+      `Project “${input.projectTitle}” (${uuidToBase62(input.projectId)}) is OPEN again: the owner reopened it `
+        + `on a reopen request (${uuidToBase62(input.reason.requestId)}) another session filed with `
+        + `project_request_reopen. The work it plans to add: “${input.reason.plannedWork}”`,
+      'Read the criteria and the work as they are now; when the project is done again, ask the owner '
+        + 'to record it — that is theirs to do.',
+    ].join('\n\n');
+  }
   const why = input.reason.kind === 'CRITERIA_CHANGED'
     ? 'its acceptance criteria changed after the owner recorded it done, so that record no longer '
       + 'covers the criteria that stand now'

@@ -58,7 +58,17 @@ class RunnerAccountCopyParityTest {
             "RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL" to RunnerAccountCopy.SETTING_DEFAULT_TERMINAL,
             "runnerAccountSetDefaultFailed" to RunnerAccountCopy.setDefaultFailed("{name}"),
             "RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED" to RunnerAccountCopy.SET_DEFAULT_UNCHANGED,
-            "RUNNER_ACCOUNT_FORMER_DEFAULT" to RunnerAccountCopy.FORMER_DEFAULT)
+            "RUNNER_ACCOUNT_FORMER_DEFAULT" to RunnerAccountCopy.FORMER_DEFAULT,
+            "runnerDefaultSignOutTitle" to RunnerAccountCopy.defaultSignOutTitle("{name}"),
+            "runnerDefaultSignOutDetail" to RunnerAccountCopy.defaultSignOutDetail("{runner}"),
+            "runnerDefaultSignOutTerminal" to RunnerAccountCopy.defaultSignOutTerminal("{runner}", "{command}"),
+            "RUNNER_DEFAULT_SIGN_OUT_CONFIRM" to RunnerAccountCopy.DEFAULT_SIGN_OUT_CONFIRM,
+            "RUNNER_DEFAULT_SIGN_OUT" to RunnerAccountCopy.DEFAULT_SIGN_OUT,
+            "RUNNER_DEFAULT_SIGNING_OUT" to RunnerAccountCopy.DEFAULT_SIGNING_OUT,
+            "runnerDefaultSignOutRunningOne" to RunnerAccountCopy.defaultSignOutRunningOne("{name}"),
+            "runnerDefaultSignOutRunningMany" to RunnerAccountCopy.defaultSignOutRunningMany(7, "{name}").replace("7", "{count}"),
+            "RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL" to RunnerAccountCopy.DEFAULT_SIGN_OUT_RUNNING_DETAIL,
+            "runnerDefaultSignOutFailed" to RunnerAccountCopy.defaultSignOutFailed("{name}"))
         val web = templates + constants
         for ((name, said) in android) assertEquals(name, web[name], said)
         // Every sentence of the web's is said here but the two of the workspace form's account field, which no Android page has.

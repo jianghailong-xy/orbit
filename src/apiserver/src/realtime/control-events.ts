@@ -71,6 +71,8 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.TRANSLATION_STATUS_CHANGED;
     case RunEventType.DRIVE_CHANGED:
       return ControlEventType.DRIVE_CHANGED;
+    case RunEventType.DRIVE_SYNC:
+      return ControlEventType.DRIVE_SYNC;
     case RunEventType.SCHEDULE_CARDS_CHANGED:
       return ControlEventType.SCHEDULE_CARDS_CHANGED;
     default:
@@ -98,6 +100,7 @@ export function isUserScopedType(t: ControlEventType): boolean {
     t === ControlEventType.TERMINALS_CHANGED ||
     t === ControlEventType.TRANSLATION_STATUS_CHANGED ||
     t === ControlEventType.DRIVE_CHANGED ||
+    t === ControlEventType.DRIVE_SYNC ||
     t === ControlEventType.SCHEDULE_CARDS_CHANGED
   );
 }

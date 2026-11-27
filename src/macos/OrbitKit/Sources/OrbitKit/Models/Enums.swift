@@ -77,6 +77,39 @@ public enum SessionRunState: String, Codable, Sendable {
         }
     }
 
+    /// The run state a payload with the new session fields reads as (web `runStateFromPhaseFields`), or nil
+    /// when `phase` or `released` is absent (an older server), which keeps the legacy reading. A release is
+    /// Failed only when the last turn failed and nobody asked for an end; Finished only by `workFinished`
+    /// (else the end reason or a settled landing); any other release is Ended. A held session reads its
+    /// phase: queued, running, or waiting on its reply. `activity` is TURN on every queued or running row (and on
+    /// a parked session whose engine runs its own turn), so only another activity (a background job, a wait) on a
+    /// RUNNING phase means no turn is running: that reads as parked.
+    public static func fromPhaseFields(phase: SessionPhase?, released: Bool?,
+                                       lastTurnOutcome: SessionTurnOutcome?, endReason: String?,
+                                       workFinished: Bool? = nil, activity: String? = nil,
+                                       isLanding: Bool = false, legacyStatus: RunStatus? = nil) -> SessionRunState? {
+        guard let phase, let released else { return nil }
+        if released {
+            return afterRelease(endReason: endReason, lastTurnOutcome: lastTurnOutcome,
+                                workFinished: workFinished, isLanding: isLanding)
+        }
+        switch phase {
+        case .pending: return .queued
+        case .running:
+            // The legacy run status decides first, as web's `dispatchedTurnInFlight` does: a dispatched turn
+            // (RUNNING, PENDING) is running; a parked session (AWAITING_INPUT) stays parked even while its engine
+            // runs its own turn or a sub-agent (activity TURN). Any other word reads the activity.
+            switch legacyStatus {
+            case .running?, .pending?: return .running
+            case .awaitingInput?: return .awaitingInput
+            default:
+                let other = activity ?? ""
+                return other.isEmpty || other == "TURN" ? .running : .awaitingInput
+            }
+        case .idle:    return lastTurnOutcome == .interrupted ? .interrupted : .awaitingInput
+        }
+    }
+
     /// Resolve the new field first, then raw runner status + end reason. The legacy mixed
     /// `sessionState` is intentionally not allowed to override a raw state: an old completed row
     /// commonly says `sessionState=COMPLETED` while its actual run status is CANCELLED.

@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { IntegrationJobCommand } from '@orbit/shared';
@@ -151,7 +152,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<{ taskId
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId: created.id, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title, prompt: title, branch, isolationStatus: 'worktree',
-      baseSha: 'b'.repeat(40), status: RunStatus.SUCCEEDED, startsTaskWork: true,
+      baseSha: 'b'.repeat(40), turnState: null, startsTaskWork: true,
       finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch, worktreeDirty: false,
     },
     select: { id: true },
@@ -384,7 +385,7 @@ test("a landing session's log is the reader's; another account's session, anothe
       await stack.db.session.create({
         data: {
           id: landingSessionId, title: 'the landing', prompt: 'Orbit runs this landing.', ownerId: w.ownerId,
-          creatorId: w.ownerId, workspaceId: w.workspaceId, status: 'AWAITING_INPUT',
+          creatorId: w.ownerId, workspaceId: w.workspaceId, turnState: null,
           sessionKind: 'LANDING', startsTaskWork: false, provider: 'orbit', providerBuiltin: true,
           titleManagedByProject: true, dispatchOrigin: 'USER', runSource: 'MANUAL',
         },
@@ -410,7 +411,7 @@ test("a landing session's log is the reader's; another account's session, anothe
     const conversation = await stack.db.session.create({
       data: {
         ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: 'chat', prompt: 'chat',
-        status: 'AWAITING_INPUT',
+        turnState: null,
       },
       select: { id: true },
     });

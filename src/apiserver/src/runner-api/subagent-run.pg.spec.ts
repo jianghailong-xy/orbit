@@ -32,7 +32,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, type Runner, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType } from '@orbit/shared';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Client } from 'pg';
@@ -119,7 +120,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: onRunner,
         title: 'split the parser work', prompt: 'split the parser work', provider: 'claude', engine: 'claude',
-        model: opts.model ?? 'claude-opus-5-5', effort: opts.effort ?? 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        model: opts.model ?? 'claude-opus-5-5', effort: opts.effort ?? 'high', turnState: null, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, costUsd: opts.costUsd ?? 0,
         ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
       },
@@ -410,7 +411,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(decision.model, 'claude-opus-5-5');
     assert.equal(decision.effort, 'high');
     assert.equal(decision.applied, true);
-    assert.equal(decision.policyVersion, 'p7-model-then-account-1');
+    assert.equal(decision.policyVersion, 'p8-account-health-1');
     assert.equal(decision.tierNote, 'Tier L, set by the caller');
     assert.equal(decision.note, 'subscription pool, Bob with 80% quota left');
     // The pick names when Bob's quota resets: the fixture's window, relative to now (p5-expiry-first-1).
@@ -495,7 +496,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
       data: {
         id: sessionId, ownerId: loneId, creatorId: loneId, workspaceId, assignedRunnerId: bareId,
         title: 'split the parser work', prompt: 'split the parser work', provider: 'claude', engine: 'claude',
-        model: 'claude-opus-5-5', effort: 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        model: 'claude-opus-5-5', effort: 'high', turnState: null, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       },
     });
@@ -592,7 +593,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     // The parent ends while the run is RUNNING. By an ordinary end its token is refused; by a coordinator handover
     // it keeps serving the run left running (kept-subagent-gateway.ts), until that run ends.
     await prisma.session.update({
-      where: { id: sessionId }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), completedAt: new Date(), endReason: 'completed' },
+      where: { id: sessionId }, data: { turnState: null, finishedAt: new Date(), completedAt: new Date(), endReason: 'completed' },
     });
     assert.equal(await gateway.caller(token!), null, 'an ordinary end refuses the token at once');
     const projectId = (await prisma.project.create({ data: { ownerId, title: 'handover keeps the SubAgent' } })).id;

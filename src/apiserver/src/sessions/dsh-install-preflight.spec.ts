@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { encryptSecret } from '../providers/provider-crypto';
 import {
@@ -11,6 +11,7 @@ import {
   DSH_VERSION_INCOMPATIBLE_ERROR,
 } from '../runner-api/runner-provider-support';
 import { SessionsService } from './sessions.service';
+import { writtenWord } from '../test-support/session-word';
 
 process.env.PROVIDER_SECRET_KEY = 'dsh-install-preflight-test-key';
 
@@ -146,7 +147,7 @@ test('dsh install gate: a persisted Harness session is not revived until the ins
     assert.equal(revived.revived, true);
     assert.equal(f.turns.length, 1);
     assert.equal(f.turns[0].content, continuation.content);
-    assert.ok(f.updates.some((data) => data.status === RunStatus.PENDING), 'the revived session was not queued for its runner');
+    assert.ok(f.updates.some((data) => writtenWord(data) === RunStatus.PENDING), 'the revived session was not queued for its runner');
     assert.ok(!f.updates.some((data) => 'runtimeSessionId' in data), 'the revive replaced the Harness conversation');
   }
 });
@@ -159,7 +160,7 @@ test('dsh install gate: creation goes through once the engine report shows the p
     // The built-in `dsh` is written as DeepSeek Harness on the default DeepSeek key (§3.3).
     assert.equal(f.creates[0].provider, 'harness-key');
     assert.equal(f.creates[0].engine, 'dsh');
-    assert.equal(f.creates[0].status, RunStatus.PENDING);
+    assert.equal(writtenWord(f.creates[0]), RunStatus.PENDING);
   }
 });
 

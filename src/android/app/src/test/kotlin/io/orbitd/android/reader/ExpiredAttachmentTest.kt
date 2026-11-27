@@ -20,7 +20,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * What a reply's file leaves behind once its bytes have gone (docs/orbit-files-design.md §2.8): a read answers 410, and the conversation
+ * What a reply's file leaves behind once its bytes have gone (docs/drive-design.md §2.8): a read answers 410, and the conversation
  * draws the grey tile an evidence card draws, in the card's words. Only that answer: anything else that goes wrong with a read may come
  * back, and stays what it has always been. The web's `Transcript.expiredAttachment.test.tsx`.
  */

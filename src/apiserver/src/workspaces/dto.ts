@@ -160,6 +160,13 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsInt() @Min(1) @Max(SUBAGENTS_MAX_RUNNING_LIMIT) subagentsMaxRunning?: number;
   /** See CreateWorkspaceDto.workflowsEnabled. Absent leaves the switch as it is. */
   @IsOptional() @IsBoolean() workflowsEnabled?: boolean;
+  /**
+   * How finished work reaches a protected GitHub branch (docs/design/protected-branch-landing.md §3, §11.1): the
+   * default PULL_REQUEST, or PUSH_AS_ME, which lands with the owner's own GitHub authorization. The owner's signed-in
+   * clients only (WorkspacesController); absent leaves it as it is.
+   */
+  @IsOptional() @IsIn(['PULL_REQUEST', 'PUSH_AS_ME'])
+  landingMode?: 'PULL_REQUEST' | 'PUSH_AS_ME';
 }
 
 // The full workspace list in the desired sidebar order; each id's index becomes its position.

@@ -19,7 +19,7 @@ import { ProjectAcceptanceService } from '../projects/project-acceptance.service
 import { ProjectsService } from '../projects/projects.service';
 import { encryptSecret } from '../providers/provider-crypto';
 import { SessionsService } from '../sessions/sessions.service';
-import { planTaskRunRoute, taskRouteReads } from '../tasks/task-route-decision';
+import { planTaskRunRoute, routeOfPlan, taskRouteReads } from '../tasks/task-route-decision';
 import { TasksService } from '../tasks/tasks.service';
 import { WorkspacesService } from './workspaces.service';
 
@@ -176,7 +176,7 @@ test('project work follows its coordinator, not a person’s one-off Codex conve
     try {
       const routed = await task('a routed task', project);
       const subject = await prisma.task.findUniqueOrThrow({ where: { id: routed } });
-      const route = await planTaskRunRoute(taskRouteReads(db, ownerId), subject, { id: workspaceId, runnerId }, 'go');
+      const route = routeOfPlan(await planTaskRunRoute(taskRouteReads(db, ownerId), subject, { id: workspaceId, runnerId }, 'go'));
       assert.ok(route, 'routing is on, so a route is planned');
       return { engine: route.baseline.engine, provider: route.baseline.provider };
     } finally {

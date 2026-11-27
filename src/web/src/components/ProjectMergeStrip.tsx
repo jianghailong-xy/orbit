@@ -59,6 +59,7 @@ import { integrationInFlight, pollWhileInFlight, promotionInFlight, streamPoll }
 import { mainBranchName } from '../lib/projectStart';
 import { ago } from '../lib/watches';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /** A read the page can draw from: the door answers a candidate or `null`, and anything else is no
  *  candidate rather than one with every field missing. */
@@ -274,7 +275,9 @@ export function ProjectMergeStrip({
             <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
             <span className="session-project-merge-badge">{NEEDS_YOU}</span>
           </div>
-          <div className="session-project-merge-ref" title={current.sourceRef}>{promotionBranchLine(current)}</div>
+          <Tooltip content={current.sourceRef} align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <div className="session-project-merge-ref">{promotionBranchLine(current)}</div>
+          </Tooltip>
           <div className="session-project-merge-rule" />
           <div className="session-project-merge-counts">{promotionPageCounts(current)}</div>
           <TaskTitles promotion={current} />

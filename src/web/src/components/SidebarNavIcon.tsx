@@ -36,7 +36,7 @@ const glyphs = {
       <path d="M18.5 17.5v4" />
     </>
   ),
-  // folder — Orbit Files, the account's drive.
+  // folder — Drive, the account's drive.
   files: (
     <path d="M2.5 6.5a2 2 0 0 1 2-2h4.6l2.2 2.4h8.2a2 2 0 0 1 2 2v9.6a2 2 0 0 1-2 2H4.5a2 2 0 0 1-2-2V6.5ZM2.5 9.5h19" />
   ),

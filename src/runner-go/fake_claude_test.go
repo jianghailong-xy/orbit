@@ -117,6 +117,9 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	clearCallingSession()
+	// The suite's many create fixtures predate D3 and say nothing of autoRunWhenReady; the processes above, which the
+	// eval's engines run as `orbit`, keep the refusal, and task_create_autorun_test.go turns it on where it is the subject.
+	autoRunDeclarationRequired = false
 	// The PATH the runner service runs with (resolveRunnerEnv): the engine installers' own
 	// directories, which a bare shell need not have. The probes of a real engine run in parallel,
 	// and a parallel test may not set PATH itself.

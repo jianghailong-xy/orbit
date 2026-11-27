@@ -102,6 +102,7 @@ import {
 import { MANAGED_RUNNER_KUBE_CLIENT_FACTORY, MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import { ManagedRunnerWorker } from './managed-runner-worker';
 import { ManagedRunnerService } from './managed-runner.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/daemon-routes-over-http';
 
 declare global {
@@ -214,7 +215,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
         const before = {
           runners: await rows('SELECT row_to_json(r) AS row FROM runner r ORDER BY id'),
           workspaces: await rows('SELECT row_to_json(w) AS row FROM workspace w ORDER BY id'),
-          sessions: await rows('SELECT id, workspace_id, assigned_runner_id, provider, status FROM session ORDER BY id'),
+          sessions: await rows(`SELECT id, workspace_id, assigned_runner_id, provider, ${wordSql()} AS status FROM session ORDER BY id`),
         };
         const signedIn = await call(server, 'POST', '/api/auth/login', undefined, { email: old.email, password: PASSWORD });
         assertSignedIn(signedIn, `${label}: an existing account`);
@@ -223,10 +224,10 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
         assert.deepEqual((await call(server, 'GET', '/api/workspaces', signedIn.json.accessToken)).json, listBefore.json, `${label}: the same workspaces, in the same order`);
         assert.deepEqual(await rows('SELECT row_to_json(r) AS row FROM runner r ORDER BY id'), before.runners, `${label}: no runner written or changed`);
         assert.deepEqual(await rows('SELECT row_to_json(w) AS row FROM workspace w ORDER BY id'), before.workspaces, `${label}: no workspace written or changed`);
-        assert.deepEqual(await rows('SELECT id, workspace_id, assigned_runner_id, provider, status FROM session ORDER BY id'), before.sessions);
+        assert.deepEqual(await rows(`SELECT id, workspace_id, assigned_runner_id, provider, ${wordSql()} AS status FROM session ORDER BY id`), before.sessions);
 
         const capabilities = await call(server, 'GET', '/api/auth/capabilities', signedIn.json.accessToken);
-        assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 } });
+        assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 }, documents: { enabled: false } });
       } finally {
         await server.stop();
       }
@@ -405,7 +406,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     const token = await bearer(quietUser.id);
     const refreshToken = generateToken(32);
     await db.refreshToken.create({ data: { userId: quietUser.id, tokenHash: sha256(refreshToken), expiresAt: new Date(Date.now() + 86_400_000) } });
-    assert.deepEqual((await call(server, 'GET', '/api/auth/capabilities', token)).json, { managedRunners: { enabled: true, contractVersion: 1 } });
+    assert.deepEqual((await call(server, 'GET', '/api/auth/capabilities', token)).json, { managedRunners: { enabled: true, contractVersion: 1 }, documents: { enabled: false } });
     const status = await statusOf(token);
     assert.equal(status.managementState, 'NOT_PROVISIONED');
     assert.equal(status.actions.canEnsure, true);

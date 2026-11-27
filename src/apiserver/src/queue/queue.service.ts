@@ -21,6 +21,8 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { runtimeCatalogModels } from '../common/runtime-model';
+import { sessionHeldSql } from '../common/session-release';
+import { sessionTurnStateSql, turnStateFilter, turnStateOf } from '../sessions/session-turn-state';
 import { anthropicGatewayEnabled, engineTableOptions, withKeyGatewayToken } from '../providers/key-gateway';
 import {
   claudeCodexLoginEnabled,
@@ -30,6 +32,7 @@ import {
 } from '../providers/codex-login-claude';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
+import { accountName } from '../providers/codex-login-gateway';
 import { choosePoolCredential } from '../providers/pool-credential-select';
 import {
   accountPoolRuntime,
@@ -62,6 +65,7 @@ import {
 import { PoolNotices } from '../providers/pool-notice';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
 import { countedAccountBeforeDispatch } from '../providers/active-sessions';
+import { healthIndexFor, runnerWithHealth, subjectBlocked, withAccountHealth, withoutBlocked } from '../providers/account-health-blocked';
 import {
   accountBeforeDispatch,
   accountSwitchNotice,
@@ -81,7 +85,6 @@ import { normalizeEffortForRuntimeModel } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
-import { engineNamingJob } from '../sessions/naming';
 import { recordActualPermissionMode } from '../sessions/actual-permission-mode';
 import {
   batchActiveTurns,
@@ -109,6 +112,7 @@ import { RunnerHints } from '../realtime/runner-hints';
 import { forkAuthorityBindings, sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { documentsClaimFields } from '../drive/drive-switch';
 import { workflowClaimFields } from '../runner-api/workflow-run';
 import { branchName } from '../projects/project-criterion-landing';
 import { codelessClaimFields } from '../sessions/codeless-checkout';
@@ -119,6 +123,7 @@ import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 import { holdNoticeSql } from './hold-notice';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
+import { chatFiledItsOpening } from '../sessions/chat-opening';
 import {
   runAccessLevel,
   scheduleRunAgentFields,
@@ -237,7 +242,8 @@ export class QueueService {
     const now = new Date();
     const pending = await this.prisma.session.findMany({
       where: {
-        assignedRunnerId: runnerId, status: 'PENDING', cancelRequestedAt: null,
+        // Queued: the turn state QUEUED (what PENDING said), as the claim SQL reads it.
+        assignedRunnerId: runnerId, AND: [turnStateFilter(['QUEUED'])], cancelRequestedAt: null,
         // The claim SQL's own filter: a LANDING row is never claimed, so it is never held either.
         sessionKind: 'CONVERSATION',
         OR: [
@@ -279,6 +285,9 @@ export class QueueService {
     });
     const blocked: string[] = [];
     const poolPauses = new Map<string, Date | null>();
+    // Each owner's account health, read once and only for a paused session that may move: the move the claim
+    // makes passes over an account health takes out (accountsForClaim), so the one asked about here must too.
+    const health = new Map<string, Awaited<ReturnType<typeof healthIndexFor>>>();
     for (const session of pending) {
       const runner = session.assignedRunner;
       // A pending Set as default for Claude Code holds back the sessions on either of its accounts: a claim now would
@@ -302,10 +311,13 @@ export class QueueService {
       let credential: AnthropicBoundCredential | null = null;
       if (until && runner && isAccountEngine(slug)) {
         const canMove = runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[slug]);
+        if (canMove && !health.has(session.ownerId)) {
+          health.set(session.ownerId, await healthIndexFor(this.prisma, session.ownerId, now));
+        }
         const move = canMove && accountBeforeDispatch(slug, {
           account: session[ACCOUNT_CHOICE[slug]],
           pinned: session[ACCOUNT_PINNED[slug]],
-        }, session.workspace, runner, now);
+        }, session.workspace, runnerWithHealth(runner, runnerId, health.get(session.ownerId), now), now);
         // Off a Default its owner removed from Orbit the move is to Automatic's pick even when that is
         // paused too — every account left is — and the session waits for it.
         if (move && !runnerAccountPausedUntil(runner.accountPauses, slug, move.to, now)) until = null;
@@ -374,7 +386,7 @@ export class QueueService {
             : until ? `Account paused until ${until.toISOString()}` : dshUnavailable!;
       if (session.error !== error) {
         const updated = await this.prisma.session.updateMany({
-          where: { id: session.id, status: 'PENDING' }, data: { error },
+          where: { id: session.id, ...turnStateFilter(['QUEUED']) }, data: { error },
         });
         if (updated.count) this.realtime.publishSessionUpdated(session.id);
       }
@@ -451,7 +463,7 @@ export class QueueService {
         if (runner.managedInstance && !(await this.managedInstanceClaimable(tx, runner.managedInstance))) return [];
         // A link claim sent again under the request id of one that claimed — its answer lost, or a
         // gateway retrying it on another replica — is answered with that claim's session while the
-        // claim stands, the session still RUNNING under the id it recorded, and claims no other.
+        // claim stands, the session still in flight (RUNNING) under the id it recorded, and claims no other.
         // Read under the claim lock, so a first attempt and its repeat running at once claim one
         // session between them. The dispatch pause does not hold it: that session was handed out
         // before the pause took effect, and a cut-over waits for what it runs.
@@ -463,7 +475,8 @@ export class QueueService {
             FROM "session"
             WHERE "assigned_runner_id" = ${runner.id}::uuid
               AND "claim_request_id" = ${runner.claimRequestId}
-              AND status = 'RUNNING'
+              AND ${sessionHeldSql('"session"')}
+              AND ${sessionTurnStateSql('"session"')} = 'IN_FLIGHT'
           `;
           if (replayed.length > 0) return replayed;
         }
@@ -479,7 +492,9 @@ export class QueueService {
           id: string; engine: string | null; provider: string; providerBuiltin: boolean; ownerId: string;
         }>>(Prisma.sql`
         UPDATE "session" SET
-          status = 'RUNNING',
+          -- QUEUED to IN_FLIGHT (docs/session-status-retirement-plan.md §1.4). The engine claim guards (migration 1641)
+          -- test exactly this transition.
+          "turn_state" = 'IN_FLIGHT',
           -- The pass is spent by whichever claim starts its turn. An overflow claim keeps it, so the RUNNING row says
           -- it runs over the limit until that turn ends (turnComplete clears it); an ordinary one started the turn in
           -- a slot of its own and clears it.
@@ -518,7 +533,8 @@ export class QueueService {
           "updated_at" = now()
         WHERE id = (
           SELECT s.id FROM "session" s
-          WHERE s.status = 'PENDING'
+          WHERE ${sessionHeldSql('s')}
+            AND ${sessionTurnStateSql('s')} = 'QUEUED'
             AND s."kind" = 'CONVERSATION'
             -- The runner dispatch pause (dispatch-pause.ts): while an administrator holds it, nothing is
             -- claimed. Read after the claim lock above, which the switch takes too, so a pause that has
@@ -565,9 +581,10 @@ export class QueueService {
                             SELECT a.provider_id FROM "provider_slug_alias" a WHERE a.slug = s.provider))
                       AND mp.enabled
                       AND mp.runtime = ANY(CASE s."engine"
-                        -- Claude Code also runs an OpenAI key, through /api/gw/anthropic, with the deployment flag on.
+                        -- Claude Code also runs an OpenAI or OpenAI-compatible key, through /api/gw/anthropic, with the
+                        -- deployment flag on.
                         WHEN 'claude' THEN CASE WHEN ${anthropicGatewayEnabled()}
-                          THEN ARRAY['claude', 'dsh', 'codex'] ELSE ARRAY['claude', 'dsh'] END
+                          THEN ARRAY['claude', 'dsh', 'codex', 'kimi'] ELSE ARRAY['claude', 'dsh'] END
                         WHEN 'dsh' THEN ARRAY['claude', 'dsh']
                         WHEN 'opencode' THEN ARRAY['claude', 'codex', 'kimi', 'antigravity', 'dsh']
                         ELSE ARRAY[s."engine"]
@@ -748,7 +765,7 @@ export class QueueService {
           ORDER BY (
               SELECT count(*) FROM "session" busy
               WHERE busy."root_session_id" = s."root_session_id"
-                AND busy."status" = 'RUNNING'
+                AND ${sessionTurnStateSql('busy')} = 'IN_FLIGHT'
             ) ASC,
             s."created_at" ASC
           FOR UPDATE NOWAIT
@@ -758,14 +775,15 @@ export class QueueService {
       `);
         // The ordinary claim first, so a message already waiting takes a slot that came free before a passed one is
         // put over the limit (F). The overflow claim runs only when it took nothing and a pass waits on this runner,
-        // which the partial index session_over_capacity_pending_idx answers from a handful of rows.
+        // which the runner's held rows answer (session_runner_held_idx, migration 1628): a handful of rows.
         let claimed = await claimOne(false);
         if (claimed.length === 0 && !scopedClaim) {
           const [waiting] = await tx.$queryRaw<Array<{ waiting: boolean }>>`
             SELECT EXISTS (
               SELECT 1 FROM "session" s
                WHERE s."assigned_runner_id" = ${runner.id}::uuid
-                 AND s."over_capacity_turn_id" IS NOT NULL AND s.status = 'PENDING'
+                 AND s."over_capacity_turn_id" IS NOT NULL
+                 AND ${sessionHeldSql('s')} AND ${sessionTurnStateSql('s')} = 'QUEUED'
             ) AS waiting`;
           if (waiting?.waiting === true) claimed = await claimOne(true);
         }
@@ -798,9 +816,9 @@ export class QueueService {
         // A credential that stopped being one the session's engine can run between the hold above and
         // this build — a key edited in that window — puts it back to wait, as a pause does.
         await this.prisma.session.updateMany({
-          where: { id: rows[0].id, status: 'RUNNING' },
+          where: { id: rows[0].id, ...turnStateFilter(['IN_FLIGHT']) },
           data: {
-            status: 'PENDING',
+            turnState: 'QUEUED',
             error: refusal.code === 'POOL_ACCOUNT_PAUSED' ? `Account paused until ${refusal.pausedUntil}` : refusal.message,
           },
         });
@@ -844,6 +862,7 @@ export class QueueService {
    */
   private async accountsForClaim(session: {
     id: string;
+    ownerId: string;
     assignedRunnerId: string | null;
     provider: string | null;
     providerBuiltin: boolean;
@@ -874,6 +893,7 @@ export class QueueService {
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !runner) return accounts;
     const column = ACCOUNT_CHOICE[engine];
     const own = session[column];
+    const now = new Date();
     const move = await countedAccountBeforeDispatch(
       this.prisma,
       session.assignedRunnerId!,
@@ -881,8 +901,9 @@ export class QueueService {
       { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
       // The account a directory variable names is read off the env the engine starts on (engineBaseEnv).
       workspace && { ...workspace, env: engineBaseEnv(workspace.env as Record<string, string> | null, session.env) },
-      runner,
-      new Date(),
+      // An account that account health takes out is left as a paused one is (§7.6), unless this run is its trial.
+      await withAccountHealth(this.prisma, session.ownerId, session.assignedRunnerId, runner, now, session.id),
+      now,
     );
     if (!move || (!move.defaultRemoved && !(runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine]))) {
       return accounts;
@@ -899,8 +920,9 @@ export class QueueService {
       data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner) },
     });
     // A resident engine still holds the previous account's environment. Reload before
-    // the next message so a pause cannot be bypassed by reusing that warm process, nor a removed Default.
-    if (move.paused || move.defaultRemoved) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
+    // the next message so a pause cannot be bypassed by reusing that warm process, nor a removed Default,
+    // nor an account health took out, which would only refuse it again.
+    if (move.paused || move.defaultRemoved || move.blocked) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
     return { ...accounts, [column]: move.to };
   }
 
@@ -983,10 +1005,10 @@ export class QueueService {
     // @@unique([sessionId, seq]) for the seq the message had already taken, after committing the
     // session to RUNNING.
     //
-    // And a wiki chat lays no turn down here: its opening turn was filed with the session, under the
-    // owner's own UUID (SessionsService.writeChat), so its words are first-hand. A seed under
+    // And a wiki chat or a Drive chat lays no turn down here: its opening turn was filed with the session, under
+    // the owner's own UUID (SessionsService.writeChat), so its words are first-hand. A seed under
     // `initial-` would hand the engine the same message twice.
-    if (!session.importedAt && session.prompt !== '' && !session.wikiChatSpaceId) {
+    if (!session.importedAt && session.prompt !== '' && !chatFiledItsOpening(session)) {
       await withTransactionRetry(this.prisma, async (tx) => {
         await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
         const seedClientTurnId = `initial-${session.id}`;
@@ -1215,9 +1237,6 @@ export class QueueService {
         ? ((await forkAuthorityBindings(this.prisma, [session])).get(session.id) ?? null)
         : await this.sourceBinding(session.sourceCodebaseId),
     );
-    // A session nothing else will name is named by the engine about to run it (engineNamingJob). An Ask is not:
-    // its title is its first question, and no model is asked for another (help-ask.ts; board 03).
-    const naming = session.helpAsk == null ? engineNamingJob(session, provider, configuredRow) : undefined;
     // The mode as asked, but for the substitutions that are not predictions: a scheduled run on Claude Code runs in
     // Auto, and Bypass reaching a root runner (a session that would exit during startup) runs as Auto. A Claude model
     // whose catalogue row lists no Auto is handed Auto all the same: its engine says what it settles on, and the runner
@@ -1250,7 +1269,7 @@ export class QueueService {
       ...(session.helpAsk != null ? { helpAsk: helpAskMarkerOf(session.helpAsk) ?? { page: null } } : {}),
       // Run now: this claim took the session over the runner's limit, for the turn named (only an overflow claim
       // keeps the pass). The runner admits it up to max + burst. Only when set, so every other claim keeps its shape.
-      ...(session.overCapacityTurnId != null && session.status === 'RUNNING'
+      ...(session.overCapacityTurnId != null && turnStateOf(session) === 'IN_FLIGHT'
         ? { overCapacity: true, overCapacityTurnId: session.overCapacityTurnId }
         : {}),
       // Per-session worktree branch (generated at creation); the runner isolates the
@@ -1304,6 +1323,9 @@ export class QueueService {
       // The same for the wiki (ORBIT_WIKI, wiki/wiki-rollout.ts): `wikiDisabled` when it is not on for the owner, so
       // the runner spawns the session without the wiki tools.
       ...wikiClaimFields(currentWikiRollout(), session.ownerId),
+      // The Drive switch (drive/drive-switch.ts): `documentsDisabled` while it is off, so the runner spawns the
+      // session without the drive tools.
+      ...documentsClaimFields(),
       // The browser switch (managed-runner-browser-gate.ts): `browserEnabled` while it is on, so the runner spawns the
       // session with the browser tools; absent, they are not there.
       ...browserClaimFields(this.browserGate),
@@ -1376,7 +1398,8 @@ export class QueueService {
         env: exec.env,
       },
       source,
-      ...(naming ? { naming } : {}),
+      // No `naming`: a session is titled only on the server's DeepSeek key (SessionsService.beautifySessionLater),
+      // never by the engine running it on the session's own provider.
     };
   }
 
@@ -1734,7 +1757,20 @@ export class QueueService {
     if (!pool || pool.engine === AgentProvider.CODEX) return null;
     const now = new Date();
     const { rows, candidates } = pool;
-    const chosen = choosePoolMember(candidates, session.poolMemberProviderId, now);
+    // A member that account health takes out is skipped while another can run (§9 "Claude pool"), as bestPoolMember
+    // skips it when routing; with every one out the pool is chosen from as before. Not the member this run is
+    // the trial of.
+    const health = candidates.length > 1 ? await healthIndexFor(this.prisma, session.ownerId, now, session.id) : new Map();
+    const blockedMember = (id: string | null | undefined) => !!id && subjectBlocked(health, { type: 'provider', providerId: id });
+    const chosen = choosePoolMember(
+      withoutBlocked(
+        candidates,
+        (candidate) => blockedMember(candidate.row.id),
+        (candidate) => !candidate.refused && !(candidate.pausedUntil && candidate.pausedUntil > now),
+      ),
+      session.poolMemberProviderId,
+      now,
+    );
     if (!chosen && candidates.some((candidate) => candidate.pausedUntil && candidate.pausedUntil > now)) {
       const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
       throw new ConflictException({ code: 'POOL_ACCOUNT_PAUSED', message: 'The pool accounts are paused', pausedUntil: pausedUntil?.toISOString() });
@@ -1756,7 +1792,8 @@ export class QueueService {
         // The first member a session runs on is where it starts, not a move.
         ...(session.poolMemberProviderId
           ? {
-              poolSwitchNotice: poolSwitchNotice(
+              // Health's reason, never "paused": nobody paused it.
+              poolSwitchNotice: previous && blockedMember(previous.id) ? `Switched to ${chosen.label} — ${previous.label} needs action` : poolSwitchNotice(
                 chosen,
                 previous
                   ? {
@@ -1834,17 +1871,36 @@ export class QueueService {
     if (pool?.engine !== AgentProvider.CODEX) return null;
     const now = new Date();
     const claude = engine === AgentProvider.CLAUDE && claudeCodexLoginEnabled();
+    // A ChatGPT account that account health takes out is skipped while another can run (§9 "Codex pool"); with every
+    // one out they are chosen from as before. Not the account this run is the trial of.
+    const health = pool.logins.length > 1 ? await healthIndexFor(this.prisma, session.ownerId, now, session.id) : new Map();
+    const blockedLogin = (accountId: string | null) =>
+      !!accountId && subjectBlocked(health, { type: 'pool-login', poolId: pool.id, accountId });
+    const logins = withoutBlocked(
+      claude ? pool.logins.filter((login) => login.userId === session.ownerId) : pool.logins,
+      (login) => blockedLogin(login.accountId),
+      (login) => loginCanRun(login, now),
+    );
     // accountPool found it as a pool of the session's owner's own, never a shared one: its accounts first.
-    const { chosen, next, notice } = choosePoolCredential(
+    const choice = choosePoolCredential(
       {
         ownerId: session.ownerId,
-        accounts: claude ? pool.logins.filter((login) => login.userId === session.ownerId) : pool.logins,
+        accounts: logins,
         keys: claude ? [] : await sharedPoolKeyCandidates(db, pool.id, now),
         ownKeyFirst: pool.ownKeyFirst,
       },
       { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
       now,
     );
+    const { chosen, next } = choice;
+    // Moved off an account health took out, which is then not among the accounts chosen from: the line says why in
+    // health's terms rather than that the account left the pool.
+    const left = !blockedLogin(session.poolCodexAccountId) || logins.some((login) => login.accountId === session.poolCodexAccountId)
+      ? null
+      : pool.logins.find((login) => login.accountId === session.poolCodexAccountId);
+    const notice = left && choice.notice
+      ? choice.notice.replace(' — the previous account is no longer in this pool', ` — ${accountName(left)} needs action`)
+      : choice.notice;
     if (!chosen) {
       const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
       if (pausedUntil) throw new ConflictException({

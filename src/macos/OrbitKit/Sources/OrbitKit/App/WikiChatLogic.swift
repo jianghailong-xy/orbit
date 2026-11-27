@@ -15,6 +15,8 @@ public enum WikiChatLogic {
     public static let rewritesMax = 5
     /// The most chats one read of a space lists.
     public static let chatsListed = 50
+    /// The most sections a space's rewrite cards write without a press in one UTC day (design §7.2, option A).
+    public static let chatAutoSectionsPerDay = 20
     /// What stands for a chat not started yet where a chat's session id would (the web's `?chat=new`).
     public static let newChat = "new"
 
@@ -57,6 +59,7 @@ public enum WikiChatLogic {
     /// Design §7.3, read top to bottom: the first that holds is the card's state (`wikiChatDraftState`).
     public static func draftState(_ facts: WikiChatDraftFacts) -> WikiChatDraftState {
         if facts.decision == .applied || facts.decision == .edited { return facts.undone ? .undone : .applied }
+        if facts.autoQueued { return facts.undone ? .undone : .rewritten }
         if facts.decision == .discarded { return .discarded }
         if facts.replaced { return .replaced }
         if !facts.chatOpen { return .notApplied }
@@ -88,6 +91,7 @@ public enum WikiChatLogic {
         case .replaced:   return WikiChatCopy.cardReplaced
         case .changed:    return WikiChatCopy.cardChanged
         case .applied:    return inReview ? WikiChatCopy.cardAppliedInReview : WikiChatCopy.cardApplied
+        case .rewritten:  return WikiChatCopy.cardRewritten
         case .discarded:  return WikiChatCopy.cardDiscarded
         case .notApplied: return WikiChatCopy.cardNotApplied
         case .undone:     return WikiChatCopy.cardUndone
@@ -119,12 +123,13 @@ public enum WikiChatLogic {
     public static func cardActions(_ card: WikiChatCard) -> [WikiChatAction] {
         switch card.state {
         case .draft:
-            if card.kind == .rewrite { return [.rewrite, .discard] }
+            // A rewrite card held out of option A's bounds is applied as any other (design §7.2): Apply, not Rewrite.
+            if card.kind == .rewrite { return [.apply, .discard] }
             if card.kind == .plan { return [.applyRebuild, .openInPlan, .discard] }
             return [.apply, .edit, .discard]
         case .changed:
             return [.redo, .discard]
-        case .applied:
+        case .applied, .rewritten:
             var actions: [WikiChatAction] = []
             if card.undoable { actions.append(.undo) }
             if card.kind == .entry { actions.append(.openEntry) }
@@ -149,10 +154,21 @@ public enum WikiChatLogic {
         card.kind == .plan && card.state == .applied && !card.undoable ? WikiChatCopy.cardPlanMovedNote : nil
     }
 
+    /// The line under a rewrite card held for a press (`wikiChatHeldLine`, contract `chat.drafts.auto`): `Apply to
+    /// write: …`, or the wait for the other draft that rewrites the same section. Nil for a card that is not held.
+    public static func heldLine(_ held: WikiChatRewriteHeld?) -> String? {
+        switch held {
+        case .web?:    return WikiChatCopy.cardHeldWeb
+        case .budget?: return WikiChatCopy.cardHeldBudget
+        case .draft?:  return WikiChatCopy.cardHeldDraft
+        default:       return nil
+        }
+    }
+
     /// Whether an applied card's rewrite waits on the owner — what it adds to the Wiki's waiting count W (contract
     /// `chat.waiting`, `wikiChatRewriteWaits`): held up until it is not; read the same or failed until seen.
     public static func rewriteWaits(_ card: WikiChatCard) -> Bool {
-        guard card.state == .applied, let rewrite = card.rewrite else { return false }
+        guard card.state == .applied || card.state == .rewritten, let rewrite = card.rewrite else { return false }
         if rewrite.result == .waiting { return true }
         return (rewrite.result == .same || rewrite.result == .failed) && !rewrite.seen
     }
@@ -179,7 +195,7 @@ public enum WikiChatLogic {
             }
             for card in chat.cards {
                 if cardNeedsYou(card) { counts.needsYou += 1 }
-                guard card.state == .applied, let rewrite = card.rewrite else { continue }
+                guard card.state == .applied || card.state == .rewritten, let rewrite = card.rewrite else { continue }
                 if rewrite.result == .rewriting { counts.working = true }
                 if rewrite.result == .updated && !rewrite.seen { counts.updated += 1 }
             }
@@ -329,17 +345,18 @@ public enum WikiChatLogic {
     /// A chat note's attributes, as its block's opening tag carries them.
     public enum Note: Equatable, Sendable {
         case chat
+        case contents
         case pageDoc(doc: String, section: String)
         case pageEntry(title: String)
         /// A plan page; `section` when it shows one of its document's sections (C12).
         case pagePlan(doc: String, section: String? = nil)
         case selection(doc: String, section: String, toSection: String?, sentences: Int, sources: Int)
-        case drafts(applied: Int, edited: Int, discarded: Int, undone: Int)
+        case drafts(applied: Int, edited: Int, discarded: Int, undone: Int, rewritten: Int = 0, settled: Int = 0)
     }
 
     /// The four blocks a chat's delivery appends (contract `chat.notes.*.tag`).
     public static let noteTags: [String: String] = [
-        "chat": "orbit_wiki_chat", "page": "orbit_wiki_page", "selection": "orbit_wiki_selection", "drafts": "orbit_wiki_drafts",
+        "chat": "orbit_wiki_chat", "contents": "orbit_wiki_contents", "page": "orbit_wiki_page", "selection": "orbit_wiki_selection", "drafts": "orbit_wiki_drafts",
     ]
 
     /// What a chat note is named as where a note is named (`describeNote`; `wikiChatNoteLabel`, board 42 ②).
@@ -348,6 +365,8 @@ public enum WikiChatLogic {
         switch note {
         case .chat:
             return WikiChatCopy.noteChat
+        case .contents:
+            return WikiChatCopy.noteContents
         case .pageDoc(let doc, let section):
             return fill(WikiChatCopy.notePageDoc, ["where": place(doc: doc, section: section)])
         case .pageEntry(let title):
@@ -362,9 +381,10 @@ public enum WikiChatLogic {
                 "sentences": count(sentences, WikiChatCopy.noteSentenceOne, WikiChatCopy.noteSentenceMany),
                 "sources": count(sources, WikiChatCopy.noteSourceOne, WikiChatCopy.noteSourceMany),
             ])
-        case .drafts(let applied, let edited, let discarded, let undone):
+        case .drafts(let applied, let edited, let discarded, let undone, let rewritten, let settled):
             let counts = [(applied, WikiChatCopy.noteApplied), (edited, WikiChatCopy.noteEdited),
-                          (discarded, WikiChatCopy.noteDiscarded), (undone, WikiChatCopy.noteUndone)]
+                          (discarded, WikiChatCopy.noteDiscarded), (undone, WikiChatCopy.noteUndone),
+                          (rewritten, WikiChatCopy.noteRewritten), (settled, WikiChatCopy.noteSettled)]
                 .filter { $0.0 > 0 }
                 .map { fill($0.1, ["n": "\($0.0)"]) }
             return fill(WikiChatCopy.noteDrafts, ["counts": counts.joined(separator: ", ")])
@@ -392,6 +412,8 @@ public enum WikiChatLogic {
         switch tag {
         case "orbit_wiki_chat":
             return .chat
+        case "orbit_wiki_contents":
+            return .contents
         case "orbit_wiki_page":
             switch value("of") {
             case "doc":
@@ -412,7 +434,8 @@ public enum WikiChatLogic {
             return .selection(doc: doc, section: section, toSection: to, sentences: sentences, sources: sources)
         case "orbit_wiki_drafts":
             return .drafts(applied: number("applied") ?? 0, edited: number("edited") ?? 0,
-                           discarded: number("discarded") ?? 0, undone: number("undone") ?? 0)
+                           discarded: number("discarded") ?? 0, undone: number("undone") ?? 0,
+                           rewritten: number("rewritten") ?? 0, settled: number("settled") ?? 0)
         default:
             return nil
         }
@@ -601,17 +624,32 @@ public enum WikiChatLogic {
 
     // MARK: the composer's attachments (design §4.2)
 
-    /// The page the reader is on, as the composer's page chip names it.
+    /// The page the reader is on, as the composer's page chip names it: on the Wiki a document's section, an entry or
+    /// a plan; on Drive the folder open (nil for the drive's top level, board drive-chat 02 ①).
     public enum Page: Equatable, Sendable {
         case doc(docSlug: String, sectionKey: String, label: String)
         case entry(entryId: String, label: String)
         /// A plan page, at one of its document's sections when it shows one (C12).
         case plan(docSlug: String, label: String, sectionKey: String? = nil)
+        /// Drive: the folder open, `Folder · Scans`.
+        case folder(folderId: String?, label: String)
 
         public var label: String {
             switch self {
-            case .doc(_, _, let label), .entry(_, let label), .plan(_, let label, _): return label
+            case .doc(_, _, let label), .entry(_, let label), .plan(_, let label, _), .folder(_, let label): return label
             }
+        }
+    }
+
+    /// Drive: the files the chip names beside the folder — the rows selected in a Mac's list, or the file open on an
+    /// iPhone's or an iPad's page — their entry ids and names, in list order (the web's `WikiChatFiles`).
+    public struct Files: Equatable, Sendable {
+        public let ids: [String]
+        public let names: [String]
+
+        public init(ids: [String], names: [String]) {
+            self.ids = ids
+            self.names = names
         }
     }
 
@@ -644,11 +682,17 @@ public enum WikiChatLogic {
         public var page: Page?
         public var pageCrossed: Bool
         public var quote: Quote?
+        /// Drive: the files, which follow the selection or the file open.
+        public var files: Files?
+        public var filesCrossed: Bool
 
-        public init(page: Page? = nil, pageCrossed: Bool = false, quote: Quote? = nil) {
+        public init(page: Page? = nil, pageCrossed: Bool = false, quote: Quote? = nil, files: Files? = nil,
+                    filesCrossed: Bool = false) {
             self.page = page
             self.pageCrossed = pageCrossed
             self.quote = quote
+            self.files = files
+            self.filesCrossed = filesCrossed
         }
     }
 
@@ -657,6 +701,9 @@ public enum WikiChatLogic {
         case crossPage
         case quote(Quote)
         case crossQuote
+        /// Drive: the selection or the file open changed; a new one is shown again even if the last was crossed out.
+        case files(Files?)
+        case crossFiles
         case sent
     }
 
@@ -674,10 +721,23 @@ public enum WikiChatLogic {
             next.quote = quote
         case .crossQuote:
             next.quote = nil
+        case .files(let files):
+            if files != state.files {
+                next.files = files
+                next.filesCrossed = false
+            }
+        case .crossFiles:
+            next.filesCrossed = true
         case .sent:
-            next = Attachments(page: state.page, pageCrossed: false, quote: nil)
+            next = Attachments(page: state.page, pageCrossed: false, quote: nil, files: state.files, filesCrossed: false)
         }
         return next
+    }
+
+    /// The files chip the composer shows (`wikiChatShownFiles`): the files, unless crossed out or none.
+    public static func shownFiles(_ state: Attachments) -> Files? {
+        guard !state.filesCrossed, let files = state.files, !files.ids.isEmpty else { return nil }
+        return files
     }
 
     /// What the composer shows, which is exactly what the message sends (`wikiChatShown`).
@@ -702,7 +762,7 @@ public enum WikiChatLogic {
         case .doc(let slug, let key, _)?: context.page = .doc(docSlug: slug, sectionKey: key)
         case .entry(let id, _)?:          context.page = .entry(entryId: id)
         case .plan(let slug, _, let key)?: context.page = .plan(docSlug: slug, sectionKey: key)
-        case nil:                         break
+        case .folder?, nil:               break
         }
         if let quote, !quote.sentenceIds.isEmpty {
             context.selection = WikiChatContext.Selection(docSlug: quote.docSlug, sectionKey: quote.sectionKey,
@@ -777,7 +837,7 @@ public enum WikiChatLogic {
         switch state {
         case .draft:   return .accent
         case .changed: return .amber
-        case .applied: return .green
+        case .applied, .rewritten: return .green
         default:       return .grey
         }
     }
@@ -823,6 +883,7 @@ public enum WikiChatLogic {
         if inReview { return WikiChatCopy.cardAppliedInReviewNote }
         if card.state == .replaced { return WikiChatCopy.cardReplacedNote }
         if card.state == .undone && card.kind == .rewrite { return WikiChatCopy.cardUndoneRewriteNote }
+        if card.state == .draft, let line = heldLine(card.held) { return line }
         return planMovedNote(card.card)
     }
 
@@ -840,7 +901,7 @@ public enum WikiChatLogic {
     }
 
     public static func resultLook(_ card: WikiChatDraftView) -> ResultLook? {
-        guard card.state == .applied, let rewrite = card.rewrite else { return nil }
+        guard card.state == .applied || card.state == .rewritten, let rewrite = card.rewrite else { return nil }
         let tone: ResultTone
         switch rewrite.result {
         case .rewriting:       tone = .run
@@ -854,7 +915,7 @@ public enum WikiChatLogic {
 
     /// The press a settled rewrite the owner has opened makes, once (contract `chat.presses.seen`, `wikiChatNeedsSeen`).
     public static func needsSeen(_ card: WikiChatDraftView) -> Bool {
-        guard card.state == .applied, let rewrite = card.rewrite, !rewrite.seen else { return false }
+        guard card.state == .applied || card.state == .rewritten, let rewrite = card.rewrite, !rewrite.seen else { return false }
         return rewrite.result == .updated || rewrite.result == .same || rewrite.result == .failed
     }
 

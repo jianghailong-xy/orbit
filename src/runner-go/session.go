@@ -861,7 +861,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// this belongs to the flush and not to the engine's reader. The roots are this session's own
 	// directories; the memo keeps a retried batch, or a mock linked twice, from being uploaded
 	// again under a second id.
-	replyFiles := newReplyAttachmentIDs()
+	replyFiles := replyFilesOf(sessionID)
+	defer replyFileMemos.Delete(sessionID)
 	replyFileRoots := []string{execDir, uploadsDir(sessionID)}
 	// takeBuffered takes what is buffered, its reply files uploaded.
 	takeBuffered := func(flushCtx context.Context) []RunEvent {
@@ -975,6 +976,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// run_event held the message. Keep the last one so finalize can carry it.
 	var lastErrMu sync.Mutex
 	lastErrorMessage := ""
+	// What the run's last FAILED turn failed with, as its adapter classified it, and its admission (§5.1):
+	// finalize carries both on a FAILED end. Under lastErrMu.
+	var lastTurnFailure *RunFailure
+	var lastTurnAdmission *bool
 	// Baseline for the main-checkout card below, taken before this session runs anything so
 	// pre-existing changes are never blamed on it. Nil unless the session is isolated.
 	mainCheckout := watchMainCheckout(job.WT)
@@ -994,7 +999,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		payload = runnerSecrets().scrubPayload(payload)
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
-		pool.engineTurnEvent(live, eventType, payload)
+		if pool.engineTurnEvent(live, eventType, payload) && t.returnHeldSlot != nil {
+			go t.returnHeldSlot(sessionID) // the engine's own turn ended under a claim held for the update
+		}
 		executing.observe(eventType, payload)
 		// A tool may have written to the volume (a commit, an edit): a managed runner syncs it
 		// behind the tool, in the background, without holding the stream up (volume_durability.go).
@@ -1308,6 +1315,15 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Every owner-request secret's value out of its text and patches, before it is kept on disk or sent
 		// (secret_wire.go).
 		req = scrubTurnComplete(req, sessionID)
+		// A classification and an admission belong to a FAILED turn only (engine_failure.go); the last one is the
+		// run's, for finalize.
+		if req.Status != stFailed {
+			req.Failure, req.Admission = nil, nil
+		} else {
+			lastErrMu.Lock()
+			lastTurnFailure, lastTurnAdmission = req.Failure, req.Admission
+			lastErrMu.Unlock()
+		}
 		// Kept before anything else: the flush below sends no completion when it fails, and a runner that
 		// stops, or is killed, before the control plane answers leaves it to its next process.
 		completions.keep(req)
@@ -1853,6 +1869,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		finalizeSubtype = ""
 		lastErrMu.Lock()
 		lastErrorMessage = (*givenUp).Error()
+		// The run ends on the runner's reason, not the engine's: no turn's classification describes it.
+		lastTurnFailure, lastTurnAdmission = nil, nil
 		lastErrMu.Unlock()
 	}
 	// Stop and join runner-owned background work before the final event drain and
@@ -1949,6 +1967,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if status == stFailed {
 		lastErrMu.Lock()
 		finalizeRequest.Error = lastErrorMessage
+		finalizeRequest.Failure, finalizeRequest.Admission = lastTurnFailure, lastTurnAdmission
 		lastErrMu.Unlock()
 		finalizeRequest.Subtype = finalizeSubtype
 	}
@@ -2000,6 +2019,11 @@ var builtinTaskTools = []string{
 	"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput", "TaskStop",
 	"TodoWrite", "TodoRead",
 }
+
+// builtinSubAgentTools are Claude's own sub-agent tool, under the two names it has had. They are disabled in a session
+// that is served Orbit's delegate (claude_spawn.go), which is the door for the same request that records the work and
+// brings its result back (design D1). Denying a name the installed claude does not have is a no-op.
+var builtinSubAgentTools = []string{"Agent", "Task"}
 
 // withBuiltinTaskToolsDisallowed appends builtinTaskTools to the agent's configured
 // disallow list, de-duplicated and order-stable.
@@ -2334,6 +2358,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The generation's inbox: what fetches its turns, and the turnIds being processed (dedup
 	// lease re-delivery).
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	// Exact Orbit executable turn owned by this Claude generation. It is separate from the
 	// transcript attribution cursor: the poller and stdout reader use it as one linearization
@@ -2608,16 +2633,22 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				}
 				// Prepend any buffered `!`-shell output as context - claude sees the
 				// command+output with this message (CLI `!` semantics), no turn spent on it.
+				// The CLI runs a slash command only when the text starts with it: nothing goes in front of one,
+				// and what would have (shell output, the reset note, a reply-file correction) waits for the next message.
+				slashCommand := isClaudeSlashCommand(resp.Content)
 				feedText := resp.Content
-				if len(pendingShellCtx) > 0 {
+				if len(pendingShellCtx) > 0 && !slashCommand {
 					feedText = strings.Join(pendingShellCtx, "\n") + "\n\n" + resp.Content
 					// NOT cleared here: a message the runtime refuses below is never fed, and
 					// the shell output it was carrying still belongs to whatever is fed next.
 				}
 				// A conversation compacted or resumed since the last message: this one says so first. Like the
 				// shell output, the flag is cleared only once the message is accepted below.
-				carriesReset := !steer && contextReset.Load()
+				carriesReset := !steer && !slashCommand && contextReset.Load()
 				feedText = withContextResetNote(feedText, carriesReset, job.insideRecordedWork())
+				if !steer && !slashCommand {
+					feedText = withReplyFileCorrection(feedText, replyFilesOf(job.SessionID).takeCorrection())
+				}
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
 				// content it never received.
@@ -2682,7 +2713,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// so everything that answers for it can be put in place before it can be
 				// answered.
 				deliveries.accept(delivery, slot.receipt)
-				pendingShellCtx = nil // this message carries it now
+				if !slashCommand {
+					pendingShellCtx = nil // this message carries it now
+				}
 				if carriesReset {
 					contextReset.Store(false)
 				}
@@ -3069,6 +3102,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// content filtering) shows up here while the trailing `result` still says success,
 	// so we use it to fail the turn below. Reset once the turn's `result` is handled.
 	var lastAssistantText string
+	// What the turn put out before its result, for the admission of a failed one (claudeTurnOutput).
+	var turnOutput claudeTurnOutput
 	// Running context-window occupancy: the latest top-level assistant message's total
 	// tokens (input + cache + output). Carried into each turn_end event so the clients'
 	// context gauge updates live and, via event replay, on session reopen. Persists
@@ -3167,6 +3202,7 @@ scanLoop:
 			if len(pending) == 0 {
 				engineOwnTurn.Store(true)
 			}
+			turnOutput.observe(msg)
 			if txt := assistantText(msg); txt != "" {
 				lastAssistantText = txt
 			}
@@ -3273,6 +3309,14 @@ scanLoop:
 					isConnectionFailure(r.Result) || isConnectionFailure(lastAssistantText)) {
 				turnStatus = stFailed
 			}
+			// What a failed turn failed with, and whether the engine put anything out first (§5.2, §5.3).
+			var turnFailure engineFailure
+			var turnAdmitted *bool
+			if turnStatus == stFailed {
+				turnFailure = claudeTurnFailureOf(r.Result, lastAssistantText)
+				turnAdmitted = turnOutput.admission(r, firstNonEmpty(turnFailure.Said, strings.TrimSpace(r.Result), strings.TrimSpace(lastAssistantText)))
+			}
+			turnOutput = claudeTurnOutput{}
 			lastAssistantText = ""
 			// A failed turn's own card is what comes next, so nothing is suggested after it.
 			lastAnsweredTurnID = ""
@@ -3309,7 +3353,7 @@ scanLoop:
 					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 					BranchMerged:   branchMergedInto(job.WT),
 					WorktreeBranch: currentBranch(job.WT),
-				}); err != nil {
+				}.withFailure(turnFailure, turnAdmitted)); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}
 				inbox.clearInflight(turnID)

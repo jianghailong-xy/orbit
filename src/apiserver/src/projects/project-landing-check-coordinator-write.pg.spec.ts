@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { uuidToBase62 } from '@orbit/shared';
-import { Prisma, RunnerStatus, RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { Prisma, RunnerStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -116,7 +117,7 @@ async function project(
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: `Session of ${label}`, prompt: `Session of ${label}`, provider: 'claude',
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       },
     });
   }

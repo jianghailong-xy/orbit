@@ -1,6 +1,6 @@
 /**
- * `files orphans` and `files verify` (docs/orbit-files-drive-technical-design.md §10.3), from a shell against DATABASE_URL and
- * the deployment's ORBIT_FILES_* settings:
+ * `files orphans` and `files verify` (docs/drive-technical-design.md §10.3), from a shell against DATABASE_URL and
+ * the deployment's ORBIT_DRIVE_* settings:
  *
  *   node src/apiserver/dist/files/file-integrity.cli.js orphans [--delete]
  *       lists objects in each store no file_blob row names, older than the grace period; --delete removes them

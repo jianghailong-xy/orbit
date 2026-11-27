@@ -2,12 +2,16 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { conversationProjectPage, setConversationProjectPage } from '../lib/conversationProjectPage';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 import type { Runner } from './TasksSidePanel';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
 import { SessionSearch } from './SessionSearch';
 import { projectSessionsQuery } from '../lib/queries';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // Exercise navigation, menus and both list scopes through the real WorkspaceView. Named API reads
 // call api() within api.ts, so stub them separately from the query factories' api export.
@@ -143,7 +147,16 @@ let folders: Array<typeof FOLDER> = [];
 let listCalls: string[] = [];
 /** The workspace list's placement reads (useSessionProjectData). */
 let placementCalls: string[] = [];
-let location = '';
+/** The router's own address. */
+let address = '';
+/** Where the console is: its address, and beside a conversation the project page the console keeps
+ *  (lib/conversationProjectPage), spelled as a list's address spells it. A conversation's address names
+ *  no project page itself (owner 2026-11-25); `address` is what a copied link holds. */
+const shown = (): string => {
+  const kept = conversationProjectPage();
+  if (!kept || !/^\/(?:sessions\/[^/?]+|projects\/[^/?]+\/landings)(?:\?|$)/.test(address)) return address;
+  return `${address}${address.includes('?') ? '&' : '?'}project=${kept.project}${kept.completed ? '&view=completed' : ''}`;
+};
 let routerNavigate: NavigateFunction;
 let mobile = false;
 let projectReadError = false;
@@ -167,7 +180,7 @@ let ownerRequests: Array<Record<string, unknown>> = [];
 function LocationProbe() {
   const l = useLocation();
   routerNavigate = useNavigate();
-  location = `${l.pathname}${l.search}`;
+  address = `${l.pathname}${l.search}`;
   return null;
 }
 const mounted = (): HTMLDivElement => {
@@ -262,7 +275,8 @@ beforeEach(() => {
   folders = [];
   listCalls = [];
   placementCalls = [];
-  location = '';
+  address = '';
+  setConversationProjectPage(null);
   mobile = false;
   projectReadError = false;
   withControlPlane = false;
@@ -335,6 +349,10 @@ beforeEach(() => {
       return reply(inScope.filter((r) => r.lifecycleState === lifecycle &&
         (!params.has('projectId') || r.projectMembership?.projectId === params.get('projectId')))
         .sort((a, b) => Date.parse(b.listedAt ?? b.lastTurnAt) - Date.parse(a.listedAt ?? a.lastTurnAt)));
+    }
+    if (path.startsWith('/sessions/listing?')) {
+      listCalls.push(path);
+      return reply(answerListing(listingRules, [...rows, ...remoteRows], folders, path));
     }
     if (path.startsWith('/sessions/project-placement?')) {
       // What the server answers (SessionsService.projectPlacement), from every workspace's rows.
@@ -465,12 +483,12 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await mount();
     await click(projectRow(), 'the project entry');
     await until(() => expect(page()).not.toBeNull());
-    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(PROJECT_ID);
+    expect(new URLSearchParams(shown().split('?')[1]).get('project')).toBe(PROJECT_ID);
     await back();
     await until(() => expect(page()).toBeNull());
     await hoverProjectMenu();
     await click(menuItem('Open Session'), 'Open Session for the coordinator');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}`));
   });
 
   it('opens the oldest waiting member named on the second line', async () => {
@@ -482,7 +500,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await act(async () => projectRow().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
     await until(() => expect(menuItem('Open Session')).toBeTruthy());
     await click(menuItem('Open Session'), 'Open Session for the waiting member');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}`));
     expect(projectRow().classList.contains('active')).toBe(true);
   });
 
@@ -493,10 +511,10 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await hoverProjectMenu();
     expect(menuItem('Open Session')?.getAttribute('aria-disabled')).toBe('true');
     await click(menuItem('Open Session'), 'the disabled Open Session');
-    expect(location).toBe(`/sessions/${LOOSE.id}`);
+    expect(shown()).toBe(`/sessions/${LOOSE.id}`);
     await click(projectRow(), 'the project entry without a coordinator');
     // No coordinator to open: the column opens the project's latest member beside itself.
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await until(() => expect(page()?.textContent).toContain('Build the package'));
     expect(titles()).toContain(LOOSE.title);
     expect(projectRows()).toHaveLength(1);
@@ -505,10 +523,10 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
   it('draws the progress tag as part of the entry, with the session-count hint', async () => {
     await mount();
     const progress = projectRow().querySelector('.session-project-progress');
-    expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
+    expect(await hoverTooltip(progress!)).toBe('2 sessions · 1 running');
     expect(progress?.closest('button')).toBeNull();
     await click(progress, 'the project progress tag');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();
   });
 
@@ -536,7 +554,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
       expect(entryText).not.toContain(forbidden);
     }
     await click(menuItem('Sessions'), 'Sessions');
-    await until(() => expect(location).toContain(`?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toContain(`?project=${PROJECT_ID}`));
   });
 
   it.each(['DONE', 'CANCELLED'] as const)('leads a %s project\'s menu with Complete, which moves its sessions to Completed', async (status) => {
@@ -557,6 +575,34 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await until(() => expect(projectRows()).toHaveLength(1));
     await hoverProjectMenu();
     expect(menuItem('Complete')).toBeUndefined();
+  });
+
+  const pressCompleteShortcut = async (): Promise<void> => {
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', metaKey: true, bubbles: true, cancelable: true }));
+    });
+  };
+
+  it('completes a DONE project with ⌘D while its menu is open, as the menu\'s Complete does', async () => {
+    const finished = { ...membership('COORDINATOR'), projectStatus: 'DONE' };
+    rows = [LOOSE, { ...COORDINATOR, projectMembership: finished }, { ...TASK, projectMembership: { ...finished, role: 'TASK' } }];
+    projects = [project({ status: 'DONE' })];
+    await mount();
+    await hoverProjectMenu();
+    await pressCompleteShortcut();
+    await until(() => expect(apiModule.completeProjectSessions).toHaveBeenCalledWith(PROJECT_ID));
+    expect(apiModule.completeSession).not.toHaveBeenCalled();
+    await until(() => expect(projectRows()).toHaveLength(0));
+  });
+
+  it('completes a DONE project with ⌘D from its selected coordinator', async () => {
+    const finished = { ...membership('COORDINATOR'), projectStatus: 'DONE' };
+    rows = [LOOSE, { ...COORDINATOR, projectMembership: finished }, { ...TASK, projectMembership: { ...finished, role: 'TASK' } }];
+    projects = [project({ status: 'DONE' })];
+    await mount(undefined, `/sessions/${COORDINATOR.id}`);
+    await pressCompleteShortcut();
+    await until(() => expect(apiModule.completeProjectSessions).toHaveBeenCalledWith(PROJECT_ID));
+    expect(apiModule.completeSession).not.toHaveBeenCalled();
   });
 
   it('pins and moves the coordinator from the project menu', async () => {
@@ -587,7 +633,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await mount();
     await hoverProjectMenu();
     await click(menuItem('Open Project'), 'Open Project');
-    await until(() => expect(location).toBe(`/projects/${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/projects/${PROJECT_ID}`));
   });
 
   it('exposes only Pin on a right swipe and Move on a left swipe on a phone', async () => {
@@ -615,14 +661,14 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     const progress = entry.querySelector('.session-project-progress')!;
     await swipe(entry, 90, progress);
     await click(progress, 'the synthesized click after swiping the progress tag');
-    expect(location).toBe(`/sessions/${LOOSE.id}`);
+    expect(shown()).toBe(`/sessions/${LOOSE.id}`);
     expect(page()).toBeNull();
     await click(progress, 'the tap that closes the open swipe');
-    expect(location).toBe(`/sessions/${LOOSE.id}`);
+    expect(shown()).toBe(`/sessions/${LOOSE.id}`);
     expect(entry.querySelector<HTMLElement>('.session-swipe')?.style.transform).toBe('');
     await click(progress, 'the progress tag after the swipe closes');
     // A phone's project row opens its coordinator directly (owner 2026-11-11, board 5).
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}`));
     expect(page()).toBeNull();
   });
 });
@@ -645,8 +691,10 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
       await act(async () => projectRow().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
       await settle();
     }
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // The column is the console's: the conversation's address is the session alone (owner 2026-11-25).
+    expect(address).toBe(`/sessions/${COORDINATOR.id}`);
     // The list is the workspace's still: its head, New session, its rows and the project's row, selected.
     const listCol = mounted().querySelector('aside.session-col:not(.session-project-column)')!;
     expect(listCol.classList.contains('session-project-page')).toBe(false);
@@ -669,15 +717,34 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     expect(column()!.querySelectorAll('.session-row.active')).toHaveLength(1);
   });
 
+  it('keeps the list on the coordinator’s folder, its project row selected, when the column opens a member filed elsewhere', async () => {
+    folders = [FOLDER];
+    rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, TASK];
+    await mount(undefined, `/workspaces/${WORKSPACE_ID}?folder=${FOLDER.id}`);
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    const listTitle = () => mounted().querySelector('aside.session-col:not(.session-project-column) .session-folder-title')?.textContent;
+    expect(listTitle()).toBe(FOLDER.name);
+    const member = [...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title);
+    await click(member, 'the member in the column');
+    await until(() => expect(shown()).toContain(`/sessions/${TASK.id}`));
+    await settle();
+    const listCol = mounted().querySelector('aside.session-col:not(.session-project-column)')!;
+    expect(listCol.querySelector('.session-folder-title')?.textContent).toBe(FOLDER.name);
+    expect(projectRow().classList.contains('active')).toBe(true);
+  });
+
   it('folds with its ✕, which keeps ?project= on the address so the title bar’s button brings it back', async () => {
     await mount();
     await click(projectRow(), 'the project row');
     await until(() => expect(column()).not.toBeNull());
     const close = column()!.querySelector('.session-project-page-header .session-folder-back')!;
     expect(close.getAttribute('aria-label')).toBe('Hide project sessions');
+    // The ✕ ends the bar, top-right, as every other panel's does (owner 2026-11-27).
+    expect(close.closest('.session-project-page-header')!.lastElementChild).toBe(close);
     await click(close, 'the column ✕');
     await until(() => expect(column()).toBeNull());
-    expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+    expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
     expect(projectSessionsButton()?.getAttribute('aria-pressed')).toBe('false');
     expect(projectRows()).toHaveLength(1);
   });
@@ -688,7 +755,7 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
     const member = [...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title);
     await click(member, 'the member row in the column');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     expect(column()).not.toBeNull();
     const active = column()!.querySelector('.session-row.active .session-title');
     expect(active?.textContent).toBe(TASK.title);
@@ -713,10 +780,10 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     const columnBefore = column()!.innerHTML.replace(/ active/g, '');
     await click([...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title),
       'the member row in the column');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await until(() => expect(mounted().querySelector('.workspace-view .session-title, .workspace-view h1, .workspace-view')?.textContent).toContain(TASK.title));
     await settle();
-    expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
     // The list: same rows, the project's row still the selected one.
     expect(listSnapshot()).toBe(listBefore);
     expect(projectRows()).toHaveLength(1);
@@ -743,9 +810,9 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     // Open a member first, so the switch is from a member's conversation too.
     await click([...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title),
       'the member row in the column');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await click(rowOf('Project Beta'), 'Project Beta’s row');
-    await until(() => expect(location).toBe(`/sessions/${otherCoordinator.id}?project=${OTHER_PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${otherCoordinator.id}?project=${OTHER_PROJECT_ID}`));
     await until(() => expect(columnTitles()).toEqual([otherCoordinator.title, otherTask.title]));
     expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project Beta');
     expect([...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent)).toEqual([otherCoordinator.title]);
@@ -760,10 +827,10 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     await click(projectRow(), 'the project row');
     await click(await (async () => { await until(() => expect(columnTitles()).toContain(TASK.title)); return [...column()!.querySelectorAll('.session-row')]
       .find((el) => el.querySelector('.session-title')?.textContent === TASK.title); })(), 'the member row in the column');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await click([...listColumn().querySelectorAll('.session-row:not(.session-project-row)')]
       .find((el) => el.querySelector('.session-title')?.textContent === LOOSE.title), 'the loose session in the list');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
     expect(column()).toBeNull();
     expect(projectRow().classList.contains('active')).toBe(false);
   });
@@ -774,11 +841,11 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
     // The list is the project's row (newest) then the loose session.
     await press('ArrowDown');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
     expect(column()).toBeNull();
     // With no column open, stepping onto the project's row opens it beside the coordinator, as a click does.
     await press('ArrowUp');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
   });
 
@@ -789,11 +856,11 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     // A member reached some other way than the column keeps it.
     await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await settle();
-    expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
     expect(column()).not.toBeNull();
     // A session in no project under the same address closes it, rather than being sent to the coordinator.
     await act(async () => routerNavigate(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
     await until(() => expect(column()).toBeNull());
   });
 
@@ -815,7 +882,7 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     .find((el) => el.querySelector('.session-title')?.textContent === title);
   const activeColumnTitles = (): string[] => [...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent ?? '');
   const expectBetaColumn = async (): Promise<void> => {
-    await until(() => expect(location).toBe(`/sessions/${betaMember.id}?project=${BETA_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${betaMember.id}?project=${BETA_ID}`));
     await until(() => expect(columnTitles()).toEqual([betaCoordinator.title, betaMember.title]));
     expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project Beta');
     expect(activeColumnTitles()).toEqual([betaMember.title]);
@@ -823,7 +890,7 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     await until(() => expect(vi.mocked(apiModule.getSession).mock.calls.some(([id]) => id === betaMember.id)).toBe(true));
     await until(() => expect(mounted().querySelector('.workspace-view')?.textContent).toContain(betaMember.title));
     await settle();
-    expect(location).toBe(`/sessions/${betaMember.id}?project=${BETA_ID}`);
+    expect(shown()).toBe(`/sessions/${betaMember.id}?project=${BETA_ID}`);
     expect(projectRow().classList.contains('active')).toBe(false);
   };
 
@@ -846,7 +913,7 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     await expectBetaColumn();
     // On to a session in no project, the column closes.
     await press('ArrowDown');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
     expect(column()).toBeNull();
   });
 
@@ -858,14 +925,14 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     // A member of Alpha keeps Alpha's column.
     await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await settle();
-    expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
     expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]);
     // A member of Beta under Alpha's address switches the column to Beta.
     await act(async () => routerNavigate(`/sessions/${betaMember.id}?project=${PROJECT_ID}`));
     await expectBetaColumn();
     // A session in no project closes it.
     await click(listRow(LOOSE.title), 'the loose session in the list');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
     expect(column()).toBeNull();
   });
 
@@ -875,7 +942,7 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     await openSessions();
     expect(column()).toBeNull();
     expect(mounted().querySelector('aside.session-col.session-project-page')).not.toBeNull();
-    expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
+    expect(shown()).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
   });
 });
 
@@ -897,18 +964,20 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     await click(projectRow(), 'the project row');
     await until(() => expect(column()).not.toBeNull());
     await until(() => expect(button().textContent).toBe('2'));
-    expect(button().getAttribute('title')).toBe('Project sessions');
+    expect(await hoverTooltip(button())).toBe('Project sessions');
     expect(button().classList.contains('orbit-button')).toBe(true);
     expect(button().querySelector('.orbit-button-icon svg, .orbit-button-icon .anticon, .orbit-button-icon img, .orbit-button-icon *')).not.toBeNull();
-    // Immediately left of the ⋮ More actions button.
-    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    // Left of the ⋯ More actions button and Share (docs/mocks/session-header-share-more).
+    expect(button().nextElementSibling?.classList.contains('workspace-header-actions')).toBe(true);
+    expect(button().nextElementSibling?.firstElementChild?.getAttribute('aria-label')).toBe('More actions');
+    expect(button().nextElementSibling?.lastElementChild?.classList.contains('workspace-header-share')).toBe(true);
     // The column header counts the same sessions.
     expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     // A member of the project carries it too.
     await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(TASK.title));
     expect(button().textContent).toBe('2');
-    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    expect(button().nextElementSibling?.firstElementChild?.getAttribute('aria-label')).toBe('More actions');
     // A session in no project has none.
     await act(async () => routerNavigate(`/sessions/${LOOSE.id}`));
     await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(LOOSE.title));
@@ -923,7 +992,7 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     await click(button(), 'the Project sessions button');
     await until(() => expect(column()).toBeNull());
     expect(button().getAttribute('aria-pressed')).toBe('false');
-    expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+    expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
     await click(button(), 'the Project sessions button');
     await until(() => expect(column()).not.toBeNull());
     expect(button().getAttribute('aria-pressed')).toBe('true');
@@ -942,7 +1011,7 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     await pressEscape();
     await until(() => expect(column()).toBeNull());
     expect(button().getAttribute('aria-pressed')).toBe('false');
-    expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+    expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
   });
 
   it('opens the column of a project conversation whose column is closed, counting its sessions', async () => {
@@ -952,7 +1021,7 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     expect(column()).toBeNull();
     expect(button().getAttribute('aria-pressed')).toBe('false');
     await click(button(), 'the Project sessions button');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     await until(() => expect(column()).not.toBeNull());
     expect(button().getAttribute('aria-pressed')).toBe('true');
   });
@@ -1054,19 +1123,19 @@ describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
 
   it('opens the coordinator’s conversation from a project row, with no project sessions page', async () => {
     await openCoordinator();
-    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(shown()).toBe(`/sessions/${COORDINATOR.id}`);
     expect(page()).toBeNull();
     expect(mounted().querySelector('.workspace-split')?.classList.contains('show-conversation')).toBe(true);
     // The title bar carries the button, left of ⋮, unpressed, with no sheet up yet.
     await until(() => expect(button().textContent).toBe('2'));
-    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    expect(button().nextElementSibling?.firstElementChild?.getAttribute('aria-label')).toBe('More actions');
     expect(button().getAttribute('aria-pressed')).toBe('false');
     expect(sheet()).toBeNull();
   });
 
   it('opens the project’s sessions in a bottom sheet at medium height from the title bar’s button', async () => {
     await openSheet();
-    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(shown()).toBe(`/sessions/${COORDINATOR.id}`);
     expect(button().getAttribute('aria-pressed')).toBe('true');
     expect(sheet()!.dataset.placement).toBe('bottom');
     expect(sheet()!.style.height).toBe('62%');
@@ -1077,6 +1146,7 @@ describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
     expect(head.textContent).toContain('Project Alpha');
     expect(head.textContent).toContain('Project · 2 sessions');
     expect(head.querySelector('.session-folder-back')?.getAttribute('aria-label')).toBe('Hide project sessions');
+    expect(head.lastElementChild?.classList.contains('session-folder-back')).toBe(true);
     expect(sheet()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
     expect(sheet()!.querySelector('.session-project-coordinator .session-row.active .session-title')?.textContent).toBe(COORDINATOR.title);
     // The list behind keeps the workspace's rows: no page took its place.
@@ -1088,13 +1158,13 @@ describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
     await openSheet();
     const member = [...sheet()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title);
     await click(member, 'the member row in the sheet');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}`));
     await until(() => expect(sheet()).toBeNull());
     await until(() => expect(conversationName()).toBe(TASK.title));
     // The member's title bar carries the same button, unpressed.
     expect(button().getAttribute('aria-pressed')).toBe('false');
     await click(mounted().querySelector('.workspace-back-mobile'), 'the conversation’s Back');
-    await until(() => expect(location.startsWith('/sessions/')).toBe(false));
+    await until(() => expect(shown().startsWith('/sessions/')).toBe(false));
     expect(mounted().querySelector('.workspace-split')?.classList.contains('show-conversation')).toBe(false);
     expect(page()).toBeNull();
     expect(projectRows()).toHaveLength(1);
@@ -1104,13 +1174,13 @@ describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
     await openSheet();
     await click(sheet()!.querySelector('.session-project-page-header .session-folder-back'), 'the sheet’s ✕');
     await until(() => expect(sheet()).toBeNull());
-    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(shown()).toBe(`/sessions/${COORDINATOR.id}`);
     expect(button().getAttribute('aria-pressed')).toBe('false');
     await click(button(), 'the Project sessions button');
     await until(() => expect(sheet()).not.toBeNull());
     await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     await until(() => expect(sheet()).toBeNull());
-    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(shown()).toBe(`/sessions/${COORDINATOR.id}`);
   });
 
   it('drags up to full height, back to medium, and closes on a drag down', async () => {
@@ -1121,7 +1191,7 @@ describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
     await until(() => expect(sheet()!.style.height).toBe('62%'));
     await drag(330, 700, 528);
     await until(() => expect(sheet()).toBeNull());
-    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(shown()).toBe(`/sessions/${COORDINATOR.id}`);
   });
 });
 
@@ -1173,7 +1243,7 @@ describe('the project column in a window too narrow for it', { timeout: 60_000 }
   it('starts folded where the conversation would go under 480px, with the button plain, and unfolds as the window widens', async () => {
     await mount();
     await click(projectRow(), 'the project row');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     await until(() => expect(button().textContent).toBe('2'));
     expect(column()).toBeNull();
     expect(button().getAttribute('aria-pressed')).toBe('false');
@@ -1242,8 +1312,9 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
   const conversation = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.workspace-scroll-wrap > .workspace-sessions');
   const card = (): HTMLElement | null => conversation()?.querySelector<HTMLElement>('.owner-request-card') ?? null;
   // Where things sit: the conversation's scroller at y=100, the waiting card far below the fold at
-  // y=900, so a reveal that brings the card's top to the scroller's top scrolls by 900 - 100 - 48 (clear of the
-  // "Jump to the beginning" pill, which a transcript scrolled off its top and tail offers).
+  // y=900, so a reveal that brings the card near the scroller's top scrolls by 900 - 100 - 16 (the
+  // air the reveal keeps above the card; the "Jump to the beginning" pill is in the header now,
+  // outside the scroller, so nothing floats there to clear).
   const scrollTops = new WeakMap<Element, number>();
   // How far content that landed after the open has pushed the waiting card down.
   let grownAbove = 0;
@@ -1289,18 +1360,18 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       await mount();
       expect(preview()?.textContent).toContain(TASK.title);
       await click(projectRow(), 'the project row');
-      await until(() => expect(location).toBe(memberAddress));
+      await until(() => expect(shown()).toBe(memberAddress));
       await until(() => expect(card()).not.toBeNull());
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
-      // The card's header and title are in view, with the gap above them clear of anything pinned.
-      expect(card()!.getBoundingClientRect().top).toBe(100 + 48);
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 16));
+      // The card's header and title are in view, under the reveal's own gap.
+      expect(card()!.getBoundingClientRect().top).toBe(100 + 16);
       expect(card()!.querySelector('.owner-request-waiting')?.textContent).toBe('Waiting on you');
       expect(card()!.querySelector('.owner-request-title')?.textContent).toBe(request.title);
       if (phone) {
         expect(column()).toBeNull();
         expect(mounted().querySelector('.workspace-split')?.classList.contains('show-conversation')).toBe(true);
         await back();
-        await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+        await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
       } else {
         // The column is open beside it: the coordinator at its top, the member the selected row.
         await until(() => expect(column()).not.toBeNull());
@@ -1314,7 +1385,7 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
     it('keeps the waiting card in place as the conversation lands above it, until the reader scrolls', async () => {
       await mount();
       await click(projectRow(), 'the project row');
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 16));
       const stream = (): FakeEventSource => FakeEventSource.streams[FakeEventSource.streams.length - 1];
       await until(() => expect(stream()?.url).toContain(`/sessions/${TASK.id}/`));
       const land = async (seq: number): Promise<void> => {
@@ -1326,12 +1397,12 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       // Rows land above the card: it is put back at the top, not left where the new rows pushed it.
       grownAbove = 300;
       await land(3);
-      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 48);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 16);
       // The reader takes the scroller: what lands next moves the card, and nothing brings it back.
       await act(async () => { conversation()!.dispatchEvent(new Event('wheel')); });
       grownAbove = 500;
       await land(4);
-      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 48);
+      expect(conversation()!.scrollTop).toBe(900 + 300 - 100 - 16);
     });
 
     // Owner 2026-11-16 (docs/mocks/coordinator-question-jump): the coordinator waiting on you with a
@@ -1356,10 +1427,10 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       }];
       await mount();
       await click(projectRow(), 'the project row');
-      await until(() => expect(location).toBe(coordinatorAddress));
+      await until(() => expect(shown()).toBe(coordinatorAddress));
       await until(() => expect(conversation()?.querySelector('#question-item-question')).not.toBeNull());
       await until(() => expect(conversation()?.querySelector('#question-record-item-answered')).not.toBeNull());
-      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 48));
+      await until(() => expect(conversation()!.scrollTop).toBe(900 - 100 - 16));
     });
 
     it('opens the coordinator when nobody is waiting', async () => {
@@ -1367,7 +1438,7 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
       ownerRequests = [];
       await mount();
       await click(projectRow(), 'the project row');
-      await until(() => expect(location).toBe(coordinatorAddress));
+      await until(() => expect(shown()).toBe(coordinatorAddress));
     });
   });
 
@@ -1375,7 +1446,7 @@ describe('a project row whose member is waiting on you', { timeout: 60_000 }, ()
     await mount();
     await hoverProjectMenu();
     await click(menuItem('Open Session'), 'Open Session for the waiting member');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}`));
     await until(() => expect(card()).not.toBeNull());
     await settle();
     expect(conversation()!.scrollTop).toBe(0);
@@ -1498,7 +1569,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(projectQueryCalls().some((params) => params.get('projectId') === PROJECT_ID && params.get('view') === 'completed')).toBe(true);
     expect(projectQueryCalls().some((params) => params.get('view') === 'trash')).toBe(false);
     await click(memberRow('Resolve remote issue'), 'the remote member');
-    await until(() => expect(location).toBe(`/sessions/${pid(825)}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${pid(825)}?project=${PROJECT_ID}`));
     expect(pageTitles()).toEqual(['Plan the release', 'Build the package', 'Resolve remote issue', 'Completed remote work']);
   });
 
@@ -1564,23 +1635,37 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(document.querySelectorAll('.ssearch-row')).toHaveLength(3));
   });
 
-  it('preserves the page in member links, browser Back and a fresh mount of the address', async () => {
+  it('preserves the page in member links and browser Back', async () => {
     await mount();
     await openSessions();
-    const pageAddress = location;
+    const pageAddress = shown();
     await click(memberRow(TASK.title), TASK.title);
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
-    const memberAddress = location;
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    expect(address).toBe(`/sessions/${TASK.id}`);
     await back();
-    await until(() => expect(location).toBe(pageAddress));
+    await until(() => expect(shown()).toBe(pageAddress));
     expect(page()).not.toBeNull();
     await back();
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
     expect(page()).toBeNull();
+  });
+
+  it('keeps the page through a reload in the same tab, with the session alone in the address', async () => {
+    await mount();
+    await openSessions();
+    await click(memberRow(TASK.title), TASK.title);
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await unmount();
-    await mount(() => expect(page()).not.toBeNull(), memberAddress);
+    await mount(() => expect(page()).not.toBeNull(), `/sessions/${TASK.id}`);
     await until(() => expect(sessionRows()).toHaveLength(2));
-    expect(location).toBe(memberAddress);
+    expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    expect(memberRow(TASK.title)?.classList.contains('active')).toBe(true);
+  });
+
+  it('opens an older conversation link that names the project with its page, and drops it from the address', async () => {
+    await mount(() => expect(page()).not.toBeNull(), `/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    await until(() => expect(address).toBe(`/sessions/${TASK.id}`));
+    expect(conversationProjectPage()?.project).toBe(PROJECT_ID);
     expect(memberRow(TASK.title)?.classList.contains('active')).toBe(true);
   });
 
@@ -1592,12 +1677,12 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await chooseView('Completed');
     await until(() => expect(projectRows()).toHaveLength(1));
     await openSessions();
-    expect(location).toBe(`/workspaces/${WORKSPACE_ID}?project=${PROJECT_ID}&view=completed`);
+    expect(shown()).toBe(`/workspaces/${WORKSPACE_ID}?project=${PROJECT_ID}&view=completed`);
     expect(pageTitles()).toEqual(expect.arrayContaining(['Plan the release', 'Build the package', 'Completed remote work']));
     expect(pageTitles()).toContain('Open remote work');
     await click(memberRow(TASK.title), TASK.title);
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`));
-    const address = location;
+    await until(() => expect(shown()).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`));
+    const address = shown();
     await unmount();
     await mount(() => expect(page()).not.toBeNull(), address);
     await until(() => expect(pageTitles()).toHaveLength(4));
@@ -1618,7 +1703,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(header.querySelector('.session-project-page-open')?.getAttribute('aria-label')).toBe('Open Project');
     await click(page()?.querySelector('.session-folder-back'), 'the project page back');
     await until(() => expect(page()).toBeNull());
-    expect(location).not.toContain('project=');
+    expect(shown()).not.toContain('project=');
   });
 
   it('opens the project from its header, and its progress card is first in the list with no link of its own', async () => {
@@ -1626,11 +1711,14 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await openSessions();
     const list = page()!.querySelector('.workspace-sessions')!;
     const card = list.querySelector('.session-project-page-card')!;
-    expect(list.firstElementChild, 'the card scrolls with the list, first in it').toBe(card);
+    // The column is drawn as items (SessionListWindow): the card leads its top block, the column's first item.
+    const top = list.querySelector('.session-list-item')?.firstElementChild;
+    expect(top?.classList.contains('session-list-top')).toBe(true);
+    expect(top?.firstElementChild, 'the card scrolls with the list, first in it').toBe(card);
     expect(card.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
     expect(card.querySelector('a')).toBeNull();
     await click(page()?.querySelector('.session-project-page-open'), 'the header’s Open Project');
-    await until(() => expect(location).toBe(`/projects/${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/projects/${PROJECT_ID}`));
   });
 
   it('says a project nobody has started is not started, and offers the owner’s own start while nobody asked', async () => {
@@ -1741,7 +1829,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     const blocks = [...page()!.querySelectorAll('.session-project-page-card, .session-project-landing, .session-project-merge')];
     expect(blocks.map((block) => block.className.split(' ')[0]))
       .toEqual(['session-project-page-card', 'session-project-landing']);
-    const before = location;
+    const before = shown();
     await click(landing()!.querySelector('.spl-press')!, 'the landing card');
     const list = (): HTMLElement | null => document.querySelector<HTMLElement>('.landing-jobs-dialog');
     await until(() => expect(list()?.querySelector('.orbit-overlay-title')?.textContent).toBe('2 jobs in flight'));
@@ -1751,7 +1839,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(list()!.textContent).toContain('Merge to main');
     // The list opens over this page rather than leaving it, and outside the card, which still holds
     // no link of its own.
-    expect(location).toBe(before);
+    expect(shown()).toBe(before);
     expect(page()!.querySelector('.session-project-page-card a')).toBeNull();
   });
 
@@ -1770,7 +1858,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(landing()!.querySelector('.spl-press')!.tagName).toBe('BUTTON');
     expect(landing()!.querySelector('.spl-press')!.getAttribute('aria-haspopup')).toBeNull();
     await click(landing()!.querySelector('.spl-press')!, 'the landing card');
-    await until(() => expect(location).toBe(`/projects/${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/projects/${PROJECT_ID}`));
     expect(document.querySelector('.landing-jobs-dialog')).toBeNull();
   });
 
@@ -1792,14 +1880,14 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     Object.defineProperty(task, 'getBoundingClientRect', { configurable: true, value: () => ({ width: 400, left: 0, top: 100 }) });
     const down = new Event('touchstart', { bubbles: true, cancelable: true });
     Object.defineProperty(down, 'touches', { value: [{ clientX: 120, clientY: 130 }] });
-    const before = location;
+    const before = shown();
     await act(async () => task.dispatchEvent(down));
     await until(() => expect(menuItem('Pin')).toBeTruthy());
     const up = new Event('touchend', { bubbles: true, cancelable: true });
     Object.defineProperty(up, 'touches', { value: [] });
     await act(async () => task.dispatchEvent(up));
     expect(up.defaultPrevented, 'the release must not send the click that opens the row').toBe(true);
-    expect(location).toBe(before);
+    expect(shown()).toBe(before);
     expect(menuItem('Move')).toBeUndefined();
     await click(menuItem('Pin'), 'Pin');
     await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(TASK.id));
@@ -1813,7 +1901,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     Object.defineProperty(entry, 'getBoundingClientRect', { configurable: true, value: () => ({ width: 400, left: 0, top: 100 }) });
     const down = new Event('touchstart', { bubbles: true, cancelable: true });
     Object.defineProperty(down, 'touches', { value: [{ clientX: 120, clientY: 130 }] });
-    const before = location;
+    const before = shown();
     await act(async () => entry.dispatchEvent(down));
     await until(() => expect(menuItem('Sessions')).toBeTruthy());
     expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pin', 'Move…']);
@@ -1821,7 +1909,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     Object.defineProperty(up, 'touches', { value: [] });
     await act(async () => entry.dispatchEvent(up));
     expect(up.defaultPrevented, 'the release must not send the click that opens the row').toBe(true);
-    expect(location).toBe(before);
+    expect(shown()).toBe(before);
     await click(menuItem('Pin'), 'Pin');
     await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(COORDINATOR.id));
   });
@@ -1872,7 +1960,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     const loose = memberRow(LOOSE.title)!;
     await act(async () => loose.focus());
     await act(async () => loose.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(shown()).toBe(`/sessions/${LOOSE.id}`));
     await act(async () => memberRow(LOOSE.title)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
     await until(() => expect(menuItem('Rename…')).toBeTruthy());
     expect(menuItems().map((item) => item.textContent?.trim())).toContain('Move…');
@@ -1882,11 +1970,11 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     mobile = true; // the page in the list's place, as a phone still has it
     folders = [FOLDER];
     rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, TASK];
-    const folderAddress = `/sessions/${LOOSE.id}?folder=${FOLDER.id}`;
+    const folderAddress = `/workspaces/${WORKSPACE_ID}?folder=${FOLDER.id}`;
     await mount(undefined, folderAddress);
     await openSessions();
     await click(page()?.querySelector('.session-folder-back'), 'the project page back');
-    await until(() => expect(location).toBe(folderAddress));
+    await until(() => expect(shown()).toBe(folderAddress));
     expect(page()).toBeNull();
     expect(mounted().querySelector('.session-folder-title')?.textContent).toBe(FOLDER.name);
     expect(projectRows()).toHaveLength(1);
@@ -1898,7 +1986,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await mount(() => expect(page()?.querySelector('.session-project-empty')?.textContent).toBe('No sessions'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 0 sessions');
     expect(titles()).toEqual([]);
-    expect(location).toContain(`?project=${PROJECT_ID}`);
+    expect(shown()).toContain(`?project=${PROJECT_ID}`);
   });
 
   it('renders project read failures on the same page, with the reason and a retry', async () => {
@@ -1908,7 +1996,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await mount(() => expect(empty()?.textContent).toContain('Couldn’t load sessions'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
     expect(empty()!.textContent).toContain('project list unavailable');
     expect(titles()).toEqual([]);
-    expect(location).toContain(`?project=${PROJECT_ID}`);
+    expect(shown()).toContain(`?project=${PROJECT_ID}`);
     projectReadError = false;
     await click([...empty()!.querySelectorAll('button')].find((button) => button.textContent === 'Retry'), 'Retry');
     await until(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]));
@@ -1925,7 +2013,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the completed member menu');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
     expect(menuItem('Complete')).toBeUndefined();
-    expect(location).toContain(`?project=${PROJECT_ID}`);
+    expect(shown()).toContain(`?project=${PROJECT_ID}`);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
   });
 
@@ -1942,7 +2030,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the restored member menu');
     await until(() => expect(menuItem('Complete')).toBeTruthy());
     expect(menuItem('Move to Open')).toBeUndefined();
-    expect(location).toBe(address);
+    expect(shown()).toBe(address);
     expect(new Set(projectQueryCalls().map((params) => params.get('view')))).toEqual(new Set(['open', 'completed']));
   });
 
@@ -1956,7 +2044,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     expect(page()?.querySelector('.session-project-coordinator .session-title')?.textContent).toBe(COORDINATOR.title);
     await click(page()?.querySelector('.session-project-coordinator .session-row'), 'the coordinator row');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}${search}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}${search}`));
     expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]);
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
   });
@@ -2117,7 +2205,7 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
     expect(text).toContain('Coordinator is resolving it');
     // The way to it keeps this page in the column, as the coordinator's row does.
     await click([...card()!.querySelectorAll('button')].find((button) => button.textContent === 'Open coordinator ›'), 'Open coordinator');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(shown()).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();
   });
 
@@ -2324,7 +2412,7 @@ describe('the project sessions page — the Landings row', () => {
     await mount();
     await openSessions();
     await click(landingsRow(), 'the Landings row');
-    expect(location).toBe(`/projects/${PROJECT_ID}/landings?project=${PROJECT_ID}`);
+    expect(shown()).toBe(`/projects/${PROJECT_ID}/landings?project=${PROJECT_ID}`);
     await until(() => expect(mounted().querySelector('.landings-window')).not.toBeNull());
     expect(mounted().querySelector('.landings-window .landing-page-title')?.textContent).toBe('Landings');
     // The list stays on the project's sessions page beside it.
@@ -2388,8 +2476,7 @@ describe('the source work session’s landing label', () => {
   it('says it is landing while it moves, and opens the landing session', async () => {
     await openSource(at({}));
     expect(chip()?.textContent).toBe('Landing · checking ›');
-    // Read on a bare conversation route, so there is no list context to keep; from a project's
-    // sessions page the `?project=` rides along (LandingLink).
+    // The session alone, from any page: the console carries the list's page (LandingLink).
     expect(chip()?.getAttribute('href')).toBe(`/sessions/${LANDING}`);
     expect(chip()?.className).toContain('is-run');
     // The pill wears the ring the board draws on it (06 e); the words say the same thing.

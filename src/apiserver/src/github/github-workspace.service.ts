@@ -10,6 +10,7 @@ import type { CloneReport, CloneRequest, RunnerGitCredentialAnswer, WorkspaceClo
 import { redactSecrets } from '../common/secret-redaction';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { GithubCallError, GithubClient } from './github-api.client';
 import { GithubAppConfigService } from './github-app-config.service';
 import { GithubConnectionService } from './github-connection.service';
@@ -112,6 +113,12 @@ export class GithubWorkspaceService {
     }
     const token = await this.installationToken(app, seen.installationId, repoId, seen.fullName);
     return { username: 'x-access-token', password: token.token, expiresAt: token.expiresAt.toISOString() };
+  }
+
+  /** The repository `repoId` as GitHub calls it now, when the owner can see it (§5.4's access check, shared by Push as
+   *  me's credential door). */
+  async repositoryFullName(ownerId: string, repoId: string): Promise<string> {
+    return (await this.ownerSees(ownerId, repoId)).fullName;
   }
 
   /** The owner can see the repository on GitHub, as GitHub said within the last ten minutes. */
@@ -263,7 +270,7 @@ export class GithubWorkspaceService {
   private async announce(ownerId: string, workspaceId: string, state: WorkspaceCloneState, progress: number | null): Promise<void> {
     this.realtime.publishWorkspaceCloneChanged(ownerId, workspaceId, { state, progress });
     const held = await this.prisma.session.findMany({
-      where: { workspaceId, ownerId, status: 'PENDING', deletedAt: null },
+      where: { workspaceId, ownerId, deletedAt: null, ...turnStateFilter(['QUEUED']) },
       select: { id: true },
       take: 100,
     });

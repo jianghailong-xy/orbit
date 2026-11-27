@@ -1,3 +1,5 @@
+import { underEveryDrivePrefix } from '../drive/drive-routes';
+
 /**
  * The owner channel's doors (docs/personal-access-token-design.md §5): every route behind JwtAuthGuard
  * that refuses a personal access token as the account owner's own decision,
@@ -18,6 +20,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): it writes the
   // account's preferences; it also refuses an acting session, SETTINGS_OWNER_CHANNEL_ONLY.
   'POST /owner-requests/:id/apply-settings',
+  // The owner's Reopen on a PROJECT_REOPEN card (docs/project-reopen-request-design.md §4.2): the project page's Reopen
+  // press made from a card; it also refuses an acting session, REOPEN_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/reopen-project',
   'GET /account-secrets',
   'POST /account-secrets',
   'GET /account-secrets/grants',
@@ -114,6 +119,14 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/doc-versions/:id/restore',
   // Making a wiki chat (contract `chat.door`): the owner's interactive credential's, as the binding writes are.
   'POST /wiki/spaces/:id/chats',
+  // Making a Drive chat (drive/drive-chat.ts), under /drive and its /documents alias: the owner's interactive
+  // credential's, as making a wiki chat is; it also refuses an acting session, DRIVE_CHAT_OWNER_CHANNEL_ONLY.
+  ...underEveryDrivePrefix('POST /drive/chats'),
+  // A Drive chat's Undo, Apply and an answer to its overwrite question (drive/drive-chat-changes.ts): presses of the
+  // owner's, as a wiki chat card's are; they also refuse an acting session, DRIVE_CHAT_OWNER_CHANNEL_ONLY.
+  ...underEveryDrivePrefix('POST /drive/chats/:sessionId/groups/:groupId/undo'),
+  ...underEveryDrivePrefix('POST /drive/chats/:sessionId/groups/:groupId/apply'),
+  ...underEveryDrivePrefix('POST /drive/chats/:sessionId/questions/:questionId'),
   // The six presses of a chat's card (contract `chat.presses`): the owner's alone, as decide is.
   'POST /wiki/chat-drafts/:id/apply',
   'POST /wiki/chat-drafts/:id/edit',

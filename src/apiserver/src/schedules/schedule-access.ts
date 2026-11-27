@@ -29,6 +29,7 @@
 import {
   AgentProvider,
   bashCommandRules,
+  bashPrefix,
   bashSegments,
   CURSOR_PERMISSION_MODES,
   DSH_PERMISSION_MODES,
@@ -83,7 +84,7 @@ function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string
  *     schedule the run serves and to its envelope (§8.3), and read the condition a WHEN rule's run was started by
  *     (`condition_get`, docs/condition-triggers-design.md §8);
  *   * `notify`, a line in front of the owner;
- *   * reads: tasks, sessions, projects, the wiki and Orbit Files;
+ *   * reads: tasks, sessions, projects, the wiki and Documents;
  *   * the guide, which reads the operation catalogue and asks the server nothing.
  *
  * Absent on purpose: `bg_run` (a shell outside Claude's check), `session_merge`, `task_start`, `task_update`,
@@ -105,6 +106,7 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__project_get',
   'mcp__orbit__wiki_search',
   'mcp__orbit__wiki_get',
+  'mcp__orbit__wiki_read',
   'mcp__orbit__file_fetch',
   'mcp__orbit__file_list',
   'mcp__orbit__browser_status',
@@ -124,7 +126,7 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__browser_clear_logins',
   'mcp__orbit__ask_owner', 'mcp__orbit__bg_kill', 'mcp__orbit__bg_list', 'mcp__orbit__bg_output',
   'mcp__orbit__drive_delete', 'mcp__orbit__drive_get', 'mcp__orbit__drive_list', 'mcp__orbit__drive_move',
-  'mcp__orbit__drive_put',
+  'mcp__orbit__drive_put', 'mcp__orbit__drive_sync',
   'mcp__orbit__bg_run', 'mcp__orbit__browser_open', 'mcp__orbit__criterion_check_report', 'mcp__orbit__criterion_check_start',
   'mcp__orbit__criterion_confirm', 'mcp__orbit__criterion_confirmation_withdraw', 'mcp__orbit__file_pin',
   'mcp__orbit__file_upload', 'mcp__orbit__integration_abandon', 'mcp__orbit__integration_observe',
@@ -133,7 +135,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__open_item_hand_over', 'mcp__orbit__open_item_resolve', 'mcp__orbit__project_blocker_resolve',
   'mcp__orbit__project_create', 'mcp__orbit__project_crossings', 'mcp__orbit__project_delete',
   'mcp__orbit__project_ensure_coordinator', 'mcp__orbit__project_integration_get',
-  'mcp__orbit__project_merge_evidence', 'mcp__orbit__project_request_done', 'mcp__orbit__project_request_start',
+  'mcp__orbit__project_merge_evidence', 'mcp__orbit__project_request_done', 'mcp__orbit__project_request_reopen',
+  'mcp__orbit__project_request_start',
   'mcp__orbit__project_ruling_record',
   'mcp__orbit__project_send', 'mcp__orbit__project_update', 'mcp__orbit__provider_create',
   'mcp__orbit__provider_delete', 'mcp__orbit__provider_list', 'mcp__orbit__provider_update',
@@ -260,13 +263,22 @@ export function checkOnlyCommandRules(card: { toolName: string; input: unknown }
     : [];
 }
 
-/** Older clients send prefixes; accept those only as a request to remember this card's exact command. */
+/**
+ * Older clients send prefixes; accept those only as a request to remember this card's exact command. That
+ * includes the plain per-segment prefixes clients derived before they stopped remembering interpreters and
+ * file-changing programs (`python3:*`): only the exact command is ever written.
+ */
 export function checkOnlyRuleRefusal(
   card: { toolName: string; input: unknown },
   rules: readonly { toolName: string; ruleContent?: string }[],
 ): string | null {
   const exact = checkOnlyCommandRules(card);
-  const given = [...exact, ...bashCommandRules(exact[0]?.ruleContent ?? '')];
+  const command = exact[0]?.ruleContent ?? '';
+  const legacy = bashSegments(command).flatMap((segment) => {
+    const prefix = bashPrefix(segment);
+    return prefix ? [{ toolName: 'Bash', ruleContent: `${prefix}:*` }] : [];
+  });
+  const given = [...exact, ...bashCommandRules(command), ...legacy];
   for (const rule of rules) {
     if (exact.length && rule.toolName === 'Bash' && given.some((g) => g.ruleContent === rule.ruleContent)) continue;
     return `Always allow on a scheduled check's card covers only this exact command (${exact[0]?.ruleContent ?? 'nothing'}). Nothing was written.`;

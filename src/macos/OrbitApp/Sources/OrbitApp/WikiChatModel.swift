@@ -46,6 +46,43 @@ extension WikiChatSeeChanges {
     }
 }
 
+/// Where a chat is docked, which decides its words, where its chats are read and made, what a message carries beside
+/// the words and which cards it draws (the web's `ChatOrigin`, board drive-chat 02): the Wiki, whose scope is a space,
+/// or Drive, which has one scope (`DriveChatLogic.scope`). The panel, the composer, the history and the round button
+/// are the same for both.
+enum ChatOrigin: Equatable {
+    case wiki
+    case drive
+
+    /// The words that differ by origin.
+    struct Copy {
+        let history: String
+        let noHistory: String
+        let emptyHint: String
+        let emptyNote: String
+        let placeholder: String
+        let chooseWorkspace: String
+        /// Nothing to run a new chat in.
+        let noWorkspace: String
+        /// Under a new chat's empty state while its box is empty.
+        let examples: [String]
+    }
+
+    var copy: Copy {
+        switch self {
+        case .wiki:
+            return Copy(history: WikiChatCopy.history, noHistory: WikiChatCopy.noHistory, emptyHint: WikiChatCopy.emptyHint,
+                        emptyNote: WikiChatCopy.emptyNote, placeholder: WikiChatCopy.placeholder,
+                        chooseWorkspace: WikiChatCopy.chooseWorkspace, noWorkspace: WikiChatCopy.noWorktree, examples: [])
+        case .drive:
+            return Copy(history: DriveChatCopy.history, noHistory: DriveChatCopy.noHistory, emptyHint: DriveChatCopy.emptyHint,
+                        emptyNote: DriveChatCopy.emptyNote, placeholder: DriveChatCopy.placeholder,
+                        chooseWorkspace: DriveChatCopy.chooseWorkspace, noWorkspace: DriveChatCopy.noWorkspace,
+                        examples: DriveChatCopy.examples)
+        }
+    }
+}
+
 /// The wiki chat on iOS and macOS (docs/wiki-chat-design.md §9, board 42 ⑤): the space's chats and the round button's
 /// counts, the chat the panel shows and its attachments, the cards a chat's transcript draws, and the owner's presses
 /// on them. Owned by `AppModel` beside `WikiModel`. Refetched rather than patched: `wiki.changed` names a space and
@@ -104,14 +141,41 @@ final class WikiChatModel {
     /// The history the title opens over the whole panel (board 45 ④), nil while the chat shows.
     var history: WikiChatHistory?
 
+    /// Where this chat is docked: the Wiki's spaces, or Drive.
+    let origin: ChatOrigin
+
+    // Drive's own (board drive-chat 02): its chats read as the server answered, where a new chat may run, each chat's
+    // change groups and overwrite questions, the green check, and the account the device keeps ✕ and the seen marks for.
+    /// `GET /drive/chats`, as answered.
+    private(set) var driveRead: DriveChatList?
+    /// The owner's workspaces, which Runs in offers beside the server's default (the host lists them).
+    private(set) var workspaceChoices: [WikiChatWorkspace] = []
+    /// A chat's change groups, by the storage key of its session id.
+    private(set) var driveGroups: [String: [DriveChatChangeGroup]] = [:]
+    /// A chat's overwrite questions, by the storage key of its session id.
+    private(set) var driveQuestions: [String: [DriveChatQuestion]] = [:]
+    /// A chat's work finished while the panel was closed: the button's green check until it is pressed.
+    private(set) var driveUpdated = false
+    /// The signed-in account: ✕ and the seen marks are kept per account on this device.
+    var account: String?
+    /// The mark keys the owner opened (`DriveChatLogic.remember`), read from this device.
+    private(set) var seenMarks: [String] = []
+    /// The window's width where the panel is a Mac's column: at 1760 or wider a file's details stand beside the chat,
+    /// narrower they overlay the list (board drive-chat 02 ③).
+    var windowWidth: CGFloat = 0
+
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
     /// The cards on screen, by how many views show each: what a nudge re-reads beyond the open chat's.
     @ObservationIgnored private var cardsOnScreen: [String: Int] = [:]
 
-    init(baseURL: URL, tokenStore: TokenStore) {
+    init(baseURL: URL, tokenStore: TokenStore, origin: ChatOrigin = .wiki) {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+        self.origin = origin
     }
+
+    /// The words this chat says where they differ by origin.
+    var copy: ChatOrigin.Copy { origin.copy }
 
     // MARK: what is read off the server
 
@@ -124,9 +188,14 @@ final class WikiChatModel {
         spaceID.flatMap { lists[$0] }
     }
 
-    /// The round button's look, from the space's chats read; at rest before it is read.
+    /// The round button's look, from the space's chats read; at rest before it is read. Drive's counts the held groups
+    /// and the open questions beside the approvals, and its check is the drive's (`driveChatFab`).
     func fab(_ spaceID: String?) -> WikiChatLogic.FabLook {
-        WikiChatLogic.fab(list(spaceID)?.fab)
+        guard origin == .drive else { return WikiChatLogic.fab(list(spaceID)?.fab) }
+        guard let read = driveRead else { return DriveChatLogic.fab(nil) }
+        let waiting = DriveChatLogic.needYou(groups: driveGroups.values.flatMap { $0 }, questions: driveQuestions.values.flatMap { $0 })
+        return DriveChatLogic.fab(WikiChatFabCounts(needsYou: read.fab.needsYou + waiting, working: read.fab.working,
+                                                    updated: driveUpdated ? 1 : 0))
     }
 
     func card(_ id: String) -> WikiChatDraftView? {
@@ -148,7 +217,7 @@ final class WikiChatModel {
     /// over the page once the chat is folded away (board 42 ⑤, third phone).
     var updatedCard: WikiChatDraftView? {
         cards.values
-            .filter { $0.state == .applied && $0.rewrite?.result == .updated && $0.rewrite?.seen == false }
+            .filter { ($0.state == .applied || $0.state == .rewritten) && $0.rewrite?.result == .updated && $0.rewrite?.seen == false }
             .max { ($0.rewrite?.settledAt ?? "") < ($1.rewrite?.settledAt ?? "") }
     }
 
@@ -160,7 +229,8 @@ final class WikiChatModel {
 
     /// The composer's placeholder: a chat with an open card is asked what to change in it (board 42 ②).
     var placeholder: String {
-        openChatCards.contains { $0.state == .draft || $0.state == .changed }
+        guard origin == .wiki else { return copy.placeholder }
+        return openChatCards.contains { $0.state == .draft || $0.state == .changed }
             ? WikiChatCopy.placeholderDraft : WikiChatCopy.placeholder
     }
 
@@ -169,6 +239,7 @@ final class WikiChatModel {
     /// The space's chats, the button's counts and where a new chat runs. A server without chats (404) leaves the
     /// button at rest.
     func load(spaceID: String) async {
+        if origin == .drive { return await loadDrive() }
         guard let read = try? await api.wikiChats(spaceID: spaceID) else { return }
         if lists[spaceID] != read { lists[spaceID] = read }
         // The button says a rewrite came out updated: read the chats that hold cards until the card is found.
@@ -182,6 +253,7 @@ final class WikiChatModel {
 
     /// Every card of a chat.
     func loadCards(chat sessionID: String) async {
+        if origin == .drive { return await loadDriveCards(chat: sessionID) }
         guard sessionID != WikiChatLogic.newChat,
               let read = try? await api.wikiChatDrafts(sessionID: sessionID) else { return }
         var ids: [String] = []
@@ -252,7 +324,7 @@ final class WikiChatModel {
             guard let self else { return }
             self.nudgeTask = nil
             // Hidden since it was asked: owed, one read when the app is shown (§4 R3).
-            VisibilityGate.app.read("wiki-chat.loaded") { [weak self] in
+            VisibilityGate.app.read(origin == .drive ? "drive-chat.loaded" : "wiki-chat.loaded") { [weak self] in
                 Task { await self?.reloadLoaded() }
             }
         }
@@ -286,10 +358,17 @@ final class WikiChatModel {
         setHiddenByOwner(spaceID, false)
         openedByDefault = false
         enter(spaceID: spaceID)
-        chat = WikiChatLogic.toOpen(list(spaceID)?.chats)
+        chat = toOpen(list(spaceID)?.chats)
         focusCard = nil
         presented = true
+        // The button has seen what finished while the panel was closed.
+        driveUpdated = false
         Task { await focusFirstCardThatNeedsYou() }
+    }
+
+    /// Which chat the panel opens on: Drive's leaves a completed chat be (`driveChatToOpen`).
+    private func toOpen(_ chats: [WikiChatRow]?) -> String {
+        origin == .drive ? DriveChatLogic.toOpen(chats) : WikiChatLogic.toOpen(chats)
     }
 
     /// Open the panel on the chat holding `card` — the floating line's press, Activity's banner.
@@ -314,10 +393,18 @@ final class WikiChatModel {
     private static let hiddenKey = "orbit.wikiChat.hidden"
 
     func hiddenByOwner(_ spaceID: String) -> Bool {
-        (UserDefaults.standard.dictionary(forKey: Self.hiddenKey)?[PublicID.storageKey(spaceID)] as? Bool) == true
+        // Drive's ✕ is kept per account on this device (board drive-chat 02 ① note 5).
+        if origin == .drive { return account.map { UserDefaults.standard.bool(forKey: DriveChatLogic.closedKey(account: $0)) } ?? false }
+        return (UserDefaults.standard.dictionary(forKey: Self.hiddenKey)?[PublicID.storageKey(spaceID)] as? Bool) == true
     }
 
     private func setHiddenByOwner(_ spaceID: String, _ hidden: Bool) {
+        if origin == .drive {
+            guard let account else { return }
+            if hidden { UserDefaults.standard.set(true, forKey: DriveChatLogic.closedKey(account: account)) }
+            else { UserDefaults.standard.removeObject(forKey: DriveChatLogic.closedKey(account: account)) }
+            return
+        }
         var all = UserDefaults.standard.dictionary(forKey: Self.hiddenKey) ?? [:]
         if hidden { all[PublicID.storageKey(spaceID)] = true } else { all.removeValue(forKey: PublicID.storageKey(spaceID)) }
         UserDefaults.standard.set(all, forKey: Self.hiddenKey)
@@ -344,7 +431,7 @@ final class WikiChatModel {
         // Widened again after a narrow window folded it: the same chat comes back. Otherwise the button's choice.
         let returning = openedByDefault && self.spaceID == spaceID
         enter(spaceID: spaceID)
-        if !returning { chat = WikiChatLogic.toOpen(read.chats) }
+        if !returning { chat = toOpen(read.chats) }
         focusCard = nil
         openedByDefault = true
         presented = true
@@ -389,6 +476,10 @@ final class WikiChatModel {
     private func focusFirstCardThatNeedsYou() async {
         guard chat != WikiChatLogic.newChat else { return }
         await loadCards(chat: chat)
+        if origin == .drive {
+            focusCard = driveCards(chat).first { $0.needsYou }?.id
+            return
+        }
         focusCard = openChatCards.first { WikiChatLogic.cardNeedsYou($0.card) }.map { PublicID.storageKey($0.id) }
     }
 
@@ -417,7 +508,13 @@ final class WikiChatModel {
     func loadHistory(offset: Int = 0) async {
         guard let spaceID, let asked = history?.query else { return }
         history?.loading = true
-        let read = try? await api.wikiChats(spaceID: spaceID, q: asked, offset: offset)
+        let read: WikiChatList?
+        if origin == .drive {
+            let choices = workspaceChoices
+            read = (try? await api.driveChats(q: asked, offset: offset)).map { DriveChatLogic.hostList($0, choices: choices) }
+        } else {
+            read = try? await api.wikiChats(spaceID: spaceID, q: asked, offset: offset)
+        }
         // A newer search, or the history closed, while this was read: drop it.
         guard history?.query == asked else { return }
         history?.loading = false
@@ -483,7 +580,7 @@ final class WikiChatModel {
     func ask(_ request: WikiChatAskRequest, spaceID: String) {
         enter(spaceID: spaceID)
         if !presented {
-            if chat == WikiChatLogic.newChat { chat = WikiChatLogic.toOpen(list(spaceID)?.chats) }
+            if chat == WikiChatLogic.newChat { chat = toOpen(list(spaceID)?.chats) }
             presented = true
         }
         asking = request
@@ -495,6 +592,11 @@ final class WikiChatModel {
         asking = nil
     }
 
+    /// An example pressed (board drive-chat 02 ①): it fills the new chat's box and sends nothing.
+    func fillDraft(_ text: String) {
+        draftText = text
+    }
+
     /// The message went: what it carried stays with it, and the next starts with the page and no quote.
     func sent() {
         attachments = WikiChatLogic.attach(attachments, .sent)
@@ -502,7 +604,21 @@ final class WikiChatModel {
 
     /// What the message about to go carries (contract `chat.notes.wikiContext`).
     var context: WikiChatContext? {
-        WikiChatLogic.context(attachments)
+        origin == .wiki ? WikiChatLogic.context(attachments) : nil
+    }
+
+    /// What a Drive chat's message carries: the folder and the files its chips show (`driveChatContext`).
+    var driveContext: DriveChatContext? {
+        origin == .drive ? DriveChatLogic.context(attachments) : nil
+    }
+
+    /// Drive: the files the chip names beside the folder (the selection, or the file open).
+    func files(_ files: WikiChatLogic.Files?) {
+        attachments = WikiChatLogic.attach(attachments, .files(files))
+    }
+
+    func crossFiles() {
+        attachments = WikiChatLogic.attach(attachments, .crossFiles)
     }
 
     // MARK: a new chat (contract `chat.create`)
@@ -516,16 +632,26 @@ final class WikiChatModel {
     /// selection, the files and the toolbar's picks (`WikiChatLogic.createRequest`) — and show it. False when it was
     /// refused, which the panel says.
     func create(spaceID: String, workspaceID: String, _ first: WikiChatLogic.FirstMessage) async -> Bool {
-        guard !creating, let request = WikiChatLogic.createRequest(
-            first, workspaceId: workspaceID, context: context, clientTurnId: UUID().uuidString.lowercased()) else { return false }
+        guard !creating else { return false }
+        let turn = UUID().uuidString.lowercased()
+        let made: String
         creating = true
         defer { creating = false }
         do {
-            let made = try await api.createWikiChat(spaceID: spaceID, request)
+            if origin == .drive {
+                // What is not shown is not sent: no chip shown goes as `noFolder` (`createDriveChat`).
+                guard let request = DriveChatLogic.createRequest(first, workspaceId: workspaceID, context: driveContext,
+                                                                 clientTurnId: turn) else { return false }
+                made = try await api.createDriveChat(request).sessionId
+            } else {
+                guard let request = WikiChatLogic.createRequest(first, workspaceId: workspaceID, context: context,
+                                                                clientTurnId: turn) else { return false }
+                made = try await api.createWikiChat(spaceID: spaceID, request).sessionId
+            }
             sent()
             draftText = ""
             pickedWorkspace = nil
-            chat = made.sessionId
+            chat = made
             await load(spaceID: spaceID)
             return true
         } catch {
@@ -577,6 +703,117 @@ final class WikiChatModel {
     func markSeen(_ card: WikiChatDraftView) {
         guard WikiChatLogic.needsSeen(card) else { return }
         Task { await press(card, .seen) }
+    }
+}
+
+// MARK: - Drive (board drive-chat 02; the web's driveChat.ts, driveChanges.ts, useDriveChanges.ts)
+
+extension WikiChatModel {
+    /// Where a new chat may run besides the server's default: the owner's workspaces, as the host lists them.
+    func setWorkspaceChoices(_ choices: [WikiChatWorkspace]) {
+        guard origin == .drive, choices != workspaceChoices else { return }
+        workspaceChoices = choices
+        if let read = driveRead { storeDrive(read) }
+    }
+
+    private func storeDrive(_ read: DriveChatList) {
+        if driveRead != read { driveRead = read }
+        let host = DriveChatLogic.hostList(read, choices: workspaceChoices)
+        if lists[DriveChatLogic.scope] != host { lists[DriveChatLogic.scope] = host }
+    }
+
+    /// `GET /drive/chats`, then the changes and questions of the open chats (the button's count and the marks). Work that
+    /// finished while the panel was closed lights the check.
+    fileprivate func loadDrive() async {
+        guard let read = try? await api.driveChats() else { return }
+        let wasWorking = driveRead?.fab.working ?? false
+        storeDrive(read)
+        if presented { driveUpdated = false } else if wasWorking && !read.fab.working { driveUpdated = true }
+        for row in read.chats.filter(\.open).prefix(DriveChatLogic.chatsRead) {
+            await loadDriveCards(chat: row.sessionId)
+        }
+    }
+
+    /// A chat's change groups and questions.
+    fileprivate func loadDriveCards(chat sessionID: String) async {
+        guard sessionID != WikiChatLogic.newChat else { return }
+        let key = PublicID.storageKey(sessionID)
+        if let groups = try? await api.driveChatGroups(sessionID: sessionID), driveGroups[key] != groups { driveGroups[key] = groups }
+        if let questions = try? await api.driveChatQuestions(sessionID: sessionID), driveQuestions[key] != questions {
+            driveQuestions[key] = questions
+        }
+    }
+
+    /// A chat's cards, oldest first, each with its turn.
+    func driveCards(_ sessionID: String) -> [DriveChatLogic.Card] {
+        let key = PublicID.storageKey(sessionID)
+        return DriveChatLogic.cards(groups: driveGroups[key] ?? [], questions: driveQuestions[key] ?? [])
+    }
+
+    func driveCard(_ id: String) -> DriveChatLogic.Card? {
+        driveCards(chat).first { $0.id == id }
+    }
+
+    /// Undo or Apply on a change card. What a press that did not go says stays in its card until the next press.
+    func press(_ group: DriveChatChangeGroup, apply: Bool) async {
+        let key = "group:\(group.id)"
+        guard !pressing.contains(key) else { return }
+        pressing.insert(key)
+        defer { pressing.remove(key) }
+        pressFailures[key] = nil
+        do {
+            let answer = try await api.pressDriveChatGroup(sessionID: group.sessionId, groupID: group.id, apply: apply)
+            let chatKey = PublicID.storageKey(group.sessionId)
+            driveGroups[chatKey] = (driveGroups[chatKey] ?? []).map { $0.id == answer.id ? answer : $0 }
+        } catch {
+            pressFailures[key] = WikiChatLogic.pressError(error)
+        }
+        await loadDrive()
+    }
+
+    /// Keep both or Replace on an overwrite card.
+    func answer(_ question: DriveChatQuestion, _ choice: DriveChatQuestion.Choice) async {
+        let key = "question:\(question.id)"
+        guard !pressing.contains(key) else { return }
+        pressing.insert(key)
+        defer { pressing.remove(key) }
+        pressFailures[key] = nil
+        do {
+            let answer = try await api.answerDriveChatQuestion(sessionID: question.sessionId, questionID: question.id, choice)
+            let chatKey = PublicID.storageKey(question.sessionId)
+            driveQuestions[chatKey] = (driveQuestions[chatKey] ?? []).map { $0.id == answer.id ? answer : $0 }
+        } catch {
+            pressFailures[key] = WikiChatLogic.pressError(error)
+        }
+        await loadDrive()
+    }
+
+    func pressFailed(card id: String) -> String? { pressFailures[id] }
+
+    // MARK: the marks (board ② ⑤)
+
+    /// The mark a row carries until it is opened: what the open chats' made groups did to it.
+    func mark(_ entryID: String) -> DriveChatLogic.Mark? {
+        guard let found = marks[PublicID.storageKey(entryID)], !seenMarks.contains(found.key) else { return nil }
+        return found.mark
+    }
+
+    private var marks: [String: (mark: DriveChatLogic.Mark, key: String)] {
+        DriveChatLogic.marks(driveGroups.values.flatMap { $0 })
+    }
+
+    /// A marked row was opened: its mark is seen, on this device, for this account.
+    func opened(_ entryID: String) {
+        guard let found = marks[PublicID.storageKey(entryID)], !seenMarks.contains(found.key) else { return }
+        seenMarks = DriveChatLogic.remember(found.key, in: seenMarks)
+        if let account { UserDefaults.standard.set(seenMarks, forKey: DriveChatLogic.seenKey(account: account)) }
+    }
+
+    /// The account signed in: its ✕ and its seen marks.
+    func signedIn(_ account: String?) {
+        guard origin == .drive, account != self.account else { return }
+        self.account = account
+        seenMarks = account.flatMap { UserDefaults.standard.stringArray(forKey: DriveChatLogic.seenKey(account: $0)) } ?? []
     }
 }
 

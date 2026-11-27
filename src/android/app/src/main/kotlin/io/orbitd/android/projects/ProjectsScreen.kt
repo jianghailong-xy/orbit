@@ -42,6 +42,9 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.cards.OwnerRequestStore
+import io.orbitd.android.cards.ProjectReopenCard
+import io.orbitd.android.core.cards.ProjectReopenFacts
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.*
@@ -483,7 +486,20 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             else -> openCoordinator(card)
         }
     }
+    // Agents' requests to reopen this project (docs/project-reopen-request-design.md §6.2), above the header while it is settled.
+    val ownerRequests = remember(handle) { OwnerRequestStore.of(app.session, handle, app.processScope) }
+    val asked by ownerRequests.state.collectAsState()
+    LaunchedEffect(ownerRequests, id) { ownerRequests.load(OwnerRequestStore.OPEN) }
+    val reopenAsks = if (status == "OPEN") emptyList() else ProjectReopenFacts.pending(asked.open, id)
+    // A row that arrives above the header would leave the page scrolled past it (the list keeps the header where it was): a reader at
+    // the top is taken back to the top, where the row is.
+    LaunchedEffect(reopenAsks.size) {
+        if (reopenAsks.isNotEmpty() && listState.firstVisibleItemIndex == reopenAsks.size && listState.firstVisibleItemScrollOffset == 0) listState.scrollToItem(0)
+    }
     LazyColumn(Modifier.fillMaxSize().testTag("project-detail"), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
+        items(reopenAsks, key = { "reopen:${it.id}" }) { ask ->
+            Box(Modifier.padding(top = 8.dp)) { ProjectReopenCard(ask, ownerRequests, onProjectPage = true, reopened = { scope.launch { load() } }) }
+        }
         item(key = "header") { Header(state, doc, now, connected, menu = {
             OpenItemsEntry(ProjectPage.openItemsSummary(doc, state.openItems), state.openItemsUnread) { dialog = ProjectDialog.OpenItems }
             Box {
@@ -556,7 +572,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             doc.text("instructions")?.trim()?.takeIf { it.isNotEmpty() }?.let { Folded(it, 180, link) }
                 ?: Text(ProjectPage.noInstructions, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        tasksSection(state, doc, openTask, openSession = { open(OrbitRoute(Destination.SESSION, it)) }, loadMore = {
+        tasksSection(state, doc, openTask, open, openSession = { open(OrbitRoute(Destination.SESSION, it)) }, loadMore = {
             val cursor = state.cursor ?: return@tasksSection
             if (state.loadingMore || state.refreshing) return@tasksSection
             state.loadingMore = true
@@ -1214,7 +1230,7 @@ internal fun RunPress(label: String, enabled: Boolean, tag: String, description:
     }
 }
 
-private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit, actions: CriteriaActions?, now: Instant) {
+internal fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit, actions: CriteriaActions?, now: Instant) {
     val criteria = ProjectPage.withLandingReasons(doc.objects("acceptanceCriteriaItems"), doc.obj("derivedDone")).sortedBy { it.number("ordinal") ?: 0 }
     item(key = "criteria-head") { SectionHead("Acceptance criteria") }
     val movedOut = doc.objects("criteriaMovedOut")
@@ -1225,17 +1241,25 @@ private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) ->
     item(key = "criteria") {
         var expanded by rememberSaveable { mutableStateOf(false) }
         val limit = ProjectPage.criteriaPreviewCompact
+        // The criteria's words in the owner's language (Settings › Translation), flipped to the agent's by the foot. Only the words:
+        // each row's menus and writes keep the criterion as it came.
+        var showOriginal by rememberSaveable { mutableStateOf(false) }
+        val translated = OwnerCardTranslation.project(doc, LocalTranslation.current.cardLanguage)?.objects("acceptanceCriteriaItems")
+            ?.takeIf { it != doc.objects("acceptanceCriteriaItems") }
+        val words = translated?.takeUnless { showOriginal }?.associate { it.text("id") to it.text("text") }.orEmpty()
         Column(Modifier.testTag("project-criteria"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val mixed = DoneFollowUps.standingMixed(criteria)
             Text(mixed ?: ProjectPage.criteriaStanding(criteria.size), Modifier.testTag("criteria-standing"), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             val main = RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef"))
             (if (expanded) criteria else criteria.take(limit)).forEach { criterion ->
-                CriterionRow(criterion, doc.obj("integration")?.text("ref"), main, openTask, criteria, actions, now) }
+                CriterionRow(criterion, words[criterion.text("id")] ?: criterion.text("text").orEmpty(), doc.obj("integration")?.text("ref"), main,
+                    openTask, criteria, actions, now) }
             ProjectPage.criteriaDisclosure(criteria.size, limit, expanded)?.let { (press, meta) ->
                 OutlinedButton(onClick = { expanded = !expanded }, Modifier.fillMaxWidth()) { Text(press) }
                 Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
+            if (translated != null) io.orbitd.android.translation.CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
             MovedOutLines(movedOut, "criteria-moved-out", actions?.openProject)
             Text(if (mixed != null) DoneCopy.ACCEPTANCE_NOTE_MIXED else ProjectPage.criteriaOutcomeNote, style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1244,7 +1268,7 @@ private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) ->
 }
 
 @Composable
-private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, openTask: (String) -> Unit, all: List<JsonObject>, actions: CriteriaActions?, now: Instant) {
+private fun CriterionRow(criterion: JsonObject, text: String, ref: String?, main: String, openTask: (String) -> Unit, all: List<JsonObject>, actions: CriteriaActions?, now: Instant) {
     var method by rememberSaveable(criterion.text("id")) { mutableStateOf(false) }
     val satisfied = ProjectDoc.satisfied(criterion)
     Row(Modifier.fillMaxWidth().testTag("criterion:${criterion.number("ordinal")}"), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1258,7 +1282,7 @@ private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, open
                 color = if (satisfied == true) Color.White else MaterialTheme.colorScheme.onSurface)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(criterion.text("text").orEmpty())
+            Text(text)
             criterion.obj("movedFrom")?.let { MovedFromLine(it, actions?.openProject) }
             if (DoneFollowUps.byConfirmation(criterion)) ConfirmationWorkView(criterion, actions, now, "criterion-confirmation:${criterion.number("ordinal")}")
             else ProjectPage.criterionWork(criterion, ref, main)?.let { work ->
@@ -1286,7 +1310,7 @@ private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, open
 private fun tasksTail(state: ProjectPageState): Int =
     1 + ProjectPage.taskGroups(state.tasks).let { groups -> if (groups.isEmpty()) 1 else groups.sumOf { 1 + it.tasks.size } } + if (state.cursor != null) 1 else 0
 
-private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject, openTask: (String) -> Unit, openSession: (String) -> Unit, loadMore: () -> Unit) {
+private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject, openTask: (String) -> Unit, open: (OrbitRoute) -> Unit, openSession: (String) -> Unit, loadMore: () -> Unit) {
     val groups = ProjectPage.taskGroups(state.tasks)
     item(key = "tasks-head") { SectionHead("Tasks", "${ProjectDoc.taskCount(doc)}") }
     if (groups.isEmpty()) item(key = "tasks-empty") { Text("No tasks yet.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -1304,6 +1328,8 @@ private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject,
                 Text(glyphText(glyph), color = glyphColor(glyph))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(task.text("title").orEmpty(), maxLines = 2, color = if (group.settled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                    // No account that could run it can run now (§7.5): one quiet line under the title, never a chip in it.
+                    if (io.orbitd.android.tasks.TaskAccountHold.showsOnRow(task)) io.orbitd.android.tasks.TaskAccountHoldLine(task, open)
                     val unmet = task.number("unmetCount") ?: 0; val blocks = task.number("blocksCount") ?: 0
                     if (tags.isNotEmpty() || unmet > 0 || blocks > 0) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         tags.forEach { Chip(it.text, it.tone) }

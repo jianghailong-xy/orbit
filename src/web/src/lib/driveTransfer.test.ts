@@ -19,7 +19,12 @@ describe('drive transfer progress', () => {
   });
 
   it('shows drive paths as Files does', () => {
-    expect(driveDisplayPath('~/Files/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
+    expect(driveDisplayPath('~/Drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
+    expect(driveDisplayPath('/home/orbit/Drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
+    expect(driveDisplayPath('~/Documents/Shuge/a.jpg')).toBe('/~/Documents/Shuge/a.jpg');
+    expect(driveDisplayPath('/home/orbit/Files/Shuge/a.jpg')).toBe('/home/orbit/Files/Shuge/a.jpg');
+    expect(driveDisplayPath('/run/orbit-drive/drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
+    expect(driveDisplayPath('/run/orbit-documents/drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
     expect(driveDisplayPath('/run/orbit-files/drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
     expect(driveDisplayPath('Shuge//a.jpg')).toBe('/Shuge/a.jpg');
     expect(commonFolder(['/Shuge/d/单幅/a.jpg', '/Shuge/d/老地图/b.jpg'])).toBe('/Shuge/d/');

@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { EllipsisOutlined, PlayCircleOutlined, RightOutlined, TeamOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
+import { AccountHealthLoginLine, AccountHealthProviderLine } from './AccountHealthLine';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { isLoginPool, loginLine, type CodexLogin } from '../lib/codexLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
@@ -52,6 +53,7 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { MultiSelect } from './ui/MultiSelect';
 import { Radio, RadioGroup } from './ui/Radio';
 import { Segmented } from './ui/Segmented';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 // Which pool cards the user folded or unfolded, by pool id. A card nobody has touched follows the
 // window: open on a desktop, where its rows fit, and folded to its head line on a phone.
@@ -138,31 +140,33 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
   if (head.kind === 'none') return <span className="pool-gauge none">{head.reason}</span>;
   const { member, quota } = head;
   return (
-    <span className="pool-gauge" title={`The next session starts on ${member.label}`}>
-      {/* A pool of one's own ChatGPT account with one account has nothing to choose between, so it is
-          named; holding several, "Next:" says which of them the next session starts on — and once other
-          people use the pool, that it is the viewer's next session, theirs running elsewhere. */}
-      <span className="pool-gauge-name">
-        {pool.shared && hasPeople(pool.shared)
-          ? `Next for you: ${member.label}`
-          : member.login && pool.members.length === 1
-            ? member.label
-            : `Next: ${member.label}`}
+    <Tooltip content={`The next session starts on ${member.label}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="pool-gauge">
+        {/* A pool of one's own ChatGPT account with one account has nothing to choose between, so it is
+            named; holding several, "Next:" says which of them the next session starts on — and once other
+            people use the pool, that it is the viewer's next session, theirs running elsewhere. */}
+        <span className="pool-gauge-name">
+          {pool.shared && hasPeople(pool.shared)
+            ? `Next for you: ${member.label}`
+            : member.login && pool.members.length === 1
+              ? member.label
+              : `Next: ${member.label}`}
+        </span>
+        {quota ? (
+          <>
+            <span className={`runner-util ${quota.nearLimit ? 'full' : ''}`}>
+              <span className="runner-util-fill" style={{ width: `${quota.percent}%` }} />
+            </span>
+            <span className={`pool-gauge-pct${quota.nearLimit ? ' near-limit' : ''}`}>
+              {`${compactWindowLabel(quota.label)} ${quota.percent}%`}
+            </span>
+          </>
+        ) : (
+          // A key with no cap has nothing to fill; an account that reports no quota says so.
+          <span className="pool-gauge-none">{member.key ? 'No limit' : 'No quota reported'}</span>
+        )}
       </span>
-      {quota ? (
-        <>
-          <span className={`runner-util ${quota.nearLimit ? 'full' : ''}`}>
-            <span className="runner-util-fill" style={{ width: `${quota.percent}%` }} />
-          </span>
-          <span className={`pool-gauge-pct${quota.nearLimit ? ' near-limit' : ''}`}>
-            {`${compactWindowLabel(quota.label)} ${quota.percent}%`}
-          </span>
-        </>
-      ) : (
-        // A key with no cap has nothing to fill; an account that reports no quota says so.
-        <span className="pool-gauge-none">{member.key ? 'No limit' : 'No quota reported'}</span>
-      )}
-    </span>
+    </Tooltip>
   );
 }
 
@@ -264,10 +268,13 @@ function MemberRow({
       <div className="re-id">
         <ProviderTile slug={member.presetSlug ?? member.slug} label={member.label} size={28} />
         <div style={{ minWidth: 0 }}>
-          <div className="re-name" title={member.label}>
-            <span className="pool-member-label">{member.label}</span>
-            {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
-          </div>
+          <Tooltip content={member.label} truncatedOnly align="start">
+            <div className="re-name">
+              <span className="pool-member-label">{member.label}</span>
+              {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
+            </div>
+          </Tooltip>
+          <AccountHealthProviderLine providerId={member.id} />
         </div>
       </div>
       <AccountPauseStatus dot className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
@@ -358,11 +365,13 @@ function KeyRow({
       <div className="re-id">
         <PersonMark pool={pool} userId={key.contributor.userId} name={key.contributor.name} />
         <div style={{ minWidth: 0 }}>
-          <div className="re-name" title={key.label}>
-            <span className="pool-member-label">{key.label}</span>
-            {key.contributor.you && <span className="pool-you">you</span>}
-            {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
-          </div>
+          <Tooltip content={key.label} truncatedOnly align="start">
+            <div className="re-name">
+              <span className="pool-member-label">{key.label}</span>
+              {key.contributor.you && <span className="pool-you">you</span>}
+              {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
+            </div>
+          </Tooltip>
           <div className="pool-key-mask">
             {key.contributor.name} · {key.fingerprint}
             {tagged && (
@@ -377,17 +386,16 @@ function KeyRow({
       <AccountPauseStatus dot className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota pool-key-money">
         {/* Short on purpose: what the others spent on it, against the cap its contributor set — the
-            whole sentence is the cell's own title. */}
-        <div
-          className="re-quota-head"
-          title={`What the others spent on this key this month${cap === null ? '' : `, of the $${cap} its contributor allows`}`}
-        >
-          <b>Others</b>
-          <span>
-            ${spent.toFixed(2)}
-            {cap === null ? '' : ` of $${cap}`}
-          </span>
-        </div>
+            whole sentence is the cell's tooltip. */}
+        <Tooltip content={`What the others spent on this key this month${cap === null ? '' : `, of the $${cap} its contributor allows`}`} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div className="re-quota-head">
+            <b>Others</b>
+            <span>
+              ${spent.toFixed(2)}
+              {cap === null ? '' : ` of $${cap}`}
+            </span>
+          </div>
+        </Tooltip>
         {percent !== null && (
           <div className={`runner-util ${percent >= 90 ? 'full' : ''}`}>
             <span className="runner-util-fill" style={{ width: `${percent}%` }} />
@@ -483,11 +491,14 @@ function LoginRow({
       <div className="re-id">
         <ProviderTile slug="openai" label="ChatGPT" size={28} />
         <div style={{ minWidth: 0 }}>
-          <div className="re-name" title={member.label}>
-            <span className="pool-member-label">{member.label}</span>
-            {/* With one account there is nothing to choose between, so the mark would say nothing. */}
-            {member.next && !accountIsPaused(member.pausedUntil, now) && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
-          </div>
+          <Tooltip content={member.label} truncatedOnly align="start">
+            <div className="re-name">
+              <span className="pool-member-label">{member.label}</span>
+              {/* With one account there is nothing to choose between, so the mark would say nothing. */}
+              {member.next && !accountIsPaused(member.pausedUntil, now) && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
+            </div>
+          </Tooltip>
+          <AccountHealthLoginLine poolId={pool.id} accountId={member.id.replace(/^login:/, '')} />
           <div className="pool-key-mask">
             {contributor && `${contributor.name} · `}
             {loginLine(login)}

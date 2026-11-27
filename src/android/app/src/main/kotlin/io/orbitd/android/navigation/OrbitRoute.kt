@@ -23,7 +23,12 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
     SCHEDULE_CHANGE,
     /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
      *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
-    GUEST_SESSION }
+    GUEST_SESSION,
+    /** Drive, the account's drive (board docs/mocks/drive/04-android): `id` the folder (null: the drive's root), `recordId` its
+     * name for the bar until the folder is read — or `uploads`, the upload notification's Show, which opens the uploads sheet. */
+    DRIVE,
+    /** A Drive file's preview: `id` the file, `folderId` the folder it is in, `recordId` its name. */
+    DRIVE_FILE, DRIVE_TRASH, DRIVE_STORAGE }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }
 
 /** Object and source travel together; the preceding frame is the actual return destination. */
@@ -85,6 +90,13 @@ data class OrbitNavigation(
         val folder = frames.takeIf { it.first().destination == Destination.WORKSPACE }?.firstOrNull { it.destination == Destination.FOLDER }
         val left = if (folder != null) foldersLeftOpen + (section to folder) else foldersLeftOpen - section
         return copy(section = key, stacks = mapOf(key to listOf(root)), foldersLeftOpen = left)
+    }
+    /** The session on top, filed in [folder], gets its folder's page under it: [workspace]'s list, then the folder's page in [view],
+     * so Back reaches the session's row (web WorkspaceView's "A filed session opened from anywhere but its folder's page"). */
+    fun underFolder(workspace: String, folder: String, view: String): OrbitNavigation {
+        val session = current
+        return land(workspace, OrbitRoute(Destination.WORKSPACE, workspace, workspace))
+            .push(OrbitRoute(Destination.FOLDER, folder, workspace, sessionView = view)).push(session)
     }
     /** A link opens over the page showing. One that [waitsForDirectory] stays [pending], signed in or not, and a later link
      * replaces it. A link to the app itself (`orbit://active`) only opens it (iOS `route(to: .active)`): a workspace's stack stays as
@@ -241,6 +253,13 @@ object OrbitLinks {
         if (scheme.startsWith("orbit-")) {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
+        } else if (scheme == "orbit" && uri.host.equals("settings", ignoreCase = true)) {
+            // `orbit://settings/<page>`: a Settings page itself, as the Providers screen a key's alert opens.
+            val page = uri.path.orEmpty().trim('/')
+            return if (page in setOf("providers", "machines", "machines-and-models")) OrbitRoute(Destination.SETTINGS, page, origin = origin) else null
+        } else if (scheme == "orbit" && (uri.host.equals("drive", ignoreCase = true) || uri.host.equals("documents", ignoreCase = true))) {
+            // `orbit://drive/uploads` (`orbit://documents/uploads` from an older build), the upload notification's Show: Drive with its uploads sheet open.
+            return OrbitRoute(Destination.DRIVE, recordId = uri.path.orEmpty().trim('/').takeIf { it == "uploads" }, origin = origin)
         } else if (scheme == "orbit") {
             val parts = uri.path.orEmpty().trim('/').split('/')
             // `orbit://terminal-login/<id>`, a terminal asking to be approved: Settings › Machines & models, on its Needs you section,

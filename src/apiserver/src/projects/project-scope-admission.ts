@@ -28,7 +28,7 @@
  */
 
 import { uuidToBase62 } from '@orbit/shared';
-import { ACCEPTANCE_FINDING_ROUTING } from './project-acceptance';
+import { ACCEPTANCE_FINDING_ROUTING, REQUEST_REOPEN_NEXT_STEP } from './project-acceptance';
 import {
   projectScopeToken,
   type ScopeOperation,
@@ -247,8 +247,8 @@ const REFUSAL_PROSE: Readonly<Record<string, string>> = {
     + 'To take an existing task out of its project, send the same write with a handoff and a '
     + 'reason: that asks the account owner, whose confirmation takes it out.',
   REOPEN_PROJECT_FIRST:
-    'That project is settled. It has to be reopened — which starts a new acceptance epoch — '
-    + 'before it can take new work. ' + ACCEPTANCE_FINDING_ROUTING,
+    'That project is settled and takes no new work until the account owner reopens it, which starts '
+    + `a new acceptance epoch. ${REQUEST_REOPEN_NEXT_STEP} ${ACCEPTANCE_FINDING_ROUTING}`,
   AWAIT_HANDOFF_APPROVAL: 'Wait for the user to answer the declared crossing.',
 };
 
@@ -287,7 +287,8 @@ export function scopeRefusalBody(
           ? `This task serves an acceptance criterion of project ${scopeId ?? 'none'}, which is `
             + 'settled, so moving it would change what that acceptance counted — even with its '
             + 'declaration taken back. A settled project gives up only work none of its criteria '
-            + 'count; this task can move once that project has been reopened.'
+            + 'count; this task can move once the account owner has reopened that project. '
+            + REQUEST_REOPEN_NEXT_STEP
           : (REFUSAL_PROSE[outcome.requiredAction ?? ''] ?? 'This write is outside its scope.')),
     taskId,
     scope: outcome.ends.from === null ? null : { projectId: outcome.ends.from },

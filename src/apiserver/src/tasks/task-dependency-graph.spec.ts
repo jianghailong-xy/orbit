@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { TaskStatus } from '@orbit/shared';
 import { TasksController } from './tasks.controller';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
+import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { TasksService } from './tasks.service';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
@@ -263,9 +264,14 @@ function graphFixture(
     $queryRaw: async (...args: unknown[]) => {
       const statement = renderRawQuery(args);
       assert.match(statement.text, /carrier\."owner_id" = \?::uuid\s+AND carrier\."task_id" IN \(/);
-      busyWhere = { ownerId: statement.values[0], taskId: { in: statement.values.slice(1) } };
+      // values[0] is the runner offline window the held-run join binds (runnerUnavailableSql), not a scope.
+      assert.equal(statement.values[0], RUNNER_OFFLINE_AFTER_MS);
+      busyWhere = { ownerId: statement.values[1], taskId: { in: statement.values.slice(2) } };
       const carrier = (taskId: string, status: RunStatus) => ({
-        taskId, sessionId: `session-${taskId}`, status, runReason: 'TURN',
+        taskId, sessionId: `session-${taskId}`, finishedAt: null,
+        // The carrier read answers the resolved turn state (sessionTurnStateSql), not the stored word.
+        turnState: ({ PENDING: 'QUEUED', RUNNING: 'IN_FLIGHT' } as Record<string, string | undefined>)[status] ?? null,
+        runReason: 'TURN',
         runningBgJobs: [], runningBgJobActivity: {}, startedAt: null,
       });
       return [carrier(TASK_B, RunStatus.RUNNING), carrier(TASK_C, RunStatus.PENDING)];
@@ -389,6 +395,7 @@ test('node refresh deduplicates in request order and returns current graph paylo
       queued: false,
       runReason: null,
       runStalled: false,
+      queuedOnHold: false,
       runningSince: null,
       prerequisiteCount: 2,
       dependentCount: 0,
@@ -400,6 +407,7 @@ test('node refresh deduplicates in request order and returns current graph paylo
       queued: false,
       runReason: 'TURN',
       runStalled: false,
+      queuedOnHold: false,
       // The fixture's carrier has never started, so no start is known.
       runningSince: null,
       prerequisiteCount: 1,
@@ -412,6 +420,7 @@ test('node refresh deduplicates in request order and returns current graph paylo
       queued: true,
       runReason: 'TURN',
       runStalled: false,
+      queuedOnHold: false,
       runningSince: null,
       prerequisiteCount: 2,
       dependentCount: 1,

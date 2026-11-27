@@ -32,7 +32,8 @@ import { test } from 'node:test';
 
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -145,8 +146,8 @@ test('the daemon routes refuse HTTPS, and serve the link and the callers that na
     await sql.end().catch(() => undefined);
   });
 
-  assert.equal(ROUTES.length, 60, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
-  assert.equal(DAEMON_ROUTES.length, 53);
+  assert.equal(ROUTES.length, 61, `RunnerApiController has ${ROUTES.length} routes; runner-link-required.spec.ts holds the census`);
+  assert.equal(DAEMON_ROUTES.length, 54);
   assert.equal(DAEMON_ROUTES.filter((r) => r.named).length, 8);
 
   // ── accounts, the machine, its checkout and a session on it ──────────────────────────────────────────────────────
@@ -183,7 +184,7 @@ test('the daemon routes refuse HTTPS, and serve the link and the callers that na
     data: {
       id: sessionId, ownerId: owner.id, creatorId: owner.id, workspaceId, assignedRunnerId: machine.id,
       title: 'a session the CLI resumes', prompt: 'the work', provider: 'claude', engine: 'claude',
-      status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       runtimeSessionId: randomUUID(),
     },
   });

@@ -22,7 +22,7 @@ export type ReferenceKind = 'list' | 'task' | 'drive';
 export interface PickedReference {
   kind: ReferenceKind;
   id: string;
-  /** A drive file's `/home/orbit/Files/…` path: what is sent in place of its chip. */
+  /** A drive file's `/home/orbit/Drive/…` path: what is sent in place of its chip. */
   path?: string;
 }
 

@@ -112,7 +112,7 @@ class PushNotificationsTest {
         assertTrue(route.recordId!!.startsWith("terminal:"))
     }
 
-    /** The two decisions only the owner makes that are no owner item (a crossing request, a coordinator's confirmation raise) ring on
+    /** The decisions only the owner makes that are no owner item (a crossing request, a coordinator's confirmation raise, a decision card) ring on
      * the needs-you channel; a schedule alert follows the session rule: the sessions channel with its run, updates without one,
      * unless it names the Waiting on you item it filed, which rings on the needs-you channel. */
     @Test fun ownerDecisionsRingAsNeedsYouAndScheduleAlertsFollowTheSessionRule() {
@@ -124,6 +124,8 @@ class PushNotificationsTest {
             """"kind":"crossing-request","projectID":"$project","handoffID":"019a0000-0000-7000-8000-00000000000c"""" to PushNotifications.NEEDS_YOU,
             """"kind":"crossing-request","sessionID":"$session","projectID":"$project","handoffID":"019a0000-0000-7000-8000-00000000000c"""" to PushNotifications.NEEDS_YOU,
             """"kind":"confirmation-raised","sessionID":"$session",$ids""" to PushNotifications.NEEDS_YOU,
+            // A decision card that became the owner's (an evidence card, a confirmation, a project's criteria or done card).
+            """"kind":"decision-card","cardKind":"EVIDENCE","sessionID":"$session","taskID":"019a0000-0000-7000-8000-000000000005"""" to PushNotifications.NEEDS_YOU,
             """"kind":"schedule","sessionID":"$session",$schedule""" to PushNotifications.SESSIONS,
             """"kind":"schedule",$schedule""" to PushNotifications.UPDATES,
             // A failure or a hold that filed a Waiting on you item names it, and rings on the needs-you channel, with its run or without.

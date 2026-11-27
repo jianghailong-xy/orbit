@@ -593,7 +593,7 @@ test('a plan card: the page brings the plan, the gate answers the agent, one pre
     const note = await prisma.$transaction(async (tx) => appendWikiChatNotes(tx as never, {
       ownerId, spaceId, sessionId: chat, turn: { seq: 99, kind: 'message', wikiContext: null },
     }, 'Thanks.'));
-    assert.match(note ?? '', /<orbit_wiki_drafts applied="1" edited="0" discarded="0" undone="0">/u);
+    assert.match(note ?? '', /<orbit_wiki_drafts applied="1" edited="0" discarded="0" undone="0" rewritten="0" settled="0">/u);
     assert.match(note ?? '', new RegExp(`- ${pub(cardA)} Plan change: applied by the owner\\. It made version 2 of the plan from version 1 and confirmed it`, 'u'));
   });
 

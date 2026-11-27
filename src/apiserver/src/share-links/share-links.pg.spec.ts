@@ -37,10 +37,10 @@ import {
   CreatorType,
   PrismaClient,
   RunnerStatus,
-  RunStatus,
   SessionDispatchOrigin,
   TaskCompletionCriterion,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -178,7 +178,7 @@ test('share links: one row per link, an owner interface for three roots, one 404
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
         ...(extra.legacyToken ? { shareToken: extra.legacyToken, sharedAt: extra.legacySharedAt ?? null } : {}),
         ...(extra.deletedAt ? { deletedAt: extra.deletedAt } : {}),
       },

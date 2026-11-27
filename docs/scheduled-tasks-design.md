@@ -33,6 +33,10 @@ the `EVERY` rule (§3, §5.1) inside the same runs-per-week envelope (§4), a ru
 one-interval catch-up (§5.2, §7.2), `maxRuns` beside `endAt` with a suggested 7-day end for sub-daily rules (§8.5),
 what clients already shipped need (§9.3), and missed slots collapsed in the run list (§9.2).
 
+**Rename** (owner, 2026-11-26; board `docs/mocks/schedule-rename/`): a person may rename a schedule directly, the
+one field a surface edits (§2, §8.4). D1 = A: a narrow REST door that changes the title alone. D2 = B: no hold, so an
+agent may rename it again later, recorded with **Undo** like any other change.
+
 ## 1. Why, and which timer
 
 A user wants recurring work that outlives any conversation:
@@ -82,7 +86,8 @@ Every part of a schedule belongs to one side:
 Three consequences follow, and the rest of the document is their detail:
 
 1. **Said, not configured.** No surface has a field. Changes are said in any session ("make it 9:00", "only on
-   weekdays", "stop opening PRs"). The page is for reading and stopping.
+   weekdays", "stop opening PRs"). The page is for reading and stopping. The one exception is the name (owner
+   2026-11-26, §8.4 *Rename*): a label, not the goal, the risk, the budget or the authority.
 2. **One rule for cards.** A change that stays inside the envelope applies at once, is recorded and can be undone. A
    change that grows it waits for one press (§4). Nothing else asks.
 3. **A person hears from a schedule only when it found something new or needs them** (§7.3). There is no notify
@@ -250,10 +255,12 @@ The inspector shows what was used: "This month: 14 runs · 41 min", with a cost 
 
 **Runs per week bounds the runs that start, not only the rule.** Moving the time of day or the weekdays is inside
 the envelope, and a session that moved its rule to "a few minutes from now" after every run would otherwise run back
-to back. So before a run starts (§6.1) the server counts, under the schedule lock the start takes (so two replicas
-cannot both pass), **the schedule's runs that actually started and count (below), of every trigger, whose planned slot (`plannedAt`; a
-MANUAL run's is when it was asked for) lies after the same local time 7 days before this run's own slot, in the
-schedule's time zone.** The window is on planned slots, not start times, so how late a start is (the worker's pass,
+to back. So before an automatic run starts (§6.1) the server counts, under the schedule lock the start takes (so two
+replicas cannot both pass), **the schedule's automatic runs (every trigger but MANUAL) that actually started and count
+(below), whose planned slot (`plannedAt`) lies after the same local time 7 days before this run's own slot, in the
+schedule's time zone.** No Run now is in this count: the rhythm the owner approved always runs, however often anyone
+pressed Run now that week (2026-11-23: six presses in three days had cost a daily schedule its next three slots). Run
+now has its own count, §8.4. The window is on planned slots, not start times, so how late a start is (the worker's pass,
 a runner back after an outage) never moves a run into or out of it: a rule inside its envelope never trips it, and a
 rule moved to "a few minutes from now" still gives each run its own slot. It is local time, not 7×24 hours, so a
 week across a daylight-saving change is still a week. At `envelope.runsPerWeek` or more, the slot is not started: it is MISSED with
@@ -262,10 +269,10 @@ usual. A start retried because it never reached its engine (§7.2) is one start.
 was delivered (`delivered_at`, §7.2) or it is still live (QUEUED, RUNNING or AWAITING_APPROVAL with a start), so an
 in-flight run holds its place and two quick starts cannot overshoot.** A run that ended without ever being
 delivered (MISSED, CANCELLED, or FAILED with `RUNNER_UNAVAILABLE`, `QUOTA` or `ENGINE_CRASHED_BEFORE_START`) counts 0:
-it did nothing, so it must not cost a later slot its place. The `SCHEDULE_OVER_BUDGET` refusal of §8.4 reports this same
-count. The owner is told once, by push,
+it did nothing, so it must not cost a later slot its place. The `SCHEDULE_OVER_BUDGET` refusal of §8.4 reads the same
+window and the same rule, over Run now presses instead. The owner is told once, by push,
 for a slot over budget, and not again for the next ones in a row; the run list says "Not started: it had already
-started as many runs in the past 7 days as you allowed." Run now follows §8.4.
+started as many scheduled runs in the past 7 days as you allowed." Run now follows §8.4.
 
 The count is of starts already made, read against the envelope as it is now. When the owner narrows runs per week
 mid-week, the runs that already started in the window stay counted against the new, smaller number, so the
@@ -579,10 +586,24 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - `note` replaces the schedule's note. It is for what the next run should know and the prompt does not say: a moved
   URL, a rate limit, where it left off.
 - The report ends the run. The session's turn may go on, but nothing after it changes the run.
+- What the run's session is doing is read from its published state alone (`readSessionPhaseReadings`: the phase
+  fields and `sessionWakes`, in `schedule-run-session-reading.ts`), never from a session column. A session released,
+  or settled idle with nothing to wake it for a minute (`SCHEDULE_IDLE_SETTLE_MS`, from `idle_seen_at`), without a
+  report fails the run: `ENGINE_CRASHED` for a release by a failure, `NO_REPORT` otherwise. An end somebody asked for
+  counts once the session is released, not when it is asked.
 - A session that ends or settles idle without a report fails the run with `NO_REPORT`. Silence never reads as "no
   change". A session is not idle while one of its `bg_run` jobs (job or watch, not a service) is still running or a
-  turn, such as that job's wake, is still to be answered: a run may end its turn to wait for a job, and its run limit
-  still counts that wait.
+  turn, such as that job's wake, is still to be answered, nor while something is set to wake it (`sessionWillWake`: a
+  `schedule_wakeup` still pending, the RESUME_SESSION watch a `task_await` or `session_await` leaves, an armed retry): a
+  run may end its turn to wait for any of these, and its run limit still counts that wait.
+- NO_REPORT and ENGINE_CRASHED are the server's reading of the session, not the agent's word, and the session can
+  come back after either, so they are the failures a report can still replace. Once a person has written to the run's
+  session after the run was failed so, a report from that
+  session is taken as if it had come in time: the run takes its outcome, the failure it counted is undone, its Waiting
+  on you item is withdrawn (a late FAILED files its own), and a push replaces the failure's banner
+  (`REPORTED_LATE`, or the late FAILED's own). It is refused (`SCHEDULE_RUN_ENDED`) before anyone has written, once a
+  newer run of the schedule has started, and on a deleted schedule. Every other failure stays final: RUN_LIMIT and
+  APPROVAL_TIMEOUT interrupt the run on purpose, so its session is stopped rather than read.
 
 ### 7.2 Failure reasons and retries
 
@@ -666,7 +687,8 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - Every run on Claude Code runs in Auto, whatever its access level (owner 2026-11-18), and so do the SubAgents it
   starts: a run waits on no card nobody is there to answer. The level's deny lists still apply in Auto. Other
   engines keep the level's mode: their Auto has no classifier.
-- A NO_CHANGE run completes its session. CHANGED and FAILED runs leave it open for follow-up questions.
+- A NO_CHANGE run completes its session, on the worker's pass once nothing works in it (a job or SubAgent it left
+  running is not stopped under it). CHANGED and FAILED runs leave it open for follow-up questions.
 - Archiving or deleting a run's session keeps the run row; the run shows its session as gone.
 
 ## 8. Creating and changing
@@ -759,11 +781,28 @@ Each is a `ScheduleRevision` with `changedBy = RUN` and **Undo**. A run asking t
 | --- | --- |
 | Pause | ACTIVE → PAUSED, `nextDueAt` = NULL, a QUEUED run becomes CANCELLED. A RUNNING run continues. |
 | Resume | PAUSED or HELD → ACTIVE, next slot after now. From HELD the §6.1 checks run first. Slots missed while paused are not caught up. |
-| Run now | Writes a MANUAL run under the overlap rule. Allowed when PAUSED; refused when ENDED. Only the owner's own press (the owner-interactive channel) starts over the weekly budget. A session's or a personal access token's Run now is refused over budget (`SCHEDULE_OVER_BUDGET`): a token is what an agent with a shell on the runner holds, so exempting it would let the budget be passed without the owner. Inside the budget both work as before. Either counts as a start toward later automatic runs (§4), and that is the cost of the press: the owner's Run now inside a full week starts, and the next automatic slot is then MISSED (`OVER_BUDGET`). |
+| Run now | Writes a MANUAL run under the overlap rule, recording whether the owner pressed it (`by_owner`). Allowed when PAUSED; refused when ENDED. The owner's own press (the owner-interactive channel) always starts and counts toward no budget. A session's or a personal access token's press counts toward a budget of its own: the same window, the same delivered-or-live rule and the same `envelope.runsPerWeek` as §4, over those presses alone, and over it the press is refused (`SCHEDULE_OVER_BUDGET`). A token is what an agent with a shell on the runner holds, so exempting it would let the budget be passed without the owner. No press takes an automatic slot's place (§4). A run's own session cannot press Run now at all (`SCHEDULE_RUN_SESSION_SCOPE`), so the loop the weekly count guards against is a rule moved to "a few minutes from now", which §4 bounds. Presses still count toward a planned end by count (`maxRuns`, §8.5). |
 | Stop this run | Interrupts the run's session, run → CANCELLED (`CANCELLED_BY_OWNER`). The schedule is unchanged. |
 | Delete | ENDED (`DELETED`), a QUEUED run is cancelled, a RUNNING one continues. Runs and findings are kept. |
+| Rename | Sets `title` alone (§8.4 *Rename*). Refused when ENDED. |
 
-Agents have the same five as tools, so "pause the Codex check until Monday" works from a chat.
+Agents have the same five as tools, so "pause the Codex check until Monday" works from a chat. Rename has no tool of
+its own: an agent renames with `schedule_update({title})`, as before.
+
+**Rename** (owner 2026-11-26, board `docs/mocks/schedule-rename/01-board.png`):
+
+- `title` only: intent, prompt, rule, access and envelope are untouched. The text is trimmed and must be 1–200
+  characters (`checkText`, the same as `schedule_update`). Unchanged text after trimming writes nothing.
+- Always inside the envelope: it applies at once, writes a `ScheduleRevision` (`changedBy = USER`, the title's before
+  and after), shows in the history as "Renamed from “…”" and has **Undo** (`POST /api/schedules/:id/undo`).
+- Allowed while ACTIVE, PAUSED or HELD, and while a run is under way; refused when ENDED (`SCHEDULE_ENDED`). A run in
+  progress keeps its revision and its session keeps its title; later runs, notifications and **Waiting on you** use
+  the new name.
+- No hold (D2 = B): a session or a run may set the title again later through `schedule_update`; that change is
+  recorded and undoable like every other.
+- Clients: **Rename…** in the row's context, long-press and ⋯ menus and in the inspector's ⋯. On web and macOS the
+  inspector title becomes a field in place (Return or leaving it saves, Esc cancels); on iOS the system alert with
+  one text field, the current name selected, Save off while empty or unchanged; Android follows iOS with a dialog.
 
 ### 8.5 Planned end
 
@@ -833,7 +872,9 @@ cards. A schedule with no planned end shows nothing.
   sessions only). The descriptions of `schedule_create` and `schedule_wakeup` carry the table of §1.
 - REST: `GET /api/schedules`, `GET /api/schedules/:id`, `GET /api/schedules/:id/runs`,
   `POST /api/schedules/:id/{pause,resume,run,undo}`, `DELETE /api/schedules/:id`, `POST /api/schedule-runs/:id/stop`.
-  There is no REST door that creates or changes a schedule: those go through a session and its card.
+  `POST /api/schedules/:id/rename {title}` (§8.4 *Rename*, owner 2026-11-26) is the one REST door that changes a
+  schedule, and it changes the title alone; it answers as Undo does (the schedule and the change's record). There is
+  no other REST door that creates or changes a schedule: those go through a session and its card.
 - The cards (S4, 2026-11-15): a card is its `ScheduleChangeRequest` row. `schedule_create` returns at once with the
   PENDING create card (and says in words that nothing is scheduled yet); `schedule_update` returns APPLIED with the
   change's record (its Undo is `POST /api/schedules/:id/undo`) or PENDING with the envelope card. The owner's press is
@@ -881,7 +922,8 @@ As decided in revision 3, modelled on Reminders' *Scheduled* list:
   client by a shared function.
 - **Inspector** (beside the list on web and macOS, a sheet on iOS): the read-back sentence, next run, last result,
   *What was asked* (the intent), *Notes for the next run*, this month's use, history (runs and revisions with
-  **Undo**, each naming who made it: you, a session, or a run), the controls of §8.4 and **Change…**.
+  **Undo**, each naming who made it: you, a session, or a run), the controls of §8.4 (with **Rename…**) and
+  **Change…**.
 - **Quick-add line** at the end of the list: "Describe a scheduled task…" with the workspace it will use.
 - **Sessions:** the create card, the change line with Undo, the widen card; on a run's session a header naming the
   schedule and the report card; on a change conversation a strip naming the schedule, which opens it.

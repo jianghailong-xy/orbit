@@ -1,4 +1,4 @@
-// Package door speaks the runner drive door, /api/runner/drive/* (docs/orbit-files-drive-technical-design.md §4.2,
+// Package door speaks the runner drive door, /api/runner/drive/* (docs/drive-technical-design.md §4.2,
 // §4.3), for the mount daemon.
 //
 //   - Every request carries the mount credential and the managed-runner instance it was issued for (generation and
@@ -64,6 +64,11 @@ const (
 	CodeInstanceRequired   = "MANAGED_RUNNER_INSTANCE_REQUIRED"
 	CodeInstancePending    = "MANAGED_RUNNER_INSTANCE_PENDING"
 	CodeCredentialRefused  = "DRIVE_MOUNT_CREDENTIAL_REFUSED"
+	// A Drive chat's write the door did not make (apiserver drive-chat-changes.ts): a move or rename onto a live file,
+	// kept as a question for the owner; a change past the turn's 200th, held for the owner's Apply; new content past it.
+	CodeDriveChatNoOverwrite = "DRIVE_CHAT_NO_OVERWRITE"
+	CodeDriveChatHeld        = "DRIVE_CHAT_HELD"
+	CodeDriveChatTurnFull    = "DRIVE_CHAT_TURN_FULL"
 )
 
 // Entry is one entry as the door answers it: stat, list, create, mkdir and rename.
@@ -257,6 +262,15 @@ func CodeOf(err error) string {
 	return ""
 }
 
+// MessageOf is the door's readable message of a refusal, or "".
+func MessageOf(err error) string {
+	var h *HTTPError
+	if errors.As(err, &h) {
+		return h.Message
+	}
+	return ""
+}
+
 // StatusOf is the HTTP status of a refusal, or 0.
 func StatusOf(err error) int {
 	var h *HTTPError
@@ -321,7 +335,7 @@ func (c *Config) defaults() {
 		c.ProbeInterval = 5 * time.Second
 	}
 	if c.UserAgent == "" {
-		c.UserAgent = "orbit-files-mount"
+		c.UserAgent = "orbit-drive-mount"
 	}
 }
 

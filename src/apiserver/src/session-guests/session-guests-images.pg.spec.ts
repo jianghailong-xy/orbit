@@ -25,7 +25,8 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
-import { type PrismaClient, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 
 import { GUEST_IMAGE_TOO_LARGE, GUEST_IMAGE_TYPE_REFUSED, MAX_COMPOSER_IMAGE_BYTES } from '../attachments/attachments.media';
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
@@ -103,7 +104,7 @@ test('session guests: a guest attaches images they uploaded, and only those', {
   const jwt = new JwtService({ secret: jwtSecret });
   const loginOf = (p: { id: string; email: string }) => jwt.signAsync({ sub: p.id, email: p.email });
   const [ownerLogin, guestLogin, otherLogin, strangerLogin] = await Promise.all([owner, guest, other, stranger].map(loginOf));
-  server = await startApiserver(url, jwtSecret, { ORBIT_FILES_BACKEND: 'local', ORBIT_FILES_DIR: filesDir });
+  server = await startApiserver(url, jwtSecret, { ORBIT_DRIVE_BACKEND: 'local', ORBIT_DRIVE_DIR: filesDir });
   const api = (method: string, path: string, bearer: string, body?: unknown, headers?: Record<string, string>): Promise<Reply> =>
     call(server!, method, `/api${path}`, bearer, body, headers);
   const ok = (reply: Reply, what: string) => {
@@ -130,7 +131,7 @@ test('session guests: a guest attaches images they uploaded, and only those', {
       data: {
         id, ownerId: owner.id, creatorId: owner.id, workspaceId, assignedRunnerId: runner.id, title, prompt: title,
         provider: 'claude', providerBuiltin: true, model: 'claude-opus-4-1', permissionMode: 'acceptEdits',
-        dispatchOrigin: SessionDispatchOrigin.USER, status: RunStatus.AWAITING_INPUT, numTurns: 1, engineTurnActive: false,
+        dispatchOrigin: SessionDispatchOrigin.USER, turnState: null, numTurns: 1, engineTurnActive: false,
         runtimeSessionId: randomUUID(), startedAt: new Date(),
       },
     });

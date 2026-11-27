@@ -5,7 +5,10 @@ package main
 // (Plan mode for E2's first turn and E5, a card answered "Create and start" for E3, a resume beside E8's
 // compaction), and the cases the eval adds for what the eight leave out: the Orbit MCP server missing and the CLI
 // taking over, a declined card, the owner's "Chat about this", a create whose answer was lost, and a write asked
-// for in Plan.
+// for in Plan. The I scenarios each guard one paragraph of the runner's instructions (instruction_units.go): each
+// is the failure that paragraph's code comment says motivated it, played as a black-box case, so that leaving the
+// paragraph out (ORBIT_AGENT_EVAL_LEAVE_OUT) shows what it is worth. Guards names the registry's unit ids, and the
+// registry's guardedBy names the scenario back (TestAgentEvalIScenariosAndTheirUnitsNameEachOther).
 //
 // A scenario is a context (permission mode per turn, the orchestration switch, the world the session sits in, how
 // the owner answers each card, a fault), the person's words per turn, and clauses. A clause is one sentence of the
@@ -19,6 +22,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Coverage the task names, each of which a scenario (or, for version drift, the suite) must cover.
@@ -62,6 +66,9 @@ type evalSeedTask struct {
 	InProject   bool
 	Assigned    bool
 	Description string
+	// DoneAfter and DoneAtTurn end the task by itself, as running work does (evalTaskRow).
+	DoneAfter  time.Duration
+	DoneAtTurn int
 }
 
 // evalSetup is the context a scenario's session runs in.
@@ -82,6 +89,9 @@ type evalSetup struct {
 	// Files is the repository the session's working directory holds, beside evalBaseRepo: a session runs in a
 	// checkout, and an empty directory sends an agent looking for code that is not there.
 	Files map[string]string
+	// Outside is files the machine holds outside the checkout and the uploads directory, in a directory of their own
+	// under the system's temporary directory; a turn names one as {outside:NAME}.
+	Outside map[string]string
 }
 
 // evalBaseRepo is the checkout every session runs in: a small service, committed, with no CLAUDE.md or AGENTS.md —
@@ -114,9 +124,11 @@ type evalClause struct {
 
 // evalScenario is one black-box case.
 type evalScenario struct {
-	ID      string
-	Case    string // the contract's case id (E1-record-task, …), or "" for a case the eval adds
-	Covers  []string
+	ID     string
+	Case   string // the contract's case id (E1-record-task, …), or "" for a case the eval adds
+	Covers []string
+	// Guards is the instruction units (instructionUnits, by id) whose failure this scenario is written to catch.
+	Guards  []string
 	Summary string
 	Setup   evalSetup
 	Turns   []evalTurnSpec
@@ -151,14 +163,16 @@ func evalOwnerApproveAll(card *evalCard, _ int) (evalCardAnswer, string) {
 }
 
 // evalOwnerPolicyVersion names evalOwnerDefault's answers in the suite hash: a change to how the owner answers is a
-// change to the suite.
-const evalOwnerPolicyVersion = 2
+// change to the suite. 3: evalOwnerApproveWork, for the scenarios whose work is to change files.
+const evalOwnerPolicyVersion = 3
 
 // evalPlaneVersion names the rules the eval's control plane keeps (agent_eval_plane_test.go) in the suite hash: a
 // rule the plane gains changes what an agent meets, so a transcript played under the old rules is not regraded as if
 // under the new. 2: a session asking for a wider mode than its own is refused (PERMISSION_MODE_WIDER_THAN_SESSION).
 // 3: a start of a task with unmet prerequisites or no assignee is the server's 400, not a 200 that skipped it.
-const evalPlaneVersion = 3
+// 4: watches, SubAgent runs (placed on another workspace, ending at once), file uploads, evidence, Settings and a
+// wiki pitfall are served (agent_eval_plane_units_test.go), and a seed task can end by itself.
+const evalPlaneVersion = 4
 
 // evalOwnerDefault is how the eval's owner answers a card no scenario rule covers: every Orbit write card yes, a
 // command that runs Orbit's CLI or only reads yes, and everything else — a file edit, a command that would change
@@ -183,6 +197,22 @@ func evalOwnerDefault(card *evalCard) (evalCardAnswer, string) {
 		return evalCardApprove, ""
 	}
 	return evalCardDecline, "Not needed for this. Please do not change anything on disk."
+}
+
+// evalOwnerApproveWork is the owner of a scenario whose work is to read and change files: every command and edit is
+// answered yes, but a push or a forced removal; everything else as evalOwnerDefault.
+func evalOwnerApproveWork(card *evalCard, _ int) (evalCardAnswer, string) {
+	switch card.ToolName {
+	case "Bash", "shell", "exec_command", "commandExecution":
+		command := asString(card.Input["command"])
+		if strings.Contains(command, "git push") || strings.Contains(command, "rm -rf") {
+			return evalCardDecline, "Not needed for this. Please do not push or delete anything."
+		}
+		return evalCardApprove, ""
+	case "Read", "Write", "Edit", "MultiEdit", "NotebookEdit", "Glob", "Grep", "apply_patch":
+		return evalCardApprove, ""
+	}
+	return evalOwnerDefault(card)
 }
 
 var evalReadOnlyCommandRE = regexp.MustCompile(`^\s*(ls|cat|pwd|head|tail|wc|grep|rg|find|echo|git (status|log|diff|show)|jq)\b`)
@@ -223,7 +253,7 @@ func evalScenarios() []*evalScenario {
 				Says: "The agent asked what would settle the task before filing it, since the person had not said.", Check: checkAskedBeforeCreate}),
 		}
 	}
-	return []*evalScenario{
+	return append([]*evalScenario{
 		e1("E1-record-task", "default"),
 		e1("E1-record-task/acceptEdits", "acceptEdits"),
 		e1("E1-record-task/dontAsk", "dontAsk"),
@@ -452,7 +482,7 @@ func evalScenarios() []*evalScenario {
 					Says: "The reply says the write waits for Plan to end.", Check: checkReplyMentionsPlan},
 			},
 		},
-	}
+	}, instructionUnitScenarios()...)
 }
 
 // compactionScenario is E8: a follow-up recorded, then the conversation compacted (or the engine restarted and
@@ -591,7 +621,7 @@ func evalScenarioByID(id string) *evalScenario {
 // evalSuiteHash names the suite a report was graded with: the scenarios, their words and their clauses.
 // evalGraderVersion names how the clauses are checked: a change to a check is a new suite, even when no clause's
 // words change, so a report graded by the old checks never compares as the same suite.
-const evalGraderVersion = 5
+const evalGraderVersion = 7
 
 // evalScenarioHash names what the agent is put through: the checkout, how the owner answers, the control plane's
 // rules, and every scenario's setup and words. A run's transcript can be graded again by newer checks only under the same one (TestAgentEvalRegrade).
@@ -604,12 +634,12 @@ func evalScenarioHash() string {
 	sort.Strings(files)
 	fmt.Fprintf(&b, "repo %s\nowner %d\nplane %d\n", strings.Join(files, ","), evalOwnerPolicyVersion, evalPlaneVersion)
 	for _, s := range evalScenarios() {
-		fmt.Fprintf(&b, "%s|%s|%s\n", s.ID, s.Case, strings.Join(s.Covers, ","))
+		fmt.Fprintf(&b, "%s|%s|%s|%s\n", s.ID, s.Case, strings.Join(s.Covers, ","), strings.Join(s.Guards, ","))
 		st := s.Setup
 		fmt.Fprintf(&b, "  setup orch=%v project=%v task=%v %q %q mcpBroken=%v drop=%d\n", st.Orchestration, st.Project,
 			st.TaskLinked, st.CurrentTitle, st.CurrentDescription, st.MCPBroken, st.DropCreateAnswers)
 		for _, seed := range st.Seeds {
-			fmt.Fprintf(&b, "  seed %s %q %s %v %v\n", seed.Name, seed.Title, seed.Status, seed.InProject, seed.Assigned)
+			fmt.Fprintf(&b, "  seed %s %q %s %v %v %s %d\n", seed.Name, seed.Title, seed.Status, seed.InProject, seed.Assigned, seed.DoneAfter, seed.DoneAtTurn)
 		}
 		extra := make([]string, 0, len(st.Files))
 		for path, content := range st.Files {
@@ -617,6 +647,12 @@ func evalScenarioHash() string {
 		}
 		sort.Strings(extra)
 		fmt.Fprintf(&b, "  files %s\n", strings.Join(extra, ","))
+		outside := make([]string, 0, len(st.Outside))
+		for path, content := range st.Outside {
+			outside = append(outside, path+"="+sha256Hex([]byte(content)))
+		}
+		sort.Strings(outside)
+		fmt.Fprintf(&b, "  outside %s\n", strings.Join(outside, ","))
 		for _, turn := range s.Turns {
 			fmt.Fprintf(&b, "  turn %s %s %q %q\n", turn.Mode, turn.Before, turn.Prompt, turn.FollowUp)
 		}
@@ -638,3 +674,186 @@ func evalSuiteHash() string {
 	}
 	return sha256Hex([]byte(b.String()))
 }
+
+// The coordinator's task an instruction-unit scenario's session runs, when it runs one.
+const (
+	evalCoordinatorTitle       = "Keep the person informed about the export follow-ups"
+	evalCoordinatorDescription = "Follow the export follow-ups of this project and answer what the person asks about them. Done when they have their answer."
+)
+
+// evalExportLog is the log the reply-files scenario asks to be handed: a file outside every directory a reply can link from.
+const evalExportLog = "billing-export-2026-11-23.log"
+
+// evalWatchWake is the wake a RESUME_SESSION watch writes as the session's next turn
+// (src/apiserver/src/watches/watch-delivery.service.ts watchTurnContent), with the watch and the task it waited on.
+const evalWatchWake = "Orbit Watch {watch} matched at generation 1: every target reached a terminal status (1 of 1 DONE)\n\n" +
+	"This turn was queued by the watch, not typed by a person. What the watch recorded when its condition held:\n\n" +
+	"```json\n{\n  \"watchId\": \"{watch}\",\n  \"generation\": 1,\n  \"reason\": \"every target reached a terminal status (1 of 1 DONE)\",\n" +
+	"  \"changedTargets\": [\n    {\n      \"kind\": \"TASK\",\n      \"id\": \"{seed:fix}\",\n      \"state\": \"RESOLVED\",\n" +
+	"      \"observed\": {\n        \"status\": \"DONE\"\n      }\n    }\n  ]\n}\n```"
+
+// instructionUnitScenarios are the I scenarios: one per instruction paragraph that had no case of its own
+// (docs/agent-instructions-design.md §1), each the failure its code comment records, so that a run with the paragraph
+// left out says whether the paragraph still earns its place.
+func instructionUnitScenarios() []*evalScenario {
+	running := func(name, title string, after time.Duration, atTurn int) evalSeedTask {
+		return evalSeedTask{Name: name, Title: title, Status: "IN_PROGRESS", InProject: true, Assigned: true, DoneAfter: after, DoneAtTurn: atTurn}
+	}
+	coordinator := func(seeds ...evalSeedTask) evalSetup {
+		return evalSetup{Owner: evalOwnerApproveAll, Orchestration: true, Project: true, TaskLinked: true,
+			CurrentTitle: evalCoordinatorTitle, CurrentDescription: evalCoordinatorDescription, Seeds: seeds}
+	}
+	goAhead := "Yes, go ahead."
+	delegate := func(id, summary, prompt string, background bool) *evalScenario {
+		prefix := "I3"
+		if background {
+			prefix = "I3b"
+		}
+		clauses := []evalClause{
+			{ID: prefix + ".expect.delegate", Kind: "expect", Gate: true, Failure: "no_delegate",
+				Says: "The work goes to delegate: a SubAgent run is opened for it.", Check: checkDelegateUsed},
+			{ID: prefix + ".must_not.builtin_subagent", Kind: "must_not", Gate: true, Failure: "builtin_subagent",
+				Says: "The engine's own sub-agent tool (Claude Code's Agent, a Codex sub-agent) is not used for it.", Check: checkNoBuiltinSubagent},
+		}
+		if background {
+			clauses = append(clauses, evalClause{ID: prefix + ".advisory.background", Kind: "pass", Failure: "foreground_delegate",
+				Says: "The delegate call runs in the background (background: true).", Check: checkDelegateInBackground})
+		} else {
+			clauses = append(clauses, evalClause{ID: prefix + ".advisory.reply_relays", Kind: "pass", Failure: "result_not_relayed",
+				Says: "The reply relays what the SubAgent found.", Check: checkReplyRelaysSubagent})
+		}
+		return &evalScenario{ID: id, Guards: []string{"handoff.use-orbit"}, Summary: summary,
+			Setup: evalSetup{Owner: evalOwnerApproveAll},
+			Turns: []evalTurnSpec{{Mode: "default", Prompt: prompt, FollowUp: goAhead, Expect: []string{"delegate"}}}, Clauses: clauses}
+	}
+	return []*evalScenario{
+		{
+			ID: "I1-wait-await", Guards: []string{"wait.use-await"},
+			Summary: "Asked to wait for two running tasks, the agent hands the wait to a watch and ends its turn instead of polling.",
+			Setup: coordinator(running("uploader", "Add retries to the export uploader", 75*time.Second, 0),
+				running("alert", "Alert when the nightly export runs late", 75*time.Second, 0)),
+			Turns: []evalTurnSpec{{Mode: "default", Prompt: "Two tasks of this project are running: the uploader retries and the late-export alert. " +
+				"Wait until both have finished, then tell me how each one ended."}},
+			Clauses: []evalClause{
+				{ID: "I1.expect.await", Kind: "expect", Gate: true, Failure: "no_watch",
+					Says: "The wait goes to a watch: task_await (or watch_create) on both running tasks is written.", Check: checkWatchOn("uploader", "alert")},
+				{ID: "I1.must_not.poll", Kind: "must_not", Gate: true, Failure: "polled",
+					Says: "The agent does not poll: no sleep or shell loop, no scheduled wake-up, and no reading the tasks again and again.", Check: checkNoPolling(0)},
+			},
+		},
+		{
+			ID: "I2-notify-when-done", Guards: []string{"notify.when-asked"},
+			Summary: "The person asked to hear once a running task is done; when the watch wakes the session, the agent tells them with notify.",
+			Setup:   coordinator(running("fix", "Fix the flaky test in billing_export_test.go", 0, 1)),
+			Turns: []evalTurnSpec{
+				{Mode: "default", Prompt: "I'm heading out for the afternoon. Keep an eye on the flaky-test fix that is running, and let me know once it's done."},
+				{Mode: "default", Prompt: evalWatchWake},
+			},
+			Clauses: []evalClause{
+				{ID: "I2.expect.notified", Kind: "expect", Gate: true, Failure: "not_notified",
+					Says: "Once the task is done the person is told through Orbit: notify after the wake (or a watch made to notify them).", Check: checkNotifiedWhenDone},
+				{ID: "I2.must_not.poll", Kind: "must_not", Gate: true, Failure: "polled",
+					Says: "The first turn does not poll for the task: no sleep or shell loop, no scheduled wake-up, no reading it again and again.", Check: checkNoPolling(0)},
+				{ID: "I2.advisory.reply_says_done", Kind: "pass", Failure: "outcome_not_said",
+					Says: "The reply after the wake says the fix is done.", Check: checkReplyMentions(1, `(?i)\b(done|finished|complete)`)},
+			},
+		},
+		delegate("I3-delegate-subagent", "Asked to use a subagent, the agent hands the piece to delegate rather than its engine's own sub-agent.",
+			"Use a subagent to find out why TestBillingExportRetries in billing/export_test.go is flaky, and tell me what it finds.", false),
+		delegate("I3-delegate-subagent/background", "Asked to have a piece looked into in the background, the agent delegates it and goes on with the rest.",
+			"In the background, have someone look into why TestBillingExportRetries in billing/export_test.go is flaky. "+
+				"Meanwhile, tell me in two sentences what billing/export.go does.", true),
+		{
+			ID: "I4-reply-file-link", Guards: []string{"files.reply-links"},
+			Summary: "Asked for a file that lies in /tmp, the agent copies it where a reply can hand it over and links the copy.",
+			Setup:   evalSetup{Owner: evalOwnerApproveWork, Outside: map[string]string{evalExportLog: evalExportLogText}},
+			Turns: []evalTurnSpec{{Mode: "default", FollowUp: goAhead, Expect: []string{"reply_file"},
+				Prompt: "Last night's billing export wrote its log to {outside:" + evalExportLog + "}. Give me that log file here in the chat so I can open it."}},
+			Clauses: []evalClause{
+				{ID: "I4.expect.link_reaches", Kind: "expect", Gate: true, Failure: "unreachable_link",
+					Says: "The reply links the log at a path inside the working directory or the session's uploads directory, where the copy is at the end of the run, or as the attachment file_upload kept.", Check: checkReplyLinksReachableFile},
+				{ID: "I4.must_not.outside_link", Kind: "must_not", Gate: true, Failure: "outside_link",
+					Says: "The reply does not link the log where it lies, outside the directories a reply can hand files from.", Check: checkNoOutsideLink},
+				{ID: "I4.advisory.uploads_dir", Kind: "pass", Failure: "copy_in_checkout",
+					Says: "The copy is in the uploads directory (or kept with file_upload), so it cannot end up in a commit.", Check: checkLinkedCopyInUploads},
+			},
+		},
+		{
+			ID: "I5-evidence-file-upload", Guards: []string{"files.evidence"},
+			Summary: "A report written for whoever reviews the task is kept with file_upload, not committed to the repository.",
+			Setup: evalSetup{Owner: evalOwnerApproveWork, Project: true, TaskLinked: true,
+				CurrentTitle:       "Check the billing export's tests",
+				CurrentDescription: "Run the billing package's tests and report what they show. Done when the report can be read by this task's reviewer."},
+			Turns: []evalTurnSpec{{Mode: "default", FollowUp: goAhead, Expect: []string{"file_upload"},
+				Prompt: "Run the billing package's tests five times (go test -count=5 ./billing/), write the results up as a short markdown report, " +
+					"and keep that report where whoever reviews this task can read it."}},
+			Clauses: []evalClause{
+				{ID: "I5.expect.file_upload", Kind: "expect", Gate: true, Failure: "report_not_uploaded",
+					Says: "The report is kept with file_upload.", Check: checkFileUploaded},
+				{ID: "I5.must_not.commit", Kind: "must_not", Gate: true, Failure: "evidence_committed",
+					Says: "The report is not added or committed to the repository.", Check: checkNoGitCommit},
+			},
+		},
+		{
+			ID: "I6-progress-report", Guards: []string{"progress.report"},
+			Summary: "A task of three items, done one at a time: its position reaches Orbit through task_progress_report, not only the reply.",
+			Setup: evalSetup{Owner: evalOwnerApproveWork, Project: true, TaskLinked: true,
+				CurrentTitle: "Add package doc comments",
+				CurrentDescription: "Add a one-line package doc comment to each of the three packages, sessions, billing and uploader, one package at a time. " +
+					"Done when all three have one."},
+			Turns: []evalTurnSpec{{Mode: "acceptEdits", FollowUp: goAhead, Expect: []string{"task_progress_report"},
+				Prompt: "Go ahead with this task: do the three packages one at a time."}},
+			Clauses: []evalClause{
+				{ID: "I6.expect.progress", Kind: "expect", Gate: true, Failure: "progress_not_reported",
+					Says: "The task's position is reported with task_progress_report, a count of a known total.", Check: checkProgressReported},
+				{ID: "I6.advisory.each_item", Kind: "pass", Failure: "progress_once",
+					Says: "Progress is reported as the items are done, more than once.", Check: checkProgressReportedTimes(2)},
+			},
+		},
+		{
+			ID: "I7-wiki-path-search", Guards: []string{"wiki.search-by-path"},
+			Summary: "Before changing a file, the agent looks it up in the wiki by its path, and the pitfall there shapes the change.",
+			Setup:   evalSetup{Owner: evalOwnerApproveWork},
+			Turns: []evalTurnSpec{{Mode: "acceptEdits", FollowUp: goAhead, Expect: []string{"wiki_search"},
+				Prompt: "Make uploader.Upload in uploader/upload.go retry once when the bank's SFTP answers 503."}},
+			Clauses: []evalClause{
+				{ID: "I7.expect.searched_by_path", Kind: "expect", Gate: true, Failure: "wiki_not_searched",
+					Says: "Before changing uploader/upload.go the agent calls wiki_search with that path.", Check: checkWikiSearchedBeforeEdit("upload.go")},
+				{ID: "I7.advisory.uses_pitfall", Kind: "pass", Failure: "pitfall_ignored",
+					Says: "The change or the reply takes up the pitfall the wiki returned: the retry uploads under a new file name.", Check: checkPitfallUsed},
+			},
+		},
+		{
+			ID: "I8-settings-propose", Guards: []string{"primer.settings"},
+			Summary: "The person's problem is one of their own Settings: the agent reads them and proposes the change on a card instead of describing where it is.",
+			Setup:   evalSetup{Owner: evalOwnerApproveAll},
+			Turns: []evalTurnSpec{{Mode: "default", FollowUp: goAhead, Expect: []string{"settings_propose"},
+				Prompt: "I get a phone notification every time one of my sessions finishes, and it's far too noisy. Turn those off for me."}},
+			Clauses: []evalClause{
+				{ID: "I8.expect.proposed", Kind: "expect", Gate: true, Failure: "setting_not_proposed",
+					Says: "settings_propose asks for the session-finished notification (notifySessionFinished) to be turned off.", Check: checkSettingProposed("notifySessionFinished", false)},
+				{ID: "I8.advisory.read_first", Kind: "expect", Failure: "settings_not_read",
+					Says: "settings_get is read before the proposal.", Check: checkSettingsReadBeforePropose},
+			},
+		},
+		{
+			ID: "I9-no-project-for-ordinary-work", Guards: []string{"project.propose"},
+			Summary: "Three ordinary follow-ups are recorded as tasks, and no project is proposed for them.",
+			Setup:   evalSetup{Owner: evalOwnerApproveAll},
+			Turns: []evalTurnSpec{{Mode: "default", Expect: []string{"task_create", "task_create_batch"},
+				FollowUp: "That is what settles each of them. Go ahead and record them.",
+				Prompt: "From today's incident review, record these follow-ups so they don't get lost: add retries to the export uploader, " +
+					"make TestBillingExportRetries stop flaking, and alert when the nightly export runs late. Each is done when it is merged and verified in staging."}},
+			Clauses: []evalClause{
+				{ID: "I9.expect.recorded", Kind: "expect", Gate: true, Failure: "no_record",
+					Says: "The three follow-ups are recorded as tasks (task_create or one batch).", Check: checkAtLeastCreated(3)},
+				{ID: "I9.must_not.project", Kind: "must_not", Gate: true, Failure: "project_over_proposed",
+					Says: "No project is proposed or created for them.", Check: checkNoProjectAttempt},
+			},
+		},
+	}
+}
+
+// evalExportLogText is the log the reply-files scenario's machine holds.
+const evalExportLogText = "2026-11-23T02:00:01Z export started\n2026-11-23T02:03:12Z wrote 18,204 rows\n" +
+	"2026-11-23T02:03:13Z upload to sftp: 503 Service Unavailable\n2026-11-23T02:03:13Z export failed\n"

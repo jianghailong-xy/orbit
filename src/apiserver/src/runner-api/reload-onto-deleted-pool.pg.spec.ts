@@ -24,7 +24,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { RunInboxResponse } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -45,6 +46,7 @@ import { RunnerApiController } from './runner-api.controller';
 import { PROVIDER_UNAVAILABLE_ERROR } from './runner-provider-support';
 import '../test-support/dequeue-under-lease';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { withWord, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts the member's key and the doors decrypt it; both only need the same secret.
@@ -85,7 +87,7 @@ async function liveSession(db: PrismaClient, ownerId: string, on: Machine, provi
     data: {
       title: 'live',
       prompt: 'hello',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       ownerId,
       creatorId: ownerId,
       workspaceId: on.workspaceId,
@@ -155,8 +157,8 @@ suite('a reload onto an account pool deleted before the inbox hands it out, on r
     })).map(({ id, kind, status, deliveredAt }) => ({ id, kind, status, delivered: deliveredAt !== null }));
   const queueOf = async (sessionId: string) =>
     (await turns(sessionId)).map(({ kind, status, delivered }) => ({ kind, status, delivered }));
-  const recorded = (sessionId: string) =>
-    db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true, error: true } });
+  const recorded = async (sessionId: string) =>
+    withWord(await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ...WORD_SELECT, error: true } }));
 
   const me = randomUUID();
   await db.user.create({

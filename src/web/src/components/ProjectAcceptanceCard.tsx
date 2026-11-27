@@ -7,6 +7,8 @@ import { api, fetchAttachmentObjectUrl } from '../api';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 import { useMediaQuery } from '../lib/useMediaQuery';
+import { criterionTextIn } from '../lib/translation';
+import { useOwnerCardTranslation } from './TranslationParts';
 import { AppLink } from './AppLink';
 import { ProjectTaskLink } from './ProjectTaskLink';
 import { TaskStatusPill } from './TaskStatusPill';
@@ -73,8 +75,9 @@ import {
   type CriterionSatisfiedBy,
   type ProjectDoneCriterion,
 } from '../lib/projectDone';
-import type { CriterionLandingReason } from '@orbit/shared';
+import type { CriterionLandingReason, ProjectTextTranslation } from '@orbit/shared';
 import { ago } from '../lib/watches';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 import './ui/Typography.css';
 
 /**
@@ -208,6 +211,8 @@ export interface AcceptanceCriterionItem {
 /** The parts of the project detail document this card reads. */
 interface ProjectAcceptanceDetail {
   acceptanceCriteriaItems?: AcceptanceCriterionItem[];
+  /** The criteria's text in the owner's language (Settings › Translation). */
+  translation?: ProjectTextTranslation | null;
   /** The criteria this project moved out to a follow-up (board 02 G). */
   criteriaMovedOut?: CriterionMovedOut[];
   /** The owner rulings still live, oldest first (coordinator handoff v2 §2). */
@@ -352,7 +357,7 @@ function RequiredAction({ code }: { code: string }) {
       </span>
     );
   }
-  return <span className="acceptance-held-up-action" title={code}>{sentence}</span>;
+  return <Tooltip content={code} delay={TEXT_TOOLTIP_DELAY_MS}><span className="acceptance-held-up-action">{sentence}</span></Tooltip>;
 }
 
 /** Who confirmed a criterion, as its row's state sentence says it. */
@@ -758,8 +763,12 @@ export function AcceptanceCriteriaList({
   integrationRef,
   mainBranch,
   projectId,
+  translation,
 }: {
   criteria: AcceptanceCriterionItem[];
+  /** The project's translation while the list is drawn translated. Only what a row reads: every write
+   *  and dialog keeps the criterion's own text. */
+  translation?: ProjectTextTranslation;
   /** The whole set, which a change of one criterion's mode restates. Defaults to `criteria`. */
   allCriteria?: AcceptanceCriterionItem[];
   id?: string;
@@ -786,7 +795,7 @@ export function AcceptanceCriteriaList({
               urlTransform={referenceUrlTransform}
               components={{ ...INLINE_ONLY, a: ReferenceLink }}
             >
-              {c.text}
+              {criterionTextIn(translation, c.id, c.text)}
             </Markdown>
             {projectId && c.movedFrom ? <MovedFromLine moved={c.movedFrom} /> : null}
             <CriterionWork criterion={c} integrationRef={integrationRef} mainBranch={mainBranch} projectId={projectId} />
@@ -918,6 +927,7 @@ export function ProjectAcceptanceCard({
       criteria={Array.isArray(detail.data?.acceptanceCriteriaItems)
         ? withLandingReasons(detail.data.acceptanceCriteriaItems, detail.data.derivedDone)
         : []}
+      translation={detail.data?.translation}
       movedOut={Array.isArray(detail.data?.criteriaMovedOut) ? detail.data.criteriaMovedOut : []}
       rulings={Array.isArray(detail.data?.rulings) ? detail.data.rulings : []}
       integrationRef={detail.data?.integration?.ref ?? null}
@@ -941,8 +951,11 @@ export function AcceptanceCriteriaCard({
   action,
   movedOut = [],
   rulings = [],
+  translation,
 }: {
   criteria: AcceptanceCriterionItem[];
+  /** The criteria's text in the owner's language (Settings › Translation); the project's own page only. */
+  translation?: ProjectTextTranslation | null;
   /** The owner rulings still live (coordinator handoff v2 §2); the project's own page only. */
   rulings?: readonly ProjectRulingView[];
   /** The criteria this project moved out to a follow-up (board 02 G); the project's own page only. */
@@ -967,6 +980,7 @@ export function AcceptanceCriteriaCard({
   const shown = criteriaPreview(criteria, expanded, previewLimit);
   const hasCriteriaDisclosure = criteria.length > previewLimit;
   const confirmed = criteria.filter((criterion) => criterion.satisfiedBy === 'CONFIRMATION').length;
+  const translated = useOwnerCardTranslation(criteria.length > 0 ? translation : null);
 
   return (
     <Card
@@ -1012,7 +1026,9 @@ export function AcceptanceCriteriaCard({
             integrationRef={integrationRef}
             mainBranch={mainBranch}
             projectId={projectId}
+            translation={translated.shown}
           />
+          {translated.foot ? <div className="acceptance-block">{translated.foot}</div> : null}
           {hasCriteriaDisclosure ? (
             // Says what it is hiding. A list that stopped at twelve without naming the other
             // forty-one would read as a complete list of twelve. The control remains after it is

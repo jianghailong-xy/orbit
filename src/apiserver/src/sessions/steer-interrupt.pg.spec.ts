@@ -29,7 +29,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { type PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   RunEventType,
   RunStatus as SharedRunStatus,
@@ -49,6 +50,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { CURRENT_WORK_INTERRUPTED } from './current-work-delivery';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -103,7 +105,7 @@ test('a message waiting to be read when its turn is stopped is not delivered, an
     await prisma.session.create({
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
-        title: 'fix the export', prompt: 'fix the export', provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title: 'fix the export', prompt: 'fix the export', provider: 'claude', turnState: null,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${sessionId}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       },
@@ -152,7 +154,7 @@ test('a message waiting to be read when its turn is stopped is not delivered, an
     } as never) as { turnId: string };
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: w.sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: w.sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
     const handed = await dequeue(w);
     assert.equal(handed?.turnId, sent.turnId, 'the running message was not the one handed out');
@@ -239,7 +241,7 @@ test('a message waiting to be read when its turn is stopped is not delivered, an
       0,
       'a turn is waiting to run after the Stop',
     );
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: w.sessionId } })).status, RunStatus.AWAITING_INPUT);
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: w.sessionId } }))), RunStatus.AWAITING_INPUT);
     assert.equal(await dequeue(w), null, 'the inbox handed something out after the Stop');
   }
 
@@ -371,7 +373,7 @@ test('a message waiting to be read when its turn is stopped is not delivered, an
       [row.kind, row.sendIntent, row.targetTurnId, row.status, row.deliveryStatus],
       ['message', 'NEXT_TURN', null, 'PENDING', null],
     );
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: w.sessionId } })).status, RunStatus.RUNNING);
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: w.sessionId } }))), RunStatus.RUNNING);
     assert.equal((await dequeue(w))?.turnId, sent.turnId, 'the message sent after the Stop is not the next turn');
     assert.ok(!(await listed(w)).some((listedRow) => listedRow.turnId === sent.turnId && listedRow.delivery != null));
   });
@@ -390,7 +392,7 @@ test('a message waiting to be read when its turn is stopped is not delivered, an
 
     const row = await turnRow(steerId);
     assert.deepEqual([row.kind, row.status, row.deliveryStatus], ['message', 'PENDING', null]);
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: w.sessionId } })).status, RunStatus.RUNNING);
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: w.sessionId } }))), RunStatus.RUNNING);
     assert.equal((await dequeue(w))?.turnId, steerId, 'the re-filed message is not the next turn');
   });
 });

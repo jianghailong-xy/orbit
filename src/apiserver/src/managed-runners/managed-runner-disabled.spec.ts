@@ -174,7 +174,7 @@ for (const said of [undefined, 'false', ' FALSE ', 'on']) {
       assert.equal((await send(base, 'GET', '/api/auth/capabilities')).status, 401);
       const capabilities = await send(base, 'GET', '/api/auth/capabilities', 'login');
       assert.equal(capabilities.status, 200);
-      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 } });
+      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 }, documents: { enabled: false } });
       assert.deepEqual(callsSince(), [], 'the capability read reads nothing');
 
       // The status read: enabled false, a read and nothing else.

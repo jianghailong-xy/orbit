@@ -5,11 +5,11 @@ import { test } from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
@@ -261,7 +261,7 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
       title: label,
       prompt: label,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
     },

@@ -25,7 +25,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { BadRequestException, ConflictException, ForbiddenException, HttpException } from '@nestjs/common';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, type Runner } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -246,7 +247,7 @@ async function sessionOf(db: PrismaClient, acc: Pick<Account, 'ownerId' | 'runne
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
     },

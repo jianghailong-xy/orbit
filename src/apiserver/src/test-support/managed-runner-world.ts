@@ -37,7 +37,7 @@ export interface WorldOptions {
   clusterKey?: string;
   /** Where the managers' warnings go. Default: nowhere. */
   log?: ManagedRunnerManagerOptions['log'];
-  /** Runner Pods receive the Orbit Files drive, and the managers write mount Secrets in the files namespace. */
+  /** Runner Pods receive the drive, and the managers write mount Secrets in the files namespace. */
   files?: boolean;
 }
 

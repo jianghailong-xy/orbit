@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Agent 请求重开项目 · project_request_reopen</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  body { margin: 0; background: #eef0f3; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; background: #fff;
+    width: 1380px; box-sizing: border-box; padding: 36px 44px 40px; margin: 0 0 24px; }
+  .b-part h1 { font-size: 26px; margin: 0 0 6px; }
+  .b-part h2 { font-size: 21px; margin: 0 0 4px; }
+  .b-lead { color: #5b6270; margin: 0 0 22px; max-width: 1180px; }
+  .b-row { display: flex; gap: 28px; align-items: flex-start; }
+  .b-col { flex: 1 1 0; min-width: 0; }
+  .b-tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px;
+    background: #eef1f6; color: #4a5160; margin-bottom: 10px; }
+  .b-tag.is-new { background: #e7f0ff; color: #1f5fd1; }
+  .b-tag.is-no { background: #fdecec; color: #b42318; }
+  /* A web conversation pane, drawn with the shipped transcript and card classes. */
+  .b-pane { position: relative; border: 1px solid #d9dde3; border-radius: 12px; background: var(--bg-base);
+    padding: 22px 22px 18px; font-size: 14px; min-height: 0; }
+  .b-pane .chat-user-wrap { margin: 0 0 16px auto; }
+  .b-agent { color: var(--text-1); line-height: 1.6; margin: 0 0 12px; }
+  .b-agent code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: var(--bg-sunken);
+    padding: 1px 5px; border-radius: 4px; }
+  .b-pane .approval-card { margin-top: 6px; }
+  .b-change { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px 10px; align-items: baseline;
+    margin: 6px 0 4px; font-size: 13px; }
+  .b-change .b-k { color: var(--text-1); }
+  .b-change .b-from { color: var(--text-3); text-decoration: line-through; }
+  .b-change .b-arrow { color: var(--text-3); }
+  .b-change .b-to { color: var(--text-1); font-weight: 600; }
+  .b-path { font-size: 12px; color: var(--text-3); margin: 0 0 2px; }
+  .b-why { font-size: 12.5px; color: var(--text-2); margin: 8px 0 0; }
+  .b-link-card { border: 1px solid var(--border-subtle); border-radius: 10px; padding: 12px 14px; background: var(--bg-sunken);
+    display: flex; align-items: center; gap: 12px; font-size: 13px; }
+  .b-link-card .b-lt { flex: 1; }
+  .b-link-card .b-lt b { display: block; font-weight: 600; color: var(--text-1); }
+  .b-link-card .b-lt span { color: var(--text-3); font-size: 12px; }
+  .b-btn { border: 1px solid var(--border-subtle); border-radius: 7px; padding: 5px 12px; background: var(--bg-base);
+    color: var(--text-1); font: inherit; font-size: 13px; white-space: nowrap; }
+  /* Numbered marks + notes. */
+  .b-mark { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #e5484d; color: #fff;
+    font: 600 13px/24px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 3px #fff; z-index: 5; }
+  .b-ring { position: absolute; border: 2px dashed #e5484d; border-radius: 10px; pointer-events: none; z-index: 4; }
+  .b-notes { margin: 18px 0 0; padding: 0; list-style: none; font-size: 14.5px; }
+  .b-notes li { display: flex; gap: 10px; margin: 0 0 8px; }
+  .b-notes li i { flex: 0 0 22px; height: 22px; border-radius: 50%; background: #e5484d; color: #fff; font: 600 12px/22px Inter;
+    text-align: center; font-style: normal; margin-top: 2px; }
+  .b-err { font-family: "JetBrains Mono", monospace; font-size: 12px; color: #b42318; background: #fff4f4;
+    border: 1px solid #f4c7c7; border-radius: 6px; padding: 6px 10px; margin: 0 0 12px; }
+  .b-toolline { font-size: 12.5px; color: var(--text-3); margin: 0 0 10px; }
+  .b-toolline code { font-family: "JetBrains Mono", monospace; font-size: 12px; }
+  /* Tier table. */
+  table.b-tiers { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .b-tiers th, .b-tiers td { border: 1px solid #e1e4e8; padding: 9px 12px; text-align: left; vertical-align: top; }
+  .b-tiers th { background: #f6f7f9; font-weight: 600; }
+  .b-tiers td code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; }
+  .b-tiers .b-c { font-size: 13px; color: #5b6270; }
+  /* Settings page frame: shipped settings-* classes, a drawn switch. */
+  .b-settings { border: 1px solid #d9dde3; border-radius: 12px; overflow: hidden; display: flex; height: 400px; }
+  .b-settings .settings-nav { flex-basis: 220px; }
+  .b-settings .b-page { flex: 1; padding: 26px 34px; background: var(--bg-base); overflow: hidden; }
+  .b-nav-item { padding: 6px 10px; border-radius: 6px; font-size: 13.5px; color: var(--text-2); }
+  .b-nav-item.is-on { background: var(--bg-hover); color: var(--text-1); font-weight: 600; }
+  .b-sw { flex: 0 0 auto; width: 36px; height: 20px; border-radius: 999px; background: #c9cdd3; position: relative; }
+  .b-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  .b-sw.is-on { background: #3b82f6; }
+  .b-sw.is-on::after { left: 18px; }
+  .b-sel { flex: 0 0 auto; font-size: 13px; border: 1px solid var(--border-subtle); border-radius: 7px; padding: 4px 10px; color: var(--text-1); }
+  .b-changed { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+  .b-changed a { color: var(--text-3); text-decoration: underline; text-underline-offset: 2px; }
+  /* Decisions. */
+  .b-q { border: 1px solid #e1e4e8; border-radius: 12px; padding: 16px 20px; margin: 0 0 16px; }
+  .b-q h3 { margin: 0 0 10px; font-size: 16.5px; }
+  .b-opts { display: flex; gap: 16px; }
+  .b-opt { flex: 1; border-radius: 10px; padding: 12px 14px; background: #f7f8fa; font-size: 14px; }
+  .b-opt.is-rec { background: #eef5ff; outline: 2px solid #7aa7f0; }
+  .b-opt > b { display: block; margin-bottom: 4px; }
+  .b-rec { font-size: 12px; font-weight: 600; color: #1f5fd1; margin-left: 6px; }
+  ol.b-steps { margin: 0; padding-left: 22px; font-size: 14.5px; }
+  ol.b-steps li { margin: 0 0 9px; }
+  ol.b-steps code, .b-q code, .b-lead code, .b-notes code { font-family: "JetBrains Mono", monospace; font-size: 12.5px;
+    background: #f1f3f5; padding: 1px 5px; border-radius: 4px; }
+  .b-cost { display: inline-block; font-size: 12px; color: #5b6270; background: #f1f3f5; border-radius: 4px; padding: 0 6px; margin-left: 6px; }
+</style>
+
+<style>
+  .b-meta { font-size: 12.5px; color: var(--text-3); margin: 0 0 8px; }
+  .b-meta a { color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
+  .b-lbl { font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--text-3); text-transform: uppercase; margin: 10px 0 2px; }
+  .b-txt { font-size: 13.5px; color: var(--text-1); margin: 0; }
+  .b-done-line { font-size: 13px; color: var(--text-3); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 12px; background: var(--bg-sunken); }
+  .b-proj { border: 1px solid #d9dde3; border-radius: 12px; background: var(--bg-base); padding: 20px 22px; position: relative; }
+  .b-proj h3 { margin: 0 0 4px; font-size: 18px; color: var(--text-1); }
+  .b-badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: #e6f4ea; color: #1e7b34; margin-left: 8px; vertical-align: 2px; }
+  .b-ask-row { display: flex; align-items: center; gap: 12px; border: 1px solid #c9d8f5; background: #f3f7ff; border-radius: 10px; padding: 10px 14px; margin: 12px 0; font-size: 13.5px; }
+  .b-ask-row .b-lt { flex: 1; color: var(--text-1); }
+  .b-ask-row .b-lt span { display: block; font-size: 12px; color: var(--text-3); }
+  .b-crit { font-size: 13px; color: var(--text-2); margin: 4px 0; }
+  .b-needs { border: 1px solid #d9dde3; border-radius: 12px; background: var(--bg-base); padding: 14px 16px; position: relative; }
+  .b-needs-row { display: flex; gap: 10px; align-items: center; padding: 9px 4px; border-bottom: 1px solid var(--border-subtle); font-size: 13.5px; color: var(--text-1); }
+  .b-needs-row:last-child { border-bottom: 0; }
+  .b-needs-row span { color: var(--text-3); font-size: 12px; margin-left: auto; }
+  pre.b-flow { font: 12.5px/1.5 "JetBrains Mono", monospace; background: #f6f7f9; border: 1px solid #e1e4e8; border-radius: 10px; padding: 14px 16px; margin: 0; white-space: pre; overflow: hidden; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>Agent 请求重开已结项项目：project_request_reopen</h1>
+  <p class="b-lead">项目 DONE / CANCELLED 后不再接新工作，只有你能重开。今天 Agent 被拒后只能用文字转告你；改后它<b>提一个请求</b>，你在卡片上点 <b>Reopen</b> 或 <b>Chat about this</b>。批准就是项目页上那个 Reopen 按下去，权力不变、不新造外观（复用 owner 请求卡）。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag">① 今天</span>
+      <div class="b-pane">
+        <div class="chat-user-wrap"><div class="chat-msg chat-user">Add a task to fix the Android share sheet under Share to Orbit.</div></div>
+        <p class="b-err">task_create → 409 PROJECT_REOPEN_REQUIRED: That project is settled. It has to be reopened — which starts a new acceptance epoch — before it can take new work.</p>
+        <p class="b-agent">I can't add work to <b>Share to Orbit</b>: it is DONE, and only you can reopen it. Open the project and press <b>Reopen</b>, then tell me and I'll file the task.</p>
+        <p class="b-agent" style="color:var(--text-3)">（人得离开对话、找到项目、按 Reopen、再回来说一声；Agent 只能等）</p>
+      </div>
+    </div>
+    <div class="b-col">
+      <span class="b-tag is-new">② 建议：Agent 请求，卡片确认</span>
+      <div class="b-pane">
+        <div class="chat-user-wrap"><div class="chat-msg chat-user">Add a task to fix the Android share sheet under Share to Orbit.</div></div>
+        <p class="b-toolline">task_create → 409 PROJECT_REOPEN_REQUIRED · next: <code>project_request_reopen</code></p>
+        <p class="b-toolline">orbit · <code>project_request_reopen</code></p>
+        <div class="approval-card" id="p1b">
+          <div class="approval-head">↺ Reopen project “Share to Orbit”?</div>
+          <div class="approval-body is-plan">
+            <div class="dag-approval">
+              <p class="b-meta">DONE since Nov 18 · <a>Open project</a></p>
+              <p class="b-why" style="margin-top:4px">The agent says: the release checklist found that the Android share sheet still opens the old screen.</p>
+              <p class="b-lbl">Planned work</p>
+              <p class="b-txt">Add a criterion for the Android share target, and one task to fix it.</p>
+              <p class="dag-approval-foot">Reopening keeps what was accepted. The project closes again when its criteria are met.</p>
+            </div>
+          </div>
+          <div class="card-actions approval-actions">
+            <button class="card-action card-action--primary">Reopen <span class="approval-kbd">⏎</span></button>
+            <button class="card-action card-action--secondary">💬 Chat about this</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ol class="b-notes">
+    <li><i>1</i><span>拒绝的文字多一句下一步：<code>project_request_reopen</code>（项目 id、理由、要加的工作），回答后再重试原来的写入。四处拒绝（R8 / R8B、任务移动、交接、标准移动）都改。</span></li>
+    <li><i>2</i><span>卡片：标题 + “DONE since …”（可点进项目）+ Agent 的理由（灰字）+ <b>Planned work</b>（D2：理由+要做的事，只是文字）。</span></li>
+    <li><i>3</i><span><b>Reopen</b>（⏎）= 项目页的 Reopen：写 OPEN + 0469 的 reopen 记录，同一事务把这张卡结掉。<b>Chat about this</b> = 拒绝并说明理由，同一会话不能再提同一请求。没有 Always allow。</span></li>
+    <li><i>4</i><span>工具立刻返回（PENDING），不轮询；你回答后结果送回提问的会话（和 owner 请求的结束一样），协调者另收“项目已重开”。</span></li>
+  </ol>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>卡片出现在哪：对话里、Needs you、项目页</h2>
+  <p class="b-lead">D1：<b>任何会话</b>都能请求（不止协调者），所以卡片要在三处都能答。同一视图里不画两遍。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag is-new">③ 项目页：DONE 头部上方一行</span>
+      <div class="b-proj">
+        <h3>Share to Orbit <span class="b-badge">DONE</span></h3>
+        <p class="b-meta">Done Nov 18 · 6 criteria met · 7 tasks</p>
+        <div class="b-ask-row">
+          <div class="b-lt">An agent asked to reopen this project<span>Asked by “Release checklist 0.1.262” · Also asked by 1 other session</span></div>
+          <button class="b-btn">Review</button>
+        </div>
+        <p class="b-crit">✓ Share sheet opens Orbit on iOS</p>
+        <p class="b-crit">✓ Shared links become a new conversation</p>
+        <p class="b-crit">✓ Android share target registered</p>
+      </div>
+    </div>
+    <div class="b-col">
+      <span class="b-tag is-new">④ Needs you</span>
+      <div class="b-needs">
+        <div class="b-needs-row">↺ Reopen project “Share to Orbit”? <span>Release checklist 0.1.262 · 2m</span></div>
+        <div class="b-needs-row">⚙️ Change 2 settings? <span>Translate replies · 1h</span></div>
+        <div class="b-needs-row">❓ Which branch should the hotfix land on? <span>Hotfix 11-22 · 3h</span></div>
+      </div>
+      <span class="b-tag" style="margin-top:22px">⑤ 回答后，卡片收成一行</span>
+      <div class="b-done-line">↺ Reopened “Share to Orbit” · Nov 23 14:02</div>
+      <div class="b-done-line" style="margin-top:8px">↺ Declined: “Put it in a new project; Share to Orbit is shipped.”</div>
+    </div>
+  </div>
+  <ol class="b-notes">
+    <li><i>5</i><span>项目页：只一行 + <b>Review</b>，点开就是同一张卡。多个会话问同一项目时合成一张（Q2 推荐 A），写“Also asked by …”，结束通知发给每个提问者。</span></li>
+    <li><i>6</i><span>你在项目页直接按 Reopen，或删掉项目，挂着的请求会自动结束（“Reopened from the project page” / WITHDRAWN），不会留一张过期卡。</span></li>
+    <li><i>7</i><span>推送：“Release checklist 0.1.262 asks to reopen “Share to Orbit””。Web、iOS/macOS、Android 三端都做；Android 跟 iOS。</span></li>
+  </ol>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>待定 · 要你拍板</h2>
+  <p class="b-lead">已定：D1 任何会话可请求 · D2 理由+要做的事，批准只重开 · D3 先看板后建项目。下面两条还要你定。</p>
+  <div class="b-q">
+    <h3>Q1　请求存在哪里？</h3>
+    <div class="b-opts">
+      <div class="b-opt is-rec"><b>A　owner 请求 PROJECT_REOPEN<span class="b-rec">推荐</span></b>和 settings_propose 的 SETTINGS_CHANGE 一样。任何会话都能发，结束通过现有 owner 请求投递回到提问者；项目页读它画一行。</div>
+      <div class="b-opt"><b>B　项目 open item REOPEN_REQUEST</b>和 project_request_done 一样挂在项目上。项目页天然有，但 open item 只投递给协调者，非协调者提问要新写一套路由。</div>
+    </div>
+  </div>
+  <div class="b-q">
+    <h3>Q2　几个会话问同一个项目，几张卡？</h3>
+    <div class="b-opts">
+      <div class="b-opt is-rec"><b>A　一个项目一张<span class="b-rec">推荐</span></b>后来的提问者并入，卡上写 “Also asked by …”；你答一次，所有提问者都收到结果。</div>
+      <div class="b-opt"><b>B　每个会话一张</b>每张有自己的理由；按下第一张 Reopen 后其余自动结束。卡多、信息全。</div>
+    </div>
+  </div>
+  <h2 style="margin-top:22px">流程</h2>
+  <pre class="b-flow">agent ─write─▶ 409 PROJECT_REOPEN_REQUIRED · next: project_request_reopen
+agent ─project_request_reopen{why, plannedWork}─▶ POST /runner/projects/:id/reopen-requests
+        409 PROJECT_ALREADY_OPEN · 409 REOPEN_REQUEST_DECLINED · else OwnerRequest{PROJECT_REOPEN, PENDING}
+owner ─Reopen─▶ POST /owner-requests/:id/reopen-project  (owner 登录专用；带会话头 403，PAT 拒绝)
+        一个事务：status OPEN + reopenRecordOfPress + 该项目所有 PENDING 卡 → DONE
+        之后：结果送回每个提问者 · tellCoordinatorProjectReopened（协调者不是提问者时）
+owner ─Chat about this─▶ DECLINED + 理由 → 同一会话不能再提</pre>
+  <h2 style="margin-top:22px">落地（按代价排）</h2>
+  <ol class="b-steps">
+    <li>服务端：新 kind、请求路由、回答路由、项目页按 Reopen 时结卡、四处拒绝文字；pg spec 覆盖 DONE/CANCELLED/已 OPEN/拒绝后再提/会话头 403/PAT/协调者只通知一次。<span class="b-cost">最大</span></li>
+    <li>Runner：MCP 工具 <code>project_request_reopen</code>、CLI <code>orbit project request-reopen</code>、operation catalog、agent tools guide。<span class="b-cost">小</span></li>
+    <li>Web：卡片、Needs you、项目页一行。<span class="b-cost">中</span></li>
+    <li>Apple（OrbitKit + OrbitApp，iOS/macOS）。<span class="b-cost">中</span></li>
+    <li>Android，跟 iOS。<span class="b-cost">中</span></li>
+  </ol>
+  <p class="b-c" style="margin-top:8px">2 依赖 1；3、4、5 依赖 1，可并行。不做：批准时自动执行被拒的写入（D2 已定只重开）。</p>
+</section>
+</body>
+</html>

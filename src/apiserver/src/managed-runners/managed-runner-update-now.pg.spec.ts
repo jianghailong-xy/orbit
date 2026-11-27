@@ -69,6 +69,7 @@ import { managedRunnerHeartbeat, storedWorkloadFor } from './managed-runner-slee
 import { recordManagedDemand } from './managed-runner-work';
 import { ManagedRunnerWorker } from './managed-runner-worker';
 import { MANAGED_RUNNER_UPDATE_NOW_ACTIVITY, ManagedRunnerService } from './managed-runner.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const quiet = { warn: () => undefined, error: () => undefined, log: () => undefined };
@@ -208,8 +209,8 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     const startedAt = new Date(Date.now() - agoMs);
     await sql.query(
       `INSERT INTO "session" ("id", "owner_id", "creator_id", "workspace_id", "assigned_runner_id", "title", "prompt", "provider",
-                              "status", "num_turns", "runtime_session_id", "started_at", "updated_at", "running_bg_shells")
-       VALUES ($1, $2, $2, $3, $4, $5, 'work', 'claude', $6::"run_status", 1, $7, $8, now(), $9::text[])`,
+                              "turn_state", "num_turns", "runtime_session_id", "started_at", "updated_at", "running_bg_shells")
+       VALUES ($1, $2, $2, $3, $4, $5, 'work', 'claude', (CASE ($6)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), 1, $7, $8, now(), $9::text[])`,
       [id, m.ownerId, workspace.id, m.runnerId, title, status, randomUUID(), startedAt.toISOString(), bgShells],
     );
     return { id, startedAt };
@@ -283,7 +284,7 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!, 'the next generation READY ends the update');
     assert.equal(awake.updateRequestedBy, ownerId, 'the record of who asked is kept');
     const session_ = await db.session.findUniqueOrThrow({ where: { id: open.id } });
-    assert.equal(session_.status, 'AWAITING_INPUT', 'the open session is left as it was');
+    assert.equal(wordOf(session_), 'AWAITING_INPUT', 'the open session is left as it was');
 
     // Its runner reports the current build: no update left, and none recorded once the READY pass looks again.
     w.advance(30_000);
@@ -368,7 +369,8 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     // Idle by the records, but its own fresh report still counts a job: busy, with the report's count.
     // Ended as the server ends one: a terminal status with its release column (session_release_fact_chk, 1401).
     await db.session.updateMany({
-      where: { id: { in: [turn.id, waiting.id] } }, data: { status: 'SUCCEEDED', finishedAt: new Date(), runningBgShells: [] },
+      where: { id: { in: [turn.id, waiting.id] } },
+      data: { turnState: null, finishedAt: w.now(), runningBgShells: [] },
     });
     w.advance(1_000);
     await w.heartbeat(mapping.runnerId, { backgroundJobs: 1 });
@@ -499,9 +501,9 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     assert.equal(awake.stopRequestedAt?.getTime(), requested.stopRequestedAt!.getTime(), 'the next generation keeps the stop request');
     assert.ok(awake.stopAcknowledgedAt && awake.stopAcknowledgedAt >= awake.stopRequestedAt!, 'and Docker\'s report of the exit as its acknowledgement');
     // The sessions are the runner's to stop and resume: the server changed none of them.
-    const sessions = await db.session.findMany({ where: { id: { in: [first.id, second.id, queued.id] } }, select: { id: true, status: true } });
+    const sessions = await db.session.findMany({ where: { id: { in: [first.id, second.id, queued.id] } }, select: { id: true, ...WORD_SELECT } });
     assert.deepEqual(
-      Object.fromEntries(sessions.map((s) => [s.id, s.status])),
+      Object.fromEntries(sessions.map((s) => [s.id, wordOf(s)])),
       { [first.id]: 'RUNNING', [second.id]: 'RUNNING', [queued.id]: 'PENDING' },
     );
   });
@@ -635,7 +637,7 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     );
     assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!);
     assert.deepEqual(w.channel.stopRequests, [], 'nothing was stopped by force');
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: queued.id } })).status, 'PENDING', 'the message waits for the next generation');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: queued.id } }))), 'PENDING', 'the message waits for the next generation');
 
     // An automatic roll — the same drain, nobody having asked — is still called off by demand.
     const v = world();
@@ -798,8 +800,8 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     assert.equal(awake.stopRequestedAt?.getTime(), requested.stopRequestedAt!.getTime(), 'the next generation keeps the stop request');
     assert.ok(awake.stopAcknowledgedAt && awake.stopAcknowledgedAt >= awake.stopRequestedAt!, 'and the kubelet\'s report of the exit as its acknowledgement');
     // The sessions are the runner's to stop and resume: the server changed none of them.
-    const sessions = await db.session.findMany({ where: { id: { in: [turn.id, queued.id] } }, select: { id: true, status: true } });
-    assert.deepEqual(Object.fromEntries(sessions.map((s) => [s.id, s.status])), { [turn.id]: 'RUNNING', [queued.id]: 'PENDING' });
+    const sessions = await db.session.findMany({ where: { id: { in: [turn.id, queued.id] } }, select: { id: true, ...WORD_SELECT } });
+    assert.deepEqual(Object.fromEntries(sessions.map((s) => [s.id, wordOf(s)])), { [turn.id]: 'RUNNING', [queued.id]: 'PENDING' });
   });
 
   await t.test('(6b) on Kubernetes: a request recorded before it could stop a Pod (waitsForIdle: true) is taken up by the stop on the next pass', async () => {

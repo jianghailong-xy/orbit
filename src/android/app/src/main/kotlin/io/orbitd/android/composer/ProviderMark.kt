@@ -53,7 +53,7 @@ internal enum class AgentBrand(val from: Long, val to: Long, val mark: String?) 
             "kimi", "moonshot" -> KIMI
             "glm", "zai", "z.ai" -> GLM
             "minimax" -> MINIMAX
-            "qwen", "dashscope" -> QWEN
+            "qwen", "qwen-coding-plan", "dashscope" -> QWEN
             "antigravity" -> ANTIGRAVITY
             "cursor", "cursor-api" -> CURSOR
             else -> GENERIC

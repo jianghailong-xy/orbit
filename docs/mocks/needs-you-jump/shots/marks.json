@@ -1,0 +1,106 @@
+{
+ "t-wide": {
+  "w": 1440,
+  "h": 820,
+  "url": "/sessions/2zwQZ2hd93IvLb59t6pcm",
+  "boxes": {
+   "row": [
+    300,
+    179,
+    280,
+    64
+   ],
+   "pbtn": [
+    1293,
+    16,
+    63,
+    32
+   ],
+   "column": null,
+   "merge": null
+  }
+ },
+ "n-wide": {
+  "w": 1440,
+  "h": 820,
+  "url": "/sessions/2zwQZ2hd93IvLb59t6pcm",
+  "boxes": {
+   "row": [
+    300,
+    179,
+    280,
+    64
+   ],
+   "pbtn": [
+    972,
+    16,
+    63,
+    32
+   ],
+   "column": [
+    1120,
+    0,
+    320,
+    820
+   ],
+   "merge": [
+    1140,
+    118,
+    272,
+    234
+   ]
+  }
+ },
+ "t-narrow": {
+  "w": 1120,
+  "h": 820,
+  "url": "/sessions/2zwQZ2hd93IvLb59t6pcm",
+  "boxes": {
+   "row": [
+    300,
+    179,
+    280,
+    64
+   ],
+   "pbtn": [
+    973,
+    16,
+    63,
+    32
+   ],
+   "column": null,
+   "merge": null
+  }
+ },
+ "n-narrow": {
+  "w": 1120,
+  "h": 820,
+  "url": "/sessions/2zwQZ2hd93IvLb59t6pcm",
+  "boxes": {
+   "row": [
+    300,
+    179,
+    280,
+    64
+   ],
+   "pbtn": [
+    973,
+    16,
+    63,
+    32
+   ],
+   "column": [
+    800,
+    0,
+    320,
+    820
+   ],
+   "merge": [
+    821,
+    118,
+    271,
+    234
+   ]
+  }
+ }
+}

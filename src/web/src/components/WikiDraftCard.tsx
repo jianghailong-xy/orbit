@@ -53,6 +53,7 @@ import {
   type WikiChatPress,
   type WikiChatPressAnswer,
 } from '../lib/wikiChat';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * What drawing a card needs of the place it is drawn in: the panel beside the wiki, or the full session page of the
@@ -237,9 +238,10 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
     <div className="wk-draft" data-draft={view.id} data-state={view.state} ref={rootRef} id={`wk-draft-${view.id}`}>
       <div className={`wk-draft-card${look.quiet ? ' quiet' : ''}${focused ? ' focus' : ''}`}>
         <div className={`wk-draft-k ${look.tone}`}>
-          {view.state === 'applied' && !look.inReview && <CheckOutlined className="ic" />}
+          {(view.state === 'applied' || view.state === 'rewritten') && !look.inReview && <CheckOutlined className="ic" />}
           <span>{look.title}</span>
         </div>
+        {look.held && <div className="wk-draft-note" data-held={view.held ?? undefined}>{look.held}</div>}
         {look.note &&
           (look.inReview ? (
             <button
@@ -290,14 +292,15 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
                   {wikiChatRewritesRow(view).map((link, index) => (
                     <span key={`${link.doc}#${link.key}`}>
                       {index > 0 && ' · '}
-                      <button
-                        type="button"
-                        className="lk"
-                        title={link.title ?? undefined}
-                        onClick={() => host.openSection(link.doc, link.key)}
-                      >
-                        {link.label}
-                      </button>
+                      <Tooltip content={link.title ?? undefined}>
+                        <button
+                          type="button"
+                          className="lk"
+                          onClick={() => host.openSection(link.doc, link.key)}
+                        >
+                          {link.label}
+                        </button>
+                      </Tooltip>
                     </span>
                   ))}
                 </FaceRow>

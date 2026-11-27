@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { EvidenceTranslation, ProjectOpenItemRow } from '@orbit/shared';
 import { ACCEPTANCE_CONFIRMATION_TITLE } from './AcceptanceConfirmationCard';
@@ -19,6 +19,7 @@ import './ui/Typography.css';
 import { streamPoll } from '../lib/listBudget';
 import type { CrossingPointer } from './CrossingDecisionCard';
 import { EvidenceRestartAction, RESTART_TASK_OWNER_ACTION } from './EvidenceRestartAction';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -284,8 +285,10 @@ export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
  * `revealDecisionCard` does.
  */
 export function revealSettlementCard(scope: ParentNode = document): boolean {
-  const card = scope.querySelector<HTMLElement>('#settlement-preview, .settlement-card');
-  return revealCard(card);
+  return revealCard(findSettlementCard(scope));
+}
+function findSettlementCard(scope: ParentNode = document): HTMLElement | null {
+  return scope.querySelector<HTMLElement>('#settlement-preview, .settlement-card');
 }
 
 /**
@@ -303,8 +306,7 @@ export function settlementPointer(question: true | SettlementQuestion): string {
 /** Take the reader to a held weakening's card, which carries its intent in its id. Returns whether
  *  it arrived, as `revealDecisionCard` does. */
 export function revealCriteriaCard(intentId: string, scope: Document = document): boolean {
-  const card = scope.getElementById(`criteria-decision-${intentId}`);
-  return revealCard(card);
+  return revealCard(scope.getElementById(`criteria-decision-${intentId}`));
 }
 
 /**
@@ -321,8 +323,10 @@ export function ownerConfirmationPointer(title: string): string {
  * Returns whether it arrived, as `revealDecisionCard` does.
  */
 export function revealOwnerConfirmationCard(scope: ParentNode = document): boolean {
-  const card = scope.querySelector<HTMLElement>('#owner-confirmation-preview, [data-owner-confirmation]');
-  return revealCard(card);
+  return revealCard(findOwnerConfirmationCard(scope));
+}
+function findOwnerConfirmationCard(scope: ParentNode = document): HTMLElement | null {
+  return scope.querySelector<HTMLElement>('#owner-confirmation-preview, [data-owner-confirmation]');
 }
 
 /** One card the owner answers by pressing rather than by replying, as the page draws it. */
@@ -414,8 +418,11 @@ export function revealOpenItemCard(
 
 /** Reveal an owner item, including the fuse pause's intentionally prefixed card id. */
 export function revealOwnerItemCard(itemId: string, scope: ParentNode = document): boolean {
-  const fuse = scope.querySelector<HTMLElement>(`#fuse-${itemId}`);
-  return revealCard(fuse ?? scope.querySelector<HTMLElement>(`[data-open-item="${itemId}"]`));
+  return revealCard(findOwnerItemCard(itemId, scope));
+}
+function findOwnerItemCard(itemId: string, scope: ParentNode = document): HTMLElement | null {
+  return scope.querySelector<HTMLElement>(`#fuse-${itemId}`)
+    ?? scope.querySelector<HTMLElement>(`[data-open-item="${itemId}"]`);
 }
 
 /** A transcript pauses following its tail before a pinned bar opens one of its previews. */
@@ -506,6 +513,9 @@ export function wayPosition(at: number, of: number): string {
   return `${at} of ${of}`;
 }
 /** What pressing the line does, said as the destination rather than as the act. */
+/** One half of the strip, for a page that draws them apart (`DecisionStrip`'s `part`). */
+export type StripPart = 'line' | 'fold';
+
 export const GO_TO_CARD_HINT = 'Go to its card';
 export const GO_TO_NEXT_CARD_HINT = 'Go to the next card';
 
@@ -546,9 +556,66 @@ export function revealDecisionCard(
   row: Pick<PendingDecisionRow, 'taskId' | 'evidenceRevision'>,
   scope: ParentNode = document,
 ): boolean {
-  const key = decisionRowKey(row);
-  const card = scope.querySelector<HTMLElement>(`[data-decision-row="${key}"]`);
-  return revealCard(card);
+  return revealCard(findDecisionCard(row, scope));
+}
+function findDecisionCard(
+  row: Pick<PendingDecisionRow, 'taskId' | 'evidenceRevision'>,
+  scope: ParentNode = document,
+): HTMLElement | null {
+  return scope.querySelector<HTMLElement>(`[data-decision-row="${decisionRowKey(row)}"]`);
+}
+
+/** Where a card is from what the reader sees: above it, below it, or on screen. */
+type CardSide = 'above' | 'below' | 'here';
+/** How much of a card has to show for the line to call it on screen. */
+const ON_SCREEN_MIN_PX = 48;
+/**
+ * Where `card` sits against the transcript scroller holding it, or null where that cannot be
+ * measured — no card, no scroller, or a layout that has no size (a static or headless render).
+ */
+export function cardSide(card: HTMLElement | null): CardSide | null {
+  const scroller = card?.closest<HTMLElement>('.workspace-sessions');
+  if (!card || !scroller) return null;
+  const view = scroller.getBoundingClientRect();
+  if (view.height <= 0) return null;
+  const box = card.getBoundingClientRect();
+  const shown = Math.min(box.bottom, view.bottom) - Math.max(box.top, view.top);
+  if (shown >= Math.min(ON_SCREEN_MIN_PX, box.height / 2)) return 'here';
+  return box.top < view.top ? 'above' : 'below';
+}
+
+/** `cardSide` of the card `locate` finds, kept current as the reader scrolls and the page moves. */
+function useCardSide(locate: (() => HTMLElement | null) | undefined, key: string | undefined): CardSide | null {
+  const [side, setSide] = useState<CardSide | null>(null);
+  useEffect(() => {
+    if (!locate || typeof window === 'undefined') {
+      setSide(null);
+      return undefined;
+    }
+    let frame = 0;
+    const measure = (): void => {
+      frame = 0;
+      setSide(cardSide(locate()));
+    };
+    const schedule = (): void => {
+      if (!frame) frame = window.requestAnimationFrame(measure);
+    };
+    measure();
+    // Capture: the transcript scrolls in its own element, whose scroll events do not bubble.
+    document.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
+    // A streaming reply or a card landing moves the card without a scroll.
+    const tick = window.setInterval(schedule, 1000);
+    return () => {
+      document.removeEventListener('scroll', schedule, true);
+      window.removeEventListener('resize', schedule);
+      window.clearInterval(tick);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  // `key` names the card; `locate` is a new function every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return side;
 }
 
 /** Age as a reader reads it. Whole units only: a queue is not a stopwatch. */
@@ -717,6 +784,8 @@ export function DecisionStrip({
   onRevealQuestion = () => {},
   ownerRequests = [],
   onRevealOwnerRequest = () => {},
+  part,
+  onWaiting,
 }: {
   queue: PendingDecisionQueue;
   /** The held criteria proposals of the project this session coordinates, when it coordinates one.
@@ -764,6 +833,12 @@ export function DecisionStrip({
   ownerRequests?: ReadonlyArray<OwnerRequestCardPointer>;
   /** Where the reader goes to answer one: its card, by the request's id. */
   onRevealOwnerRequest?: (id: string) => void;
+  /** One half of the strip: `line`, the one line that goes to the cards, drawn as a segment of the
+   *  conversation's top capsule; `fold`, the WAITING ON YOU fold, drawn as a bar of its own.
+   *  Both when unset. */
+  part?: StripPart;
+  /** Told whether the line has anything to go to, as that changes, and false once it is gone. */
+  onWaiting?: (waiting: boolean) => void;
 }) {
   const [at, setAt] = useState<string | null>(null);
   const hasNeedsYou = needsYou !== undefined;
@@ -790,6 +865,8 @@ export function DecisionStrip({
     ageSeconds: number | null;
     above?: boolean;
     go: () => void;
+    /** The card a press goes to, where the page can find it: what the caret measures. */
+    locate?: () => HTMLElement | null;
   }> = [
     ...ownerExceptions.map(({ row, need, ageSeconds, above }) => ({
       key: `exception:${row.itemId}`,
@@ -797,6 +874,7 @@ export function DecisionStrip({
       ageSeconds: exceptionAge({ row, ageSeconds, above }, hasNeedsYou),
       above,
       go: () => onRevealException(row),
+      locate: () => findOwnerItemCard(row.itemId),
     })),
     // The requests this conversation filed for its owner: the owner's alone, like the exceptions,
     // and each holds the conversation up until it is ended — after the exceptions, which already
@@ -810,6 +888,7 @@ export function DecisionStrip({
         ageSeconds: request.ageSeconds,
         above: request.above,
         go: () => onRevealOwnerRequest(request.id),
+        locate: () => document.getElementById(`owner-request-${request.id}`),
       })),
     // The coordinator's questions next: like the exceptions they are the owner's alone, and each
     // holds the coordinator up until it is answered — ahead of evidence, which waits on nobody's
@@ -821,6 +900,7 @@ export function DecisionStrip({
         label: questionPointer(question.question),
         ageSeconds: question.ageSeconds,
         go: () => onRevealQuestion(question.itemId),
+        locate: () => document.getElementById(`question-${question.itemId}`),
       })),
     ...(onOpenCriteria
       ? oldestFirst(decidableCriteriaRows(criteria)).map((row) => ({
@@ -828,6 +908,7 @@ export function DecisionStrip({
         label: CRITERIA_DECISION_HEADING,
         ageSeconds: row.ageSeconds,
         go: () => onOpenCriteria(row),
+        locate: () => document.getElementById(`criteria-decision-${row.intentId}`),
       }))
       : []),
     // Cross-project requests into this project, one card per batch: after the weakenings, which are
@@ -839,12 +920,14 @@ export function DecisionStrip({
         label: pointer.label,
         ageSeconds: pointer.ageSeconds,
         go: () => onRevealCrossing(pointer.id),
+        locate: () => document.getElementById(pointer.id),
       })),
     ...oldestFirst(decisions).map((row) => ({
       key: `evidence:${decisionRowKey(row)}`,
       label: row.title,
       ageSeconds: row.ageSeconds,
       go: () => onReveal(row),
+      locate: () => findDecisionCard(row),
     })),
     // An OWNER_CONFIRMED task's run waiting on its owner: at most one per conversation, and only in
     // the task's own session, where its card is drawn.
@@ -854,20 +937,42 @@ export function DecisionStrip({
         label: ownerConfirmationPointer(ownerConfirmation.title),
         ageSeconds: ownerConfirmation.ageSeconds,
         go: onRevealOwnerConfirmation,
+        locate: () => findOwnerConfirmationCard(),
       }]
       : []),
     ...(confirmation
-      ? [{ key: 'settlement', label: settlementPointer(confirmation), ageSeconds: null, go: onRevealConfirmation }]
+      ? [{
+        key: 'settlement',
+        label: settlementPointer(confirmation),
+        ageSeconds: null,
+        go: onRevealConfirmation,
+        locate: () => findSettlementCard(),
+      }]
       : []),
   ];
-  if (ways.length === 0 && yours.length === 0) return null;
   // Where the last press went, while that card is still one to go to. Until a press has gone
   // anywhere the line names the first, which is where the first press goes.
   const here = ways.findIndex((way) => way.key === at);
-  const shown = ways[Math.max(here, 0)];
-  // Where the next press goes — the first, until a press has gone anywhere — and so what the caret
-  // points at.
+  const shown = ways[Math.max(here, 0)] as (typeof ways)[number] | undefined;
+  // Where the next press goes: the first, until a press has gone anywhere.
   const next = ways.length > 0 ? ways[(here + 1) % ways.length] : undefined;
+  // The caret says where the card the line NAMES is, so the words and the arrow are about one card:
+  // measured where the page is drawn, and nothing once that card is on screen. Where it cannot be
+  // measured, a card among the messages says the side the page measured, and every other card is at
+  // the conversation's foot, below.
+  const side = useCardSide(shown?.locate, shown?.key);
+  const caret = side === 'here' ? null : (side ?? (shown?.above ? 'above' : 'below')) === 'above' ? '↑' : '↓';
+  const waiting = ways.length > 0;
+  useEffect(() => {
+    onWaiting?.(waiting);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => onWaiting?.(false), []);
+  if (ways.length === 0 && yours.length === 0) return null;
+  if (part === 'line' && shown === undefined) return null;
+  if (part === 'fold' && yours.length === 0) return null;
+  const Wrap = part === 'line' ? 'span' : 'div';
   const step = () => {
     if (!next) return;
     next.go();
@@ -875,40 +980,41 @@ export function DecisionStrip({
   };
 
   return (
-    <div className="decision-strip" aria-label={STRIP_LABEL}>
+    <Wrap className="decision-strip" aria-label={STRIP_LABEL}>
       {/* The whole of what the questions get: the one the line is on, how long it has waited, where
           it stands among the rest, and the way to its card — with no control that answers anything.
           The count is said to a screen reader, which cannot glance down at the cards. */}
-      {shown === undefined ? null : (
-        <button
-          className="decision-strip-line"
-          type="button"
-          aria-label={`${ownerExceptions.length + ownerRequests.length + questions.length > 0 ? `${ownerExceptions.length + ownerRequests.length + questions.length} waiting` : needsDecisionCount(ways.length)}: ${shown.label}`}
-          title={here < 0 || ways.length < 2 ? GO_TO_CARD_HINT : GO_TO_NEXT_CARD_HINT}
-          onClick={step}
-        >
-          <span className="decision-strip-dot" aria-hidden="true" />
-          <span className="decision-strip-title">{shown.label}</span>
-          {shown.ageSeconds === null ? null : (
-            <span className="decision-strip-quiet">{formatAge(shown.ageSeconds)}</span>
-          )}
-          {ways.length < 2 ? null : (
-            <>
-              <span className="decision-strip-sep" aria-hidden="true">·</span>
-              <span className="decision-strip-quiet">
-                {wayPosition(Math.max(here, 0) + 1, ways.length)}
-              </span>
-            </>
-          )}
-          <span className="decision-strip-caret" aria-hidden="true">{next?.above ? '↑' : '↓'}</span>
-        </button>
+      {shown === undefined || part === 'fold' ? null : (
+        <Tooltip content={here < 0 || ways.length < 2 ? GO_TO_CARD_HINT : GO_TO_NEXT_CARD_HINT}>
+          <button
+            className="decision-strip-line"
+            type="button"
+            aria-label={`${ownerExceptions.length + ownerRequests.length + questions.length > 0 ? `${ownerExceptions.length + ownerRequests.length + questions.length} waiting` : needsDecisionCount(ways.length)}: ${shown.label}`}
+            onClick={step}
+          >
+            <span className="decision-strip-dot" aria-hidden="true" />
+            <span className="decision-strip-title">{shown.label}</span>
+            {shown.ageSeconds === null ? null : (
+              <span className="decision-strip-quiet">{formatAge(shown.ageSeconds)}</span>
+            )}
+            {ways.length < 2 ? null : (
+              <>
+                <span className="decision-strip-sep" aria-hidden="true">·</span>
+                <span className="decision-strip-quiet">
+                  {wayPosition(Math.max(here, 0) + 1, ways.length)}
+                </span>
+              </>
+            )}
+            {caret === null ? null : <span className="decision-strip-caret" aria-hidden="true">{caret}</span>}
+          </button>
+        </Tooltip>
       )}
 
       {/* The submissions this session is the one to fix, and the only undecidable rows that reach
           any session at all. No card anywhere to go to, so they get the one fold left and the
           sentence saying what clears them — not greyed, because that sentence is an instruction to
           the reader rather than news about somebody else. */}
-      {yours.length === 0 ? null : (
+      {yours.length === 0 || part === 'line' ? null : (
         <button
           className="decision-strip-line"
           type="button"
@@ -921,7 +1027,7 @@ export function DecisionStrip({
           <span className="decision-strip-caret" aria-hidden="true">{open ? '▴' : '▾'}</span>
         </button>
       )}
-      {yours.length === 0 || !open ? null : (
+      {yours.length === 0 || !open || part === 'line' ? null : (
         <div className="decision-strip-body">
           <section className="decision-rail-group decision-rail-mine" aria-label={WAITING_ON_YOU_LABEL}>
             <div className="decision-rail-head">
@@ -932,7 +1038,7 @@ export function DecisionStrip({
           </section>
         </div>
       )}
-    </div>
+    </Wrap>
   );
 }
 
@@ -955,6 +1061,8 @@ export function SessionDecisionStrip({
   crossings = [],
   questions = [],
   ownerRequests = [],
+  part,
+  onWaiting,
 }: {
   sessionId: string;
   /** The project this session coordinates, when it coordinates one. Its held criteria proposals
@@ -981,6 +1089,10 @@ export function SessionDecisionStrip({
   questions?: ReadonlyArray<QuestionCardPointer>;
   /** The pending owner requests whose cards this conversation draws. */
   ownerRequests?: ReadonlyArray<OwnerRequestCardPointer>;
+  /** Which half to draw, as `DecisionStrip` takes it. */
+  part?: StripPart;
+  /** As `DecisionStrip` takes it; a queue that could not be read counts as something to say. */
+  onWaiting?: (waiting: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const phone = useMediaQuery(PHONE_QUERY);
@@ -1003,11 +1115,14 @@ export function SessionDecisionStrip({
   const ownerExceptions = needsYou ?? exceptions;
   if (pending.isError && ownerExceptions.length === 0 && crossings.length === 0 && questions.length === 0
     && ownerRequests.length === 0) {
-    return (
-      <div className="decision-strip decision-strip-unread" role="status">
-        {`${STRIP_LABEL}: this queue could not be read.`}
-      </div>
-    );
+    if (part === 'fold') return null;
+    return part === 'line'
+      ? <UnreadSegment onWaiting={onWaiting} />
+      : (
+        <div className="decision-strip decision-strip-unread" role="status">
+          {`${STRIP_LABEL}: this queue could not be read.`}
+        </div>
+      );
   }
   if (!pending.data && ownerExceptions.length === 0 && crossings.length === 0 && questions.length === 0
     && ownerRequests.length === 0) return null;
@@ -1039,6 +1154,23 @@ export function SessionDecisionStrip({
       onRevealQuestion={(itemId) => revealQuestionCard(itemId)}
       ownerRequests={ownerRequests}
       onRevealOwnerRequest={(id) => revealCard(document.getElementById(`owner-request-${id}`))}
+      part={part}
+      onWaiting={onWaiting}
     />
+  );
+}
+
+/** The read that failed, as a grey segment of the capsule: there is something to say, so the
+ *  capsule shows while it is there. */
+function UnreadSegment({ onWaiting }: { onWaiting?: (waiting: boolean) => void }) {
+  useEffect(() => {
+    onWaiting?.(true);
+    return () => onWaiting?.(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <span className="decision-strip decision-strip-unread" role="status">
+      {`${STRIP_LABEL}: this queue could not be read.`}
+    </span>
   );
 }

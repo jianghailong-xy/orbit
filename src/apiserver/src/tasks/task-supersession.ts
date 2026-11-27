@@ -296,7 +296,7 @@ export const EXECUTION_CLAIM_INDEX = 'session_task_execution_claim_idx_finished_
 
 /**
  * 0130's claim index, over the four held statuses, which 1426 builds the one above beside (release A).
- * Both are enforced while both exist, and session_release_fact_chk makes them refuse the same rows, so
+ * Both were enforced while both existed, and the release CHECK of the time made them refuse the same rows, so
  * a second live run is refused by either, and which name PostgreSQL reports is its choice. Release B
  * (migration 1444) drops the index and keeps this name: the server code of release B is release A's, so
  * the rehearsal of the drop (sessions/session-claim-index-release-b.pg.spec.ts) is also what a deploy-2

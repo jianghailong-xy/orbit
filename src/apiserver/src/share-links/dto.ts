@@ -28,7 +28,7 @@ export class TurnOffShareLinksDto {
 }
 
 /**
- * `POST /share-links`: share one drive file, pinned to its current version (docs/orbit-files-drive-technical-design.md §9).
+ * `POST /share-links`: share one drive file, pinned to its current version (docs/drive-technical-design.md §9).
  * Posting again for a file that is already shared moves its link to the file's current version ("Share this version").
  */
 export class ShareDriveFileDto {

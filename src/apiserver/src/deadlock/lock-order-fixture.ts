@@ -417,7 +417,7 @@ export function capacityFenceScenario(ids: FixtureIds): ScenarioSpec {
   // return does not fire and it really does take the Project row.
   const statusWrite = {
     label: 'C2 session-status-write',
-    sql: `UPDATE "session" SET "status" = 'SUCCEEDED'::run_status, "finished_at" = $2, "updated_at" = $2
+    sql: `UPDATE "session" SET "turn_state" = NULL, "finished_at" = $2, "updated_at" = $2
            WHERE "id" = $1::uuid`,
     values: [ids.telemetrySessionId, ids.telemetryTurnAt],
   };
@@ -465,7 +465,7 @@ export function admissionFenceSteps(ids: FixtureIds) {
       values: [ids.telemetrySessionId] as unknown[],
     },
     statusWrite: {
-      sql: `UPDATE "session" SET "status" = 'SUCCEEDED'::run_status, "finished_at" = $2, "updated_at" = $2
+      sql: `UPDATE "session" SET "turn_state" = NULL, "finished_at" = $2, "updated_at" = $2
              WHERE "id" = $1::uuid`,
       values: [ids.telemetrySessionId, ids.telemetryTurnAt] as unknown[],
     },

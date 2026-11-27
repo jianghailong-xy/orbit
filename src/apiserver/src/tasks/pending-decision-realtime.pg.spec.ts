@@ -42,12 +42,12 @@ import test from 'node:test';
 import { HttpException } from '@nestjs/common';
 import {
   CreatorType,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
   type PrismaClient,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { type ControlEvent, uuidToBase62 } from '@orbit/shared';
 import {
@@ -141,7 +141,7 @@ async function evidenceFixture(db: PrismaClient, ownerId: string) {
         title,
         prompt: 'run the task',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         startsTaskWork: taskFor !== undefined,
       },

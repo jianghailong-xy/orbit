@@ -31,10 +31,10 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, type RunInboxResponse } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -146,7 +146,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       title: `${label} run`,
       prompt: 'do the task',
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,

@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-// The engine grants of the Orbit Files drive (docs/orbit-files-drive-technical-design.md §7): every launch names the
-// parent /run/orbit-files and both spellings of the drive in every write mode, Plan mode only reads it, and a runner
+// The engine grants of the drive (docs/drive-technical-design.md §7): every launch names the
+// parent /run/orbit-drive and both spellings of the drive in every write mode, Plan mode only reads it, and a runner
 // with no drive mounted is launched exactly as before.
 
 func driveRootsForTest() []string { return []string{driveParentPath, driveHomePath, driveMountPath} }
@@ -55,7 +55,7 @@ func TestClaudeLaunchGrantsTheDriveInEveryMode(t *testing.T) {
 	t.Run("no drive mounted", func(t *testing.T) {
 		fakeDriveMount(t, false)
 		for _, d := range addDirs(claudeCommandArgs(claudeSpawnJob(t), t.TempDir(), true)) {
-			if strings.Contains(d, "orbit-files") || d == driveParentPath || d == driveHomePath {
+			if strings.Contains(d, "orbit-drive") || strings.Contains(d, "orbit-documents") || strings.Contains(d, "orbit-files") || d == driveParentPath || d == driveHomePath {
 				t.Fatalf("a runner without the drive was granted %s", d)
 			}
 		}

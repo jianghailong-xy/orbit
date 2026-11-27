@@ -3,7 +3,11 @@ import { test } from 'node:test';
 import { Logger, type LoggerService, ValidationPipe } from '@nestjs/common';
 import { RunnerStatus, type LoginCommand, type RunnerLoginState } from '@orbit/shared';
 import type { AuthUser } from '../common/current-user.decorator';
-import { ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY, ANTIGRAVITY_GOOGLE_LOGIN_V1 } from '../common/antigravity-readiness';
+import {
+  ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1,
+  ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM,
+  ANTIGRAVITY_GOOGLE_LOGIN_V1,
+} from '../common/antigravity-readiness';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { MemoryNats } from '../test-support/memory-nats';
 import { StartLoginDto } from './dto';
@@ -157,7 +161,7 @@ async function logsDuring(run: () => Promise<void>): Promise<string> {
   return lines.join('\n');
 }
 
-test('the Google sign-in is started only on a runner process that relays it, on Linux', async () => {
+test('the Google sign-in is started only on a runner process that relays it, on Linux or macOS', async () => {
   const h = harness();
   assert.deepEqual(await h.post({ engine: 'antigravity' }), {
     status: 'pending',
@@ -182,14 +186,26 @@ test('the Google sign-in is started only on a runner process that relays it, on 
   assert.match(state.message ?? '', /too old to sign Antigravity in with Google — update it/);
   assert.equal(await downgraded.beat(null), undefined, 'a failed start is not handed over later');
 
-  // Nor one that names another operating system.
-  const mac = harness();
-  await mac.post({ engine: 'antigravity' });
-  assert.equal(await mac.beat(CAPABLE, 'darwin'), undefined);
+  // Nor one that names an operating system the sign-in does not run on.
+  const windows = harness();
+  await windows.post({ engine: 'antigravity' });
+  assert.equal(await windows.beat(`${CAPABLE},${ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1}`, 'windows'), undefined);
   assert.deepEqual(
-    [(await mac.state()).status, (await mac.state()).message],
-    ['failed', ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY],
+    [(await windows.state()).status, (await windows.state()).message],
+    ['failed', ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM],
   );
+
+  // A Mac process is handed it only when it relays the macOS sign-in too; one from before that is too old.
+  const oldMac = harness();
+  await oldMac.post({ engine: 'antigravity' });
+  assert.equal(await oldMac.beat(CAPABLE, 'darwin'), undefined);
+  assert.equal((await oldMac.state()).status, 'failed');
+  assert.match((await oldMac.state()).message ?? '', /too old to sign Antigravity in with Google — update it/);
+  const mac = harness([ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:darwin']);
+  await mac.post({ engine: 'antigravity' });
+  assert.deepEqual(await mac.beat(`${CAPABLE},${ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1}`, 'darwin'), {
+    action: 'start', engine: 'antigravity', attempt: attemptOf(mac.row),
+  });
 
   // A process that relays it but names no OS is let through: it refuses a platform it cannot do itself.
   const unnamed = harness([ANTIGRAVITY_GOOGLE_LOGIN_V1]);
@@ -345,9 +361,9 @@ test('a runner that names no OS but cannot sign in on its platform refuses it, a
   await h.post({ engine: 'antigravity' });
   const attempt = attemptOf(h.row);
   assert.deepEqual(await h.beat(CAPABLE, null), { action: 'start', engine: 'antigravity', attempt });
-  assert.deepEqual(await h.report({ status: 'failed', message: ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY, attempt }), { ok: true, applied: true });
+  assert.deepEqual(await h.report({ status: 'failed', message: ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM, attempt }), { ok: true, applied: true });
   assert.deepEqual(await h.state(), {
-    status: 'failed', engine: 'antigravity', userCode: null, url: null, message: ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY, account: null,
+    status: 'failed', engine: 'antigravity', userCode: null, url: null, message: ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM, account: null,
   });
   assert.equal(await h.beat(CAPABLE, null), undefined, 'a refused start is not handed over again');
 });

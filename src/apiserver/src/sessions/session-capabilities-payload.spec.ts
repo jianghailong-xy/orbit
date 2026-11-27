@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SESSION_MERGE_RECOVERY_V1 } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';

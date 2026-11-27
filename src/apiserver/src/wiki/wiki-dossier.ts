@@ -14,6 +14,7 @@ import {
 import { sha256 } from '../common/crypto.util';
 import { redactSecrets } from '../common/secret-redaction';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
+import { legacySessionStatusSql } from '../sessions/session-legacy-words';
 import { approvalParts, hasText, partsText, runEventParts, toolCallParts, toolOutputText, type RecordPart } from './wiki-verify-evidence';
 
 /**
@@ -76,7 +77,8 @@ export interface DossierSessionRow {
   /** The CLI that ran it (migration 0414); null on a row from before that, whose provider says. */
   engine?: string | null;
   model: string | null;
-  status: string;
+  /** The word the session reads on the wire (session-legacy-words.ts). */
+  legacyStatus: string;
   createdAt: Date;
   taskId: string | null;
   parentSessionId: string | null;
@@ -269,7 +271,8 @@ const TEXT_NOT_BLANK = '[^\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f
  */
 export async function loadDossierRecords(reader: DossierReader, ownerId: string, sessionId: string): Promise<DossierRecords | null> {
   const [session] = await reader.$queryRaw<DossierSessionRow[]>`
-    SELECT s."id"::text AS "id", s."title", s."provider", s."engine", s."model", s."status"::text AS "status",
+    SELECT s."id"::text AS "id", s."title", s."provider", s."engine", s."model",
+           ${legacySessionStatusSql('s')} AS "legacyStatus",
            s."created_at" AS "createdAt", s."task_id"::text AS "taskId",
            s."parent_session_id"::text AS "parentSessionId", s."dispatch_origin"::text AS "dispatchOrigin",
            s."wiki_chat_space_id"::text AS "wikiChatSpaceId"
@@ -1936,7 +1939,7 @@ export async function buildDossier(
   const where = [
     session.model ? `${session.provider}/${session.model}` : session.provider,
     `started ${session.createdAt.toISOString().slice(0, 10)}`,
-    `status ${session.status}`,
+    `status ${session.legacyStatus}`,
     ...(session.parentSessionId ? ['spawned by another session'] : []),
   ];
   header.push(where.join(' · '));

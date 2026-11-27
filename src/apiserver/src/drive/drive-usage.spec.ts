@@ -7,11 +7,11 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { DriveController } from './drive.controller';
 
 const s3Env = {
-  ORBIT_FILES_BACKEND: 's3',
-  ORBIT_FILES_S3_ENDPOINT: 'http://minio:9000',
-  ORBIT_FILES_S3_BUCKET: 'orbit',
-  ORBIT_FILES_S3_ACCESS_KEY_ID: 'key',
-  ORBIT_FILES_S3_SECRET_ACCESS_KEY: 'secret',
+  ORBIT_DRIVE_BACKEND: 's3',
+  ORBIT_DRIVE_S3_ENDPOINT: 'http://minio:9000',
+  ORBIT_DRIVE_S3_BUCKET: 'orbit',
+  ORBIT_DRIVE_S3_ACCESS_KEY_ID: 'key',
+  ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: 'secret',
 };
 const user = { userId: '954995fd-cffe-475e-83f3-a41624f6e623' } as AuthUser;
 const accountUsage = { totalBytes: 30, driveBytes: 20, trashBytes: 2, otherBytes: 10 };
@@ -22,8 +22,8 @@ function usageRoute(quota?: string, storeBytes: number | null = null) {
     $queryRaw: async () => [{ drive: 20n, trash: 2n, other: 10n }],
     fileBlob: { aggregate },
   } as unknown as PrismaService;
-  const files = new FilesService(prisma, filesConfigFrom({ ...s3Env, ORBIT_FILES_STORE_QUOTA_BYTES: quota }));
-  const controller = new DriveController(null!, null!, null!, null!, null!, files);
+  const files = new FilesService(prisma, filesConfigFrom({ ...s3Env, ORBIT_DRIVE_STORE_QUOTA_BYTES: quota }));
+  const controller = new DriveController(null!, null!, null!, null!, null!, files, null!);
   return { usage: () => controller.usage(user), aggregate };
 }
 

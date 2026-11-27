@@ -1,5 +1,6 @@
 import { useContext, useId, type MouseEventHandler, type ReactNode } from 'react';
 import { SettingChangedLineSlot } from './SettingChangedLine';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../ui/Tooltip';
 import './Settings.css';
 
 /** A page's own heading in the right-hand column: its name, a line under it, and an optional action on its right. */
@@ -89,9 +90,11 @@ export function SettingsRow({
         {ChangedLine && anchor ? <ChangedLine anchor={anchor} /> : null}
       </div>
       {control != null && (
-        <div className="settings-row-control" title={tooltip}>
-          {control}
-        </div>
+        <Tooltip content={tooltip} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <div className="settings-row-control">
+            {control}
+          </div>
+        </Tooltip>
       )}
     </div>
   );
