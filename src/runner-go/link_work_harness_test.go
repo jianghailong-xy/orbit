@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -78,6 +79,11 @@ type fakeWorkGateway struct {
 	onMessage func(c *fakeWorkConn, data []byte)
 	// pings counts the pings the runner's connections sent.
 	pings atomic.Int64
+	// compression is how it accepts permessage-deflate: off (the zero value), as a gateway from before
+	// docs/runner-link-design.md §15.17 does, or as the gateway does now. wireIn counts the bytes its connections read,
+	// TLS included.
+	compression websocket.CompressionMode
+	wireIn      atomic.Int64
 
 	conns      []*fakeWorkConn
 	upgrades   []time.Time
@@ -86,6 +92,31 @@ type fakeWorkGateway struct {
 	arrivals   []fakeWorkBeatAt // every beat as it came, answered or not
 	answers    []fakeWorkBeatAt // every beat as it was answered
 	superseded int
+}
+
+// fakeCountingListener counts the bytes its connections read.
+type fakeCountingListener struct {
+	net.Listener
+	n *atomic.Int64
+}
+
+func (l fakeCountingListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return fakeCountingConn{Conn: c, n: l.n}, nil
+}
+
+type fakeCountingConn struct {
+	net.Conn
+	n *atomic.Int64
+}
+
+func (c fakeCountingConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	c.n.Add(int64(n))
+	return n, err
 }
 
 // fakeWorkBeatAt is a beat by its id, on a connection, at a time.
@@ -110,6 +141,7 @@ type fakeWorkConn struct {
 	writeMu    sync.Mutex
 	outID      uint64
 	facts      map[string]fakeWorkFact // what a connection's beats sent whole, by kind
+	offered    string                  // the extensions the runner's upgrade request offered
 	// beatq holds the beat waiting for the connection's heartbeat worker, once beats are answered late (beatDelay).
 	beatq    chan *linkpb.Heartbeat
 	beatOnce sync.Once
@@ -147,6 +179,7 @@ func newFakeWorkGateway(t *testing.T) *fakeWorkGateway {
 	t.Helper()
 	g := &fakeWorkGateway{t: t, mode: linkpb.Mode_MODE_LINK}
 	g.Server = httptest.NewUnstartedServer(http.HandlerFunc(g.serve))
+	g.Server.Listener = fakeCountingListener{Listener: g.Server.Listener, n: &g.wireIn}
 	g.StartTLS()
 	t.Cleanup(func() {
 		g.mu.Lock()
@@ -190,17 +223,22 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{OnPingReceived: func(context.Context, []byte) bool {
-		g.pings.Add(1)
-		return true
-	}})
+	g.mu.Lock()
+	compression := g.compression
+	g.mu.Unlock()
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: compression, CompressionThreshold: 512,
+		OnPingReceived: func(context.Context, []byte) bool {
+			g.pings.Add(1)
+			return true
+		}})
 	if err != nil {
 		return
 	}
 	ws.SetReadLimit(16 << 20)
 	g.mu.Lock()
 	c := &fakeWorkConn{g: g, id: fmt.Sprintf("c-%016x", len(g.conns)+1), ws: ws, status: -1, done: make(chan struct{}),
-		token: strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), facts: map[string]fakeWorkFact{}}
+		token: strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), facts: map[string]fakeWorkFact{},
+		offered: r.Header.Get("Sec-WebSocket-Extensions")}
 	g.conns = append(g.conns, c)
 	g.mu.Unlock()
 	defer close(c.done)

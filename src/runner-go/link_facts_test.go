@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"google.golang.org/protobuf/proto"
 
 	"orbit/linkpb"
@@ -227,5 +228,43 @@ func TestLinkPartsOfABeatLostWithItsConnectionGoWholeAgain(t *testing.T) {
 	}
 	if whole := linkWholeKinds(last.frame); len(whole) != 1 || whole[0] != "repos" {
 		t.Errorf("the beat on the next connection sent %v whole, want [repos]", whole)
+	}
+}
+
+// The runner offers permessage-deflate without context takeover (link_client.go). A gateway that accepts it gets the
+// heartbeat's parts compressed; one from before it, which accepts none, gets them as they are, and the link works the
+// same either way.
+func TestLinkCompressesWhereTheGatewayAcceptsIt(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		mode websocket.CompressionMode
+	}{
+		{"a gateway that accepts no compression", websocket.CompressionDisabled},
+		{"a gateway that accepts permessage-deflate", websocket.CompressionNoContextTakeover},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := newLinkWorkRig(t)
+			r.g.compression = c.mode
+			conn := r.useLink(t)
+			if !strings.Contains(conn.offered, "permessage-deflate") || !strings.Contains(conn.offered, "client_no_context_takeover") {
+				t.Fatalf("the runner offered %q", conn.offered)
+			}
+			// A first beat of compressible parts, as a runner's are.
+			body := linkTestHeartbeat(r.t.leaseOwner)
+			for i := 0; i < 40; i++ {
+				body.Skills = append(body.Skills, SlashCommandInfo{Name: fmt.Sprintf("skill-%d", i), Description: "Use when the task involves the runner link: conventions, pitfalls and a worked example"})
+			}
+			raw, _ := json.Marshal(body.Skills)
+			before := r.g.wireIn.Load()
+			beats := linkBeatOn(t, r, map[string]any{"leaseOwner": r.t.leaseOwner, "skills": json.RawMessage(raw)}, conn.id)
+			if len(beats) != 1 || beats[0].forwarded == nil || !jsonEqual(t, beats[0].forwarded["skills"], raw) {
+				t.Fatalf("the beat: %+v", beats)
+			}
+			read := r.g.wireIn.Load() - before
+			t.Logf("a %d-byte part came in %d bytes on the wire", len(raw), read)
+			if compressed := read < int64(len(raw))/2; compressed != (c.mode != websocket.CompressionDisabled) {
+				t.Errorf("%d bytes on the wire for a %d-byte part: compressed %v", read, len(raw), compressed)
+			}
+		})
 	}
 }

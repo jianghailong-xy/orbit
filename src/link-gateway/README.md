@@ -99,6 +99,13 @@ the same delay.
 | The connection token in `Authorization: Bearer`. | `401 UNAUTHENTICATED`, with a `reason`. |
 | The runner's connection slots. | `429 TOO_MANY_CONNECTIONS`, `Retry-After: 30`. |
 
+The upgrade accepts permessage-deflate without context takeover when the runner offers it (runners since
+docs/runner-link-design.md §15.17 do), and answers `server_no_context_takeover; client_no_context_takeover` even to an
+offer with context takeover: each message is compressed alone, from pooled writers, so no connection keeps a 1.2 MB
+writer of its own. Messages under 512 bytes go uncompressed. A runner that offers nothing, as every older one, gets an
+uncompressed connection, as before (`TestCompressionIsNegotiatedOnlyWithARunnerThatOffersIt`). The 256 KiB read limit
+holds what a message inflates to, not its compressed size.
+
 The token is checked without asking any database:
 
 - The apiserver's four checks, in its order and with its reasons, apply first: `MALFORMED`, `SIGNATURE`, `AUDIENCE`

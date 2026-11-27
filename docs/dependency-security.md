@@ -201,7 +201,10 @@ is the version reviewed above, at the same release as the runner's:
 - **Reach.**
   - The WebSocket library parses frames only from connections that have already passed the upgrade checks: the
     connection token is verified by the gateway's own code before `websocket.Accept` runs. An unauthenticated client
-    reaches only Go's `net/http` and that verifier. Messages are capped at 256 KiB, and compression is off.
+    reaches only Go's `net/http` and that verifier. Messages are capped at 256 KiB. Since 2026-11-27 the gateway accepts
+    permessage-deflate without context takeover from a runner that offers it (docs/runner-link-design.md §15.17): the
+    library's inflater runs only on connections that passed those checks, and the 256 KiB cap holds what a message
+    inflates to (the library's read limit wraps its inflater).
   - `acme` and `autocert` run only in the ACME TLS mode. There they answer TLS-ALPN-01 challenges in the TLS handshake,
     and `HostWhitelist` refuses any name not in `LINK_ACME_DOMAINS` before anything is asked of the CA. They talk only
     to the configured ACME directory, Let's Encrypt by default.
@@ -234,7 +237,8 @@ The runner's link client and its shadow connection (`src/runner-go/link_*.go`, `
   runner's code, fourteen in its module scan, all fixed in go1.27.2. These are the gateway's toolchain findings above.
 - **Reach.** The runner only dials. It reads frames from the connections it opened itself, over TLS verified against the
   system's roots, to the link address the control plane hands out with the link token. A message is capped at 256 KiB
-  (a frame in pieces at 8 MiB), and compression is off. Since the cut-over the runner's work goes over the link, so
+  (a frame in pieces at 8 MiB), what a message inflates to included: since 2026-11-27 the runner offers permessage-deflate
+  without context takeover, and inflates only what the gateway it dialled sends it. Since the cut-over the runner's work goes over the link, so
   what it reads there (the control plane's answers, hints, Drain and Close) is what the runner acts on.
 - **Updates.** Dependabot's existing `gomod` entry for `/src/runner-go` covers both. Keep them at the gateway's
   versions.
