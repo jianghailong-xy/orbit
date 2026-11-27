@@ -59,17 +59,22 @@ private val SessionMark.icon: Int get() = when (this) {
     SessionMark.ON_HOLD -> R.drawable.ic_mark_on_hold
 }
 
-/** A list row's title-line icons ([SessionDisplay.rowIcons]): grey glyphs before the state icon, each saying its [SessionRowIcon.tip]
- * to a screen reader. The terminal and the eye are the glyphs the row drew for the same facts before the session facts. */
+/** A list row's title-line icons ([SessionDisplay.rowIcons]): glyphs before the state icon, red for Failed and grey otherwise, each
+ * saying its [SessionRowIcon.tip] to a screen reader. Failed, Retrying and On hold are their chips' glyphs; the terminal and the eye
+ * are the glyphs the row drew for the same facts before the session facts. */
 @Composable
 internal fun SessionRowIcons(icons: List<SessionRowIcon>) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     icons.forEach { icon ->
         val drawable = when (icon) {
+            SessionRowIcon.FAILED -> R.drawable.ic_mark_failed
+            SessionRowIcon.RETRYING -> R.drawable.ic_mark_retrying
+            SessionRowIcon.ON_HOLD -> R.drawable.ic_mark_on_hold
             SessionRowIcon.BACKGROUND -> R.drawable.ic_terminal
             SessionRowIcon.WILL_RESUME -> R.drawable.ic_eye
         }
-        Icon(painterResource(drawable), icon.tip, Modifier.size(14.dp).testTag("session-row-icon:${icon.name}"), tint = muted)
+        Icon(painterResource(drawable), icon.tip, Modifier.size(14.dp).testTag("session-row-icon:${icon.name}"),
+            tint = if (icon.red) MaterialTheme.colorScheme.error else muted)
     }
 }
 

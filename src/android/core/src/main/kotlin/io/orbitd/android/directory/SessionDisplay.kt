@@ -35,12 +35,27 @@ enum class SessionMark(val word: String, val tone: Tone) {
     enum class Tone { AMBER, RED, GREY }
 }
 
-/** A fact a list row draws as a grey icon at the end of its title line, not as a mark (the owner, 2026-11-27; web `sessionRowIcons`):
- * background work still running, and a wake (a watch, a scheduled wake-up or an armed retry) that will resume it. [tip] is its label.
- * Interrupted, Finished and Ended are not drawn at all. */
-enum class SessionRowIcon(val tip: String) {
+/** A fact a list row draws as an icon at the end of its title line instead of a chip (the owner, 2026-11-27; web `sessionRowIcons`): a
+ * release by a failure (Failed, or Retrying when the server will retry it) and a held queued turn (On hold), which every other surface
+ * still draws as marks; and background work still running and a wake (a watch, a scheduled wake-up or an armed retry) that will resume
+ * a held session, which no other surface draws. [tip] is its label; [red] is Failed's colour. Interrupted, Finished and Ended are not
+ * drawn at all. */
+enum class SessionRowIcon(val tip: String, val red: Boolean = false) {
+    FAILED(SessionMark.FAILED.word, red = true),
+    RETRYING(SessionMark.RETRYING.word),
+    ON_HOLD(SessionMark.ON_HOLD.word),
     BACKGROUND("Background work running"),
-    WILL_RESUME("Will resume"),
+    WILL_RESUME("Will resume");
+
+    companion object {
+        /** The icon a list row draws for [mark] instead of its chip, if any. */
+        fun of(mark: SessionMark): SessionRowIcon? = when (mark) {
+            SessionMark.FAILED -> FAILED
+            SessionMark.RETRYING -> RETRYING
+            SessionMark.ON_HOLD -> ON_HOLD
+            else -> null
+        }
+    }
 }
 
 object SessionDisplay {
@@ -75,13 +90,17 @@ object SessionDisplay {
         }
     }
 
-    /** The title-line icons of a held session, in drawing order. Empty from an older control plane and for a released session. */
-    fun rowIcons(f: Facts): List<SessionRowIcon> {
-        if (state(f) == null || f.released == true) return emptyList()
-        return buildList {
-            if (f.activity == "BACKGROUND_JOB" || f.runningBgCount > 0) add(SessionRowIcon.BACKGROUND)
-            if (f.waitingOn == "WAKE") add(SessionRowIcon.WILL_RESUME)
-        }
+    /** The chips a list row draws after its line: the marks less those it draws as title-line icons, so Needs you alone. Null from an
+     * older control plane. */
+    fun rowMarks(f: Facts): List<SessionMark>? = marks(f)?.filter { SessionRowIcon.of(it) == null }
+
+    /** The title-line icons of a list row, in drawing order: Failed / Retrying and On hold (the marks of those names), then Background and
+     * Will resume for a held session. */
+    fun rowIcons(f: Facts): List<SessionRowIcon> = buildList {
+        marks(f).orEmpty().mapNotNullTo(this) { SessionRowIcon.of(it) }
+        if (state(f) == null || f.released == true) return@buildList
+        if (f.activity == "BACKGROUND_JOB" || f.runningBgCount > 0) add(SessionRowIcon.BACKGROUND)
+        if (f.waitingOn == "WAKE") add(SessionRowIcon.WILL_RESUME)
     }
 
     /** The state word and the marks as one line, [separator] between them: " · " in Markdown (`Idle · Needs you`), ", " where a

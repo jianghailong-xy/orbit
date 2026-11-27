@@ -51,20 +51,21 @@ class SessionDisplayRowDrawTest {
         .map { it.jsonObject["mark"]!!.jsonPrimitive.content }
 
     /** The board's after column for the rows with the facts: the state icon, the marks and what TalkBack says. Interrupted, Finished and
-     * Ended are not drawn; Background and Will resume are title-line icons ([iconsAfter]), not marks (the owner, 2026-11-27). */
+     * Ended are not drawn; Failed, Retrying, On hold, Background and Will resume are the row's title-line icons ([iconsAfter]), not chips,
+     * though TalkBack still says the marks (the owner, 2026-11-27). */
     private val after = mapOf(
         1 to Triple("QUEUED", listOf(), "Queued"), 3 to Triple("RUNNING", listOf(), "Running"), 5 to Triple("IDLE", listOf(), "Idle"),
         7 to Triple("IDLE", listOf(), "Idle"), 9 to Triple("IDLE", listOf(), "Idle"),
-        11 to Triple("IDLE", listOf("FAILED"), "Idle, Failed"), 13 to Triple("IDLE", listOf(), "Idle"),
+        11 to Triple("IDLE", listOf(), "Idle, Failed"), 13 to Triple("IDLE", listOf(), "Idle"),
         15 to Triple("RUNNING", listOf(), "Running"), 17 to Triple("RUNNING", listOf("NEEDS_YOU"), "Running, Needs you"),
-        19 to Triple("QUEUED", listOf("ON_HOLD"), "Queued, On hold"), 21 to Triple("IDLE", listOf(), "Idle"),
+        19 to Triple("QUEUED", listOf(), "Queued, On hold"), 21 to Triple("IDLE", listOf(), "Idle"),
         23 to Triple("IDLE", listOf(), "Idle"), 25 to Triple("IDLE", listOf(), "Idle"),
         27 to Triple("RUNNING", listOf(), "Running"), 29 to Triple("RUNNING", listOf(), "Running"),
         31 to Triple("IDLE", listOf(), "Idle"), 33 to Triple("IDLE", listOf(), "Idle"),
         35 to Triple("IDLE", listOf(), "Idle"),
     )
-    private val iconsAfter = mapOf(15 to listOf("BACKGROUND"), 31 to listOf("WILL_RESUME"))
-    private val iconTags = listOf("BACKGROUND", "WILL_RESUME")
+    private val iconsAfter = mapOf(11 to listOf("FAILED"), 15 to listOf("BACKGROUND"), 19 to listOf("ON_HOLD"), 31 to listOf("WILL_RESUME"))
+    private val iconTags = listOf("FAILED", "RETRYING", "ON_HOLD", "BACKGROUND", "WILL_RESUME")
     private val stateTags = listOf("QUEUED", "RUNNING", "IDLE").map { "session-state-icon:$it" }
     private val markTags = listOf("NEEDS_YOU", "FAILED", "RETRYING", "ON_HOLD")
     private val legacyTags = listOf("needs-you", "review", "queued", "running", "watching", "jobs", "services", "failed")

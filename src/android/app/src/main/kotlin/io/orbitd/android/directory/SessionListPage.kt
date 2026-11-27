@@ -128,7 +128,8 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
     }
     // With the session facts, the row's value is the state and its marks ("Idle, Needs you"); from an older server, today's word.
     val word = remember(session, watching) { SessionDisplay.text(session.displayFacts, ", ") ?: SessionHeader.statusWord(session, watching) }
-    val marks = remember(session) { SessionDisplay.marks(session.displayFacts) }
+    // The chips after the line: Needs you alone, the rest being title-line icons.
+    val marks = remember(session) { SessionDisplay.rowMarks(session.displayFacts) }
     val rowIcons = remember(session) { SessionDisplay.rowIcons(session.displayFacts) }
     Column(Modifier.fillMaxWidth()
         .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${session.name}", onLongClick = onOptions, onClick = onOpen)

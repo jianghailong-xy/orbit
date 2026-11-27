@@ -3,6 +3,7 @@ package io.orbitd.android.sessionfacts
 import io.orbitd.android.directory.DirectorySession
 import io.orbitd.android.directory.SessionDisplay
 import io.orbitd.android.directory.SessionDisplayState
+import io.orbitd.android.directory.SessionMark
 import io.orbitd.android.directory.SessionRowIcon
 import io.orbitd.android.directory.SessionHeader
 import io.orbitd.android.directory.SessionLine
@@ -108,7 +109,7 @@ class SessionDisplayRowsTest {
     @Test fun row08_stoppedTurn_withoutFacts_drawsToday() = withoutFacts(8)
     @Test fun row09_taskRunFinished_withFacts_isIdleWithNoMark() = withFacts(9, I, listOf(), "-")
     @Test fun row10_taskRunFinished_withoutFacts_drawsToday() = withoutFacts(10)
-    @Test fun row11_releasedByAFailedTurn_withFacts_isIdleFailedInNeedsYou() = withFacts(11, I, listOf("Failed"), "Needs you")
+    @Test fun row11_releasedByAFailedTurn_withFacts_isIdleFailedInNeedsYou() = withFacts(11, I, listOf("Failed"), "Needs you", listOf(SessionRowIcon.FAILED))
     @Test fun row12_releasedByAFailedTurn_withoutFacts_drawsToday() = withoutFacts(12)
     @Test fun row13_releasedByEnd_withFacts_isIdleWithNoMark() = withFacts(13, I, listOf(), "-")
     @Test fun row14_releasedByEnd_withoutFacts_drawsToday() = withoutFacts(14)
@@ -117,7 +118,7 @@ class SessionDisplayRowsTest {
     @Test fun row16_aJobWithNoTurn_withoutFacts_drawsToday() = withoutFacts(16)
     @Test fun row17_waitingOnAnApproval_withFacts_isRunningNeedsYou() = withFacts(17, R, listOf("Needs you"), "Needs you")
     @Test fun row18_waitingOnAnApproval_withoutFacts_drawsToday() = withoutFacts(18)
-    @Test fun row19_onHold_withFacts_isQueuedOnHold() = withFacts(19, Q, listOf("On hold"), "Working")
+    @Test fun row19_onHold_withFacts_isQueuedOnHold() = withFacts(19, Q, listOf("On hold"), "Working", listOf(SessionRowIcon.ON_HOLD))
     @Test fun row20_onHold_withoutFacts_drawsToday() = withoutFacts(20)
     @Test fun row21_endRunnerNeverConfirmed_withFacts_isIdleWithNoMark() = withFacts(21, I, listOf(), "-")
     @Test fun row22_endRunnerNeverConfirmed_withoutFacts_drawsToday() = withoutFacts(22)
@@ -140,6 +141,9 @@ class SessionDisplayRowsTest {
     @Test fun aReleasedFailureTheServerWillRetryIsRetryingNotFailed() {
         val f = SessionDisplay.Facts("IDLE", true, "FAILED", waitingOn = "WAKE")
         assertEquals(listOf("Retrying"), SessionDisplay.marks(f)!!.map { it.word })
+        // A list row draws it as its title-line icon, not a chip.
+        assertEquals(listOf(SessionRowIcon.RETRYING), SessionDisplay.rowIcons(f))
+        assertEquals(listOf<SessionMark>(), SessionDisplay.rowMarks(f))
     }
     @Test fun aReleasedFailureWhoseRunnerWentOfflineIsFailedLikeAnyOther() {
         // The owner's approval of 2026-11-25 dropped Disconnected: the error text is never read.
