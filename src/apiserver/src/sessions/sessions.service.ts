@@ -162,6 +162,7 @@ import {
   CLONE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
   type WikiChatContext,
+  type DriveChatContext,
   type TranslationActionResponse,
   type TranslationLanguage,
   type ApprovalTranslation,
@@ -249,6 +250,8 @@ import { SourceResolutionRefusal } from '../projects/source-selector';
 import { forkRefusalBody } from '../tasks/task-fork';
 import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
+import { driveContextOutsideChat, readDriveChatContext, sameDriveChatContext } from '../drive/drive-chat-context';
+import { chatFiledItsOpening } from './chat-opening';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { INTEGRATION_ITEM_KINDS, openItemInWorkSessionHands, openItemOwed, openItemVisible } from '../projects/project-open-item';
@@ -366,7 +369,6 @@ import {
   type SessionSwitch,
 } from '../providers/engine-provider';
 import { ownsModel, withPreset } from '../providers/preset-overlay';
-import { sessionHeldKey } from '../providers/held-key';
 import {
   newTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
@@ -480,6 +482,9 @@ import {
   withRunnerLastBeat,
 } from '../runners/runner-presence';
 import { PULL_REQUEST_VIEW_SELECT, pullRequestViewOf } from '../projects/pull-request-landing';
+
+/** A POST /sessions request's own key (CreateSessionDto.clientRequestId): a UUID fits, as does any opaque token like it. */
+const CLIENT_REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,100}$/;
 
 /**
  * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
@@ -1388,6 +1393,16 @@ export class SessionsService {
         repository: { repoUrl: string; rootCommitSha: string | null };
       };
       /**
+       * This session is a Drive chat (drive/drive-chat.ts): set only by that door, with `openedBy` DRIVE_CHAT. Written
+       * by `writeChat` as a wiki chat is — the session row and its first turn, the owner's words under the client's
+       * UUID carrying the folder and selection as ids, in one transaction — but it needs no worktree and freezes no
+       * selector: a Drive chat works on the drive, not on a repository.
+       */
+      driveChat?: {
+        clientTurnId: string;
+        driveContext: DriveChatContext | null;
+      };
+      /**
        * Who outside Orbit sent the opening message (docs/feishu-bot-design.md §8.2): a member of a connected Feishu
        * group whose mention opened this session (feishu-group.service.ts). Internal, like `createTurn`'s. The
        * opening turn is then laid down now, carrying the sender, rather than by the claim, which knows of none.
@@ -1434,6 +1449,15 @@ export class SessionsService {
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
+    // A repeat of a request that already made its session answers with that session, before anything is checked
+    // against the state of now or written: the first one's answer may have been lost on the way back (migration 1730).
+    if (dto.clientRequestId !== undefined) {
+      if (typeof dto.clientRequestId !== 'string' || !CLIENT_REQUEST_ID_PATTERN.test(dto.clientRequestId)) {
+        throw new BadRequestException('clientRequestId must be 8 to 100 letters, digits or hyphens');
+      }
+      const made = await this.sessionMadeByRequest(ownerId, dto.clientRequestId);
+      if (made) return made;
+    }
     // CreateSessionDto is an interface, so nothing upstream checked the type: a string "false" must not
     // quietly keep a worktree the caller asked to leave out.
     if (dto.worktree != null && typeof dto.worktree !== 'boolean') {
@@ -1444,10 +1468,14 @@ export class SessionsService {
     // The folder below workDir the session runs in: checked here, before anything is read or written.
     const workSubdir = checkedWorkSubdir(dto.workSubdir, noWorktree);
     const wikiChat = opts?.wikiChat;
+    const driveChat = opts?.driveChat;
     // A chat is a conversation of its workspace and nothing else: it executes no task, makes no
     // workspace and opens with words (wiki contract `chat.create`). The door never asks for more.
     if (wikiChat && (dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || noWorktree)) {
       throw new Error('a wiki chat is a session of its workspace that executes no task and opens with words');
+    }
+    if (driveChat && (wikiChat || dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || opts?.openedBy !== 'DRIVE_CHAT')) {
+      throw new Error('a Drive chat is a session of its workspace, opened by DRIVE_CHAT, that executes no task and opens with words');
     }
     // An Ask is a question on a machine and nothing else: no workspace, no task, no shell (help/help-ask.ts).
     if (opts?.helpAsk && (dto.taskId || dto.workspaceId || dto.newWorkspace != null || dto.shell || !dto.assignedRunnerId)) {
@@ -1902,6 +1930,7 @@ export class SessionsService {
     const insertSession = (client: PrismaService | Prisma.TransactionClient, madeWorkspaceId?: string) => client.session.create({
       data: {
         ...(opts?.id ? { id: opts.id } : {}),
+        ...(dto.clientRequestId ? { clientRequestId: dto.clientRequestId } : {}),
         title,
         titleManagedByProject: opts?.titleManagedByProject ?? false,
         titleBeforeProjectManagement: null,
@@ -1991,7 +2020,7 @@ export class SessionsService {
     });
     // Settings › Translation: the language the opening message is translated from, or null.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
-    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !opts.helpAsk && !dto.shell && !attachmentsAlone
+    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !driveChat && !opts.helpAsk && !dto.shell && !attachmentsAlone
       && !opts.externalSender && !opts.fence && dto.prompt.trim() && !isSlashCommand(dto.prompt)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
@@ -2002,12 +2031,26 @@ export class SessionsService {
           attachmentsAlone,
           heldFrom,
         })
-      : wikiChat
-        ? this.writeChat(dto.workspaceId!, dto.prompt, wikiChat, attachmentIds, insertSession)
+      : wikiChat || driveChat
+        ? this.writeChat(
+            dto.workspaceId!,
+            dto.prompt,
+            wikiChat
+              ? { clientTurnId: wikiChat.clientTurnId, wikiContext: wikiChat.wikiContext, needsWorktree: true }
+              : { clientTurnId: driveChat!.clientTurnId, driveContext: driveChat!.driveContext, needsWorktree: false },
+            attachmentIds,
+            insertSession,
+          )
         : heldFrom
           ? this.createWithHeldOpening(insertSession, heldFrom)
           : this.writeFenced(opts?.fence, (client) => insertSession(client))
     ).catch(async (e: unknown) => {
+      // The same request twice at once: the other one's INSERT won the key's index, so this one answers with the
+      // session that one made. Re-read rather than parsed out of the error, as below.
+      if (dto.clientRequestId && e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        const made = await this.sessionMadeByRequest(ownerId, dto.clientRequestId);
+        if (made) return { replayed: made } as const;
+      }
       // The folder checked above was deleted before this INSERT reached it: the same 400 as naming
       // a deleted one. Re-read rather than parsed out of the error, so a P2003 about any other key
       // this INSERT names is left saying what it was really about.
@@ -2021,12 +2064,13 @@ export class SessionsService {
       }
       throw e;
     });
+    if ('replayed' in session) return session.replayed;
     // Scope the compose-page uploads to this session now that it exists. They stay
     // turn-less until the runner seeds the first turn (queue.service links them to it),
     // and cascade-delete with the session. A session that made its workspace did this, and the
     // two seeds below, inside that transaction (createInNewWorkspace); a wiki chat linked them to
     // its first turn inside its own (writeChat).
-    if (attachmentIds.length > 0 && !newWorkspace && !wikiChat) {
+    if (attachmentIds.length > 0 && !newWorkspace && !wikiChat && !driveChat) {
       await this.prisma.attachment.updateMany({
         // `taskId: null` for the same reason the validator carries it, but here it is the
         // CONCURRENT case: an upload that became a task's input between that check and this write
@@ -2094,6 +2138,23 @@ export class SessionsService {
       promptByOrbit: _promptByOrbit,
       // Read by the workspace default (workspace-provider.ts), not by clients.
       openedBy: _openedBy,
+      // The create request's own key, not something about the session.
+      clientRequestId: _clientRequestId,
+      ...publicSession
+    } = session;
+    return withSessionState(publicSession);
+  }
+
+  /** The session an earlier POST /sessions with this key made, answered as `create` answered it then (migration 1730). */
+  private async sessionMadeByRequest(ownerId: string, clientRequestId: string) {
+    const session = await this.prisma.session.findFirst({ where: { ownerId, clientRequestId } });
+    if (!session) return null;
+    const {
+      titleManagedByProject: _titleManagedByProject,
+      titleBeforeProjectManagement: _titleBeforeProjectManagement,
+      promptByOrbit: _promptByOrbit,
+      openedBy: _openedBy,
+      clientRequestId: _clientRequestId,
       ...publicSession
     } = session;
     return withSessionState(publicSession);
@@ -2209,7 +2270,14 @@ export class SessionsService {
   private async writeChat<S extends { id: string }>(
     workspaceId: string,
     content: string,
-    chat: { clientTurnId: string; wikiContext: WikiChatContext | null },
+    chat: {
+      clientTurnId: string;
+      wikiContext?: WikiChatContext | null;
+      /** A Drive chat's folder and selection, as ids (migration 1680). */
+      driveContext?: DriveChatContext | null;
+      /** A wiki chat never runs in a shared checkout; a Drive chat works on the drive and may. */
+      needsWorktree: boolean;
+    },
     attachmentIds: readonly string[],
     insertSession: (tx: Prisma.TransactionClient) => PromiseLike<S>,
   ): Promise<S> {
@@ -2219,7 +2287,7 @@ export class SessionsService {
          WHERE "id" = ${workspaceId}::uuid AND "deleted_at" IS NULL
            FOR SHARE`;
       if (!workspace) throw new ForbiddenException('workspace not found');
-      if (!workspace.enableWorktree) throw chatWorktreeRequired();
+      if (chat.needsWorktree && !workspace.enableWorktree) throw chatWorktreeRequired();
       const session = await insertSession(tx);
       const turn = await this.insertTurnLocked(tx, session.id, {
         kind: 'message',
@@ -2227,6 +2295,7 @@ export class SessionsService {
         clientTurnId: chat.clientTurnId,
         sendIntent: 'NEXT_TURN',
         ...(chat.wikiContext ? { wikiContext: chat.wikiContext as unknown as Prisma.InputJsonValue } : {}),
+        ...(chat.driveContext ? { driveContext: chat.driveContext as unknown as Prisma.InputJsonValue } : {}),
       });
       if (attachmentIds.length > 0) {
         // Still unscoped, as `create` found them; one taken by a task or another session since is left where it went.
@@ -2255,7 +2324,7 @@ export class SessionsService {
    * After the commit the runner is marked changed: its next heartbeat lists the new directory (`agentDirs`). One log
    * line says how it ended, either way: nothing else on this path does.
    */
-  private async createInNewWorkspace<S extends { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null }>(
+  private async createInNewWorkspace<S extends { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null; openedBy: string }>(
     ownerId: string,
     target: NewWorkspaceTarget,
     insertSession: (tx: Prisma.TransactionClient, workspaceId: string) => PromiseLike<S>,
@@ -2638,9 +2707,6 @@ export class SessionsService {
         select: {
           id: true,
           ownerId: true,
-          provider: true,
-          providerBuiltin: true,
-          model: true,
           title: true,
           runtimeSessionId: true,
         },
@@ -2676,23 +2742,21 @@ export class SessionsService {
 
   /**
    * Background naming for a session that started with a prompt-derived title: a cleaner display
-   * title, plus a couple of semantic tags to file it under. Asked of DeepSeek on the server's key
-   * when one is configured; otherwise of the session's own provider, when the server holds its key
-   * (sessionHeldKey). A session on an engine's own sign-in has no key here, and is named by its runner
-   * through that engine instead (the claim's `naming`). The shared bounded queue prevents a create
+   * title, plus a couple of semantic tags to file it under. Asked only of DeepSeek on the server's
+   * key: without DEEPSEEK_API_KEY nothing is asked, and the session keeps the title cut from its
+   * prompt; the session's own provider is never spent on naming. The shared bounded queue prevents a create
    * burst from fanning out calls. Swap the title only while it is still the exact fallback we wrote,
    * so a user rename (or any concurrent change) is never clobbered. Re-publishes the session so live
    * clients pick up both. Fire-and-forget: never awaited, swallows all errors.
    */
   private async beautifySessionLater(
-    session: { id: string; ownerId: string; provider: string; providerBuiltin: boolean; model: string | null },
+    session: { id: string; ownerId: string },
     prompt: string,
     fallbackTitle: string,
   ): Promise<void> {
     const { id: sessionId, ownerId } = session;
     try {
-      const key = process.env.DEEPSEEK_API_KEY?.trim() ? undefined : await sessionHeldKey(this.prisma, session);
-      if (key === null) return;
+      if (!process.env.DEEPSEEK_API_KEY?.trim()) return;
       // The owner's own vocabulary, offered to the model as reuse candidates. System tags are
       // colors ("Red"), not semantics, so they are never candidates and are never auto-applied.
       const known = await this.prisma.sessionTag.findMany({
@@ -2704,7 +2768,6 @@ export class SessionsService {
       const { title, tags } = await enqueueBeautifySession({
         prompt,
         knownTags: known.map((t) => t.name),
-        key,
       });
       let changed = false;
       if (title && title !== fallbackTitle) {
@@ -5949,7 +6012,8 @@ export class SessionsService {
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
       // Internal, as in `create`: the row says it as `lastUserFromOrbit`, the queue as `authoredByOrbit`.
       promptByOrbit: _promptByOrbit,
-      openedBy: _openedBy,
+      // Read, never spread: answered as `chatOrigin` below.
+      openedBy,
       // Read, never spread: it is the input to the count below, and a client that wants to know
       // which jobs are moving asks the count, not the per-job instants behind it.
       runningBgJobActivity,
@@ -6023,6 +6087,9 @@ export class SessionsService {
       && sanitizeRunnerEngines(session.assignedRunner?.engines)?.find((e) => e.engine === engine)?.version) || null;
     const detail = withSessionCapabilities({
       ...rest,
+      // Which chat door opened it, for the header's origin tag (@orbit/shared SESSION_ORIGIN_TAGS: From Wiki, From
+      // Drive); null for every other session. `openedBy` itself stays internal.
+      chatOrigin: rest.wikiChatSpaceId ? 'WIKI_CHAT' : openedBy === 'DRIVE_CHAT' ? 'DRIVE_CHAT' : null,
       engine,
       // What its Trash note says when a file is keeping it there past the 30 days.
       trashHold: session.deletedAt ? await trashHoldOf(this.prisma, session.id) : null,
@@ -7606,11 +7673,11 @@ export class SessionsService {
    */
   private async ensurePromptSeeded(
     tx: Prisma.TransactionClient,
-    session: { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null },
+    session: { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null; openedBy: string },
     excludedAttachmentIds: readonly string[] = [],
     externalSender?: ExternalTurnSender,
   ) {
-    if (session.importedAt || session.wikiChatSpaceId) return;
+    if (session.importedAt || chatFiledItsOpening(session)) return;
     const existing = await tx.conversationTurn.findUnique({
       where: {
         sessionId_clientTurnId: {
@@ -7655,7 +7722,7 @@ export class SessionsService {
    * transaction as the turn, so no runner can take the turn without them.
    */
   private async seedOpeningTurn(
-    session: { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null },
+    session: { id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null; openedBy: string },
     externalSender?: ExternalTurnSender,
   ) {
     await withTransactionRetry(this.prisma, async (tx) => {
@@ -7669,8 +7736,8 @@ export class SessionsService {
    * chat's prompt as the seeded `initial-` turn is any other session's, so it is listed and withdrawn no
    * more than that one is.
    */
-  private static isChatOpeningTurn(session: { wikiChatSpaceId?: string | null }, turn: { seq: number }): boolean {
-    return Boolean(session.wikiChatSpaceId) && turn.seq === 1;
+  private static isChatOpeningTurn(session: { wikiChatSpaceId: string | null; openedBy: string }, turn: { seq: number }): boolean {
+    return chatFiledItsOpening(session) && turn.seq === 1;
   }
 
   /** The fixed clientTurnId of the seeded first turn (the prompt) — see ensurePromptSeeded
@@ -7835,6 +7902,8 @@ export class SessionsService {
       byPerson?: boolean;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
+      /** A Drive chat's folder and selection (migration 1680), which delivery reads. */
+      driveContext?: Prisma.InputJsonValue;
       /** A held message under Settings › Translation (heldTurnColumns, migration 0532). */
       status?: string;
       displayPrompt?: string;
@@ -8149,6 +8218,8 @@ export class SessionsService {
     // A wiki chat's page and selection (contract `chat.turns`): shape-checked before anything is read,
     // and taken only by a chat, which is decided under the lock below.
     const wikiContext = readWikiChatContext(dto.wikiContext);
+    // A Drive chat's folder and selection: shape-checked here, taken only by a Drive chat (decided under the lock).
+    const driveContext = readDriveChatContext(dto.driveContext);
     // Settings › Translation: the language this message is translated from, or null when it goes as
     // written. Words only — a `!cmd` and a `/command` are commands, and attachments alone carry no words.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
@@ -8188,6 +8259,7 @@ export class SessionsService {
       // No engine turn can be queued onto the platform's landing container (§2.9 LS6).
       assertEngineSessionRow(session);
       if (wikiContext && !session.wikiChatSpaceId) throw wikiContextOutsideChat();
+      if (driveContext && session.openedBy !== 'DRIVE_CHAT') throw driveContextOutsideChat();
       turnRunnerId = session.assignedRunnerId;
       // A committed operation owns its key even after its Session later ends or moves to Trash.
       // Check the durable receipt while holding the Session lock before any lifecycle, attachment
@@ -8242,6 +8314,7 @@ export class SessionsService {
           || (existing.requestFingerprint != null
             && existing.requestFingerprint !== opts?.requestFingerprint)
           || !sameWikiChatContext(existing.wikiContext, wikiContext)
+          || !sameDriveChatContext(existing.driveContext, driveContext)
         ) {
           throw new ConflictException(
             'clientTurnId was already used with a different turn payload',
@@ -8268,7 +8341,7 @@ export class SessionsService {
       if (translateFrom && dto.content) {
         return {
           turn: await this.insertHeldTurnLocked(
-            tx, ownerId, session, dto, translateFrom, intent, wikiContext, opts?.clearSettledWorktreeState === true,
+            tx, ownerId, session, dto, translateFrom, intent, wikiContext, driveContext, opts?.clearSettledWorktreeState === true,
             opts?.listed === true,
           ),
           placement: 'queued' as const,
@@ -8457,6 +8530,7 @@ export class SessionsService {
         ...externalSenderColumns(opts?.externalSender),
         ...senderClientColumns(opts?.senderClient),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
+        ...(driveContext ? { driveContext: driveContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       await opts?.onTurnWritten?.(tx, turn);
@@ -8584,6 +8658,7 @@ export class SessionsService {
     from: TranslationLanguage,
     intent: SessionTurnIntent | undefined,
     wikiContext: WikiChatContext | null,
+    driveContext: DriveChatContext | null,
     clearSettledWorktreeState: boolean,
     listed: boolean,
   ): Promise<ConversationTurn> {
@@ -8597,6 +8672,7 @@ export class SessionsService {
       ...(listed ? { byPerson: true } : {}),
       ...(intent === 'NEXT_TURN' ? { sendIntent: 'NEXT_TURN' as const } : {}),
       ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
+      ...(driveContext ? { driveContext: driveContext as unknown as Prisma.InputJsonValue } : {}),
       ...heldTurnColumns(content, from),
     });
     await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -9192,7 +9268,7 @@ export class SessionsService {
       // And whether the platform wrote that prompt (0493), which makes the opening Orbit's.
       // And, for the active view, whether its opening is still only the prompt on the row (below).
       select: {
-        id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true,
+        id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, openedBy: true, promptByOrbit: true,
         ...TURN_STATE_SELECT, numTurns: true, importedAt: true, prompt: true, createdAt: true,
       },
     });
@@ -9398,14 +9474,14 @@ export class SessionsService {
   private async unseededOpening(
     session: {
       id: string; numTurns: number; importedAt: Date | null; prompt: string;
-      wikiChatSpaceId: string | null; createdAt: Date;
+      wikiChatSpaceId: string | null; openedBy: string; createdAt: Date;
     } & TurnStateFacts,
     listed: ReadonlyArray<{ clientTurnId: string | null }>,
   ) {
     const key = SessionsService.initialTurnClientId(session.id);
     if (
       !['QUEUED', 'IN_FLIGHT'].includes(turnStateOf(session) ?? '')
-      || session.numTurns !== 0 || session.importedAt || !session.prompt || session.wikiChatSpaceId
+      || session.numTurns !== 0 || session.importedAt || !session.prompt || chatFiledItsOpening(session)
       || listed.some((turn) => turn.clientTurnId === key)
     ) {
       return [];
@@ -9542,7 +9618,7 @@ export class SessionsService {
           status: 'PENDING',
           clientTurnId: { not: SessionsService.initialTurnClientId(id) },
           // A wiki chat's opening turn is its prompt, as the seeded one is any other session's.
-          ...(session.wikiChatSpaceId ? { seq: { gt: 1 } } : {}),
+          ...(chatFiledItsOpening(session) ? { seq: { gt: 1 } } : {}),
         }),
       };
       if (res.count === 0) {
@@ -11792,6 +11868,7 @@ export class SessionsService {
     assertPromptSize(dto.content, 'message');
     // A chat's next message may revive it, and carries its page and selection here as on a live one.
     const wikiContext = readWikiChatContext(dto.wikiContext);
+    const driveContext = readDriveChatContext(dto.driveContext);
     const requestFingerprint = resumeRequestFingerprint(dto);
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
@@ -11801,6 +11878,7 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('session not found');
     if (wikiContext && !session.wikiChatSpaceId) throw wikiContextOutsideChat();
+    if (driveContext && session.openedBy !== 'DRIVE_CHAT') throw driveContextOutsideChat();
     // Reviving is an engine door: the platform's landing container has nothing to revive (§2.9 LS6).
     assertEngineSessionRow(session);
     // The run this request may stop is an engine door too, named in the body rather than the path.
@@ -12109,6 +12187,7 @@ export class SessionsService {
             (attachmentId, index) => attachmentId !== storedAttachments[index],
           )
           || !sameWikiChatContext(existing.wikiContext, wikiContext)
+          || !sameDriveChatContext(existing.driveContext, driveContext)
         ) {
           throw new ConflictException(
             'clientTurnId was already used with a different resume payload',
@@ -12210,6 +12289,7 @@ export class SessionsService {
         ...senderClientColumns(opts?.senderClient),
         ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
+        ...(driveContext ? { driveContext: driveContext as unknown as Prisma.InputJsonValue } : {}),
         ...(reviveHeldFrom && dto.content ? heldTurnColumns(dto.content, reviveHeldFrom) : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -13545,8 +13625,8 @@ export class SessionsService {
     const granted = await withTransactionRetry(this.prisma, async (tx) => {
       // The session row first, as every turn write takes it: the seed and the pass are then one decision about it.
       const [session] = await tx.$queryRaw<Array<{
-        id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null;
-      }>>`SELECT id, prompt, imported_at AS "importedAt", wiki_chat_space_id AS "wikiChatSpaceId"
+        id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null; openedBy: string;
+      }>>`SELECT id, prompt, imported_at AS "importedAt", wiki_chat_space_id AS "wikiChatSpaceId", opened_by AS "openedBy"
             FROM "session" WHERE id = ${id}::uuid AND owner_id = ${ownerId}::uuid FOR UPDATE`;
       if (!session) throw new NotFoundException('session not found');
       return grantRunNow(tx, ownerId, id, () => this.ensurePromptSeeded(tx, session));

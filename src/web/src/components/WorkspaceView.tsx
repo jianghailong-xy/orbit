@@ -416,7 +416,7 @@ import {
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
 import { DriveFilePicker } from './drive/DriveFilePicker';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, PendingSendCtx, Transcript, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -651,7 +651,7 @@ import { coordinatorDeliverySentence, parseCoordinatorDelivery } from '../lib/co
 import { trashNoteWhen } from '../lib/trashNote';
 import { transcriptPlaceholder } from '../lib/transcriptPaint';
 import { useDelayedFlag } from '../lib/useDelayedFlag';
-import { type AcceptedUserTurn, queuedTurnEvent } from '../lib/acceptedUserTurn';
+import { type AcceptedUserTurn, acceptedUserTurnEvent, queuedTurnEvent } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
 import { commitFailureCopy, resolveCommitPrompt } from '../lib/commitFailure';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
@@ -662,6 +662,16 @@ import {
   resolveConflictLogicalSendToken,
   type LogicalSendToken,
 } from '../lib/composerSendState';
+import {
+  answerDeadline,
+  dropPendingSend,
+  isSendNotAnswered,
+  markNotSent,
+  newestSeq,
+  SendNotAnsweredError,
+  withPendingSend,
+} from '../lib/pendingSend';
+import { compatibleUuid } from '../lib/uuid';
 import {
   TASK_RUN_RESEND_AFTER_MS,
   TASK_RUN_RESEND_MAX_ATTEMPTS,
@@ -801,6 +811,23 @@ interface ComposerSendVars {
   /** Sent by no composer (Compact, from the Context popover): the composer has nothing to do with it,
    *  and what it holds may be somebody's next thought. */
   held?: boolean;
+  /** Drawn in the transcript as a pending bubble from the press on (lib/pendingSend): the key of
+   *  that bubble. Its words left the composer at the press, so the answer never touches the box. */
+  pendingKey?: string;
+  /** The pending bubble's own key on the wire, kept for its Retry so a send that did arrive is not
+   *  taken twice. */
+  clientTurnId?: string;
+  /** A new session's first message waiting as a bubble: the create request's own key, so its Retry
+   *  answers with the session a lost answer may already have made (migration 1730). */
+  clientRequestId?: string;
+}
+
+/** A send's files, as a pending bubble draws them and as Put back stages them again. */
+function pendingAttachmentsOf(vars: ComposerSendVars): { id: string; mime?: string; name?: string }[] {
+  return [
+    ...vars.images.flatMap((im) => (im.id ? [{ id: im.id, mime: im.mime || 'application/octet-stream', name: im.name }] : [])),
+    ...(vars.attachmentIds ?? []).map((id) => ({ id })),
+  ];
 }
 
 // The image types Claude takes as inline content blocks: shown as a thumbnail and capped
@@ -1300,9 +1327,12 @@ type ParkedWork = { text: string; kind: OutlivingWork; active: boolean };
 // The words for a wait that will resume this parked session: the caller's own for the watches it
 // holds (`watching`), else the server's word when it says something else will (activity WAITING — a
 // scheduled wake-up, an armed auto-retry, a watch the caller did not hand in). Null when nothing
-// will, which is the only parked session that is really waiting for your reply.
+// will, which is the only parked session that is really waiting for your reply. Null for a session the server calls
+// IDLE: a wake to come is no reason to say anything special about it (the owner, 2026-11-27).
 const resumeWords = (s: any, watching?: string | null): string | null =>
-  watching ?? (sessionActivityOf(s) === 'WAITING' ? SESSION_ACTIVITY_WORD.WAITING : null);
+  sessionDisplayState(s)?.phase === 'IDLE'
+    ? null
+    : watching ?? (sessionActivityOf(s) === 'WAITING' ? SESSION_ACTIVITY_WORD.WAITING : null);
 const parkedWorkLabel = (s: any): ParkedWork | null => {
   const kind = outlivingSessionWork(s);
   if (!kind) return null;
@@ -3354,6 +3384,11 @@ export function WorkspaceView({
   // One key per logical send, retained across an uncertain network/5xx result. A changed wire
   // payload mints another key; a verbatim retry lets the server return its committed receipt.
   const sendOperationRef = useRef<LogicalSendToken | null>(null);
+  // Each pending bubble's send, by its key: what its Retry sends again and its Put back returns.
+  const pendingSendsRef = useRef(new Map<string, ComposerSendVars>());
+  // A new session's first message while it waits for its session: drawn on the new-session page in
+  // the provider hero's place, as the conversation's first bubble, until the session opens.
+  const [draftPending, setDraftPending] = useState<AcceptedUserTurn | null>(null);
   const resolveConflictOperationRef = useRef<LogicalSendToken | null>(null);
   const resolveCommitOperationRef = useRef<LogicalSendToken | null>(null);
   // Images already sent, keyed by their turnId. The runner echoes only the turn's text,
@@ -7012,7 +7047,10 @@ export function WorkspaceView({
         ...(vars.attachmentIds ?? []),
         ...imgs.map((im) => im.id).filter((x): x is string => !!x),
       ];
-      const operation = logicalSendToken(sendOperationRef.current, {
+      // A pending bubble carries its own key, so its Retry is the same send to the server.
+      const operation = vars.clientTurnId
+        ? { fingerprint: '', clientTurnId: vars.clientTurnId }
+        : logicalSendToken(sendOperationRef.current, {
         sessionId: selected?.id ?? null,
         content,
         attachmentIds: [...attachmentIds].sort(),
@@ -7023,68 +7061,18 @@ export function WorkspaceView({
         effort,
         provider: pendingResumeProvider ?? pickedProvider,
       });
-      sendOperationRef.current = operation;
-      // Continue a live session; revive an ended-but-resumable one (same row, claude
-      // --resumes its context); otherwise (no selection, or unresumable) start fresh.
-      // New-draft uploads are unscoped and can follow CREATE. Uploads made while viewing an
-      // existing session belong to that session, so a terminal CREATE fallback blocks below
-      // and keeps the chips visible instead of passing invalid attachment ids or dropping them.
-      if (selected && live) {
-        const res = await sendTurn(
-          selected.id,
-          content,
-          attachmentIds,
-          shell ? 'shell' : undefined,
-          intent,
-          operation.clientTurnId,
-          vars.optimized,
-        );
-        // The server decides this under the same Session row lock as enqueue/claim. Missing
-        // placement is a protocol error; local idle state is never used to infer delivery.
-        const placement = turnPlacementOf(res);
-        // The optimistic row carries the refs this send referenced, so withdrawing it before the
-        // server snapshot comes round (which is authoritative, and does carry them) still hands the
-        // files back to the composer. A re-send knows only the ids it was given; the snapshot fills
-        // in what each one is a moment later.
-        const attachments = [
-          ...imgs.flatMap((im) => (im.id ? [{ id: im.id, mimeType: im.mime }] : [])),
-          ...(vars.attachmentIds ?? []).map((id) => ({ id, mimeType: '' })),
-        ];
-        const queuedItem =
-          placement === 'accepted' && !res.translation
-            ? undefined
-            : {
-                turnId: res.turnId,
-                content,
-                shell,
-                // Held for its translation: on the queue, whatever its place will be once delivered.
-                placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
-                ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
-                ...(attachments.length ? { attachments } : {}),
-                ...(res.translation ? { translation: res.translation } : {}),
-              };
-        return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
-      }
-      if (selected && !live) {
-        // Capabilities can change with heartbeat/context cleanup, so never POST /resume from a
-        // cached terminal decision (positive or negative). Re-read detail immediately; if another
-        // client already made it live, honor fresh canSend, if its context is now available resume
-        // it, and only then fall back to a fresh run.
-        const fresh = await getSession(selected.id);
-        qc.setQueryData(sessionQuery(selected.id).queryKey, fresh);
-        const freshReason = sessionResumeBlockedReasonOf(fresh);
-        const freshLegacyResumable = !!fresh.startedAt && !!runner.online;
-        const disposition =
-          !!managed?.display.acceptsWork && freshReason === 'RUNNER_OFFLINE'
-            ? 'RESUME'
-            : sessionSendDispositionOf(fresh, freshLegacyResumable);
-        if (disposition === 'BLOCK')
-          throw new Error(
-            sessionSendBlockedMessage(
-              sessionLifecycleStateOf(fresh) === 'TRASH' ? 'TRASHED' : freshReason,
-            ),
-          );
-        if (disposition === 'SEND') {
+      if (!vars.clientTurnId) sendOperationRef.current = operation;
+      // A pending bubble waits SEND_ANSWER_TIMEOUT_MS for the answer, then says Not sent; the request
+      // is ended rather than left holding one of the browser's few connections to this server.
+      const deadline = vars.pendingKey ? answerDeadline() : null;
+      const signal = deadline?.signal;
+      try {
+        // Continue a live session; revive an ended-but-resumable one (same row, claude
+        // --resumes its context); otherwise (no selection, or unresumable) start fresh.
+        // New-draft uploads are unscoped and can follow CREATE. Uploads made while viewing an
+        // existing session belong to that session, so a terminal CREATE fallback blocks below
+        // and keeps the chips visible instead of passing invalid attachment ids or dropping them.
+        if (selected && live) {
           const res = await sendTurn(
             selected.id,
             content,
@@ -7093,8 +7081,19 @@ export function WorkspaceView({
             intent,
             operation.clientTurnId,
             vars.optimized,
+            signal,
           );
+          // The server decides this under the same Session row lock as enqueue/claim. Missing
+          // placement is a protocol error; local idle state is never used to infer delivery.
           const placement = turnPlacementOf(res);
+          // The optimistic row carries the refs this send referenced, so withdrawing it before the
+          // server snapshot comes round (which is authoritative, and does carry them) still hands the
+          // files back to the composer. A re-send knows only the ids it was given; the snapshot fills
+          // in what each one is a moment later.
+          const attachments = [
+            ...imgs.flatMap((im) => (im.id ? [{ id: im.id, mimeType: im.mime }] : [])),
+            ...(vars.attachmentIds ?? []).map((id) => ({ id, mimeType: '' })),
+          ];
           const queuedItem =
             placement === 'accepted' && !res.translation
               ? undefined
@@ -7102,152 +7101,207 @@ export function WorkspaceView({
                   turnId: res.turnId,
                   content,
                   shell,
+                  // Held for its translation: on the queue, whatever its place will be once delivered.
                   placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
                   ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
+                  ...(attachments.length ? { attachments } : {}),
                   ...(res.translation ? { translation: res.translation } : {}),
                 };
           return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
-        if (disposition === 'RESUME') {
-          // The pills were seeded from this session's stored config, so an untouched
-          // send keeps it and an edited Mode/Model/Effort/Provider is re-applied on resume.
-          // A `!cmd` revives via a shell turn: claude --resumes (context restored) and the
-          // runner runs the command, buffering its output for the next message.
-          const provider =
-            pendingResumeProvider ??
-            fresh.provider ??
-            selected.provider ??
-            detailForSelected?.provider ??
-            'claude';
-          // By the session's own engine, which the resume keeps whatever provider it carries.
-          const wireEffort = normalizeEffortFor(
-            selectedEngine,
-            provider,
-            effort,
-            model,
-            runner.modelCatalog,
-            configuredProviders,
-          );
-          const res = await resumeSession(
-            selected.id,
-            content,
-            // Keep '' so choosing Default explicitly clears a stale stored variant.
-            {
+        if (selected && !live) {
+          // Capabilities can change with heartbeat/context cleanup, so never POST /resume from a
+          // cached terminal decision (positive or negative). Re-read detail immediately; if another
+          // client already made it live, honor fresh canSend, if its context is now available resume
+          // it, and only then fall back to a fresh run.
+          const fresh = await getSession(selected.id, signal);
+          qc.setQueryData(sessionQuery(selected.id).queryKey, fresh);
+          const freshReason = sessionResumeBlockedReasonOf(fresh);
+          const freshLegacyResumable = !!fresh.startedAt && !!runner.online;
+          const disposition =
+            !!managed?.display.acceptsWork && freshReason === 'RUNNER_OFFLINE'
+              ? 'RESUME'
+              : sessionSendDispositionOf(fresh, freshLegacyResumable);
+          if (disposition === 'BLOCK')
+            throw new Error(
+              sessionSendBlockedMessage(
+                sessionLifecycleStateOf(fresh) === 'TRASH' ? 'TRASHED' : freshReason,
+              ),
+            );
+          if (disposition === 'SEND') {
+            const res = await sendTurn(
+              selected.id,
+              content,
+              attachmentIds,
+              shell ? 'shell' : undefined,
+              intent,
+              operation.clientTurnId,
+              vars.optimized,
+              signal,
+            );
+            const placement = turnPlacementOf(res);
+            const queuedItem =
+              placement === 'accepted' && !res.translation
+                ? undefined
+                : {
+                    turnId: res.turnId,
+                    content,
+                    shell,
+                    placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
+                    ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
+                    ...(res.translation ? { translation: res.translation } : {}),
+                  };
+            return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
+          }
+          if (disposition === 'RESUME') {
+            // The pills were seeded from this session's stored config, so an untouched
+            // send keeps it and an edited Mode/Model/Effort/Provider is re-applied on resume.
+            // A `!cmd` revives via a shell turn: claude --resumes (context restored) and the
+            // runner runs the command, buffering its output for the next message.
+            const provider =
+              pendingResumeProvider ??
+              fresh.provider ??
+              selected.provider ??
+              detailForSelected?.provider ??
+              'claude';
+            // By the session's own engine, which the resume keeps whatever provider it carries.
+            const wireEffort = normalizeEffortFor(
+              selectedEngine,
+              provider,
+              effort,
               model,
-              permissionMode: MODE_TO_PERMISSION[mode],
-              effort: wireEffort,
-              fastMode,
-              ...(pendingResumeProvider ? { provider: pendingResumeProvider } : {}),
-              ...(pendingResumeAccount ? { account: pendingResumeAccount } : {}),
-            },
-            attachmentIds,
-            shell ? 'shell' : undefined,
-            operation.clientTurnId,
-            vars.stopSessionId,
-            vars.optimized,
-          );
-          // The task moved on to another run and the server delivered this there. Nothing was
-          // placed on THIS row, so there is no placement to honour and no bubble to paint here —
-          // onSuccess follows the message instead.
-          const routedToSessionId = routedToSession(res);
-          if (routedToSessionId)
-            return { id: selected.id, routedToSessionId, clientTurnId: operation.clientTurnId };
-          // A genuinely terminal revive is accepted. If another client revived the row between
-          // the capability read and this request, /resume routes through live createTurn and its
-          // row-locked placement preserves a real queued/steer state here.
-          const placement = turnPlacementOf(res);
-          const queuedItem =
-            placement === 'accepted' && !res.translation
-              ? undefined
-              : {
-                  turnId: res.turnId,
-                  content,
-                  shell,
-                  placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
-                  ...(res.translation ? { translation: res.translation } : {}),
-                };
-          return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
+              runner.modelCatalog,
+              configuredProviders,
+            );
+            const res = await resumeSession(
+              selected.id,
+              content,
+              // Keep '' so choosing Default explicitly clears a stale stored variant.
+              {
+                model,
+                permissionMode: MODE_TO_PERMISSION[mode],
+                effort: wireEffort,
+                fastMode,
+                ...(pendingResumeProvider ? { provider: pendingResumeProvider } : {}),
+                ...(pendingResumeAccount ? { account: pendingResumeAccount } : {}),
+              },
+              attachmentIds,
+              shell ? 'shell' : undefined,
+              operation.clientTurnId,
+              vars.stopSessionId,
+              vars.optimized,
+              signal,
+            );
+            // The task moved on to another run and the server delivered this there. Nothing was
+            // placed on THIS row, so there is no placement to honour and no bubble to paint here —
+            // onSuccess follows the message instead.
+            const routedToSessionId = routedToSession(res);
+            if (routedToSessionId)
+              return { id: selected.id, routedToSessionId, clientTurnId: operation.clientTurnId };
+            // A genuinely terminal revive is accepted. If another client revived the row between
+            // the capability read and this request, /resume routes through live createTurn and its
+            // row-locked placement preserves a real queued/steer state here.
+            const placement = turnPlacementOf(res);
+            const queuedItem =
+              placement === 'accepted' && !res.translation
+                ? undefined
+                : {
+                    turnId: res.turnId,
+                    content,
+                    shell,
+                    placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
+                    ...(res.translation ? { translation: res.translation } : {}),
+                  };
+            return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
+          }
+          if (attachmentIds.length > 0)
+            throw new Error(scopedAttachmentCreateBlockedMessage(attachmentIds.length));
+          // Fall through to createInteractiveSession: terminal non-resumable sessions keep the
+          // established "start a new session" behavior instead of sending an invalid resume.
         }
-        if (attachmentIds.length > 0)
-          throw new Error(scopedAttachmentCreateBlockedMessage(attachmentIds.length));
-        // Fall through to createInteractiveSession: terminal non-resumable sessions keep the
-        // established "start a new session" behavior instead of sending an invalid resume.
-      }
-      const provider = pickedProvider;
-      // By the engine the session will run on. Harness levels are opaque catalogue values, so they are
-      // checked against the model's own row.
-      const wireEffort =
-        pickedEngine === AgentProvider.DSH
-          ? normalizeEffortFor(pickedEngine, provider, effort, model, runner.modelCatalog, configuredProviders)
-          : normalizeEffortFor(pickedEngine, provider, effort);
-      const providerResolved = providerIdentityResolved(
-        provider,
-        configuredProvidersLoaded,
-      );
-      const modelWasEdited =
-        modelSeedState.current.contextKey === modelContextKey && modelSeedState.current.dirty;
-      const modeWasEdited =
-        modeSeedState.current.contextKey === modelContextKey && modeSeedState.current.dirty;
-      // Never turn an unresolved custom-provider slug into an explicit Claude model. If provider
-      // discovery is still pending/failed, omit the untouched override and let the server resolve
-      // the configured provider's own default. Once resolved, derive from the current seed rather
-      // than waiting for the post-render state effect to catch up.
-      const createModel =
-        providerResolved || selected?.model
-          ? modelWasEdited
-            ? model
-            : (selected ? selectedModelDefault : pickedModelDefault) ?? model
-          : undefined;
-      const createPermissionMode = selected
-        ? MODE_TO_PERMISSION[mode]
-        : modeWasEdited
-          ? MODE_TO_PERMISSION[mode]
-          : providerResolved
-            ? MODE_TO_PERMISSION[pickedModeSeed ?? mode]
+        const provider = pickedProvider;
+        // By the engine the session will run on. Harness levels are opaque catalogue values, so they are
+        // checked against the model's own row.
+        const wireEffort =
+          pickedEngine === AgentProvider.DSH
+            ? normalizeEffortFor(pickedEngine, provider, effort, model, runner.modelCatalog, configuredProviders)
+            : normalizeEffortFor(pickedEngine, provider, effort);
+        const providerResolved = providerIdentityResolved(
+          provider,
+          configuredProvidersLoaded,
+        );
+        const modelWasEdited =
+          modelSeedState.current.contextKey === modelContextKey && modelSeedState.current.dirty;
+        const modeWasEdited =
+          modeSeedState.current.contextKey === modelContextKey && modeSeedState.current.dirty;
+        // Never turn an unresolved custom-provider slug into an explicit Claude model. If provider
+        // discovery is still pending/failed, omit the untouched override and let the server resolve
+        // the configured provider's own default. Once resolved, derive from the current seed rather
+        // than waiting for the post-render state effect to catch up.
+        const createModel =
+          providerResolved || selected?.model
+            ? modelWasEdited
+              ? model
+              : (selected ? selectedModelDefault : pickedModelDefault) ?? model
             : undefined;
-      const created = await createInteractiveSession({
-        prompt: content,
-        assignedRunnerId: runner.id,
-        workspaceId,
-        // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
-        // credential of it (docs/provider-engine-contract.md §3.2). Leaving both off keeps the
-        // server's inherit-from-workspace path, which re-checks that pair as it starts the session.
-        // A fallback travels too: the workspace's pair is the one that can't run here.
-        ...(draftHere || fallback ? { engine: pickedEngine, provider: pickedProvider } : {}),
-        model: createModel,
-        permissionMode: createPermissionMode,
-        // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
-        // default, so the pill is authoritative — an explicit Default must stick, not fall back to
-        // the workspace's effort server-side (session.effort ?? workspace.effort). Task runs omit it, so
-        // those still inherit the workspace default.
-        effort: wireEffort,
-        // Only when it is on. Off is the server's default and the engine's, so saying it is the
-        // one way this could disagree with either of them later.
-        ...(fastMode ? { fastMode: true } : {}),
-        // Only an explicit pick, as with the provider: none is Automatic, or the workspace's account.
-        ...(draftCodexAccount && pickedProvider === 'codex' ? { codexAccount: draftCodexAccount } : {}),
-        ...(draftClaudeAccount && pickedProvider === 'claude' ? { claudeAccount: draftClaudeAccount } : {}),
-        ...(draftAntigravityAccount && pickedProvider === 'antigravity'
-          ? { antigravityAccount: draftAntigravityAccount }
-          : {}),
-        ...(draftKimiAccount && pickedProvider === 'kimi' ? { kimiAccount: draftKimiAccount } : {}),
-        ...(draftCursorAccount && pickedProvider === 'cursor' ? { cursorAccount: draftCursorAccount } : {}),
-        attachmentIds,
-        // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
-        shell,
-        // Composed on a folder's page: the session starts in that folder.
-        ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
-        ...vars.optimized,
-      });
-      // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
-      // default, possibly clamped for this provider (Auto -> Default on a model that can't run
-      // it), and writing that back would erase the workspace's real stored mode.
-      return {
-        id: created.id,
-        created: true,
-        permissionMode: modeWasEdited ? MODE_TO_PERMISSION[mode] : undefined,
-        clientTurnId: operation.clientTurnId,
-      };
+        const createPermissionMode = selected
+          ? MODE_TO_PERMISSION[mode]
+          : modeWasEdited
+            ? MODE_TO_PERMISSION[mode]
+            : providerResolved
+              ? MODE_TO_PERMISSION[pickedModeSeed ?? mode]
+              : undefined;
+        const created = await createInteractiveSession({
+          prompt: content,
+          assignedRunnerId: runner.id,
+          workspaceId,
+          // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
+          // credential of it (docs/provider-engine-contract.md §3.2). Leaving both off keeps the
+          // server's inherit-from-workspace path, which re-checks that pair as it starts the session.
+          // A fallback travels too: the workspace's pair is the one that can't run here.
+          ...(draftHere || fallback ? { engine: pickedEngine, provider: pickedProvider } : {}),
+          model: createModel,
+          permissionMode: createPermissionMode,
+          // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
+          // default, so the pill is authoritative — an explicit Default must stick, not fall back to
+          // the workspace's effort server-side (session.effort ?? workspace.effort). Task runs omit it, so
+          // those still inherit the workspace default.
+          effort: wireEffort,
+          // Only when it is on. Off is the server's default and the engine's, so saying it is the
+          // one way this could disagree with either of them later.
+          ...(fastMode ? { fastMode: true } : {}),
+          // Only an explicit pick, as with the provider: none is Automatic, or the workspace's account.
+          ...(draftCodexAccount && pickedProvider === 'codex' ? { codexAccount: draftCodexAccount } : {}),
+          ...(draftClaudeAccount && pickedProvider === 'claude' ? { claudeAccount: draftClaudeAccount } : {}),
+          ...(draftAntigravityAccount && pickedProvider === 'antigravity'
+            ? { antigravityAccount: draftAntigravityAccount }
+            : {}),
+          ...(draftKimiAccount && pickedProvider === 'kimi' ? { kimiAccount: draftKimiAccount } : {}),
+          ...(draftCursorAccount && pickedProvider === 'cursor' ? { cursorAccount: draftCursorAccount } : {}),
+          attachmentIds,
+          // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
+          shell,
+          // Composed on a folder's page: the session starts in that folder.
+          ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
+          ...vars.optimized,
+          ...(vars.clientRequestId ? { clientRequestId: vars.clientRequestId } : {}),
+        }, signal);
+        // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
+        // default, possibly clamped for this provider (Auto -> Default on a model that can't run
+        // it), and writing that back would erase the workspace's real stored mode.
+        return {
+          id: created.id,
+          created: true,
+          permissionMode: modeWasEdited ? MODE_TO_PERMISSION[mode] : undefined,
+          clientTurnId: operation.clientTurnId,
+        };
+      } catch (e) {
+        // The fetch rejects with the abort's reason, or a bare AbortError while reading the body.
+        if (signal?.aborted && isSendNotAnswered(e)) throw new SendNotAnsweredError();
+        throw e;
+      } finally {
+        deadline?.done();
+      }
     },
     onSuccess: (
       { id, turnId, queuedItem, created, permissionMode: sentMode, clientTurnId, routedToSessionId },
@@ -7255,6 +7309,15 @@ export function WorkspaceView({
     ) => {
       if (sendOperationRef.current?.clientTurnId === clientTurnId) {
         sendOperationRef.current = null;
+      }
+      // Taken: the pending bubble gives way to what the server made of it — the accepted bubble
+      // painted below, the queue, or the run it was routed to. Its words left the box at the press,
+      // so nothing below empties the box over what was typed since.
+      const pending = !!vars.pendingKey;
+      if (vars.pendingKey) {
+        pendingSendsRef.current.delete(vars.pendingKey);
+        setAcceptedUserTurns((current) => dropPendingSend(current, vars.pendingKey as string));
+        setDraftPending((turn) => (turn?.key === vars.pendingKey ? null : turn));
       }
       // Work for a managed runner that is not up asks it to wake: show that now, not at the next poll.
       // Up is the managed status's own READY: a runner that has just gone to sleep still reads online
@@ -7270,9 +7333,11 @@ export function WorkspaceView({
       if (routedToSessionId) {
         setRunConflict(null);
         setHandedOverTo(routedToSessionId);
-        setText((draft) => composerDraftAfterSend(draft, true));
-        setComposerRefs({});
-        setImages([]);
+        if (!pending) {
+          setText((draft) => composerDraftAfterSend(draft, true));
+          setComposerRefs({});
+          setImages([]);
+        }
         setView('open');
         refreshSessionLists();
         navigate(`/sessions/${encodeId(routedToSessionId)}`);
@@ -7310,7 +7375,7 @@ export function WorkspaceView({
           .catch(() => {});
       }
       navigate(sessionPath(id));
-      if (!vars.held) {
+      if (!vars.held && !pending) {
         setText((draft) => composerDraftAfterSend(draft, true));
         setComposerRefs({});
       }
@@ -7328,7 +7393,7 @@ export function WorkspaceView({
         // the attachment refs and the transcript fetches them back for display.
         previews.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
       }
-      if (!vars.held) setImages([]);
+      if (!vars.held && !pending) setImages([]);
       setView('open'); // a new/continued session lives in Open
       if (queuedItem)
         setQueued((current) =>
@@ -7392,7 +7457,10 @@ export function WorkspaceView({
       //
       // Terminates: the retry carries NEXT_TURN, which the server never answers with this code.
       if (isCurrentWorkUnavailable(e) && vars.intent === 'CURRENT_WORK') {
-        send.mutate({ ...vars, intent: 'NEXT_TURN' });
+        // A different send on the wire (another intent), so a pending bubble's key is minted anew.
+        const next = vars.pendingKey ? { ...vars, intent: 'NEXT_TURN' as const, clientTurnId: compatibleUuid() } : { ...vars, intent: 'NEXT_TURN' as const };
+        if (vars.pendingKey) pendingSendsRef.current.set(vars.pendingKey, next);
+        send.mutate(next);
         return;
       }
       // Compact, from the Context popover: no composer holds it, so the toast is where it fails.
@@ -7400,12 +7468,31 @@ export function WorkspaceView({
         message.error("Couldn't compact", e.message);
         return;
       }
+      const conflict = readTaskRunConflict(e);
+      if (vars.pendingKey) {
+        const key = vars.pendingKey;
+        if (conflict) {
+          // The refusal has its own card, which offers the send again: the bubble steps aside and its
+          // words go back into the box, as they stood before there were pending bubbles.
+          pendingSendsRef.current.delete(key);
+          setAcceptedUserTurns((current) => dropPendingSend(current, key));
+          setDraftPending((turn) => (turn?.key === key ? null : turn));
+          restoreUndelivered?.(vars.content, pendingAttachmentsOf(vars));
+          setHandedOverTo(null);
+          // Its answer resends from the box, as any conflict's does, under the same key on the wire.
+          setRunConflict({ conflict, vars: { ...vars, pendingKey: undefined } });
+          return;
+        }
+        // Anything else is said on the bubble, which offers Retry and Put back; no toast.
+        setAcceptedUserTurns((current) => markNotSent(current, key, e.message));
+        setDraftPending((turn) => (turn?.key === key ? markNotSent([turn], key, e.message)[0] : turn));
+        return;
+      }
       setText((draft) => composerDraftAfterSend(draft, false));
       // One of the refusals about who holds this task. They arrive structured — a stable code, the
       // run in the way, whether it is letting go — and `message.error(e.message)` is exactly the
       // line that threw that away and put the server's English on screen. Anything this build has
       // no reading for still goes to the toast below, server's words and all.
-      const conflict = readTaskRunConflict(e);
       if (conflict) {
         setHandedOverTo(null);
         setRunConflict({ conflict, vars });
@@ -8487,8 +8574,94 @@ export function WorkspaceView({
   // with one it is on its way to that workspace's page.
   const sendFromComposer = (vars: ComposerSendVars): void => {
     if (machineDraft) return;
+    // A message leaves the box now and waits as its own bubble (lib/pendingSend): in the transcript of
+    // a session that exists, or — a new session's first message — on the new-session page, keyed so
+    // its Retry opens no second session. A `!cmd` settles into a Bash card rather than a bubble, so
+    // it keeps the box.
+    if (!selected && !vars.shell && !vars.held) {
+      const clientRequestId = compatibleUuid();
+      const key = `pending:${clientRequestId}`;
+      const pendingVars = { ...vars, clientRequestId, pendingKey: key };
+      pendingSendsRef.current.set(key, pendingVars);
+      setDraftPending({
+        key,
+        sessionId: '',
+        source: 'local',
+        text: vars.content,
+        acceptedAt: new Date().toISOString(),
+        attachments: pendingAttachmentsOf(vars),
+        pending: { state: 'sending', afterSeq: 0 },
+      });
+      setText('');
+      setComposerRefs({});
+      setImages([]);
+      send.mutate(pendingVars);
+      return;
+    }
+    if (selected && !vars.shell && !vars.held) {
+      const clientTurnId = compatibleUuid();
+      const key = `pending:${clientTurnId}`;
+      const pendingVars = { ...vars, clientTurnId, pendingKey: key };
+      pendingSendsRef.current.set(key, pendingVars);
+      setAcceptedUserTurns((current) =>
+        withPendingSend(current, {
+          key,
+          sessionId: selected.id,
+          source: 'local',
+          text: vars.content,
+          acceptedAt: new Date().toISOString(),
+          attachments: pendingAttachmentsOf(vars),
+          pending: { state: 'sending', afterSeq: newestSeq(transcriptEvents) },
+        }),
+      );
+      setText('');
+      setComposerRefs({});
+      setImages([]);
+      send.mutate(pendingVars);
+      return;
+    }
     send.mutate(vars);
   };
+  // A `Not sent` bubble's two ways on. Retry is the same send again — the same key on the wire, so a
+  // send that did arrive is answered with its turn instead of being taken twice. One send at a time,
+  // as from the composer (decision Ⓐ): a press while another is on its way waits for it.
+  const retryPendingSend = (key: string): void => {
+    const vars = pendingSendsRef.current.get(key);
+    if (!vars || send.isPending) return;
+    setDraftPending((turn) =>
+      turn?.key === key && turn.pending ? { ...turn, pending: { state: 'sending', afterSeq: 0 } } : turn,
+    );
+    setAcceptedUserTurns((current) =>
+      current.map((turn) =>
+        turn.key === key && turn.pending
+          ? { ...turn, pending: { state: 'sending', afterSeq: turn.pending.afterSeq } }
+          : turn,
+      ),
+    );
+    send.mutate(vars);
+  };
+  const putBackPendingSend = (key: string): void => {
+    const vars = pendingSendsRef.current.get(key);
+    if (!vars) return;
+    pendingSendsRef.current.delete(key);
+    setAcceptedUserTurns((current) => dropPendingSend(current, key));
+    setDraftPending((turn) => (turn?.key === key ? null : turn));
+    restoreUndelivered?.(vars.content, pendingAttachmentsOf(vars));
+  };
+  // The first message's bubble, as the one event of the conversation it opens.
+  const draftPendingEvents = useMemo(
+    () => (draftPending ? [acceptedUserTurnEvent(draftPending, 1) as RunEvent] : []),
+    [draftPending],
+  );
+  const pendingSendActions = useRef({ retry: retryPendingSend, putBack: putBackPendingSend });
+  pendingSendActions.current = { retry: retryPendingSend, putBack: putBackPendingSend };
+  const pendingSend = useMemo(
+    () => ({
+      retry: (key: string) => pendingSendActions.current.retry(key),
+      putBack: (key: string) => pendingSendActions.current.putBack(key),
+    }),
+    [],
+  );
 
   const onSend = (intentOverride?: SessionTurnIntent): void => {
     const intent = intentOverride ?? defaultSendIntent;
@@ -8706,7 +8879,9 @@ export function WorkspaceView({
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
-      !loadingSession;
+      !loadingSession &&
+      // One first message at a time (decision Ⓐ): one that reads Not sent is retried or put back first.
+      !(!selected && draftPending);
   // The single send button morphs into a Stop while the session has something to stop AND the
   // composer is empty — interrupting it. With content typed it stays Send, so a follow-up can
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
@@ -12262,6 +12437,7 @@ export function WorkspaceView({
                 sandboxFixHelp={sandboxFixHelp}
                 restoreUndelivered={restoreUndelivered}
                 steerWithdrawal={steerWithdrawal}
+                pendingSend={pendingSend}
                 linkStateWord={orbitLinkStateWord}
                 linkRefreshKey={sessionDetailQ.dataUpdatedAt}
                 answeredQuestions={answeredQuestions}
@@ -12631,10 +12807,17 @@ export function WorkspaceView({
             // centering flex row, so once /status prints a card it would sit beside the hero instead
             // of under it. With cards the pane falls back to plain transcript flow.
             <div
-              className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
+              // A first message waiting for its session reads where the conversation it opens will: from the top.
+              className={`workspace-sessions${localStatusCards.length || draftPending ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
-              {!machineDraft && (
+              {draftPending ? (
+                // The first message, waiting for its session: the conversation it opens, drawn from its
+                // first bubble on, in the hero's place.
+                <PendingSendCtx.Provider value={pendingSend}>
+                  <Transcript events={draftPendingEvents} />
+                </PendingSendCtx.Provider>
+              ) : !machineDraft && (
                 <NewSessionProviderHero
                   current={currentDraftEngine}
                   engines={draftEngines}
@@ -12985,7 +13168,8 @@ export function WorkspaceView({
           showStop={showStop}
           onStop={() => selected && control.mutate(selected.id)}
           canSend={canSend && !handingOver}
-          sending={send.isPending}
+          // A send waiting as a bubble says Sending… there; the button need not say it too.
+          sending={send.isPending && !send.variables?.pendingKey}
           onSend={onSend}
           queueOffered={queueOffered}
           defaultSendIntent={defaultSendIntent}

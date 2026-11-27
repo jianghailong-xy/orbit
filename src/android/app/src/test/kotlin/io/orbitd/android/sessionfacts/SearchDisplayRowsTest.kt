@@ -50,7 +50,7 @@ class SearchDisplayRowsTest {
     @Test fun cancelled_isIdleEnded() = check("CANCELLED", I, SessionMark.ENDED)
     @Test fun jobRunning_isRunningBackground() = check("job running", R, SessionMark.BACKGROUND)
     @Test fun waitingOnAnApproval_isRunningNeedsYou() = check("waiting on an approval", R, SessionMark.NEEDS_YOU)
-    @Test fun watchArmed_isIdleWillResume() = check("watch armed", I, SessionMark.WILL_RESUME)
+    @Test fun watchArmed_isPlainIdle() = check("watch armed", I)
     @Test fun pausedAccount_isQueuedOnHold() = check("paused account", Q, SessionMark.ON_HOLD)
     @Test fun endedRunnerNeverConfirmed_isIdleEnded() = check("ended, runner never confirmed", I, SessionMark.ENDED)
     @Test fun oldPlainSucceeded_isIdleEnded() = check("old plain row stored SUCCEEDED", I, SessionMark.ENDED)
@@ -58,13 +58,13 @@ class SearchDisplayRowsTest {
     @Test fun engineStartedItsOwnTurn_isRunning() = check("parked, engine started its own turn", R)
     @Test fun subAgentRunning_isRunning() = check("parked, sub-agent running", R)
     @Test fun processLeftUp_isIdleBackground() = check("parked, background process left up", I, SessionMark.BACKGROUND)
-    @Test fun parkedRetryArmed_isIdleWillResume() = check("parked, retry armed", I, SessionMark.WILL_RESUME)
+    @Test fun parkedRetryArmed_isPlainIdle() = check("parked, retry armed", I)
     @Test fun failedRetryArmed_isIdleRetrying() = check("failed, retry armed", I, SessionMark.RETRYING)
     @Test fun failedRunnerOffline_isIdleFailed() = check("failed, runner offline", I, SessionMark.FAILED)
     @Test fun approvalBesideABackgroundJob_isRunningNeedsYouBackground() =
         check("approval beside a background job", R, SessionMark.NEEDS_YOU, SessionMark.BACKGROUND)
-    @Test fun interruptedProcessUpRetryArmed_isIdleInterruptedBackgroundWillResume() =
-        check("interrupted, a process up, retry armed", I, SessionMark.INTERRUPTED, SessionMark.BACKGROUND, SessionMark.WILL_RESUME)
+    @Test fun interruptedProcessUpRetryArmed_isIdleInterruptedBackground() =
+        check("interrupted, a process up, retry armed", I, SessionMark.INTERRUPTED, SessionMark.BACKGROUND)
 
     private companion object {
         val Q = SessionDisplayState.QUEUED

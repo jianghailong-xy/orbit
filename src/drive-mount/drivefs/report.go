@@ -141,7 +141,7 @@ var errnoNames = map[fuse.Status]string{
 	fuse.Status(syscall.EISDIR): "EISDIR", fuse.Status(syscall.ENOSPC): "ENOSPC",
 	fuse.Status(syscall.ENOTEMPTY): "ENOTEMPTY", fuse.Status(syscall.EOPNOTSUPP): "EOPNOTSUPP",
 	fuse.Status(syscall.ENOLCK): "ENOLCK", fuse.Status(syscall.ENAMETOOLONG): "ENAMETOOLONG",
-	fuse.Status(syscall.ENODEV): "ENODEV",
+	fuse.Status(syscall.ENODEV): "ENODEV", fuse.Status(syscall.EDQUOT): "EDQUOT",
 }
 
 func errnoName(st fuse.Status, op string) string {

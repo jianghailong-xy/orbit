@@ -676,6 +676,13 @@ allows it), and groups deletes by the per-mount window (§3.4). The refinement, 
   *appears* to come from, which is all rule 6 promises.
 - **Docker:** the optional `mrf-<uuid>` mounter keeps its own pid namespace (§12 decision 4), so pids read 0 and there is
   no attribution.
+- **Drive chats.** A Drive chat's mount writes are held to its rules (one change group a turn, no overwrite, the
+  200-item hold) wherever the session is named: the door answers 409 `DRIVE_CHAT_NO_OVERWRITE` (the daemon: `EEXIST`)
+  or `DRIVE_CHAT_HELD` / `DRIVE_CHAT_TURN_FULL` (`EDQUOT`), and errors.log carries the door's words; the daemon never
+  waits for the owner's answer. A mount write that names no session is counted as the chat's when the chat is the
+  runner's only live session (not ended, with a turn in flight or a background process running); with another session
+  live it stays nobody's, which is why a Cloud Drive chat's guidance has it change the drive only through the drive_*
+  tools and read ~/Files.
 
 ### 5.9 The daemon's finish line: shell operations and expected results
 

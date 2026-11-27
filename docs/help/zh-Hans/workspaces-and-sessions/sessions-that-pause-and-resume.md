@@ -12,7 +12,7 @@ summary: 机器离线或账户额度用尽时，会话会等待而不是失败�
 | **The assigned runner is offline. This session starts when it comes back.** | 会话已排队到一台未连接的机器。 | 让机器恢复连接。参见 [机器显示为离线](orbit:/help/machines-and-engines/machine-offline)。 |
 | 输入框里的 **Runner offline**，或页头里的 **Disconnected** | 运行过程中机器掉线了。 | 同上。机器恢复后，它持有的工作会被重新发出。 |
 | **5-hour limit reached**、**Weekly limit reached** 或 **Usage limit reached** | 会话使用的账户额度用尽。 | 保持 **Auto-retry when the quota resets** 开启。参见 [会话停止：账户额度用尽](orbit:/help/models-keys-and-accounts/account-out-of-quota)。 |
-| **Waiting to resume** | 会话停在一个会唤醒它的东西上：watch、定时唤醒或自动重试。 | 什么都不用做。它会自行继续。 |
+| **Idle**，出现在设了 watch 或定时唤醒的会话上 | 会话停在一个会唤醒它的东西上。它和其他处于两轮之间的会话一样显示 Idle。 | 什么都不用做。它会自行继续。 |
 | **Running in background** | 后台作业仍在运行。 | 什么都不用做。作业结束时 Agent 会被唤醒。 |
 
 ## 手动恢复

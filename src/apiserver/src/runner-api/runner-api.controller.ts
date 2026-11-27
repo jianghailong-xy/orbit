@@ -312,6 +312,7 @@ import { deliverIntegrationAftermath } from './integration-aftermath';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { documentsClaimFields } from '../drive/drive-switch';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
+import { appendDriveChatNotes } from '../drive/drive-chat-notes';
 import { appendScheduleChangeNote } from '../schedules/schedule-change-conversation';
 import {
   type TaskFailure,
@@ -1088,6 +1089,8 @@ interface HandedTurn {
   externalSenderName: string | null;
   /** A wiki chat's page and selection, as ids (migration 0476): what `appendWikiChatNotes` reads. */
   wikiContext: unknown;
+  /** A Drive chat's folder and selection, as ids (migration 1680): what `appendDriveChatNotes` reads. */
+  driveContext: unknown;
 }
 // How many times one message may be handed to an engine with nothing under it answering before the
 // control plane stops putting it back on the queue at once. A message that deserves another delivery
@@ -6139,7 +6142,8 @@ export class RunnerApiController {
                    "sender_session_id" AS "senderSessionId",
                    "external_sender_source" AS "externalSenderSource",
                    "external_sender_name" AS "externalSenderName",
-                   "wiki_context" AS "wikiContext"
+                   "wiki_context" AS "wikiContext",
+                   "drive_context" AS "driveContext"
             FROM "conversation_turn" turn
             WHERE turn.id = ${owned[0].inboxRequestTurnId}::uuid
               AND turn."session_id" = ${sessionId}::uuid
@@ -6405,7 +6409,8 @@ export class RunnerApiController {
                   "sender_session_id" AS "senderSessionId",
                   "external_sender_source" AS "externalSenderSource",
                   "external_sender_name" AS "externalSenderName",
-                  "wiki_context" AS "wikiContext"
+                  "wiki_context" AS "wikiContext",
+                  "drive_context" AS "driveContext"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
@@ -6443,6 +6448,10 @@ export class RunnerApiController {
             },
             // A wiki chat's messages carry its notes (appendWikiChatNotes, below).
             wikiChatSpaceId: true,
+            // A Drive chat's messages carry `<orbit_drive_chat>` (appendDriveChatNotes, below), which says whether the
+            // drive is mounted where the session runs.
+            openedBy: true,
+            assignedRunnerId: true,
             // A schedule's change conversation names its schedule on every message (appendScheduleChangeNote).
             changeScheduleId: true,
           },
@@ -6544,6 +6553,17 @@ export class RunnerApiController {
               spaceId: sessionContext.wikiChatSpaceId,
               sessionId,
               turn: { seq: t.seq, kind: t.kind, wikiContext: t.wikiContext },
+            }, content);
+          }
+          // A Drive chat's message: `<orbit_drive_chat>` with the folder the owner had open and the items they
+          // selected, read now from the ids its door kept, and the standing guidance on the first message and the
+          // first after its text changed. Not best-effort, as the wiki chat's notes are not.
+          if (sessionContext?.openedBy === 'DRIVE_CHAT') {
+            content = await appendDriveChatNotes(tx, {
+              ownerId: sessionContext.ownerId,
+              sessionId,
+              runnerId: sessionContext.assignedRunnerId,
+              turn: { seq: t.seq, kind: t.kind, driveContext: t.driveContext },
             }, content);
           }
           // A schedule's change conversation (scheduled-tasks-design.md §8.2): each message carries the schedule it
@@ -7342,7 +7362,8 @@ export class RunnerApiController {
 
   /**
    * The title the engine running a session gave it, when its claim asked for one
-   * (ClaimedSession.naming, engineNamingJob). It lands only while the session still carries the title
+   * (ClaimedSession.naming). The server no longer asks: a session is titled only on its DeepSeek key.
+   * It lands only while the session still carries the title
    * that claim did, so a rename made in the meantime stands; a miss is not an error.
    */
   @UseGuards(RunnerAuthGuard)

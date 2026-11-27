@@ -389,7 +389,7 @@ public enum OrbitExchangeFold {
                 }
             case .steps(let items):
                 if items.contains(where: needsReader) { return nil }
-            case .statusCard, .decisionCard:
+            case .statusCard, .decisionCard, .chatCard:
                 return nil
             default:
                 break

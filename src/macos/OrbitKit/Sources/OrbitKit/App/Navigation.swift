@@ -590,6 +590,17 @@ public struct NavState: Equatable, Sendable {
         }
     }
 
+    /// The draft's folder picked from its place pill (docs/mocks/new-session-place): a draft with a
+    /// frame of its own is refiled in place, so Back still leaves for the page under it; the draft an
+    /// iPad draws at its pane's root has none, and gets one as ✎ would open it.
+    public mutating func fileDraft(agentID: String, folderID: String?) {
+        if case .compose = path.last {
+            replaceTop(with: .compose(agentID: agentID, folderID: folderID))
+        } else {
+            openDraft(agentID: agentID, folderID: folderID)
+        }
+    }
+
     /// A machine's own new session page: the stack's whole content on every shell, as a project's own
     /// page is on a phone. What is under it belongs to a workspace, and this page has none.
     public mutating func openMachineDraft(runnerID: String) {

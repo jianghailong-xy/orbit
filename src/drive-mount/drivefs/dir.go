@@ -442,6 +442,9 @@ func (fs *FS) failed(op, drivePath string, err error) fuse.Status {
 		fs.rep.Log(fuse.EIO, op, fs.display(drivePath), "", "the drive's server did not answer: "+err.Error())
 	case st == fuse.Status(syscall.ENOSPC):
 		fs.rep.Log(st, op, fs.display(drivePath), "", "the drive's storage is full")
+	case isDriveChatRefusal(err):
+		// The door's own words: which files, what the owner is asked, and not to retry.
+		fs.rep.Log(st, op, fs.display(drivePath), "", door.MessageOf(err))
 	}
 	return st
 }

@@ -1441,9 +1441,6 @@ struct NewSessionView: View {
     let workspaceTitleInBar: Bool
     @State private var draft: ConsoleModel
     @Environment(AppModel.self) private var app
-    #if os(macOS)
-    @State private var showSwitcher = false
-    #endif
     @State private var showEnginePicker = false
 
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
@@ -1505,6 +1502,7 @@ struct NewSessionView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Engine: \(currentEngine.label). Switch")
+                        placePill
                     }
                     VStack(spacing: 5) {
                         // The draft moved off what the workspace last ran on, which can't run here
@@ -1565,13 +1563,6 @@ struct NewSessionView: View {
                                 .font(.callout).buttonStyle(.plain).foregroundStyle(Color.accentColor)
                         }
                     }
-                    #if os(macOS)
-                    // macOS renders this inline in the Agents detail pane, which has no navigation
-                    // bar to host the agent switcher, so it stays in the layout — demoted to a quiet
-                    // pill under the hero rather than competing with it.
-                    agentSwitcher
-                        .padding(.top, 2)
-                    #endif
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
@@ -1680,14 +1671,6 @@ struct NewSessionView: View {
         .task(id: defaultEffort) {
             draft.adoptDraftDefaultEffort(defaultEffort, legacyWorkspaceDefault: agent.effort)
         }
-        #if os(macOS)
-        .sheet(isPresented: $showSwitcher) {
-            AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id,
-                             configuredProviders: app.agents?.configuredProviders ?? []) { id in
-                app.composeWithAgent(id)
-            }
-        }
-        #endif
         .sheet(isPresented: $showEnginePicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
             // the machine this draft would run on, and the one whose engine page fixes a row.
@@ -1701,12 +1684,77 @@ struct NewSessionView: View {
         }
     }
 
-    #if os(macOS)
-    /// Switches the draft's workspace from below the hero on macOS.
-    private var agentSwitcher: some View {
-        WorkspaceTitleSwitcher(name: agent.name) { showSwitcher = true }
+    /// Where the session runs, under the engine (docs/mocks/new-session-place, option A; web's
+    /// `PlacePill`): one bordered pill, `[workspace] / [folder] ▾`, naming the folder only when one is
+    /// picked — a folder is a sidebar group, so none is the quiet default. Its one menu lists the
+    /// workspaces, then this workspace's folders under None.
+    private var placePill: some View {
+        let folders = app.sessionFolders.filter { $0.workspaceId == agent.id }
+        let folder = folders.first { $0.id == folderID }
+        let label = folder.map { "\(agent.name) / \($0.name)" } ?? agent.name
+        return Menu {
+            Section("Workspace") {
+                ForEach(app.orderedAgents) { other in
+                    Button { pickWorkspace(other.id) } label: { placeRow(other.name, on: other.id == agent.id) }
+                }
+            }
+            if !folders.isEmpty {
+                Section("Folder in \(agent.name) · optional") {
+                    Button { pickFolder(nil) } label: { placeRow("None", on: folder == nil) }
+                    ForEach(folders) { each in
+                        Button { pickFolder(each.id) } label: { placeRow(each.name, on: each.id == folder?.id) }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal").foregroundStyle(.secondary)
+                Text(agent.name).lineLimit(1).frame(maxWidth: 200)
+                if let folder {
+                    Text("/").foregroundStyle(.tertiary)
+                    Image(systemName: "folder").foregroundStyle(.secondary)
+                    Text(folder.name).lineLimit(1).frame(maxWidth: 200)
+                }
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            .font(.callout).foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.35)))
+            .contentShape(Capsule())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("Runs in: \(label)")
     }
-    #endif
+
+    /// A row of the place menu: its name, ticked when it is the draft's.
+    @ViewBuilder private func placeRow(_ name: String, on: Bool) -> some View {
+        if on { Label(name, systemImage: "checkmark") } else { Text(name) }
+    }
+
+    /// Another workspace opens its own draft, which files in no folder; what was typed goes along.
+    private func pickWorkspace(_ id: String) {
+        guard id != agent.id else { return }
+        carryDraftText(to: id)
+        app.composeWithAgent(id)
+    }
+
+    /// Another folder refiles this draft: the same workspace's draft under the folder's identity.
+    private func pickFolder(_ id: String?) {
+        guard id != folderID else { return }
+        carryDraftText(to: agent.id)
+        app.composeInFolder(id, of: agent.id)
+    }
+
+    /// The draft the pick opens is a new one (its identity names the workspace and the folder), so
+    /// the words typed here are handed to it as a main checkout line's are (`pendingDraftText`).
+    private func carryDraftText(to agentID: String) {
+        guard !draft.composerText.isEmpty else { return }
+        app.consoleRegistry?.pendingDraftText[agentID] = draft.composerText
+    }
 
     /// What the hero judges the engines and their credentials by: the draft's own snapshot — so the
     /// list matches the model space the pills are already resolving against — with this workspace's

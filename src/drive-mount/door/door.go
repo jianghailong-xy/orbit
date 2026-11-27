@@ -64,6 +64,11 @@ const (
 	CodeInstanceRequired   = "MANAGED_RUNNER_INSTANCE_REQUIRED"
 	CodeInstancePending    = "MANAGED_RUNNER_INSTANCE_PENDING"
 	CodeCredentialRefused  = "DRIVE_MOUNT_CREDENTIAL_REFUSED"
+	// A Drive chat's write the door did not make (apiserver drive-chat-changes.ts): a move or rename onto a live file,
+	// kept as a question for the owner; a change past the turn's 200th, held for the owner's Apply; new content past it.
+	CodeDriveChatNoOverwrite = "DRIVE_CHAT_NO_OVERWRITE"
+	CodeDriveChatHeld        = "DRIVE_CHAT_HELD"
+	CodeDriveChatTurnFull    = "DRIVE_CHAT_TURN_FULL"
 )
 
 // Entry is one entry as the door answers it: stat, list, create, mkdir and rename.
@@ -253,6 +258,15 @@ func CodeOf(err error) string {
 	var h *HTTPError
 	if errors.As(err, &h) {
 		return h.Code
+	}
+	return ""
+}
+
+// MessageOf is the door's readable message of a refusal, or "".
+func MessageOf(err error) string {
+	var h *HTTPError
+	if errors.As(err, &h) {
+		return h.Message
 	}
 	return ""
 }

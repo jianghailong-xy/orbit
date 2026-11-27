@@ -569,6 +569,9 @@ final class AppModel {
     /// The wiki chat beside every wiki page: its round button, its panel and the cards it draws
     /// (docs/wiki-chat-design.md §9).
     private(set) var wikiChat: WikiChatModel?
+    /// The Drive chat beside the drive's files (board docs/mocks/drive-chat/02-native): the Wiki chat's model, panel and
+    /// button, docked on Drive (`ChatOrigin.drive`).
+    private(set) var driveChat: WikiChatModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
     /// What the next cold launch draws first (`persistLaunchSnapshot` / `restoreLaunchSnapshot`),
@@ -685,6 +688,7 @@ final class AppModel {
         driveModel.openSession = { [weak self] id in self?.route(to: .session(id)) }
         drive = driveModel
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
+        driveChat = WikiChatModel(baseURL: url, tokenStore: tokenStore, origin: .drive)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
         launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
@@ -1408,6 +1412,8 @@ final class AppModel {
         if selectedSection == .wiki {
             if let wiki { Task { await wiki.reloadLoaded() } }
             if let wikiChat { Task { await wikiChat.reloadLoaded() } }
+        } else if selectedSection == .drive, let driveChat {
+            Task { await driveChat.reloadLoaded() }
         } else if let wiki, wiki.spacesState.hasLoaded {
             Task { await wiki.loadSpaces() }
         }
@@ -1538,7 +1544,11 @@ final class AppModel {
             if syncs {
                 drive?.nudge(syncs: true)
             } else {
-                whenSeen("drive") { $0.drive?.nudge(syncs: false) }
+                whenSeen("drive") {
+                    $0.drive?.nudge(syncs: false)
+                    // A Drive chat's write: its change cards and the list's marks are read again.
+                    $0.driveChat?.nudge()
+                }
             }
         case .wiki:
             whenSeen("wiki") {
@@ -1909,7 +1919,8 @@ final class AppModel {
         // The console on top of the stack, else the wiki chat a panel beside a wiki page shows: it streams
         // while the panel is open on the Wiki, as a console on top would (`WikiChatHost` re-syncs as the
         // panel moves, and as the Wiki comes and goes).
-        let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID : nil)
+        let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID
+            : selectedSection == .drive ? driveChat?.focusedSessionID : nil)
         // Every focused console needs an exact-detail fallback, not only cold deep links. If an
         // Open row is filed or purged on another client, the next list refresh removes it; retaining
         // this last loaded snapshot makes `needsExactRefresh` detect that absence and GET the new
@@ -2618,6 +2629,12 @@ final class AppModel {
     /// from belongs to the old workspace, so the reborn draft files in none.
     func composeWithAgent(_ id: String) {
         show(.compose(agentID: id, folderID: nil), agent: id)
+    }
+
+    /// The draft's folder, picked from its place pill (docs/mocks/new-session-place): the same
+    /// workspace's draft, filed in `folderID` or in none.
+    func composeInFolder(_ folderID: String?, of agentID: String) {
+        nav.fileDraft(agentID: agentID, folderID: folderID)
     }
 
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the

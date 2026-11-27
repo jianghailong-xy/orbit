@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { CheckSquareOutlined, EyeOutlined } from '@ant-design/icons';
+import { CheckSquareOutlined, EyeOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -112,8 +112,14 @@ export function SessionCreatedTasksStrip({
           </>
         )}
         <span className="wt-spacer" />
-        {/* The pill sits at the right edge, as the Agents line's failed count and the branch bar's state do. */}
-        {pill && <TaskStatusPill {...pill} />}
+        {/* The pill sits at the right edge, as the Agents line's failed count and the branch bar's state do. A running
+            task shows the spinner alone, in the same column as the Agents and Background rows. */}
+        {pill &&
+          (pill.running ? (
+            <LoadingOutlined spin className="chat-tool-status running" aria-label="Running" />
+          ) : (
+            <TaskStatusPill {...pill} />
+          ))}
         <button
           type="button"
           className="wt-expand"

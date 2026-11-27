@@ -200,7 +200,11 @@ final class SessionDisplayTests: XCTestCase {
     }
 
     func testRow31_ParkedWillWakeWatchOrWakeUp_FactsPresent() throws {
-        try assertDrawn(row: 31, state: .idle, marks: [.willResume], group: "")
+        // Idle is Idle: a watch or wake-up to come draws no mark and no row line of its own (the owner, 2026-11-27).
+        try assertDrawn(row: 31, state: .idle, marks: [], group: "")
+        let s = try JSONDecoder().decode(Session.self, from: try payload(row: 31).0)
+        XCTAssertTrue(s.resumesOnItsOwn)
+        XCTAssertEqual(SessionLine.make(for: s, live: true), SessionLine(text: "Idle", tone: .preview))
     }
 
     func testRow32_ParkedWillWakeWatchOrWakeUp_FactsAbsent() throws {

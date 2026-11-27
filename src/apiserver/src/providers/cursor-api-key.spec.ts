@@ -19,7 +19,6 @@ import {
 } from './custom-provider';
 import { CreateModelProviderDto, CursorKeyCheckDto, TestModelProviderDto, UpdateModelProviderDto } from './dto';
 import { resolvedCredentialEngines } from './engine-provider';
-import { heldKeyOf, sessionHeldKey } from './held-key';
 import { subscriptionUsageRefusal } from './plan-usage';
 import { poolMemberRefusal } from './pool-admission';
 import { followsRuntimeCatalog, presetDefaultModel, withPreset } from './preset-overlay';
@@ -177,15 +176,8 @@ test('P2 a Cursor key on any other engine, and any other key on Cursor CLI, is r
   assert.equal(openCode.body.message, 'provider not available on OpenCode: "cursor-api"');
 });
 
-test('P2 the server never spends a Cursor key itself: no held key, no quota probe, no pool, no connection test', async () => {
+test('P2 the server never spends a Cursor key itself: no quota probe, no pool, no connection test', async () => {
   const row = cursorKey();
-  // Naming and recaps are never asked of a Cursor key: it is no model API.
-  for (const ownProvider of [true, false]) assert.equal(heldKeyOf(row as never, 'default[]', ownProvider), null);
-  const db = {
-    user: { findUnique: async () => ({ role: 'USER' }) },
-    modelProvider: { findFirst: async () => row },
-  };
-  assert.equal(await sessionHeldKey(db as never, { provider: row.slug, providerBuiltin: false, ownerId: 'o', model: 'default[]' }), null);
   // Never sent to Anthropic's usage endpoint, and never admitted into an account pool.
   assert.equal(subscriptionUsageRefusal(row, KEY), 'NOT_CLAUDE_RUNTIME');
   assert.equal(poolMemberRefusal({ ...row, ownerId: 'o' } as never), 'NOT_CLAUDE_RUNTIME');

@@ -28,13 +28,16 @@ class State:
         self.me=None
         # Rows the turns listing carries as the server placed them (`placement` accepted/queued), beside the turns this fixture took.
         self.queuedTurns=[]
+        # Drive and its chat (board docs/mocks/drive-chat/02-native.html frames 9–12): the chats read's chats and button counts, each
+        # chat's change groups and overwrite questions, and the chats made and presses taken through /api/drive/chats.
+        self.driveChats=[]; self.driveFab={'needsYou':0,'working':False}; self.driveGroups=[]; self.driveQuestions=[]; self.drivePosts=[]
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
             'permissionMode':'default','effort':'high','capabilities':{'canSend':self.status!='FAILED','canResume':self.status=='FAILED','canComplete':True},
             **({'projectId':PROJECT} if self.discussion else {}),**self.extraDetail,**self.config}
     def stats(self):
-        return {'scope':'controlled HTTP fixture; not deployed backend','uniqueTurns':len(self.turns),'attempts':self.attempts,
+        return {'drivePosts':self.drivePosts,'scope':'controlled HTTP fixture; not deployed backend','uniqueTurns':len(self.turns),'attempts':self.attempts,
             'turns':self.turns,'attachments':{k:{a:b for a,b in v.items() if a!='bytes'} for k,v in self.attachments.items()},
             'calls':self.calls,'controls':self.controls,'config':self.config,'rotations':self.rotation,'creations':self.creations,'downloads':self.downloads}
 state=State()
@@ -65,7 +68,8 @@ class Handler(BaseHTTPRequestHandler):
             with state.lock:
                 if body.get('reset'): state.reset()
                 for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus',
-                          'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me','queuedTurns']:
+                          'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me','queuedTurns',
+                          'driveChats','driveFab','driveGroups','driveQuestions']:
                     if k in body: setattr(state,k,body[k])
                 # Account events (a clone's `agent.changed` frame) to relay once on the next poll of /api/events.
                 state.sendEvents=state.sendEvents+body.get('events',[])
@@ -84,6 +88,24 @@ class Handler(BaseHTTPRequestHandler):
         state.revision+=1
         state.calls.append({'method':method,'path':self.path,'bodySha256':hashlib.sha256(raw).hexdigest(),
             'body':body if not multipart else {'multipartBytes':len(raw)}})
+        if path.startswith('/api/drive/chats'):
+            rest=[x for x in path[len('/api/drive/chats'):].split('/') if x]
+            state.drivePosts.append({'path':'/'.join(rest),'body':body})
+            if not rest:
+                chat={'sessionId':SESSION,'title':body.get('text','')[:40],'status':'RUNNING','open':True,'completed':False,'working':True,'needsYou':0,
+                    'workspaceId':WORKSPACE,'createdAt':'2026-11-26T14:30:00Z','updatedAt':'2026-11-26T14:30:00Z','lastActiveAt':'2026-11-26T14:30:00Z'}
+                state.driveChats=[chat]+state.driveChats
+                return self.reply({'sessionId':SESSION,'chat':chat,'workspace':{'id':WORKSPACE,'name':'Composer fixture','runner':'Fixture runner','online':True}})
+            if len(rest)==4 and rest[3] in ('undo','apply'):
+                for g in state.driveGroups:
+                    if g['id']==rest[2]: g['status']='UNDONE' if rest[3]=='undo' else 'DONE'; return self.reply(g)
+            if len(rest)==3 and rest[1]=='questions':
+                for q in state.driveQuestions:
+                    if q['id']==rest[2]:
+                        q['status']='ANSWERED'; q['choice']=body.get('choice')
+                        q['outcome']={'entryId':q['moving']['entryId'],'path':'/Documents/Home/lease-2026 (2).pdf','name':'lease-2026 (2).pdf'}
+                        return self.reply(q)
+            return self.reply({'message':'no such chat'},404)
         if path=='/api/sessions' and method=='POST':
             for field in ['codexAccount','claudeAccount']:
                 if field in body and not re.fullmatch(r'default|[0-9a-f]{8}',body[field]):
@@ -177,6 +199,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.wfile.write(b'data: '+encoded(value)+b'\n\n'); self.wfile.flush(); time.sleep(1)
             except (BrokenPipeError,ConnectionResetError): pass
             self.close_connection=True; return
+        if path.startswith('/api/drive/'): return self.drive(url)
         if path=='/api/users/me' and state.me is not None: return self.reply(state.me)
         if path=='/api/workspaces': return self.reply([{'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'enabled':True}])
         if path==f'/api/workspaces/{WORKSPACE}': return self.reply({'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'provider':'codex','model':'fixture-model'})
@@ -205,6 +228,54 @@ class Handler(BaseHTTPRequestHandler):
         if path==f'/api/projects/{PROJECT}/acceptance/confirmation': return self.reply({'state':'UNCONFIRMED','currentVersion':{'digest':'fixture-criteria-seal'}})
         if path.endswith('/confirmation-under-review'): return self.reply(None)
         return self.reply([])
+    def drive(self,url):
+        path=url.path[len('/api/drive/'):]; query=parse_qs(url.query)
+        if path=='chats': return self.reply({'workspace':{'id':WORKSPACE,'name':'Orbit Cloud','runner':'Fixture runner','online':True},
+            'workspaceFrom':'ORBIT_CLOUD','fab':state.driveFab,'chats':state.driveChats,'more':False})
+        if path.startswith('chats/') and path.endswith('/groups'): return self.reply({'groups':state.driveGroups})
+        if path.startswith('chats/') and path.endswith('/questions'): return self.reply({'questions':state.driveQuestions})
+        if path=='entries':
+            folder=query.get('parentId',['root'])[0]
+            return self.reply({'folder':drive_entry(folder),'entries':[drive_entry(k) for k,v in DRIVE.items() if v[0]==folder],'nextCursor':None})
+        if path.startswith('entries/') and path.count('/')==1: return self.reply(drive_entry(path.split('/')[1]))
+        if path.startswith('entries/') and path.endswith('/versions'): return self.reply({'entry':drive_entry(path.split('/')[1]),'versions':[]})
+        if path=='trash': return self.reply({'groups':[],'nextCursor':None})
+        if path=='syncs': return self.reply({'syncs':[]})
+        if path=='usage': return self.reply({'totalBytes':0,'driveBytes':0,'trashBytes':0,'otherBytes':0})
+        return self.reply({'message':'unsupported drive path'},404)
+
+# The drive the Drive chat's captures browse, as the board draws it: id → (parent, kind, name, size, writer session or None, when).
+DRIVE={
+    'root':(None,'FOLDER','',0,None,'2026-09-01T09:00:00Z'),
+    'scans':('root','FOLDER','Scans',0,None,'2026-11-06T09:00:00Z'),
+    'receipts':('root','FOLDER','Receipts 2026',0,None,'2026-11-26T14:32:00Z'),
+    'documents':('root','FOLDER','Documents',0,None,'2026-01-04T09:00:00Z'),
+    'img4821':('scans','FILE','IMG_4821.jpg',240000,None,'2026-10-03T09:00:00Z'),
+    'scan12':('scans','FILE','scan 12.pdf',88000,None,'2026-10-09T09:00:00Z'),
+    'scan13':('scans','FILE','scan 13.pdf',1100000,None,'2026-10-11T09:00:00Z'),
+    'img4907':('scans','FILE','IMG_4907.jpg',240000,None,'2026-10-18T09:00:00Z'),
+    'receipt2':('scans','FILE','receipt (2).pdf',88000,None,'2026-10-24T09:00:00Z'),
+    'img5011':('scans','FILE','IMG_5011.jpg',1100000,None,'2026-11-02T09:00:00Z'),
+    'scan14':('scans','FILE','scan 14.pdf',240000,None,'2026-11-06T09:00:00Z'),
+    'lease':('scans','FILE','lease-2026.pdf',2300000,None,'2026-09-30T09:00:00Z'),
+    'r10':('receipts','FOLDER','2026-10',0,None,'2026-11-26T14:32:00Z'),
+    'r11':('receipts','FOLDER','2026-11',0,None,'2026-11-26T14:32:00Z'),
+    'r09':('receipts','FOLDER','2026-09',0,None,'2026-10-02T09:00:00Z'),
+    'r08':('receipts','FOLDER','2026-08',0,None,'2026-09-01T09:00:00Z'),
+    'totals':('receipts','FILE','2026 totals.xlsx',44000,SESSION,'2026-11-26T14:32:00Z'),
+    'shop':('receipts','FILE','shop index.pdf',88000,SESSION,'2026-11-26T14:32:00Z'),
+    'bluebottle':('r10','FILE','2026-10-03 Blue Bottle.pdf',88000,SESSION,'2026-11-26T14:32:00Z'),
+}
+def drive_path(key):
+    names=[]
+    while key and DRIVE[key][0] is not None: names.append(DRIVE[key][2]); key=DRIVE[key][0]
+    return '/'+'/'.join(reversed(names))
+def drive_entry(key):
+    parent,kind,name,size,writer,when=DRIVE[key]
+    return {'id':key,'parentId':parent,'kind':kind,'name':name,'sizeBytes':size,'mtime':when,'currentVersionId':'v-'+key,'seq':1,
+        'createdAt':when,'updatedAt':when,'lastWriter':{'kind':'AGENT','sessionId':writer,'at':when} if writer else {'kind':'OWNER','at':when},
+        'path':drive_path(key)}
+
 if __name__=='__main__':
     p=argparse.ArgumentParser(); p.add_argument('--port',type=int,default=18767); p.add_argument('--manifest'); a=p.parse_args()
     if a.manifest:
