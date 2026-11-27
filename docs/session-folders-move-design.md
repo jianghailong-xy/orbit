@@ -111,13 +111,13 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 
 会话自身：
 
-- 必须先**结束**（没有 runner 在托管它）。只有结束时 runner 才会收尾提交；没结束就改归属，原 runner 会直接撒手，未提交的改动会被晾在原机器上。
-  - 空闲但还没结束的会话：确认框的按钮写 `End and Move`，先结束再搬，一步完成。
+- 搬之前必须先**释放**（没有 runner 在托管它）。只有释放时 runner 才会收尾提交；没释放就改归属，原 runner 会直接撒手，未提交的改动会被晾在原机器上。
+  - 空闲但还没释放的会话：由服务端在 move 里先释放、等释放完成再搬（2026-11-27 起），用户只看到 `Move` 和 `Moving…`，不出现“结束会话”的字样。已经在释放中的会话（已请求结束）同样等它释放完再搬。
   - 正在跑、有排队的消息、在等审批：不能搬，写 `Stop the session first.`
 - 不能搬：回收站里的会话；任务的执行会话（归属跟着任务走，暂停的执行会话也按 Workspace 找回）；项目为单件事开的判断会话（`dispatch_origin = PROJECT_COORDINATOR`）；还在导入中的会话。
-- 暂时不能搬，过一会儿再试：正在结束、合并或提交进行中、合并修复还没处理完、等自动重试。
+- 暂时不能搬，过一会儿再试：合并或提交进行中、合并修复还没处理完、等自动重试；服务端等释放超过 45 秒（`The session’s work is still being saved, so it wasn’t moved. Try again in a moment.`）。
 - 派生出来的子会话可以搬（子会话本来就能建在别的 Workspace）。
-- 需要结束时，原 runner 必须在线（收尾提交在它那里做）。已经结束的会话没有这个要求。
+- 需要释放时，原 runner 必须在线（收尾提交在它那里做），否则写 `<runner> has to be online to move this session.`。已经释放或正在释放的会话没有这个要求。
 
 运行时 × 目标 runner：
 
@@ -140,13 +140,13 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 - `The conversation moves with it. Your next message continues it in <workspace>.`
 - 换 runner 的 Claude 会话加一句：`Earlier parts of the conversation are summarized for the agent.`
 - 有改动时加一句：`Changes made so far stay on branch <branch> in <old workspace>.`；还有没合并的改动时写成 `3 changed files aren't merged into <target> yet. They stay on branch <branch> in <old workspace>.`
-- 按钮：`Cancel` / `Move`（需要先结束时是 `End and Move`）。
+- 按钮：`Cancel` / `Move`。
 
 搬完回到原列表，顶部 toast `Moved to <workspace>`；会话从当前列表消失，出现在目标 Workspace 的列表里。
 
 ### 5.4 控制面
 
-- `GET /sessions/:id/move-targets`：给 Move 面板用。返回当前 Workspace 的文件夹，以及其他每个 Workspace 能不能搬、不能的原因（文案由服务端给，客户端只渲染），还有这次搬家要不要先结束。判断依据（runner 能力、在线状态、运行时）只有服务端齐全。
+- `GET /sessions/:id/move-targets`：给 Move 面板用。返回当前 Workspace 的文件夹，以及其他每个 Workspace 能不能搬、不能的原因（文案由服务端给，客户端只渲染），还有这次搬家要不要先释放（`needsEnd`，字段名保留给旧客户端；新客户端只用它决定协调者确认框里那句 Orbit 更新去向）。判断依据（runner 能力、在线状态、运行时）只有服务端齐全。
 - `POST /sessions/:id/move`：`{workspaceId?, folderId?}`。
   - 只换文件夹：同一个 Workspace 内，任何非回收站状态都可以，运行中也可以。
   - 换 Workspace：先 `FOR SHARE` 锁目标 Workspace（`deleted_at IS NULL AND enabled`，同 `rebindCoordinator`；锁序 workspace 在 session 之前，`common/lock-order.ts`），再锁会话行，重新检查 5.2 的条件（不满足返回 409 和原因），然后一条 UPDATE 写完：
@@ -158,7 +158,7 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
     - 项目当前的协调会话（`project.coordinator_session_id`）可以搬（2026-11-11，docs/mocks/coordinator-move-workspace）：同一个事务里，会话行写完后再改 `project.coordinator_workspace_id`（project 锁序 40，在 session 之后；0126 的指针守卫此时读到的是新的一对）。`move-targets` 带 `coordinates`（项目 id 和名字）和每个目标的 `startsCoordinator`（对话带不过去时，能不能在那里新开一个 coordinator，走 `POST /projects/:id/coordinator/replace` 带 `workspaceId`）。被换下的旧协调会话就是普通会话，照常能搬，不动项目。
   - 之后：`publishSessionUpdated`；两个 Workspace 都发 `publishWorkspaceChanged`（Workspace 的默认运行时取自它最新的会话，搬家可能改变两边的默认值）；清掉 `RealtimeService` 里这个会话的 owner 缓存（缓存的 `workspaceId` 平时只在会话结束时淘汰）。
   - 新事务登记进 `common/db-write-inventory.ts`。
-  - `End and Move` 由客户端编排：先 `POST /sessions/:id/end`，等会话变成已结束，再调 move。move 自己只认已结束的会话，中间若被新消息唤醒就返回 409。
+  - 释放由服务端在 move 里完成（`SessionsService.releaseForMove`）：先把会话、目标 Workspace、文件夹的规则都问一遍，不能搬就直接 409，不动会话；能搬才请求结束、轮询到 `finished_at` 落下（最多 45 秒），再进事务搬。事务里仍按锁住的行重判一遍，中间被新消息唤醒返回 409 `The session is working again. Try again when it’s idle.`。客户端只发一次 move，不再调 `/end`、不轮询。
 - `POST /runner/sessions/worktrees-removable`：会话已搬到别的 runner 时，也算这台 runner 上的旧检出可回收。目前只看会话是否关闭，搬走的会话在原机器上的检出会一直留着。回收时分支保留，只删目录；有未提交改动的检出 runner 本来就不删。
 
 ### 5.5 Runner（新能力 `session-move/v1`）

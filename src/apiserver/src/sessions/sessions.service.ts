@@ -14025,7 +14025,7 @@ export class SessionsService {
   /**
    * `GET /sessions/:id/move-targets`: what the Move panel shows (§4, §5.2–5.3) — the folders of the
    * session's workspace, each of the owner's other workspaces with whether the session can move
-   * there and why not, whether it has to be ended first, and what its confirmation says about the
+   * there and why not, whether the move releases it first, and what its confirmation says about the
    * code left behind. Judged here because only the server has every input: runner capabilities and
    * engines, liveness, the session's runtime. The same rules refuse `POST /sessions/:id/move`, which
    * asks them again on locked rows.
