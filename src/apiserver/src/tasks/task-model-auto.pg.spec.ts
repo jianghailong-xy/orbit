@@ -405,6 +405,21 @@ test('task create, pin and start keep every task run on a model that has Auto', 
     assert.equal(swept.model, SONNET);
     assert.equal(swept.permissionMode, 'auto');
 
+    // With smart selection on and no tier to apply (Cost, no suggestion), the decision recorded beside the run
+    // says why it is on another model than the runner's default.
+    const r = await agent(h.db, 'default-routed', {
+      rows: [[HAIKU, WITHOUT_AUTO], [SONNET, WITH_AUTO], [OPUS, WITH_AUTO]], runtimeDefault: HAIKU, modelRouting: true,
+    });
+    const unrouted = await storedTask(h.db, r, 'default-routed');
+    await h.tasks.execute(r.ownerId, unrouted);
+    const decision = await h.db.taskRouteDecision.findFirstOrThrow({ where: { taskId: unrouted } });
+    assert.equal(decision.applied, false, JSON.stringify(decision));
+    assert.ok(decision.reasons.some((reason) => reason.startsWith(`Runs on ${SONNET}: task runs start in Auto`)),
+      JSON.stringify(decision.reasons));
+    const unroutedClaim = await claimed(h, r, unrouted);
+    assert.equal(unroutedClaim.model, SONNET);
+    assert.equal(unroutedClaim.permissionMode, 'auto');
+
     // A default with Auto is the runner's to keep: the run names no model, and the claim runs that default.
     const b = await agent(h.db, 'default-kept');
     const kept = await storedTask(h.db, b, 'default-kept');
@@ -424,6 +439,11 @@ test('task create, pin and start keep every task run on a model that has Auto', 
     await h.tasks.execute(a.ownerId, routed);
     const decision = await h.db.taskRouteDecision.findFirst({ where: { taskId: routed } });
     assert.notEqual(decision?.model, SONNET, JSON.stringify(decision));
+    // A decision that left the run to the runner's default says why the run is on another model after all.
+    if (decision && !decision.applied) {
+      assert.ok(decision.reasons.some((reason) => reason.startsWith(`Runs on ${OPUS}: task runs start in Auto`)),
+        JSON.stringify(decision.reasons));
+    }
     const { run, model, permissionMode } = await claimed(h, a, routed);
     assert.notEqual(run.model, SONNET);
     assert.equal(model, OPUS);

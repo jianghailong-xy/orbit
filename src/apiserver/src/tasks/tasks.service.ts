@@ -736,6 +736,19 @@ function taskRunDispatch(
 }
 
 /**
+ * A route that left the run to the runner's default, with the line that says why the run is on another
+ * model after all (task-run-auto.ts): the decision clients show beside the run must not read "keeps the
+ * agent's model" for a run created on `autoModel`.
+ */
+function withAutoModelReason(route: TaskRunRoute | null, autoModel: string | null): TaskRunRoute | null {
+  if (!route || !autoModel) return route;
+  return {
+    ...route,
+    reasons: [...route.reasons, `Runs on ${autoModel}: task runs start in Auto, and the runner's default model has none`],
+  };
+}
+
+/**
  * The task a bound run target carries out. A routed target names what routing chose, not the task's
  * pins, so the pins are read back from the decision: its model is never one — a pinned model is not
  * routed — and its engine and provider are ones only when the task pinned them.
@@ -16495,7 +16508,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       runnerId: task.assignee!.runnerId!,
       ...taskRunDispatch(task, route),
       ...(autoModel ? { autoModel } : {}),
-      route,
+      route: withAutoModelReason(route, autoModel),
       projectId: task.projectId ?? null,
       // The list doubles as a durable batch so its cap is enforced by the claim transaction's
       // existing batch gate — no second scheduler. Only when the list actually sets a cap:
@@ -16902,7 +16915,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       runnerId: workspace.runnerId,
       ...taskRunDispatch(t, route),
       ...(autoModel ? { autoModel } : {}),
-      route,
+      route: withAutoModelReason(route, autoModel),
       runAt: t.runAt ? t.runAt.toISOString() : null,
       startWhenConditionId: t.startWhenConditionId ?? null,
       clearFailed: t.status === TaskStatus.FAILED,
