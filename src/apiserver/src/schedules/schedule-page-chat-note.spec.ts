@@ -21,6 +21,7 @@ test('no context: the counts and the standing guidance, no data block', () => {
     'Ask in words before you delete or end more than one schedule.',
     'show the before and after',
     'Do not call schedule_run_now. Offer "Run now" as a button',
+    '[Run now](orbit-run-now:<schedule id>)',
   ]) assert.ok(note.includes(line), line);
   assert.ok(!/[㐀-鿿]/u.test(note), 'English');
 });

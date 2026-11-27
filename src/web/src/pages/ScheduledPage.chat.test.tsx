@@ -359,7 +359,7 @@ describe('Runs in (design §5)', () => {
     expect(empty).toContain('You have 4 scheduled tasks: 2 active, 2 paused, none failing. Next: Codex stable check, tomorrow at 06:00 on apiserver.');
     expect(empty).toContain('Ask about them, or tell me what to change. For example:');
     expect([...document.querySelectorAll('.wk-chat-example')].map((b) => b.textContent)).toEqual([
-      '“Pause everything on orbit-ws04 until Monday”',
+      '“Pause everything on my laptop until Monday”',
       '“Why did the last run take so long?”',
       "“Every weekday at 09:00, check a changelog and tell me what's new”",
     ]);

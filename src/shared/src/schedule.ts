@@ -821,7 +821,7 @@ export const SCHEDULE_PAGE_CHAT_COPY = {
   deletedWorkspace: 'a deleted workspace',
   examplesLead: 'Ask about them, or tell me what to change. For example:',
   examples: [
-    'Pause everything on orbit-ws04 until Monday',
+    'Pause everything on my laptop until Monday',
     'Why did the last run take so long?',
     "Every weekday at 09:00, check a changelog and tell me what's new",
   ],

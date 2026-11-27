@@ -57,6 +57,7 @@ import {
 } from '../lib/schedules';
 import { sameResourceId } from '../lib/watches';
 import { Button } from './ui/Button';
+import { useScheduleChatHost } from '../lib/scheduleChatHost';
 import type { TranscriptInsert } from './Transcript';
 import './Scheduled.css';
 
@@ -318,10 +319,14 @@ export function ScheduleCardView({ card, layout, onOpenConversation }: {
 }
 
 /** "Changed <b>Codex stable check</b>: time 10:00 → 09:00", the title in bold. */
-function withTitleBold(text: string, title: string): ReactNode {
+function withTitleBold(text: string, title: string, onOpen?: () => void): ReactNode {
   const at = title ? text.indexOf(title) : -1;
   if (at < 0) return text;
-  return <>{text.slice(0, at)}<b>{title}</b>{text.slice(at + title.length)}</>;
+  // In the Scheduled page's chat the name is the way to its row (board scheduled-chat 01 ①).
+  const name = onOpen
+    ? <button type="button" className="sched-link sched-record-name" data-schedule-name="" onClick={onOpen}><b>{title}</b></button>
+    : <b>{title}</b>;
+  return <>{text.slice(0, at)}{name}{text.slice(at + title.length)}</>;
 }
 
 /**
@@ -331,6 +336,9 @@ function withTitleBold(text: string, title: string): ReactNode {
 export function ScheduleRecordLine({ record }: { record: ScheduleChangeRecord }): JSX.Element {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const host = useScheduleChatHost();
+  // In the Scheduled page's chat the schedule opens in the page's inspector; elsewhere it is the page's address.
+  const open = () => (host ? host.openSchedule(record.scheduleId) : navigate(schedulePath(record.scheduleId)));
   const undo = useMutation({
     mutationFn: () => undoScheduleRecord(record),
     onSettled: () => {
@@ -342,14 +350,14 @@ export function ScheduleRecordLine({ record }: { record: ScheduleChangeRecord })
   return (
     <div className={`sched-record${undoable ? '' : ' is-undone'}`} data-schedule-record={record.revision}>
       <CalendarIcon />
-      <span>{withTitleBold(scheduleChangeLineText(record), record.title)}</span>
+      <span>{withTitleBold(scheduleChangeLineText(record), record.title, host ? open : undefined)}</span>
       <span className="sched-record-doors">
         {record.undo ? (
           <button type="button" className="sched-link" disabled={!undoable || undo.isPending} onClick={() => undo.mutate()}>
             {C.actions.undo}
           </button>
         ) : null}
-        <button type="button" className="sched-link" onClick={() => navigate(schedulePath(record.scheduleId))}>
+        <button type="button" className="sched-link" onClick={open}>
           {C.actions.open}
         </button>
       </span>

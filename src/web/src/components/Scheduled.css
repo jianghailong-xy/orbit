@@ -286,3 +286,13 @@
 .sched-run-door { flex: 1 1 0; min-width: 0; }
 .sched-run-door.is-wide { flex-basis: 100%; }
 .sched-run-error { margin-top: 8px; color: var(--error); font-size: 13px; }
+.sched-chat-ring { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--brand-border); border-top-color: var(--brand); animation: sched-spin 0.9s linear infinite; }
+.sched-chat-count { min-width: 16px; padding: 0 5px; border-radius: 8px; background: #f59f00; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+.sched-record-name { padding: 0; }
+.sched-run-now { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.sched-run-now-offer { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.sched-run-now-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sched-run-now-started { display: flex; gap: 6px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); }
+.sched-run-now-started > span:first-child { color: #2f9e44; font-weight: 700; }
+@keyframes sched-row-flash { 0% { background: var(--brand-tint); } 100% { background: transparent; } }
+.sched-row.is-flash { animation: sched-row-flash 1.6s ease-out 1; }

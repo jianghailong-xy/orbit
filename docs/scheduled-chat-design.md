@@ -29,7 +29,7 @@ What changed from revision 1:
 1. **A Chat button in the Scheduled page's header opens a conversation docked on the right**, next to the list and
    the inspector. Like the Wiki chat, it is an ordinary session in a panel, with no new model loop or store.
 2. **It covers the whole page**: questions ("what runs tomorrow?", "why did the last run fail?"), changes ("move the
-   engine bump to 07:00 on weekdays", "pause everything on orbit-ws04"), and new schedules.
+   engine bump to 07:00 on weekdays", "pause everything on my laptop"), and new schedules.
 3. **No new authority.** It acts only through the existing `schedule_*` tools. The envelope (S§4) decides what
    applies at once with **Undo** and what waits on a card. The one addition is attribution: a change made from it is
    recorded as the person's, in their words, as Change… already is (§4.4).
@@ -105,7 +105,7 @@ You have 4 scheduled tasks: 2 active, 2 paused, none failing.
 Next: Engine version bump, tomorrow at 06:00 on orbit-ws01.
 
 Ask about them, or tell me what to change. For example:
-  · "Pause everything on orbit-ws04 until Monday"
+  · "Pause everything on my laptop until Monday"
   · "Why did the last run take so long?"
   · "Every weekday at 09:00, check a changelog and tell me what's new"
 

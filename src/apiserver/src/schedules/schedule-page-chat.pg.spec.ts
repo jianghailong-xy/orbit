@@ -203,7 +203,7 @@ test('the Scheduled page chat: an opening that writes nothing, a marked MANUAL s
   });
 
   await t.test('2. open: an ordinary MANUAL session of the workspace, marked by schedule_chat_at, the words its prompt', async () => {
-    const words = 'Pause everything on orbit-ws04 until Monday';
+    const words = 'Pause everything on my laptop until Monday';
     const reply = await open({ workspaceId: pub(wsA), text: `  ${words}  ` });
     assert.equal(reply.status, 200, reply.text);
     assert.equal(reply.json.created, true);

@@ -575,6 +575,16 @@ export interface WikiChatAttachments {
   files?: WikiChatFiles | null;
   /** The owner crossed the files out of this message. */
   filesCrossed?: boolean;
+  /** Scheduled: the row selected in the list, as one chip that follows the selection (design §2.4). */
+  schedule?: WikiChatSchedule | null;
+  /** The owner crossed the schedule out of this message. */
+  scheduleCrossed?: boolean;
+}
+
+/** The schedule selected on the Scheduled page: its id and the title the chip shows. */
+export interface WikiChatSchedule {
+  id: string;
+  title: string;
 }
 
 /** The rows selected in Drive's list: their entry ids and names, in list order. */
@@ -587,6 +597,8 @@ export type WikiChatAttachAction =
   | { type: 'follow'; page: WikiChatPage | null }
   | { type: 'files'; files: WikiChatFiles | null }
   | { type: 'crossFiles' }
+  | { type: 'schedule'; schedule: WikiChatSchedule | null }
+  | { type: 'crossSchedule' }
   | { type: 'crossPage' }
   | { type: 'quote'; quote: WikiChatQuote }
   | { type: 'crossQuote' }
@@ -606,6 +618,12 @@ export function wikiChatAttach(state: WikiChatAttachments, action: WikiChatAttac
     case 'files':
       if (JSON.stringify(state.files ?? null) === JSON.stringify(action.files)) return state;
       return { ...state, files: action.files, filesCrossed: false };
+    case 'schedule':
+      if (JSON.stringify(state.schedule ?? null) === JSON.stringify(action.schedule)) return state;
+      // Selecting another row swaps the chip, and a swapped-in chip is on again.
+      return { ...state, schedule: action.schedule, scheduleCrossed: false };
+    case 'crossSchedule':
+      return { ...state, scheduleCrossed: true };
     case 'crossFiles':
       return { ...state, filesCrossed: true };
     case 'crossPage':
@@ -615,7 +633,7 @@ export function wikiChatAttach(state: WikiChatAttachments, action: WikiChatAttac
     case 'crossQuote':
       return { ...state, quote: null };
     case 'sent':
-      return { page: state.page, pageCrossed: false, quote: null, files: state.files ?? null, filesCrossed: false };
+      return { page: state.page, pageCrossed: false, quote: null, files: state.files ?? null, filesCrossed: false, schedule: state.schedule ?? null, scheduleCrossed: false };
   }
 }
 
@@ -662,6 +680,11 @@ export function wikiChatPageSection(state: WikiChatReading, slug: string, keys: 
 /** The files chip the composer shows: the selection, unless crossed out. */
 export function wikiChatShownFiles(state: WikiChatAttachments): WikiChatFiles | null {
   return state.filesCrossed || !state.files || state.files.ids.length === 0 ? null : state.files;
+}
+
+/** The schedule chip the composer shows: the selected row, unless crossed out. */
+export function wikiChatShownSchedule(state: WikiChatAttachments): WikiChatSchedule | null {
+  return state.scheduleCrossed ? null : state.schedule ?? null;
 }
 
 /** What the composer shows, which is exactly what the message sends. */

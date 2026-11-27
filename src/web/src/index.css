@@ -6558,6 +6558,10 @@ button.toast--pill:focus-visible {
 .session-tags-error { padding: 6px 12px; font-size: 12px; color: var(--error); }
 /* Merge failed/conflicted on this session's branch — a red nudge so it's noticed even
    when the session isn't open (its status bar, where the reason lives, is then unseen). */
+.session-origin-tag {
+  flex: none; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 16px;
+  background: var(--brand-tint); color: var(--brand); white-space: nowrap;
+}
 .session-merge-badge {
   flex: none;
   font-size: 12.5px;
