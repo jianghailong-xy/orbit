@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunEventType } from '@orbit/shared';
-import { encryptSecret } from '../providers/provider-crypto';
 import {
   buildRecapTask,
   enqueueRecap,
@@ -21,8 +20,8 @@ import {
   sanitizeRecap,
 } from './recap';
 
-// The held key's row is decrypted on the way out.
-process.env.PROVIDER_SECRET_KEY ??= 'recap-spec';
+// Recap is off without the server's DeepSeek key; the gate tests below run with one.
+process.env.DEEPSEEK_API_KEY ??= 'test-key';
 
 const NOW = new Date('2026-10-10T12:00:00Z');
 const RECAP_TYPES: readonly string[] = [RunEventType.USER, RunEventType.ASSISTANT, RunEventType.TOOL_USE];
@@ -47,16 +46,11 @@ interface StoredSession {
   recapAt: Date | null;
   recapEventSeq: number | null;
   recapClaimedAt: Date | null;
-  provider: string;
-  providerBuiltin: boolean;
-  ownerId: string;
-  model: string | null;
 }
 
 interface FakeDbInit {
   session?: Partial<StoredSession>;
   events?: Array<{ seq: number; type: string; payload: unknown }>;
-  providerRow?: unknown;
   /** Runs as a pass sends its claim, before the row is read for it: where another apiserver's pass lands. */
   beforeClaim?: (stored: StoredSession) => void;
 }
@@ -91,10 +85,6 @@ function fakeDb(init: FakeDbInit = {}) {
     recapAt: null,
     recapEventSeq: null,
     recapClaimedAt: null,
-    provider: 'claude',
-    providerBuiltin: true,
-    ownerId: 'owner-1',
-    model: null,
     ...init.session,
   };
   const rows = init.events ?? [];
@@ -126,23 +116,9 @@ function fakeDb(init: FakeDbInit = {}) {
           .map((row) => ({ seq: row.seq, type: row.type, payload: row.payload }));
       },
     },
-    modelProvider: { findFirst: async () => init.providerRow ?? null },
-    user: { findUnique: async () => ({ role: 'USER' }) },
   };
   return { db: db as never, stored, writes, window };
 }
-
-/** An Anthropic endpoint row whose key a pass may spend, with the model a session runs it on. */
-const ANTHROPIC_ROW = {
-  runtime: 'claude',
-  baseUrl: 'https://api.anthropic.com',
-  apiKeyEnc: encryptSecret('sk-ant-api03-recap-spec'),
-  enabled: true,
-  presetSlug: null,
-  followsPreset: false,
-  models: [],
-  defaultModel: 'claude-opus-5',
-};
 
 function textResponse(content: string): Response {
   return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) } as Response;
@@ -356,36 +332,23 @@ test('a pass assembles the prompt, holds the 8k ceiling and compare-and-sets the
   }
 });
 
-test('without a server key the pass spends the held key on the dialect-fixed cheap model', async () => {
+test('without a server key recap is off: no provider is asked and nothing is written', async () => {
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.DEEPSEEK_API_KEY;
   delete process.env.DEEPSEEK_API_KEY;
-  let url: string | undefined;
-  let body: { model?: string; messages: { role: string; content: string }[] } | undefined;
-  globalThis.fetch = ((input: string, init: { body: string }) => {
-    url = input;
-    body = JSON.parse(init.body) as typeof body;
-    return Promise.resolve({ ok: true, json: async () => ({ content: [{ type: 'text', text: 'Shipped the fix.' }] }) } as Response);
-  }) as unknown as typeof fetch;
+  let calls = 0;
+  globalThis.fetch = (() => {
+    calls += 1;
+    return Promise.resolve(textResponse('never asked'));
+  }) as typeof fetch;
   try {
-    const { db, stored } = fakeDb({
-      session: {
-        provider: 'anthropic',
-        providerBuiltin: false,
-        model: 'claude-opus-5',
-      },
-      events: events(8),
-      providerRow: ANTHROPIC_ROW,
-    });
-
-    const outcome = await generateRecap({ db, sessionId: 's1' }, { now: NOW, retries: 0 });
-
-    assert.equal(outcome.written, true);
-    assert.equal(stored.recapText, 'Shipped the fix.');
-    assert.equal(url, 'https://api.anthropic.com/v1/messages');
-    // The session runs an Opus; the recap must not inherit it.
-    assert.equal(body!.model, 'claude-haiku-4-5-20251001');
-    assert.notEqual(body!.model, 'claude-opus-5');
+    assert.equal(recapEnabled(), false);
+    const { db, writes } = fakeDb({ events: events(8) });
+    assert.deepEqual(await generateRecap({ db, sessionId: 's1' }, { now: NOW, retries: 0 }), { written: false, reason: 'disabled' });
+    assert.deepEqual(await enqueueRecap({ db, sessionId: 's1', force: true }), { written: false, reason: 'disabled' });
+    await recapAfterSettle({ db, sessionId: 's1' });
+    assert.equal(calls, 0);
+    assert.equal(writes.length, 0);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv('DEEPSEEK_API_KEY', originalKey);
