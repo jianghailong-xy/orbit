@@ -24,7 +24,15 @@ export interface AcceptedUserTurn extends TurnCards {
   attachments: { id: string; mime?: string; name?: string }[];
   /** Settings › Translation: the turn's translation, carried as the runner's echo will carry it. */
   translation?: TurnTranslation;
+  /** Typed and sent, with no answer from the server yet (`sending`) or none that took it (`notSent`):
+   *  the bubble stands in the transcript from the press on, so the words leave the composer at
+   *  once (docs/mocks/composer-sending-bubble). No turn id yet — the server has not given one — so
+   *  `afterSeq`, the transcript's newest seq at the press, is how its echo is recognised instead. */
+  pending?: { state: 'sending' | 'notSent'; reason?: string; afterSeq: number };
 }
+
+/** The `delivery` a pending send's bubble is drawn with (Transcript's UserBubble). */
+export const PENDING_SEND_DELIVERY = { sending: 'sending', notSent: 'not_sent' } as const;
 
 /** Every field of `TurnCards`, which the compiler holds this list to: a card added there cannot be
  *  left off the placeholder or the queued row, which carry what `turnCardsOf` picks. */
@@ -126,6 +134,17 @@ export function acceptedUserTurnLanded(
   events: readonly UserTurnEvent[],
 ): boolean {
   if (eventSessionId !== turn.sessionId) return false;
+  // A pending send has no turn id to match. Its echo is the first user event after the press that
+  // carries the same words — which also settles a send whose answer was lost (timed out) but which
+  // the server did take: the real bubble replaces the "Not sent" one instead of standing beside it.
+  if (turn.pending) {
+    const { afterSeq } = turn.pending;
+    return events.some((event) => {
+      if (event.type !== 'user' || event.seq <= afterSeq) return false;
+      const p = event.payload as { text?: unknown; translation?: { original?: unknown } } | null;
+      return p?.text === turn.text || p?.translation?.original === turn.text;
+    });
+  }
   // Only the durable user event replaces the optimistic user bubble. The runner can attach the
   // turn id before it publishes that opening event, so a system/context event with the same id is
   // not sufficient proof and must not make a newly accepted local message flicker away.
@@ -149,6 +168,12 @@ export function acceptedUserTurnEvent(
       text: turn.text,
       ...(turn.attachments.length ? { attachments: turn.attachments } : {}),
       ...(turn.translation ? { translation: turn.translation } : {}),
+      ...(turn.pending
+        ? {
+            delivery: PENDING_SEND_DELIVERY[turn.pending.state],
+            ...(turn.pending.reason ? { deliveryReason: turn.pending.reason } : {}),
+          }
+        : {}),
       // Beside the text, as the control plane records them on the runner's echo (readTurnCards,
       // turn-cards.ts): the words and the cards they are drawn as, one payload either way — so the
       // placeholder is drawn as the card, by the same parser, rather than as a bubble the card
@@ -265,7 +290,7 @@ export function reconcileAcceptedUserTurnSnapshot(
   const openingListed = openingQueued || snapshot.some((turn) => turn.opening);
   for (const turn of current) {
     if (turn.sessionId !== sessionId || included.has(turn.key)) continue;
-    if (openingListed && turn.source === 'local' && turn.turnId === undefined) continue;
+    if (openingListed && turn.source === 'local' && turn.turnId === undefined && !turn.pending) continue;
     // The initial create turn is outside the active snapshot's contract, so REST absence says
     // nothing about it. An id-backed entry that was known before the request is absent from an
     // authoritative response and is therefore no longer active.

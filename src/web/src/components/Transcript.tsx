@@ -85,6 +85,7 @@ import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 // Re-exported for the modules that have always read them from the transcript.
 export { ExportCtx, Pre, relPath, type ExportMode };
 import { copyText } from '../lib/clipboard';
+import { PENDING_SEND_DELIVERY } from '../lib/acceptedUserTurn';
 import { splitRecordedNote } from '../lib/deliveredMessage';
 import { offersSteerWithdraw, steerDeliveryState, WITHDRAWN_DELIVERY } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
@@ -506,6 +507,19 @@ export function AntigravityRepairCard({ repair, help, seq }: {
 export const UndeliveredCtx = createContext<
   ((text: string, attachments?: readonly TurnAttachmentRef[]) => void) | null
 >(null);
+
+/**
+ * A message this tab sent that the server has not taken yet: drawn as its bubble from the press on,
+ * `Sending…` and then, when no answer came or the answer was a refusal, `Not sent` with a way to send
+ * it again or to take it back into the composer (docs/mocks/composer-sending-bubble). Keyed by the
+ * bubble's turn id, which for a pending send is its local key. WorkspaceView supplies it; a reader
+ * who cannot send has no pending sends, so the shared page and the static export leave it null.
+ */
+export interface PendingSendHandle {
+  retry: (key: string) => void;
+  putBack: (key: string) => void;
+}
+export const PendingSendCtx = createContext<PendingSendHandle | null>(null);
 
 /**
  * Take back a message sent into the running turn while nothing has read it yet: a steer whose runner
@@ -1547,6 +1561,7 @@ function buildTranscript(
             images: imgs,
             attachmentRefs: refs,
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
+            deliveryReason: typeof p.deliveryReason === 'string' ? p.deliveryReason : undefined,
             steer: p.steer === true,
             withdrawable: p.withdrawable === true ? true : undefined,
             turnId: ev.turnId ?? undefined,
@@ -3652,6 +3667,7 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
+  const pendingSend = useContext(PendingSendCtx);
   const foot = useContext(TurnStatusFootCtx);
   const held = foot && !foot.running && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
@@ -3704,8 +3720,35 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // button and the time before it do. A message that did not land says so (the one thing a
   // bubble must never do is stand there looking sent; the reason rides in the tooltip); a steer
   // says how far it got.
+  const sending = node.delivery === PENDING_SEND_DELIVERY.sending;
   const status =
-    node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
+    sending ? (
+      <div className="chat-steer-state">Sending…</div>
+    ) : node.delivery === PENDING_SEND_DELIVERY.notSent ? (
+      <Tooltip content={node.deliveryReason} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <div className="chat-undelivered">
+          ⚠ Not sent
+          {pendingSend && node.turnId && (
+            <>
+              <button
+                type="button"
+                className="chat-undelivered-retry"
+                onClick={() => pendingSend.retry(node.turnId as string)}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="chat-undelivered-retry"
+                onClick={() => pendingSend.putBack(node.turnId as string)}
+              >
+                Put back in the composer
+              </button>
+            </>
+          )}
+        </div>
+      </Tooltip>
+    ) : node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
       <Tooltip content={node.deliveryReason} delay={TEXT_TOOLTIP_DELAY_MS}>
         <div className="chat-undelivered">
           ⚠ {steerDeliveryState(node.delivery).label}
@@ -3728,7 +3771,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
       {node.externalSender && <div className="chat-user-from">{externalSenderLabel(node.externalSender)}</div>}
       {node.sentByReader && <div className="chat-user-from">You</div>}
       <div
-        className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
+        className={queued ? 'chat-msg chat-user chat-queued' : sending ? 'chat-msg chat-user chat-sending' : 'chat-msg chat-user'}
         data-seq={queued ? undefined : node.seq}
       >
         <TurnAttachments node={node} />

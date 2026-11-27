@@ -9251,6 +9251,12 @@ button.chat-jump-start:hover {
    row where the failure mark would stand. Muted: it is the only report that message gets — the
    running turn's reply answers something else — but it is a progress note, not a problem, so it
    never competes with the failure mark, which owns the error colour. */
+/* A message this tab sent that the server has not taken yet (docs/mocks/composer-sending-bubble):
+   the ordinary bubble, dimmed, with `Sending…` in its foot row. It returns to full strength the
+   moment the server takes it, so nothing about its shape changes. */
+.chat-sending {
+  opacity: 0.62;
+}
 .chat-steer-state {
   font-size: 12px;
   line-height: 1.4;
