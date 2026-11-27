@@ -500,7 +500,9 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     expect(await hoverTooltip(badge!)).toBe('Open task · Fix the red checks');
     expect(badge?.getAttribute('aria-label')).toBe('Task · Open task Fix the red checks');
     await act(async () => badge!.click());
-    await waitFor(() => expect(new URLSearchParams(search).get('task')).toBeTruthy());
+    // Open beside the conversation, with the address left as it was (owner 2026-11-27).
+    await waitFor(() => expect(badge?.getAttribute('aria-pressed')).toBe('true'));
+    expect(new URLSearchParams(search).get('task')).toBeNull();
   });
 
   it('the title reads the same hovered as at rest: no tooltip, no ›, still Session settings to a screen reader', async () => {
@@ -524,7 +526,10 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
     const badge = () => line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link')!;
     const title = () => line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
-    const taskOpen = () => new URLSearchParams(search).get('task') != null;
+    const taskOpen = () => {
+      expect(new URLSearchParams(search).get('task')).toBeNull();
+      return badge().getAttribute('aria-pressed') === 'true';
+    };
 
     await act(async () => title().click());
     await waitFor(() => expect(title().getAttribute('aria-expanded')).toBe('true'));
