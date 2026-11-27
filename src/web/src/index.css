@@ -7061,6 +7061,11 @@ button.toast--pill:focus-visible {
   font-size: 13px;
   cursor: pointer;
 }
+/* The project column's ✕ ends its bar, so it hangs off the right edge instead of the left. */
+.session-folder-back.session-project-page-close {
+  margin-right: -6px;
+  margin-left: 0;
+}
 .session-folder-back:hover {
   background: var(--bg-sunken);
   color: var(--text-1);

@@ -11052,13 +11052,20 @@ export function WorkspaceView({
 
   // The project's sessions page: in the list's place at phone width, and wider in the column at the
   // conversation's right edge (owner 2026-11-11), where its back chevron is a ✕ that closes the column.
-  const projectPageHead = (onClose: () => void, closeLabel: string, closeIcon: ReactNode): ReactNode => openProjectId && (
-    <div className="session-col-head session-folder-head session-project-page-header">
-      <Tooltip side="bottom" align="start" content={closeLabel}>
-        <button type="button" className="session-folder-back" aria-label={closeLabel} onClick={onClose}>
+  // A back chevron leads the title; a ✕ ends the bar, top-right, as every other panel's does
+  // (owner 2026-11-27).
+  const projectPageHead = (onClose: () => void, closeLabel: string, closeIcon: ReactNode, closeAtEnd = false): ReactNode => {
+    const close = (
+      <Tooltip side="bottom" align={closeAtEnd ? 'end' : 'start'} content={closeLabel}>
+        <button type="button" className={`session-folder-back${closeAtEnd ? ' session-project-page-close' : ''}`}
+          aria-label={closeLabel} onClick={onClose}>
           {closeIcon}
         </button>
       </Tooltip>
+    );
+    return openProjectId && (
+    <div className="session-col-head session-folder-head session-project-page-header">
+      {!closeAtEnd && close}
       <span className="session-folder-titles">
         <span className="session-folder-title">{pageProjectTitle}</span>
         <span className="session-folder-workspace">
@@ -11076,8 +11083,10 @@ export function WorkspaceView({
           <AppstoreOutlined />
         </button>
       </Tooltip>
+      {closeAtEnd && close}
     </div>
-  );
+    );
+  };
   // The project's first card and its merge into main lead the list and scroll with it, as on iOS
   // (docs/mocks/project-sessions-page-web); the coordinator's conversation keeps a line about the
   // merge. A DONE project's first card is its ending, in the progress card's place
@@ -13035,7 +13044,7 @@ export function WorkspaceView({
           <aside className={`session-col session-project-column${projectColumnOnDemand ? ' session-project-column-over' : ''}`}
             style={{ width: projectColWidth }}
             aria-label={PROJECT_COLUMN_COPY.label}>
-            {projectPageHead(() => foldProjectColumn(true), PROJECT_COLUMN_COPY.close, <CloseOutlined />)}
+            {projectPageHead(() => foldProjectColumn(true), PROJECT_COLUMN_COPY.close, <CloseOutlined />, true)}
             <div className="workspace-sessions session-col-list autohide-scrollbar">
               {projectPageItems(columnProjectId)}
               {loadingProjectSessions && (
@@ -13052,7 +13061,7 @@ export function WorkspaceView({
           onClose={() => setSheetProjectId(null)} title={pageProjectTitle}>
           {sheetProjectId && (
             <div className="session-col project-sessions-sheet-page">
-              {projectPageHead(() => setSheetProjectId(null), PROJECT_COLUMN_COPY.close, <CloseOutlined />)}
+              {projectPageHead(() => setSheetProjectId(null), PROJECT_COLUMN_COPY.close, <CloseOutlined />, true)}
               <div className="workspace-sessions session-col-list autohide-scrollbar">
                 {projectPageItems(sheetProjectId)}
                 {loadingProjectSessions && (
