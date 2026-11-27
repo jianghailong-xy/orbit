@@ -129,7 +129,8 @@ public enum SessionDisplay {
         if f.waitingOn == .hold { out.append(.onHold) }
         if !released && f.phase == .idle && f.lastTurnOutcome == .interrupted { out.append(.interrupted) }
         if !released && (f.activity == "BACKGROUND_JOB" || (f.runningBgCount ?? 0) > 0) { out.append(.background) }
-        if !released && f.waitingOn == .wake { out.append(.willResume) }
+        // An idle session a watch or wake-up will resume is just Idle: no mark (the owner, 2026-11-27).
+        if !released && f.waitingOn == .wake && f.phase != .idle { out.append(.willResume) }
         if released && f.workFinished == true { out.append(.finished) }
         if released && f.workFinished != true && !releasedByFailure(f) { out.append(.ended) }
         return out
