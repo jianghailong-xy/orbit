@@ -580,7 +580,11 @@ In both cases, git push/fetch/pull/clone, remote curl/wget, package installs, ss
 sudo, recursive deletes outside temporary directories, secret files, other systems
 (`dshToolGateMatch`), containers and every other `git worktree` subcommand still require
 a card. Sandboxed Auto scans the entire command and script body for these markers, including quoted command arguments; an
-unterminated heredoc also gets a card. This does not change DSH's classifier.
+unterminated heredoc also gets a card. With the sandbox in force, package installs means each common form:
+npm/pnpm/bun `i`/`install`/`add`/`ci`, yarn `install`/`add` or a bare `yarn`, pip/pipx/uv `install` (uv also `add`),
+brew `install`/`reinstall`/`upgrade`, gem `install`, cargo `install`/`add` and go `install`/`get`. `osascript`
+(it drives other apps, which run outside the sandbox) and every `kubectl` call also require a card there.
+This does not change DSH's classifier.
 Owner decision (2026-11-08): the workspace's standing "Always allow" rule counts
 as owner approval. Such an answer escapes the sandbox through the same one-use,
 exact-command grant as a person's click (§8.5); runner classifier allows stay sandboxed.

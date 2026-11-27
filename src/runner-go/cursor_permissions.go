@@ -584,7 +584,14 @@ func cursorPreApproved(agent AgentExecConfig, ask cursorPermissionAsk) bool {
 	return false
 }
 
-var cursorSandboxHighImpact = regexp.MustCompile(`(?i)(?:\.ssh|\.aws|\bgit(?:\s+[^;|&\n]+)*\s+(?:push|fetch|pull|clone)\b|\b(?:npm|pnpm|yarn|pip[0-9.]*)(?:\s+[^;|&\n]+)*\s+(?:install|ci|add)\b)`)
+// cursorSandboxHighImpact is matched only with the sandbox in force. Besides git's network verbs and secret
+// directories it names the common package installs (a bare `yarn` installs too) and the programs that act
+// outside the sandbox on its behalf: osascript drives other apps, kubectl talks to a cluster.
+var cursorSandboxHighImpact = regexp.MustCompile(`(?i)(?:\.ssh|\.aws|\bgit(?:\s+[^;|&\n]+)*\s+(?:push|fetch|pull|clone)\b|` +
+	`\b(?:npm|pnpm|bun)(?:\s+[^;|&\n]+)*\s+(?:i|install|ci|add)\b|\byarn(?:\s+[^;|&\n]+)*\s+(?:install|add)\b|\byarn\s*(?:$|[;|&)\n])|` +
+	`\b(?:pip[0-9.]*|pipx|uv)(?:\s+[^;|&\n]+)*\s+(?:install|add)\b|\bbrew(?:\s+[^;|&\n]+)*\s+(?:install|reinstall|upgrade)\b|` +
+	`\bgem(?:\s+[^;|&\n]+)*\s+install\b|\bcargo(?:\s+[^;|&\n]+)*\s+(?:install|add)\b|\bgo(?:\s+[^;|&\n]+)*\s+(?:install|get)\b|` +
+	`\b(?:osascript|kubectl)\b)`)
 
 // cursorGitWorktreeList is the read-only listing of a repository's worktrees. Codex's Auto list
 // refuses every `git worktree` subcommand; with the sandbox in force the listing is routine.
