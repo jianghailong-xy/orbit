@@ -2631,10 +2631,15 @@ final class AppModel {
         show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
-    /// The draft's folder, picked from its place pill (docs/mocks/new-session-place): the same
-    /// workspace's draft, filed in `folderID` or in none.
+    /// A place picked from the draft's place pill (docs/mocks/new-session-place 02, option D): this
+    /// workspace's draft refiled in `folderID` or in none, or another workspace's draft opened in one of
+    /// its folders — the hero's workspace switch, landing in the folder in the same move.
     func composeInFolder(_ folderID: String?, of agentID: String) {
-        nav.fileDraft(agentID: agentID, folderID: folderID)
+        if agentID != selectedAgentID {
+            show(.compose(agentID: agentID, folderID: folderID), agent: agentID)
+        } else {
+            nav.fileDraft(agentID: agentID, folderID: folderID)
+        }
     }
 
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the

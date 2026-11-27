@@ -1684,25 +1684,31 @@ struct NewSessionView: View {
         }
     }
 
-    /// Where the session runs, under the engine (docs/mocks/new-session-place, option A; web's
-    /// `PlacePill`): one bordered pill, `[workspace] / [folder] ▾`, naming the folder only when one is
-    /// picked — a folder is a sidebar group, so none is the quiet default. Its one menu lists the
-    /// workspaces, then this workspace's folders under None.
+    /// Where the session runs, under the engine (docs/mocks/new-session-place, option A's pill, board
+    /// 02 option D's menu; web's `PlacePill`): one bordered pill, `[workspace] / [folder] ▾`, naming the
+    /// folder only when one is picked — a folder is a sidebar group, so none is the quiet default. Its
+    /// menu lists the workspaces alone, this one first; a workspace with folders opens them one level
+    /// down under None, so a folder of any workspace is one pick.
     private var placePill: some View {
-        let folders = app.sessionFolders.filter { $0.workspaceId == agent.id }
-        let folder = folders.first { $0.id == folderID }
+        let folder = app.sessionFolders.first { $0.workspaceId == agent.id && $0.id == folderID }
         let label = folder.map { "\(agent.name) / \($0.name)" } ?? agent.name
+        let workspaces = [agent] + app.orderedAgents.filter { $0.id != agent.id }
         return Menu {
-            Section("Workspace") {
-                ForEach(app.orderedAgents) { other in
-                    Button { pickWorkspace(other.id) } label: { placeRow(other.name, on: other.id == agent.id) }
-                }
-            }
-            if !folders.isEmpty {
-                Section("Folder in \(agent.name) · optional") {
-                    Button { pickFolder(nil) } label: { placeRow("None", on: folder == nil) }
-                    ForEach(folders) { each in
-                        Button { pickFolder(each.id) } label: { placeRow(each.name, on: each.id == folder?.id) }
+            ForEach(workspaces) { other in
+                let folders = app.sessionFolders.filter { $0.workspaceId == other.id }
+                let here = other.id == agent.id
+                if folders.isEmpty {
+                    Button { pick(other.id, folder: nil) } label: { placeRow(other.name, on: here) }
+                } else {
+                    Menu {
+                        Button { pick(other.id, folder: nil) } label: { placeRow("None", on: here && folder == nil) }
+                        ForEach(folders) { each in
+                            Button { pick(other.id, folder: each.id) } label: {
+                                placeRow(each.name, on: here && each.id == folder?.id)
+                            }
+                        }
+                    } label: {
+                        placeRow("\(other.name)  \(folders.count)", on: here)
                     }
                 }
             }
@@ -1735,18 +1741,11 @@ struct NewSessionView: View {
         if on { Label(name, systemImage: "checkmark") } else { Text(name) }
     }
 
-    /// Another workspace opens its own draft, which files in no folder; what was typed goes along.
-    private func pickWorkspace(_ id: String) {
-        guard id != agent.id else { return }
-        carryDraftText(to: id)
-        app.composeWithAgent(id)
-    }
-
-    /// Another folder refiles this draft: the same workspace's draft under the folder's identity.
-    private func pickFolder(_ id: String?) {
-        guard id != folderID else { return }
-        carryDraftText(to: agent.id)
-        app.composeInFolder(id, of: agent.id)
+    /// A workspace, and a folder of it or none: the draft for that place, with what was typed here.
+    private func pick(_ workspaceID: String, folder: String?) {
+        guard workspaceID != agent.id || folder != folderID else { return }
+        carryDraftText(to: workspaceID)
+        app.composeInFolder(folder, of: workspaceID)
     }
 
     /// The draft the pick opens is a new one (its identity names the workspace and the folder), so
