@@ -103,6 +103,7 @@ import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition'
 import { setConversationProjectPage, useConversationProjectPage } from '../lib/conversationProjectPage';
 import {
   type ComponentProps,
+  type CSSProperties,
   type Dispatch,
   type DragEvent as ReactDragEvent,
   Fragment,
@@ -11732,21 +11733,20 @@ export function WorkspaceView({
               {selected && !selectedTrashed && !composing ? (
                 // A click opens the session's settings, and again closes them (docs/mocks/session-settings-column ③);
                 // it is renamed there, in the Name field.
-                <Tooltip content="Session settings" side="bottom" align="start">
-                  <button
-                    type="button"
-                    className="workspace-name workspace-name-button"
-                    aria-expanded={settingsOpen}
-                    onClick={() => {
-                      // One column at a time beside the conversation (docs/mocks/session-task-column).
-                      if (!settingsOpen && taskOverPage) closeTaskOverPage();
-                      setSettingsOpen((open) => !open);
-                    }}
-                  >
-                    <span className="workspace-name-text">{selected.title}</span>
-                    <RightOutlined className="workspace-name-chevron" aria-hidden />
-                  </button>
-                </Tooltip>
+                // It looks the same hovered as at rest: no ground, no ›, no tooltip (docs/mocks/session-title-hover).
+                <button
+                  type="button"
+                  className="workspace-name workspace-name-button"
+                  aria-label="Session settings"
+                  aria-expanded={settingsOpen}
+                  onClick={() => {
+                    // One column at a time beside the conversation (docs/mocks/session-task-column).
+                    if (!settingsOpen && taskOverPage) closeTaskOverPage();
+                    setSettingsOpen((open) => !open);
+                  }}
+                >
+                  <span className="workspace-name-text">{selected.title}</span>
+                </button>
               ) : (
                 <div className="workspace-name">
                   {composing
@@ -13252,6 +13252,23 @@ export function SessionComposer({
   const translationIsOn = translationOn(me.data);
   // A failing translator being skipped (policy board frame 6): warned here, before the send.
   const translationUnavailable = useTranslationUnavailable(me.data);
+  // Settings › Translation (6A), drawn the way the Apple clients draw it: the "<Language> → <agent
+  // language>" capsule sits at the composer's top-right on the empty box's first line, and gives that
+  // line up to a suggestion — the tag is about the words being typed, and a guess needs the width
+  // (Apple: ComposerView.showsTranslationTag, ComposerTranslationTag). Its width is kept off the line
+  // so neither the guess nor a placeholder runs under it.
+  const translationTagText = translationIsOn
+    ? (translationUnavailable
+        ? unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))
+        : translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data)))
+    : null;
+  const showsTranslationTag = translationTagText !== null && text === ''
+    && (!offeredSuggestion || translationUnavailable);
+  const translationTagRef = useRef<HTMLButtonElement>(null);
+  const [translationTagWidth, setTranslationTagWidth] = useState(0);
+  useLayoutEffect(() => {
+    setTranslationTagWidth(showsTranslationTag ? (translationTagRef.current?.offsetWidth ?? 0) + 8 : 0);
+  }, [showsTranslationTag, translationTagText]);
   // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
   // its auto-grow cap.
   const [composerScroll, setComposerScroll] = useState(0);
@@ -13719,7 +13736,10 @@ export function SessionComposer({
           )}
         </div>
       )}
-      <div className="composer-field">
+      <div
+        className="composer-field"
+        style={{ '--composer-tag-reserve': `${translationTagWidth}px` } as CSSProperties}
+      >
       {/* Behind the input, drawing its chips. Same characters, same metrics — see the
           `.composer-field` block in index.css for why that is not negotiable. */}
       <ComposerMirror text={text} refs={composerRefs} scrollTop={composerScroll} />
@@ -13959,6 +13979,24 @@ export function SessionComposer({
         <span id={optimizeHintId} className="sr-only">
           <span className="composer-suggestion-tab-hint">Press Tab to optimize this draft.</span>
         </span>
+      )}
+      {/* Settings › Translation is on (6A): what is typed here is translated into the agent language
+          when it is sent, never while it is typed. Drawn on the empty box's first line, at its right
+          edge, as the Apple clients draw it; pressing it opens the setting. */}
+      {showsTranslationTag && (
+        <button
+          ref={translationTagRef}
+          type="button"
+          className={`composer-translation-tag${translationUnavailable ? ' is-unavailable' : ''}`}
+          title={
+            translationUnavailable
+              ? `${translationTagText}. The translator is failing, so a message sent now is held until you Retry or Send as written. Open Settings › Translation`
+              : 'Messages are translated before the agent gets them. Open Settings › Translation'
+          }
+          onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
+        >
+          {translationTagText}
+        </button>
       )}
       </div>
       <div className="composer-toolbar">
@@ -14224,25 +14262,6 @@ export function SessionComposer({
             unavailable={shownEngine === AgentProvider.CURSOR ? CURSOR_CONTEXT_UNAVAILABLE : undefined}
             actions={contextActions}
           />
-        )}
-        {/* Settings › Translation is on (6A): what is typed here is translated into the agent language when it
-            is sent, never while it is typed. The tag opens the setting. */}
-        {translationIsOn && (
-          <Tooltip content={
-            translationUnavailable
-              ? `${unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}. The translator is failing, so a message sent now is held until you Retry or Send as written. Open Settings › Translation`
-              : 'Messages are translated before the agent gets them. Open Settings › Translation'
-          }>
-            <button
-              type="button"
-              className={`composer-translation-tag${translationUnavailable ? ' is-unavailable' : ''}`}
-              onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
-            >
-              {translationUnavailable
-                ? unavailableTranslationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))
-                : translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
-            </button>
-          </Tooltip>
         )}
         {/* A 32px icon like `+` and Send, there whenever the optimizer is on and only disabled with
             nothing to optimize: a button that came and went with the draft moved every control to
