@@ -61,6 +61,7 @@ let openChat: string | null;
 let writes: Array<{ method: string; path: string; body: Record<string, unknown> }>;
 let reads: string[];
 let client: QueryClient;
+let listRows: typeof LIST_ROWS;
 let cards: { run: null; cards: unknown[]; records: unknown[] };
 const CODEX = LIST_ROWS.find((row) => row.title === 'Codex stable check')!;
 
@@ -79,7 +80,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     return reply(200, { ok: true });
   }
   reads.push(url);
-  if (path === '/api/schedules') return reply(200, listAnswer(LIST_ROWS));
+  if (path === '/api/schedules') return reply(200, listAnswer(listRows));
   if (/^\/api\/sessions\/[^/]+\/schedule-cards$/.test(path)) return reply(200, cards);
   if (path === `/api/schedules/${CODEX.id}`) return reply(200, scheduleDetail(CODEX.id));
   if (path === '/api/schedules/drafts') return reply(200, { drafts: [] });
@@ -104,7 +105,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   if (session) {
     return reply(200, {
       id: session[1], title: `Chat ${session[1]}`, runState: 'AWAITING_INPUT', status: 'AWAITING_INPUT', workspace: { id: 'ws-web', name: 'web' },
-      assignedRunnerId: 'r-mac', engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', permissionMode: 'default',
+      chatOrigin: session[1] === 'S-plain' ? null : 'SCHEDULE_CHAT', assignedRunnerId: 'r-mac', engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', permissionMode: 'default',
     });
   }
   return reply(404, { message: `${url} is not in this fixture` });
@@ -218,6 +219,7 @@ async function resize(width: number): Promise<void> {
 // beforeEach of the harness above resets its own state; this file's own:
 beforeEach(() => {
   cards = { run: null, cards: [], records: [] };
+  listRows = LIST_ROWS;
   streamState.events = [];
 });
 
@@ -391,5 +393,41 @@ describe('the Chat button states (board 3 ①)', () => {
     expect(chatButton().getAttribute('data-state')).toBe('needs_you');
     expect(document.querySelector('[data-chat-count]')!.textContent).toBe('1');
     expect(document.querySelector('[data-chat-ring]')).toBeNull();
+  });
+});
+
+describe('the Run now button is safe against agent text (design §4.6)', () => {
+  const offerOf = (text: string) => [{ seq: 5, type: 'assistant', ts: AT, payload: { text } }];
+  beforeEach(() => {
+    openSessions = [asRow('S-open'), asRow('S-plain', { chatOrigin: null })];
+    openChat = 'S-open';
+  });
+
+  it('draws nothing for an id that is not one of the account’s schedules', async () => {
+    streamState.events = offerOf('[Run now](orbit-run-now:not-mine)');
+    await open('/scheduled?chat=S-open');
+    expect(document.querySelector('[data-run-now]')).toBeNull();
+  });
+
+  it('titles the button from the server’s list, never from the link’s words', async () => {
+    streamState.events = offerOf(`[Delete everything now](orbit-run-now:${CODEX.id})`);
+    await open('/scheduled?chat=S-open');
+    const offer = document.querySelector('[data-run-now]')!;
+    expect(offer.textContent).toContain('Codex stable check');
+    expect(offer.textContent).not.toContain('Delete everything');
+  });
+
+  it('draws no button for an ended schedule', async () => {
+    listRows = LIST_ROWS.map((row) => (row.id === CODEX.id ? { ...row, state: 'ENDED' as const } : row));
+    streamState.events = offerOf(`[Run now](orbit-run-now:${CODEX.id})`);
+    await open('/scheduled?chat=S-open');
+    expect(document.querySelector('[data-run-now]')).toBeNull();
+  });
+
+  it('draws no button in a session that is not a Scheduled chat, even when the address names it', async () => {
+    streamState.events = offerOf(`[Run now](orbit-run-now:${CODEX.id})`);
+    await open('/scheduled?chat=S-plain');
+    expect(shownSession()).toBe('S-plain');
+    expect(document.querySelector('[data-run-now]')).toBeNull();
   });
 });

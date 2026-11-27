@@ -1244,6 +1244,7 @@ function WikiChatPick({
 /** The fields of a session's detail the panel reads. */
 interface ChatSession {
   title?: string;
+  chatOrigin?: string | null;
   workspace?: { id: string; name?: string } | null;
   assignedRunnerId?: string | null;
   engine?: string | null;
@@ -1604,7 +1605,8 @@ function WikiChatSession({
   const schedules = origin.schedules ?? null;
   const scheduleCards = useSessionScheduleCards(schedules ? sessionId : null);
   const scheduleInserts = useSessionScheduleInserts(schedules ? sessionId : null, scheduleCards, stream.transcriptEvents, null);
-  const runNowInserts = useRunNowInserts(schedules ? sessionId : null, stream.transcriptEvents);
+  // Only a Scheduled page chat's transcript offers Run now: `?chat=` can name any session.
+  const runNowInserts = useRunNowInserts(schedules && session?.chatOrigin === 'SCHEDULE_CHAT' ? sessionId : null, stream.transcriptEvents);
   const chatInserts = useMemo(
     () => [...driveCards.inserts, ...scheduleInserts, ...runNowInserts],
     [driveCards.inserts, scheduleInserts, runNowInserts],
