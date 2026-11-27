@@ -63,6 +63,27 @@ class PermissionModesTest {
         assertTrue(PermissionModes.changes(json("""{"permissionModeChanges":{"toMode":"auto"}}""")).isEmpty())
     }
 
+    /** Since migration 1780 each change carries the order it was recorded in, and the detail says whether older ones are recorded:
+     * two repeated transitions at one moment are two lines, and a page of older ones decodes the same way. */
+    @Test fun eachChangeCarriesItsSeqAndThePageOfOlderOnesDecodes() {
+        val detail = json("""{"permissionModeChangesHasMore":true,"permissionModeChanges":[
+              {"fromMode":"auto","toMode":"plan","cause":"OWNER_PICK","client":"web","at":"2026-11-22T12:00:00.000Z","seq":41},
+              {"fromMode":"plan","toMode":"auto","cause":"OWNER_PICK","client":"android","at":"2026-11-22T12:00:00.000Z","seq":42},
+              {"fromMode":"auto","toMode":"plan","cause":"OWNER_PICK","client":"web","at":"2026-11-22T12:00:00.000Z","seq":43},
+              {"fromMode":"plan","toMode":"auto","cause":"OWNER_PICK","client":"android","at":"2026-11-22T12:00:00.000Z","seq":44}]}""")
+        val changes = PermissionModes.changes(detail)
+        assertEquals(listOf(41L, 42L, 43L, 44L), changes.map { it.seq })
+        assertEquals(4, changes.map { it.key }.toSet().size)
+        assertTrue(PermissionModes.changesHasMore(detail))
+        assertFalse(PermissionModes.changesHasMore(json("""{"permissionModeChanges":[]}""")))
+        val page = PermissionModes.page(json("""{"changes":[
+              {"fromMode":null,"toMode":"auto","cause":"CLAIM","client":null,"at":"2026-11-22T11:59:00.000Z","seq":7}],"hasMore":false}"""))
+        assertEquals(ModeChangePage(listOf(PermissionModeChange(null, "auto", "CLAIM", null, "2026-11-22T11:59:00.000Z", 7)), false), page)
+        // A seq spelled as a string is no seq.
+        assertNull(PermissionModes.changes(json("""{"permissionModeChanges":[
+              {"fromMode":null,"toMode":"auto","cause":"CLAIM","at":"2026-11-22T11:59:00.000Z","seq":"7"}]}""")).single().seq)
+    }
+
     @Test fun eachModeHasTheSharedTablesName() {
         assertEquals(listOf("Default", "Accept Edits", "Plan", "Auto", "Don't Ask", "Bypass"),
             listOf("default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions").map(PermissionModes::label))

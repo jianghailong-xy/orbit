@@ -134,6 +134,8 @@ import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.SessionRunStart
 import io.orbitd.android.core.net.HttpMethod
+import io.orbitd.android.core.protocol.ModeChangeHistory
+import io.orbitd.android.core.protocol.PermissionModes
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
@@ -428,8 +430,31 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
     // Each change of the mode the engine runs in, with who or what made it (board permission-mode-actual B1), where it happened: the
-    // session's detail carries them, and the runner's catalogue says whether its model has Auto.
-    val permissionModeLines = remember(snapshotDetail, composerState.catalog) { modeLines(snapshotDetail, composerState.catalog) }
+    // session's detail carries the newest, and the runner's catalogue says whether its model has Auto. The older ones are read as
+    // the window pages back to them (GET /sessions/:id/permission-mode-changes, ModeChangeHistory), each held once by its seq.
+    var modeHistory by remember(handle, route.id) { mutableStateOf(ModeChangeHistory()) }
+    val heldModes = remember(modeHistory, snapshotDetail) {
+        snapshotDetail?.let { modeHistory.adopt(PermissionModes.changes(it), PermissionModes.changesHasMore(it)) } ?: ModeChangeHistory()
+    }
+    SideEffect { if (heldModes !== modeHistory) modeHistory = heldModes }
+    val oldestEventTs = state.window.events.firstOrNull()?.ts
+    val windowReachesStart = state.window.seeded && !state.window.hasOlder && state.window.events.isNotEmpty()
+    val olderModesBefore = heldModes.changes.firstOrNull()?.seq
+    val needsOlderModes = heldModes.needsOlder(oldestEventTs, windowReachesStart)
+    LaunchedEffect(handle, route.id, needsOlderModes, olderModesBefore, oldestEventTs) {
+        val before = olderModesBefore ?: return@LaunchedEffect
+        if (!needsOlderModes) return@LaunchedEffect
+        try {
+            val body = app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, "permission-mode-changes"),
+                query = listOf("before" to "$before"))).body
+            val page = Wire.decode(body, JsonElement.serializer()) as? JsonObject ?: return@LaunchedEffect
+            modeHistory = modeHistory.withOlder(before, PermissionModes.page(page))
+        // Silent: the next page the window loads asks again.
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
+    }
+    val permissionModeLines = remember(snapshotDetail, heldModes.changes, composerState.catalog) {
+        modeLines(snapshotDetail, heldModes.changes, composerState.catalog)
+    }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
         key(insert.key) { Box(Modifier.conversationCard()) {
             ScheduleConversationInsert(insert, scheduled, route.id!!) { id ->
