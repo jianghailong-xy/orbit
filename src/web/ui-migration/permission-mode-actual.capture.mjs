@@ -166,7 +166,7 @@ async function open(browser, s) {
 }
 
 async function act(page, s) {
-  const capsule = page.locator('.composer-toolbar [data-mode-gap]');
+  const capsule = page.locator('.composer-toolbar .composer-pill:has([data-mode-gap])');
   if (s.open === 'menu') {
     await capsule.locator('[role="combobox"]').click();
     await page.locator('[role="listbox"] [role="option"]').first().waitFor();
@@ -198,7 +198,7 @@ async function facts(page) {
     const capsule = document.querySelector('.composer-toolbar [data-mode-gap]');
     const text = (el) => el?.textContent?.replace(/\s+/g, ' ').trim();
     return {
-      capsule: text(capsule?.querySelector('.orbit-choice-value')),
+      capsule: text(capsule?.closest('.orbit-choice-value')),
       gap: capsule?.getAttribute('data-mode-gap'),
       head: text(document.querySelector('.orbit-select-header')),
       checked: text(document.querySelector('[role="listbox"] [role="option"][aria-selected="true"]')),

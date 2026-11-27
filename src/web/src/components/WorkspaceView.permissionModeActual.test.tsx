@@ -148,8 +148,9 @@ async function settle(): Promise<void> {
   }
 }
 
+/** The Mode capsule's words, which say whether there is a gap (`data-mode-gap`), inside the pill's trigger. */
 const capsule = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.composer-toolbar [data-mode-gap]');
-const capsuleText = (): string => capsule()?.querySelector('.orbit-choice-value')?.textContent?.trim() ?? '';
+const capsuleText = (): string => capsule()?.closest('.orbit-choice-value')?.textContent?.trim() ?? '';
 
 /** Mounts the page at `route` and waits for the Mode capsule to say `expected`. */
 async function mount(route: string, expected: string, runner = runnerWith()): Promise<void> {
@@ -176,7 +177,7 @@ async function mount(route: string, expected: string, runner = runnerWith()): Pr
 
 /** Opens the Mode menu, as the session page's tests open a house Select, and waits for its options. */
 async function openMode(): Promise<void> {
-  const trigger = capsule()?.querySelector('[role="combobox"]');
+  const trigger = capsule()?.closest('[role="combobox"]');
   expect(trigger, 'the Mode capsule').toBeTruthy();
   await act(async () => {
     const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
@@ -296,7 +297,7 @@ describe('the mode a session is actually running in (docs/mocks/permission-mode-
   it('② while the runner switches Claude back to Auto: "Default → Auto" with a spinner, and why', async () => {
     await mount(`/sessions/${CORRECTING}`, 'Default → Auto');
     expect(capsule()?.dataset.modeGap).toBe('switching');
-    expect(capsule()?.className).toContain('composer-mode-gap');
+    expect(capsule()?.className).toContain('is-gap');
     expect(capsule()?.querySelector('.composer-mode-spin')).not.toBeNull();
     await openMode();
     expect(menuHead()).toBe('Running in Default. Claude started below the Auto you asked for; the runner is switching it to Auto now.');

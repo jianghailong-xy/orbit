@@ -7966,13 +7966,13 @@ button.toast--pill:focus-visible {
 /* The Mode capsule while the mode running is not the one asked for (board
    docs/mocks/permission-mode-actual, A1): amber, with a spinner while it switches ("Default → Auto")
    and a dot while the gap lasts. */
-.composer-toolbar .composer-mode-gap .orbit-select:not([data-disabled]) .orbit-choice-value {
-  color: var(--warning);
-}
 .composer-mode-value {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+.composer-toolbar .orbit-select:not([data-disabled]) .composer-mode-value.is-gap {
+  color: var(--warning);
 }
 .composer-mode-dot {
   width: 6px;

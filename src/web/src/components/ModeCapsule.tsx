@@ -7,9 +7,15 @@ import { permissionModeLabel, type ModeCapsule } from '../lib/sessionPermissionM
  * beside it while a gap lasts.
  */
 export function ModeCapsuleValue({ capsule }: { capsule: ModeCapsule }) {
-  if (capsule.gap === 'none') return <>{capsule.label}</>;
+  if (capsule.gap === 'none') {
+    return (
+      <span className="composer-mode-value" data-mode-gap="none">
+        {capsule.label}
+      </span>
+    );
+  }
   return (
-    <span className="composer-mode-value">
+    <span className="composer-mode-value is-gap" data-mode-gap={capsule.gap}>
       {capsule.gap === 'switching' ? (
         <LoadingOutlined spin className="composer-mode-spin" aria-hidden />
       ) : (

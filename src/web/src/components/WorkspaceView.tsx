@@ -13280,7 +13280,7 @@ export function SessionComposer({
             intent the menu's check stays on (docs/mocks/permission-mode-actual, A1 and C1). The reason
             for a gap is said on hover and at the head of the menu. */}
         <Tooltip content={capsule.reason ? `${capsule.reason.lead} ${capsule.reason.rest}` : null}>
-        <span className={`composer-pill${capsule.gap === 'none' ? '' : ' composer-mode-gap'}`} data-mode-gap={capsule.gap}>
+        <span className="composer-pill">
           <Select
             size="small"
             variant="borderless"
