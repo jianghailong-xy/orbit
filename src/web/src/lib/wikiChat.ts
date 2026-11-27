@@ -321,6 +321,11 @@ export interface ChatHostStore {
   closed: string;
   open: string;
   width: string;
+  /**
+   * A host whose panel opens only on a press of the page's own button (Scheduled's header Chat): whether it was left
+   * open, per scope on the device (local storage). Absent on a host that opens by default where it docks.
+   */
+  shown?: string;
 }
 
 export const WIKI_CHAT_STORE: ChatHostStore = {
@@ -352,6 +357,18 @@ export function writeWikiChatClosed(spaceSlug: string, closed: boolean, key: str
   } catch {
     // Storage refused: the panel opens by default again next time, which is the lesser loss.
   }
+}
+
+/**
+ * Whether the panel was left open on this device, for a host that opens only on a press (`ChatHostStore.shown`): kept
+ * across tabs and restarts until the button or ✕ closes it. Not set, it is closed: such a panel never opens by itself.
+ */
+export function readChatHostShown(scope: string, key: string): boolean {
+  return readWikiChatClosed(scope, key);
+}
+
+export function writeChatHostShown(scope: string, shown: boolean, key: string): void {
+  writeWikiChatClosed(scope, shown, key);
 }
 
 /**
@@ -422,13 +439,21 @@ export function wikiChatPanelWidth(
   dragged: number | null,
   windowWidth: number,
   fixed: number | null = null,
+  range: ChatPanelRange | null = null,
 ): number | null {
   const { share, initial, cap, min } = WIKI_CHAT_WIDTH.panel;
   if (layout === 'sheet') return null;
   if (layout !== 'wide' || dragged === null || !Number.isFinite(dragged)) {
     return fixed ?? Math.min(cap, Math.max(initial, Math.round(windowWidth * share)));
   }
-  return Math.min(wikiChatPanelMax(windowWidth), Math.max(min, Math.round(dragged)));
+  const bounds = range ?? { min, max: wikiChatPanelMax(windowWidth) };
+  return Math.min(bounds.max, Math.max(bounds.min, Math.round(dragged)));
+}
+
+/** Where a host holds its panel's drag (Scheduled: 400 to 480, design §6); absent, 320 to half the window. */
+export interface ChatPanelRange {
+  min: number;
+  max: number;
 }
 
 /** Whether the open panel pushes the page over (it docks) rather than lying over it. */

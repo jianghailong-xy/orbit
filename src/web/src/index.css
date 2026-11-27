@@ -29966,6 +29966,8 @@ button.agent-progress-agent:hover {
 .wk-chat-examples li { margin: 4px 0; }
 .wk-chat-example { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .wk-chat-example:hover { color: var(--brand); }
+/* A last line under the examples (Scheduled: what applies at once and what needs Allow). */
+.wk-chat-closing { margin-top: 12px; font-size: 12.5px; color: var(--text-3); }
 /* The panel's composer is the session page's (board 43): its box 12px in from the panel's edges, as the short one it
    replaced was — 374 wide in the default panel, where its toolbar keeps one line as it is. Dragged narrower (to 320),
    the toolbar does what the session page's does on a phone (the 600px block of .composer-toolbar): tighter gaps, the
@@ -31782,13 +31784,23 @@ td > .routing-report-tier + .model-routing-flag {
     animation: none;
   }
 
-  /* Scheduled: the list is one panel and the inspector beside it another. */
-  .app-shell .app-main > .app-view:has(> .sched-page > .sched-inspector) {
+  /* Scheduled: the list is one panel and the inspector beside it another; with the chat docked, the chat a third
+     (board scheduled-chat 01 parts 1–2). The chat's host steps aside so the list is the panel. */
+  .app-shell .app-main > .app-view:has(> .wk-chat-frame > .wk-chat-host > .sched-page > .sched-inspector) {
     background: none;
     border: 0;
     border-radius: 0;
     box-shadow: none;
   }
+  .app-shell .wk-chat-frame.is-sched.is-columned:has(> :is(.wk-chat-panel, .wk-chat-slot)) > .wk-chat-host {
+    padding: 0;
+    overflow: hidden;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .wk-chat-frame.is-sched.is-columned:has(> :is(.wk-chat-panel, .wk-chat-slot)) .sched-page > .sched-list,
   .app-shell .sched-page:has(> .sched-inspector) > .sched-list,
   .app-shell .sched-page > .sched-inspector {
     background: var(--bg-base);
