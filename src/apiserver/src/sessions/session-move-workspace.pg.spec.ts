@@ -17,7 +17,7 @@
  *   (5) Codex moves within its runner, on the account it ran on; a runner that cannot run Codex, and
  *       any other runner, is refused;
  *   (6) every §5.2 rule about the session itself: the panel's reason is the move's 409, and a refusal
- *       writes and announces nothing; an idle session has to be ended first, and then moves; a
+ *       writes and announces nothing; an idle session is released by the move itself, which waits for it; a
  *       spawned child session moves;
  *   (7) every §5.2 rule about the target workspace, the same way; an offline runner is no refusal;
  *   (8) the rules are asked again under the locks: a session that wakes up, or a workspace that is
@@ -294,6 +294,10 @@ test('moving a session to another workspace: the panel, the move, its refusals a
     publishWorkspaceChanged: (sessionId: string, workspaceId: string, affectsTaskRows: boolean) => {
       published.push(`workspace_changed ${sessionId} ${workspaceId} ${affectsTaskRows}`);
     },
+    // An idle session's move releases it first (SessionsService.releaseForMove): the end's own announcements.
+    publishQueuedTurnsChanged: () => undefined,
+    notifyInbox: () => undefined,
+    requestCancel: (runnerId: string, sessionId: string) => { published.push(`cancel ${runnerId} ${sessionId}`); },
   } as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined };
 
@@ -578,7 +582,6 @@ test('moving a session to another workspace: the panel, the move, its refusals a
           data: { sessionId: id, toolName: 'Bash', input: { command: 'rm -rf build' }, toolUseId: 'toolu_ask', backgroundJobId: 'toolu_bg' },
         });
       }],
-      ['ending', 'The session is ending. Try again in a moment.', { ...LIVE, status: RunStatus.AWAITING_INPUT, cancelRequestedAt: new Date() }],
       ['a background task', 'Background tasks are still running.', { ...LIVE, status: RunStatus.AWAITING_INPUT, runningBgShells: ['toolu_bg'] }],
       ['in Trash', 'Restore the session from Trash first.', { deletedAt: new Date() }],
       ['still importing', 'The session is still being imported.', { importSourceCwd: '/home/orbit/old-project' }],
@@ -603,30 +606,65 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       await refused(id, ws.sibling, reason);
     }
 
-    // Idle but not ended: the panel offers End and Move, and the move itself waits for the end.
+    // Idle but still held: the move releases it itself, waits until its runner has let it go (which is when the runner
+    // commits what it left), and then moves it. Nobody is asked to end anything.
     const idle = await conversation('Idle', { ...LIVE, status: RunStatus.AWAITING_INPUT });
     const offered = (await targetsOf(idle)).json;
     assert.deepEqual([offered.reason, offered.needsEnd], [null, true]);
-    const early = await move(idle, { workspaceId: pub(ws.sibling) });
-    assert.equal(early.status, 409, early.text);
-    assert.equal(early.json.message, 'End the session first.');
-    assert.equal((await row(idle)).workspace_id, ws.home);
-    // …which is the old runner's to do, so it has to be up.
+    const waiting = move(idle, { workspaceId: pub(ws.sibling) });
+    // The runner's part: told to let go, it releases the session (its finalize).
+    const release = async (id: string) => {
+      for (let i = 0; (await row(id)).cancel_requested_at == null; i++) {
+        assert.ok(i < 200, 'the move never asked for the release');
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.equal((await row(id)).workspace_id, ws.home, 'moved before it was released');
+      await sql.query(
+        "UPDATE session SET turn_state = NULL, finished_at = now() WHERE id = $1::uuid",
+        [id],
+      );
+    };
+    await release(idle);
+    const done = await waiting;
+    assert.equal(done.status, 201, done.text);
+    assert.equal((await row(idle)).workspace_id, ws.sibling);
+    assert.ok(announced().includes(`cancel ${runners.wikova} ${idle}`), 'its runner was told to let it go');
+
+    // A runner still committing when the move stops waiting: refused with why, left where it was, and a second press
+    // once it is released moves it at once.
+    const slow = await conversation('Idle, slow to let go', { ...LIVE, status: RunStatus.AWAITING_INPUT });
+    const wait = SessionsService.moveReleaseWaitMs;
+    SessionsService.moveReleaseWaitMs = 300;
+    try {
+      const late = await move(slow, { workspaceId: pub(ws.sibling) });
+      assert.equal(late.status, 409, late.text);
+      assert.equal(late.json.message, 'The session’s work is still being saved, so it wasn’t moved. Try again in a moment.');
+    } finally {
+      SessionsService.moveReleaseWaitMs = wait;
+    }
+    assert.equal((await row(slow)).workspace_id, ws.home);
+    // Its release is under way, so the panel still offers the move, and the move waits for it (no second end).
+    assert.deepEqual(
+      [(await targetsOf(slow)).json.reason, (await targetsOf(slow)).json.needsEnd],
+      [null, true],
+    );
+    const again = move(slow, { workspaceId: pub(ws.sibling) });
+    await release(slow);
+    assert.equal((await again).status, 201);
+    assert.equal((await row(slow)).workspace_id, ws.sibling);
+    announced();
+
+    // Releasing is the old runner's to do, so it has to be up — and nothing is released for a move that can't happen.
     const asleep = await conversation('Idle asleep', {
       ...LIVE, status: RunStatus.AWAITING_INPUT, workspaceId: ws.nap, assignedRunnerId: runners.sleepy,
     });
     const stuck = (await targetsOf(asleep)).json;
-    assert.deepEqual([stuck.reason, stuck.needsEnd], ['sleepy has to be online to end the session first.', true]);
-    // Once ended, it moves — the second half of End and Move.
-    await sql.query(
-      "UPDATE session SET turn_state = NULL, end_reason = 'ended', finished_at = now() WHERE id = $1::uuid",
-      [idle],
-    );
-    const settled = (await targetsOf(idle)).json;
-    assert.deepEqual([settled.reason, settled.needsEnd], [null, false]);
-    assert.equal((await move(idle, { workspaceId: pub(ws.sibling) })).status, 201);
-    assert.equal((await row(idle)).workspace_id, ws.sibling);
-    announced();
+    assert.deepEqual([stuck.reason, stuck.needsEnd], ['sleepy has to be online to move this session.', true]);
+    const away = await move(asleep, { workspaceId: pub(ws.sibling) });
+    assert.equal(away.status, 409, away.text);
+    assert.equal(away.json.message, 'sleepy has to be online to move this session.');
+    assert.equal((await row(asleep)).cancel_requested_at, null, 'released for a move that was refused');
+    assert.deepEqual(announced(), []);
 
     // An ended session needs nothing of its old runner, online or not.
     const endedAsleep = await conversation('Ended asleep', { workspaceId: ws.nap, assignedRunnerId: runners.sleepy });

@@ -471,6 +471,7 @@ import {
   branchIsMerged,
   changedFileCount,
   mergeTargetOf,
+  moveNeedsRunnerOnline,
   moveTargetRefusal,
   runnerLabel,
   sessionMoveVerdict,
@@ -13665,6 +13666,7 @@ export class SessionsService {
   async move(ownerId: string, id: string, dto: MoveSessionDto) {
     const folderId = dto.folderId ?? null;
     const workspaceId = dto.workspaceId ?? null;
+    if (workspaceId) await this.releaseForMove(ownerId, id, workspaceId, folderId);
     const moved = await withTransactionRetry(this.prisma, async (tx) => {
       const [workspace] = workspaceId
         ? await tx.$queryRaw<Array<{ id: string }>>`
@@ -13724,6 +13726,67 @@ export class SessionsService {
       this.realtime.publishSessionUpdated(id);
     }
     return { id, workspaceId: moved.workspaceId, folderId };
+  }
+
+  /** How long a move waits for the session's runner to let it go (releaseForMove). Below the 60 seconds an
+   *  Apple client's request waits for an answer by default. Not readonly: a spec shortens it. */
+  static moveReleaseWaitMs = 45_000;
+  private static readonly MOVE_RELEASE_POLL_MS = 250;
+
+  /**
+   * The step of a move to another workspace that comes before its transaction: an idle session that is still held is
+   * let go of here, and the move waits until it is released. Only a released session moves, because releasing is when
+   * its runner commits what it left uncommitted (session-move.ts sessionMoveVerdict); clients used to do this
+   * themselves as "End and Move", which showed the person a session ending that, for them, only moved.
+   *
+   * Nothing is released for a move that would be refused anyway: the session's own rules, the target workspace's and
+   * the folder are asked first, as the panel asks them, so a refusal leaves the session as it was. The transaction
+   * then asks every rule again on locked rows; a session woken by a new message in between is refused there
+   * (MOVE_REFUSAL.END). A session already released, one the region check holds, and a move within the session's own
+   * workspace pass straight through.
+   *
+   * The release is the runner's to do, so it has to be online, unless the end was already asked for (then it is under
+   * way, and the reaper finishes it if the runner never does). A runner still committing when the wait runs out is a
+   * 409 saying so: the session stays where it was, released, and a second press moves it at once.
+   */
+  private async releaseForMove(ownerId: string, id: string, workspaceId: string, folderId: string | null): Promise<void> {
+    const subject = await this.readMoveSubject(this.prisma, ownerId, id);
+    if (!subject) throw new NotFoundException('session not found');
+    const { session, runtime, verdict } = subject;
+    if (session.workspaceId === workspaceId || verdict.reason || !verdict.needsEnd) return;
+    const target = await this.prisma.workspace.findFirst({
+      where: { id: workspaceId, ownerId, deletedAt: null },
+      select: {
+        enabled: true,
+        runnerId: true,
+        runner: { select: { name: true, displayName: true, capabilities: true, engines: true } },
+      },
+    });
+    // A workspace that is gone: the transaction says which way.
+    if (!target) return;
+    const sourceRunner = session.assignedRunner;
+    const refusal = moveTargetRefusal(
+      { runtime, assignedRunnerId: session.assignedRunnerId, runnerName: sourceRunner ? runnerLabel(sourceRunner) : 'its runner' },
+      target,
+    );
+    if (refusal) throw new ConflictException(refusal);
+    if (folderId) {
+      const folder = await this.prisma.sessionFolder.findFirst({ where: { id: folderId, ownerId, workspaceId }, select: { id: true } });
+      if (!folder) throw new BadRequestException('folderId must be a folder of the workspace the session moves to');
+    }
+    if (!session.cancelRequestedAt) {
+      if (!(sourceRunner && runnerIsOnline(sourceRunner))) throw new ConflictException(moveNeedsRunnerOnline(sourceRunner));
+      await this.endOpen(ownerId, id, SessionEndReason.ENDED);
+    }
+    const deadline = Date.now() + SessionsService.moveReleaseWaitMs;
+    for (;;) {
+      const row = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { finishedAt: true } });
+      if (!row || isReleased(row)) return;
+      const remaining = deadline - Date.now();
+      // A stopping apiserver stops waiting (common/graceful-stop.ts): the release is the runner's, and goes on.
+      if (remaining <= 0 || isStopping()) throw new ConflictException(MOVE_REFUSAL.RELEASE_TIMED_OUT);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(SessionsService.MOVE_RELEASE_POLL_MS, remaining)));
+    }
   }
 
   /**
@@ -13973,12 +14036,12 @@ export class SessionsService {
     const { session, runtime, verdict } = subject;
     const sourceRunner = session.assignedRunner;
     const sourceRunnerName = sourceRunner ? runnerLabel(sourceRunner) : null;
-    // Ending is the old runner's to do — it commits what the session left uncommitted — so an End
-    // and Move needs it online. An ended session has no such need.
+    // Releasing is the old runner's to do — it commits what the session left uncommitted — so the move
+    // of a held session needs it online (releaseForMove). A released one, or one already being let go, does not.
     const reason =
       verdict.reason ??
-      (verdict.needsEnd && !(sourceRunner && runnerIsOnline(sourceRunner))
-        ? `${sourceRunnerName ?? 'Its runner'} has to be online to end the session first.`
+      (verdict.needsEnd && !session.cancelRequestedAt && !(sourceRunner && runnerIsOnline(sourceRunner))
+        ? moveNeedsRunnerOnline(sourceRunner)
         : null);
     const workspaces = await this.prisma.workspace.findMany({
       where: { ownerId, deletedAt: null },
