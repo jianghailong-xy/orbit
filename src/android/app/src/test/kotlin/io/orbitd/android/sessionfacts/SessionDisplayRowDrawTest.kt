@@ -88,7 +88,8 @@ class SessionDisplayRowDrawTest {
             }
             val expected = after[row]
             if (expected != null) {
-                assertEquals("row $row state icon", listOf(expected.first), states)
+                // Idle draws no icon on a list row (owner, 2026-11-27, as on iOS); its TalkBack value still says it.
+                assertEquals("row $row state icon", if (expected.first == "IDLE") listOf() else listOf(expected.first), states)
                 assertEquals("row $row marks", expected.second, marks)
                 assertEquals("row $row title-line icons", iconsAfter[row].orEmpty(), icons)
                 assertEquals("row $row draws no legacy mark", listOf<String>(), legacy)
