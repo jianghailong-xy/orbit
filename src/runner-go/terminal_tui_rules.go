@@ -48,7 +48,21 @@ var (
 		"cp", "mv", "rm", "rmdir", "ln", "chmod", "chown", "chgrp", "tee", "dd", "touch", "truncate",
 		"mkdir", "install", "rsync", "unlink", "shred",
 		"export", "env", "set", "unset", "declare", "typeset", "readonly", "local", "alias", "source", ".",
-		"eval", "exec", "sudo", "doas", "xargs", "nohup", "timeout", "nice", "command", "builtin")
+		"eval", "exec", "sudo", "doas", "xargs", "nohup", "timeout", "nice", "command", "builtin",
+		// Shells and interpreters: a rule for one covers every script it is given.
+		"sh", "bash", "zsh", "dash", "ksh", "fish", "node", "ruby", "perl", "php", "osascript", "awk", "gawk", "mawk",
+		// `find -delete`/`-exec` and `sed -i` change files.
+		"find", "sed")
+	// `python`, `python3`, `python3.12`: interpreters too.
+	bashPython = regexp.MustCompile(`^python[0-9.]*$`)
+	// Sub-commands that run any code or package they are given (`bun run x.ts`, `npm exec`), per program.
+	bashRunsGivenCode = map[string]map[string]bool{
+		"bun":  bashWordSet("run", "x", "exec", "repl"),
+		"deno": bashWordSet("run", "eval", "repl", "x"),
+		"npm":  bashWordSet("exec"),
+		"pnpm": bashWordSet("exec", "dlx"),
+		"yarn": bashWordSet("exec", "dlx"),
+	}
 )
 
 // bashRulePrefixes is the prefix of each distinct sub-command worth remembering, each stored as
@@ -90,7 +104,8 @@ func bashShellWrapperCommand(segment string) bool {
 
 // bashRememberedPrefix is what one sub-command, read with its substitutions replaced by `$_`, may
 // stand for, or "" for nothing: leading keywords skipped, a second word only for a sub-command
-// program, nothing for a program that changes files or the environment.
+// program (none that runs given code), nothing for a program that changes files or the environment
+// or interprets a script.
 func bashRememberedPrefix(head string) string {
 	words := strings.Fields(head)
 	i := 0
@@ -102,13 +117,13 @@ func bashRememberedPrefix(head string) string {
 	}
 	program := words[i]
 	name := program[strings.LastIndex(program, "/")+1:]
-	if bashNeverRemembered[name] {
+	if bashNeverRemembered[name] || bashPython.MatchString(name) {
 		return ""
 	}
 	if !bashSubcommandPrograms[name] {
 		return program
 	}
-	if i+1 < len(words) && bashSubcommandWord.MatchString(words[i+1]) {
+	if i+1 < len(words) && bashSubcommandWord.MatchString(words[i+1]) && !bashRunsGivenCode[name][words[i+1]] {
 		return program + " " + words[i+1]
 	}
 	return ""

@@ -525,7 +525,7 @@
     {
       "name": "recorded card 1 of session 4FwPbT4Fa0wz8VbxYjHfVz (2026-11-18): git worktree list, a $(…) and an if block",
       "command": "git worktree list | rg -i 'set-as-default|0cc5aa|c333b8|f1f63a'; echo '---'; WT=$(git worktree list | awk '/0cc5aa/{print $1}'); echo \"wt=$WT\"; if [ -n \"$WT\" ]; then cd \"$WT\" && git status -sb && git diff --stat && ls -la docs/evidence 2>/dev/null | head; find . -name '*SetDefault*' -o -name '*set-as-default*' -o -name '*SetAsDefault*' 2>/dev/null | head -40; ls OrbitKitTests 2>/dev/null; find . -path '*uploads*' -name '*.png' 2>/dev/null | head; find /Users/long/.orbit/runs -path '*5OK81*' -name '*.png' 2>/dev/null | head; fi",
-      "rules": ["git worktree", "rg", "echo", "cd", "git status", "git diff", "ls", "head", "find"]
+      "rules": ["git worktree", "rg", "echo", "cd", "git status", "git diff", "ls", "head"]
     },
     {
       "name": "recorded card 2 of session 4FwPbT4Fa0wz8VbxYjHfVz (2026-11-18): copies, then git apply",
@@ -589,7 +589,7 @@
     },
     {
       "name": "file-changing programs are never remembered",
-      "command": "cp a b; mv a b; rm -f a; ln -s a b; chmod +x a; chown me a; tee out < a; dd if=a of=b; ls",
+      "command": "cp a b; mv a b; rm -f a; ln -s a b; chmod +x a; chown me a; tee out < a; dd if=a of=b; find . -name '*.tmp' -delete; sed -i s/a/b/ f; ls",
       "rules": ["ls"]
     },
     {
@@ -606,6 +606,16 @@
       "name": "programs that run whatever they are given are never remembered",
       "command": "sudo ls; xargs rm < list; eval \"$CMD\"; exec ls; nohup ./run.sh; timeout 5 rm -rf x; nice make; command rm x; builtin cd /",
       "rules": []
+    },
+    {
+      "name": "shells and interpreters are never remembered: a rule for one covers every script",
+      "command": "sh x.sh; bash ./build.sh; zsh -f x; dash x; ksh x; fish x; python x.py; python3 -c \"print(1)\"; python3.12 x.py; /usr/bin/python3 x.py; node x.js; ruby x.rb; perl -e 1; php x.php; osascript -e 1; awk '{print $1}' f; source x; . x; pwd",
+      "rules": ["pwd"]
+    },
+    {
+      "name": "a runner's sub-command that runs any code it is given is never remembered; its others are",
+      "command": "bun run x.ts; bun x cowsay; deno run x.ts; deno eval 1; npm exec foo; pnpm dlx foo; yarn dlx foo; bun test; deno fmt; npm test; pnpm install",
+      "rules": ["bun test", "deno fmt", "npm test", "pnpm install"]
     }
   ]
 }

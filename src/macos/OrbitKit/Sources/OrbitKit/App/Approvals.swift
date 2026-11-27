@@ -603,11 +603,27 @@ public enum Approvals {
         "mkdir", "install", "rsync", "unlink", "shred",
         "export", "env", "set", "unset", "declare", "typeset", "readonly", "local", "alias", "source", ".",
         "eval", "exec", "sudo", "doas", "xargs", "nohup", "timeout", "nice", "command", "builtin",
+        // Shells and interpreters: a rule for one covers every script it is given.
+        "sh", "bash", "zsh", "dash", "ksh", "fish", "node", "ruby", "perl", "php", "osascript", "awk", "gawk", "mawk",
+        // `find -delete`/`-exec` and `sed -i` change files.
+        "find", "sed",
     ]
+    /// Sub-commands that run any code or package they are given (`bun run x.ts`, `npm exec`), per
+    /// program. A port of `RUNS_GIVEN_CODE` in `@orbit/shared`.
+    private static let runsGivenCode: [String: Set<String>] = [
+        "bun": ["run", "x", "exec", "repl"], "deno": ["run", "eval", "repl", "x"],
+        "npm": ["exec"], "pnpm": ["exec", "dlx"], "yarn": ["exec", "dlx"],
+    ]
+
+    /// `python`, `python3`, `python3.12`: interpreters too. A port of `PYTHON` in `@orbit/shared`.
+    private static func isPython(_ name: String) -> Bool {
+        name.hasPrefix("python") && name.dropFirst(6).allSatisfy { $0.isASCII && ($0.isNumber || $0 == ".") }
+    }
 
     /// The prefix "always allow" remembers for one sub-command (its `head`), or nil for none: leading
     /// keywords skipped, nothing from inside a substitution, a second word only for a sub-command
-    /// program, and nothing for a program that changes files or the environment. A port of
+    /// program (none that runs given code), and nothing for a program that changes files or the
+    /// environment or interprets a script. A port of
     /// `rememberedPrefix` in `@orbit/shared`.
     static func rememberedPrefix(_ head: String) -> String? {
         let toks = head.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" }).map(String.init)
@@ -616,9 +632,11 @@ public enum Approvals {
         guard i < toks.count, !constructHeaders.contains(toks[i]), isCleanProgram(toks[i]) else { return nil }
         let prog = toks[i]
         let name = prog.split(separator: "/", omittingEmptySubsequences: false).last.map(String.init) ?? prog
-        if neverRemembered.contains(name) { return nil }
+        if neverRemembered.contains(name) || isPython(name) { return nil }
         guard subcommandPrograms.contains(name) else { return prog }
-        return i + 1 < toks.count && isSubcommand(toks[i + 1]) ? "\(prog) \(toks[i + 1])" : nil
+        guard i + 1 < toks.count, isSubcommand(toks[i + 1]), !(runsGivenCode[name]?.contains(toks[i + 1]) ?? false)
+        else { return nil }
+        return "\(prog) \(toks[i + 1])"
     }
 
     /// Whether one sub-command runs a shell with `-c`/`-lc`-style command execution. Codex wraps

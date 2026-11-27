@@ -35,7 +35,17 @@ object ApprovalRules {
         "cp", "mv", "rm", "rmdir", "ln", "chmod", "chown", "chgrp", "tee", "dd", "touch", "truncate",
         "mkdir", "install", "rsync", "unlink", "shred",
         "export", "env", "set", "unset", "declare", "typeset", "readonly", "local", "alias", "source", ".",
-        "eval", "exec", "sudo", "doas", "xargs", "nohup", "timeout", "nice", "command", "builtin")
+        "eval", "exec", "sudo", "doas", "xargs", "nohup", "timeout", "nice", "command", "builtin",
+        // Shells and interpreters: a rule for one covers every script it is given.
+        "sh", "bash", "zsh", "dash", "ksh", "fish", "node", "ruby", "perl", "php", "osascript", "awk", "gawk", "mawk",
+        // `find -delete`/`-exec` and `sed -i` change files.
+        "find", "sed")
+    /** `python`, `python3`, `python3.12`: interpreters too. */
+    private val python = Regex("^python[0-9.]*$")
+    /** Sub-commands that run any code or package they are given (`bun run x.ts`, `npm exec`), per program. */
+    private val runsGivenCode = mapOf(
+        "bun" to setOf("run", "x", "exec", "repl"), "deno" to setOf("run", "eval", "repl", "x"),
+        "npm" to setOf("exec"), "pnpm" to setOf("exec", "dlx"), "yarn" to setOf("exec", "dlx"))
     fun remember(tool: String, input: JsonObject): List<PermissionRule> = when {
         tool.isBlank() || tool in asks -> emptyList()
         tool == "Bash" && input.flag("orbitScheduleCheckOnly") -> input.text("command")?.takeIf { it.isNotBlank() }
@@ -146,9 +156,10 @@ object ApprovalRules {
         val program = words.getOrNull(i)?.takeIf { it !in constructHeaders && Regex("^[A-Za-z./_-][\\w./-]*$").matches(it) }
             ?: return null
         val name = program.substringAfterLast('/')
-        if (name in neverRemembered) return null
+        if (name in neverRemembered || python.matches(name)) return null
         if (name !in subcommandPrograms) return program
-        val sub = words.getOrNull(i + 1)?.takeIf { Regex("^[A-Za-z][\\w-]*$").matches(it) } ?: return null
+        val sub = words.getOrNull(i + 1)?.takeIf { Regex("^[A-Za-z][\\w-]*$").matches(it) && it !in runsGivenCode[name].orEmpty() }
+            ?: return null
         return "$program $sub"
     }
     fun bash(command: String): List<PermissionRule> {

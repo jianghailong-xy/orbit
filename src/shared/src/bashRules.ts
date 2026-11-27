@@ -405,13 +405,30 @@ const NEVER_REMEMBERED = new Set([
   'mkdir', 'install', 'rsync', 'unlink', 'shred',
   'export', 'env', 'set', 'unset', 'declare', 'typeset', 'readonly', 'local', 'alias', 'source', '.',
   'eval', 'exec', 'sudo', 'doas', 'xargs', 'nohup', 'timeout', 'nice', 'command', 'builtin',
+  // Shells and interpreters: a rule for one covers every script it is given, whatever that script does.
+  'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'node', 'ruby', 'perl', 'php', 'osascript', 'awk', 'gawk', 'mawk',
+  // `find -delete`/`-exec` and `sed -i` change files, so a rule for them is as wide as `rm:*`.
+  'find', 'sed',
 ]);
+
+/** `python`, `python3`, `python3.12`: interpreters, like the ones in `NEVER_REMEMBERED`. */
+const PYTHON = /^python[0-9.]*$/;
+
+/** Sub-commands that run any code or package they are given (`bun run x.ts`, `npm exec`), per program. */
+const RUNS_GIVEN_CODE: Record<string, string[]> = {
+  bun: ['run', 'x', 'exec', 'repl'],
+  deno: ['run', 'eval', 'repl', 'x'],
+  npm: ['exec'],
+  pnpm: ['exec', 'dlx'],
+  yarn: ['exec', 'dlx'],
+};
 
 /**
  * The prefix "always allow" remembers for one sub-command, or null for none. Unlike `bashPrefix`, which
  * reads a command a rule might cover, this decides what a person's one approval may stand for: it skips
  * leading keywords (`then cd x` is `cd`), reads `heads` so nothing inside `$(…)` or backticks counts,
- * keeps a second word only for `SUBCOMMAND_PROGRAMS`, and refuses `NEVER_REMEMBERED`.
+ * keeps a second word only for `SUBCOMMAND_PROGRAMS` (none that `RUNS_GIVEN_CODE`), and refuses
+ * `NEVER_REMEMBERED` and Python.
  */
 function rememberedPrefix(head: string): string | null {
   const toks = head.trim().split(/\s+/);
@@ -420,10 +437,11 @@ function rememberedPrefix(head: string): string | null {
   const prog = toks[i];
   if (!prog || CONSTRUCT_HEADERS.has(prog) || !/^[A-Za-z./_-][\w./-]*$/.test(prog)) return null;
   const name = prog.slice(prog.lastIndexOf('/') + 1);
-  if (NEVER_REMEMBERED.has(name)) return null;
+  if (NEVER_REMEMBERED.has(name) || PYTHON.test(name)) return null;
   if (!SUBCOMMAND_PROGRAMS.has(name)) return prog;
   const next = toks[i + 1];
-  return next && /^[A-Za-z][\w-]*$/.test(next) ? `${prog} ${next}` : null;
+  if (!next || !/^[A-Za-z][\w-]*$/.test(next) || RUNS_GIVEN_CODE[name]?.includes(next)) return null;
+  return `${prog} ${next}`;
 }
 
 // One session-permission rule per distinct sub-command of a Bash line, so `cd x && git
