@@ -19,6 +19,8 @@
 .wk-chat-frame.is-sched,
 .wk-chat-frame.is-sched > .wk-chat-host { height: 100%; min-height: 0; }
 .wk-chat-frame.is-sched > .wk-chat-host { display: flex; }
+/* Beside a docked chat the page gives up width: the list narrows rather than pushing the inspector under the chat. */
+.wk-chat-frame.is-sched > .wk-chat-host > .sched-page { min-width: 0; }
 /* The Chat button: the tools row's last, at its far right; pressed while the panel is open. */
 .sched-chat-btn {
   display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border: 1px solid var(--border); border-radius: 8px;
@@ -28,8 +30,18 @@
 .sched-chat-btn[aria-pressed='true'] { border-color: var(--brand-border); background: var(--brand-tint); color: var(--brand); font-weight: 600; }
 .sched-chat-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .sched-tools > .sched-chat-btn:first-child { margin-left: auto; }
-/* Orbit's opening reads as the chat's first paragraph, not a centred empty state. */
+/* Beside a docked chat the tools row keeps its words whole and wraps as a row; the list's sides and the inspector's
+   default width give up some room (the inspector keeps a width it was dragged to). */
+.wk-chat-frame.is-sched .sched-tools { flex-wrap: wrap; row-gap: 6px; }
+.wk-chat-frame.is-sched .sched-tools > * { white-space: nowrap; }
+.wk-chat-frame.is-sched.is-columned .sched-list { padding-left: 28px; padding-right: 28px; }
+.wk-chat-frame.is-sched.is-columned .sched-inspector { width: var(--sched-inspector-width, 360px); }
+/* Orbit's opening reads as the chat's first paragraph, not a centred empty state; its examples are dot-led lines. */
 .wk-chat-frame.is-sched .wk-chat-empty { margin: 6px 2px; text-align: left; }
+.wk-chat-frame.is-sched .wk-chat-examples { padding-left: 4px; list-style: none; }
+.wk-chat-frame.is-sched .wk-chat-examples li { display: flex; gap: 6px; }
+.wk-chat-frame.is-sched .wk-chat-examples li::before { content: '·'; color: var(--brand); }
+.wk-chat-frame.is-sched .wk-chat-example { flex: 1; color: var(--brand); }
 .sched-lead { color: var(--text-2); margin: 22px 0 4px; font-size: 14px; }
 
 .sched-group { margin-top: 20px; }
