@@ -67,6 +67,11 @@ class PermissionModeDisplayTest {
     @Test fun anyOtherGapSaysWhatWasAskedAndWhatSetTheModeRunning() {
         assertEquals("You asked for Plan. Mode set to Default by Orbit.",
             capsule("plan", "default", change("plan", "default", "ORBIT_CHANGE")).head?.text)
+        assertEquals("You asked for Plan. Claude started in Default.",
+            capsule("plan", "default", change("plan", "default", "ENGINE_REPORT")).head?.text)
+        // A claim, or the runner, that put the engine in another mode than the one asked for since says nothing of why.
+        assertEquals("You asked for Plan.", capsule("plan", "auto", change(null, "auto", "CLAIM")).head?.text)
+        assertEquals("You asked for Plan.", capsule("plan", "auto", change("default", "auto", "RUNNER_CORRECTION")).head?.text)
         // The owner's own change on its way to the engine: what was asked is the whole story.
         assertEquals(ModeCapsule("Auto", Gap.STANDING, ModeCapsule.Head("Running in Auto.", "You asked for Plan.")),
             capsule("plan", "auto", change("default", "auto", "OWNER_PICK", "web")))

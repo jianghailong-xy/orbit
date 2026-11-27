@@ -592,10 +592,10 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
     }
 
     /**
-     * The permission modes a session on [engine] can pick for [model] (web `permissionModeSupported` / `supportsAuto`): DeepSeek
-     * Harness enforces Default, Auto and Don't Ask alone and the server refuses the rest at admission, so those are not offered;
-     * elsewhere Bypass is gone on a root runner, and Auto on a Claude Code sign-in's model the runner says lacks it. A key or pool on
-     * Claude Code owns its model space, which Claude's list cannot speak for.
+     * The permission modes a session on [engine] can pick for [model] (web `permissionModeSupported`): DeepSeek Harness enforces
+     * Default, Auto and Don't Ask alone and the server refuses the rest at admission, so those are not offered; elsewhere Bypass is
+     * gone on a root runner. Auto stays a pick on a model that has none ([autoMissing]): it starts in Default there, and the pick
+     * applies again on a model that has it (board permission-mode-actual C1).
      */
     fun permissions(engine: String, provider: String, model: String): List<String> {
         val modes = listOf("default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions")
@@ -604,14 +604,20 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         // the runner's own review of each request, on any model; Bypass goes on a root runner, as everywhere.
         if (engine == ProviderEngines.CURSOR) return modes.filter { it in CursorRuntime.PERMISSION_MODES &&
             !(runner.flag("runsAsRoot") == true && it == "bypassPermissions") }
+        return modes.filterNot { mode -> runner.flag("runsAsRoot") == true && mode == "bypassPermissions" }
+    }
+
+    /**
+     * Whether [model] has no Auto (web `supportsAuto`): a Claude Code sign-in's model the runner says lacks it, or, where the runner
+     * has said nothing of it, one that is not among the models known to have it (shared AUTO_CAPABLE_CLAUDE_MODELS). A key or pool on
+     * Claude Code owns its model space, which Claude's list cannot speak for; a model named by nobody is not one to say this of.
+     */
+    fun autoMissing(engine: String, provider: String, model: String): Boolean {
+        if (engine != ProviderEngines.CLAUDE || row(provider) != null || model.isBlank()) return false
         val reported = models(engine, provider).firstOrNull { it.text("value") == model }
-        return modes.filterNot { mode ->
-            (runner.flag("runsAsRoot") == true && mode == "bypassPermissions") ||
-                (mode == "auto" && engine == ProviderEngines.CLAUDE && row(provider) == null &&
-                    if (reported?.get("permissionModes") is JsonArray) "auto" !in reported.strings("permissionModes")
-                    else model !in setOf("claude-opus-5-5", "claude-opus-5", "claude-fable-5-2", "claude-fable-5-1", "claude-fable-5",
-                        "claude-sonnet-5-5", "claude-sonnet-5", "claude-haiku-5-5"))
-        }
+        return if (reported?.get("permissionModes") is JsonArray) "auto" !in reported.strings("permissionModes")
+            else model !in setOf("claude-opus-5-5", "claude-opus-5", "claude-fable-5-2", "claude-fable-5-1", "claude-fable-5",
+                "claude-sonnet-5-5", "claude-sonnet-5", "claude-haiku-5-5")
     }
 
     /** The efforts [model] takes on [engine] with [provider]: its row's levels. A key's declared levels are Claude Code's to honour;

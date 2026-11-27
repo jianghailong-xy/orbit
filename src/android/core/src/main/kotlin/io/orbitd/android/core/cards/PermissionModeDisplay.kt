@@ -44,6 +44,9 @@ object PermissionModeDisplay {
 
     private val BELOW_AUTO = setOf("default", "acceptEdits", "plan")
     private val ENGINE_CAUSES = setOf("ENGINE_REPORT", "RESPAWN")
+    /** The changes whose line says why the mode running is not the one asked for: Orbit's own, and the engine's word. The owner's
+     * change or a claim that reached the engine with another mode says nothing of why — the intent moved since, or a rule above did. */
+    private val SAYS_WHY = setOf("ORBIT_CHANGE", "ENGINE_REPORT", "RESPAWN")
 
     /**
      * The control for a session asked to run in [intent].
@@ -77,9 +80,8 @@ object PermissionModeDisplay {
                 "You asked for Auto, but $noAutoModel has no Auto. Pick a model with Auto to get it back."
             intent == BYPASS && runsAsRoot -> "You asked for Bypass, which can’t run on a root runner."
             engineSaid -> "Claude started below the Auto you asked for. Pick Auto to switch it."
-            // Who or what set the mode running, but for the owner's own change: that it reached the engine says nothing of why.
             else -> "You asked for $asked." +
-                (latest?.takeIf { it.toMode == actual && it.cause != "OWNER_PICK" }?.let { " ${line(it, null, null, null, false, false).text}." } ?: "")
+                (latest?.takeIf { it.toMode == actual && it.cause in SAYS_WHY }?.let { " ${line(it, null, null, null, false, false).text}." } ?: "")
         }
         return ModeCapsule(running, ModeCapsule.Gap.STANDING, ModeCapsule.Head(lead, why))
     }

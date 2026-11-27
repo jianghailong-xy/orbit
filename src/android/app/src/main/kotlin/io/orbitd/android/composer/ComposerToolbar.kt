@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.attachments.decodeAttachmentImage
+import io.orbitd.android.core.cards.ModeCapsule
 import io.orbitd.android.management.Ink
 import io.orbitd.android.management.UsageRow
 import kotlinx.coroutines.CancellationException
@@ -116,14 +117,33 @@ internal fun ToolbarPlus(enabled: Boolean, open: () -> Unit) {
     }
 }
 
-/** The permission mode on the toolbar (iOS `modeMenu`): its name, which never truncates; pressed, the modes this engine offers. */
+/** The width the mode's mark takes before its name, with the space after it: [ToolbarMode]'s spinner or dot. */
+internal fun modeMarkWidth(gap: ModeCapsule.Gap?): Float = when (gap) {
+    ModeCapsule.Gap.CORRECTING -> 12f + 4f
+    ModeCapsule.Gap.STANDING -> 6f + 4f
+    null -> 0f
+}
+
+/** The permission mode on the toolbar (iOS `modeMenu`): the mode the session runs in, by its name, which never truncates — amber where
+ * it is not the one asked for, after a spinner while the runner switches Claude back ("Default → Auto") and after a dot while the gap
+ * stands (board permission-mode-actual A1). Said aloud with why. Pressed, the modes this engine offers. */
 @Composable
-internal fun ToolbarMode(label: String, enabled: Boolean, open: () -> Unit) {
+internal fun ToolbarMode(capsule: ModeCapsule, enabled: Boolean, open: () -> Unit) {
+    val ink = (if (capsule.gap != null) io.orbitd.android.ui.LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant)
+        .copy(alpha = if (enabled) 1f else 0.38f)
     Box(Modifier.height(48.dp).clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, role = Role.Button, onClick = open)
-        .semantics { contentDescription = "Permission mode $label" }.testTag("composer-mode")
-        .padding(horizontal = (TOOLBAR_TEXT_PAD / 2).dp), contentAlignment = Alignment.Center) {
-        Text(label, style = toolbarTextStyle(), fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.38f))
+        .semantics { contentDescription = "Permission mode ${capsule.spoken}" + (capsule.head?.let { ". ${it.sentence}" } ?: "") }
+        .testTag("composer-mode").padding(horizontal = (TOOLBAR_TEXT_PAD / 2).dp), contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            when (capsule.gap) {
+                // On a faint track: at this size the turning arc alone, caught short, reads as a comma.
+                ModeCapsule.Gap.CORRECTING -> CircularProgressIndicator(Modifier.size(12.dp).testTag("composer-mode-correcting"),
+                    color = ink, strokeWidth = 1.5.dp, trackColor = ink.copy(alpha = 0.25f))
+                ModeCapsule.Gap.STANDING -> Box(Modifier.size(6.dp).clip(CircleShape).background(ink).testTag("composer-mode-gap"))
+                null -> Unit
+            }
+            Text(capsule.label, style = toolbarTextStyle(), fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false, color = ink)
+        }
     }
 }
 
