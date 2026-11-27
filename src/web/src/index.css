@@ -7963,6 +7963,31 @@ button.toast--pill:focus-visible {
 .composer-pill:hover {
   background: var(--bg-hover);
 }
+/* The Mode capsule while the mode running is not the one asked for (board
+   docs/mocks/permission-mode-actual, A1): amber, with a spinner while it switches ("Default → Auto")
+   and a dot while the gap lasts. */
+.composer-toolbar .composer-mode-gap .orbit-select:not([data-disabled]) .orbit-choice-value {
+  color: var(--warning);
+}
+.composer-mode-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.composer-mode-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--warning);
+  flex: none;
+}
+.composer-mode-spin {
+  font-size: 11px;
+  flex: none;
+}
+.composer-mode-arrow {
+  opacity: 0.8;
+}
 /* Pushes the model control, the gauges and Send to the right edge, leaving `+` and Mode on the
    left. */
 .composer-pill-spacer {
@@ -8424,6 +8449,37 @@ button.composer-usage:focus-visible {
   color: var(--text-3);
   font-size: 13px;
   padding: 10px 4px;
+}
+/* A change of the session's permission mode, where it happened (PermissionModeLine; board
+   docs/mocks/permission-mode-actual, B1): the note's grey and size, a shield, the time at the right.
+   Amber while it is the change behind the gap the Mode capsule shows. */
+.chat-mode-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 13px;
+  padding: 6px 4px;
+}
+.chat-mode-line-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.chat-mode-line b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.chat-mode-line-time {
+  margin-left: auto;
+  padding-left: 12px;
+  flex: none;
+  color: var(--text-4);
+  font-size: 12px;
+}
+.chat-mode-line.is-gap,
+.chat-mode-line.is-gap b {
+  color: var(--warning);
 }
 /* What is above the loaded window: a page in flight, or the way back to the first message. Sticky
    inside the scroller — it has to stay reachable wherever the reader is, and the top of the content

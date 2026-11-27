@@ -37,6 +37,9 @@ export interface SelectProps<Value extends string = string> extends AriaAttribut
   showArrow?: boolean;
   matchTriggerWidth?: boolean;
   emptyContent?: ReactNode;
+  /** Drawn above the options, inside the list's popup: what the list is about right now, such as why the
+   *  chosen value is not the one in effect. Not an option, so neither the keys nor a press reach it. */
+  header?: ReactNode;
   renderOption?: (option: SelectOption<Value>) => ReactNode;
   renderValue?: (value: Value, option: SelectOption<Value> | undefined) => ReactNode;
   className?: string;
@@ -50,7 +53,7 @@ export function flattenOptions<Value extends string>(options: SelectOptions<Valu
 
 export function Select<Value extends string = string>({ options, value, onValueChange, id, name, disabled, loading,
   placeholder, clearable, clearLabel = 'Clear selection', size = 'middle', variant = 'outlined', showArrow = true,
-  matchTriggerWidth = true, emptyContent = <SelectEmpty />, renderOption, renderValue, className, style, ref,
+  matchTriggerWidth = true, emptyContent = <SelectEmpty />, header, renderOption, renderValue, className, style, ref,
   open, onOpenChange, side = 'bottom', align = 'start', popupClassName, popupStyle, returnFocus, ...aria }: SelectProps<Value>) {
   const layer = useFloating({ open, onOpenChange });
   const anchor = useRef<HTMLSpanElement>(null);
@@ -120,6 +123,7 @@ export function Select<Value extends string = string>({ options, value, onValueC
             if (event.target !== event.currentTarget || selected) return;
             event.currentTarget.querySelector<HTMLElement>('[role="option"]:not([data-disabled])')?.focus({ preventScroll: true });
           }}>
+          {header != null && <div className="orbit-select-header">{header}</div>}
           <BaseSelect.List className="orbit-select-list">
             {options.map((entry) => 'options' in entry ? <BaseSelect.Group key={entry.label}>
               <BaseSelect.GroupLabel className="orbit-select-group-label">

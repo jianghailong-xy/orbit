@@ -250,3 +250,33 @@ describe('Select opened by the pointer', () => {
     expect(highlighted()).not.toBe('Never');
   });
 });
+
+describe('Select header', () => {
+  it('is drawn above the options, inside the popup, and is no option the keys or a press can reach', async () => {
+    const next = createRoot(container!);
+    root = next;
+    await act(async () =>
+      next.render(
+        <Select
+          aria-label="Mode"
+          options={options}
+          value="1"
+          onValueChange={(value) => picked.push(value)}
+          header={<><b>Running in Default.</b> You asked for Auto.</>}
+        />,
+      ),
+    );
+    expect(document.querySelector('.orbit-select-header')).toBeNull();
+    trigger().focus();
+    await pointerOpen();
+    await runFrames();
+    const popup = document.querySelector<HTMLElement>('.orbit-select-popup')!;
+    const header = popup.querySelector<HTMLElement>('.orbit-select-header')!;
+    expect(header.textContent).toBe('Running in Default. You asked for Auto.');
+    expect(popup.firstElementChild).toBe(header);
+    expect(header.closest('[role="listbox"]')).toBeNull();
+    expect([...popup.querySelectorAll('[role="option"]')].map((o) => o.textContent)).toEqual(['Never', '1 day', '7 days', '30 days']);
+    await act(async () => header.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(picked).toEqual([]);
+  });
+});
