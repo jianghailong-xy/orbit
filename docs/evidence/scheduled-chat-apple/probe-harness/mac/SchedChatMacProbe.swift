@@ -20,7 +20,8 @@ struct SchedChatMacProbeApp: App {
                 .frame(minWidth: 900, minHeight: 600)
                 .task { await ProbeArgs.land(model) }
         }
-        .defaultSize(width: 1440, height: 860)
+        // GitHub's macOS runner's screen is 1024 × 768: the whole window stays on it (the source list folds for the chat).
+        .defaultSize(width: 1010, height: 700)
         .defaultPosition(.topLeading)
         .commands { SidebarCommands() }
     }
