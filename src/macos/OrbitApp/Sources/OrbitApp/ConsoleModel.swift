@@ -3507,28 +3507,24 @@ final class ConsoleModel {
         runConflictFromRetry = false
         handedOverSessionID = nil
         do {
-            let accepted: TurnAccepted
             // A "stop and send this instead" goes through the interrupt, first time and Retry alike.
             // One whose session has ended since has nothing to stop, and resumes as any send does.
-            if record.saved.stopsTurn == true, !resuming {
-                accepted = try await postInterrupt(clientTurnId: clientTurnId, text: text,
-                                                   attachmentIds: record.saved.attachments.map(\.id))
-                // The interrupt door names no turn only for a repeat of a request it had already
-                // taken, whose message a later Stop has dropped since: the words go back.
-                if accepted.turnId == nil {
-                    awaitingReply = false
-                    handBack(clientTurnId)
-                    return
-                }
-            } else {
-                accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
+            let stopsTurn = record.saved.stopsTurn == true && !resuming
+            let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell,
                                               attachmentIds: record.saved.attachments.map(\.id),
                                               queueForNextTurn: record.queueForNextTurn,
                                               wikiContext: record.wikiContext,
                                               driveContext: record.driveContext,
                                               skipTranslation: record.skipTranslation,
-                                              optimizedTranslation: record.optimizedTranslation)
+                                              optimizedTranslation: record.optimizedTranslation,
+                                              stopsTurn: stopsTurn)
+            // The interrupt door names no turn only for a repeat of a request it had already
+            // taken, whose message a later Stop has dropped since: the words go back.
+            if stopsTurn, accepted.turnId == nil {
+                awaitingReply = false
+                handBack(clientTurnId)
+                return
             }
             // The server has it: nothing is left to retry, put back or reload.
             forgetUnsent(clientTurnId)
@@ -3962,7 +3958,8 @@ final class ConsoleModel {
                           wikiContext: WikiChatContext? = nil,
                           driveContext: DriveChatContext? = nil,
                           skipTranslation: Bool = false,
-                          optimizedTranslation: String? = nil) async throws -> TurnAccepted {
+                          optimizedTranslation: String? = nil,
+                          stopsTurn: Bool = false) async throws -> TurnAccepted {
         // Built once, for the same reason the endpoint is chosen once: every attempt must send the
         // identical request, and the pills it reads stay editable while a retry waits.
         let resumeRequest = ResumeRequest(clientTurnId: clientTurnId, content: text,
@@ -3993,6 +3990,14 @@ final class ConsoleModel {
                                                  driveContext: driveContext,
                                                  skipTranslation: skipTranslation,
                                                  optimizedTranslation: optimizedTranslation)
+        // "Stop and send this instead": one request stops the turn and files the message, and the
+        // server files both once per `clientTurnId`, so it replays like the others.
+        let interruptRequest = stopsTurn
+            ? SessionInterruptRequest(clientTurnId: clientTurnId, content: text,
+                                      attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds)
+            : nil
+        // Claimed on every attempt, a Retry's too, for the same reason as the first (`interruptAndSend`).
+        if stopsTurn { interruptFollowUpClientTurnId = clientTurnId }
         // A run that is letting go frees the task within a couple of seconds, so this waits it out
         // rather than handing the reader a refusal about a situation that is already resolving.
         // The identical request goes back out — same `clientTurnId` — so the server either queues
@@ -4001,22 +4006,8 @@ final class ConsoleModel {
         // inside the one answer deadline: past it the request is ended, and the bubble reads
         // `Not sent` with Retry (board 04-native-parity, decisions 3 and 4; web `answerDeadline`).
         return try await answered(within: sendAnswerTimeout) {
-            try await self.postTurnReplaying(resuming: resuming, resumeRequest: resumeRequest, turnRequest: turnRequest)
-        }
-    }
-
-    /// POST the interrupt that carries its follow-up, under the same answer deadline and same-key
-    /// replays as `postTurn`: the server files both halves once per `clientTurnId`.
-    private func postInterrupt(clientTurnId: String, text: String,
-                               attachmentIds: [String]) async throws -> TurnAccepted {
-        let request = SessionInterruptRequest(clientTurnId: clientTurnId, content: text,
-                                              attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds)
-        // Claimed again by a Retry, for the same reason as the first time (`interruptAndSend`).
-        interruptFollowUpClientTurnId = clientTurnId
-        return try await answered(within: sendAnswerTimeout) {
-            try await self.retryingTransientFailures { () async throws -> TurnAccepted in
-                try await self.api.interruptAndSend(sessionID: self.sessionID, request)
-            }
+            try await self.postTurnReplaying(resuming: resuming, resumeRequest: resumeRequest, turnRequest: turnRequest,
+                                             interruptRequest: interruptRequest)
         }
     }
 
@@ -4037,12 +4028,16 @@ final class ConsoleModel {
     }
 
     private func postTurnReplaying(resuming: Bool, resumeRequest: ResumeRequest,
-                                   turnRequest: SessionTurnRequest) async throws -> TurnAccepted {
+                                   turnRequest: SessionTurnRequest,
+                                   interruptRequest: SessionInterruptRequest?) async throws -> TurnAccepted {
         var waits = 0
         while true {
             do {
                 return try await retryingTransientFailures { () async throws -> TurnAccepted in
                     if resuming { return try await self.api.resume(sessionID: self.sessionID, resumeRequest) }
+                    if let interruptRequest {
+                        return try await self.api.interruptAndSend(sessionID: self.sessionID, interruptRequest)
+                    }
                     return try await self.api.sendTurn(sessionID: self.sessionID, turnRequest)
                 }
             } catch {
