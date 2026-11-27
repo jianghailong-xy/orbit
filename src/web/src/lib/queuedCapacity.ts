@@ -6,7 +6,8 @@ import type { QueuedGate } from './runnerSlots';
  * `Queued · runner updating` is said (board queued-card-runner-updating), and a popover that counts how the
  * slots are taken. A runner counts a session against its maxConcurrent while it runs a turn OR while a
  * background job of its own still runs (src/runner-go/session_pool.go), so a runner can be full with fewer
- * turns than slots: the server reports those slots apart as queuedHeldByJobs.
+ * turns than slots: the server reports those slots apart as queuedHeldByJobs. Jobs alone never take the last
+ * slot, which is always a turn's, so queuedHeldByJobs is at most one less than the limit.
  *
  * The native clients say the same words (OrbitKit QueuedCapacity, Android QueuedCapacity), held to this
  * file by their parity tests.

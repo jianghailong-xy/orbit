@@ -155,6 +155,24 @@ const CURSOR_RUNNER = {
   ],
 } satisfies Runner;
 
+/**
+ * A claimed run the runner has no slot for yet (runner cdvn0, 2026-11-27): the claim landed while its turns and
+ * background jobs filled the machine, so no engine was asked to start, and the page said "Getting the session ready"
+ * for half an hour. The runner names the wait (enginePhase waiting_for_slot), and the list row carries the slots the
+ * jobs hold of the limit.
+ */
+const WAITING_FOR_SLOT = {
+  ...BASE,
+  title: 'V1 yield and exit: waits that loop',
+  status: 'RUNNING',
+  numTurns: 4,
+  engineStartedAt: null,
+  enginePhase: 'waiting_for_slot',
+  enginePhaseSince: '2026-11-27T08:00:31.000Z',
+  runClaimedAt: '2026-11-27T08:00:30.000Z',
+  slotWait: { heldByJobs: 3, limit: 4 },
+};
+
 class FakeEventSource {
   onmessage: ((e: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -182,6 +200,20 @@ describe('a refused run reads as over', () => {
     const starting = { status: 'RUNNING', engineStartedAt: null };
     expect(waitingNoticeFor(starting)).toEqual({ kind: 'starting', since: null });
     expect(statusLabel(starting)).toBe('Starting');
+  });
+});
+
+describe('a claimed run waiting for a free slot', () => {
+  it('reads as waiting for a slot, not as starting, counted from when the wait began', () => {
+    expect(waitingNoticeFor(WAITING_FOR_SLOT)).toEqual({ kind: 'waiting_for_slot', since: '2026-11-27T08:00:31.000Z' });
+    expect(statusLabel(WAITING_FOR_SLOT)).toBe('Waiting for slot');
+    expect(sessionLine(WAITING_FOR_SLOT, true)).toEqual({ text: 'Waiting for slot…', tone: 'running' });
+  });
+
+  it('is the ordinary starting wait once the slot is granted and the phase is gone', () => {
+    const granted = { ...WAITING_FOR_SLOT, enginePhase: null, enginePhaseSince: null, slotWait: null };
+    expect(waitingNoticeFor(granted)).toEqual({ kind: 'starting', since: '2026-11-27T08:00:30.000Z' });
+    expect(statusLabel(granted)).toBe('Starting');
   });
 });
 
@@ -381,6 +413,23 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
     expect(page).not.toContain('Starting');
     // …and a wide header wears no run word at all (docs/mocks/session-header-compact), so no wait's either.
     expect(mounted().querySelector('.workspace-sub')).toBeNull();
+  });
+
+  it('says a claimed run is waiting for a free slot, with the slots background jobs hold, not that it is getting ready', async () => {
+    await mount(WAITING_FOR_SLOT, false);
+    // The notice keeps its ordinary ten quiet seconds (STARTING_NOTICE_DELAY_MS), then names the wait.
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().querySelector('.chat-queued-state')).not.toBeNull(), {
+        timeout: 20_000,
+        interval: 100,
+      });
+    });
+    const notice = mounted().querySelector('.chat-queued-state')!.textContent ?? '';
+    expect(notice).toContain('Waiting for a free slot');
+    expect(notice).toContain('All 4 slots on this runner are in use, 3 of them by background jobs.');
+    expect(notice).toContain('Your message starts as soon as one frees up.');
+    expect(mounted().textContent).not.toContain('Getting the session ready');
+    expect(card()).toBeNull();
   });
 
   /** Waits for the conversation's history to be on the page, then answers where the card stands. */

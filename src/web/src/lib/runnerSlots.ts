@@ -80,6 +80,9 @@ export const STARTING_NOTICE_DELAY_MS = 10_000;
 /** Which phase the runner reported for a starting session, if it reported one. */
 export interface EnginePhase {
   enginePhase?: string | null;
+  /** Beside enginePhase `waiting_for_slot` only: the runner's limit, and the slots background jobs hold of it.
+   *  Absent from an older control plane, and then the copy names no numbers. */
+  slotWait?: { heldByJobs: number; limit: number } | null;
 }
 
 /**
@@ -96,6 +99,29 @@ export const COMPACTING_DESCRIPTION =
   'The conversation no longer fits, so the engine is summarizing it before it can read your message. This can take a few minutes.';
 
 /**
+ * Copy for a claimed turn the runner has no slot for yet: the runner holds the session, and has not
+ * asked any engine to start it, because its turns and the slots background jobs hold fill it. The
+ * runner says so (enginePhase `waiting_for_slot`, src/runner-go/session_pool.go waitActive), and
+ * this is the one starting wait the reader's own machine explains: "Getting the session ready …
+ * usually seconds" here once stood for half an hour over four background jobs. Background jobs
+ * never take a runner's last slot, so the wait ends when a turn running there does, or a job.
+ */
+export const WAITING_FOR_SLOT_LABEL = PENDING_SLOT_LABEL;
+export const WAITING_FOR_SLOT_TITLE = PENDING_SLOT_TITLE;
+
+export function waitingForSlotDescription(slotWait?: EnginePhase['slotWait']): string {
+  const starts = 'Your message starts as soon as one frees up.';
+  if (!slotWait) return `Every slot on this runner is in use. ${starts}`;
+  const { heldByJobs, limit } = slotWait;
+  // Background jobs never take a runner's last slot, so a one-slot runner is full by a turn alone.
+  if (limit <= 1) return `This runner's only slot is in use by a running turn. ${starts}`;
+  const slots = `All ${limit} slots on this runner are in use`;
+  if (heldByJobs <= 0) return `${slots} by running turns. ${starts}`;
+  const held = heldByJobs === 1 ? '1 of them by a background job' : `${heldByJobs} of them by background jobs`;
+  return `${slots}, ${held}. ${starts}`;
+}
+
+/**
  * What a starting session is doing, in the user's terms.
  *
  * The runner names the phase, because only it can — the same division of labour as queuedReason
@@ -109,22 +135,28 @@ export const COMPACTING_DESCRIPTION =
 const isCompacting = (session?: EnginePhase | null): boolean =>
   session?.enginePhase === 'compacting';
 
+const isWaitingForSlot = (session?: EnginePhase | null): boolean =>
+  session?.enginePhase === 'waiting_for_slot';
+
 export function startingTitle(session?: EnginePhase | null): string {
+  if (isWaitingForSlot(session)) return WAITING_FOR_SLOT_TITLE;
   return isCompacting(session) ? COMPACTING_TITLE : STARTING_TITLE;
 }
 
 /** The short chip form of startingTitle, for the session list. */
 export function startingLabel(session?: EnginePhase | null): string {
+  if (isWaitingForSlot(session)) return WAITING_FOR_SLOT_LABEL;
   return isCompacting(session) ? COMPACTING_LABEL : STARTING_LABEL;
 }
 
 export function startingDescription(session?: EnginePhase | null): string {
+  if (isWaitingForSlot(session)) return waitingForSlotDescription(session?.slotWait);
   return isCompacting(session) ? COMPACTING_DESCRIPTION : STARTING_DESCRIPTION;
 }
 
 /** A session as the waiting notices read it. Every clock is optional: an older control plane sends
  *  none of them, and then `lastTurnAt` is the only clock there is. */
-export interface WaitingSource extends SessionStateSource {
+export interface WaitingSource extends SessionStateSource, EnginePhase {
   lastTurnAt?: string | null;
   runClaimedAt?: string | null;
   enginePhaseSince?: string | null;
@@ -132,7 +164,7 @@ export interface WaitingSource extends SessionStateSource {
 
 /** Which wait a session is in, and the moment that wait began. */
 export interface WaitingNotice {
-  kind: 'starting' | 'compacting';
+  kind: 'starting' | 'compacting' | 'waiting_for_slot';
   since: string | null;
 }
 
@@ -157,6 +189,12 @@ export function waitingNoticeFor(session?: WaitingSource | null): WaitingNotice 
   // RunNeverStartedCard) is what stands in this slot. Without this, a row that still says RUNNING
   // under a refusal drew "Starting … usually seconds" over a session nobody will start.
   if (sessionSourceRefused(session)) return null;
+  // The runner's own phase, before any engine has been asked to start: it counts from when the wait began.
+  if (sessionRunStateOf(session) === 'RUNNING' && isWaitingForSlot(session))
+    return {
+      kind: 'waiting_for_slot',
+      since: session.enginePhaseSince ?? session.runClaimedAt ?? session.lastTurnAt ?? null,
+    };
   if (sessionRunStateOf(session) === 'RUNNING' && isCompacting(session))
     return {
       kind: 'compacting',
