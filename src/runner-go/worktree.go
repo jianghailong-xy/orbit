@@ -238,14 +238,24 @@ func currentBranch(wt *Worktree) string {
 }
 
 func (ops worktreeGitOps) currentBranch(wt *Worktree) string {
-	if wt == nil || wt.Path == "" {
-		return ""
-	}
-	b, err := ops.run(wt.Path, "symbolic-ref", "--short", "HEAD")
+	b, err := ops.checkedOutBranch(wt)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(b)
+	return b
+}
+
+// checkedOutBranch distinguishes a detached HEAD (empty branch) from an unreadable checkout.
+func (ops worktreeGitOps) checkedOutBranch(wt *Worktree) (string, error) {
+	if wt == nil || wt.Path == "" {
+		return "", errors.New("worktree path is missing")
+	}
+	b, err := ops.run(wt.Path, "symbolic-ref", "--quiet", "--short", "HEAD")
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return "", nil
+	}
+	return strings.TrimSpace(b), err
 }
 
 // effectiveBranch is the branch every live worktree computation (diff base, "already merged")
@@ -280,11 +290,14 @@ func (ops worktreeGitOps) effectiveBranchSha(wt *Worktree) string {
 	if wt == nil || wt.RepoDir == "" {
 		return ""
 	}
-	branch := ops.effectiveBranch(wt)
-	if branch == "" {
+	return ops.localBranchSha(wt.RepoDir, ops.effectiveBranch(wt))
+}
+
+func (ops worktreeGitOps) localBranchSha(repoDir, branch string) string {
+	if repoDir == "" || branch == "" {
 		return ""
 	}
-	sha, err := ops.run(wt.RepoDir, "rev-parse", "--verify", "refs/heads/"+branch)
+	sha, err := ops.run(repoDir, "rev-parse", "--verify", "refs/heads/"+branch)
 	if err != nil {
 		return ""
 	}
@@ -980,9 +993,8 @@ const parkCheckpointTrailer = "Orbit-Park-Checkpoint"
 // the checkout dir may then be removed. `checkpoint` tags the commit as an undo-on-resume park
 // checkpoint (see parkCheckpointTrailer) rather than a permanent end commit.
 //
-// A non-nil error means the work did NOT reach the branch, and the returned empty diff is
-// "unknown", not "the session changed nothing" — the caller must keep the checkout, which is
-// then the only copy of it.
+// A non-nil error means finalization could not put all the work on the branch. A detached
+// checkout can still report the branch's diff while its off-branch work is kept for recovery.
 //
 // The commit subject is derived from the diff, never the session title/prompt: a permanent end
 // gets an LLM-summarized Conventional-Commits message (diffstat fallback, same as the manual
@@ -995,13 +1007,29 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 			return reportAbsentCheckout(wt)
 		}
 	}
-	// Staging is what puts the session's work under git's control, so a failure here makes every
-	// later question meaningless: nothing is staged, `diff --cached --quiet` reads that as "no
-	// changes to commit", and finalize would report a session that changed nothing while its whole
-	// output sits uncommitted in a checkout about to be deleted. An empty diff may only be
-	// reported when staging actually succeeded.
+	branch, err := unboundedWorktreeGitOps.checkedOutBranch(wt)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading the checkout of session %s failed: %w", wt.Session, err)
+	}
+	captureErr := commitForFinalize(wt, checkpoint && branch != "")
+	if branch == "" {
+		captureErr = errors.Join(captureErr, preserveDetachedHead(wt))
+	} else if captureErr != nil {
+		return nil, nil, captureErr
+	}
+	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
+	baseSha := unboundedWorktreeGitOps.freshenBaseSha(wt)
+	recordWorktreeTaint(wt)
+	tip := effectiveBranchSha(wt)
+	files, patches := unboundedWorktreeGitOps.committedWorktreeDiff(wt, baseSha, tip, branch != "", true)
+	return files, patches, captureErr
+}
+
+func commitForFinalize(wt *Worktree, checkpoint bool) error {
+	// A failed stage can leave the index empty even while the checkout still holds work.
+	// Report the failure before treating an empty index as nothing to commit.
 	if err := stageForFinalize(wt.Path); err != nil {
-		return nil, nil, fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
+		return fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
 	}
 	// A file holding an owner-request secret is left out of the commit, and the session is told (secret_git.go).
 	unstageHeldSecrets(wt.Path, nil, wt.Session)
@@ -1020,64 +1048,67 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 		}
 		// Use the user's git identity; --no-verify keeps hooks from blocking finalization.
 		if _, err := git(wt.Path, "commit", "--no-verify", "-m", msg); err != nil {
-			return nil, nil, fmt.Errorf("committing the work of session %s failed: %w", wt.Session, err)
+			return fmt.Errorf("committing the work of session %s failed: %w", wt.Session, err)
 		}
 	}
-	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
-	freshenBaseSha(wt)
-	// The finished branch, recorded while the values are known (secret_taint.go).
-	recordWorktreeTaint(wt)
-	baseSha := wt.baseSha()
-	if baseSha == "" {
-		return nil, nil, nil
+	return nil
+}
+
+// A named branch, remote-tracking branch or tag distinguishes a detached read of existing history
+// from a commit held only by this checkout. Recovery refs do not count as capture on a branch.
+func detachedHeadHasNamedRef(dir, head string) (bool, error) {
+	refs, err := git(dir, "for-each-ref", "--count=1", "--contains="+head, "refs/heads/", "refs/remotes/", "refs/tags/")
+	return refs != "", err
+}
+
+func preserveDetachedHead(wt *Worktree) error {
+	head, err := git(wt.Path, "rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return fmt.Errorf("reading detached HEAD: %w", err)
 	}
-	files := diffFiles(wt.Path, baseSha, "HEAD")
-	if len(files) > maxChangedFiles {
-		// Same bound as the live diff, for the same reason (maxChangedFiles): the finalize
-		// payload goes through the same body limit, and a base this old reports an upstream's
-		// work rather than this session's.
-		logln(fmt.Sprintf("finalize diff for %s spans %d files — reporting the first %d, without patches",
-			wt.Session, len(files), maxChangedFiles))
-		return files[:maxChangedFiles], nil, nil
+	named, err := detachedHeadHasNamedRef(wt.Path, head)
+	if err != nil {
+		return fmt.Errorf("checking references to detached HEAD: %w", err)
 	}
-	patchOut, _ := git(wt.Path, "diff", "--full-index", baseSha+"..HEAD")
-	// The committed pictures are what the checkout holds now: their placeholders come from it.
-	return files, withoutSecretPatches(withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), wt.Session), nil
+	if named {
+		return nil
+	}
+	// A session can resume and detach again. Keep each distinct tip reachable.
+	ref := detachedRecoveryRef(wt.Session, head)
+	if _, err := git(wt.Path, "update-ref", ref, head); err != nil {
+		return fmt.Errorf("saving detached HEAD at %s: %w", ref, err)
+	}
+	return fmt.Errorf("detached work was saved at %s and still needs to be brought onto %s", ref, wt.Branch)
+}
+
+func detachedRecoveryRef(sessionID, head string) string {
+	return "refs/orbit/detached/" + decodeSessionID(sessionID) + "/" + head
 }
 
 // reportAbsentCheckout is finalizeWorktree for a session ended while its checkout was known to be away
 // (absentRefName): nothing in it is left to capture, and git has nothing to say about a path that is not
 // there, so the diff is read from the branch. There is no checkout to draw pictures from.
 func reportAbsentCheckout(wt *Worktree) ([]ChangedFile, []FilePatch, error) {
-	freshenBaseSha(wt)
-	baseSha := wt.baseSha()
-	if baseSha == "" {
-		return nil, nil, nil
-	}
-	tip := "refs/heads/" + wt.Branch
-	files := diffFiles(wt.RepoDir, baseSha, tip)
-	if len(files) > maxChangedFiles {
-		return files[:maxChangedFiles], nil, nil
-	}
-	patchOut, _ := git(wt.RepoDir, "diff", "--full-index", baseSha+".."+tip)
-	return files, withoutSecretPatches(buildFilePatches(files, splitPatch(patchOut)), wt.Session), nil
+	ops := unboundedWorktreeGitOps
+	baseSha := ops.freshenBaseSha(wt)
+	files, patches := ops.committedWorktreeDiff(wt, baseSha, ops.localBranchSha(wt.RepoDir, wt.Branch), false, true)
+	return files, patches, nil
 }
 
 // finalizeWorktreeReport commits the work of an ending session (finalizeWorktree) and fills the
 // worktree half of its finalize report from the checkout as finalization leaves it.
 //
-// A finalize that could not put the work on the branch reports no diff — which is
-// indistinguishable on the wire from a session that changed nothing, and is why no checkout
-// may be dropped on the server's say-so alone. Logged here; enforced where the removal
-// actually happens, by removeWorktree re-checking that the work reached the branch.
+// Report capture failures separately from the branch snapshot. removeWorktree verifies capture
+// independently before deleting the checkout.
 func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Worktree, status string) {
 	req.Branch = wt.Branch
-	// The worktree's ACTUAL HEAD branch (before finalize/removal) differs from the reported
-	// branch when the agent ran `git checkout -b` inside the checkout, so the server can flag
-	// it / offer Adopt.
-	req.WorktreeBranch = currentBranch(wt)
 	var captureErr error
 	req.ChangedFiles, req.ChangedDiff, captureErr = finalizeWorktree(wt, status == stCancelled)
+	branch, branchErr := unboundedWorktreeGitOps.checkedOutBranch(wt)
+	if branchErr == nil {
+		req.WorktreeBranch = branch
+		req.WorktreeDetached = branch == ""
+	}
 	if captureErr != nil {
 		logln("worktree finalization failed for", sessionID+":", captureErr)
 		// Say it on the wire too. A log line on whichever machine happened to run this is not
@@ -1085,9 +1116,8 @@ func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Workt
 		// produced nothing from one whose entire output is still uncommitted in a checkout.
 		req.CaptureError = clip(captureErr.Error(), 1000)
 	}
-	// Measured, not assumed: this is the checkout as it actually stands once finalization is
-	// done with it, and it is what tells the control plane the work still needs committing.
-	req.WorktreeDirty = worktreeIsDirty(wt)
+	// Pending files and saved detached commits both need further work to reach the branch.
+	req.WorktreeDirty = worktreeIsDirty(wt) || (captureErr != nil && req.WorktreeDetached)
 	// finalizeWorktree may heal a stale fork point while computing this snapshot.
 	req.BaseSha = wt.baseSha()
 	// Candidate merge targets for the ended session's "Merge to…" dropdown.
@@ -1098,10 +1128,13 @@ func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Workt
 	// still reported: a run the control plane ends (a task its acceptance made DONE ends as
 	// `task_done`, which the runner sees as a cancel) has no later report, and the last live one
 	// may predate the run's own commits.
-	if status != stCancelled {
+	if status != stCancelled || req.WorktreeDetached {
 		req.BranchSha = effectiveBranchSha(wt)
 	} else {
 		req.BranchSha = tipUnderParkCheckpoint(wt)
+	}
+	if req.BaseSha != "" && req.BranchSha != "" {
+		req.BranchCommits = branchCommitsBetween(wt.RepoDir, req.BaseSha, req.BranchSha)
 	}
 }
 
@@ -1177,14 +1210,43 @@ func gitEnvCtx(ctx context.Context, dir string, env []string, args ...string) (s
 
 // diffFiles returns the per-file change summary for the committed `git diff base..head`.
 func diffFiles(dir, base, head string) []ChangedFile {
+	return unboundedWorktreeGitOps.diffFiles(dir, base, head)
+}
+
+func (ops worktreeGitOps) diffFiles(dir, base, head string) []ChangedFile {
 	rng := base + ".." + head
-	numOut, err := git(dir, "diff", "--numstat", rng)
+	numOut, err := ops.run(dir, "diff", "--numstat", rng)
 	if err != nil {
 		logln("worktree diff failed in", dir+":", err)
 		return nil
 	}
-	statusOut, _ := git(dir, "diff", "--name-status", rng)
+	statusOut, _ := ops.run(dir, "diff", "--name-status", rng)
 	return parseNumstat(numOut, statusOut)
+}
+
+// A committed diff can also be read with the checkout detached or absent. Only read image
+// previews from disk when the files there are the ones represented by the diff.
+func (ops worktreeGitOps) committedWorktreeDiff(wt *Worktree, base, tip string, previews, withPatch bool) ([]ChangedFile, []FilePatch) {
+	if base == "" || tip == "" || base == tip {
+		return nil, nil
+	}
+	files := ops.diffFiles(wt.RepoDir, base, tip)
+	if len(files) > maxChangedFiles {
+		if withPatch {
+			logln(fmt.Sprintf("committed diff for %s spans %d files — reporting the first %d, without patches",
+				wt.Session, len(files), maxChangedFiles))
+		}
+		return files[:maxChangedFiles], nil
+	}
+	if !withPatch || len(files) == 0 {
+		return files, nil
+	}
+	patchOut, _ := ops.run(wt.RepoDir, "diff", "--full-index", base+".."+tip)
+	patches := buildFilePatches(files, splitPatch(patchOut))
+	if previews {
+		patches = withImagePreviews(wt.Path, files, patches)
+	}
+	return files, withoutSecretPatches(patches, wt.Session)
 }
 
 // liveDiff returns the per-file stat summary AND the per-file unified-diff patches of the
@@ -1225,6 +1287,14 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	baseSha := ops.freshenBaseSha(wt)
 	if wt == nil || baseSha == "" {
 		return nil, nil
+	}
+	branch, err := ops.checkedOutBranch(wt)
+	if err != nil {
+		return nil, nil
+	}
+	if branch == "" {
+		tip := ops.localBranchSha(wt.RepoDir, wt.Branch)
+		return ops.committedWorktreeDiff(wt, baseSha, tip, false, withPatch)
 	}
 	tmp, err := os.CreateTemp("", "orbit-idx-*")
 	if err != nil {
@@ -1500,9 +1570,8 @@ func removeWorktree(wt *Worktree, storage *checkoutStorage) {
 	// branch. Confirm that belief instead of acting on it: staging or committing can fail, and
 	// `worktree remove --force` is then the step that destroys the session's only copy of its
 	// work. A status we cannot read counts as unconfirmed for exactly the same reason.
-	if !checkoutWorkIsCaptured(wt) {
-		logln("worktree remove refused for", wt.Session+": work is not on", wt.Branch+
-			"; keeping the checkout", wt.Path)
+	if !checkoutWorkIsCaptured(wt) || !checkoutHeadIsCaptured(wt) {
+		logln("worktree remove refused for", wt.Session+": work is not captured; keeping the checkout", wt.Path)
 		return
 	}
 	teardownWorktreeProcesses(wt.Path)
@@ -1518,7 +1587,7 @@ func removeWorktree(wt *Worktree, storage *checkoutStorage) {
 	_, _ = git(wt.RepoDir, "update-ref", "-d", baseRefName(wt.Session))
 }
 
-// checkoutWorkIsCaptured reports whether everything in the checkout is already on the branch:
+// checkoutWorkIsCaptured reports whether the checkout has no pending file changes:
 // `git status --porcelain` ran and came back empty (.gitignore'd build output and the runner's
 // own scratch never counted as work, and still don't). A checkout that is already gone has
 // nothing left to lose and counts as captured. Anything else — pending changes, or a status that
@@ -1529,6 +1598,34 @@ func checkoutWorkIsCaptured(wt *Worktree) bool {
 	}
 	out, err := git(wt.Path, "status", "--porcelain")
 	return err == nil && out == ""
+}
+
+// A clean detached checkout can be reclaimed if its HEAD is reachable from a named ref.
+// A recovery checkout stays unless we can prove its HEAD reached the session branch.
+func checkoutHeadIsCaptured(wt *Worktree) bool {
+	if checkoutAbsent(wt.Path) {
+		return true
+	}
+	branch, err := unboundedWorktreeGitOps.checkedOutBranch(wt)
+	if err != nil {
+		return false
+	}
+	if branch != "" {
+		return true
+	}
+	if wt.Branch != "" && unboundedWorktreeGitOps.isAncestor(wt.Path, "HEAD", "refs/heads/"+wt.Branch) {
+		return true
+	}
+	head, err := git(wt.Path, "rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return false
+	}
+	ref, err := git(wt.Path, "for-each-ref", "--count=1", detachedRecoveryRef(wt.Session, head))
+	if err != nil || ref != "" {
+		return false
+	}
+	named, err := detachedHeadHasNamedRef(wt.Path, head)
+	return err == nil && named
 }
 
 // dropEmptyChatBranch removes a wiki chat's checkout and deletes its branch when the run ends with
@@ -1621,6 +1718,87 @@ type mergeOutcome struct {
 	// plane that knows the flag records §13.7 MR2's `ALREADY_MERGED`, which exists to keep "the
 	// target moved" and "it was already there" different facts.
 	AlreadyMerged bool
+	// With Status "pull_request" (docs/design/protected-branch-landing.md §4.6): the commit the landing
+	// branch holds after the push, and GitHub's words for the refused target push.
+	PushedSha   string
+	PushRefusal string
+	// The command's landVia, echoed on "merged" and "pull_request" (mergeToMain), and with "merged" after a Push as
+	// me push GitHub took (§5.2): PushedAs "OWNER" and the rules GitHub said it bypassed.
+	LandVia       string
+	PushedAs      string
+	BypassedRules []string
+}
+
+// mergeLanding is a merge's pull-request fallback (docs/design/protected-branch-landing.md §4.6): how the control
+// plane said this merge reaches its target, the landing branch the replayed tip goes to when GitHub refuses the target
+// because of its rules, what Orbit last pushed there, and whether the session's pull request is already open. The
+// zero value is a merge with no fallback, which pushes the target as it always did.
+type mergeLanding struct {
+	landVia  string
+	ref      string
+	expected string
+	open     bool
+	// The merge operation this runner holds, which a Push as me request for the owner's token names (§5.2).
+	sessionID   string
+	operationID string
+	leaseOwner  string
+}
+
+func mergeLandingOf(req MergeCommand) mergeLanding {
+	return mergeLanding{
+		landVia: req.LandVia, ref: req.LandingRef, expected: req.LandingRefSha, open: req.PullRequestOpen,
+		sessionID: req.SessionID, operationID: req.OperationID, leaseOwner: req.LeaseOwner,
+	}
+}
+
+// viaPullRequest reports whether a refused target push falls back to the landing branch.
+func (l mergeLanding) viaPullRequest() bool {
+	return landsThroughPullRequest(l.landVia, l.ref, false)
+}
+
+// pushesAsOwner reports whether this merge's target push carries the owner's own GitHub token (Push as me, §5.2).
+func (l mergeLanding) pushesAsOwner() bool {
+	return pushesAsOwner(l.landVia, l.viaPullRequest(), l.open)
+}
+
+// ownerCredential asks for the owner's token for this merge's target push, naming the merge operation. A refusal
+// answers the sentence the landing branch's pull request says instead of GitHub's words.
+func (l mergeLanding) ownerCredential(tmp string) (*orbitGitCredential, string) {
+	credential, err := askOwnerGitCredential(tmp, "origin", RunnerGitCredentialRequest{
+		SessionID: l.sessionID, MergeOperationID: l.operationID, LeaseOwner: l.leaseOwner,
+	})
+	if err != nil {
+		logln("merge of session", l.sessionID, "could not have the owner's GitHub token for its push; pushing its landing branch:", err)
+		return nil, pushAsMeUnavailablePrefix + err.Error()
+	}
+	return credential, ""
+}
+
+// toLandingBranch pushes the replayed tip in the staging checkout tmp to the landing branch and answers
+// "pull_request" (§4.6 step 2). The local target and the root checkout are left where they are: the target on origin
+// did not move, and this machine's copy of it catches up at its next fetch.
+func (l mergeLanding) toLandingBranch(tmp, source, sourceSha, base, refusal string) mergeOutcome {
+	tip, err := git(tmp, "rev-parse", "HEAD")
+	if err != nil || tip == "" {
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(fmt.Sprintf("could not read the rebased result of %s: %s", source, gitStderr(err)), 1000)}
+	}
+	tree, err := git(tmp, "rev-parse", "HEAD^{tree}")
+	if err != nil || tree == "" {
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(fmt.Sprintf("could not read the rebased tree of %s: %s", source, gitStderr(err)), 1000)}
+	}
+	pushed, err := landingBranchPush{
+		dir: tmp, remote: "origin", landingRef: l.ref,
+		tested: tip, treeSha: tree, baseSha: base, expected: l.expected, reuse: l.open,
+	}.run()
+	if err != nil {
+		message := "could not push the landing branch " + strings.TrimPrefix(l.ref, "refs/heads/") + ": " + gitStderr(err)
+		if refusal != "" {
+			message = "GitHub refused the push to the target (" + refusal + "), and " + message
+		}
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(message, 1000)}
+	}
+	logln(fmt.Sprintf("pushed %s to %s for session %s's pull request", shortSha(pushed), strings.TrimPrefix(l.ref, "refs/heads/"), source))
+	return mergeOutcome{Status: "pull_request", SourceSha: sourceSha, PushedSha: pushed, PushRefusal: refusal, RebaseBase: base}
 }
 
 // mergeToMain brings a session's branch into a target branch on the runner's local repo by
@@ -1651,7 +1829,13 @@ type mergeOutcome struct {
 // returns "error" with an actionable message; the UI keeps a copyable `git merge` fallback. The
 // session branch is never rewritten or deleted. Serialized by mergeLock so concurrent merges
 // don't race on the repo.
-func mergeToMain(req MergeCommand) mergeOutcome {
+func mergeToMain(req MergeCommand) (res mergeOutcome) {
+	// The command's landVia, echoed on every answer that landed or went to the landing branch (§5.4).
+	defer func() {
+		if res.Status == "merged" || res.Status == "pull_request" {
+			res.LandVia = req.LandVia
+		}
+	}()
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
 	// And the checkout's own lock, which the main checkout actions (move, commit, push, Save & clean)
@@ -1836,7 +2020,7 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return alreadyMergedOutcome(req.SessionID, target, sourceSha, targetBefore)
 	}
 
-	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot, anchor, landed)
+	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot, anchor, landed, mergeLandingOf(req))
 	out.TargetBranch = target
 	out.TargetShaBefore = targetBefore
 	// The base the source was replayed ONTO. For this merge that is the target tip: the rebase puts
@@ -2019,7 +2203,7 @@ func restageRebaseScratch(repoRoot, sourceSha string) (string, error) {
 // local branch, so the local target only ever moves to what origin already accepted — local merges
 // can't pile up unpushed and silently diverge from origin. A concurrent push that beats ours is
 // rejected (non-fast-forward); we re-sync to the new origin tip and replay, up to mergePushAttempts.
-func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string, landed map[string]bool) mergeOutcome {
+func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string, landed map[string]bool, landing mergeLanding) mergeOutcome {
 	// Staged once per repository and kept: the scratch is NOT removed afterwards, because the next
 	// merge restages it and paying a full checkout of the repository again is what pressing Merge
 	// mostly used to cost.
@@ -2032,6 +2216,10 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 	// Whether origin already accepted the rebased commits. It decides what a failure to advance the
 	// LOCAL target means: the work is upstream either way, and only this machine's checkout lags.
 	pushed := false
+	// Push as me (§5.2): the owner's token, asked for once before the first target push and held for this merge's
+	// push attempts alone, and what GitHub said when it took the push.
+	var owner *orbitGitCredential
+	var ownerSaid string
 
 	// Replay the temp branch onto target and, when origin tracks target, push the result so
 	// origin/<target> advances in lockstep. A push that origin rejects (it moved under us) is
@@ -2062,6 +2250,12 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 				Conflicts: splitLines(unmerged),
 			}
 		}
+		// docs/design/protected-branch-landing.md §4.6: the session's pull request for this target is open, so the
+		// merge updates it — the landing branch, never the target, and nothing local moves.
+		if pushToOrigin && landing.viaPullRequest() && landing.open {
+			base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+			return landing.toLandingBranch(tmp, source, sourceSha, base, "")
+		}
 		// The local fast-forward at the end writes exactly the paths this replay changed, and git
 		// refuses it if any of them is modified in that checkout. Finding that out AFTER the push
 		// would strand the merge half-done — the work on origin, the local target behind — so check
@@ -2077,14 +2271,46 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 		if !pushToOrigin {
 			break // local-only target (or no origin): nothing to push.
 		}
+		if owner == nil && landing.pushesAsOwner() {
+			credential, refusal := landing.ownerCredential(tmp)
+			if refusal != "" {
+				base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return landing.toLandingBranch(tmp, source, sourceSha, base, refusal)
+			}
+			owner = credential
+		}
 		// Push the rebased commits, fast-forwarding origin/<target> (target == origin/<target> after
 		// the reconcile, so origin is an ancestor of the rebased tip unless it just moved).
-		out, err := pushMergeResult(tmp, target)
+		var out string
+		if owner != nil {
+			ownerSaid, err = pushAsOwner(tmp, "origin", owner, "HEAD:refs/heads/"+target)
+		} else {
+			out, err = pushMergeResult(tmp, target)
+		}
 		if err == nil {
 			pushed = true
 			break
 		}
 		combined := strings.TrimSpace(out + "\n" + gitStderr(err))
+		// §5.2 "No second credential": the owner's push refused by the branch's rules, or the owner's token not
+		// accepted, goes to the landing branch; the target is never pushed again with another credential.
+		if owner != nil {
+			if refusal, ok := ownerPushRefusal(ownerSaid, err); ok {
+				base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return landing.toLandingBranch(tmp, source, sourceSha, base, refusal)
+			}
+		}
+		// §4.6 step 2: GitHub refused the push because of the branch's rules, which is never a race to retry. A merge
+		// the control plane said goes through a pull request pushes its landing branch instead; any other one says
+		// the branch is protected, in GitHub's words. A control plane that named no landVia is told as before.
+		if landing.landVia != "" && isProtectedRefusal(combined) {
+			if landing.viaPullRequest() {
+				base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return landing.toLandingBranch(tmp, source, sourceSha, base, githubRefusalWords(combined))
+			}
+			return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(fmt.Sprintf(
+				"GitHub refused the push to %s because of the branch's rules: %s", target, githubRefusalWords(combined)), 1000)}
+		}
 		if !isNonFastForward(combined) {
 			// Auth/network/other — origin untouched, local target not yet advanced. Surface it.
 			return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not push %s to origin: %s", target, combined), 1000)}
@@ -2127,7 +2353,11 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 
 	sha, _ := git(repoRoot, "rev-parse", target)
 	logln(fmt.Sprintf("rebased %s onto %s (%s) for session %s", source, target, shortSha(sha), sessionID))
-	return mergeOutcome{Status: "merged", MergedSha: sha, SourceSha: sourceSha}
+	merged := mergeOutcome{Status: "merged", MergedSha: sha, SourceSha: sourceSha}
+	if owner != nil && pushed {
+		merged.PushedAs, merged.BypassedRules = pushedAsOwner, bypassedRulesOf(ownerSaid)
+	}
+	return merged
 }
 
 // ffClash returns the paths that both the rebased result (in worktree `tmp`) and the target's

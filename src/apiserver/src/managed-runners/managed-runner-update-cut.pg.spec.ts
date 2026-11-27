@@ -27,13 +27,15 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { RUNNER_UPDATE_RESUME_NOTE, RunEventType, type RunInboxResponse } from '@orbit/shared';
-import { RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import '../test-support/dequeue-under-lease';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const UPDATE_HEAD = `[Orbit] ${RUNNER_UPDATE_RESUME_NOTE} Orbit updated its runner at the owner's request, which stopped this turn`;
@@ -93,7 +95,7 @@ test('a turn an Orbit Cloud runner\'s Update Now cut is handed back as the updat
     const sessionId = randomUUID();
     await db.session.create({ data: {
       id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId, assignedRunnerId: f.runnerId, title: 'A long build',
-      prompt: 'build it', provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+      prompt: 'build it', provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(), runClaimedAt: new Date(Date.now() - 10 * 60_000), runtimeSessionId: randomUUID(),
     } });
     const turn = await db.conversationTurn.create({
@@ -130,7 +132,7 @@ test('a turn an Orbit Cloud runner\'s Update Now cut is handed back as the updat
     const sessionId = randomUUID();
     await db.session.create({ data: {
       id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId, assignedRunnerId: f.runnerId, title: 'Ticks',
-      prompt: 'append ticks', provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+      prompt: 'append ticks', provider: 'claude', turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(), runClaimedAt: new Date(Date.now() - 10 * 60_000), runtimeSessionId: randomUUID(),
     } });
     const turn = await db.conversationTurn.create({
@@ -165,7 +167,7 @@ test('a turn an Orbit Cloud runner\'s Update Now cut is handed back as the updat
     });
     assert.deepEqual(turns.map((turn) => [turn.kind, turn.status]), [['message', 'ANSWERED'], ['message', 'PENDING']], 'the cut turn answered, its continuation queued');
     assert.equal(turns[1].clientTurnId, `update-now-continue:v1:${ended.turnId}`);
-    assert.equal((await db.session.findUniqueOrThrow({ where: { id: ended.sessionId } })).status, RunStatus.RUNNING, 'RUNNING for the continuation');
+    assert.equal(wordOf((await db.session.findUniqueOrThrow({ where: { id: ended.sessionId } }))), RunStatus.RUNNING, 'RUNNING for the continuation');
 
     // The completion again (a retry, or the next process's kept copy): nothing queued twice.
     await api.turnComplete({ id: f.runnerId }, ended.sessionId, { leaseOwner: ended.p1, turnId: ended.turnId, status: 'INTERRUPTED', subtype: 'interrupted', numTurns: 1 } as never);
@@ -187,7 +189,7 @@ test('a turn an Orbit Cloud runner\'s Update Now cut is handed back as the updat
     ] } as never);
     await api.turnComplete({ id: f.runnerId }, ended.sessionId, { leaseOwner: p2, turnId: turns[1].id, status: 'SUCCEEDED', numTurns: 1 } as never);
     const settled = await db.session.findUniqueOrThrow({ where: { id: ended.sessionId } });
-    assert.notEqual(settled.status, RunStatus.RUNNING);
+    assert.notEqual(wordOf(settled), RunStatus.RUNNING);
     assert.equal(await db.conversationTurn.count({ where: { sessionId: ended.sessionId, kind: 'message', status: { not: 'ANSWERED' } } }), 0);
   });
 
@@ -205,7 +207,7 @@ test('a turn an Orbit Cloud runner\'s Update Now cut is handed back as the updat
       const ended = await endedInterruptedAtTheStop(await runnerOf(window), { ownStop });
       const queued = await db.conversationTurn.count({ where: { sessionId: ended.sessionId, clientTurnId: { startsWith: 'update-now-continue:' } } });
       assert.equal(queued, 0, `${label}: nothing queued`);
-      assert.notEqual((await db.session.findUniqueOrThrow({ where: { id: ended.sessionId } })).status, RunStatus.RUNNING, `${label}: settled`);
+      assert.notEqual(wordOf((await db.session.findUniqueOrThrow({ where: { id: ended.sessionId } }))), RunStatus.RUNNING, `${label}: settled`);
     }
   });
 

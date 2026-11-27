@@ -6,7 +6,6 @@
  * capabilities, so the sessions service can ask the same question without importing it.
  */
 import { AgentProvider, ENGINE_CLI_NAMES } from '@orbit/shared';
-import type { RunStatus } from '@prisma/client';
 import { isSessionGenerating } from '../common/session-generating';
 
 /** Runner carries a Codex session's thread onto the account its claim names when that is not the one
@@ -57,11 +56,9 @@ export const CURSOR_CONVERSATION_MOVE_REFUSAL =
  * since a switch takes effect only after it. Without any of these it has not talked: it waits for its
  * first claim, or ended before Cursor opened a conversation, and starts one on whichever it moves to.
  */
-export function cursorConversationStarted(session: {
+export function cursorConversationStarted(session: Parameters<typeof isSessionGenerating>[0] & {
   numTurns: number;
   runtimeSessionId: string | null;
-  status: RunStatus;
-  engineTurnActive?: boolean | null;
 }): boolean {
   return session.numTurns > 0 || session.runtimeSessionId != null || isSessionGenerating(session);
 }

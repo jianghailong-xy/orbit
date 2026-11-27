@@ -54,6 +54,9 @@ var cliParityParamAlias = map[string]string{
 	"paths": "--path",
 	// One section per flag at a terminal, repeatable, as doc/key: wiki_draft's sections are { doc, section } objects.
 	"sections": "--section",
+	// A CHANGE request's one object is typed as the two flags that fill it; blocksTaskIds repeats one id per flag.
+	"change":        "--runner",
+	"blocksTaskIds": "--blocks-task-id",
 }
 
 // Tools whose command takes the whole MCP input as ONE JSON document (`--input JSON | --input-file -`),
@@ -74,7 +77,7 @@ func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 	// One direction only: every MCP tool needs a command, and a command needs no tool. The person's
 	// own commands (userCLICapabilities: login, logout, whoami, api) have none — MCP runs only inside
 	// sessions, where the CLI never acts as the person (docs/personal-access-token-design.md §7.4).
-	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, driveCLICapabilities, subagentCLICapabilities, settingsCLICapabilities, browserCLICapabilities, userCLICapabilities, guideCLICapabilities} {
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, ownerRequestCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, driveCLICapabilities, subagentCLICapabilities, settingsCLICapabilities, browserCLICapabilities, userCLICapabilities, guideCLICapabilities} {
 		for _, spec := range list {
 			specs[spec.Tool] = spec
 		}
@@ -111,7 +114,7 @@ func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 			if input != "" && regexp.MustCompile(`\b`+param+`\b`).MatchString(input) {
 				continue
 			}
-			if !cliDocumentsParam(documented, param) {
+			if !cliDriveParam(documented, param) {
 				t.Errorf("%s does not document MCP parameter %q: %v", name, param, spec.Arguments)
 			}
 		}
@@ -306,7 +309,7 @@ func assertSameStringSet(t *testing.T, label string, want, got []string) {
 
 // A parameter counts as documented when the arguments name its flag (--kebab-case), its
 // positional form ([kebab-case]), or the alias the CLI deliberately uses instead.
-func cliDocumentsParam(documented, param string) bool {
+func cliDriveParam(documented, param string) bool {
 	kebab := kebabCase(param)
 	if strings.Contains(documented, "--"+kebab) || strings.Contains(documented, "["+kebab+"]") {
 		return true

@@ -294,6 +294,8 @@ struct MachinesAndModelsKeysSection: View {
     /// (`MachinesAndModels.cursorModel`) — a Cursor key has no model list of its own.
     var cursorModel = "Auto"
     var open: ((NavNode) -> Void)? = nil
+    /// A key an account refused runs on: the provider's words, the next trial and Check again (contract §4).
+    var health = AccountHealthRows()
 
     var body: some View {
         Section {
@@ -318,11 +320,22 @@ struct MachinesAndModelsKeysSection: View {
                 } else {
                     row(key, balance: nil)
                 }
+                healthRow(key)
             }
         } header: {
             RunnerSectionHeader(ProvidersOverview.apiKeys)
         } footer: {
             Text(ProvidersOverview.apiKeysDetail + " " + ProvidersOverview.editOnWeb)
+        }
+    }
+
+    /// A key an account refused, on its own list row under the key's: a press on the key's row opens its page,
+    /// so Check again can't share that row on iOS.
+    @ViewBuilder private func healthRow(_ key: ConfiguredProvider) -> some View {
+        if let id = key.providerID, let block = AccountHealth.block(health.blocks, providerID: id) {
+            health.row(block)
+                .padding(.leading, 38)
+                .listRowSeparator(.hidden, edges: .top)
         }
     }
 

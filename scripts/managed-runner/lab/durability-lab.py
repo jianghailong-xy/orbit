@@ -683,7 +683,7 @@ def run_resume(run):
             for label, repo in live['repos'].items():
                 step.check(f'{name} {label}: the repository reads and git fsck is clean on the runner after its start', repo['revParseHead']['exit'] == 0
                            and repo['fsck']['exit'] == 0, {k_: repo[k_] for k_ in ('revParseHead', 'fsck', 'locks')})
-        s3 = wl.sql_json(f"select status from session where id = {wl.quote(r['s3']['uuid'])}")[0]['status']
+        s3 = wl.sql_json(f"select {wl.session_word('session')} as status from session where id = {wl.quote(r['s3']['uuid'])}")[0]['status']
         return {'runnerLog': check_lines, 'live': live, 'turn': turn, 'answered': found, 'resumedSecrets': secrets, 'lastTurnResumed': kept,
                 's3StatusNow': s3, 'answeredAfterSeconds': al.seconds_between(at, found['event']['ingested_at'])}
     return step_fn
@@ -786,7 +786,7 @@ def damaged_wake(ctx, step):
     step.check(f'{name}: the session was refused with the reason, naming the repository', 'REPOSITORY_DAMAGED' in text and 'orbit-repos/default' in text
                and 'cannot be read' in text, text[:600])
     status = poll(lambda: (lambda row: row if row['status'] in ('FAILED', 'AWAITING_INPUT', 'CANCELLED') else None)(
-        wl.sql_json(f"select status from session where id = {wl.quote(r['sessions']['s1']['uuid'])}")[0]), 120, 'the refused session settles')
+        wl.sql_json(f"select {wl.session_word('session')} as status from session where id = {wl.quote(r['sessions']['s1']['uuid'])}")[0]), 120, 'the refused session settles')
     step.check(f'{name}: the session failed with the refusal', status['status'] == 'FAILED', status)
     step.check(f'{name}: no engine saw the message: the model was never asked about it', fake_model_line(word, 'text') is None
                and fake_model_line(word, 'tool_use') is None)

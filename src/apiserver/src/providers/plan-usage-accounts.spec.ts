@@ -230,10 +230,12 @@ test('an account entry is stored as that account’s own windows, under an id a 
       'deadbeef': 'not a snapshot' as unknown as PlanUsageSnapshot,
     },
   };
+  // Work's own reset block stays on it (contract v2 §12.1); its nested `accounts` does not.
+  const workBlock = beat(62, null).planUsage!.codex!.rateLimitReset!;
   assert.deepEqual(sanitizePlanUsageAccounts(reported), {
     provider: AgentProvider.CODEX,
     primary: window(62, DEFAULT_RESET),
-    accounts: { [WORK]: work(8) },
+    accounts: { [WORK]: { ...work(8), rateLimitReset: workBlock } },
   });
   // Nested: the other runtimes' snapshots are left as reported.
   const nested = sanitizePlanUsageAccounts({ claude: { provider: AgentProvider.CLAUDE }, codex: { provider: AgentProvider.CODEX, accounts: many } });
@@ -258,7 +260,125 @@ test('an account entry is stored as that account’s own windows, under an id a 
   const h = harness();
   await h.heartbeat({ ...beat(62, null), planUsage: { codex: { ...beat(62, null).planUsage!.codex!, accounts: reported.accounts } } });
   assert.deepEqual(Object.keys((h.row.planUsage as PlanUsage).codex!.accounts!), [WORK]);
-  assert.equal(h.account(WORK)!.rateLimitReset, undefined, 'no block is stored under an account');
+  assert.deepEqual(h.account(WORK)!.rateLimitReset, workBlock, "Work's block is stored under Work");
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage, WORK), workBlock);
+});
+
+/** The contract's per-account heartbeat: Default and two added Codex slots, each with its own block. */
+const PER_ACCOUNT = JSON.parse(
+  readFileSync(path.resolve(__dirname, '../../../../contracts/codex-rate-limit-reset.fixtures.json'), 'utf8'),
+).heartbeats.perAccount as RunnerHeartbeatRequest;
+const SPARE = '7b04d1e9';
+
+/** The per-account fixture with Work's block changed by `work`, and Default's by `default`. */
+function perAccount(work: Partial<PlanUsageRateLimitReset> = {}, defaults: Partial<PlanUsageRateLimitReset> = {}): RunnerHeartbeatRequest {
+  const fixture = clone(PER_ACCOUNT);
+  const codex = fixture.planUsage!.codex!;
+  codex.rateLimitReset = { ...codex.rateLimitReset!, ...defaults };
+  codex.accounts![WORK].rateLimitReset = { ...codex.accounts![WORK].rateLimitReset!, ...work };
+  return fixture;
+}
+
+test("sanitizePlanUsageAccounts keeps each Codex account's well-formed reset block and drops a malformed one", () => {
+  const reported = clone(PER_ACCOUNT.planUsage!);
+  const blocks = reported.codex!.accounts!;
+  // As the runner reports it, every block is kept, each on its own account.
+  assert.deepEqual(sanitizePlanUsageAccounts(reported), reported);
+  assert.equal(codexRateLimitResetOf(sanitizePlanUsageAccounts(reported), WORK)!.accountFingerprint, 'cxa1_ba0f094a2ee93e11858a0c7e88850745');
+  assert.equal(codexRateLimitResetOf(sanitizePlanUsageAccounts(reported), SPARE)!.support, 'CREDITS_UNAVAILABLE');
+
+  // Malformed blocks go, and only they do: the account's windows stay, and the other account's block too.
+  const malformed: unknown[] = [
+    'not a block',
+    null,
+    { ...blocks[WORK].rateLimitReset, protocolVersion: 2 },
+    { ...blocks[WORK].rateLimitReset, accountFingerprint: 'alice@example.com' },
+    { ...blocks[WORK].rateLimitReset, fetchedAt: 'yesterday' },
+    { ...blocks[WORK].rateLimitReset, sequence: 0 },
+  ];
+  for (const block of malformed) {
+    const bad = clone(reported);
+    (bad.codex!.accounts![WORK] as Record<string, unknown>).rateLimitReset = block;
+    const kept = sanitizePlanUsageAccounts(bad);
+    assert.equal(kept.codex!.accounts![WORK].rateLimitReset, undefined, JSON.stringify(block));
+    assert.deepEqual(kept.codex!.accounts![WORK], (({ rateLimitReset: _b, ...own }) => own)(blocks[WORK]), 'its windows are kept');
+    assert.deepEqual(kept.codex!.accounts![SPARE], blocks[SPARE], "the other account's block is kept");
+    assert.deepEqual(kept.codex!.rateLimitReset, reported.codex!.rateLimitReset, "Default's block is untouched");
+  }
+
+  // The flat snapshot of an older runner, the same way.
+  const flat = sanitizePlanUsageAccounts({ ...clone(reported.codex!), accounts: { [WORK]: clone(blocks[WORK]) } });
+  assert.deepEqual(flat.accounts![WORK].rateLimitReset, blocks[WORK].rateLimitReset);
+
+  // A block on another engine's account is never kept: only Codex accounts carry one.
+  const claude = sanitizePlanUsageAccounts({
+    claude: { provider: AgentProvider.CLAUDE, accounts: { [WORK]: { provider: AgentProvider.CLAUDE, rateLimitReset: blocks[WORK].rateLimitReset } } },
+  });
+  assert.equal(claude.claude!.accounts![WORK].rateLimitReset, undefined);
+});
+
+test("each added account's block is ordered on its own: an older one never overwrites a newer one", async () => {
+  const h = harness();
+  await h.heartbeat(perAccount({ fetchedAt: '2026-09-11T04:21:40.000Z', sequence: 10 }));
+  const newer = codexRateLimitResetOf(h.row.planUsage as PlanUsage, WORK)!;
+  assert.equal(newer.sequence, 10);
+  const spare = codexRateLimitResetOf(h.row.planUsage as PlanUsage, SPARE)!;
+
+  // An older read of Work, beside a newer read of Default: Work keeps its stored block, Default takes its new
+  // one, and Work's windows are still the ones this heartbeat reported.
+  const older = perAccount(
+    { fetchedAt: '2026-09-11T04:21:35.000Z', sequence: 11, rateLimitResetCredits: { availableCount: 9, credits: null } },
+    { fetchedAt: '2026-09-11T04:21:50.000Z', sequence: 12 },
+  );
+  older.planUsage!.codex!.accounts![WORK].primary!.utilization = 42;
+  await h.heartbeat(older);
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage, WORK), newer, "the older block did not replace Work's");
+  assert.equal(h.account(WORK)!.primary!.utilization, 42);
+  assert.equal(codexRateLimitResetOf(h.row.planUsage as PlanUsage)!.sequence, 12, "Default's newer block was taken");
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage, SPARE), spare);
+
+  // The same instant and process: only a higher sequence within Work's own block moves it.
+  await h.heartbeat(perAccount({ fetchedAt: '2026-09-11T04:21:40.000Z', sequence: 9 }, { fetchedAt: '2026-09-11T04:21:50.000Z', sequence: 13 }));
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage, WORK), newer, 'a lower sequence at the same instant');
+  // Another process's block, not this heartbeat's own: refused, Work's stays.
+  await h.heartbeat(perAccount({ fetchedAt: '2026-09-11T04:21:59.000Z', generation: '0b9e8d7c-6a5f-4e3d-8c2b-1a0f9e8d7c6b' }));
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage, WORK), newer, "another process's read");
+  // A heartbeat that reports Work without a block keeps Work's stored one, as Default's is kept.
+  const blockless = perAccount();
+  delete blockless.planUsage!.codex!.accounts![WORK].rateLimitReset;
+  await h.heartbeat(blockless);
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage, WORK), newer, 'a heartbeat without a block');
+
+  // A newer read replaces it.
+  await h.heartbeat(perAccount({ fetchedAt: '2026-09-11T04:22:05.000Z', sequence: 20 }));
+  assert.equal(codexRateLimitResetOf(h.row.planUsage as PlanUsage, WORK)!.sequence, 20);
+
+  // A block never moves between accounts: Spare's stored block is no older block for Work, and Work's is not Spare's.
+  assert.equal(codexRateLimitResetOf(h.row.planUsage as PlanUsage, SPARE)!.sequence, 41);
+  // A slot the runner no longer reports goes, block and all.
+  const withoutSpare = perAccount({ fetchedAt: '2026-09-11T04:22:05.000Z', sequence: 20 });
+  delete withoutSpare.planUsage!.codex!.accounts![SPARE];
+  await h.heartbeat(withoutSpare);
+  assert.equal(h.account(SPARE), undefined);
+  assert.equal(codexRateLimitResetOf(h.row.planUsage as PlanUsage, SPARE), undefined);
+});
+
+test("the block a reset refresh writes for an added account lands on that account alone, and only forwards", async () => {
+  const h = harness();
+  await h.heartbeat(perAccount({ fetchedAt: '2026-09-11T04:21:40.000Z', sequence: 10 }));
+  const before = clone(h.row.planUsage as PlanUsage);
+  const stored = codexRateLimitResetOf(before, WORK)!;
+  const refreshed = { ...stored, fetchedAt: '2026-09-11T04:21:45.000Z', sequence: 11, rateLimitResetCredits: { availableCount: 1, credits: null } };
+  assert.equal(await storeRefreshedCodexResetBlock(h.prisma as never, RUNNER.id, refreshed, A, WORK), true);
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage, WORK), refreshed);
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage), codexRateLimitResetOf(before), "Default's block is untouched");
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage, SPARE), codexRateLimitResetOf(before, SPARE));
+  assert.equal(h.account(WORK)!.primary!.utilization, before.codex!.accounts![WORK].primary!.utilization);
+  // An older one is not written, nor one for a slot the runner does not report.
+  assert.equal(await storeRefreshedCodexResetBlock(h.prisma as never, RUNNER.id, { ...stored, sequence: 9 }, A, WORK), false);
+  assert.deepEqual(codexRateLimitResetOf(h.row.planUsage as PlanUsage, WORK), refreshed);
+  assert.equal(await storeRefreshedCodexResetBlock(h.prisma as never, RUNNER.id, { ...refreshed, sequence: 30 }, A, 'abcdef01'), false);
+  assert.equal(codexRateLimitResetOf(h.row.planUsage as PlanUsage, 'abcdef01'), undefined);
 });
 
 /** The runner's report of its engines: Codex and Claude Code, each with Default and Work. */

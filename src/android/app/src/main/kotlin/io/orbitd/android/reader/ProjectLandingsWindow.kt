@@ -516,6 +516,7 @@ private fun LandingWindowRow(row: LandingsWindowRow, record: LandingSessionRead?
         if (expanded) Column(Modifier.fillMaxWidth().padding(start = LANDING_LINE_INDENT, bottom = 6.dp).testTag("landing:record-panel"),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (merge) LandingReceiptBlock(LandingSessionModel.mergeReceipt(row.promotion, view))
+            view?.pullRequest?.let { LandingPullRequestCard(it, view.currentAttempt?.targetRef?.removePrefix("refs/heads/") ?: "main") }
             if (row.sessionId != null) {
                 if (view != null) {
                     LandingRecord(view, now, zone, onLog)
@@ -593,6 +594,7 @@ private fun LandingWindowCard(card: LandingsWindowCard, read: LandingSessionRead
             Text(refusal, Modifier.padding(horizontal = 4.dp).testTag("landing:refusal"), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error)
         }
+        view?.pullRequest?.let { LandingPullRequestCard(it, attempt?.targetRef?.removePrefix("refs/heads/") ?: "main") }
         if (open && view != null) Column(Modifier.fillMaxWidth().padding(start = LANDING_LINE_INDENT, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             LandingRecord(view, now, zone, onLog)

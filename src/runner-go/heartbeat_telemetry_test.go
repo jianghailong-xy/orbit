@@ -397,7 +397,7 @@ func TestBoundedBaseShaHealingStaysOnTelemetryCopyAndFeedsLaterChecks(t *testing
 			command := strings.Join(args, " ")
 			commands = append(commands, command)
 			switch {
-			case command == "symbolic-ref --short HEAD":
+			case command == "symbolic-ref --quiet --short HEAD":
 				return "orbit/feature", nil
 			case command == "rev-parse refs/heads/orbit/feature":
 				return "tip", nil

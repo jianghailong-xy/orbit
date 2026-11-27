@@ -149,9 +149,10 @@ struct SessionFolderPage: View {
     @State private var hitsQuery = ""
     @State private var contentSearched = true
     @State private var searching = false
-    /// The Pinned section's fold, shared with the workspace list's by its storage key: folding it on
-    /// one list folds it on both, which is what "the same list" means here.
+    /// The Pinned and Needs you sections' folds, shared with the workspace list's by their storage
+    /// keys: folding one on one list folds it on both, which is what "the same list" means here.
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
+    @AppStorage("sessionList.needsYouCollapsed") private var needsYouCollapsed = false
     /// The last grouping drawn and its inputs (see `list(agent:)`).
     @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
     /// A row being dragged onto the page's head, out of the folder (the Mac's shortcut for Move, see
@@ -421,13 +422,13 @@ struct SessionFolderPage: View {
                     listRow(session, projects: projects, marks: marks)
                 }
             }
-        } else if section.title == "Pinned" {
+        } else if let folded = sectionFold(section.title) {
             TitledListSection {
-                if !pinnedCollapsed {
+                if !folded.wrappedValue {
                     ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
                 }
             } title: {
-                pinnedSectionHeader(section.title)
+                foldSectionHeader(section.title, folded: folded)
             }
         } else {
             TitledListSection {
@@ -450,24 +451,36 @@ struct SessionFolderPage: View {
             onTag: { taggingSession = $0 }, onShare: { sharingSession = $0 }, onMove: { movingSession = $0 })
     }
 
-    /// The Pinned section's header: its title, and a chevron that points down while the rows show
-    /// and right once they are folded away, the whole band being the button.
-    private func pinnedSectionHeader(_ title: String) -> some View {
-        Button {
-            withAnimation { pinnedCollapsed.toggle() }
+    /// A folding section's header (Pinned, Needs you): its title, and a chevron that points down
+    /// while the rows show and right once they are folded away, the whole band being the button.
+    private func foldSectionHeader(_ title: String, folded: Binding<Bool>) -> some View {
+        let pinned = title == "Pinned"
+        let shows = pinned ? "Shows the pinned sessions" : "Shows the sessions waiting for you"
+        let hides = pinned ? "Hides the pinned sessions" : "Hides the sessions waiting for you"
+        return Button {
+            withAnimation { folded.wrappedValue.toggle() }
         } label: {
             HStack {
                 Text(title).textCase(nil)
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
+                    .rotationEffect(.degrees(folded.wrappedValue ? 0 : 90))
                     .accessibilityHidden(true)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
-        .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+        .accessibilityHint(folded.wrappedValue ? shows : hides)
+    }
+
+    /// The fold of a section that folds to its header (Pinned, Needs you); nil for one that doesn't.
+    private func sectionFold(_ title: String) -> Binding<Bool>? {
+        switch title {
+        case "Pinned": return $pinnedCollapsed
+        case "Needs you": return $needsYouCollapsed
+        default: return nil
+        }
     }
 
     /// Search hits, standing in for the sections while the field has text — the workspace list's

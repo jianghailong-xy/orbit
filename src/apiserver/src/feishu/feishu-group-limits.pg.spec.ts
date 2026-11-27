@@ -36,6 +36,7 @@ import { FEISHU_TEST_OPEN_PLATFORM_ENV } from './feishu-open-platform';
 import { feishuDedupeUuid } from './feishu-outbound';
 import { FEISHU_TEST_TIME_SCALE_ENV } from './feishu-timing';
 import { FakeOpenPlatform, type FakeConnection, type FakeRequest } from './test-support/fake-open-platform';
+import { wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY = `feishu-group-limits-${randomUUID()}`;
@@ -205,13 +206,13 @@ test('Feishu: a connected group\'s limits, and a session that cannot be started'
     await processed(eventId, attempts + 1);
     await sleep(300);
   }
-  const park = (sessionId: string) => sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT' WHERE "id" = $1::uuid`, [sessionId]);
+  const park = (sessionId: string) => sql.query(`UPDATE "session" SET "turn_state" = NULL WHERE "id" = $1::uuid`, [sessionId]);
 
   await t.test('(1) at the concurrency limit, a second request starts nothing, writes nothing and is answered in English', async () => {
     const first = await mention(ONE, BOB, 'Fix the flaky login test');
     const opened = await sessionOf(first.messageId);
     assert.ok(opened, 'the first request opened a session');
-    assert.equal(opened.status, 'PENDING', 'and it is running (not yet claimed)');
+    assert.equal(wordOf(opened), 'PENDING', 'and it is running (not yet claimed)');
     assert.deepEqual(textsTo(first.messageId), [`Started · ${opened.title}`]);
 
     const [app, links, sessions, topics, activity] = [await appRow(), await linkRows(), await sessionCount(), await topicsOf(ONE), await feishuActivity()];

@@ -25,6 +25,10 @@ import (
 // gitCredentialWorkspaceFlag names, on the helper's command line, the workspace whose credential it may answer.
 const gitCredentialWorkspaceFlag = "--workspace"
 
+// gitCredentialOnlyFlag, after --workspace, tells the helper to answer that workspace's credential and nothing else:
+// no question falls through to the machine's own helpers (Push as me, push_as_me.go).
+const gitCredentialOnlyFlag = "--only"
+
 // orbitGitCredentialEnv carries Orbit's credential, JSON-encoded, from one network git command to its helper.
 const orbitGitCredentialEnv = "ORBIT_GIT_CREDENTIAL"
 
@@ -57,6 +61,15 @@ type RunnerGitCredentialRequest struct {
 	WorkspaceID string `json:"workspaceId"`
 	Host        string `json:"host"`
 	Path        string `json:"path"`
+	// Purpose PUSH_AS_ME asks for the owner's own GitHub token for one landing's target push (push_as_me.go), naming
+	// the attempt: an integration job's claim (JobID, ClaimGeneration, LeaseOwner) or a session's Merge (SessionID,
+	// MergeOperationID, LeaseOwner). Empty: the App's installation token, as always.
+	Purpose          string `json:"purpose,omitempty"`
+	JobID            string `json:"jobId,omitempty"`
+	ClaimGeneration  string `json:"claimGeneration,omitempty"`
+	LeaseOwner       string `json:"leaseOwner,omitempty"`
+	SessionID        string `json:"sessionId,omitempty"`
+	MergeOperationID string `json:"mergeOperationId,omitempty"`
 }
 
 // RunnerGitCredentialAnswer mirrors @orbit/shared RunnerGitCredentialAnswer.
@@ -100,13 +113,20 @@ func orbitGitCredentialFor(dir string) (*orbitGitCredential, error) {
 
 // askOrbitGitCredential asks the control plane for workspace's credential for the GitHub repository path.
 func askOrbitGitCredential(workspace, path string) (*orbitGitCredential, error) {
+	return askOrbitGitCredentialWith(RunnerGitCredentialRequest{WorkspaceID: workspace, Host: githubGitHost, Path: path})
+}
+
+// askOrbitGitCredentialWith is askOrbitGitCredential for a request that may name more than the repository: Push as
+// me's, which names the attempt the owner's token is for (askOwnerGitCredential).
+func askOrbitGitCredentialWith(request RunnerGitCredentialRequest) (*orbitGitCredential, error) {
+	workspace, path := request.WorkspaceID, request.Path
 	ask := orbitGitCredentialSource.Load()
 	if ask == nil {
 		return nil, errors.New("this process cannot ask Orbit for a GitHub credential")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), orbitGitCredentialTimeout)
 	defer cancel()
-	answer, err := (*ask)(ctx, RunnerGitCredentialRequest{WorkspaceID: workspace, Host: githubGitHost, Path: path})
+	answer, err := (*ask)(ctx, request)
 	if err != nil {
 		return nil, errors.New(transportRefusalMessage(err))
 	}

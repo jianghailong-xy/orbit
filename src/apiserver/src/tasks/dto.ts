@@ -219,7 +219,7 @@ export class TaskCompletionEvidenceDto {
    * for every revision with a checks envelope, as of the read: the judge has to see which handles
    * still hold (a TOOL_CALL's `bgj_…` included, which it cannot read with bg_output), and a row
    * deleted since submission reads as unresolved with its reason. A file's citation also says what
-   * the file is (docs/orbit-files-design.md §2.4). Null only for a stored evidence object that is
+   * the file is (docs/drive-design.md §2.4). Null only for a stored evidence object that is
    * not a checks envelope (a legacy import).
    */
   citations!: TaskEvidenceCitationDto[] | null;

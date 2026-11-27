@@ -105,8 +105,9 @@ final class SessionProjectCopyParityTests: XCTestCase {
         "resumedTitle", "resumedLimitNote", "refusedTitle", "refusedReason",
     ]
     /// The web's words OrbitKit's table does not carry: the project page's status line before any count,
-    /// and its empty and failed states.
-    private static let notInThisTable: Set<String> = ["pageStatus", "pageEmpty", "pageUnread", "retry"]
+    /// its empty and failed states, and the title of a listed project the list knows no title for (the app
+    /// falls back to "Project" itself, as the web's word says).
+    private static let notInThisTable: Set<String> = ["pageStatus", "pageEmpty", "pageUnread", "retry", "untitled"]
 
     /// Every word of the web's `SESSION_PROJECT_COPY` is held here or named above as not in this table:
     /// a sentence the web adds that OrbitKit does not carry fails.

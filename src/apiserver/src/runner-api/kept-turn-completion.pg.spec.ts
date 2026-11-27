@@ -26,7 +26,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, type RunInboxResponse } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -39,6 +40,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -133,7 +135,7 @@ test('a turn completion kept across a runner restart settles the turn, and no fe
         title: `${label}: a session whose runner stops mid-answer`,
         prompt: 'stream the drill ticks',
         provider: 'claude',
-        status: RunStatus.RUNNING,
+        turnState: 'IN_FLIGHT',
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         runtimeSessionId: randomUUID(),
@@ -179,7 +181,7 @@ test('a turn completion kept across a runner restart settles the turn, and no fe
     return r.rows[0] as { status: string; answered_at: Date | null; leaseExpired: boolean | null };
   }
   async function sessionRow(sessionId: string) {
-    const r = await sql.query(`SELECT status, cost_usd::float AS "costUsd", num_turns AS "numTurns" FROM "session" WHERE id = $1::uuid`, [sessionId]);
+    const r = await sql.query(`SELECT ${wordSql()} AS status, cost_usd::float AS "costUsd", num_turns AS "numTurns" FROM "session" WHERE id = $1::uuid`, [sessionId]);
     return r.rows[0] as { status: string; costUsd: number; numTurns: number };
   }
   async function turnRows(sessionId: string, turnId: string) {

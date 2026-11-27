@@ -15,6 +15,7 @@ import type {
   ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
+  ProjectAccountWait,
   ProjectSignInWait,
 } from '@orbit/shared';
 import { SessionLifecycleState } from '@orbit/shared';
@@ -69,6 +70,7 @@ import { signInHref } from './TaskSignInHold';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
 import { useProjectIntegration } from '../lib/pollOwner';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * What a project still owes somebody, and what its coordinator has left to spend
@@ -2178,12 +2180,13 @@ function ItemCard({
       <div className="approval-head project-open-item-head">
         <span className="project-open-item-heading">{heading}</span>
         {tag ? <span className={`project-open-item-state is-${tag.tone}`}>{tag.text}</span> : null}
-        <span
-          className={`criteria-provenance${tone === 'owner' ? '' : ' prov-neutral'}`}
-          title={FROM_ORBIT_TITLE}
-        >
-          {FROM_ORBIT}
-        </span>
+        <Tooltip content={FROM_ORBIT_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span
+            className={`criteria-provenance${tone === 'owner' ? '' : ' prov-neutral'}`}
+          >
+            {FROM_ORBIT}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-plan project-open-item-body">
         {fixing ? (
@@ -2857,9 +2860,11 @@ export function WhoFixesItCard({
       <div className="approval-head project-open-item-head">
         <span className="project-open-item-heading">{heading}</span>
         <span className="project-open-item-clock">{whoFixesClock(row, now)}</span>
-        <span className="criteria-provenance" title={FROM_ORBIT_TITLE}>
-          {FROM_ORBIT}
-        </span>
+        <Tooltip content={FROM_ORBIT_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="criteria-provenance">
+            {FROM_ORBIT}
+          </span>
+        </Tooltip>
       </div>
       <div className="approval-body is-plan project-open-item-body">
         <p className="project-open-item-subline">{whoFixesSubline(row, name)}</p>
@@ -3051,21 +3056,27 @@ function OpenItemRowView({
     <li className={`project-open-item-row is-${row.assignee === 'OWNER' ? 'owner' : 'coordinator'}`}>
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
-        <div className="project-open-item-title" title={title}>
-          {title}
-        </div>
-        {detailLine ? (
-          <div className="project-open-item-line" title={detailLine}>
-            {detailLine}
+        <Tooltip content={title} truncatedOnly>
+          <div className="project-open-item-title">
+            {title}
           </div>
+        </Tooltip>
+        {detailLine ? (
+          <Tooltip content={detailLine} truncatedOnly>
+            <div className="project-open-item-line">
+              {detailLine}
+            </div>
+          </Tooltip>
         ) : null}
         {/* §4.7 H1: the coordinator's rerun of it, while it runs — the row is still open, and says
             so rather than "handled". */}
         {row.handling ? (
-          <div className="project-open-item-line is-handling" title={row.handling.reason}>
-            <span className="project-open-item-state is-handling">{HANDLING_TAG}</span>
-            {` ${handlingLine(row, row.handling, now, main)}`}
-          </div>
+          <Tooltip content={row.handling.reason} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <div className="project-open-item-line is-handling">
+              <span className="project-open-item-state is-handling">{HANDLING_TAG}</span>
+              {` ${handlingLine(row, row.handling, now, main)}`}
+            </div>
+          </Tooltip>
         ) : null}
       </div>
       <div className="project-open-item-who">
@@ -3116,13 +3127,17 @@ function StartRequestRowView({
     <li className="project-open-item-row is-owner" data-kind="START_REQUEST">
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
-        <div className="project-open-item-title" title={START_PROJECT_TITLE}>
-          {START_PROJECT_TITLE}
-        </div>
-        {line ? (
-          <div className="project-open-item-line" title={line}>
-            {line}
+        <Tooltip content={START_PROJECT_TITLE} truncatedOnly>
+          <div className="project-open-item-title">
+            {START_PROJECT_TITLE}
           </div>
+        </Tooltip>
+        {line ? (
+          <Tooltip content={line} truncatedOnly>
+            <div className="project-open-item-line">
+              {line}
+            </div>
+          </Tooltip>
         ) : null}
       </div>
       <div className="project-open-item-who">
@@ -3175,8 +3190,12 @@ export function SignInWaitRowView({ wait }: { wait: ProjectSignInWait }): JSX.El
     <li className="project-open-item-row is-owner" data-kind="SIGN_IN_WAIT">
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
-        <div className="project-open-item-title" title={wait.title}>{wait.title}</div>
-        <div className="project-open-item-line" title={wait.detailLine}>{wait.detailLine}</div>
+        <Tooltip content={wait.title} truncatedOnly>
+          <div className="project-open-item-title">{wait.title}</div>
+        </Tooltip>
+        <Tooltip content={wait.detailLine} truncatedOnly>
+          <div className="project-open-item-line">{wait.detailLine}</div>
+        </Tooltip>
       </div>
       <div className="project-open-item-who">
         <span>{WHO.OWNER}</span>
@@ -3184,6 +3203,35 @@ export function SignInWaitRowView({ wait }: { wait: ProjectSignInWait }): JSX.El
       <div className="project-open-item-press">
         <Link className="project-open-item-action is-primary" to={signInHref(wait)}>
           Sign in
+        </Link>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The project's tasks held because no account can run them (`accountWait`): "2 tasks wait for an account", the
+ * provider's words and the next try, and a link to the account rows where Check again is. Derived on each read, so it
+ * goes once an account can run them.
+ */
+export function AccountWaitRowView({ wait }: { wait: ProjectAccountWait }): JSX.Element {
+  return (
+    <li className="project-open-item-row is-owner" data-kind="ACCOUNT_WAIT">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <Tooltip content={wait.title} truncatedOnly>
+          <div className="project-open-item-title">{wait.title}</div>
+        </Tooltip>
+        <Tooltip content={wait.detailLine} truncatedOnly>
+          <div className="project-open-item-line">{wait.detailLine}</div>
+        </Tooltip>
+      </div>
+      <div className="project-open-item-who">
+        <span>{WHO.OWNER}</span>
+      </div>
+      <div className="project-open-item-press">
+        <Link className="project-open-item-action is-primary" to="/settings/machines">
+          Open accounts
         </Link>
       </div>
     </li>
@@ -3210,8 +3258,14 @@ function DoneRequestRowView({
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
         <div className="project-open-item-state is-ready-to-close">{PROJECT_DONE_COPY.readyToClose}</div>
-        <div className="project-open-item-title" title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>
-        {detail ? <div className="project-open-item-line" title={detail}>{detail}</div> : null}
+        <Tooltip content={PROJECT_DONE_COPY.heading} truncatedOnly>
+          <div className="project-open-item-title">{PROJECT_DONE_COPY.heading}</div>
+        </Tooltip>
+        {detail ? (
+          <Tooltip content={detail} truncatedOnly>
+            <div className="project-open-item-line">{detail}</div>
+          </Tooltip>
+        ) : null}
       </div>
       <div className="project-open-item-who">
         <span>{WHO.OWNER}</span>
@@ -3330,6 +3384,7 @@ export function ProjectOpenItems({
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const signIns = items.data?.signIns ?? [];
+  const accountWait = items.data?.accountWait ?? null;
   // Landing failures their task's own session is fixing (revision 42, §12.7; web d ①): listed apart, and waiting on
   // nobody — not counted in Needs you.
   const fixing = (items.data?.withWorkSession ?? []).filter(heldByItsSession);
@@ -3337,7 +3392,7 @@ export function ProjectOpenItems({
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + signIns.length + fixing.length === 0 && !ownStart && !ownDone)
+    || (paused.length + needsYou.length + signIns.length + (accountWait ? 1 : 0) + fixing.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -3345,13 +3400,13 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length + signIns.length} need you · oldest first`}
+          {`${needsYou.length + signIns.length + (accountWait ? 1 : 0)} need you · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
         <FusePauseCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
-      {needsYou.length > 0 || signIns.length > 0 || ownStart || ownDone ? (
+      {needsYou.length > 0 || signIns.length > 0 || accountWait || ownStart || ownDone ? (
         <>
           <div className="project-open-items-group">{NEEDS_YOU_GROUP}</div>
           <ul className="project-open-items-list">
@@ -3360,6 +3415,7 @@ export function ProjectOpenItems({
             {signIns.map((wait) => (
               <SignInWaitRowView key={`${wait.runnerId}:${wait.engine}`} wait={wait} />
             ))}
+            {accountWait ? <AccountWaitRowView wait={accountWait} /> : null}
             {needsYou.map((row) =>
               row === startRequest ? (
                 <StartRequestRowView

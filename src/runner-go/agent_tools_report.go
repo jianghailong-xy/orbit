@@ -78,6 +78,7 @@ type agentToolsSwitches struct {
 	Orchestration bool `json:"orchestration"`
 	Watches       bool `json:"watches"`
 	Wiki          bool `json:"wiki"`
+	DocumentsOff  bool `json:"documentsOff,omitempty"`
 	Browser       bool `json:"browser"`
 }
 
@@ -137,7 +138,7 @@ func newAgentToolsReport(job *ClaimedSession, engine, carrier string) *agentTool
 		MCP: agentToolsMCP{Status: "starting"},
 	}
 	if job != nil {
-		r.Switches = agentToolsSwitches{Orchestration: job.AllowOrchestration, Watches: job.watchesOn(), Wiki: !job.WikiDisabled, Browser: job.BrowserEnabled}
+		r.Switches = agentToolsSwitches{Orchestration: job.AllowOrchestration, Watches: job.watchesOn(), Wiki: !job.WikiDisabled, DocumentsOff: job.DocumentsDisabled, Browser: job.BrowserEnabled}
 		r.scheduleRun = job.ScheduleRun
 		r.PermissionMode = job.Agent.PermissionMode
 		workspace := strings.TrimSpace(job.Agent.AppendSystemPrompt)
@@ -164,6 +165,9 @@ func agentToolsWithheldBy(op *operation, sw agentToolsSwitches) string {
 	}
 	if wikiToolNames[op.Tool] && !sw.Wiki {
 		return "wiki"
+	}
+	if driveToolNames[op.Tool] && sw.DocumentsOff {
+		return "documents"
 	}
 	return ""
 }
@@ -335,7 +339,8 @@ func claudeAgentToolsReport(job *ClaimedSession, msg map[string]interface{}) *ag
 	prefix := claudeToolName("")
 	for _, name := range stringsFromJSON(msg["tools"]) {
 		if strings.HasPrefix(name, prefix) {
-			listed[strings.TrimPrefix(name, prefix)] = true
+			// An engine started while Drive was called Documents lists documents_*: the same tools (drive_tools.go).
+			listed[canonicalToolName(strings.TrimPrefix(name, prefix))] = true
 		}
 	}
 	r.countFamilies(listed)

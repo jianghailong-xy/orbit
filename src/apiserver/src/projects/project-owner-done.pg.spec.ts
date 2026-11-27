@@ -33,11 +33,11 @@ import { JwtService } from '@nestjs/jwt';
 import {
   Prisma,
   ProjectStatus,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   type PrismaClient,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { type AcceptedGap, type DoneRequest, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -180,7 +180,7 @@ test('the owner records a project done in person, and the projection keeps that 
       title: 'Coordinating the closing door',
       prompt: 'Coordinate the closing door',
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
       runtimeSessionId: randomUUID(),
@@ -352,7 +352,7 @@ test('the owner records a project done in person, and the projection keeps that 
         taskId,
         title: `ran ${branch}`,
         prompt: 'do the work',
-        status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+        turnState: null, finishedAt: new Date(), 
         branch,
         isolationStatus: 'worktree',
       },

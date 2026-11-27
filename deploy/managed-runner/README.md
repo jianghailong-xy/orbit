@@ -22,8 +22,8 @@ or infer permission from available credentials. Local fixtures are preparation e
 ## Image and build
 
 [Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, a dated Debian
-package snapshot and every engine Orbit runs: Codex 0.171.0, Claude Code 2.1.330 (which also runs
-Anthropic-dialect API keys, DeepSeek's included), OpenCode 1.19.6, Kimi Code 2.7.2, Antigravity CLI 1.5.14,
+package snapshot and every engine Orbit runs: Codex 0.172.0, Claude Code 2.1.332 (which also runs
+Anthropic-dialect API keys, DeepSeek's included), OpenCode 1.19.6, Kimi Code 2.8.1, Antigravity CLI 1.5.18,
 Cursor CLI 2026.10.14-941492e and DeepSeek Harness 0.2.0-rc.2. [pins.json](image/pins.json) records each
 pin and where its digest comes from. Kimi Code and Antigravity CLI are fetched by URL and checked against
 the SHA-256/SHA-512 their publishers' manifests give; Codex, Claude Code and OpenCode are their npm
@@ -330,9 +330,9 @@ kubectl --context "$AUTHORIZED_TEST_CONTEXT" --namespace "$AUTHORIZED_TEST_NAMES
 In the managed namespace: Pods get, create (including `dryRun`), delete, patch (only to take its own
 finalizer off a Pod whose stop it recorded); PVCs get, create; Secrets get, create, delete;
 ConfigMaps get. Cluster-scoped and read-only: PersistentVolumes get, VolumeAttachments list. Nothing
-on nodes, Ceph or the webhook configuration. With the Orbit Files drive (the profile's `files`
-section), also Secrets get, create, update and delete in `orbit-files-system`, for the mount
-credentials (files-csi/rbac.yaml).
+on nodes, Ceph or the webhook configuration. With the Drive (the profile's `files`
+section), also Secrets get, create, update and delete in `orbit-drive-system`, for the mount
+credentials (drive-csi/rbac.yaml).
 
 ## Reproducible checks and pending acceptance
 

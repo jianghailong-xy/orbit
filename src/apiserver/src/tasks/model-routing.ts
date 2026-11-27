@@ -1,9 +1,11 @@
 import {
   AgentProvider,
+  ENGINE_CLI_NAMES,
   PermissionMode,
   autoAvailable,
   credentialIsAnthropicBound,
   runnerCatalogRow,
+  settingLink,
   type AnthropicBoundCredential,
   type PlanUsage,
   type RunnerModelCatalog,
@@ -11,7 +13,9 @@ import {
   type RuntimeDefaultModels,
 } from '@orbit/shared';
 
-export const MODEL_ROUTING_POLICY_VERSION = 2;
+/** Version 3: account health removes, ranks and holds (docs/routing-account-health-design.md §7). Version 4: a pin
+ *  on an account health set aside holds with the pin named, or is relaxed when the owner allows it (§7.5). */
+export const MODEL_ROUTING_POLICY_VERSION = 4;
 export const MODEL_ROUTING_LEVELS = ['S', 'M', 'L', 'XL'] as const;
 export type ModelRoutingLevel = (typeof MODEL_ROUTING_LEVELS)[number];
 
@@ -172,6 +176,86 @@ export const MODEL_ROUTING_ENGINES: readonly string[] = [AgentProvider.CLAUDE, A
 /** At or above this share of a window used, an engine is not picked for a fresh run (§6). */
 export const ENGINE_QUOTA_LIMIT = 90;
 
+/** What account health says of an account at the moment of the route (docs/routing-account-health-design.md §7.1). */
+export type RoutingHealthState = 'blocked' | 'suspect' | 'cooldown' | 'trial-due' | 'trial-running';
+
+/** One live account-health entry, as routing input carries it: at most one for the whole account, one per model. */
+export interface RoutingHealthEntry {
+  state: RoutingHealthState;
+  /** Null: the whole account. Otherwise the one model the entry is about. */
+  model: string | null;
+  /** The RunFailureKind that set it, or UNCLASSIFIED_ADMISSION for the breaker. */
+  kind: string;
+  /** The provider's own words. */
+  said?: string;
+  /** When the streak began, and when the account last refused a run (ms). */
+  since: number;
+  last: number;
+  /** When it ends (ms): a block's or cool-down's end, a suspect period's, or a trial claim's. */
+  until: number;
+  trips: number;
+  /** The health subject (account-health.ts subjectKey): what a dispatch claims the account's due trial by. */
+  subject: string;
+}
+
+/** The states that take an account, or one model on it, out of the pool (§7.1); suspect and trial-due do not. */
+const HEALTH_REMOVES: ReadonlySet<RoutingHealthState> = new Set(['blocked', 'cooldown', 'trial-running']);
+
+/** The engine as the provider's words are attributed to it: its product name. */
+const productOf = (engine: string): string => ENGINE_CLI_NAMES[engine as AgentProvider] ?? engine;
+
+/** The Why line of an account or model health removes (§7.1): what the provider said, since when, and its end. */
+export function healthLine(entry: RoutingHealthEntry, engine: string): string {
+  const since = minuteOf(entry.since);
+  const until = minuteOf(entry.until);
+  if (entry.state === 'trial-running') return 'The account is being tried now by another run';
+  const quoted = entry.said ? ` "${entry.said}"` : '';
+  if (entry.model) {
+    if (entry.kind === 'CAPACITY') {
+      return `${entry.model} was at capacity on this account at ${minuteOf(entry.last)}; used again from ${until}`;
+    }
+    return `${entry.model} is not available on this account${entry.said ? `: "${entry.said}"` : ''} (tried again at ${until})`;
+  }
+  switch (entry.kind) {
+    case 'ACCOUNT_ACTION_REQUIRED':
+      return `The account needs your action${entry.said ? `: ${productOf(engine)} said${quoted}` : ''} (since ${since}; tried again at ${until})`;
+    case 'CREDENTIAL_REFUSED':
+      return `The provider refused the account's credential (since ${since}; tried again at ${until})`;
+    case 'ACCESS_DENIED':
+      return `The provider does not allow this account to run${entry.said ? `:${quoted}` : ''} (since ${since}; tried again at ${until})`;
+    case 'USAGE_LIMIT':
+      return `The account hit its usage limit; used again from ${until}`;
+    case 'CAPACITY':
+      return `The account was at capacity at ${minuteOf(entry.last)}; used again from ${until}`;
+    default:
+      return `The account failed to start ${Math.max(entry.trips, 1) + 1} runs in a row at no cost; tried again at ${until}`;
+  }
+}
+
+/** The account-level entry that removes an account, if one does. */
+function accountRemoval(health: readonly RoutingHealthEntry[] | undefined): RoutingHealthEntry | null {
+  return health?.find((entry) => entry.model === null && HEALTH_REMOVES.has(entry.state)) ?? null;
+}
+
+/** The model-level entries that remove one model each, by model. */
+function modelRemovals(health: readonly RoutingHealthEntry[] | undefined): Map<string, RoutingHealthEntry> {
+  return new Map((health ?? [])
+    .filter((entry) => entry.model !== null && HEALTH_REMOVES.has(entry.state))
+    .map((entry) => [entry.model!, entry]));
+}
+
+/** What an account's health leaves of it in the pool: ranked last while suspect, and the trial it is due. */
+function healthStanding(health: readonly RoutingHealthEntry[] | undefined): {
+  suspect: boolean; trial: RoutingHealthEntry | null; modelHealth: Map<string, RoutingHealthEntry>;
+} {
+  const account = health?.find((entry) => entry.model === null);
+  return {
+    suspect: account?.state === 'suspect',
+    trial: account?.state === 'trial-due' ? account : null,
+    modelHealth: modelRemovals(health),
+  };
+}
+
 /** What the target runner says of one engine, for the account a run there would use (§6). */
 export interface ModelRoutingEngineState {
   signedOut?: boolean;
@@ -194,6 +278,8 @@ export interface ModelRoutingEngineState {
   nearLimit?: boolean;
   /** That account's Opus weekly window, in percent; null when none is live. At ENGINE_QUOTA_LIMIT Opus is not routed onto. */
   opusUtilization?: number | null;
+  /** What account health says of that account (docs/routing-account-health-design.md §7.1); absent: healthy. */
+  health?: readonly RoutingHealthEntry[];
 }
 
 export interface ModelRoutingSelection {
@@ -208,18 +294,19 @@ export type ModelRoutingOutcome =
   'FAILED' | 'ACCEPTANCE_FAILED' | 'VERIFICATION_FAILED' | 'SENT_BACK' | 'OK';
 
 /**
- * What a run's error says when the provider found the model at capacity ("Selected model is at
- * capacity"), matched case-insensitively as a substring. Keep it identical to isCodexCapacityError in
- * src/runner-go/codex.go.
+ * Why a failed run is not counted against its task (docs/routing-account-health-design.md §7.4): its failure was the
+ * account's or the provider's, not the task's (common/run-not-counted.ts decides it, for routing and the failure
+ * budget alike).
  */
-export const MODEL_AT_CAPACITY_ERROR_MARKER = 'at capacity';
+export type ModelRoutingNotCounted = 'usage-limit' | 'capacity' | 'account' | 'transport' | 'admission';
 
 export interface ModelRoutingRun {
   ordinal: number;
   status: string;
-  quotaFailure: boolean;
-  /** Failed on "Selected model is at capacity"; skipped for escalation like quotaFailure. */
-  capacityFailure?: boolean;
+  /** Set when the run is skipped for escalation; absent, it counts. */
+  notCounted?: ModelRoutingNotCounted | null;
+  /** The provider the run was a refused trial of (§6.5), when it was one. */
+  trialOf?: string | null;
   /** The prior decision's tier, including a shadow decision; null falls back to the actual model. */
   level?: ModelRoutingLevel | null;
   model?: string | null;
@@ -304,6 +391,9 @@ export interface ModelRoutingInput {
   /** What the SubAgent router reads for the Agent's runner (runner-api/subagent-route.ts subagentRouteInput): the
    *  pool a tiered run is picked from. Absent: nothing was read, and the run keeps the agent's model. */
   pool?: SubagentRoutingInput | null;
+  /** The owner's UserPreferences.relaxBlockedPins (docs/routing-account-health-design.md §7.5): a pin on an account
+   *  health set aside may run elsewhere. Off (absent): the task holds with the pin named. */
+  relaxBlockedPins?: boolean;
 }
 
 export interface ModelRoutingDecision extends ModelRoutingSelection {
@@ -312,6 +402,24 @@ export interface ModelRoutingDecision extends ModelRoutingSelection {
   /** The engine the run starts on: the baseline's, or the one the route moved it to (§6). */
   engine: string;
   reasons: string[];
+  /** Nothing can run it now (docs/routing-account-health-design.md §7.5): the run is not started, and the task waits. */
+  hold?: ModelRoutingHold;
+  /** The pick's account is due a trial (§6.5): the dispatch claims it before the run starts. */
+  trial?: { subject: string; scopeModel: string; provider: string };
+  /** A pin was relaxed off an account health set aside (§7.5): the run goes where it says, tier or not. */
+  relaxed?: true;
+}
+
+/** Why a task waits for an account (§7.5): each account that could have run it, and when the first is tried again. */
+export interface ModelRoutingHold {
+  kind: 'ACCOUNT_NEEDS_ACTION';
+  /** One sentence: "Waiting for an account: …. Next try at …", or the pin named. */
+  reason: string;
+  /** The earliest end among them (ISO): the hold lifts then, and the held task takes the trial. */
+  until: string;
+  accounts: Array<{ provider: string; engine: string | null; line: string; until: string }>;
+  /** A pinned task held with relaxation off: the setting that would let it run elsewhere (§7.5), as a link. */
+  setting?: string;
 }
 
 const FAILURE_WORDING = {
@@ -349,19 +457,30 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     level: null,
     reasons: reasons.map((reason) => reason.startsWith('[') ? reason : `[not-routed] ${reason}`),
   });
-  if (task.model != null) return unchanged([`Task pin: ${task.model}`]);
+  const credential = task.provider ?? baseline.provider;
+  if (task.model != null) {
+    // A named model is never swapped (§7.5): it runs as pinned, or on another provider × engine that lists that same
+    // model when the owner allows it, or the task waits for its account.
+    const lines = [`Task pin: ${task.model}`];
+    const standing = input.pool ? ownStanding(input, input.pool, own, credential) : {};
+    if (!standing.removed) {
+      return standing.trial
+        ? { ...unchanged(lines), trial: { subject: standing.trial.subject, scopeModel: '', provider: credential } }
+        : unchanged(lines);
+    }
+    const held = holdOf(input, [standing.removed], credential);
+    const moved = input.relaxBlockedPins ? samePinnedModel(input, input.pool!, task.model, credential, own, held) : null;
+    return moved ?? { ...unchanged([...lines, held.reason]), hold: held };
+  }
 
   const skipped: string[] = [];
   let last: ModelRoutingRun | undefined;
   for (const run of history) {
-    if (run.quotaFailure) {
-      skipped.push(`Run ${run.ordinal} hit a usage limit — not counted`);
-    } else if (run.capacityFailure) {
-      skipped.push(`Run ${run.ordinal} found the model at capacity — not counted`);
-    } else {
+    if (!run.notCounted) {
       last = run;
       break;
     }
+    skipped.push(notCountedLine(run));
   }
   const rule = task.modelHint ? null : inferRuleTier(input.features);
   let level = task.modelHint ?? rule?.level ?? null;
@@ -403,7 +522,13 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   reasons.push(...skipped);
   if (!level) {
     reasons.push(`Engine ${own}: ${task.engine || task.provider ? 'pinned on the task' : "this agent's own engine"}`);
-    return unchanged(reasons);
+    // Kept on the Agent's own model, which only runs while its account can (§7.5, G7); with no tier there is nothing
+    // to relax a pin at, so it waits. An account whose trial is due takes it.
+    const standing = input.pool ? ownStanding(input, input.pool, own, credential) : {};
+    if (standing.removed) return { ...unchanged(reasons), hold: holdOf(input, [standing.removed], credential) };
+    return standing.trial
+      ? { ...unchanged(reasons), trial: { subject: standing.trial.subject, scopeModel: '', provider: credential } }
+      : unchanged(reasons);
   }
   if (!input.pool) return unchanged([...reasons, "No providers were read — keeps the agent's model"]);
   // The pick is the SubAgent router's (§4.2), at this tier: every provider × engine × model the owner has.
@@ -418,13 +543,23 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   const fresh = verified ? runnable.find((c) => c.engine !== verified) : undefined;
   // The Agent's own engine and credential keep the run while they can take it at this tier (owner, 2026-11-20): the
   // router's ranking only decides where it goes when they cannot. A verification's fresh pair of eyes comes first.
-  const credential = task.provider ?? baseline.provider;
-  const ownPick = runnable.find((c) => c.engine === own && c.provider === credential && c.level === level);
+  // A suspect account is not kept for being the Agent's own (§6.4): the failure the router just saw outranks it, and
+  // the run goes to a healthy account when there is one.
+  const ownMatch = runnable.find((c) => c.engine === own && c.provider === credential && c.level === level);
+  const ownPick = ownMatch?.suspect && runnable.some((c) => !c.suspect) ? undefined : ownMatch;
   const pick = fresh ?? ownPick ?? runnable[0];
   // The router's own words, less what only a SubAgent says: the caller that set the tier, and its refusal.
   const lines = route.reasons.filter((r) =>
     !r.startsWith(`Tier ${level}, set by the caller`) && !r.startsWith('No provider can run a SubAgent'));
   if (!pick) {
+    // No longer the Agent's own model when its account cannot run (§7.5, G7): the task waits for the first that can.
+    // A pin on what health set aside is relaxed, one step at a time, when the owner allows it (§7.5).
+    const held = healthHold(input, route, own, credential);
+    const relaxed = held && input.relaxBlockedPins && (task.provider || task.engine)
+      ? relaxedPin(input, input.pool, level, mode, own, credential, held, [...reasons, ...lines])
+      : null;
+    if (relaxed) return relaxed;
+    if (held) return { ...unchanged([...reasons, ...lines, held.reason]), hold: held };
     return unchanged([...reasons, ...lines, "No provider can run it at this tier — keeps the agent's model"]);
   }
   if (!fresh && ownPick && pick === ownPick) {
@@ -450,6 +585,200 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     model: pick.model,
     effort: pick.effort,
     reasons,
+    ...(pick.trial ? { trial: { subject: pick.trial.subject, scopeModel: '', provider: pick.provider } } : {}),
+  };
+}
+
+/** The line a run skipped for escalation leaves (§7.4). */
+function notCountedLine(run: ModelRoutingRun): string {
+  const n = `Run ${run.ordinal}`;
+  if (run.trialOf) return `${n} was a trial of ${run.trialOf}, which refused it — not counted`;
+  switch (run.notCounted) {
+    case 'usage-limit': return `${n} hit a usage limit — not counted`;
+    case 'capacity': return `${n} found the model at capacity — not counted`;
+    case 'account': return `${n} was refused by its account before it started — not counted`;
+    case 'transport': return `${n} lost its connection — not counted`;
+    default: return `${n} failed to start at no cost — not counted`;
+  }
+}
+
+/**
+ * The hold of §7.5 when nothing in the pool can run: each candidate health removed, and the earliest of their ends.
+ * Only when the Agent's own engine and credential are among them (or the task is pinned to what was removed): a pool
+ * that is empty for any other reason keeps the Agent's model, as it did.
+ */
+function healthHold(
+  input: ModelRoutingInput,
+  route: SubagentRoutingDecision,
+  own: string,
+  credential: string,
+): ModelRoutingHold | null {
+  const removed = route.candidates.filter((c) => c.health);
+  if (removed.length === 0) return null;
+  const ownRemoved = removed.some((c) => c.provider === credential && (c.engine === null || c.engine === own));
+  if (!ownRemoved && !input.task.provider && !input.task.engine) return null;
+  return holdOf(input, removed, credential);
+}
+
+/**
+ * What account health says of the run's own provider × engine, the one a run keeps when it is not routed (§7.5, G7):
+ * the removal when health sets the account aside (or, for a model pin, that model on it), else the trial its account
+ * is due. Nothing for an account health has no word on, or one ruled out for another reason (that keeps today's
+ * behaviour: health relaxes and holds for health only).
+ */
+function ownStanding(
+  input: ModelRoutingInput,
+  pool: SubagentRoutingInput,
+  own: string,
+  credential: string,
+): { removed?: SubagentRemovedCandidate; trial?: RoutingHealthEntry } {
+  const provider = pool.providers.find((p) => p.slug === credential);
+  if (!provider || !provider.engines.some((spec) => spec.engine === own)) return {};
+  if (providerRefusal(pool, provider)) return {};
+  const verdict = engineVerdict(pool, provider, own);
+  if ('reason' in verdict) {
+    return verdict.health
+      ? { removed: { provider: credential, engine: own, model: null, effort: null, reason: verdict.reason, health: verdict.health } }
+      : {};
+  }
+  const model = input.task.model ?? null;
+  const modelOut = model ? verdict.modelHealth.get(model) : undefined;
+  if (model && modelOut) {
+    return { removed: { provider: credential, engine: own, model, effort: null, reason: healthLine(modelOut, own), health: modelOut } };
+  }
+  return verdict.trial ? { trial: verdict.trial } : {};
+}
+
+/**
+ * What account health means for a run that is not routed at all, the owner's smart model selection being off: the
+ * run keeps its baseline (or its pins), and still does not start on an account health set aside, nor rush one whose
+ * trial is due. No tier and no relaxation: both are routing (docs/routing-account-health-design.md §7.5).
+ */
+export function baselineHealth(input: ModelRoutingInput): {
+  hold?: ModelRoutingHold;
+  trial?: { subject: string; scopeModel: string; provider: string };
+} {
+  if (!input.pool) return {};
+  const own = input.baseline.engine ?? input.environment.runtime;
+  const credential = input.task.provider ?? input.baseline.provider;
+  const standing = ownStanding(input, input.pool, own, credential);
+  if (standing.removed) return { hold: holdOf(input, [standing.removed], credential) };
+  return standing.trial ? { trial: { subject: standing.trial.subject, scopeModel: '', provider: credential } } : {};
+}
+
+/** The earliest-ending account of a hold: the one its line quotes. */
+function firstHeld(hold: ModelRoutingHold): ModelRoutingHold['accounts'][number] {
+  return hold.accounts.reduce((a, b) => (b.until < a.until ? b : a));
+}
+
+function holdOf(input: ModelRoutingInput, removed: readonly SubagentRemovedCandidate[], credential: string): ModelRoutingHold {
+  // One line per account: a model's removal and its account's say the same account twice.
+  const seen = new Set<string>();
+  const accounts = removed
+    .filter((c) => {
+      const key = `${c.provider}\u0000${c.engine ?? ''}\u0000${c.health!.model ?? ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((c) => ({ provider: c.provider, engine: c.engine, line: c.reason, until: new Date(c.health!.until).toISOString() }));
+  const first = accounts.reduce((a, b) => (b.until < a.until ? b : a));
+  const at = minuteOf(Date.parse(first.until));
+  const { task } = input;
+  const pin = task.model ? `${task.model} on ${credential}` : task.provider ?? task.engine;
+  const reason = pin
+    ? `Pinned to ${pin}, which can't run now (${first.line}). Next try at ${at}.`
+    : `Waiting for an account: ${first.line}. Next try at ${at}.`;
+  // With relaxation off a pin holds, and the hold links the setting that lets it run elsewhere (§7.5).
+  const setting = pin && !input.relaxBlockedPins ? { setting: settingLink('relaxBlockedPins') } : {};
+  return { kind: 'ACCOUNT_NEEDS_ACTION', reason, until: first.until, accounts, ...setting };
+}
+
+/**
+ * §7.5 with the switch on, for a provider or engine pin whose account health set aside: the pool is widened one step
+ * at a time and the first step with a runnable candidate wins. Step 1 keeps the engine and drops the provider (only
+ * when a provider is pinned); step 2 drops both. The tier is kept: the ordinary fit order applies inside the widened
+ * pool. The owner's blocked providers and a shared provider out of scope stay out, as routeSubagent's own filters keep
+ * them. Null when no step can run it: the task holds.
+ */
+function relaxedPin(
+  input: ModelRoutingInput,
+  pool: SubagentRoutingInput,
+  level: ModelRoutingLevel,
+  mode: ModelRoutingOptimizeFor,
+  own: string,
+  credential: string,
+  held: ModelRoutingHold,
+  reasons: readonly string[],
+): ModelRoutingDecision | null {
+  const line = firstHeld(held).line;
+  const engine = input.task.engine ?? own;
+  const steps: Array<{ engine: string | null; why: (pick: SubagentFallback) => string }> = [];
+  if (input.task.provider) {
+    steps.push({
+      engine,
+      why: (pick) => `Pinned to ${credential}, which can't run now (${line}); runs on ${pick.provider} instead, on the same engine, at tier ${level}`,
+    });
+  }
+  steps.push({
+    engine: null,
+    why: (pick) => `Pinned to ${credential} on ${engine}, where no account can run now (${line}); runs on ${pick.model} on ${pick.provider} instead, at tier ${level}`,
+  });
+  for (const step of steps) {
+    const widened = { ...input, task: { ...input.task, provider: null, engine: step.engine } };
+    const route = routeSubagent(taskRunPool(widened, pool, level, mode));
+    const pick = fallbackOrder(route).find((c) => autoEligible(c, input.environment));
+    if (!pick) continue;
+    return {
+      policyVersion: MODEL_ROUTING_POLICY_VERSION,
+      level,
+      engine: pick.engine,
+      provider: pick.provider,
+      model: pick.model,
+      effort: pick.effort,
+      relaxed: true,
+      reasons: [...reasons, step.why(pick)],
+      ...(pick.trial ? { trial: { subject: pick.trial.subject, scopeModel: '', provider: pick.provider } } : {}),
+    };
+  }
+  return null;
+}
+
+/**
+ * §7.5 with the switch on, for a model pin whose account health set aside: the same model id on another provider ×
+ * engine that lists it and passes the §4.2 filters, in the owner's provider order, at its engine's default effort.
+ * Never another model: null when nobody else lists it, and the task holds.
+ */
+function samePinnedModel(
+  input: ModelRoutingInput,
+  pool: SubagentRoutingInput,
+  model: string,
+  credential: string,
+  own: string,
+  held: ModelRoutingHold,
+): ModelRoutingDecision | null {
+  const unpinned = { ...input, task: { ...input.task, provider: null, engine: null } };
+  const named = routeSubagent({
+    ...taskRunPool(unpinned, pool, 'M', input.optimizeFor ?? 'cost'),
+    caller: { model },
+    strictNamedModel: true,
+  });
+  const pick = fallbackOrder(named).find((c) =>
+    c.model === model && !(c.provider === credential && c.engine === own) && autoEligible(c, input.environment));
+  if (!pick) return null;
+  return {
+    policyVersion: MODEL_ROUTING_POLICY_VERSION,
+    level: null,
+    engine: pick.engine,
+    provider: pick.provider,
+    model,
+    effort: pick.effort,
+    relaxed: true,
+    reasons: [
+      `[not-routed] Task pin: ${model}`,
+      `Pinned to ${model} on ${credential}, which can't run now (${firstHeld(held).line}); runs the same model on ${pick.provider}`,
+    ],
+    ...(pick.trial ? { trial: { subject: pick.trial.subject, scopeModel: '', provider: pick.provider } } : {}),
   };
 }
 
@@ -498,6 +827,7 @@ function fallbackOrder(route: SubagentRoutingDecision): SubagentFallback[] {
     ? [{
       engine: route.engine, provider: route.provider, model: route.model, effort: route.effort, level: route.pickLevel ?? null,
       ...(route.note ? { note: route.note } : {}),
+      ...(route.trial ? { trial: route.trial } : {}), ...(route.suspect ? { suspect: true } : {}),
     }]
     : [];
   return [...first, ...route.fallbacks];
@@ -513,7 +843,7 @@ function autoEligible(c: SubagentFallback, environment: ModelRoutingInput['envir
 // ─────────────────────────── SubAgent routing (docs/subagent-design.md §4.1, §4.2) ───────────────────────────
 
 /** What a recorded SubAgent decision was made under: bump when a rule below changes what it picks. */
-export const SUBAGENT_ROUTING_POLICY_VERSION = 'p7-model-then-account-1';
+export const SUBAGENT_ROUTING_POLICY_VERSION = 'p8-account-health-1';
 
 /** Which row of §4.1 set the tier — or, for the first two, the model; `not-routed`: smart model selection is off. */
 export type SubagentTierSource =
@@ -561,6 +891,8 @@ export interface SubagentPoolMember {
   nearLimit?: boolean;
   /** Its Opus weekly window, in percent; null when none is live. */
   opusUtilization?: number | null;
+  /** What account health says of it (docs/routing-account-health-design.md §7.1); absent: healthy. */
+  health?: readonly RoutingHealthEntry[];
 }
 
 /** One provider the owner has, in the owner's order (provider_list). */
@@ -573,10 +905,12 @@ export interface SubagentProvider {
   engines: readonly SubagentProviderEngine[];
   /** The credential it spends, as far as the Claude region check asks (credentialIsAnthropicBound, contract §8). */
   credential: AnthropicBoundCredential;
-  /** A subscription's account on the parent's runner: its fullest window, and whether it is paused. */
+  /** A subscription's account on the parent's runner: its fullest window, and whether it is paused. On a metered key
+   *  only `health` is read: what the runs sent to that key have shown (§7.1, G8). */
   account?: {
     quota?: ModelRoutingEngineState['quota']; paused?: boolean; refused?: boolean; unreadable?: boolean;
     expiresAt?: number | null; expiryWindowMins?: number | null; nearLimit?: boolean; opusUtilization?: number | null;
+    health?: readonly RoutingHealthEntry[];
   } | null;
   /** An account pool: a subscription on its members' own credentials, whose headroom is its best member's. */
   pool?: { members: readonly SubagentPoolMember[] };
@@ -632,6 +966,8 @@ export interface SubagentRemovedCandidate {
   model: string | null;
   effort: string | null;
   reason: string;
+  /** Account health removed it (§7.1): the entry, so a hold can name it and say when it is tried again. */
+  health?: RoutingHealthEntry;
 }
 
 export interface SubagentRoutingDecision {
@@ -657,6 +993,10 @@ export interface SubagentRoutingDecision {
   /** The pick's own tier, which may differ from `level` when none in that tier could run; null when untiered.
    *  Absent for a model that was named or not routed. */
   pickLevel?: ModelRoutingLevel | null;
+  /** The pick's account is due its trial (§6.5). */
+  trial?: RoutingHealthEntry;
+  /** The pick's account failed its last run at no cost: every other candidate was suspect too (§7.2). */
+  suspect?: boolean;
 }
 
 /** One candidate a SubAgent may move to after a usage-limit or capacity failure (§4.3). */
@@ -669,6 +1009,10 @@ export interface SubagentFallback {
   note?: string;
   /** Its own tier, null for an untiered default model: what says so when it runs instead of the asked tier. */
   level?: ModelRoutingLevel | null;
+  /** Its account's trial is due (§6.5): a run that goes there claims it first. */
+  trial?: RoutingHealthEntry;
+  /** Its account failed its last run at no cost (§7.2). */
+  suspect?: boolean;
 }
 
 const levelIndex = (level: ModelRoutingLevel): number => MODEL_ROUTING_LEVELS.indexOf(level);
@@ -760,6 +1104,10 @@ interface SubagentCandidate extends SubagentModelRow {
   fit: SubagentFit;
   /** For a higher or lower tier: how many tiers away. */
   distance: number;
+  /** Its account failed its last run at no cost (the breaker's first strike): ranked after every healthy one (§7.2). */
+  suspect: boolean;
+  /** Its account's trial is due: ranked as healthy, so that a trial happens (§7.2). */
+  trial: RoutingHealthEntry | null;
 }
 
 /** The order the fits are tried in, best first. */
@@ -814,7 +1162,9 @@ const fitOrder = (a: SubagentCandidate, b: SubagentCandidate): number =>
 function compareAccounts(a: SubagentCandidate, b: SubagentCandidate): number {
   const subscription = (c: SubagentCandidate) => (c.provider.billing === 'subscription' ? 0 : 1);
   const unknown = (c: SubagentCandidate) => (c.quotaUnknown ? 1 : 0);
-  const order = subscription(a) - subscription(b)
+  // Healthy before suspect, for subscriptions and keys alike (§7.2): headroom never outranks a failure just seen.
+  const order = Number(a.suspect) - Number(b.suspect)
+    || subscription(a) - subscription(b)
     || (subscription(a) === 0
       ? unknown(a) - unknown(b) || expiryOrder(a, b) || headroom(b) - headroom(a)
       : marginalPrice(a) - marginalPrice(b));
@@ -832,7 +1182,7 @@ function compareTogether(mode: ModelRoutingOptimizeFor, a: SubagentCandidate, b:
   if (fit) return fit;
   if (mode !== 'intelligence') return compareAccounts(a, b);
   const unknown = (c: SubagentCandidate) => (c.quotaUnknown ? 1 : 0);
-  const order = levelIndex(b.ceiling) - levelIndex(a.ceiling) || unknown(a) - unknown(b) || expiryOrder(a, b)
+  const order = Number(a.suspect) - Number(b.suspect) || levelIndex(b.ceiling) - levelIndex(a.ceiling) || unknown(a) - unknown(b) || expiryOrder(a, b)
     || marginalPrice(a) - marginalPrice(b);
   return (Number.isNaN(order) ? 0 : order) || a.providerIndex - b.providerIndex || a.engineIndex - b.engineIndex;
 }
@@ -975,6 +1325,7 @@ function pickLine(mode: ModelRoutingOptimizeFor, c: SubagentCandidate): string {
 /** Which step-2 key put the pick ahead of the next account that can run the same model. */
 function accountStep(best: SubagentCandidate, next: SubagentCandidate | undefined): string {
   if (!next) return 'the only account that can run it';
+  if (best.suspect !== next.suspect) return `${next.provider.slug} failed to start its last run`;
   if (best.provider.billing !== next.provider.billing) return 'a subscription, used before any metered key';
   if (best.provider.billing === 'key') {
     return marginalPrice(best) < marginalPrice(next) ? 'the cheapest key that runs it' : "first in the owner's provider order";
@@ -1028,21 +1379,30 @@ export function subagentFitLine(
  * ENGINE_QUOTA_LIMIT — the one with the most quota left, else one whose quota was not read. Otherwise why the
  * pool can't run, in words that name its accounts.
  */
-function bestPoolMember(members: readonly SubagentPoolMember[]): { member: SubagentPoolMember } | { reason: string } {
+function bestPoolMember(members: readonly SubagentPoolMember[]): { member: SubagentPoolMember } | { reason: string; health?: RoutingHealthEntry } {
   if (members.length === 0) return { reason: 'The pool has no account that can run' };
-  const live = members.filter((m) => !m.refused && !m.paused);
+  // A member health removes is out with the refused and paused ones (§7.1); a suspect one ranks after the rest.
+  const live = members.filter((m) => !m.refused && !m.paused && !accountRemoval(m.health));
   const expires = (m: SubagentPoolMember) => m.expiresAt ?? Infinity;
+  const suspect = (m: SubagentPoolMember) => Number(healthStanding(m.health).suspect);
   const eligible = live
     .filter((m) => !m.unreadable && (m.quota?.utilization ?? 0) < ENGINE_QUOTA_LIMIT)
-    .sort((a, b) => Number(a.nearLimit === true) - Number(b.nearLimit === true)
+    .sort((a, b) => suspect(a) - suspect(b)
+      || Number(a.nearLimit === true) - Number(b.nearLimit === true)
       || (expires(a) === expires(b) ? 0 : expires(a) < expires(b) ? -1 : 1)
       || (a.quota?.utilization ?? 0) - (b.quota?.utilization ?? 0));
   if (eligible.length > 0) return { member: eligible[0] };
-  const unreadable = live.find((m) => m.unreadable);
+  const unreadable = [...live].sort((a, b) => suspect(a) - suspect(b)).find((m) => m.unreadable);
   if (unreadable) return { member: unreadable };
   const each = members.map((m) => `${m.label} ${m.refused ? 'refused its key' : m.paused ? 'paused'
-    : `at ${m.quota!.utilization}% of its ${m.quota!.window} quota`}`);
-  return { reason: `No account in the pool can run: ${each.join('; ')}` };
+    : accountRemoval(m.health) ? 'needs action'
+      : `at ${m.quota!.utilization}% of its ${m.quota!.window} quota`}`);
+  // Every member out, and health the reason for some: the earliest of their ends is when the pool can run again.
+  const removals = members.map((m) => accountRemoval(m.health)).filter((h): h is RoutingHealthEntry => h !== null);
+  const health = members.every((m) => m.refused || m.paused || accountRemoval(m.health)) && removals.length > 0
+    ? removals.reduce((a, b) => (b.until < a.until ? b : a))
+    : undefined;
+  return { reason: `No account in the pool can run: ${each.join('; ')}`, ...(health ? { health } : {}) };
 }
 
 /** Why a provider is out of every pool (§4.2 filters 1 and 2), or null. */
@@ -1056,14 +1416,14 @@ function providerRefusal(input: SubagentRoutingInput, provider: SubagentProvider
  * One engine of a provider against §4.2 filters 3 and 4 on the runner `engines` reports: why it cannot run there,
  * or the quota (and, for a pool, the account) a run there would spend.
  */
-function engineVerdict(
-  input: SubagentRoutingInput,
-  provider: SubagentProvider,
-  engine: string,
-): { reason: string } | {
+type EngineVerdict = { reason: string; health?: RoutingHealthEntry } | {
   quota: ModelRoutingEngineState['quota']; quotaUnknown: boolean; expiresAt: number | null; expiryWindowMins: number | null;
   nearLimit: boolean; opusUtilization: number | null; poolMember?: string;
-} {
+  /** What account health leaves of the account (§7.1, §7.2). */
+  suspect: boolean; trial: RoutingHealthEntry | null; modelHealth: Map<string, RoutingHealthEntry>;
+};
+
+function engineVerdict(input: SubagentRoutingInput, provider: SubagentProvider, engine: string): EngineVerdict {
   const where = input.runnerLabel ?? "the parent's runner";
   const report = input.engines?.[engine];
   // A runner that reported nothing is not judged on it; one that reported others lacks this one.
@@ -1075,15 +1435,23 @@ function engineVerdict(
   if (provider.pool) {
     // A pool runs on its members' own credentials, not the runner's sign-in: its best member decides.
     const best = bestPoolMember(provider.pool.members);
-    if ('reason' in best) return best;
+    if ('reason' in best) {
+      return best.health ? { reason: best.reason, health: best.health } : { reason: best.reason };
+    }
     return {
       quota: best.member.quota, quotaUnknown: best.member.unreadable === true,
       expiresAt: best.member.expiresAt ?? null, expiryWindowMins: best.member.expiryWindowMins ?? null,
       nearLimit: best.member.nearLimit === true,
       opusUtilization: best.member.opusUtilization ?? null, poolMember: best.member.label,
+      ...healthStanding(best.member.health),
     };
   }
   const quota = provider.account?.quota;
+  // What account health says of the account, after the owner's pause and the endpoint's refusal (§7.1): on a
+  // subscription and, closing G8, on a metered key.
+  const removal = accountRemoval(provider.account?.health);
+  const healthOut = removal ? { reason: healthLine(removal, engine), health: removal } : null;
+  const standing = healthStanding(provider.account?.health);
   if (provider.billing === 'subscription') {
     // The runner reports on its own sign-in: a subscription key runs on its own token, whatever that says.
     if (report?.signedOut && provider.credential.kind === 'login') return { reason: `${engine} is signed out on ${where}` };
@@ -1092,15 +1460,18 @@ function engineVerdict(
     }
     if (provider.account?.paused) return { reason: 'The account is paused' };
     if (provider.account?.refused) return { reason: "The endpoint refused the account's key" };
+    if (healthOut) return healthOut;
     // No reading of its quota (nothing reported for it, or none read at all): it runs, after those whose headroom is known.
     return {
       quota, quotaUnknown: !provider.account || provider.account.unreadable === true,
       expiresAt: provider.account?.expiresAt ?? null, expiryWindowMins: provider.account?.expiryWindowMins ?? null,
       nearLimit: provider.account?.nearLimit === true,
       opusUtilization: provider.account?.opusUtilization ?? null,
+      ...standing,
     };
   }
-  return { quota, quotaUnknown: false, expiresAt: null, expiryWindowMins: null, nearLimit: false, opusUtilization: null };
+  if (healthOut) return healthOut;
+  return { quota, quotaUnknown: false, expiresAt: null, expiryWindowMins: null, nearLimit: false, opusUtilization: null, ...standing };
 }
 
 /**
@@ -1202,8 +1573,15 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
       }
       for (const engine of listing) {
         const verdict = engineVerdict(input, provider, engine.engine);
-        if ('reason' in verdict) removed.push({ provider: provider.slug, engine: engine.engine, model, effort: null, reason: verdict.reason });
-        else offers.push({ engine: engine.engine, provider: provider.slug, model, effort: null });
+        const modelOut = 'reason' in verdict ? undefined : verdict.modelHealth.get(model);
+        if ('reason' in verdict) {
+          removed.push({ provider: provider.slug, engine: engine.engine, model, effort: null, reason: verdict.reason,
+            ...(verdict.health ? { health: verdict.health } : {}) });
+        } else if (modelOut) {
+          removed.push({ provider: provider.slug, engine: engine.engine, model, effort: null, reason: healthLine(modelOut, engine.engine), health: modelOut });
+        } else {
+          offers.push({ engine: engine.engine, provider: provider.slug, model, effort: null, ...(verdict.trial ? { trial: verdict.trial } : {}) });
+        }
       }
     }
     return { removed, offers };
@@ -1285,8 +1663,8 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   // The pool (§4.2): every provider × engine that can run, each removal with its reason. Every tier joins; the
   // asked one comes first, then the tiers above it, then each untiered engine's default model, then the tiers below.
   const removed: SubagentRemovedCandidate[] = [];
-  const drop = (provider: string, engine: string | null, model: string | null, effort: string | null, reason: string) =>
-    removed.push({ provider, engine, model, effort, reason });
+  const drop = (provider: string, engine: string | null, model: string | null, effort: string | null, reason: string,
+    health?: RoutingHealthEntry) => removed.push({ provider, engine, model, effort, reason, ...(health ? { health } : {}) });
   const pool: SubagentCandidate[] = [];
   input.providers.forEach((provider, providerIndex) => {
     const slug = provider.slug;
@@ -1295,8 +1673,8 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
     provider.engines.forEach((spec, engineIndex) => {
       const { engine } = spec;
       const verdict = engineVerdict(input, provider, engine);
-      if ('reason' in verdict) return drop(slug, engine, null, null, verdict.reason);
-      const { quota, quotaUnknown, expiresAt, expiryWindowMins, nearLimit, opusUtilization, poolMember } = verdict;
+      if ('reason' in verdict) return drop(slug, engine, null, null, verdict.reason, verdict.health);
+      const { quota, quotaUnknown, expiresAt, expiryWindowMins, nearLimit, opusUtilization, poolMember, suspect, trial, modelHealth } = verdict;
       // Opus has a weekly window of its own on a Claude account: at the limit, Opus is not run there; Sonnet still is.
       const opusOut = (row: SubagentModelRow) => engine === AgentProvider.CLAUDE && row.model.startsWith('claude-opus-')
         && opusUtilization !== null && opusUtilization >= ENGINE_QUOTA_LIMIT;
@@ -1311,7 +1689,11 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
       const join = (row: SubagentModelRow, ceiling: ModelRoutingLevel, fit: SubagentFit, distance: number) => pool.push({
         ...row, provider, providerIndex, engine, engineIndex, rowIndex: Math.max(rows.indexOf(row), 0), origin: origin(row),
         ceiling, quota, quotaUnknown, expiresAt, expiryWindowMins, nearLimit, ...(poolMember ? { poolMember } : {}), fit, distance,
+        suspect, trial,
       });
+      // A model's own health entry removes that model's rows only, as the Opus window does; the rest of the account
+      // stays (§7.1). On an engine whose tiers are one model at several efforts, that is every tier of the account.
+      const modelOut = (row: SubagentModelRow) => modelHealth.get(row.model);
       if (!rows.some((row) => row.level)) {
         // No tiers at all: its default model runs, untiered; the rest of what it lists is reachable by name.
         // A list of the provider's own is its model space, even empty; only an engine on its catalogue reads the runner's.
@@ -1321,7 +1703,9 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
         // The runner's default for the engine, else the provider's own, each only if it is listed; else the first listed.
         const listedAs = (model: string | null | undefined) => (model ? listed.find((row) => row.model === model) : undefined);
         const chosen = listedAs(input.runtimeDefaultModels?.[engine as AgentProvider]) ?? listedAs(spec.defaultModel) ?? listed[0];
-        join(chosen, level, 'untiered', 0);
+        const out = modelOut(chosen);
+        if (out) drop(slug, engine, chosen.model, chosen.effort, healthLine(out, engine), out);
+        else join(chosen, level, 'untiered', 0);
         for (const row of listed) if (row !== chosen) drop(slug, engine, row.model, row.effort, `The model has no tier; ${slug} runs ${chosen.model}`);
         return;
       }
@@ -1338,6 +1722,11 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
         }
         if (opusOut(row)) {
           drop(slug, engine, row.model, row.effort, opusReason);
+          continue;
+        }
+        const out = modelOut(row);
+        if (out) {
+          drop(slug, engine, row.model, row.effort, healthLine(out, engine), out);
           continue;
         }
         const away = levelIndex(row.level) - levelIndex(level);
@@ -1359,6 +1748,8 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   const away = subagentFitLine(level, { level: best.level, model: best.model, provider: best.provider.slug, engine: best.engine });
   if (away) reasons.push(away);
   reasons.push(twoStep ? modelFirstLine(mode, twoStep.models, twoStep.reason) : pickLine(mode, best));
+  // An account whose block ran out ranks as healthy so that its trial happens (§7.2): the run says it is that trial.
+  if (best.trial) reasons.push(`Trying ${best.provider.slug} again: it last refused a run at ${minuteOf(best.trial.last)}`);
   const priceless = new Set(pool
     .filter((c) => best.provider.billing === 'key' && c.fit === best.fit && c.provider.billing === 'key' && c.outputPricePerMTok == null)
     .map((c) => `No price known for ${c.model} on ${c.provider.slug}; ordered after priced keys`));
@@ -1371,9 +1762,11 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   if (removed.length > 0) reasons.push(`${removed.length} candidate${removed.length === 1 ? '' : 's'} removed, each with its reason`);
   const fallbacks = rest.map((c) => ({
     engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort, note: candidateNote(c), level: c.level,
+    ...(c.trial ? { trial: c.trial } : {}), ...(c.suspect ? { suspect: true } : {}),
   }));
   return {
     ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort,
     note: candidateNote(best), pickLevel: best.level, reasons, fallbacks,
+    ...(best.trial ? { trial: best.trial } : {}), ...(best.suspect ? { suspect: true } : {}),
   };
 }

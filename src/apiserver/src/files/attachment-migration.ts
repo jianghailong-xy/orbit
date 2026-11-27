@@ -4,7 +4,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type { FilesService } from './files.service';
 
 /**
- * How attachments from before Orbit Files leave Postgres (docs/orbit-files-design.md §2.1), in the two steps the
+ * How attachments from before Drive leave Postgres (docs/drive-design.md §2.1), in the two steps the
  * account owner decided on 2026-11-02:
  *
  *   copy   Automatic and reversible: `AttachmentCopyAtBoot`, in the background after a start. A row's bytes go into the
@@ -60,7 +60,7 @@ export interface AttachmentCounts {
   waiting: RowsAndBytes;
   /** In the store and still in `data`: copied, not cleared. */
   copied: RowsAndBytes;
-  /** Only in the store: cleared, or uploaded since Orbit Files. */
+  /** Only in the store: cleared, or uploaded since Drive. */
   storeOnly: RowsAndBytes;
 }
 

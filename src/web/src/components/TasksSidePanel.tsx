@@ -64,8 +64,13 @@ import type {
 } from '@orbit/shared';
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
+import { unregisterWebPushOnSignOut } from '../lib/webPush';
+import { WebPushOffer } from './WebPushOffer';
+import { useDriveEnabled } from '../lib/driveSwitch';
+import { SIDEBAR_WIDTH_KEY, clampSidebarWidth, savedSidebarWidth } from '../lib/sidebarWidth';
 import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
+import { setConversationProjectPage, useConversationProjectPage } from '../lib/conversationProjectPage';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { useSidebarFolded } from '../lib/sidebarFold';
@@ -109,8 +114,8 @@ import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
-import { Tooltip } from './ui/Tooltip';
-import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
+import { HELP_PATH } from '../lib/helpDrawer';
 import { OPTIMIZE_LABELS } from '../lib/settingsChange';
 import { MODEL_ROUTING_PAGE } from '../pages/settings/settingsIndex';
 
@@ -190,9 +195,9 @@ const TOP: TopNavItem[] = [
   // the Workspaces; this one stands for them all, as Projects does: the whole count, the one way in on
   // the collapsed rail, and the way to a first wiki for an account with none to list.
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
-  // Orbit Files, the account's drive, directly under the Wiki (docs/mocks/orbit-files/02-web, frame 1). No count and no
+  // Drive, the account's drive, directly under the Wiki (docs/mocks/drive/02-web, frame 1). No count and no
   // shortcut: nothing in Files waits on the owner. Its Trash and earlier versions are reached from inside it.
-  { key: 'files', icon: <SidebarNavIcon name="files" />, label: 'Files' },
+  { key: 'drive', icon: <SidebarNavIcon name="files" />, label: 'Drive' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
@@ -200,15 +205,8 @@ const TOP: TopNavItem[] = [
   // there — so it is reached as the phone reaches it, from Settings.
 ];
 
-// The left sidebar is user-resizable; the chosen width persists across refreshes.
-const SIDEBAR_WIDTH_KEY = 'orbit:sidebar-width';
 // Whether the user collapsed the panel to its icon rail; persisted like the width.
 const SIDEBAR_COLLAPSED_KEY = 'orbit:sidebar-collapsed';
-const DEFAULT_SIDEBAR_WIDTH = 280;
-const MIN_SIDEBAR_WIDTH = 200;
-const MAX_SIDEBAR_WIDTH = 480;
-const clampWidth = (w: number): number =>
-  Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -370,6 +368,7 @@ export function workspaceRunnerIsOffline(
 }
 
 async function logout() {
+  await unregisterWebPushOnSignOut(); // this browser's notifications, while the token still signs the request
   await logoutSession(); // revoke the refresh token server-side (best-effort) before clearing
   clearToken();
   location.href = '/login';
@@ -391,7 +390,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const help = useHelpDrawer();
   // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
   // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
   // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
@@ -400,7 +398,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiWaitingCount = wikiWaiting(wikiSpaces.data ?? []);
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
-  const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
+  // Nor a Files row on a server without Drive (ORBIT_DRIVE_ENABLED), nor while that is still being read.
+  const drive = useDriveEnabled();
+  const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'drive' || drive.enabled));
   // The wikis the Wiki group lists, in the server's order, each called what the Wiki's own head calls it.
   const wikiRows = wikiSpaces.data ?? [];
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
@@ -464,8 +464,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // whichever workspace or member session it shows, and the workspace's row is not lit there. That is
   // a phone's: wider, `?project=` is a column beside the conversation and the list stays the
   // workspace's, so the workspace's row stays lit (owner 2026-11-14).
+  // A conversation's address names no project page (owner 2026-11-25): beside one it is the console's.
   const onConsole = !!(workspacesMatch ?? agentsMatch) || !!sessionId;
-  const projectPageId = onConsole ? routeId(searchParams.get('project')) : null;
+  const conversationProjectPage = useConversationProjectPage();
+  const projectPageId = !onConsole ? null
+    : routeId(sessionId ? conversationProjectPage?.project : searchParams.get('project'));
   const projectPageKey =
     narrow && projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
       ? `project:${projectPageId}`
@@ -510,9 +513,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           ? (projectRowKey ?? 'projects')
           : onWiki
             ? (wikiRowKey ?? 'wiki')
-            // The Files page and its Trash are Files.
-            : loc.pathname === '/files' || loc.pathname.startsWith('/files/')
-              ? 'files'
+            // The Drive page and its Trash are Drive.
+            : loc.pathname === '/drive' || loc.pathname.startsWith('/drive/')
+              ? 'drive'
             // Every task route — all tasks, one task, a list, the tasks in none — is the Tasks
             // page, whose title picks among them.
             : loc.pathname.startsWith('/tasks/') || loc.pathname.startsWith('/lists/')
@@ -533,10 +536,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // rows pass under it (docs/mocks/sidebar-projects-scroll, 03).
   const listsRef = useRef<HTMLDivElement>(null);
 
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
-    return saved > 0 ? clampWidth(saved) : DEFAULT_SIDEBAR_WIDTH;
-  });
+  const [sidebarWidth, setSidebarWidth] = useState<number>(savedSidebarWidth);
 
   // Collapse the whole panel to a slim icon rail (desktop) — hands the content
   // region the full width back. Persisted so the choice survives a refresh.
@@ -585,7 +585,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     // The panel hugs the viewport's left edge, so clientX is the target width.
     let next = sidebarWidth;
     const onMove = (ev: MouseEvent) => {
-      next = clampWidth(ev.clientX);
+      next = clampSidebarWidth(ev.clientX);
       setSidebarWidth(next);
     };
     const onUp = () => {
@@ -899,7 +899,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     if (sel === `project:${key}` || (besideConversation && projectPageId === key)) return;
     if (narrow) setSel(`project:${key}`);
     if (besideConversation) {
-      navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
+      setConversationProjectPage({ project: key, completed: false });
       return;
     }
     const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;
@@ -937,15 +937,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           </svg>
         </span>
         <span className="tp-brand-name">Orbit</span>
-        <button
-          type="button"
-          className="tp-collapse-btn"
-          onClick={toggleCollapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-        </button>
+        <Tooltip side="bottom" content={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          <button
+            type="button"
+            className="tp-collapse-btn"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          </button>
+        </Tooltip>
       </div>
 
       {/* Collapsed-only icon rail: the fixed top-nav as icons. The dynamic lists (workspaces,
@@ -953,32 +954,34 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           workspaces themselves stay as monogram avatars below. Shown only when collapsed, on desktop. */}
       <div className="tp-rail">
         {topItems.map((t) => (
-          <div
-            key={t.key}
-            className={`tp-rail-item ${railSel === t.key ? 'active' : ''}`}
-            onClick={() => openTopNav(t.key, railSel)}
-            onKeyDown={(event) => handleNavActivation(event, () => openTopNav(t.key, railSel))}
-            role="link"
-            tabIndex={0}
-            aria-current={railSel === t.key ? 'page' : undefined}
-            title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
-          >
-            <span className="tp-ico">{t.icon}</span>
-            {t.key === 'scheduled' && scheduledNeeds > 0 && (
-              <span className="tp-rail-badge needs-you" data-scheduled-count="">
-                {scheduledNeeds}
-              </span>
-            )}
-            {t.key === 'wiki' && wikiWaitingCount > 0 && (
-              <span
-                className="tp-rail-badge needs-you"
-                title={wikiWaitingOnYou(wikiWaitingCount)}
-                aria-label={wikiWaitingOnYou(wikiWaitingCount)}
-              >
-                {wikiWaitingCount}
-              </span>
-            )}
-          </div>
+          <Tooltip key={t.key} content={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`} side="right">
+            <div
+              className={`tp-rail-item ${railSel === t.key ? 'active' : ''}`}
+              onClick={() => openTopNav(t.key, railSel)}
+              onKeyDown={(event) => handleNavActivation(event, () => openTopNav(t.key, railSel))}
+              role="link"
+              tabIndex={0}
+              aria-current={railSel === t.key ? 'page' : undefined}
+              aria-label={(t.key === 'scheduled' && scheduledNeeds > 0) || (t.key === 'wiki' && wikiWaitingCount > 0) ? undefined : `${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
+            >
+              <span className="tp-ico">{t.icon}</span>
+              {t.key === 'scheduled' && scheduledNeeds > 0 && (
+                <span className="tp-rail-badge needs-you" data-scheduled-count="">
+                  {scheduledNeeds}
+                </span>
+              )}
+              {t.key === 'wiki' && wikiWaitingCount > 0 && (
+                <Tooltip content={wikiWaitingOnYou(wikiWaitingCount)} delay={TEXT_TOOLTIP_DELAY_MS}>
+                  <span
+                    className="tp-rail-badge needs-you"
+                    aria-label={wikiWaitingOnYou(wikiWaitingCount)}
+                  >
+                    {wikiWaitingCount}
+                  </span>
+                </Tooltip>
+              )}
+            </div>
+          </Tooltip>
         ))}
         {/* The user's workspaces, kept reachable when collapsed: a monogram avatar each
             (workspaces have identity + exceptional/activity state + ⌘1‒9, so unlike the
@@ -992,26 +995,26 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
             'Shared';
           return (
-            <div
-              key={a.id}
-              className={`tp-rail-item ${a.id === litWorkspaceId ? 'active' : ''}`}
-              onClick={() => openWorkspace(a)}
-              title={`${a.name} · ${runnerLabel}${shortcutLabel ? `  ${shortcutLabel}` : ''}`}
-            >
-              <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
-              <WorkspaceStateMark
-                compact
-                managed={managedRowOf(accountManaged, runnerId)}
-                offline={
-                  !managedRowOf(accountManaged, runnerId) &&
-                  workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
-                }
-                running={(workspaceRunning.get(a.id) ?? 0) > 0}
-                jobs={workspaceJobs.get(a.id) ?? 0}
-                needsYou={workspaceNeedsYou.get(a.id) ?? 0}
-                runnerLabel={runnerLabel}
-              />
-            </div>
+            <Tooltip key={a.id} content={`${a.name} · ${runnerLabel}${shortcutLabel ? `  ${shortcutLabel}` : ''}`} side="right">
+              <div
+                className={`tp-rail-item ${a.id === litWorkspaceId ? 'active' : ''}`}
+                onClick={() => openWorkspace(a)}
+              >
+                <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
+                <WorkspaceStateMark
+                  compact
+                  managed={managedRowOf(accountManaged, runnerId)}
+                  offline={
+                    !managedRowOf(accountManaged, runnerId) &&
+                    workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
+                  }
+                  running={(workspaceRunning.get(a.id) ?? 0) > 0}
+                  jobs={workspaceJobs.get(a.id) ?? 0}
+                  needsYou={workspaceNeedsYou.get(a.id) ?? 0}
+                  runnerLabel={runnerLabel}
+                />
+              </div>
+            </Tooltip>
           );
         })}
       </div>
@@ -1035,21 +1038,23 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   {scheduledNeeds}
                 </span>
               ) : t.key === 'wiki' && wikiWaitingCount > 0 ? (
-                <span
-                  className="tp-count needs-you"
-                  title={wikiWaitingOnYou(wikiWaitingCount)}
-                  aria-label={wikiWaitingOnYou(wikiWaitingCount)}
-                >
-                  {wikiWaitingCount}
-                </span>
+                <Tooltip content={wikiWaitingOnYou(wikiWaitingCount)} delay={TEXT_TOOLTIP_DELAY_MS}>
+                  <span
+                    className="tp-count needs-you"
+                    aria-label={wikiWaitingOnYou(wikiWaitingCount)}
+                  >
+                    {wikiWaitingCount}
+                  </span>
+                </Tooltip>
               ) : (
                 t.shortcut && (
-                  <kbd
-                    className="tp-count tp-nav-shortcut"
-                    title={`Open ${t.label} with ${t.shortcut}`}
-                  >
-                    {t.shortcut}
-                  </kbd>
+                  <Tooltip content={`Open ${t.label} with ${t.shortcut}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+                    <kbd
+                      className="tp-count tp-nav-shortcut"
+                    >
+                      {t.shortcut}
+                    </kbd>
+                  </Tooltip>
                 )
               )}
             </div>
@@ -1096,11 +1101,15 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
                       (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
                       'Shared';
+                    // Orbit Cloud is hosted, apart from your own machines' tools and keys: its workspaces wear its
+                    // cloud, and every other workspace keeps the folder (docs/mocks/workspace-machine-icon, B).
+                    const onCloud = !!runnerId && !!managedRunnerId && routeId(runnerId) === routeId(managedRunnerId);
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
                         key={a.id}
                         workspace={a}
                         runnerLabel={runnerLabel}
+                        cloud={onCloud}
                         active={a.id === litWorkspaceId}
                         managed={managedRowOf(accountManaged, runnerId)}
                         offline={
@@ -1213,6 +1222,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
         </div>
       </div>
 
+      <WebPushOffer placement="rail" />
       <div className="tp-user">
         <Menu
           side="top"
@@ -1388,18 +1398,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               ),
               onSelect: () => navigate(MODEL_ROUTING_PAGE.path),
             },
-            {
-              key: 'settings',
-              icon: <SettingOutlined />,
-              label: 'Settings',
-              onSelect: () => navigate('/settings'),
-            },
             // The full help center (board help-center 01 ⓪②), where a reader who looks in the account menu finds it.
             {
               key: 'help',
               icon: <QuestionCircleOutlined />,
               label: 'Help center',
               onSelect: () => navigate(HELP_PATH),
+            },
+            {
+              key: 'settings',
+              icon: <SettingOutlined />,
+              label: 'Settings',
+              onSelect: () => navigate('/settings'),
             },
             // User management, for admins only. It opens a settings page as the row above does, so
             // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
@@ -1441,25 +1451,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             </button>
           }
         />
-        {/* Help, beside the avatar (board help-center 01 ⓪①); above it on the collapsed rail. */}
-        <Tooltip
-          side="top"
-          content={
-            <>
-              Help<kbd className="tp-help-key">?</kbd>
-            </>
-          }
-        >
-          <button
-            type="button"
-            className={`tp-help${help.open ? ' is-open' : ''}`}
-            aria-label="Help"
-            aria-pressed={help.open}
-            onClick={help.toggleHelp}
-          >
-            <QuestionCircleOutlined />
-          </button>
-        </Tooltip>
       </div>
 
       <div
@@ -1495,13 +1486,17 @@ export function ProjectRow({
   return (
     <div className={`tp-item tp-project ${active ? 'active' : ''}`} onClick={() => onOpen(project)}>
       <span className="tp-ico tp-project-mark">
-        <span className={`tp-list-dot ${working ? 'running' : ''}`} title={working ? 'Work in flight' : undefined} />
+        <Tooltip content={working ? 'Work in flight' : undefined} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className={`tp-list-dot ${working ? 'running' : ''}`} aria-label={working ? 'Work in flight' : undefined} />
+        </Tooltip>
       </span>
       <span className="tp-label">{project.title}</span>
       {needsYou > 0 && (
-        <span className="tp-count needs-you" title={waiting} aria-label={waiting}>
-          {needsYou}
-        </span>
+        <Tooltip content={waiting} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="tp-count needs-you" aria-label={waiting}>
+            {needsYou}
+          </span>
+        </Tooltip>
       )}
     </div>
   );
@@ -1545,9 +1540,11 @@ export function WikiRow({
       </span>
       <span className="tp-label">{name}</span>
       {waiting > 0 && (
-        <span className="tp-count needs-you" title={waitingOnYou} aria-label={waitingOnYou}>
-          {waiting}
-        </span>
+        <Tooltip content={waitingOnYou} delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="tp-count needs-you" aria-label={waitingOnYou}>
+            {waiting}
+          </span>
+        </Tooltip>
       )}
       {/* Inside the row's link: a press or an Enter on the menu is the menu's, and opens no wiki. */}
       <span className="tp-workspace-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
@@ -1557,8 +1554,9 @@ export function WikiRow({
           items={menu}
           open={menuOpen}
           onOpenChange={setMenuOpen}
+          tooltip="Actions"
           trigger={
-            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`} title="Actions">
+            <button type="button" className="tp-workspace-more" aria-label={`${name} actions`}>
               <MoreOutlined />
             </button>
           }
@@ -1601,13 +1599,14 @@ export function WorkspaceStateMark({
   if (needsYou > 0) {
     const title = `${needsYou} ${needsYou === 1 ? 'session needs' : 'sessions need'} your reply`;
     badge = (
-      <span
-        className={compact ? 'tp-rail-badge needs-you' : 'tp-count needs-you'}
-        title={title}
-        aria-label={title}
-      >
-        {needsYou}
-      </span>
+      <Tooltip content={title} delay={TEXT_TOOLTIP_DELAY_MS}>
+        <span
+          className={compact ? 'tp-rail-badge needs-you' : 'tp-count needs-you'}
+          aria-label={title}
+        >
+          {needsYou}
+        </span>
+      </Tooltip>
     );
   }
   if (!compact) return badge;
@@ -1686,12 +1685,13 @@ export function ManagedRunnerMark({ row, className }: { row: ManagedRunnerRow; c
   );
 }
 
-// A compact, permanently visible workspace row. Its folder occupies the same icon column as the
-// fixed first-level destinations above, so Workspace names share their label alignment. Runner is
-// descriptive metadata on the same line, not a disclosure parent the user has to remember.
+// A compact, permanently visible workspace row. Its folder (Orbit Cloud's cloud, for a workspace there)
+// occupies the same icon column as the fixed first-level destinations above, so Workspace names share their
+// label alignment. Runner is descriptive metadata on the same line, not a disclosure parent the user has to remember.
 export function WorkspaceRow({
   workspace,
   runnerLabel,
+  cloud = false,
   active,
   offline,
   managed = null,
@@ -1705,6 +1705,8 @@ export function WorkspaceRow({
 }: {
   workspace: Workspace;
   runnerLabel: string;
+  /** On Orbit Cloud: its cloud stands in the folder's place. */
+  cloud?: boolean;
   active: boolean;
   offline: boolean;
   /** The account's managed runner, when it is this workspace's: Asleep or Waking up…, never Offline. */
@@ -1725,19 +1727,22 @@ export function WorkspaceRow({
       <span className="tp-workspace-separator" aria-hidden="true">
         ·
       </span>
-      <span className="tp-workspace-runner" title={runnerLabel}>
-        {runnerLabel}
-      </span>
+      <Tooltip content={runnerLabel} truncatedOnly>
+        <span className="tp-workspace-runner">
+          {runnerLabel}
+        </span>
+      </Tooltip>
     </span>
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const shortcut = shortcutLabel && (
-    <kbd
-      className="tp-count tp-workspace-shortcut"
-      title={`Open workspace with ${shortcutLabel}`}
-    >
-      {shortcutLabel}
-    </kbd>
+    <Tooltip content={`Open workspace with ${shortcutLabel}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <kbd
+        className="tp-count tp-workspace-shortcut"
+      >
+        {shortcutLabel}
+      </kbd>
+    </Tooltip>
   );
   // While the list is arranged, the handle takes the folder's column and the row opens nothing. Its
   // state marks step aside too, so every row shows the ⌘N it will have once dropped.
@@ -1773,7 +1778,7 @@ export function WorkspaceRow({
         role={offline ? 'img' : undefined}
         aria-label={offline ? offlineTitle : undefined}
       >
-        <FolderOutlined aria-hidden="true" />
+        {cloud ? <CloudOutlined aria-hidden="true" data-machine="cloud" /> : <FolderOutlined aria-hidden="true" />}
         {managedRest(managed) && !showRunningDot && !showJobsDot && (
           <ManagedRunnerMark row={managed!} className="tp-workspace-icon-managed" />
         )}
@@ -1786,20 +1791,22 @@ export function WorkspaceRow({
           </Tooltip>
         )}
         {showRunningDot && (
-          <span
-            className="tp-workspace-icon-running"
-            title="Running"
-            role="img"
-            aria-label="Workspace has a running session"
-          />
+          <Tooltip content="Running" delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span
+              className="tp-workspace-icon-running"
+              role="img"
+              aria-label="Workspace has a running session"
+            />
+          </Tooltip>
         )}
         {showJobsDot && (
-          <span
-            className="tp-workspace-icon-jobs"
-            title={`${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`}
-            role="img"
-            aria-label="Workspace has a background job running"
-          />
+          <Tooltip content={`${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <span
+              className="tp-workspace-icon-jobs"
+              role="img"
+              aria-label="Workspace has a background job running"
+            />
+          </Tooltip>
         )}
       </span>
       {label}
@@ -1818,8 +1825,9 @@ export function WorkspaceRow({
           items={menu}
           open={menuOpen}
           onOpenChange={setMenuOpen}
+          tooltip="Actions"
           trigger={
-            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`} title="Actions">
+            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`}>
               <MoreOutlined />
             </button>
           }
@@ -1849,18 +1857,19 @@ function SortableWorkspaceRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
       {children(
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          className="tp-ico tp-workspace-handle"
-          title="Drag to reorder"
-          aria-label={`Reorder ${workspace.name}`}
-          disabled={disabled}
-          {...attributes}
-          {...listeners}
-        >
-          <HolderOutlined />
-        </button>,
+        <Tooltip content="Drag to reorder">
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            className="tp-ico tp-workspace-handle"
+            aria-label={`Reorder ${workspace.name}`}
+            disabled={disabled}
+            {...attributes}
+            {...listeners}
+          >
+            <HolderOutlined />
+          </button>
+        </Tooltip>,
       )}
     </div>
   );

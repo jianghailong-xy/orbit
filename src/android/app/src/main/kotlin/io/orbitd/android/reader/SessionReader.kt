@@ -1,5 +1,9 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.directory.QueuedCapacity
+import io.orbitd.android.directory.RunningOverLimit
+import io.orbitd.android.management.int
+import io.orbitd.android.management.personalFailure
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -69,6 +73,7 @@ import io.orbitd.android.composer.WorkspaceClone
 import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.ManagedRunnerAsleepLine
 import io.orbitd.android.composer.SessionPendingTray
@@ -94,6 +99,8 @@ import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionRunStartCard
 import io.orbitd.android.schedule.ScheduleConversationInsert
 import io.orbitd.android.schedule.ScheduleInsert
+import io.orbitd.android.schedule.ScheduleRunStatusCard
+import io.orbitd.android.schedule.ScheduleRunStrip
 import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.cards.LocalWatchTargetNames
@@ -110,6 +117,8 @@ import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.watch.rememberSessionTitles
 import io.orbitd.android.wiki.PageBar
+import io.orbitd.android.chat.ReaderChat
+import io.orbitd.android.core.drive.DriveChatLogic
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
@@ -144,7 +153,9 @@ import kotlinx.serialization.json.*
 
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
-    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}, swap: (OrbitRoute) -> Unit = open) {
+    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}, swap: (OrbitRoute) -> Unit = open,
+    /** Drawn inside a page's chat sheet (PageChat): no page bar of its own, the chat's cards with their turns, its composer's chips. */
+    chat: ReaderChat? = null) {
     // This page shows a conversation, and the store streams the one it shows: selecting it is the reader's own act, so a
     // landing session — which SessionDestination never sends here — is never subscribed to (§2.9 LS6). A reader leaving
     // clears the selection; a reader replacing another (a link to a second session) sets its own after the old one's.
@@ -283,6 +294,21 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             })
         }
     } }
+    // Run now in a full runner's, run's or batch's popover (docs/mocks/queued-run-now): this one queued turn over the limit. A
+    // refusal the server gives only at the press is said in a toast; either way the row is read again.
+    var runNowPending by remember(route.id) { mutableStateOf(false) }
+    val runNow: (@Composable () -> Unit)? = runnerUpdatingGate?.takeIf(QueuedCapacity::isCapacityHeld)?.let { gate -> {
+        RunNowAction(gate, runnerUpdatingMachine, runnerUpdatingRow?.int("activeSessions"), runnerUpdatingRow?.int("maxConcurrent"), runNowPending) {
+            runNowPending = true
+            updateNowScope.launch {
+                try { api.mutate(listOf("sessions", route.id!!, "run-now")) }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (e: Exception) { OrbitToasts.show(QueuedCapacity.RUN_NOW_FAILED, detail = personalFailure(e), tone = ToastTone.ERROR) }
+                app.realtime.refreshDirectory(); app.realtime.refreshSession()
+                runNowPending = false
+            }
+        }
+    } }
     val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
     // The project this conversation is the coordinator or a member of (owner 2026-11-11, docs/mocks/project-sessions-column board 5):
     // its bar carries the button that opens the project's sessions in a sheet. Read off the detail, or the list's row before that.
@@ -384,7 +410,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
     val scheduledState by scheduled.state.collectAsState()
     val scheduleRunId = snapshotDetail?.text("scheduleRunId")
-    LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) { scheduled.loadSession(route.id!!, scheduleRunId) }
+    val scheduleRead = scheduledState.session(route.id!!)
+    val scheduledRun = scheduleRead?.run
+    val scheduleRunStatus = scheduleRead?.runStatus
+    val scheduleStatusKind = scheduleRead?.statusKind?.takeUnless {
+        snapshotDetail?.text("lifecycleState") == "TRASH" || listRow?.effectiveLifecycleState == "TRASH"
+    }
+    LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) {
+        scheduled.loadSessionNow(route.id!!, scheduleRunId)
+    }
     val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
         key(insert.key) { Box(Modifier.conversationCard()) {
@@ -596,7 +630,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // ([WorktreeModel.offer]), a minute's safety read, and its own bounded cadence only while a merge or commit is in flight. It stops with
     // the Activity.
     PagePoll(app, handle, emptySet(), worktree, state.denied, inFlightMs = { worktree.inFlightMs() }) {
-        if (!state.denied) worktree.loadDetail()
+        if (!state.denied) {
+            worktree.loadDetail()
+            // The run can move on in a different session, without an update on this try's stream.
+            if (scheduledRun?.state in setOf("QUEUED", "RUNNING") && scheduleRunStatus != null) {
+                scheduled.loadSessionNow(route.id!!, scheduleRunId)
+            }
+        }
     }
     // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the reconnect
     // line) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
@@ -742,7 +782,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // replacement runs (the owner, 2026-11-15, coordinator-context-actions board 04, A; iOS `handingOverCapsule`).
         // A state the capsule reads, like `offTail`: the bar keeps the content it is first handed.
         val handingOver by rememberUpdatedState(CoordinatorHandoff.outgoing(snapshotDetail)?.locksComposer == true)
-        PageBar.Bind(route, title = null, folds = foldsChrome, center = {
+        if (chat == null) PageBar.Bind(route, title = null, folds = foldsChrome, center = {
             // One capsule changing between them (08-motion ⑤): the old words leave upward, the new come in from below.
             val saysWaiting = !handingOver && here != null && (here.side == ReaderSide.ABOVE || offTail)
             AnimatedContent(handingOver to saysWaiting, transitionSpec = {
@@ -777,6 +817,33 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             }
             if (state.denied) {
                 StatusMessage("Session unavailable", if (session?.error?.httpStatus == 403) "You don't have permission to access this item." else "This item is no longer available.", model::retry)
+            } else if (scheduleStatusKind != null && scheduledRun != null && scheduleRunStatus != null) {
+                val schedule = scheduledState.run(route.id!!)?.schedule
+                val runner = data.effectiveRunnerRows.firstOrNull {
+                    ObjectId.same(it.text("id"), detail?.text("assignedRunnerId"))
+                }?.let { io.orbitd.android.management.RunnerPage.displayName(it) }
+                    ?: data.machineName(workspaceOfSession ?: schedule?.workspaceId) ?: "The runner"
+                val engine = detail?.text("engine") ?: schedule?.engine ?: detail?.text("provider")
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (schedule != null) {
+                        val conditionId = schedule.condition?.id
+                        LaunchedEffect(conditionId, scheduledRun.trigger) {
+                            if (scheduledRun.trigger == "CONDITION") conditionId?.let(scheduled::loadCondition)
+                        }
+                        Box(Modifier.conversationCard()) {
+                            ScheduleRunStrip(schedule, scheduledRun, scheduledState.condition(conditionId), notStarted = true)
+                        }
+                    }
+                    Box(Modifier.conversationCard()) {
+                        ScheduleRunStatusCard(scheduledRun, scheduleRunStatus, scheduleStatusKind, scheduled, route.id!!, runner,
+                            engine?.let(ProviderEngines::cliName) ?: "The engine",
+                            openSchedule = { open(OrbitRoute(Destination.SCHEDULED, it, origin = Origin.LINK)) },
+                            openRun = { open(OrbitRoute(Destination.SESSION, it, folderId = ScheduledRunsFolder.ID)) })
+                    }
+                }
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
@@ -799,6 +866,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     list.scrollToItem(if (index < 0) 0 else index + lead)
                 }
                 val schedulePlaced = remember(displayedRows, scheduleInserts) { ScheduleInsert.place(displayedRows.map { it.event.ts }, scheduleInserts) }
+                // A page chat's cards, each after the last row of its turn (web `useDriveChatCards`); the rest go under the conversation.
+                val chatCards = chat?.cards.orEmpty()
+                val chatPlaced = remember(displayedRows, displayedWindow.events, chatCards) {
+                    if (chatCards.isEmpty()) emptyMap() else {
+                        val lastOfTurn = HashMap<String, Long>()
+                        displayedWindow.events.forEach { e -> e.turnId?.let { t -> val k = ObjectId.canonical(t) ?: t; lastOfTurn[k] = maxOf(lastOfTurn[k] ?: e.seq, e.seq) } }
+                        val at = DriveChatLogic.place(displayedRows.map { it.event.seq }, { lastOfTurn[ObjectId.canonical(it) ?: it] },
+                            chatCards.map { it.key to it.turnId })
+                        chatCards.filter { it.key in at }.groupBy { at.getValue(it.key) }
+                    }
+                }
+                val chatRest = remember(chatPlaced, chatCards) { chatCards.filter { card -> chatPlaced.values.none { card in it } } }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
                 // merely live: a turn stopped without a `turn_end` would count up for as long as the session waits (iOS reads `.running` too).
@@ -813,6 +892,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val heldHead = if (runnerUpdatingGate == null || live == null || tailHeld) null else accepted.lastOrNull()
                 val heldSeq = if (runnerUpdatingGate == null || live == null || tailHeld || heldHead != null) null
                     else displayedRows.lastOrNull { it.event.type == "user" && it.steps.isEmpty() && it.exchanges.isEmpty() }?.event?.seq
+                // A turn started over its runner's limit says so under the message that opened it, while it runs (docs/mocks/queued-run-now ②):
+                // the accepted head until its echo lands, else the open turn's own message.
+                val overflow = listRow?.takeIf { live != null && it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.RUNNING }
+                    ?.let { RunningOverLimit.of(it.runningOverLimit) }
+                val overflowSeq = if (overflow == null || accepted.isNotEmpty()) null else openTurnUserSeq(state.window.events)
                 val targetSeq = state.targetSeq
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(Modifier.fillMaxSize().fadesIntoComposerBand().onSizeChanged {
@@ -890,21 +974,24 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         val asked = ownerPlaced[index]
                         val crossings = crossingPlaced[index]
                         val scheduleThings = schedulePlaced[index]
+                        val chatThings = chatPlaced[index]
                         // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
                         val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
                         val held = runnerUpdatingGate?.takeIf { heldSeq != null && row.event.seq == heldSeq }
                         val drawRow: @Composable () -> Unit = {
-                            if (head == null && held == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
+                            if (head == null && held == null && !(overflow != null && row.event.seq == overflowSeq)) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
                             else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
                                 // Under the reader's own message, so it stands at the bubble's right edge, as on iOS and web.
-                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater) }
+                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, runNow = runNow) }
+                                overflow?.takeIf { row.event.seq == overflowSeq && row.steps.isEmpty() }?.let { RunningOverLimitFoot(it, Modifier.align(Alignment.End)) }
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
-                        if (asked == null && crossings == null && scheduleThings == null) drawRow()
+                        if (asked == null && crossings == null && scheduleThings == null && chatThings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
+                            chatThings?.forEach { key(it.key) { it.content() } }
                             scheduleThings?.forEach { drawSchedule(it) }
                             asked?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id, discussCard) } } }
                             crossings?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
@@ -937,20 +1024,25 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         // a person's turn — no dashes, no "Queued", no Cancel: the runner has it.
                         items(accepted, key = { "accepted:${it.turnId}" }) { head ->
                             val gate = runnerUpdatingGate?.takeIf { heldHead != null && head.turnId == heldHead.turnId }
-                            if (gate == null) Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
+                            val over = overflow?.takeIf { head.turnId == accepted.last().turnId }
+                            if (gate == null && over == null) Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
                             else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
                                 // ` · Cancel` beside the tag: the turn withdrawn as the tray's is, its words back in the composer.
                                 val withdraw = heldCancel?.takeIf { it.turnId == head.turnId }?.let { held ->
                                     { composer.withdraw(held.turnId, held.words, steer = false, engine = console.engine) }
                                 }
-                                RunnerUpdatingFoot(gate, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, cancel = withdraw)
+                                gate?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, cancel = withdraw, runNow = runNow) }
+                                over?.let { RunningOverLimitFoot(it, Modifier.align(Alignment.End)) }
                             }
                         }
                     }
                     // At the live tail, under everything the conversation said and above the cards that ask the owner something.
                     if (live != null && displayedRows.isNotEmpty()) recapCard?.let { card ->
                         item(key = "recap") { RecapCardView(card, hideRecap) }
+                    }
+                    if (chatRest.isNotEmpty()) item(key = "chat-cards") {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { chatRest.forEach { key(it.key) { it.content() } } }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
@@ -963,7 +1055,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
                     if (live != null) items(queued, key = { it.key }) { turn ->
                         val held: (@Composable () -> Unit)? = runnerUpdatingGate?.takeIf { turn.heldByUpdate }?.let { gate ->
-                            { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) }
+                            { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater, runNow = runNow) }
                         }
                         CompositionLocalProvider(LocalQueuedHeld provides held) {
                             QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy,
@@ -998,7 +1090,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // holds the keyboard.
                 Box(Modifier.heightIn(max = composerHeight).then(if (composerHeight == 0.dp) Modifier.clipToBounds() else Modifier)) {
                     SessionPendingTray(composer, state.session, unreadSteers,
-                        held = runnerUpdatingGate?.let { gate -> { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) } })
+                        held = runnerUpdatingGate?.let { gate -> { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater, runNow = runNow) } })
                 }
                 // A08-5: a run that never started says why, first of the band's cards under the tray — and stays while a phone types.
                 Box(Modifier.conversationCard()) { SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true, console,
@@ -1082,7 +1174,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it },
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
                     openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
-                    openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) }) }
+                    openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) },
+                    placeholder = chat?.placeholder, chips = chat?.chips) }
                 }
             }
         }

@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.ChangeCopy
 import io.orbitd.android.core.cards.OwnerCardTranslation
 import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequestStep
@@ -65,6 +68,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
     now: Instant = Instant.now(), focusInput: Boolean = false, discuss: ((String) -> Unit)? = null) {
+    if (asked.kind == OwnerRequests.PROJECT_REOPEN) { ProjectReopenCard(asked, store, discuss); return }
     if (asked.kind == OwnerRequests.SETTINGS_CHANGE && asked.pending) { SettingsChangeCard(asked, store); return }
     if (!asked.pending) { OwnerRequestResolved(asked, store, runner, now); return }
     // The agent's words in the owner's language (Settings › Translation), flipped whole to its own words by the foot; the doors
@@ -77,7 +81,7 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val tag = "owner-request:${request.id}"
-    val runnerName = runner(request.secretSpec?.runnerId)
+    val runnerName = runner(request.secretSpec?.runnerId ?: request.changeSpec?.runnerId)
     // The key is held in this card's state only: never saved, never in a URL, a view model or a cache, gone with the card.
     var value by remember(request.id) { mutableStateOf("") }
     var save by remember(request.id) { mutableStateOf(false) }
@@ -85,6 +89,8 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
     var savedId by remember(request.id) { mutableStateOf<String?>(null) }
     var chosen by remember(request.id) { mutableStateOf(request.recommendedOption) }
     var text by remember(request.id) { mutableStateOf("") }
+    // CHANGE: the number the owner would apply, starting at the one asked for.
+    var maxValue by remember(request.id) { mutableStateOf(request.changeSpec?.requested ?: 1) }
     var declining by remember(request.id) { mutableStateOf(false) }
     var reason by remember(request.id) { mutableStateOf("") }
     var busy by remember(request.id) { mutableStateOf(false) }
@@ -127,6 +133,7 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
                 value = ""; save = false; savedId = null
                 press { if (saved != null) provideSaved(request.id, saved) else provide(request.id, typed, name) }
             }
+            OwnerRequests.CHANGE -> { val n = maxValue; press { applyChange(request.id, n) } }
             OwnerRequests.DECISION -> { val words = text.trim().takeIf { it.isNotEmpty() }; pressWords { asWritten -> { done(request.id, chosen, words, asWritten) } } }
             else -> press { done(request.id) }
         }
@@ -183,6 +190,9 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
         }
 
         if (request.kind == OwnerRequests.WIKI_CREATE) WikiCreateFacts(request, store, tag)
+        if (request.kind == OwnerRequests.CHANGE) request.changeSpec?.let { spec ->
+            ChangeSetting(spec, runnerName, maxValue, { maxValue = it }, !busy && !closed, tag, store)
+        }
         if (request.kind == OwnerRequests.MANUAL_STEP) Steps(request.steps.orEmpty(), tag, open)
         if (request.kind == OwnerRequests.SECRET) request.secretSpec?.let { spec ->
             when {
@@ -301,6 +311,39 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
     }
 }
 
+/** The runner rows a CHANGE card reads its live value from, when a host supplies them (tests); null reads the directory. */
+internal val LocalChangeRunners = compositionLocalOf<List<DirectoryRunner>?> { null }
+
+/** A CHANGE card's setting block (web `ChangeSetting`): the runner's live value → a − / + stepper holding the number to apply (no
+ * keyboard), what is running now, and what that number would do. */
+@Composable
+private fun ChangeSetting(spec: io.orbitd.android.core.cards.OwnerRequestChangeSpec, runnerName: String, value: Int, onValue: (Int) -> Unit,
+    enabled: Boolean, tag: String, store: OwnerRequestStore) {
+    val app = LocalContext.current.applicationContext as OrbitApplication
+    val data by rememberDirectoryData(app, store.handle)
+    val row = (LocalChangeRunners.current ?: data.runners).firstOrNull { ObjectId.same(it.id, spec.runnerId) }
+    val current = row?.maxConcurrent ?: spec.before
+    val running = row?.activeSessions
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().testTag("$tag:change").background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+        .padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(ChangeCopy.setting(runnerName), Modifier.testTag("$tag:change-setting"), style = MaterialTheme.typography.bodyMedium, color = secondary)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("$current", Modifier.testTag("$tag:change-live"), style = MaterialTheme.typography.headlineMedium, color = secondary)
+            Text("→", color = secondary)
+            Spacer(Modifier.weight(1f))
+            OutlinedIconButton(onClick = { onValue(value - 1) }, enabled = enabled && value > 1, modifier = Modifier.size(36.dp).testTag("$tag:change-minus")
+                .semantics { contentDescription = "${ChangeCopy.numberLabel}: fewer" }) { Text("−") }
+            Text("$value", Modifier.testTag("$tag:change-value"), style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold))
+            OutlinedIconButton(onClick = { onValue(value + 1) }, enabled = enabled, modifier = Modifier.size(36.dp).testTag("$tag:change-plus")
+                .semantics { contentDescription = "${ChangeCopy.numberLabel}: more" }) { Text("+") }
+        }
+        running?.let { Text(ChangeCopy.runningNow(it), Modifier.testTag("$tag:change-running"), style = MaterialTheme.typography.bodySmall, color = secondary) }
+        if (current != spec.before) Text(ChangeCopy.wasWhenAsked(spec.before), Modifier.testTag("$tag:change-was"), style = MaterialTheme.typography.bodySmall, color = secondary)
+        OwnerRequests.changeEffect(value, current)?.let { Text(it, Modifier.testTag("$tag:change-effect"), style = MaterialTheme.typography.bodySmall, color = secondary) }
+    }
+}
+
 /** What a WIKI_CREATE card will make (docs/wiki-explicit-creation-design.md §3.6, board 46 part 3; web `WikiCreateFacts`): the
  * repository, the asking session's workspace it reads it from — offline when its runner is — and the maintenance it starts with. */
 @Composable
@@ -413,11 +456,13 @@ private fun StepValue(value: String, action: String?, onAction: () -> Unit) {
 /** A request that has ended, as one row (web `OwnerRequestResolved`): how, who, when, and from which device. */
 @Composable
 fun OwnerRequestResolved(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, now: Instant = Instant.now()) {
+    if (request.kind == OwnerRequests.PROJECT_REOPEN && request.state in setOf("DONE", "DECLINED")) { ProjectReopenCard(request, store); return }
     if (request.kind == OwnerRequests.SETTINGS_CHANGE && request.state in setOf("DONE", "DECLINED")) { SettingsChangeFolded(request, store); return }
     val scope = rememberCoroutineScope()
     var busy by remember(request.id) { mutableStateOf(false) }
     var failure by remember(request.id) { mutableStateOf<String?>(null) }
-    val runnerName = runner(request.secretSpec?.runnerId.takeIf { request.kind == OwnerRequests.SECRET })
+    val runnerName = runner(if (request.kind == OwnerRequests.CHANGE) request.changeSpec?.runnerId
+        else request.secretSpec?.runnerId.takeIf { request.kind == OwnerRequests.SECRET })
     val grant = OwnerRequests.resolvedGrant(request)
     val tag = "owner-request:${request.id}"
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant

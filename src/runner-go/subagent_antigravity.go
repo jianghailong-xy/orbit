@@ -75,7 +75,11 @@ func runAntigravityChild(ctx context.Context, c subagentChild) (ExecResult, stri
 		}
 		usage := turn.usage
 		// agy reports no cost.
-		return subagentChildResult(status, text, errText, 0, &usage), child.RuntimeSessionID, nil
+		res := subagentChildResult(status, text, errText, 0, &usage)
+		if status == stFailed {
+			res.Failure, res.Admission = turn.failure.wire(), turn.admission()
+		}
+		return res, child.RuntimeSessionID, nil
 	}
 	for {
 		select {

@@ -26,7 +26,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, PermissionMode, type RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -41,6 +42,7 @@ import {
 import { CURSOR_ACCOUNT_MOVE_V1, CURSOR_CONVERSATION_MOVE_REFUSAL } from '../providers/account-move-capability';
 import { ProvidersService } from '../providers/providers.service';
 import { SessionsService } from './sessions.service';
+import { WORD_SELECT, wordOf, fixtureFacts, type SessionFixture, wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -129,7 +131,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
   }
 
   /** The states a session can be in, as far as its conversation goes — each with its own ids. */
-  type Facts = () => Partial<Prisma.SessionUncheckedCreateInput>;
+  type Facts = () => SessionFixture;
   const TALKED = {
     /** Idle after a turn, Cursor's conversation id known. */
     idle: () => ({ status: RunStatus.AWAITING_INPUT, numTurns: 1, runtimeSessionId: randomUUID() }),
@@ -172,8 +174,8 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         ...(onKey ? {} : { cursorAccount: 'default', cursorAccountPinned: false }),
-        ...facts(),
-        ...extra,
+        ...fixtureFacts(facts()),
+        ...fixtureFacts(extra),
       },
     });
     return id;
@@ -183,7 +185,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
   async function snapshot(id: string) {
     const session = (await sql.query(
       `SELECT provider, provider_builtin, cursor_account, cursor_account_pinned, kimi_account, kimi_account_pinned,
-              status::text AS status
+              ${wordSql()} AS status
          FROM "session" WHERE id = $1::uuid`,
       [id],
     )).rows[0];
@@ -199,7 +201,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
       [id],
     )).rows as Array<{ content: string }>).map((turn) => JSON.parse(turn.content) as Record<string, unknown>);
   const stored = (id: string) => db.session.findUniqueOrThrow({
-    where: { id }, select: { provider: true, providerBuiltin: true, cursorAccount: true, cursorAccountPinned: true, status: true },
+    where: { id }, select: { provider: true, providerBuiltin: true, cursorAccount: true, cursorAccountPinned: true, ...WORD_SELECT },
   });
 
   /** The switch is refused with 409 and `words`, and leaves the session exactly as it was. */
@@ -260,7 +262,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
     const ended = await cursorSession(m, TALKED.ended, { provider: m.key });
     await revive(m, ended, { provider: m.key });
     assert.deepEqual(
-      { provider: (await stored(ended)).provider, status: (await stored(ended)).status },
+      { provider: (await stored(ended)).provider, status: wordOf((await stored(ended))) },
       { provider: m.key, status: RunStatus.PENDING },
     );
   });
@@ -307,13 +309,13 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
     const ended = await cursorSession(m, UNSPOKEN.ended, { provider: m.key });
     await revive(m, ended, { provider: m.otherKey });
     assert.deepEqual(
-      { provider: (await stored(ended)).provider, status: (await stored(ended)).status },
+      { provider: (await stored(ended)).provider, status: wordOf((await stored(ended))) },
       { provider: m.otherKey, status: RunStatus.PENDING },
     );
     const endedOnLogin = await cursorSession(m, UNSPOKEN.ended);
     await sessions.switchAccount(m.ownerId, endedOnLogin, WORK);
     assert.deepEqual(
-      { account: (await stored(endedOnLogin)).cursorAccount, status: (await stored(endedOnLogin)).status },
+      { account: (await stored(endedOnLogin)).cursorAccount, status: wordOf((await stored(endedOnLogin))) },
       { account: WORK, status: RunStatus.FAILED },
     );
     const endedToLogin = await cursorSession(m, UNSPOKEN.ended, { provider: m.key });
@@ -354,7 +356,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
     const revived = await cursorSession(carrying, TALKED.ended, { provider: carrying.key });
     await revive(carrying, revived, { provider: carrying.otherKey });
     assert.deepEqual(
-      { provider: (await stored(revived)).provider, status: (await stored(revived)).status },
+      { provider: (await stored(revived)).provider, status: wordOf((await stored(revived))) },
       { provider: carrying.otherKey, status: RunStatus.PENDING },
     );
 
@@ -366,7 +368,7 @@ test('P6b Cursor CLI account and key moves on PostgreSQL', { skip, concurrency: 
         data: {
           id: kimi, ownerId: old.ownerId, creatorId: old.ownerId, workspaceId: old.workspaceId, assignedRunnerId: old.runnerId,
           title: 'kimi session', prompt: 'fix the flaky test', provider: AgentProvider.KIMI, providerBuiltin: true,
-          engine: AgentProvider.KIMI, status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          engine: AgentProvider.KIMI, turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
           startedAt: new Date(), numTurns, runtimeSessionId: numTurns ? randomUUID() : null, kimiAccount: 'default',
         },
       });

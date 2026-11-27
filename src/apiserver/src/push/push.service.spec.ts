@@ -5,10 +5,11 @@ import { randomUUID } from 'node:crypto';
 import { SessionEndReason, uuidToBase62 } from '@orbit/shared';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { PushService } from './push.service';
 import { releaseFactsOf } from '../common/session-release-shapes.fixture';
 import { findingCollapseId, findingCopy } from '../schedules/schedule-attention';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 function enabledConfig(): ConfigService {
   const values: Record<string, string> = {
@@ -33,13 +34,18 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
     ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
+    // The decision cards (push/owner-cards.ts) the same count reads: no project, task or confirmation, so none.
+    project: { findMany: async () => [] },
+    task: { findMany: async () => [] },
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
   };
   const service = new PushService(prisma as any, enabledConfig());
 
   assert.deepEqual(await service.needsYouSessions('owner-1'), ['s-open']);
   assert.deepEqual(calls[0].where, {
     ownerId: 'owner-1',
-    status: RunStatus.RUNNING,
+    // A turn in flight (sessions/session-turn-state.ts).
+    ...turnStateFilter(['IN_FLIGHT']),
     sessionKind: 'CONVERSATION',
     completedAt: null,
     archivedAt: null,
@@ -63,6 +69,10 @@ function approvalPrisma() {
     ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async (): Promise<any[]> => [] },
+    // The decision cards (push/owner-cards.ts) the same count reads: no project, task or confirmation, so none.
+    project: { findMany: async () => [] },
+    task: { findMany: async () => [] },
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
     // Which of those rows nobody owes any more (`openItemsNoLongerOwed`): none, here.
     $queryRaw: async (): Promise<Array<{ id: string }>> => [],
   };
@@ -343,7 +353,7 @@ test('approval push initially requires a canonical Open, non-ending RUNNING sess
 
   assert.deepEqual(calls[0].where, {
     id: 's-completed',
-    OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
+    OR: [turnStateFilter(['IN_FLIGHT']), { runningSubagents: { isEmpty: false } }],
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
@@ -1079,7 +1089,7 @@ test('notify from an Automatic task run reaches the coordinator without alerting
       return { placement: 'queued' };
     } }) },
   });
-  const live = { status: 'RUNNING', endReason: null, completedAt: null, archivedAt: null,
+  const live = { turnState: 'IN_FLIGHT', finishedAt: null, status: 'RUNNING', endReason: null, completedAt: null, archivedAt: null,
     deletedAt: null, cancelRequestedAt: null, retryAt: null };
   (harness.prisma as any).$queryRaw = async () => [];
   harness.prisma.session.findFirst = async (q: any) => {
@@ -1087,7 +1097,7 @@ test('notify from an Automatic task run reaches the coordinator without alerting
     if (q.select.task) return { title: 'Run', agentNotifiedAt: harness.rang.sessions.get(run) ?? null, task: { id: taskId, title: 'Build', project: {
       id: randomUUID(), coordinatorEnabled: true, coordinatorSessionId: coordinator, exceptionEscalationSeconds: 7200,
     } } };
-    if (q.select.status) return live;
+    if (q.select.turnState) return live;
     return { id: q.where.id, title: 'Run', taskId, workspace: null, permissionMode: 'default', engine: 'codex', owner: { preferences: {} } };
   };
   const result = await harness.service.notifyAgentMessage({ ...agentInput, sessionId: run, message: 'Ready to review' });
@@ -1130,7 +1140,7 @@ for (const unavailable of ['missing', 'ended', 'paused', 'fused', 'refused']) {
       if (q.select.task) return { title: 'Run', task: { id: randomUUID(), title: 'Build', project: {
         id: randomUUID(), coordinatorEnabled: true, coordinatorSessionId: unavailable === 'missing' ? null : coordinator, exceptionEscalationSeconds: 7200,
       } } };
-      if (q.select.status) return { status: unavailable === 'ended' ? 'COMPLETED' : 'RUNNING', endReason: null,
+      if (q.select.turnState) return { status: unavailable === 'ended' ? 'COMPLETED' : 'RUNNING', turnState: 'IN_FLIGHT', finishedAt: null, endReason: null,
         completedAt: unavailable === 'ended' ? new Date() : null, archivedAt: null, deletedAt: null,
         cancelRequestedAt: null, retryAt: unavailable === 'paused' ? new Date() : null };
       return null;
@@ -1392,4 +1402,86 @@ test('a condition that cannot be read, and the run a firing started, push as the
     assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(expected.source));
     assert.deepEqual([expected.pushType, expected.collapseId], ['alert', sent[0].collapseId]);
   }
+});
+
+// ── a decision card that became the owner's (push/owner-cards.ts, PushService.notifyDecisionCards) ──────────────────
+//
+// The shared Android fixture's `decision-card` sample is this send: fcm-transport.spec converts it to the data it holds,
+// and Android's PushAuthorityTest parses that data, so a card the owner is pushed about is not dropped on Android.
+
+/** An evidence card, as the sweep reads it: drawn in its dispatching session. */
+const EVIDENCE_CARD = {
+  key: 'evidence:019a0000-0000-7000-8000-000000000027',
+  kind: 'EVIDENCE' as const,
+  sessionId: '019a0000-0000-7000-8000-000000000025',
+  projectId: null,
+  taskId: '019a0000-0000-7000-8000-000000000026',
+  subjectId: '019a0000-0000-7000-8000-000000000027',
+  title: 'Archive the August receipts',
+  body: 'Does this evidence settle the task? · Revision 1',
+  open: true,
+};
+
+function decisionCardHarness(session: { notificationsMuted: boolean; notifyNeedsYou: string | null } | null) {
+  const { service, sent } = deviceAlertHarness();
+  (service as any).prisma.session = { findFirst: async () => session };
+  (service as any).needsYouSessions = async () => [EVIDENCE_CARD.sessionId, 'another-session'];
+  return { service, sent, send: () => (service as any).sendDecisionCard('owner-1', EVIDENCE_CARD) as Promise<void> };
+}
+
+test('a decision card rings with its badge and opens the conversation it is drawn in, as the shared Android fixture holds it', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const { sent, send } = decisionCardHarness({ notificationsMuted: false, notifyNeedsYou: null });
+  await send();
+  assert.equal(sent.length, 1);
+  const { payload, collapseId } = sent[0];
+  assert.deepEqual(payload.aps.alert, { title: 'Archive the August receipts', body: 'Does this evidence settle the task? · Revision 1' });
+  assert.equal(payload.aps.badge, 2, 'the badge is the needs-you count, which counts this conversation');
+  assert.deepEqual([payload.kind, payload.cardKind, payload.sessionID, payload.taskID],
+    ['decision-card', 'EVIDENCE', EVIDENCE_CARD.sessionId, EVIDENCE_CARD.taskId]);
+  assert.equal(payload.projectID, undefined, 'a task in no project names none');
+  assert.equal(collapseId, 'decision-card-evidence:019a0000-0000-7000-8000-000000000027', 'collapsed per revision');
+  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'decision-card');
+  assert.ok(sample, 'the shared Android fixture has no decision-card sample');
+  assert.equal(JSON.stringify(payload), JSON.stringify(sample.source));
+  assert.deepEqual([sample.pushType, sample.collapseId], ['alert', collapseId]);
+});
+
+test('a decision card in a muted conversation, one with needs-you off, or one in Trash rings nothing', async () => {
+  for (const session of [{ notificationsMuted: true, notifyNeedsYou: null }, { notificationsMuted: false, notifyNeedsYou: 'off' }, null]) {
+    const { sent, send } = decisionCardHarness(session);
+    await send();
+    assert.deepEqual(sent, [], JSON.stringify(session));
+  }
+});
+
+test('a coordinator’s raise takes the owner confirmation’s one push: the sweep, or a replay, does not ring it again', async () => {
+  const { service, sent } = deviceAlertHarness();
+  const claimed = new Set<string>();
+  const claims: unknown[] = [];
+  Object.assign((service as any).prisma, {
+    taskOwnerConfirmationReviewRecord: {
+      findUnique: async () => ({
+        kind: 'REVIEW', ownerId: 'owner-1', taskId: 'task-1', body: { needsYou: [{}, {}] }, task: { title: 'Rotate the keys' },
+        review: { request: { id: 'request-1', sessionId: 'run-1' } },
+      }),
+    },
+    // `owner_card_push`'s unique key, as ON CONFLICT DO NOTHING answers it.
+    ownerCardPush: {
+      createMany: async ({ data }: { data: Array<{ ownerId: string; cardKey: string }> }) => {
+        claims.push(...data);
+        const key = `${data[0].ownerId}:${data[0].cardKey}`;
+        if (claimed.has(key)) return { count: 0 };
+        claimed.add(key);
+        return { count: 1 };
+      },
+    },
+  });
+  await service.notifyConfirmationRaised('record-1');
+  assert.equal(sent.length, 1, 'the raise rings');
+  assert.equal(sent[0].payload.kind, 'confirmation-raised');
+  assert.deepEqual(claims[0], { ownerId: 'owner-1', cardKey: 'owner-confirmation:request-1', kind: 'OWNER_CONFIRMATION', sessionId: 'run-1' },
+    'claiming the key the decision-card sweep reads for this request');
+  await service.notifyConfirmationRaised('record-1');
+  assert.equal(sent.length, 1, 'a second raise of the same request finds it claimed');
 });

@@ -850,6 +850,17 @@ export function workStillMovingSql(alias: string): string {
     )`;
 }
 
+/** A DONE code task whose finish still has to decide its landing (§12.15 P-M1). */
+export function landingDeferredSql(alias: string): string {
+  return `(
+      ${alias}."status" = 'DONE'
+      AND ${alias}."delivered_at" IS NULL
+      AND ${isCodeTaskSql(alias)}
+      AND ${workStillMovingSql(alias)}
+      AND (${taskLandingSql(alias)}) = 'NOT_KNOWN'
+    )`;
+}
+
 /**
  * Whether this job is the line saying, in its own words, that the branch it was handed had nothing
  * on it that the upstream did not already have.

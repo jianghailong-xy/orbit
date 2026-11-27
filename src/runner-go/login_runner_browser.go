@@ -60,6 +60,35 @@ type loginBrowser interface {
 	ReserveForEngineSignIn(attempt string) error
 	EndEngineSignIn(attempt string)
 	DevToolsEndpoint() string
+	KeepSignInTab(tab string)
+	KeepsSignInTab(tab string) bool
+	ReleaseSignInTabs(tabs ...string)
+}
+
+// loginKeptTabCheckEvery is how often a kept sign-in tab is looked for among Chrome's pages. A var for tests.
+var loginKeptTabCheckEvery = 30 * time.Second
+
+// watchKeptSignInTab lets tab go once the owner has closed it. It ends when the browser no longer keeps the tab
+// (stopped, Chrome started again, or a later sign-in succeeded). A DevTools that does not answer is asked again later.
+func watchKeptSignInTab(b loginBrowser, endpoint, tab string) {
+	for b.KeepsSignInTab(tab) {
+		time.Sleep(loginKeptTabCheckEvery)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		targets, err := loginBrowserTargets(ctx, endpoint)
+		cancel()
+		if err != nil {
+			continue
+		}
+		open := false
+		for _, t := range targets {
+			open = open || t.ID == tab
+		}
+		if !open {
+			b.ReleaseSignInTabs(tab)
+			logln("login: the kept sign-in tab was closed; the browser may stop when idle again")
+			return
+		}
+	}
 }
 
 // openInBrowser carries out one LoginCommand `browser`. Runs on its own goroutine: opening the tab waits on Chrome.
@@ -129,15 +158,24 @@ func (r *loginRelay) openInLoginBrowser(ctx context.Context, lr LoginCommand, b 
 		return
 	}
 	// The tab goes once the machine is signed in: the page has nothing more to say, and the owner watching the
-	// browser is left on what was there before. A sign-in that failed or was cancelled keeps it, for what it said.
+	// browser is left on what was there before. A sign-in that failed or was cancelled keeps it, for what it said,
+	// and keeps the browser from stopping for idleness until the owner closes it (owner, 2026-11-24): a stopped
+	// browser starts again with none of its tabs.
 	go func() {
 		<-run.ctx.Done()
 		r.mu.Lock()
 		done := run.reportedDone
 		r.mu.Unlock()
-		if !done || tabID == "" {
+		if tabID == "" {
 			return
 		}
+		if !done {
+			b.KeepSignInTab(tabID)
+			watchKeptSignInTab(b, endpoint, tabID)
+			return
+		}
+		// Signed in now: what an earlier sign-in's page said is settled, so its tab no longer holds the browser.
+		b.ReleaseSignInTabs()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := loginBrowserCloseTab(ctx, endpoint, tabID); err != nil {

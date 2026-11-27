@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignInMethods } from '../lib/queries';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Admin → Users and Google sign-in (docs/google-sign-in-design.md §5.3, §5.4, §5.6, §8.1): the list
@@ -177,7 +178,9 @@ describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
     expect(cell('dev@example.test', 'Sign-in')).toBe('Password · Google');
     expect(cell('gina@gmail.com', 'Sign-in')).toBe('Google');
     expect(cell('nora@example.test', 'Sign-in')).toBe('Google · pending');
-    expect(rowOf('dev@example.test')?.querySelector('[title="dev@gmail.com"]')?.textContent).toBe('Google');
+    const google = rowOf('dev@example.test')!.querySelector('.admin-users-signin span')!;
+    expect(google.textContent).toBe('Google');
+    expect(await hoverTooltip(google)).toBe('dev@gmail.com');
     expect(cell('admin@example.test', 'Created')).toBe('Jan 5, 2026');
     expect(cell('nora@example.test', 'Created')).toBe('Oct 7, 2026');
   });

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Coordinator question card — colour schemes from the product palette</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<style>
+  body {
+    margin: 0;
+    padding: 40px 52px 56px;
+    width: 1440px;
+    background: #eef0f3;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+      'Microsoft YaHei', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  h1 { margin: 0 0 6px; font-size: 25px; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 22px; max-width: 1140px; color: var(--text-2); font-size: 14px; line-height: 1.55; }
+
+  .palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 0 0 30px; }
+  .tone { background: #fff; border: 1px solid var(--border-subtle); border-radius: 10px; padding: 11px 13px; }
+  .tone-top { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .tone-sw { width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(0,0,0,.14); flex: none; }
+  .tone-name { font-size: 12.5px; font-weight: 650; }
+  .tone-what { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+  .tone-what .where { display: block; margin-top: 4px; color: var(--text-3); font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .panel { background: #fff; border: 1px solid var(--border-subtle); border-radius: 14px;
+    padding: 20px 24px 24px; margin: 0 0 22px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .panel-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; }
+  .panel-body { display: grid; grid-template-columns: 744px minmax(0, 1fr); gap: 30px; align-items: start; }
+  .num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--text-1); color: #fff;
+    font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+    transform: translateY(1px); }
+  .num.rec { background: var(--success-solid); }
+  .panel h2 { margin: 0; font-size: 18px; font-weight: 650; }
+  .panel .cap { margin: 0 0 16px 34px; color: var(--text-2); font-size: 13.5px; line-height: 1.5; }
+
+  .stage { width: 744px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px;
+    padding: 12px; }
+  .stage .approval-card { margin: 0; max-width: 720px; }
+  .stage .approval-body { max-height: none; overflow: visible; }
+
+  .notes { margin: 0; padding: 0; list-style: none; font-size: 13.5px; line-height: 1.62; color: var(--text-1); }
+  .notes li { margin: 0 0 12px; padding-left: 20px; position: relative; }
+  .notes li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--text-4); }
+  .notes li.good::before { background: var(--success-solid); }
+  .notes li.bad::before { background: var(--error-solid); }
+  .notes b { font-weight: 650; }
+  .token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    padding: 1px 5px; border-radius: 4px; background: var(--fill-muted); color: var(--text-1); white-space: nowrap; }
+  .verdict { margin: 14px 0 0; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.55; }
+  .verdict.yes { background: var(--success-bg); border: 1px solid var(--success-border); color: var(--text-1); }
+  .verdict.no { background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--text-1); }
+  .verdict b { font-weight: 650; }
+
+  /* Scheme 1: the card stays blue; only the edge gets heavier while a person is being asked. */
+  .scheme-blue .approval-card.coordinator-question {
+    border: 1.5px solid var(--brand);
+  }
+  /* Scheme 3: the exception-card language — amber everywhere. */
+  .scheme-amber .approval-card.coordinator-question {
+    border: 1.5px solid var(--warning-solid);
+    background: var(--warning-bg);
+  }
+  .scheme-amber .approval-card.coordinator-question .approval-head {
+    background: var(--warning-bg);
+    border-bottom-color: var(--warning-border);
+  }
+  .scheme-amber .approval-card.coordinator-question .approval-actions {
+    border-top-color: var(--warning-border);
+  }
+
+  .code { margin: 0; padding: 14px 16px; border-radius: 10px; background: #1f2329; color: #e6e8eb;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.65;
+    overflow: hidden; }
+  .code .c { color: #8f959e; }
+  .code .p { color: #ffd591; }
+  .code .k { color: #7aa2ff; }
+  .foot { margin-top: 26px; color: var(--text-3); font-size: 12.5px; line-height: 1.6; }
+  .foot b { color: var(--text-2); }
+  .foot code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .label { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3);
+    font-weight: 650; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+
+<h1>Coordinator question card — a scheme from the product's own palette</h1>
+<p class="sub">
+  Same card, three tones, every value already a token in <span class="token">index.css</span>. The card is drawn with the
+  real component classes; only this board's frame and captions are drawn. Question: which colour should an
+  <b>open</b> question wear, so it reads as “somebody is being asked” and not as “something went wrong”?
+</p>
+
+<div class="palette">
+  <div class="tone">
+    <div class="tone-top"><span class="tone-sw" style="background:#3370ff"></span><span class="tone-name">Brand blue</span></div>
+    <div class="tone-what">The platform is asking you; the pressable action.
+      <span class="where">approval cards, decision-strip dot</span></div>
+  </div>
+  <div class="tone">
+    <div class="tone-top"><span class="tone-sw" style="background:#fa8c16"></span><span class="tone-name">Amber</span></div>
+    <div class="tone-what">Attention, or “this is yours to act on”.
+      <span class="where">owner open-item cards, warning marks</span></div>
+  </div>
+  <div class="tone">
+    <div class="tone-top"><span class="tone-sw" style="background:#2ea121"></span><span class="tone-name">Green</span></div>
+    <div class="tone-what">Done, confirmed, merged.
+      <span class="where">receipts, promotion merged</span></div>
+  </div>
+  <div class="tone">
+    <div class="tone-top"><span class="tone-sw" style="background:#5b4bd6"></span><span class="tone-name">Purple</span></div>
+    <div class="tone-what">A landing in its own session's hands.
+      <span class="where">--fixing</span></div>
+  </div>
+  <div class="tone">
+    <div class="tone-top"><span class="tone-sw" style="background:#dee0e3"></span><span class="tone-name">Neutral</span></div>
+    <div class="tone-what">Nobody has to act; the coordinator is handling it.
+      <span class="where">open-item card, is-coordinator</span></div>
+  </div>
+</div>
+
+<!-- ① ─────────────────────────────────────────────────────────────────────────────── -->
+<section class="panel">
+  <div class="panel-head"><span class="num rec">1</span><h2>Scheme 1 — brand blue, solid heavier edge <span style="color:var(--success);font-size:13px;font-weight:650">Chosen · 2026-11-26</span></h2></div>
+  <p class="cap">The card keeps the tone it already has everywhere; only the edge is emphasised while the question is open.</p>
+  <div class="panel-body">
+    <div class="stage scheme-blue" id="stage-one"></div>
+    <div>
+      <ul class="notes">
+        <li class="good"><b>Surface, head rule, mark and action stay <span class="token">--brand</span></b> — nothing new is introduced, and the answered card drops back to the 1px edge.</li>
+        <li class="good"><b>This is the product's own “asked of you” colour.</b> The web strip that points at what waits marks it with a blue dot (<span class="token">decision-strip-dot</span>, <span class="token">#3b82f6</span>).</li>
+        <li class="good"><b>The card's own comment says so:</b> “the mark is in the brand colour rather than the warning one — nothing is wrong, somebody is being asked” (<span class="token">index.css:14726</span>).</li>
+        <li class="good"><b>It was Q1</b>, the option the 2026-11-13 board itself recommended; only one value changes.</li>
+      </ul>
+      <p class="verdict yes"><b>Matches the product:</b> blue is “someone is asking you”, and the thicker solid edge is the emphasis — no warning tone borrowed.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ② ─────────────────────────────────────────────────────────────────────────────── -->
+<section class="panel">
+  <div class="panel-head"><span class="num">2</span><h2>Scheme 2 — brand blue, hairline edge</h2></div>
+  <p class="cap">The card as it was before 2026-11-13: the plain approval chrome, no emphasis beyond its own tint.</p>
+  <div class="panel-body">
+    <div class="stage" id="stage-two"></div>
+    <div>
+      <ul class="notes">
+        <li class="good"><b>No new tone and no thicker line</b> — the most conservative scheme; the card is exactly the approval card.</li>
+        <li>The pointing is left to the strip and the project page: the “1 open question below” line scrolls to it.</li>
+        <li class="bad"><b>Weakest in a list:</b> in a transcript of several cards, a plain 1px blue card does not say “answer me” before reading.</li>
+      </ul>
+      <p class="verdict yes"><b>Matches the product</b> — but it gives up the thing the 2026-11-13 pick was for: being visible before it is read.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ③ ─────────────────────────────────────────────────────────────────────────────── -->
+<section class="panel">
+  <div class="panel-head"><span class="num">3</span><h2>Scheme 3 — amber card</h2></div>
+  <p class="cap">The exception-card language: the same amber surface the owner's open-item cards wear, plus the heavier edge.</p>
+  <div class="panel-body">
+    <div class="stage scheme-amber" id="stage-three"></div>
+    <div>
+      <ul class="notes">
+        <li>Amber <b>is</b> a product colour for “this is yours to act on” — but it is the <b>exception</b> language: conflicts, failed checks, escalations (<span class="token">.project-open-item-card.is-owner</span>, <span class="token">index.css:26545</span>).</li>
+        <li class="bad">Amber also means <b>warning / criteria change</b> in the card language; the Q2 board itself warned that the two will be confused.</li>
+        <li class="bad">It paints a question — a normal, healthy thing a coordinator does — as a fault, and it is the only card whose surface leaves its own family.</li>
+      </ul>
+      <p class="verdict no"><b>Product-adjacent, not product-matching:</b> it is the exception tone applied to something that is not an exception.</p>
+    </div>
+  </div>
+</section>
+
+<!-- change + sources ──────────────────────────────────────────────────────────────── -->
+<section class="panel">
+  <div class="panel-head"><span class="num">4</span><h2>What Scheme 1 changes</h2></div>
+  <div class="split" style="margin-top:10px">
+    <div>
+      <p class="label">One value</p>
+      <pre class="code"><span class="c">/* was: border: 1.5px solid var(--warning-solid); */</span>
+.approval-card.<span class="p">coordinator-question</span> {
+  border: 1.5px solid <span class="k">var(--brand)</span>;
+}
+<span class="c">/* nothing else moves: surface, head rule, mark,
+   action rule and button were brand already */</span></pre>
+    </div>
+    <div>
+      <p class="label">Why blue and not amber</p>
+      <ul class="notes" style="font-size:13px">
+        <li>The card is <b>an ask</b>, not a fault: the product's calm reader-facing ask is brand.</li>
+        <li>The web's own “something waits for you” mark is a <b>blue dot</b> (<span class="token">decision-strip-dot</span>).</li>
+        <li>Amber stays available for real exceptions and criteria changes, so the two never read alike.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<p class="foot">
+  <b>Evidence:</b> approval chrome <code>src/web/src/index.css:14149</code>; question mark comment <code>:14726</code>;
+  blue attention dot <code>:10129</code>; amber owner-item card <code>:26545</code>; amber warning tokens <code>:44-48</code>;
+  the 2026-11-13 board <code>docs/mocks/decision-receipt-fold/02-question-border.html</code> (Q1 recommended, Q2 picked).<br>
+  <b>Chosen 2026-11-26: Scheme 1, web and Apple.</b> Web is <code>src/web/src/index.css</code>; Apple is
+  <code>ApprovalCards.swift</code>'s <code>tone: .blue</code> with <code>emphasized: open</code>. Android already reads the question in
+  the brand tone (<code>CardPreviews</code> BLUE; the card surface is neutral, with no amber chrome to remove).
+</p>
+
+<template id="card-tpl">
+  <div class="approval-card coordinator-question">
+    <div class="approval-head coordinator-question-head">
+      <span class="coordinator-question-heading">The coordinator has a question</span>
+      <span class="criteria-provenance prov-brand">FROM COORDINATOR</span>
+    </div>
+    <div class="approval-body is-questions coordinator-question-body">
+      <div class="coordinator-question-text md">
+        For each GPT account’s reset-quota card, which layout should the Plan usage popover use?
+      </div>
+      <label class="coordinator-question-option is-chosen">
+        <input type="radio" name="Q" checked>
+        <span class="coordinator-question-option-text">Option A — stacked blocks, current account first
+          <span class="coordinator-question-recommended">Recommended</span></span>
+      </label>
+      <label class="coordinator-question-option">
+        <input type="radio" name="Q">
+        <span class="coordinator-question-option-text">Option B — compact cards, one button each</span>
+      </label>
+      <p class="coordinator-question-meta">Blocks 1 task · If you don’t answer: the Web task stays blocked.</p>
+    </div>
+    <div class="card-actions approval-actions coordinator-question-actions">
+      <button type="button" class="card-action card-action--primary">Send answer</button>
+      <span class="coordinator-question-asked">asked 44s ago</span>
+    </div>
+  </div>
+</template>
+
+<script>
+  const tpl = document.getElementById('card-tpl');
+  for (const [id, amber] of [['stage-one', false], ['stage-two', false], ['stage-three', true]]) {
+    const node = tpl.content.firstElementChild.cloneNode(true);
+    if (amber) node.querySelector('.prov-brand')?.classList.remove('prov-brand');
+    document.getElementById(id).appendChild(node);
+  }
+</script>
+</body>
+</html>

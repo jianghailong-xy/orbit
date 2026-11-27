@@ -93,12 +93,17 @@ func init() {
 		sessionCodexCoordinatorContextV1,
 		sessionSourcePinV1,
 		codexRateLimitResetCapabilityV1,
+		codexRateLimitResetCapabilityV2,
 		integrationJobCapabilityV1,
 		integrationObserveCapabilityV1,
 		integrationProgressV2Capability,
 		promotionAutomaticLandCapabilityV1,
+		integrationPullRequestCapabilityV1,
+		sessionMergePullRequestCapabilityV1,
+		pushAsMeCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		antigravityGoogleLoginCapabilityV1,
+		antigravityGoogleLoginMacOSCapabilityV1,
 		codexAccountRemoveCapabilityV1,
 		codexAccountMoveCapabilityV1,
 		claudeAccountLoginCapabilityV1,
@@ -138,7 +143,7 @@ func init() {
 		bgOwnerStopCapabilityV1,
 		bgOutputTailCapabilityV1,
 		overCapacityCapabilityV1,
-	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
+	}, append(cursorAccountCapabilities(), defaultSignOutCapabilities()...)...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
 		runnerCapabilitiesV1 += "," + ownerSecretCapabilityV1
@@ -270,6 +275,14 @@ type Transport struct {
 	// releaseOffered is what the latest successful heartbeat answer said of the session-release protocol
 	// (session_release.go): false until one says it, and on the first that does not.
 	releaseOffered atomic.Bool
+	// draining is whether this runner's pool drains for an update (sessionPool.isDrainingForUpdate), which every
+	// inbox fetch says (draining=1, docs/runner-update-drain-design.md §7.2). Set by runLoop once it has a pool,
+	// before any session starts; nil on every other transport, whose fetches say nothing.
+	draining func() bool
+	// returnHeldSlot gives back, while the pool drains for an update, the slot a session holds with no turn running
+	// under it (sessionPool.returnHeldSlot, §7.3), waiting for the control plane's answer, so its callers run it on a
+	// goroutine of their own. Set by runLoop with draining; nil on every other transport.
+	returnHeldSlot func(sessionID string)
 	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
 	observerMu sync.Mutex
 	observer   func(transportEvent)
@@ -659,6 +672,12 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	if leaseGeneration != "" {
 		path += "&leaseGeneration=" + url.QueryEscape(leaseGeneration)
 	}
+	// While the pool drains for an update the control plane hands this fetch no new message, shell or reload, and
+	// still hands it every control turn. A control plane that predates the field ignores it, and the runner's own
+	// hold (heldForUpdate, and the poller's wait for a held turn's permit) is the backstop.
+	if t.draining != nil && t.draining() {
+		path += "&draining=1"
+	}
 	if err := t.do(ctx, "GET", path, nil, &r, fetchCallTimeout); err != nil {
 		return nil, err
 	}
@@ -894,6 +913,10 @@ func takeoverClaimedSession(ctx context.Context, t *Transport, job *ClaimedSessi
 func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCompleteRequest) (string, error) {
 	var r TurnCompleteResponse
 	b.LeaseOwner = t.leaseOwner
+	// A turn that ends while the pool drains for an update keeps no slot for a follow-up (§7.3): the control plane
+	// answers PENDING, and the permit is parked below rather than held for the update. An older control plane ignores
+	// the field and answers RUNNING, which the hold (holdFollowUpForUpdate) still covers.
+	b.Draining = t.draining != nil && t.draining()
 	// Every path a completion is sent by, a kept one an earlier process journaled included (secret_wire.go).
 	b = scrubTurnComplete(b, sessionID)
 	// What this completion reports of the worktree is newer than any heartbeat sample scanned before
@@ -949,6 +972,18 @@ func (t *Transport) releaseTurnLeases(ctx context.Context, sessionID, leaseGener
 		body["leaseGeneration"] = leaseGeneration
 	}
 	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/release-leases", body, nil, 15*time.Second)
+}
+
+// returnSlot gives back the slot this process holds for a session under which no turn runs, while its pool drains
+// for an update (POST /runner/sessions/:id/return-slot, docs/runner-update-drain-design.md §7.3). The answer is the
+// session's status after it: PENDING or AWAITING_INPUT when the slot was given back (or the session no longer held
+// one), RUNNING when a turn in flight keeps it.
+func (t *Transport) returnSlot(ctx context.Context, sessionID string) (string, error) {
+	var r struct {
+		Status string `json:"status"`
+	}
+	err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/return-slot", map[string]string{"leaseOwner": t.leaseOwner}, &r, 15*time.Second)
+	return r.Status, err
 }
 
 // activateTurnLeases makes a freshly reserved process generation the only inbox consumer.
@@ -2101,6 +2136,20 @@ func (t *Transport) requestProjectDone(sessionID, id string, body map[string]int
 	return out, err
 }
 
+// requestProjectReopen files a session's request that the account owner reopen a DONE or CANCELLED
+// project, and returns at once: the owner answers on the card. Any session may ask; the session
+// header names the asker. A project already OPEN is 409 PROJECT_ALREADY_OPEN and an ask the owner
+// declined is 409 REOPEN_REQUEST_DECLINED, both travelling as the server raised them.
+func (t *Transport) requestProjectReopen(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/reopen-requests", body,
+		&out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // criterionConfirmationCall is the coordinator's confirm, withdraw or start-a-check on one of its
 // project's CONFIRMATION criteria (migration 0545). The session header is the authority: the server
 // checks it against the project's own coordinator pointer.
@@ -3049,6 +3098,23 @@ func (t *Transport) writeWikiNote(sessionID string, body interface{}) (json.RawM
 func (t *Transport) draftWiki(sessionID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	_, err := t.doWiki(http.MethodPost, "/runner/wiki/drafts", body, &out, taskOpTimeout, sessionHeader(sessionID), wikiRecordsOnce(body))
+	return out, err
+}
+
+// readWiki is a wiki chat's read of its space (`wiki_read`, contract `chat.read`). Only a read: it is sent again like one.
+func (t *Transport) readWiki(sessionID string, query wikiReadQueryArgs) (json.RawMessage, error) {
+	values := url.Values{}
+	for name, value := range map[string]string{"q": query.Q, "doc": query.Doc, "section": query.Section, "draft": query.Draft, "more": query.More} {
+		if value != "" {
+			values.Set(name, value)
+		}
+	}
+	path := "/runner/wiki/read"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var out json.RawMessage
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 

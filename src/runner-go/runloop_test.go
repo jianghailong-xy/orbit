@@ -1171,7 +1171,7 @@ func TestUnstartedWorktreeCommands(t *testing.T) {
 // TestBackgroundScansReadOnlyAgentWorkDirs: a runner registered from ~/Desktop keeps that directory
 // as its own workDir, but the scans it repeats in the background — repo health every minute, slash
 // assets every five — read only its agents' workDirs and the user's ~/.claude. On a Mac every read
-// in ~/Desktop, ~/Documents or ~/Downloads has macOS ask the user, in the runner's name, for access.
+// in ~/Desktop, ~/Drive or ~/Downloads has macOS ask the user, in the runner's name, for access.
 func TestBackgroundScansReadOnlyAgentWorkDirs(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

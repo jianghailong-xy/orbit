@@ -17,7 +17,7 @@ function refusal(status: HttpStatus, code: string, message: string, extra: Recor
 const notFound = () => refusal(HttpStatus.NOT_FOUND, UPLOAD_NOT_FOUND, 'No such upload in progress.');
 
 /**
- * The owner's resumable upload (docs/orbit-files-drive-technical-design.md §4.1): open a staging, send its chunks one
+ * The owner's resumable upload (docs/drive-technical-design.md §4.1): open a staging, send its chunks one
  * request each (DriveChunksService.putChunk), ask which have arrived, and complete, which creates the file and commits it
  * through DriveService.commit, keyed by the staging id so a retry never makes a second file. Every call takes the owner
  * from the credential; another account's upload is not found.

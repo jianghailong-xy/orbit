@@ -72,6 +72,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { completeHumanTaskForPgTest } from './task-completion-test-helper';
 import { TasksService } from './tasks.service';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 /** Emails are unique and this database can outlive one run. */
@@ -204,14 +205,14 @@ async function queued(
   listId: string,
 ): Promise<Array<{ id: string; taskId: string | null; status: string; cap: number | null }>> {
   const rows = await db.session.findMany({
-    where: { batchId: listId, status: { in: ['PENDING', 'RUNNING'] } },
-    select: { id: true, taskId: true, status: true, batchMaxConcurrent: true },
+    where: { batchId: listId, turnState: { in: ['IN_FLIGHT', 'QUEUED'] } },
+    select: { id: true, taskId: true, ...WORD_SELECT, batchMaxConcurrent: true },
     orderBy: { createdAt: 'asc' },
   });
   return rows.map((row) => ({
     id: row.id,
     taskId: row.taskId,
-    status: String(row.status),
+    status: String(wordOf(row)),
     cap: row.batchMaxConcurrent,
   }));
 }
@@ -389,11 +390,11 @@ suite('which door materialises a run past a list cap, on real PostgreSQL', async
     );
     const manual = await db.session.findFirstOrThrow({
       where: { batchId: f.listId, taskId: f.y },
-      select: { dispatchOrigin: true, runSource: true, status: true, batchMaxConcurrent: true },
+      select: { dispatchOrigin: true, runSource: true, ...WORD_SELECT, batchMaxConcurrent: true },
     });
     assert.equal(manual.dispatchOrigin, 'USER', 'the manual run is not attributed to its door');
     assert.equal(manual.runSource, 'MANUAL');
-    assert.equal(manual.status, 'PENDING', 'the run past the cap is not waiting for a slot');
+    assert.equal(wordOf(manual), 'PENDING', 'the run past the cap is not waiting for a slot');
     assert.equal(manual.batchMaxConcurrent, 1, 'the manual run does not carry the list ceiling');
 
     // And the automatic rows are distinguishable from it by the same columns, which is how the

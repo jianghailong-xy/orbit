@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { RunnerApiController } from './runner-api.controller';
 
@@ -268,7 +269,7 @@ test('commit result rejects stale operation ABA and stale process ownership', as
     },
     {
       name: 'session left the idle boundary',
-      row: commitRow({ status: RunStatus.RUNNING }),
+      row: commitRow({ turnState: 'IN_FLIGHT', status: RunStatus.RUNNING }),
       operationId: NEW_OPERATION,
       leaseOwner: NEW_OWNER,
     },

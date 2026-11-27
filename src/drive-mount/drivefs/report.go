@@ -16,7 +16,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-// Reporter writes what an agent reads beside the mount, in the plain parent directory /run/orbit-files (§5.6, §5.7):
+// Reporter writes what an agent reads beside the mount, in the plain parent directory /run/orbit-drive (§5.6, §5.7):
 //
 //   - errors.log, one line per refusal or failure, saying why (an errno alone does not), the last 1,000 lines;
 //   - status.json, whether the drive is connected, since when not, and how many handles hold uncommitted bytes;
@@ -40,7 +40,7 @@ type Reporter struct {
 
 // ReporterOptions say where the reporter writes.
 type ReporterOptions struct {
-	// Dir is the plain parent directory, /run/orbit-files: errors.log, status.json and unsent/ are in it.
+	// Dir is the plain parent directory, /run/orbit-drive: errors.log, status.json and unsent/ are in it.
 	Dir string
 	// ShownDir is how agents know Dir, for the paths errors.log names (defaults to Dir).
 	ShownDir string
@@ -141,7 +141,7 @@ var errnoNames = map[fuse.Status]string{
 	fuse.Status(syscall.EISDIR): "EISDIR", fuse.Status(syscall.ENOSPC): "ENOSPC",
 	fuse.Status(syscall.ENOTEMPTY): "ENOTEMPTY", fuse.Status(syscall.EOPNOTSUPP): "EOPNOTSUPP",
 	fuse.Status(syscall.ENOLCK): "ENOLCK", fuse.Status(syscall.ENAMETOOLONG): "ENAMETOOLONG",
-	fuse.Status(syscall.ENODEV): "ENODEV",
+	fuse.Status(syscall.ENODEV): "ENODEV", fuse.Status(syscall.EDQUOT): "EDQUOT",
 }
 
 func errnoName(st fuse.Status, op string) string {
@@ -165,7 +165,7 @@ func (r *Reporter) Refusal(st fuse.Status, op, shownPath, detail, reason string)
 
 // Log appends one line to errors.log:
 //
-//	2026-11-20T10:00:00Z EOPNOTSUPP write /home/orbit/Files/Proj/app.db at offset 4096: the drive does not change a file in place; ...
+//	2026-11-20T10:00:00Z EOPNOTSUPP write /home/orbit/Drive/Proj/app.db at offset 4096: the drive does not change a file in place; ...
 //
 // The same line again within a second is not repeated.
 func (r *Reporter) Log(st fuse.Status, op, shownPath, detail, reason string) {

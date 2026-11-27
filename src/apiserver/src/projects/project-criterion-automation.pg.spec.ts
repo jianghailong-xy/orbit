@@ -6,12 +6,12 @@ import {
   CreatorType,
   PrismaClient,
   ProjectStatus,
-  RunStatus,
   RunnerStatus,
   TaskCompletionCriterion,
   TaskStatus,
   TaskVerdict,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { BadRequestException } from '@nestjs/common';
 import { Client } from 'pg';
 

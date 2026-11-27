@@ -280,7 +280,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// waits or stopped, and each candidate's newest check and merge. It is what replaces a
 	// coordinator querying the production database, and it writes nothing.
 	// K7 adds request-promotion: one durable request, consumed by one candidate.
-	if len(specs) != 14 {
+	if len(specs) != 15 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -311,7 +311,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	for _, tool := range []string{
 		"project_create", "project_update", "project_delete",
 		"project_merge_evidence", "project_ensure_coordinator", "project_send",
-		"project_request_start", "project_request_done",
+		"project_request_start", "project_request_done", "project_request_reopen",
 	} {
 		write, ok := specs[tool]
 		if !ok {

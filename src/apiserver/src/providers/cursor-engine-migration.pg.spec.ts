@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { Client } from 'pg';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 /**
  * 0426 against a real server: `cursor` stops being a slug anybody's key, pool or retired name can hold,
@@ -60,6 +61,9 @@ test('P1 cursor engine migration on PostgreSQL', { concurrency: 1, timeout: 300_
   const sql = new Client({ connectionString: PG_URL, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The replayed migration predates deploy D4 (migration 1711), which dropped session.status: it runs on the
+  // database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   t.after(() => sql.end().catch(() => undefined));
 
   const one = async <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>
@@ -99,8 +103,8 @@ test('P1 cursor engine migration on PostgreSQL', { concurrency: 1, timeout: 300_
   ) => {
     const id = randomUUID();
     await sql.query(
-      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, engine, model, status, updated_at)
-       VALUES ($1, 'cursor', 'cursor', $2, $2, $3, $4, $5, $6::run_status, now())`,
+      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, engine, model, turn_state, updated_at)
+       VALUES ($1, 'cursor', 'cursor', $2, $2, $3, $4, $5, (CASE ($6)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), now())`,
       [id, ownerId, provider, opts.engine ?? null, opts.model ?? null, opts.status ?? 'AWAITING_INPUT'],
     );
     return id;

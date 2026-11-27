@@ -105,7 +105,7 @@ class RunnerStackDeviceTest {
         back(); back()
         // macOS: Google sign-in not supported there; Antigravity on the runner's own key.
         click(hasText("a13c-mac") and hasClickAction()); await("Max Concurrent")
-        await("Google sign-in is not supported on macOS runners yet. Use a Gemini API key."); await("env key")
+        await("Google sign-in is not supported on this runner's operating system. Use a Gemini API key."); await("env key")
         capture("stack-mac-runner")
         back()
         // Too old to relay Google sign-in.

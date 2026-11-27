@@ -8,7 +8,7 @@ import {
   runningPermissionMode,
   widerSessionRefusal,
 } from '../common/permission-mode';
-import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
+import { heldFilter } from '../common/session-release';
 
 /**
  * What a session may do to another session that already exists: give it a turn, or end, complete,
@@ -248,7 +248,7 @@ export async function assertMayEndWorkingRuns(
   act: 'confirmEvidence' | 'writeVerdict' | 'settleTask',
 ): Promise<void> {
   const runs = await db.session.findMany({
-    where: { ownerId, taskId, startsTaskWork: true, status: { in: TASK_OCCUPYING } },
+    where: { ownerId, taskId, startsTaskWork: true, ...heldFilter() },
     select: { id: true },
   });
   for (const run of runs) await assertSessionMayReach(db, ownerId, callerSessionId, run.id, act);

@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -8,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -22,6 +25,9 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.DirectoryData
+import io.orbitd.android.directory.DirectoryWorkspace
+import io.orbitd.android.directory.Folder
+import io.orbitd.android.directory.orderedWorkspaces
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.RunnerPage
@@ -77,8 +83,8 @@ fun NewSessionComposer(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val composerHeight = if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
         Column(Modifier.fillMaxSize()) {
-            // The workspace's name is the bar's title (iOS `WorkspaceTitle`), so the page opens on the hero.
-            route.folderId?.let { id -> Text(data.folders.firstOrNull { ObjectId.same(it.id, id) }?.name ?: "Folder", Modifier.padding(horizontal = 16.dp)) }
+            // The workspace's name is the bar's title (iOS `WorkspaceTitle`), so the page opens on the hero; its folder is the place
+            // pill's to say.
             error?.let { Text(it); TextButton(onClick = { retry++ }) { Text("Retry workspace") } }
             // First the engine — the CLI this session runs on for good — then, in the composer's model menu, the credential it spends.
             // The engine is the hero, as iOS draws it: the vendor's mark, the engine's name as the one tappable identity, then the line
@@ -105,6 +111,19 @@ fun NewSessionComposer(
                             Spacer(Modifier.width(7.dp))
                             Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        Spacer(Modifier.height(10.dp))
+                        PlacePill(
+                            workspaces = orderedWorkspaces(data.workspaces).filter { it.runnerId != null || ObjectId.same(it.id, workspaceId) },
+                            workspaceId = workspaceId,
+                            workspaceName = data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceId) }?.name ?: workspace.text("name").orEmpty(),
+                            folders = data.folders.filter { ObjectId.same(it.workspaceId, workspaceId) }.sortedBy { it.name.lowercase() },
+                            folderId = route.folderId,
+                            enabled = choosable,
+                            // Another workspace's draft files in no folder; another folder is this workspace's draft filed there. Each
+                            // is the draft that place keeps (`DraftTarget`), with what was typed there.
+                            onWorkspace = { id -> replace(route.copy(workspaceId = id, folderId = null)) },
+                            onFolder = { id -> replace(route.copy(folderId = id)) },
+                        )
                         Spacer(Modifier.height(18.dp))
                         Text("Send a task to get started.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(5.dp))
@@ -126,6 +145,90 @@ fun NewSessionComposer(
             }
         }
     }
+}
+
+/**
+ * Where the session runs, under the engine (docs/mocks/new-session-place, option A; web's `PlacePill`): one bordered pill,
+ * `[workspace] / [folder] ▾`, naming the folder only when one is picked — a folder is a sidebar group, so none is the quiet default.
+ * Its one menu lists the workspaces, then this workspace's folders under None.
+ */
+@Composable
+private fun PlacePill(
+    workspaces: List<DirectoryWorkspace>,
+    workspaceId: String,
+    workspaceName: String,
+    folders: List<Folder>,
+    folderId: String?,
+    enabled: Boolean,
+    onWorkspace: (String) -> Unit,
+    onFolder: (String?) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    val folder = folders.firstOrNull { ObjectId.same(it.id, folderId) }
+    val label = folder?.let { "$workspaceName / ${it.name}" } ?: workspaceName
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Box {
+        Row(
+            Modifier.clip(CircleShape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                .clickable(enabled = enabled, role = Role.Button) { open = true }
+                .semantics(mergeDescendants = true) { contentDescription = "Runs in: $label" }
+                .testTag("new-session-place")
+                .heightIn(min = 32.dp).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(painterResource(R.drawable.ic_terminal), null, Modifier.size(15.dp), tint = muted)
+            Spacer(Modifier.width(6.dp))
+            Text(workspaceName, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 140.dp))
+            folder?.let {
+                Text(" / ", style = MaterialTheme.typography.bodyMedium, color = muted.copy(alpha = 0.6f))
+                Icon(painterResource(R.drawable.ic_folder), null, Modifier.size(15.dp), tint = muted)
+                Spacer(Modifier.width(6.dp))
+                Text(it.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 120.dp))
+            }
+            Spacer(Modifier.width(6.dp))
+            Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(14.dp), tint = muted)
+        }
+        DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.testTag("new-session-place-menu")) {
+            PlaceHeading("Workspace")
+            workspaces.forEach { w ->
+                PlaceRow(w.name, R.drawable.ic_terminal, ObjectId.same(w.id, workspaceId)) {
+                    open = false
+                    if (!ObjectId.same(w.id, workspaceId)) onWorkspace(w.id)
+                }
+            }
+            if (folders.isNotEmpty()) {
+                HorizontalDivider()
+                PlaceHeading("Folder in $workspaceName · optional")
+                PlaceRow("None", null, folder == null) { open = false; if (folder != null) onFolder(null) }
+                folders.forEach { f ->
+                    PlaceRow(f.name, R.drawable.ic_folder, ObjectId.same(f.id, folder?.id)) {
+                        open = false
+                        if (!ObjectId.same(f.id, folder?.id)) onFolder(f.id)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaceHeading(text: String) {
+    Text(text.uppercase(), Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+        overflow = TextOverflow.Ellipsis)
+}
+
+/** A row of the place menu: its name, ticked when it is the draft's; None has no icon. */
+@Composable
+private fun PlaceRow(name: String, icon: Int?, on: Boolean, pick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (on) FontWeight.SemiBold else null) },
+        onClick = pick,
+        leadingIcon = icon?.let { { Icon(painterResource(it), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) } },
+        trailingIcon = if (on) { { Icon(painterResource(R.drawable.ic_check), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary) } } else null,
+    )
 }
 
 /**

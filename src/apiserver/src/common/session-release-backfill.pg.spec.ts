@@ -13,11 +13,11 @@
  *       writers leave them, among them a refused source's PENDING turn (H4), a lost runner's turn still IN_FLIGHT, a
  *       non-work turn ahead of the work turn, a failed import with a message queued during it (in Trash), open
  *       requests to bridged rows with and without a retry armed; the production pre-check
- *       (scripts/session-release-cause-drop-precheck.sql) is run on it and answers what it should
+ *       (PRECHECK below) is run on it and answers what it should
  *   (3) 1441, 1442 and 1443 are applied by prisma: every row's last_turn_outcome is what the fixture's `backfilled`
  *       says, the carrying turn and no other got FAILED and the session's error, the failure question (without the
  *       bridge) answers as deploy 2's reading (with it) did before on every row but W5 and A2, the column and its CHECK
- *       are gone, no trigger names a terminal status, and the post-check (scripts/session-release-cause-drop-postcheck.sql)
+ *       are gone, no trigger names a terminal status, and the post-check (POSTCHECK)
  *       answers zero where the criterion asks for zero
  *   (4) applied a second time, the three write nothing
  *
@@ -41,6 +41,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { prismaClientFor } from '../prisma/prisma-client';
 import { releaseWasFailure, releaseWasFailureSql } from './session-release';
 import { backfilled, RELEASE_SHAPES, type ReleaseShape } from './session-release-shapes.fixture';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -54,6 +56,93 @@ const DEPLOY_3 = [
   '1441_session_turn_outcome_backfill', '1442_ended_triggers_drop_status_bridge', '1443_session_release_cause_drop',
 ];
 
+/**
+ * The read-only checks run around that deploy, on the database as it was then: it still has session.status, which both
+ * read, so they live here with the migrations they check rather than under scripts/, where nothing reads the column
+ * (docs/session-status-retirement-plan.md §2.6). A "bridged" row is one 1441 writes: released, FAILED, no end reason,
+ * no FAILED turn outcome, not in Trash.
+ */
+const PRECHECK = `
+WITH bridged AS (
+  SELECT s."id", s."release_cause", s."finished_at", s."retry_at"
+    FROM "session" s
+   WHERE s."finished_at" IS NOT NULL AND s."end_reason" IS NULL AND s."status"::text = 'FAILED'
+     AND s."last_turn_outcome" IS DISTINCT FROM 'FAILED' AND s."deleted_at" IS NULL
+), a2 AS (
+  SELECT s."id"
+    FROM "session" s
+   WHERE s."finished_at" IS NOT NULL AND s."end_reason" IS NULL AND s."status"::text <> 'FAILED'
+     AND s."last_turn_outcome" = 'FAILED'
+), trashed AS (
+  SELECT s."id", s."import_source_cwd"
+    FROM "session" s
+   WHERE s."finished_at" IS NOT NULL AND s."end_reason" IS NULL AND s."status"::text = 'FAILED'
+     AND s."last_turn_outcome" IS DISTINCT FROM 'FAILED' AND s."deleted_at" IS NOT NULL
+)
+SELECT
+  (SELECT count(*) FROM bridged) AS bridged_rows,
+  (SELECT json_object_agg(COALESCE(cause, 'null'), n) FROM (
+     SELECT "release_cause" AS cause, count(*) AS n FROM bridged GROUP BY "release_cause") c) AS bridged_by_cause,
+  (SELECT count(*) FROM bridged WHERE "finished_at" >= TIMESTAMP '2026-11-22 04:09:45') AS bridged_since_deploy2,
+  (SELECT count(*) FROM bridged b WHERE NOT EXISTS (
+     SELECT 1 FROM "conversation_turn" t WHERE t."session_id" = b."id" AND t."outcome" = 'FAILED'))
+    AS bridged_without_failed_turn,
+  (SELECT count(*) FROM bridged b WHERE EXISTS (
+     SELECT 1 FROM "conversation_turn" t
+      WHERE t."session_id" = b."id" AND t."outcome" IS NULL
+        AND t."id" = (SELECT c."id" FROM "conversation_turn" c
+                       WHERE c."session_id" = b."id" AND c."kind" IN ('message', 'shell')
+                         AND c."status" IN ('IN_FLIGHT', 'PENDING')
+                       ORDER BY (c."status" = 'IN_FLIGHT') DESC, c."seq" ASC LIMIT 1))) AS carrying_turns,
+  (SELECT count(*) FROM a2) AS residual_a2_rows,
+  (SELECT count(*) FROM "session" s
+    WHERE s."finished_at" IS NOT NULL AND s."end_reason" IS NOT NULL AND s."status"::text <> 'FAILED'
+      AND s."last_turn_outcome" = 'FAILED') AS stale_copy_rows,
+  (SELECT count(*) FROM trashed) AS trashed_unbridged,
+  (SELECT count(*) FROM trashed WHERE "import_source_cwd" IS NOT NULL) AS failed_imports,
+  (SELECT count(*) FROM "session_request" r JOIN bridged b ON b."id" = r."to_session_id"
+    WHERE r."state" = 'OPEN' AND b."retry_at" IS NULL) AS requests_closed_by_backfill,
+  (SELECT count(*) FROM "session_request" r JOIN bridged b ON b."id" = r."from_session_id"
+    WHERE r."state" <> 'OPEN' AND r."reply_client_turn_id" IS NULL AND r."reply_held_at" IS NOT NULL
+      AND r."reply_comment_due_at" IS NULL) AS replies_due_by_backfill,
+  (SELECT count(*) FROM "task_owner_confirmation_review" v JOIN a2 ON a2."id" = v."reviewer_session_id"
+    WHERE v."reviewer_ended_at" IS NULL) AS reviews_ended_by_backfill,
+  (SELECT count(*) FROM "session"
+    WHERE "release_cause" IS NOT NULL AND "finished_at" >= TIMESTAMP '2026-11-22 04:09:45') AS causes_after_deploy2,
+  (SELECT max("finished_at") FROM "session" WHERE "release_cause" IS NOT NULL) AS latest_cause_release,
+  (SELECT count(*) FROM "pg_depend" d
+     JOIN "pg_attribute" a ON a."attrelid" = d."refobjid" AND a."attnum" = d."refobjsubid"
+    WHERE d."refclassid" = 'pg_class'::regclass AND d."refobjid" = '"session"'::regclass
+      AND a."attname" = 'release_cause'
+      AND NOT (d."classid" = 'pg_constraint'::regclass
+               AND d."objid" = (SELECT "oid" FROM "pg_constraint"
+                                 WHERE "conrelid" = '"session"'::regclass
+                                   AND "conname" = 'session_release_cause_chk'))) AS other_dependents,
+  (SELECT "convalidated" FROM "pg_constraint"
+    WHERE "conrelid" = '"session"'::regclass AND "conname" = 'session_release_cause_chk') AS release_cause_chk_valid;
+`;
+
+const POSTCHECK = `
+SELECT
+  (SELECT count(*) FROM "information_schema"."columns"
+    WHERE "table_name" = 'session' AND "column_name" = 'release_cause') AS release_cause_columns,
+  (SELECT count(*) FROM "pg_constraint"
+    WHERE "conname" LIKE '%release_cause%' OR pg_get_constraintdef("oid") LIKE '%release_cause%')
+    AS release_cause_constraints,
+  (SELECT count(*) FROM "session"
+    WHERE "finished_at" IS NOT NULL AND "end_reason" IS NULL AND "status"::text = 'FAILED'
+      AND "last_turn_outcome" IS DISTINCT FROM 'FAILED' AND "deleted_at" IS NULL) AS failed_without_failed_outcome,
+  (SELECT count(*) FROM "session"
+    WHERE "finished_at" IS NOT NULL AND "end_reason" IS NULL AND "status"::text = 'FAILED'
+      AND "last_turn_outcome" IS DISTINCT FROM 'FAILED' AND "deleted_at" IS NOT NULL) AS trashed_without_failed_outcome,
+  (SELECT count(*) FROM "session"
+    WHERE "finished_at" IS NOT NULL AND "end_reason" IS NULL AND "status"::text <> 'FAILED'
+      AND "last_turn_outcome" = 'FAILED') AS residual_a2_rows,
+  (SELECT count(*) FROM "pg_trigger"
+    WHERE "tgrelid" = '"session"'::regclass AND NOT "tgisinternal"
+      AND pg_get_triggerdef("oid") ~ '''(SUCCEEDED|FAILED|CANCELLED)''::run_status') AS terminal_status_triggers;
+`;
+
 /** Deploy 2's failure question, as 1425 and the release module spelled it: with the status bridge. */
 const DEPLOY_2_FAILED = `(s."finished_at" IS NOT NULL AND s."end_reason" IS NULL
   AND (s."last_turn_outcome" IS NOT DISTINCT FROM 'FAILED' OR s."status" = 'FAILED'))`;
@@ -65,6 +154,11 @@ const CAUSE: Record<string, string> = {
 };
 
 /** See session-release.pg.spec.ts deployAgain: forget the rows, then let prisma find the files pending and apply them. */
+/** Migration 1671 (deploy D3) and its rollback: this file rehearses deploy 3 of the release work on deploy 2's
+ *  database, whose writers wrote the word. */
+const D3_DOWN = readFileSync(join(__dirname, '..', '..', '..', '..', 'scripts', 'session-status-from-facts-down.sql'), 'utf8');
+const D3_UP = readFileSync(join(__dirname, '..', '..', 'prisma', 'migrations', '1671_session_status_from_facts', 'migration.sql'), 'utf8');
+
 async function deployAgain(sql: Client, url: string, migrations: string[]): Promise<void> {
   await sql.query(`DELETE FROM _prisma_migrations WHERE migration_name = ANY($1::text[])`, [migrations]);
   try {
@@ -154,8 +248,13 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The column session.status was dropped in deploy D4 (migration 1711): this file rehearses deploys it
+  // was part of, on the database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const db = prismaClientFor(url);
   t.after(async () => {
+    // Deploy D3 back, as every migration leaves the database (1671 is re-runnable).
+    await sql.query(D3_UP).catch(() => undefined);
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
@@ -164,8 +263,6 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
   const requestIds = new Map<string, string>();
   const rows = rowsOf();
   const deploy2 = new Map<string, boolean>();
-  const precheck = readFileSync(join(API, '..', '..', 'scripts', 'session-release-cause-drop-precheck.sql'), 'utf8');
-  const postcheck = readFileSync(join(API, '..', '..', 'scripts', 'session-release-cause-drop-postcheck.sql'), 'utf8');
   const columnExists = async () => (await sql.query(
     `SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'session' AND column_name = 'release_cause'`,
   )).rows[0].n as number;
@@ -176,6 +273,8 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
   )).rows as Array<{ tgname: string; def: string }>;
 
   await t.test('(1) back to deploy 2\'s state: the column, its validated CHECK, the bridged triggers', async () => {
+    // Deploy 2's writers wrote the word, and the facts followed it: 1671 (deploy D3) rolled back, with its down script.
+    await sql.query(D3_DOWN);
     await deployAgain(sql, url, DEPLOY_2_STATE);
     assert.equal(await columnExists(), 1, 'release_cause is there again');
     const check = (await sql.query(
@@ -203,7 +302,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
     const asker = randomUUID();
     await db.session.create({ data: {
       id: asker, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: 'asker', prompt: 'ask',
-      status: 'AWAITING_INPUT', provider: 'claude', providerBuiltin: true, engine: 'claude', assignedRunnerId: w.runnerId,
+      turnState: null, provider: 'claude', providerBuiltin: true, engine: 'claude', assignedRunnerId: w.runnerId,
     } });
     for (const row of rows) {
       const { shape } = row;
@@ -213,11 +312,9 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
       await db.session.create({
         data: {
           id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: row.label, prompt: shape.what,
-          status: shape.status,
           ...(landing
             ? { sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, engine: null, startsTaskWork: false }
             : { provider: 'claude', providerBuiltin: true, engine: 'claude', assignedRunnerId: w.runnerId }),
-          finishedAt: shape.released ? new Date() : null,
           endReason: shape.endReason,
           ...(shape.endReason ? { cancelRequestedAt: new Date() } : {}),
           lastTurnOutcome: shape.lastTurnOutcome,
@@ -226,6 +323,14 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
           ...(shape.trashed ? { deletedAt: new Date(), importSourceCwd: '/home/someone/project' } : {}),
         },
       });
+      // The word and the release column, as deploy 2's writer wrote them (the field is not in this build's model): 1611's
+      // trigger keeps the facts from the word. Under the engine read's declaration, as a claim makes it.
+      await db.$transaction([
+        db.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`,
+        db.$executeRawUnsafe(
+          `UPDATE "session" SET "status" = $2::run_status, "finished_at" = CASE WHEN $3::boolean THEN now() END WHERE "id" = $1::uuid`,
+          id, shape.status, shape.released),
+      ]);
       // The cause column is not in this build's model: deploy 1 (or 1262) wrote it beside the status.
       if (CAUSE[row.label] || CAUSE[shape.name]) {
         await sql.query(`UPDATE "session" SET "release_cause" = $2 WHERE "id" = $1::uuid`,
@@ -256,7 +361,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
       [[...sessionIds.values()]])).rows as Array<{ id: string; failed: boolean }>;
     for (const row of rows) deploy2.set(row.label, answers.find((a) => a.id === sessionIds.get(row.label))!.failed);
 
-    const pre = (await sql.query(precheck)).rows[0] as Record<string, unknown>;
+    const pre = (await sql.query(PRECHECK)).rows[0] as Record<string, unknown>;
     console.log(`# pre-check: ${JSON.stringify(pre)}`);
     // The bridged rows: released FAILED, no end reason, no FAILED outcome, outside Trash.
     const bridged = rows.filter(({ shape }) => shape.released && shape.status === 'FAILED' && shape.endReason === null
@@ -303,7 +408,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
       assert.equal(stored.status, row.shape.status, `${row.label}: the status is not written`);
       assert.equal(stored.failed, releaseWasFailure({
         finishedAt: stored.finished_at, endReason: stored.end_reason, lastTurnOutcome: stored.last_turn_outcome,
-        status: stored.status,
+        turnState: turnStateOfWord(stored.status),
       }), `${row.label}: the SQL and the predicate agree`);
       if (stored.failed !== deploy2.get(row.label)) differences.push(row.label);
       // The turns: the carrying one got FAILED and the session's error; every other one is as it was.
@@ -351,7 +456,7 @@ test('deploy 3 on a populated database at deploy 2\'s state: 1441, 1442 and 1443
       console.log(`# ${tgname}: ${def}`);
       assert.doesNotMatch(def, /'(SUCCEEDED|FAILED|CANCELLED)'::run_status/, `${tgname}: no terminal status`);
     }
-    const post = (await sql.query(postcheck)).rows[0] as Record<string, unknown>;
+    const post = (await sql.query(POSTCHECK)).rows[0] as Record<string, unknown>;
     console.log(`# post-check: ${JSON.stringify(post)}`);
     assert.deepEqual(Object.fromEntries(Object.entries(post).map(([k, v]) => [k, Number(v)])), {
       release_cause_columns: 0, release_cause_constraints: 0, failed_without_failed_outcome: 0,

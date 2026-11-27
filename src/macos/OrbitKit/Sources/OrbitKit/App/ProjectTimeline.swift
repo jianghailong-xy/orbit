@@ -17,16 +17,16 @@ public struct ProjectTimelineSection: Identifiable, Equatable, Sendable {
 }
 
 public enum ProjectTimeline {
-    /// The sessions keep the order they are given in (the page's load sorts them by last activity,
-    /// newest first). The buckets and their titles are `SessionTimeGrouping`'s, without a Pinned
-    /// section: the project's page has none.
+    /// The buckets and their titles are `SessionTimeGrouping`'s, without a Pinned section: the
+    /// project's page has none. Each session is placed and ordered by `listedAt` (`createdAt` when
+    /// null), then `createdAt`, then id, as its row's time reads (contracts/session-list-order.fixtures.json).
     public static func sections(sessions: [Session], now: Date = Date(),
                                 calendar: Calendar = .current) -> [ProjectTimelineSection] {
         let titles = SessionTimeGrouping.bucketTitles
         let today = calendar.startOfDay(for: now)
         var buckets: [[Session]] = Array(repeating: [], count: titles.count)
-        for session in sessions {
-            buckets[SessionTimeGrouping.bucketIndex(at: session.lastTurnAt ?? session.createdAt,
+        for session in SessionFilter.listedOrder(sessions) {
+            buckets[SessionTimeGrouping.bucketIndex(at: session.listedAt ?? session.createdAt,
                                                     today: today, calendar: calendar)].append(session)
         }
         return buckets.enumerated().compactMap { index, sessions in

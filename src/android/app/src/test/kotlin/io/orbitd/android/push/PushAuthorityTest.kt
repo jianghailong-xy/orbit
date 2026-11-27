@@ -309,6 +309,39 @@ class PushAuthorityTest {
         }
     }
 
+    /** A decision card that became the owner's (push.service notifyDecisionCards, task 354adqnR5U6CZFIfyR5df): the shared fixture's
+     * sample is what the server sends for an evidence card. It parses — a new kind is dropped here unless `kinds` and the `when` both
+     * name it — rings as an owner decision, opens the conversation the card is drawn in, and stands while that conversation does.
+     * Naming no conversation it is not a notification. */
+    @Test fun aDecisionCardOpensTheConversationItIsDrawnInAndStandsWhileItDoes() = runBlocking {
+        val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+            .single { it["name"]!!.jsonPrimitive.content == "decision-card" }
+        val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val push = PushMessage.parse(data) ?: throw AssertionError("the server's decision-card push is dropped")
+        val session = sample["source"]!!.jsonObject["sessionID"]!!.jsonPrimitive.content
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals(PushPayload.DECISION_CARD, push.payload.kind)
+        assertEquals("Archive the August receipts", push.payload.title)
+        assertEquals("Does this evidence settle the task? · Revision 1", push.payload.body)
+        assertEquals(2, push.payload.badge)
+        assertTrue(ObjectId.same(push.payload.sessionId, session))
+        assertTrue(push.payload.isOwnerDecision)
+        assertEquals(OrbitRoute(Destination.SESSION, session, origin = Origin.EXTERNAL),
+            push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        assertNull("it names the conversation its card is drawn in", PushMessage.parse(data + ("payload" to
+            """{"title":"Archive the August receipts","body":"Does this evidence settle the task?","kind":"decision-card","cardKind":"EVIDENCE"}""")))
+        authorityFixture { authority, server, _ ->
+            var deleted = false
+            server.respond = { request -> when (request.path) {
+                "/api/sessions/$session" -> response("""{"id":"$session","status":"AWAITING_INPUT","lifecycleState":"OPEN","deletedAt":${if (deleted) "\"2026-11-27\"" else "null"}}""")
+                else -> response("{}", 404)
+            } }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            deleted = true
+            assertEquals(PushCheck.MISSING, authority.check(push))
+        }
+    }
+
     /** A scheduled task's alert (push.service notifySchedule): it opens the run's session when it names one, and the schedule on the
      * Scheduled page when it names none. With a session it stands while that session does; without, while its schedule exists.
      * Without its schedule it is not a notification. */
@@ -405,6 +438,30 @@ class PushAuthorityTest {
     /** The server's one push per drain with the owner's work waiting (docs/runner-update-drain-design.md D3): it parses exactly as the
      * server sends it (the shared fixture's sample), names no engine, opens the runner, and stands while GET /runners lists the runner's
      * drainWaiting. Without its runner it is no notification. */
+    /** docs/account-health-owner-surface-contract.md §1: it opens its machine, names the row Check again takes, and stands only while
+     * GET /account-health lists that row. A key's push names no machine and no link. */
+    @Test fun anAccountNeedsActionPushOpensItsMachineAndStandsWhileTheBlockDoes() = runBlocking {
+        val push = message("account-needs-action", "runnerID" to runnerId, "accountHealthID" to "h1")
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("h1", push.payload.accountHealthId)
+        assertEquals(Destination.RUNNER, OrbitLinks.parse(push.link!!)!!.destination)
+        // A key or pool login has no machine: the Providers screen, where its row is.
+        val providers = message("account-needs-action", "accountHealthID" to "h2", "subjectKey" to "provider:k1").link
+        assertEquals("orbit://settings/providers", providers)
+        assertEquals(OrbitRoute(Destination.SETTINGS, "providers"), OrbitLinks.parse(providers!!)!!.copy(origin = OrbitRoute(Destination.SETTINGS).origin))
+        assertNull("it names its health row", runCatching { message("account-needs-action", "runnerID" to runnerId) }.getOrNull())
+        authorityFixture { authority, server, _ ->
+            var blocks = """[{"id":"h1"}]"""
+            server.respond = { request ->
+                assertEquals("/api/account-health", request.path)
+                response("""{"blocks":$blocks}""")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            blocks = "[]"
+            assertEquals("cleared by Check again", PushCheck.STALE, authority.check(push))
+        }
+    }
+
     @Test fun aRunnerUpdatingPushOpensItsRunnerAndStandsWhileWorkWaits() = runBlocking {
         val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
             .single { it["name"]!!.jsonPrimitive.content == "runner-updating" }

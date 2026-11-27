@@ -4,7 +4,7 @@ import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { actingSession } from '../wiki/wiki.controller';
-import { CompleteOwnerRequestDto, DeclineOwnerRequestDto, SubmitOwnerSecretDto } from './dto';
+import { ApplyOwnerRequestChangeDto, CompleteOwnerRequestDto, DeclineOwnerRequestDto, SubmitOwnerSecretDto } from './dto';
 import { OwnerRequestsService, ownerRequestClient } from './owner-requests.service';
 import { OwnerSecretsService, refuseActingSession } from './owner-secrets.service';
 
@@ -87,6 +87,42 @@ export class OwnerRequestsController {
     @Headers('x-orbit-client') client?: string,
   ) {
     return this.requests.applySettings(user.userId, id, actingSession(request.headers), ownerRequestClient(client));
+  }
+
+  /**
+   * The owner's Reopen on a PROJECT_REOPEN card (docs/project-reopen-request-design.md §4.2): reopens the project
+   * exactly as the project page's Reopen press does and settles every pending PROJECT_REOPEN of the project DONE, in one
+   * transaction. Answers with the card. Refused REOPEN_OWNER_CHANNEL_ONLY to a request carrying an acting session, and
+   * to a personal access token (OWNER_INTERACTIVE): a session never answers its own card.
+   */
+  @Post(':id/reopen-project')
+  @PatForbidden('OWNER_INTERACTIVE')
+  @HttpCode(HttpStatus.OK)
+  reopenProject(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+    @Headers('x-orbit-client') client?: string,
+  ) {
+    return this.requests.reopenProject(user.userId, id, actingSession(request.headers), ownerRequestClient(client));
+  }
+
+  /**
+   * The owner's Apply on a CHANGE card (docs/design/owner-request-change.md §4): writes the runner's Max Concurrent — the
+   * requested value or the one the owner typed — and settles the card DONE with `{ applied, actualBefore }`, in one
+   * transaction. Answers with the card. Guarded as `PATCH /runners/:id` is: no access token changes a runner, so none
+   * applies a change either, the asking agent's own included.
+   */
+  @Post(':id/apply')
+  @PatForbidden('RUNNER_CONTROL')
+  @HttpCode(HttpStatus.OK)
+  applyChange(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: ApplyOwnerRequestChangeDto,
+    @Headers('x-orbit-client') client?: string,
+  ) {
+    return this.requests.applyChange(user.userId, id, dto.maxConcurrent, ownerRequestClient(client));
   }
 
   /**

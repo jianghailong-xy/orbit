@@ -34,12 +34,14 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { uuidToBase62 } from '@orbit/shared';
-import type { Prisma, PrismaClient, RunStatus } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import type { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -84,8 +86,8 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_BACKEND: 'local',
-    ORBIT_FILES_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
 
@@ -104,11 +106,11 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
   await db.workspace.create({ data: { id: workspaceId, ownerId, runnerId, name: 'one', enabled: true } });
   const bearer = await new JwtService({ secret: jwtSecret }).signAsync({ sub: ownerId, email });
 
-  const sessionOf = async (title: string, taskId?: string, parentSessionId?: string, status: RunStatus = 'AWAITING_INPUT') => {
+  const sessionOf = async (title: string, taskId?: string, parentSessionId?: string, status: `${RunStatus}` = 'AWAITING_INPUT') => {
     const id = randomUUID();
     await db.session.create({
       data: {
-        id, title, prompt: title, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, status,
+        id, title, prompt: title, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, turnState: turnStateOfWord(status),
         startedAt: new Date(), runtimeSessionId: `runtime-${id}`, provider: 'claude', taskId, startsTaskWork: taskId !== undefined, parentSessionId,
       },
     });

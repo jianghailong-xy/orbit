@@ -19,13 +19,13 @@ import {
   CreatorType,
   PrismaClient,
   ProjectStatus,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   TaskStatus,
   TaskVerdict,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -201,7 +201,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
         title: 'T8 project seed',
         prompt: 'Create the project',
         provider: 'claude',
-        status: RunStatus.AWAITING_INPUT,
+        turnState: null,
         dispatchOrigin: SessionDispatchOrigin.USER,
         runSource: SessionRunSource.MANUAL,
       },
@@ -281,7 +281,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
       await tx.session.update({
         where: { id: firstRun.id },
-        data: { status: RunStatus.RUNNING, startedAt: new Date() },
+        data: { turnState: 'IN_FLIGHT', startedAt: new Date() },
       });
     });
     await db.conversationTurn.create({
@@ -355,7 +355,7 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
     );
     await db.session.update({
       where: { id: failureJudgment.id },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+      data: { turnState: null, finishedAt: new Date() },
     });
 
     await (stack.tasks as unknown as { reconcileReadyTasks(): Promise<void> })

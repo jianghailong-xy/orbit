@@ -172,6 +172,10 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public var mainCheckoutActions: Bool? = nil
     /// The repository its directory is a checkout of, as the runner reported it; nil for a workspace on none.
     public let repoUrl: String?
+    /// What the owner chose for landing on GitHub: `PULL_REQUEST` or `PUSH_AS_ME`. Nil from an older server.
+    public var landingMode: String? = nil
+    /// The landing setting, on the workspace's own read (`GET /agents/:id`) only.
+    public var landing: WorkspaceLandingView? = nil
 
     private enum CodingKeys: String, CodingKey {
         case id, name, lastProvider, lastEngine, lastModel, provider, model, permissionMode, effort, workDir, repoUrl
@@ -182,6 +186,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case enableWorktree, subagentsEnabled, subagentsMaxRunning, workflowsEnabled
         case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
+        case landingMode, landing
     }
 
     public init(from decoder: Decoder) throws {
@@ -228,6 +233,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         repoCleanup = try c.decodeIfPresent(RunnerRepoCleanup.self, forKey: .repoCleanup)
         mainCheckoutActions = try? c.decodeIfPresent(Bool.self, forKey: .mainCheckoutActions)
         repoUrl = try c.decodeIfPresent(String.self, forKey: .repoUrl)
+        landingMode = try? c.decodeIfPresent(String.self, forKey: .landingMode)
+        landing = try? c.decodeIfPresent(WorkspaceLandingView.self, forKey: .landing)
     }
 }
 
@@ -819,7 +826,16 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     }
     public var isReleased: Bool { released ?? effectiveRunStatus.isTerminal }
     public var effectiveRunState: SessionRunState {
-        SessionRunState.resolve(runState, legacy: sessionState,
+        // A held session whose status word this build does not know reads its phase, as web does (a release is
+        // worded by `displayRunState`). A known status keeps its reading: a parked turn with a background job
+        // says so, which the phase alone cannot.
+        if released == false, effectiveRunStatus == .unknown, (runState ?? .unknown) == .unknown,
+           let held = SessionRunState.fromPhaseFields(phase: phase, released: released,
+                                                      lastTurnOutcome: lastTurnOutcome, endReason: endReason,
+                                                      activity: activity) {
+            return held
+        }
+        return SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
     }
     /// Whether to draw this session as working — a port of the web console's `isGenerating`.
@@ -1400,6 +1416,9 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// A wiki chat's page and selection, beside the owner's words rather than in them (wiki contract
     /// `chat.turns`). Nil leaves the field out: any other session refuses one.
     public let wikiContext: WikiChatContext?
+    /// A Drive chat's folder and selection, beside the owner's words (`driveContext`, src/shared/src/driveChat.ts).
+    /// Nil leaves the field out: any other session refuses one.
+    public let driveContext: DriveChatContext?
     /// Prompt optimizer (D2): the text is the optimizer's prompt, sent exactly as inserted, so
     /// Translation neither holds nor translates it. Nil leaves the key out (`PromptOptimizerState.skipTranslation`).
     public let skipTranslation: Bool?
@@ -1408,14 +1427,15 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// (`PromptOptimizerState.optimizedTranslation`).
     public let optimizedTranslation: String?
     public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
-                intent: String? = nil, wikiContext: WikiChatContext? = nil, skipTranslation: Bool? = nil,
-                optimizedTranslation: String? = nil) {
+                intent: String? = nil, wikiContext: WikiChatContext? = nil, driveContext: DriveChatContext? = nil,
+                skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
         self.intent = intent
         self.wikiContext = wikiContext
+        self.driveContext = driveContext
         self.skipTranslation = skipTranslation
         self.optimizedTranslation = optimizedTranslation
     }
@@ -2314,6 +2334,8 @@ public struct ResumeRequest: Codable, Sendable {
     /// A wiki chat's page and selection: a chat's next message may revive it, and carries them here as on
     /// a live one (wiki contract `chat.turns`). Nil leaves the field out.
     public let wikiContext: WikiChatContext?
+    /// A Drive chat's folder and selection, which revive it too. Nil leaves the field out.
+    public let driveContext: DriveChatContext?
     /// Prompt optimizer (D2): a revive whose words are the optimizer's prompt, sent as inserted. Nil omits it.
     public let skipTranslation: Bool?
     /// Prompt optimizer (D2): a revive whose words are the reading copy Use inserted; this is its
@@ -2324,7 +2346,9 @@ public struct ResumeRequest: Codable, Sendable {
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
                 stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil,
+                driveContext: DriveChatContext? = nil,
                 skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
+        self.driveContext = driveContext
         self.skipTranslation = skipTranslation
         self.optimizedTranslation = optimizedTranslation
         self.clientTurnId = clientTurnId
@@ -2432,6 +2456,15 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     public let deletedAt: String?
     /// Carried so `SessionStatusGlyph` reports the same wording here as in the session list.
     public let endReason: String?
+    /// The session facts (`SessionDisplay`); absent while the search route does not send them.
+    @LenientSessionField public private(set) var phase: SessionPhase?
+    @LenientSessionField public private(set) var released: Bool?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
+    /// The Background mark's inputs, beside the facts; absent while the search route does not send them.
+    public let activity: String?
+    public let runningBgCount: Int?
     public let matchField: SessionSearchMatchField
     /// A whitespace-collapsed window around the match; nil for a `recent` row. The match is
     /// located client-side (see the web `splitHighlight`) — collapsing invalidates any offset.
@@ -2478,6 +2511,13 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
             ?? legacy.decodeIfPresent(String.self, forKey: .archivedAt)
         deletedAt = try c.decodeIfPresent(String.self, forKey: .deletedAt)
         endReason = try c.decodeIfPresent(String.self, forKey: .endReason)
+        phase = try? c.decodeIfPresent(SessionPhase.self, forKey: .phase)
+        released = try? c.decodeIfPresent(Bool.self, forKey: .released)
+        workFinished = try? c.decodeIfPresent(Bool.self, forKey: .workFinished)
+        lastTurnOutcome = try? c.decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome)
+        waitingOn = try? c.decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn)
+        activity = try? c.decodeIfPresent(String.self, forKey: .activity)
+        runningBgCount = try? c.decodeIfPresent(Int.self, forKey: .runningBgCount)
         snippet = try c.decodeIfPresent(String.self, forKey: .snippet)
         let raw = try c.decodeIfPresent(String.self, forKey: .matchField) ?? ""
         matchField = SessionSearchMatchField(rawValue: raw) ?? .message

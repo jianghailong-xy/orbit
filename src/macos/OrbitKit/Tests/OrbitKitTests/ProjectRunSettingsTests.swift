@@ -55,6 +55,22 @@ final class ProjectRunSettingsTests: XCTestCase {
         XCTAssertNil(older.escalationSeconds)
     }
 
+    func testTheIntegrationReadCarriesTheDefaultProjectBranch() throws {
+        let with = try decode(ProjectIntegrationView.self,
+                              #"{"line":"MAIN","defaultProjectBranch":"project/foo-352xNyEH"}"#)
+        XCTAssertEqual(with.defaultProjectBranch, "project/foo-352xNyEH")
+        XCTAssertEqual(with.projectBranchName(projectID: "p"), "project/foo-352xNyEH")
+        let on = try decode(ProjectIntegrationView.self,
+                            #"{"line":"PROJECT_BRANCH","ref":"project/foo-352xNyEH","defaultProjectBranch":"project/foo-352xNyEH"}"#)
+        XCTAssertEqual(on.projectBranchName(projectID: "p"), "project/foo-352xNyEH")
+        let older = try decode(ProjectIntegrationView.self, #"{"line":null}"#)
+        XCTAssertNil(older.defaultProjectBranch)
+        XCTAssertEqual(older.projectBranchName(projectID: "p"), "project/p")
+        let summary = RunSettings.summary(ProjectIntegrationView(line: .projectBranch, defaultProjectBranch: "project/foo-352xNyEH"),
+                                          projectID: "p", automatic: true, maxConcurrentTasks: 2, nonCode: false)
+        XCTAssertEqual(summary.line, "A project branch · project/foo-352xNyEH · 2 tasks at a time")
+    }
+
     // MARK: before the start
 
     func testTheStartRowIsTheRequestOrTheOwnersOwnAndOnlyForAnOpenProjectNobodyStarted() {

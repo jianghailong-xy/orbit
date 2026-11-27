@@ -138,8 +138,8 @@ suite('in an Automatic project a session cannot hand a task to the owner unless 
       );
       await sql.query(
         `INSERT INTO "session" ("id","owner_id","workspace_id","title","prompt","creator_id",
-           "provider","status","dispatch_origin","updated_at")
-         VALUES ($1,$2,$3,$4,'coordinate',$2,'claude','RUNNING'::"run_status",
+           "provider","turn_state","dispatch_origin","updated_at")
+         VALUES ($1,$2,$3,$4,'coordinate',$2,'claude','IN_FLIGHT',
            'USER'::"session_dispatch_origin",now())`,
         [coordinator, ownerId, workspaceId, `${title} coordinator`],
       );

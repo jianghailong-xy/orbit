@@ -13,21 +13,24 @@ import { DriveUploadsService } from './drive-uploads.service';
 import { FilesService, type DriveUsage } from '../files/files.service';
 import { DriveService } from './drive.service';
 import { DriveDownloadLinks } from './drive-download-links';
+import { DRIVE_ROUTE_PREFIXES } from './drive-routes';
+import { DriveEnabledGuard } from './drive-switch';
 import { CreateDriveFolderDto, DriveDownloadLinkDto, OpenDriveUploadDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
+import { DriveSyncsService, type DriveSyncView } from './drive-syncs.service';
 
-/** What every drive route declares for a token: the files scope; a drive holds no workspace, so a confined token is refused. */
-export const DRIVE_PAT = () => PatScope('files', { workspaceConfinable: false });
+/** What every Drive route declares for a token: the drive scope; Drive holds no workspace, so a confined token is refused. */
+export const DRIVE_PAT = () => PatScope('drive', { workspaceConfinable: false });
 
 const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.parseInt(limit, 10));
 
 /**
- * The owner's drive routes (docs/orbit-files-drive-technical-design.md §4.1), under the owner's login: folders and files,
+ * The owner's drive routes (docs/drive-technical-design.md §4.1), under the owner's login: folders and files,
  * versions, Trash and the change feed. The owner is always the credential's; another account's entry, version or group
  * is not found. Usage and the share check are their own tasks' routes. A token reaches them with the
- * `files` scope (DRIVE_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
+ * `drive` scope (DRIVE_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
  */
-@UseGuards(JwtAuthGuard)
-@Controller('drive')
+@UseGuards(JwtAuthGuard, DriveEnabledGuard)
+@Controller(DRIVE_ROUTE_PREFIXES)
 export class DriveController {
   constructor(
     private readonly drive: DriveService,
@@ -36,7 +39,22 @@ export class DriveController {
     private readonly content: DriveContentService,
     private readonly downloadLinks: DriveDownloadLinks,
     private readonly files: FilesService,
+    private readonly syncs: DriveSyncsService,
   ) {}
+
+  /** Agents' directory syncs for the upload tray: running ones and those ended in the last day (S4). */
+  @DRIVE_PAT()
+  @Get('syncs')
+  listSyncs(@CurrentUser() user: AuthUser): Promise<{ syncs: DriveSyncView[] }> {
+    return this.syncs.list(user.userId);
+  }
+
+  /** One agent's sync, whatever its age: the conversation's sync card for the call that started it. */
+  @DRIVE_PAT()
+  @Get('syncs/:id')
+  getSync(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<DriveSyncView> {
+    return this.syncs.get(user.userId, id);
+  }
 
   // What Files → Storage shows: the drive's share and the rest, each content once (§2.5).
   @DRIVE_PAT()
@@ -289,7 +307,8 @@ function send(content: DriveContent, res: Response): StreamableFile | undefined 
  * login: the signed token is the credential, bound to one owner, file and version, and expired, forged or stale it is the
  * one 404. Range, If-Range and If-None-Match work as on the owner's content route.
  */
-@Controller('drive')
+@UseGuards(DriveEnabledGuard)
+@Controller(DRIVE_ROUTE_PREFIXES)
 export class DriveDownloadController {
   constructor(private readonly downloadLinks: DriveDownloadLinks) {}
 

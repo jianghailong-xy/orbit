@@ -216,7 +216,7 @@ func shellTurnBudget(resp *RunInboxResponse, interactive, acceptance time.Durati
 // emits a Bash tool_use/tool_result pair — the same shape claude's own Bash tool emits,
 // so the transcript renders it identically (a `$ command` card + output) with no UI
 // changes — and returns the combined stdout+stderr plus the process exit code.
-func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, turnID string, env map[string]string, budget time.Duration) (string, int) {
+func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, turnID string, env map[string]string, budget time.Duration, sessionID string) (string, int) {
 	toolUseID := "shell-" + turnID
 	emit(evToolUse, map[string]interface{}{
 		"id": toolUseID, "name": "Bash", "input": map[string]interface{}{"command": command},
@@ -230,10 +230,15 @@ func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, tur
 	var combined shellOutputBuffer
 	cmd.Stdout = &combined
 	cmd.Stderr = &combined
+	checkOOM := watchMemoryTool(cctx, sessionID)
 	err := cmd.Start()
 	if err == nil {
+		trackMemoryRoots(sessionID, true, cmd.Process.Pid)
 		err = waitWithForegroundShellOutput(
-			func() error { return waitSessionProcessTree(cmd) }, &combined, emit, toolUseID,
+			func() error {
+				checkOOM(cmd.Process.Pid)
+				return waitSessionProcessTree(cmd)
+			}, &combined, emit, toolUseID,
 		)
 	}
 	out := combined.output()
@@ -340,7 +345,7 @@ func runSynchronousShellTurn(
 ) (TurnCompleteRequest, error) {
 	out, exitCode := runShellTurn(
 		ctx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env,
-		shellTurnBudget(resp, shellTurnTimeout, acceptanceTurnTimeout),
+		shellTurnBudget(resp, shellTurnTimeout, acceptanceTurnTimeout), job.SessionID,
 	)
 	return TurnCompleteRequest{
 		TurnID: resp.TurnID, Status: stSucceeded, Result: fmt.Sprintf("exit %d", exitCode),

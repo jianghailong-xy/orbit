@@ -5,10 +5,10 @@ import { test } from 'node:test';
 import {
   PrismaClient,
   ProjectStatus,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -222,7 +222,7 @@ async function fixture(stack: Stack, label: string): Promise<Fixture> {
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
     },
@@ -302,7 +302,7 @@ async function serve(stack: Stack, f: Fixture, criterionKey: string, title: stri
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',
@@ -340,7 +340,7 @@ async function mergeSession(stack: Stack, f: Fixture, taskId: string, label: str
       title: `${label}-merge`,
       prompt: `${label}-merge`,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+      turnState: null, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       isolationStatus: 'worktree',
@@ -362,7 +362,7 @@ async function ranOnABranch(stack: Stack, f: Fixture, taskId: string, label: str
     data: {
       id: randomUUID(), ownerId: f.ownerId, creatorId: f.ownerId, taskId, workspaceId: f.workspaceId,
       assignedRunnerId: f.runnerId, title: `${label}-work`, prompt: `${label}-work`, provider: 'claude',
-      status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: `orbit/${label}`, worktreeBranch: `orbit/${label}`,
       baseSha: '1'.repeat(40), branchSha: '2'.repeat(40), worktreeDirty: false, changedFiles: ['src/suite.ts'],
       finishedAt: new Date(),
@@ -500,7 +500,7 @@ async function coordinatorReads(db: PrismaClient, f: Fixture): Promise<void> {
   });
   await db.session.update({
     where: { id: f.coordinatorSessionId },
-    data: { status: RunStatus.AWAITING_INPUT },
+    data: { turnState: null },
   });
 }
 

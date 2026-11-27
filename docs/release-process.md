@@ -70,6 +70,9 @@ ORBIT_REGISTRY=10.66.0.1:5000 deploy/two-stage/publish-managed-runner.sh vX.Y.Z-
   before it pushes.
 - It is idempotent: a tag whose image is in the registry already is skipped. Running it again after a failure is
   safe.
+- Then /release pulls the published image onto the production k3s node, through workspace orbit-ws03
+  (`deploy/managed-runner/prepull-runner-image.sh <registry>/orbit-cloud-runner@sha256:<digest>`). A runner's Pod
+  pulls its image only as it starts, so otherwise the first runner to start after the deploy waits for the 1.5 GB pull.
 - A two-stage deploy builds no runner image. It uses the newest `v*` tag's image at or behind the commit it deploys,
   writing `runner.image` (by digest), `runner.imageRevision` and `runner.imageVersion` into the hosted runners'
   profile, and stops before changing anything when that image is not in the registry, naming the command above. So

@@ -21,7 +21,7 @@ const DELETE_TRANSACTION_TIMEOUT_MS = 65_000;
 /** How long a drive write may go untouched before its staging, and the chunks only it held, are let go. */
 export const DRIVE_STAGING_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** How long the drive keeps a commit's answer and a change-feed row (docs/orbit-files-drive-technical-design.md §1.1). */
+/** How long the drive keeps a commit's answer and a change-feed row (docs/drive-technical-design.md §1.1). */
 export const DRIVE_FEED_KEEP_MS = 24 * 60 * 60 * 1000;
 
 /** What one sweep did. */
@@ -46,7 +46,7 @@ export interface FileSweepResult {
  * Carries out §2.8's expiry (file-retention.ts says what the dates mean), in five steps, each of which can stop at any
  * instant and is carried on from by the next sweep:
  *
- *   0. A drive staging (docs/orbit-files-drive-technical-design.md §2.4), a write no commit has taken, is removed once
+ *   0. A drive staging (docs/drive-technical-design.md §2.4), a write no commit has taken, is removed once
  *      nothing has touched it for seven days; its chunk rows go with it, and step 3 then finds what only they held. A
  *      drive commit's answer and a change-feed row go once they are a day old: a retried commit or a feed reader older
  *      than that starts again from the tree.

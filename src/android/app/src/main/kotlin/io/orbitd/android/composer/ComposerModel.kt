@@ -11,6 +11,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.reader.COULDNT_CANCEL_MESSAGE
 import io.orbitd.android.reader.SteerDelivery
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastTone
@@ -36,6 +37,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     private val uploads = mutableMapOf<String, Job>()
     private val mutable = MutableStateFlow(ComposerState())
     val state: StateFlow<ComposerState> = mutable.asStateFlow()
+    /** The page's chat this composer sends for, while the page shows it (ChatDoor). */
+    @Volatile var door: ChatDoor? = null
 
     init { restore() }
     fun restore() {
@@ -235,8 +238,10 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                             "Session: ${detail.text("status") ?: "New session"} · Permission: ${detail.text("permissionMode") ?: CursorRuntime.unsetMode(engineId)}") }
                     persist(); return@launch
                 }
+                val door = door
                 val endpoint = if (target != null) {
-                    check(detail.flag("enabled") != false) { "Workspace is disabled." }; "create"
+                    check(detail.flag("enabled") != false) { "Workspace is disabled." }
+                    if (target.chat != null && door != null) CHAT_CREATE + door.createPath.joinToString("/") else "create"
                 } else sendEndpoint(detail)
                 val raw = draft.text.trim()
                 val shell = raw.startsWith("!")
@@ -247,7 +252,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 // a new session's opening message alike. Send never waits for the optimizer: a press still out, or a sheet still open, goes.
                 val optimizedTranslation = state.value.optimizer.optimizedTranslation(draft.text)
                 cancelOptimize(); dismissOptimization()
-                val body = PromptOptimizer.withOptimizedTranslation(if (target != null) {
+                val body = PromptOptimizer.withOptimizedTranslation(if (endpoint.startsWith(CHAT_CREATE)) {
+                    val config = state.value.draft.resumeConfig
+                    door!!.createBody(content, id, if (config["model"] == null && seedModel != null) JsonObject(config + ("model" to JsonPrimitive(seedModel))) else config,
+                        draft.attachments.mapNotNull { it.remoteId })
+                } else if (target != null) {
                     buildCreateBody(detail, content, shell, draft.attachments, seedModel)
                 } else buildJsonObject {
                     if (endpoint == "resume") {
@@ -257,6 +266,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     put("clientTurnId", id); put("content", content); put("kind", if (shell) "shell" else "message")
                     if (queueForNextTurn && endpoint == "turns") put("intent", "NEXT_TURN")
                     putJsonArray("attachmentIds") { draft.attachments.forEach { add(it.remoteId!!) } }
+                    door?.turnExtra?.invoke()?.forEach { (k, v) -> put(k, v) }
                 }, optimizedTranslation)
                 val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments)
                 mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList(), pending = pending)) }
@@ -305,7 +315,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         val pending = state.value.draft.pending ?: return
         // The existing create-session door has no public idempotency contract. Never replay an
         // ambiguous create and accidentally start a second agent. Existing turns remain replayable.
-        if (pending.endpoint == "create") return
+        if (isCreate(pending.endpoint)) return
         mutable.update { it.copy(busy = true, error = null) }
         launch { try { persist(); transmit(pending) } finally { mutable.update { it.copy(busy = false) } } }
     }
@@ -332,7 +342,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         }
         // Persist acknowledgement before removing the retry. If disk fails, replay is still safe.
         val previous = state.value.draft
-        val created = if (pending.endpoint == "create") accepted.text("id") ?: error("Creation response has no session id.") else null
+        val created = if (isCreate(pending.endpoint))
+            accepted.text("id") ?: accepted.text("sessionId") ?: error("Creation response has no session id.") else null
         mutable.update { it.copy(draft = it.draft.copy(pending = null, resumeConfig = JsonObject(emptyMap()), createdSessionId = created),
             acknowledgementPending = created != null) }
         try { persist() } catch (e: Exception) {
@@ -387,17 +398,24 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
      * have its engine drop it. Taken back, its [words] return to the box under any draft: an explicit press, so a draft keeps its place
      * above them. Its pictures and files are not staged again: the box holds only what this device staged. Too late is an answer, not a
      * failure — the agent on [engine] read it first, and it is part of the turn.
+     *
+     * [files] are staged again too, read before the DELETE since the server drops them with the turn; [refused] is the one line a
+     * failure is said with, in place of the tray's ([cancelHeld]).
      */
-    fun withdraw(turnId: String, words: String?, steer: Boolean, engine: String) {
+    fun withdraw(turnId: String, words: String?, steer: Boolean, engine: String, files: List<StagedAttachment> = emptyList(),
+        refused: String? = null) {
         val id = ObjectId.canonical(turnId) ?: turnId
         if (id in state.value.withdrawing || id in state.value.withdrawn) return
         mutable.update { it.copy(withdrawing = it.withdrawing + id) }
         launch {
             try {
-                try { api.mutation("turns/$turnId", method = HttpMethod.DELETE) }
+                val kept = try {
+                    files.map { it to api.attachment(it.id) }.also { api.mutation("turns/$turnId", method = HttpMethod.DELETE) }
+                }
                 catch (cancel: CancellationException) { throw cancel }
                 catch (e: Exception) {
                     when {
+                        refused != null -> OrbitToasts.show(refused, detail = failure(e), tone = ToastTone.ERROR)
                         e is ApiError && e.code == "STEER_ALREADY_READ" ->
                             OrbitToasts.show(PendingTray.TOO_LATE, detail = PendingTray.alreadyRead(engine), tone = ToastTone.INFO)
                         !steer -> OrbitToasts.show(PendingTray.ALREADY_PROCESSING, tone = ToastTone.INFO)
@@ -408,9 +426,18 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 val restores = !words.isNullOrBlank() && state.value.loaded
                 mutable.update { it.copy(withdrawn = it.withdrawn + id, draft = if (restores) it.draft.under(words!!) else it.draft) }
                 if (restores) persist()
+                kept.forEach { (file, bytes) ->
+                    val staged = file.copy(id = UUID.randomUUID().toString(), size = bytes.size)
+                    importAttachment(staged, { staged to bytes }, {})
+                }
                 refresh()
             } finally { mutable.update { it.copy(withdrawing = it.withdrawing - id) } }
         }
+    }
+
+    /** Cancel under a message whose translation failed: [withdraw], once the box is there to take it back. */
+    fun cancelHeld(turnId: String, words: String, files: List<StagedAttachment>) {
+        if (state.value.loaded) withdraw(turnId, words, steer = false, engine = "", files = files, refused = COULDNT_CANCEL_MESSAGE)
     }
 
     /** The tray's Steer (POST …/turns/:turnId/steer; web and iOS `steerQueued`): a message queued for the next turn sent into the one

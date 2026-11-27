@@ -307,7 +307,11 @@ struct ConsoleView: View {
             // run itself rather than the message being sent, and drawn INSTEAD of the
             // two engine-repair cards below when it has something to say — one fact,
             // one card (an engine reason it does not claim is theirs, and the reverse).
-            if let runStart = console.runStart {
+            // A scheduled run that did not get under way in this session says so on its own card in the
+            // transcript (board scheduled-run-not-started): none of these notes about this session, no composer.
+            if console.scheduleRunCard != nil {
+                EmptyView()
+            } else if let runStart = console.runStart {
                 SessionRunStartCardView(console: console, card: runStart, onMove: moveFromCard)
                     .padding(.bottom, .composerBandGap)
             } else if let repair = console.queuedDshRepair {
@@ -406,7 +410,9 @@ struct ConsoleView: View {
                     .padding(.bottom, .composerBandGap)
                 }
             }
-            if case .completed(let successor)? = handoffRow {
+            if console.scheduleRunCard != nil {
+                EmptyView()
+            } else if case .completed(let successor)? = handoffRow {
                 CoordinatorHandedOverBanner { appModel.route(to: .session(successor)) }
             } else if CoordinatorContextActions.locksComposer(handoff) {
                 CoordinatorHandoffLockedComposer()
@@ -471,6 +477,7 @@ struct ConsoleView: View {
                     agentLanguage: SessionTranslation.agentLanguage(appModel.user?.preferences),
                     retryTurn: { id in Task { await console.retryTurnTranslation(id) } },
                     sendAsWritten: { id in Task { await console.sendTurnAsWritten(id) } },
+                    cancelTurn: { bubble in Task { await console.cancelUntranslated(bubble) } },
                     retryReply: { seq in Task { await console.retryReplyTranslation(seq) } }))
                 // A task link in this conversation — prose on the Mac, a card's own button —
                 // opens over the conversation on a wide shell (owner decision 2026-11-12). With
@@ -965,10 +972,29 @@ private struct TypingFold: ViewModifier {
     }
 }
 
+/// The cards a page's chat hangs under the conversation's turns (`TranscriptChatCard`), and how the page draws one:
+/// a Drive chat's change groups and overwrite questions (board drive-chat 02). Nil everywhere else.
+struct TranscriptChatCards {
+    let cards: [TranscriptChatCard]
+    let render: (String) -> AnyView
+}
+
+private struct TranscriptChatCardsKey: EnvironmentKey {
+    static let defaultValue: TranscriptChatCards? = nil
+}
+
+extension EnvironmentValues {
+    var transcriptChatCards: TranscriptChatCards? {
+        get { self[TranscriptChatCardsKey.self] }
+        set { self[TranscriptChatCardsKey.self] = newValue }
+    }
+}
+
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openApprovalReview) private var openApprovalReview
+    @Environment(\.transcriptChatCards) private var chatCards
     @Environment(\.openPromotionReview) private var openPromotionReview
     let console: ConsoleModel
     /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
@@ -1636,7 +1662,8 @@ struct TranscriptView: View {
                              recap: recapCard,
                              watchName: watchWakeName,
                              handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived,
-                             createdWorkspace: console.createdWorkspaceLine)
+                             createdWorkspace: console.createdWorkspaceLine,
+                             chatCards: chatCards?.cards ?? [])
     }
 
     /// The name a folded watch turn gives its one target (`OrbitExchangeFold.orbitTurn`): the watch's
@@ -1705,6 +1732,17 @@ struct TranscriptView: View {
         }
     }
 
+    /// Where a transfer card's "Show in Drive" goes: the file in its folder on the Mac's Drive page. The phone
+    /// has no Drive page, so its card has no such press.
+    private var showInDrive: ((String) -> Void)? {
+        #if os(macOS)
+        guard app.drive?.shown == true else { return nil }
+        return { app.revealDocument($0) }
+        #else
+        return nil
+        #endif
+    }
+
     /// The words of a message at the tail that never reached the engine, back in the composer
     /// (`ConsoleModel.putBack`): the row goes, and a receipt is discarded with it.
     private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
@@ -1757,6 +1795,12 @@ struct TranscriptView: View {
         case .agents(let cards):
             // No `AnchorRow`, for the steps line's reason: a group of Agents is no "Your question".
             AgentGroupView(cards: cards, fullPayload: console.fullPayload)
+        case .transfer(let kind, let cards):
+            // No `AnchorRow`, for the steps line's reason. Live as the steps line is, off the session row.
+            DriveTransferCardView(
+                kind: kind, cards: cards,
+                live: app.session(id: console.sessionID)?.isGenerating ?? (console.state.status == .running),
+                showInDrive: showInDrive)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
@@ -1782,6 +1826,9 @@ struct TranscriptView: View {
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
             ApprovalCard(console: console, approval: approval).orbitCardWidth()
+        case .chatCard(let card):
+            // No `AnchorRow`: drawn by the page whose chat hangs it here.
+            if let chatCards { chatCards.render(card.id).orbitCardWidth() }
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
             RecapCardView(card: card, onHide: hideRecap)
@@ -2077,7 +2124,7 @@ struct TranscriptView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            headerStatus
+            headerStatusLine
                 .font(.caption)
             if let session = app.session(id: console.sessionID) {
                 SessionCoordinatorBadge(session: session)
@@ -2120,6 +2167,23 @@ struct TranscriptView: View {
             + Text(subtitle.dropFirst(word.count)).foregroundColor(.secondary)
     }
 
+    /// With the session facts: the state word from `phase`, its marks, then "lifecycle · when"
+    /// (`SessionDisplay`). From an older server, `headerStatus` as it always was.
+    @ViewBuilder private var headerStatusLine: some View {
+        let watching = app.watches?.summary(for: console.sessionID)
+        let now = Date()
+        if let session = app.session(id: console.sessionID),
+           let state = SessionDisplay.state(session.displayFacts),
+           let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
+                                                 machine: console.runnerName) {
+            SessionHeaderStateLine(session: session, state: state, subtitle: subtitle,
+                                   word: SessionHeader.headerWord(for: session, watching: watching, now: now,
+                                                                  machine: console.runnerName))
+        } else {
+            headerStatus
+        }
+    }
+
     private static func statusWordColor(_ tone: SessionStatusGlyph.Tone) -> Color {
         switch tone {
         case .brand:   return .blue
@@ -2131,6 +2195,27 @@ struct TranscriptView: View {
     }
     #endif
 }
+
+#if os(macOS)
+/// The status bar's line with the session facts: the state word from `phase` (blue while Running), its marks, then
+/// "lifecycle · when" (`SessionDisplay`).
+struct SessionHeaderStateLine: View {
+    let session: Session
+    let state: SessionDisplayState
+    let subtitle: String
+    let word: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(word).fontWeight(.semibold)
+                .foregroundColor(word == state.word && state == .running ? .blue : .primary)
+            SessionMarkPills(marks: SessionDisplay.marks(session.displayFacts) ?? [])
+            Text(subtitle.hasPrefix(word) ? String(subtitle.dropFirst(word.count)) : subtitle)
+                .foregroundColor(.secondary)
+        }
+    }
+}
+#endif
 
 private extension View {
     /// No iOS 26 scroll-edge effect at the top: the transcript runs on up behind the nav bar as it
@@ -2664,6 +2749,10 @@ struct TranscriptItemView: View {
             // A bg_run call is its job's card from start to end (board A1); one refused, or whose answer
             // names no job, stays a call.
             JobCardView(card: c)
+        case .toolCall(let c) where DriveSyncCard.drawsCard(c):
+            // A drive_sync call is its sync's card, live after the turn ends (board drive-sync-card); an
+            // answer that names no sync, from an older runner, stays a call.
+            DriveSyncCardView(syncID: DriveSyncCard.syncID(c.result) ?? "")
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).

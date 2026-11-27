@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { RightOutlined } from '@ant-design/icons';
 import { Spinner } from '../../components/ui/Spinner';
+import { useHelpLanguage } from '../../lib/help/helpLanguage';
 import { helpArticlePath, helpIndexQuery } from '../../lib/help/helpQueries';
 import { CATEGORY_BLURB } from './HelpHomePage';
 import { useDocumentTitle } from './useDocumentTitle';
@@ -9,7 +10,8 @@ import { useDocumentTitle } from './useDocumentTitle';
 /** /help/:category: a category's articles, each with its summary — what a category in the nav opens. */
 export function HelpCategoryPage() {
   const { category = '' } = useParams();
-  const index = useQuery(helpIndexQuery());
+  const { language } = useHelpLanguage();
+  const index = useQuery(helpIndexQuery(language));
   const found = index.data?.categories.find((c) => c.slug === category);
   useDocumentTitle(found?.title);
   if (index.isPending) {
@@ -39,7 +41,7 @@ export function HelpCategoryPage() {
       <p className="help-sub">{CATEGORY_BLURB[found.slug]}</p>
       <div className="help-list">
         {articles.map((article) => (
-          <Link key={article.slug} to={helpArticlePath(article)} className="help-list-row help-list-row--two">
+          <Link key={article.slug} to={helpArticlePath(article)} className="help-list-row help-list-row--two" data-row-focus="">
             <span className="help-list-text">
               <span>{article.title}</span>
               <span className="help-list-summary">{article.summary}</span>

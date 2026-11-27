@@ -43,7 +43,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { CreatorType, PrismaClient, RunStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import type { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -130,7 +131,7 @@ async function landedTask(
   const session = await db.session.create({
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, title, prompt: 'p',
-      taskId, startsTaskWork: true, status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+      taskId, startsTaskWork: true, turnState: null, finishedAt: new Date(), 
     },
   });
   return { taskId, sessionId: session.id };

@@ -212,6 +212,61 @@ func TestKimiPermissionBridgeFilesCardWithJoinedCommand(t *testing.T) {
 	}
 }
 
+// 2026-11-26: a Kimi plan review reached the owner as a question card whose one "question" was the
+// whole plan, raw Markdown under "Plan saved to: <the engine's own path>". Kimi's request (its
+// acp-server approval.ts) is titled ExitPlanMode, heads the plan with that path, and offers
+// plan_approve (allow_once), plan_revise and plan_reject_and_exit (both reject_once).
+func TestKimiPlanReviewFilesThePlanCard(t *testing.T) {
+	fastApprovalRetry(t)
+	for _, tc := range []struct{ decision, want string }{
+		{`{"status":"ALLOWED"}`, "plan_approve"},
+		{`{"status":"DENIED"}`, "plan_revise"},
+	} {
+		var body map[string]interface{}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.Contains(r.URL.Path, "/approvals/"):
+				_, _ = w.Write([]byte(tc.decision))
+			case strings.HasSuffix(r.URL.Path, "/approvals"):
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
+			default:
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+		job := &ClaimedSession{SessionID: "sess-1", Agent: AgentExecConfig{PermissionMode: "plan"}}
+		res := (&kimiACPClient{}).bridgeKimiPermission(context.Background(), NewTransport(srv.URL, "tok"), job, map[string]interface{}{
+			"toolCall": map[string]interface{}{
+				"title": "ExitPlanMode", "toolCallId": "0:tool_9",
+				"content": []interface{}{
+					map[string]interface{}{"type": "content", "content": map[string]interface{}{
+						"type": "text", "text": "Plan saved to: /home/k/.kimi/plans/p.md\n\n# Plan\n\n- **Step** one",
+					}},
+					map[string]interface{}{"type": "content", "content": map[string]interface{}{
+						"type": "text", "text": "Requesting approval to exit plan mode",
+					}},
+				},
+			},
+			"options": []interface{}{
+				map[string]interface{}{"optionId": "plan_approve", "name": "Approve", "kind": "allow_once"},
+				map[string]interface{}{"optionId": "plan_revise", "name": "Revise", "kind": "reject_once"},
+				map[string]interface{}{"optionId": "plan_reject_and_exit", "name": "Reject and Exit", "kind": "reject_once"},
+			},
+		})
+		srv.Close()
+
+		if got := firstString(mapValue(res["outcome"]), "optionId"); got != tc.want {
+			t.Fatalf("%s: outcome = %#v, want %s", tc.decision, res, tc.want)
+		}
+		if body["toolName"] != "ExitPlanMode" {
+			t.Fatalf("filed card = %#v, want the plan card", body)
+		}
+		if got := firstString(mapValue(body["input"]), "plan"); got != "# Plan\n\n- **Step** one" {
+			t.Fatalf("plan = %q, want the plan without Kimi's path line", got)
+		}
+	}
+}
+
 // Waiting out an outage must not outlive the session: cancelling it ends the wait at once, even with
 // a retry delay far longer than the test.
 func TestApprovalWaitThroughAnOutageEndsWithItsContext(t *testing.T) {

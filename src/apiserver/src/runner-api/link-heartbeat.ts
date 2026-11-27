@@ -15,6 +15,7 @@ import { storableBranchSha } from '../tasks/owner-confirmation-review';
 import { mergeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { runnerLinkHintsOf, runnerLinkHintsSql, type RunnerLinkHintColumns, type RunnerLinkHints } from './runner-link-hints';
 import { stripNul } from './strip-nul';
+import { RUNNER_JOB_STATES_SQL } from '../projects/in-flight-job-states';
 
 /**
  * A heartbeat the runner link's gateway forwarded, answered from runner_presence (docs/runner-link-design.md §5.7,
@@ -192,7 +193,11 @@ export const HEARTBEAT_DELIVERIES = {
     writers: ['runners/runners.service.ts#startLogin', 'runners/runners.service.ts#submitLoginCode', 'runners/runners.service.ts#cancelLogin'],
     pending: 'a sign-in in flight',
   },
-  accountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
+  accountRemoveRequest: {
+    how: 'MARKED',
+    writers: ['runners/runners.service.ts#removeAccount', 'runners/runners.service.ts#signOutDefault'],
+    pending: 'a removal or a Default sign-out pending',
+  },
   codexAccountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
   claudeAccountSwapRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#setDefaultAccount'], pending: 'a Set as default swap pending' },
   installRequest: {
@@ -682,7 +687,7 @@ export async function writeLinkBeatReports(
     const selfUpdate = sanitizeRunnerSelfUpdate(dto.selfUpdate);
     sets.push(selfUpdate ? Prisma.sql`"self_update" = ${JSON.stringify(selfUpdate)}::jsonb` : Prisma.sql`"self_update" = NULL`);
   }
-  let planUsage: { merged: string; order: ReturnType<typeof mergeHeartbeatPlanUsage>['order'] } | null = null;
+  let planUsage: { merged: string; orders: ReturnType<typeof mergeHeartbeatPlanUsage>['orders'] } | null = null;
   if (has('planUsage') && dto.planUsage != null) {
     const merge = mergeHeartbeatPlanUsage(
       input.storedPlanUsage,
@@ -690,7 +695,7 @@ export async function writeLinkBeatReports(
       input.leaseOwner,
       input.now,
     );
-    planUsage = { merged: JSON.stringify(merge.planUsage), order: merge.order };
+    planUsage = { merged: JSON.stringify(merge.planUsage), orders: merge.orders };
     const unchanged = input.storedPlanUsage == null
       ? Prisma.sql`(r."plan_usage" IS NULL OR r."plan_usage" = 'null'::jsonb)`
       : Prisma.sql`r."plan_usage" = ${JSON.stringify(input.storedPlanUsage)}::jsonb`;
@@ -739,7 +744,7 @@ export async function writeLinkBeatReports(
     SELECT ${planUsageStored} AS "planUsageStored", (SELECT count(*) FROM facts)::int AS "recorded"
   `;
   const written = rows[0]?.planUsageStored === true;
-  if (planUsage?.order != null && written) countCodexResetSnapshotWrite('heartbeat', planUsage.order);
+  if (planUsage && written) for (const order of planUsage.orders) countCodexResetSnapshotWrite('heartbeat', order);
   return { planUsageStored: written };
 }
 
@@ -912,7 +917,7 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
         SELECT 1 FROM "project_integration_job" j
           JOIN "session" s ON s."id" = j."session_id"
           JOIN "workspace" w ON w."id" = s."workspace_id"
-         WHERE w."runner_id" = ${runnerId}::uuid AND j."state" IN ('QUEUED', 'RUNNING')
+         WHERE w."runner_id" = ${runnerId}::uuid AND j."state" IN ${RUNNER_JOB_STATES_SQL}
       )
       OR EXISTS (
         SELECT 1 FROM "owner_request_secret" g

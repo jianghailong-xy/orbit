@@ -147,7 +147,7 @@ final class ProjectPageParityFixtureTests: XCTestCase {
     func testTheHeaderDetailIsWebs() throws {
         let web = String(decoding: try repoFile("src/web/src/components/ProjectProgressStatus.tsx"), as: UTF8.self)
         XCTAssertTrue(web.contains(
-            "{`${needsYou.length + signIns.length} need you · oldest first`}"))
+            "{`${needsYou.length + signIns.length + (accountWait ? 1 : 0)} need you · oldest first`}"))
         XCTAssertFalse(web.contains("with the coordinator · oldest first"))
         XCTAssertEqual(ProjectPage.openItemsHint(needsYou: 0), "0 need you · oldest first")
         XCTAssertEqual(ProjectPage.openItemsHint(needsYou: 2), "2 need you · oldest first")

@@ -88,10 +88,12 @@ data class SessionLine(val text: String, val tone: Tone) {
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
             if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
-            // Parked on a live watch that will resume it, in the Watching strip's own line.
-            if (live && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
+            // Parked on a live watch that will resume it, in the Watching strip's own line. Not for a session the server calls
+            // IDLE: a wake to come needs no words of its own (the owner, 2026-11-27; web `resumeWords`).
+            val idle = SessionDisplay.state(s.displayFacts) == SessionDisplayState.IDLE
+            if (live && !idle && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
             // The same place for a wait the server reports and this caller holds no watch for (OrbitKit `resumesOnItsOwn`).
-            if (live && s.resumesOnItsOwn) return SessionLine(SessionLineCopy.waitingToResume, Tone.WATCHING)
+            if (live && !idle && s.resumesOnItsOwn) return SessionLine(SessionLineCopy.waitingToResume, Tone.WATCHING)
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
             s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
@@ -186,8 +188,10 @@ internal object SessionLineCopy {
 /** OrbitKit `SessionHeader`'s two words the line falls back on. */
 internal object SessionHeader {
     /** The run's short state word; where the session is filed is not consulted. [watching]: parked with a live watch that
-     * will resume it, it reads the watch's word. */
+     * will resume it, it reads the watch's word. Where the server sends the session facts, the word is the state's, from `phase` alone
+     * ([SessionDisplay.state]); the marks beside it are the caller's to draw. What follows is the reading for an older control plane. */
     fun statusWord(s: DirectorySession, watching: WatchSessionSummary? = null, now: Instant = Instant.now()): String {
+        SessionDisplay.state(s.displayFacts)?.let { return it.word }
         if (s.pendingApprovals > 0) return waitingWord(s)
         if (s.confirmationUnderReview != null) return OwnerReview.underReview
         return when (s.displayRunState) {
@@ -254,8 +258,18 @@ internal object OwnerRequestRowWords {
 /** OrbitKit `SessionRunState`: what the run is doing or how it ended, apart from where the session is filed. */
 internal enum class RunState { QUEUED, RUNNING, AWAITING_INPUT, INTERRUPTED, SUCCEEDED, FAILED, ENDED, UNKNOWN }
 
+private val KNOWN_RUN_STATUSES = setOf("PENDING", "RUNNING", "AWAITING_INPUT", "SUCCEEDED", "FAILED", "INTERRUPTED", "CANCELLED")
+
 /** `SessionRunState.resolve`: the server's `runState` first, then its raw run status and end reason. */
 internal val DirectorySession.effectiveRunState: RunState get() {
+    // A held session whose status word this build does not know reads the phase, as web does (a release is worded by [displayRunState]).
+    // A known status keeps its reading: a parked turn with a background job says so, which the phase alone cannot.
+    if (released == false && (runStatus ?: status) !in KNOWN_RUN_STATUSES && RunState.entries.none { it != RunState.UNKNOWN && it.name == runState }) when (phase) {
+        "PENDING" -> return RunState.QUEUED
+        // `activity` is TURN on every queued or running row; only another one (a background job, a wait) is a parked session.
+        "RUNNING" -> return if (activity.isNullOrEmpty() || activity == "TURN") RunState.RUNNING else RunState.AWAITING_INPUT
+        "IDLE" -> return if (lastTurnOutcome == "INTERRUPTED") RunState.INTERRUPTED else RunState.AWAITING_INPUT
+    }
     RunState.entries.firstOrNull { it != RunState.UNKNOWN && it.name == runState }?.let { return it }
     return when (runStatus ?: status) {
         "PENDING" -> RunState.QUEUED

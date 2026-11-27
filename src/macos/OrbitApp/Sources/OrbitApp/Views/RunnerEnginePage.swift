@@ -62,6 +62,11 @@ private struct RunnerEngineContent: View {
     @State private var pendingRemoval: RunnerPageFormat.AccountLine?
     /// The added Claude Code account whose Set as default confirmation is up.
     @State private var pendingSetDefault: RunnerPageFormat.AccountLine?
+    /// Default's Sign out… confirmation is up; `forcingSignOut` is the second question, once the runner
+    /// refused because sessions run on Default; `signOutSent` is this page's own request awaiting that word.
+    @State private var pendingSignOut: RunnerPageFormat.AccountLine?
+    @State private var forcingSignOut: RunnerPageFormat.AccountLine?
+    @State private var signOutSent = false
     /// This page's own Set as default request is on its way: the menu item says busy until it lands.
     @State private var swapPressing = false
     /// Use again is on its way: the button stays busy until the list read after it carries Default back
@@ -138,6 +143,7 @@ private struct RunnerEngineContent: View {
             }
         }
         .runnerNotice(notice)
+        .onChange(of: runner.accountRemove) { _, state in signOutAnswered(state, health: health) }
         // A sign-in lands on the machine's next check-in: read it again while the page is up — and the
         // app can be seen (`ViewPoll`).
         .task(id: runner.id) {
@@ -311,6 +317,24 @@ private struct RunnerEngineContent: View {
                         Button("Cancel", role: .cancel) {}
                     } message: { line in
                         Text(removalNote(line))
+                    }
+                    .orbitConfirmation({ _ in pendingSignOut.map { signOutQuestion($0).title } ?? "" },
+                                       isPresented: signOutAsked, presenting: pendingSignOut) { line in
+                        Button(RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_CONFIRM, role: .destructive) {
+                            signOut(line, force: false)
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: { line in
+                        Text(signOutQuestion(line).message)
+                    }
+                    .orbitConfirmation({ _ in forcingSignOut.map { forcingSignOutQuestion($0).title } ?? "" },
+                                       isPresented: forceSignOutAsked, presenting: forcingSignOut) { line in
+                        Button(RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_CONFIRM, role: .destructive) {
+                            signOut(line, force: true)
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: { line in
+                        Text(forcingSignOutQuestion(line).message)
                     }
                     .orbitConfirmation({ _ in setDefaultTitle },
                                        isPresented: setDefaultAsked, presenting: pendingSetDefault) { line in
@@ -493,6 +517,12 @@ private struct RunnerEngineContent: View {
                         .disabled(offline || removal?.pending == true)
                 }
             }
+            // Default's relayed state is always its sign-out: the runner is taking the login off the machine.
+            if line.isDefault, removal?.pending == true {
+                Text(RunnerAccountCopy.RUNNER_DEFAULT_SIGNING_OUT)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            }
             if let moving = removal?.moving {
                 Text(moving)
                     .font(.orbitLabel)
@@ -512,6 +542,9 @@ private struct RunnerEngineContent: View {
                         blockingSessionRow(session)
                     }
                 }
+            }
+            if let block = AccountHealth.block(runners.healthBlocks, runnerID: runner.id, engine: engine, account: line.id) {
+                AccountHealthRow(block: block, now: now) { await runners.checkAccountAgain(block) }
             }
             if signingIn == line.id {
                 RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,
@@ -678,6 +711,13 @@ private struct RunnerEngineContent: View {
             }
             .disabled(blocked != nil)
         }
+        if RunnerPageFormat.offersSignOut(line, engine: engine, runner: runner) {
+            Divider()
+            Button(role: .destructive) { pendingSignOut = line } label: {
+                Label(RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT, systemImage: "rectangle.portrait.and.arrow.right")
+            }
+            .disabled(!RunnerPageFormat.canSignOut(offline: offline, pending: removal?.pending == true))
+        }
         if RunnerPageFormat.offersRemove(line, health: health, runner: runner) {
             Divider()
             Button(role: .destructive) { pendingRemoval = line } label: {
@@ -797,6 +837,24 @@ private struct RunnerEngineContent: View {
 
     private var removalAsked: Binding<Bool> {
         Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
+    }
+
+    private var signOutAsked: Binding<Bool> {
+        Binding(get: { pendingSignOut != nil }, set: { if !$0 { pendingSignOut = nil } })
+    }
+
+    private var forceSignOutAsked: Binding<Bool> {
+        Binding(get: { forcingSignOut != nil }, set: { if !$0 { forcingSignOut = nil } })
+    }
+
+    private func signOutQuestion(_ line: RunnerPageFormat.AccountLine) -> RunnerPageFormat.RemovalQuestion {
+        RunnerPageFormat.signOutQuestion(line, engine: engine, runner: runner)
+    }
+
+    /// The second question names the sessions the runner refused over.
+    private func forcingSignOutQuestion(_ line: RunnerPageFormat.AccountLine) -> RunnerPageFormat.RemovalQuestion {
+        let count = RunnerPageFormat.removal(runner.accountRemove, engine: engine, account: line.id)?.blocking.count ?? 0
+        return RunnerPageFormat.signOutAgainQuestion(line, count: count)
     }
 
     private var setDefaultAsked: Binding<Bool> {
@@ -937,6 +995,32 @@ private struct RunnerEngineContent: View {
         Task {
             if let failure = await runners.removeAccount(id, engine: login, account: line.id) { show(failure) }
         }
+    }
+
+    /// Sign out…: the runner deletes Default's credential. Asked again with `force` once the runner
+    /// refuses over running sessions (`signOutRefused`); a control-plane refusal is said at once.
+    private func signOut(_ line: RunnerPageFormat.AccountLine, force: Bool) {
+        guard let login = RunnerPageFormat.loginEngine(engine) else { return }
+        let id = runner.id
+        signOutSent = true
+        Task {
+            if let failure = await runners.signOutDefault(id, engine: login, force: force) {
+                signOutSent = false
+                show(RunnerAccountCopy.runnerDefaultSignOutFailed(name: line.name) + " — " + failure)
+            }
+        }
+    }
+
+    /// The runner's word on this page's own sign-out: sessions running on Default raise the second
+    /// question; any other end settles the request.
+    private func signOutAnswered(_ state: RunnerAccountRemoveState?, health: RunnerEngineHealth?) {
+        guard signOutSent, let state, state.engine == engine, state.account == CodexAccounts.defaultID,
+              state.status != "pending" else { return }
+        signOutSent = false
+        guard state.status == "failed", !state.sessions.isEmpty,
+              let line = RunnerPageFormat.accountLines(health ?? RunnerEngineHealth(engine: engine), usage: nil)
+                  .first(where: { $0.isDefault }) else { return }
+        forcingSignOut = line
     }
 
     /// Make default: the runner swaps this login with ~/.claude. A control-plane refusal is said over

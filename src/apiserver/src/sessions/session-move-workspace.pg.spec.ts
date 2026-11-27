@@ -38,7 +38,8 @@ import { test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -61,6 +62,7 @@ import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { fixtureFacts } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -261,7 +263,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: ws.home, assignedRunnerId: runners.wikova,
         title, prompt: title, provider: 'claude', providerBuiltin: true,
-        status: RunStatus.CANCELLED, endReason: 'ended', startedAt: new Date(Date.now() - 600_000),
+        turnState: null, endReason: 'ended', startedAt: new Date(Date.now() - 600_000),
         finishedAt: new Date(), numTurns: 3, runtimeSessionId: randomUUID(),
         model: 'claude-opus-5', effort: 'high', permissionMode: 'acceptEdits',
         dispatchOrigin: SessionDispatchOrigin.USER,
@@ -275,7 +277,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
         mergeTargets: ['develop', 'main'],
         mergeStatus: 'conflict', mergeError: 'CONFLICT (content): Merge conflict in src/a.ts',
         mergeRequestedAt: new Date(), mergeOperationId: randomUUID(), mergeRecoveryAction: 'preview',
-        ...extra,
+        ...fixtureFacts(extra),
       } as never,
     });
     return id;
@@ -617,7 +619,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
     assert.deepEqual([stuck.reason, stuck.needsEnd], ['sleepy has to be online to end the session first.', true]);
     // Once ended, it moves — the second half of End and Move.
     await sql.query(
-      "UPDATE session SET status = 'CANCELLED', end_reason = 'ended', finished_at = now() WHERE id = $1::uuid",
+      "UPDATE session SET turn_state = NULL, end_reason = 'ended', finished_at = now() WHERE id = $1::uuid",
       [idle],
     );
     const settled = (await targetsOf(idle)).json;
@@ -702,7 +704,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       await holder.query('BEGIN');
       await holder.query('SELECT id FROM session WHERE id = $1::uuid FOR UPDATE', [waking]);
       await holder.query(
-        "UPDATE session SET status = 'RUNNING', end_reason = NULL, finished_at = NULL WHERE id = $1::uuid",
+        "UPDATE session SET turn_state = 'IN_FLIGHT', end_reason = NULL, finished_at = NULL WHERE id = $1::uuid",
         [waking],
       );
       const blocked = move(waking, { workspaceId: pub(ws.sibling) });

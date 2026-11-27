@@ -86,6 +86,8 @@ struct MarkdownView: View, Equatable {
                 case .file(let ref):
                     MarkdownFileLinkView(ref: ref)
                         .modifier(BubbleProseInset(active: inset))
+                case .document(let id, let label):
+                    DriveLinkCard(entryID: id, label: label)
                 }
             }
         }
@@ -109,6 +111,8 @@ struct MarkdownView: View, Equatable {
                 case .file(let ref):
                     MarkdownFileLinkView(ref: ref)
                         .modifier(BubbleProseInset(active: inset))
+                case .document(let id, let label):
+                    DriveLinkCard(entryID: id, label: label)
                 }
             }
             if let tail, !tailInline {
@@ -135,6 +139,8 @@ enum MarkdownRenderBlock: Equatable {
     case card(OrbitLinkRef)
     case file(MarkdownFileRef)
     case settings(SettingPlace)
+    /// A drive file a reply links (`orbit-document:<id>`), drawn as that file (docs/mocks/drive, 01-ios ⑮).
+    case document(entryID: String, label: String)
 }
 
 /// A message's blocks, with every Orbit link that stands for itself replaced by the card drawn in
@@ -153,7 +159,7 @@ enum MarkdownRenderBlock: Equatable {
         switch rendered {
         case .card(let ref): return [.card(ref)]
         case .settings(let place): return [.settings(place)]
-        case .markdown(let block): return splitFileLinks(in: block)
+        case .markdown(let block): return splitDocumentLinks(in: block)
         }
     }
 }
@@ -165,6 +171,7 @@ extension Array where Element == MarkdownRenderBlock {
             if case .card = block { return true }
             if case .file = block { return true }
             if case .settings = block { return true }
+            if case .document = block { return true }
             return false
         }
     }
@@ -178,6 +185,28 @@ extension Array where Element == MarkdownRenderBlock {
 
     /// What a re-render keys on: which links the message shows, not the words around them.
     var orbitCardKeys: [String] { orbitCards.map(\.target.key) }
+}
+
+/// Split a paragraph around its links to drive files, each drawn as the file it names; the words between go on to
+/// the file-link split below.
+private func splitDocumentLinks(in block: MarkdownBlock) -> [MarkdownRenderBlock] {
+    guard case .paragraph(let text) = block else { return splitFileLinks(in: block) }
+    let matches = DriveLogic.linkMatches(in: text)
+    guard !matches.isEmpty else { return splitFileLinks(in: block) }
+    var result: [MarkdownRenderBlock] = []
+    var cursor = text.startIndex
+    func prose(_ piece: String) {
+        let trimmed = piece.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.allSatisfy({ $0.isWhitespace || "，。；：、,.;:!?!?".contains($0) }) else { return }
+        result += splitFileLinks(in: .paragraph(text: trimmed))
+    }
+    for match in matches {
+        prose(String(text[cursor..<match.range.lowerBound]))
+        result.append(.document(entryID: match.entryID, label: match.label))
+        cursor = match.range.upperBound
+    }
+    prose(String(text[cursor...]))
+    return result
 }
 
 /// Split a paragraph around Markdown links that name files. Keeping the surrounding prose as
@@ -232,6 +261,7 @@ private enum ProseGroup {
     case card(OrbitLinkRef)
     case file(MarkdownFileRef)
     case settings(SettingPlace)
+    case document(entryID: String, label: String)
 }
 
 /// Fold a block list into render groups: maximal runs of flowable prose (headings, paragraphs,
@@ -261,6 +291,11 @@ private func proseGroups(_ blocks: [MarkdownRenderBlock], base: ProseRole) -> [P
         if case .settings(let place) = rendered {
             flush()
             groups.append(.settings(place))
+            continue
+        }
+        if case .document(let id, let label) = rendered {
+            flush()
+            groups.append(.document(entryID: id, label: label))
             continue
         }
         guard case .markdown(let block) = rendered else { continue }

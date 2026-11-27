@@ -110,10 +110,11 @@ const wikiSearchReply = `{"q":"trgm index","semantic":false,"hits":[` +
 
 // ── The surface ─────────────────────────────────────────────────────────────────────────────────
 
-// Five tools, and no more: the contract names them, the CLI has a command per tool (the parity test
+// Six tools, and no more: the contract names them, the CLI has a command per tool (the parity test
 // walks that), and the two halves of this file — tool descriptors and capability specs — are here.
 // A sixth tool added on one side is caught by whichever table the other side did not grow. The
-// fifth, wiki_draft, joined with the binary that serves it (contract `agentSurface.chat.draft.arrival`).
+// fifth, wiki_draft, and the sixth, wiki_read, joined with the binary that serves them (contract
+// `agentSurface.chat.draft.arrival`, `agentSurface.chat.read.arrival`).
 func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 	surface := wikiSurface(t)
 	tools := surface["tools"].([]interface{})
@@ -134,11 +135,11 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 		}
 	}
 
-	// The risk split, which is the whole reason there are five tools: the contract says which are
+	// The risk split, which is the whole reason there are six tools: the contract says which are
 	// read-only and whether the ones that write destroy anything, and the annotations say it to the
 	// engine that decides whether to ask a human first.
 	specs := surface["toolSpecs"].(map[string]interface{})
-	for _, name := range []string{"wiki_search", "wiki_get", "wiki_propose", "wiki_note", "wiki_draft"} {
+	for _, name := range []string{"wiki_search", "wiki_get", "wiki_propose", "wiki_note", "wiki_draft", "wiki_read"} {
 		spec := specs[name].(map[string]interface{})
 		annotations, _ := wikiDescriptor(t, name)["annotations"].(map[string]interface{})
 		if annotations == nil {
@@ -166,6 +167,7 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 		"wiki_propose": {"ops", "rationale", "idempotencyKey", "dryRun", "replaces"},
 		"wiki_note":    {"text", "paths", "corrects", "replaces"},
 		"wiki_draft":   {"kind", "sections", "change", "reason", "replaces", "idempotencyKey"},
+		"wiki_read":    {"q", "doc", "section", "draft", "more"},
 	}
 	for name, want := range params {
 		// And the contract's own list for the tool, name for name: a parameter in one and not the other is caught here.
@@ -1706,6 +1708,12 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("idempotency-key", "", "")
 		fs.String("replaces", "", "")
 		fs.String("change", "", "")
+	case "read":
+		fs.String("q", "", "")
+		fs.String("doc", "", "")
+		fs.String("section", "", "")
+		fs.String("draft", "", "")
+		fs.String("more", "", "")
 	case "verify":
 		fs.String("space", "", "")
 	default:
@@ -1735,7 +1743,7 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 	// Every form says where a known pitfall is looked up, and only for a session that has the tool.
 	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
 		got := orbitCLIInstructions(exe, form.inside, form.watches, true, true)
-		if !strings.Contains(got, "Before changing a file, use wiki_search with its path to look up known pitfalls, if your tool list has it.") {
+		if !strings.Contains(got, "Before changing a file, use wiki_search with its path to look up known pitfalls.") {
 			t.Errorf("instructions (inside=%v, watches=%v) do not say to look a file up before changing it: %q", form.inside, form.watches, got)
 		}
 	}
@@ -1751,10 +1759,14 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 			t.Errorf("orbit wiki %s is pre-approved, and this build has no such command: %q", action, rules)
 		}
 	}
-	// The entry links join the ones the instruction paragraph already names, and none of those went.
-	for _, link := range []string{"orbit-task:<id>", "orbit-session:<id>", "orbit-project:<id>", "orbit-list:<id>"} {
-		if !strings.Contains(instructions, link) {
-			t.Errorf("the link paragraph lost %s", link)
+	// The entry links join the ones a receipt hands over ready-made (receiptLink, primer 1.5.0): the instructions
+	// show the task form and send the agent to the receipt for the rest.
+	if !strings.Contains(instructions, "orbit-task:<id>") || !strings.Contains(instructions, "by its receipt's link") {
+		t.Errorf("the link paragraph lost the task link or the receipt's: %q", instructions)
+	}
+	for kind, scheme := range map[operationObject]string{objectTask: "orbit-task:", objectSession: "orbit-session:", objectProject: "orbit-project:", objectTaskList: "orbit-list:"} {
+		if receiptLinkSchemes[string(kind)] != scheme {
+			t.Errorf("a %s's receipt links it as %q, want %q", kind, receiptLinkSchemes[string(kind)], scheme)
 		}
 	}
 }

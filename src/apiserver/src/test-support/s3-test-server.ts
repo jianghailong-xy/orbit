@@ -38,7 +38,7 @@ async function s3Request(config: S3FilesConfig, method: 'PUT', requestPath: stri
  */
 export async function startS3(after: (fn: () => void) => void, dataDir?: string): Promise<S3FilesConfig> {
   const run = randomUUID().slice(0, 8);
-  const name = `orbit-files-s3-${run}`;
+  const name = `orbit-documents-s3-${run}`;
   const accessKeyId = `orbitfiles${run}`;
   const secretAccessKey = randomBytes(24).toString('hex');
   execFileSync('docker', [
@@ -54,7 +54,7 @@ export async function startS3(after: (fn: () => void) => void, dataDir?: string)
   });
   const port = execFileSync('docker', ['port', name, '7070/tcp'], { encoding: 'utf8' }).split('\n')[0].split(':').pop();
   const config: S3FilesConfig = {
-    endpoint: `http://127.0.0.1:${port}`, bucket: `orbit-files-${run}`, accessKeyId, secretAccessKey, region: 'us-east-1',
+    endpoint: `http://127.0.0.1:${port}`, bucket: `orbit-documents-${run}`, accessKeyId, secretAccessKey, region: 'us-east-1',
   };
   const deadline = Date.now() + 60_000;
   for (;;) {

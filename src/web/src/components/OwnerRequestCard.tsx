@@ -19,7 +19,9 @@ import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import {
   BROWSER_SIGN_IN_COPY,
+  CHANGE_COPY,
   KIND_TAGS,
+  changeNumber,
   WAITING_ON_YOU,
   deviceLabel,
   expiryText,
@@ -65,6 +67,7 @@ import { WikiCreateDialog, sameId, useWikiWorkspaceChoices } from './WikiSetUpDi
 import { ScheduleWaitingCard, isScheduleWaitingKind } from './ScheduleWaitingCard';
 import { ConditionWaitingCard, isConditionWaitingKind } from './ConditionWaitingCard';
 import { SettingsChangeCard, SettingsChangeFolded } from './SettingsChangeCard';
+import { ProjectReopenCard, ProjectReopenFolded } from './ProjectReopenCard';
 import './OwnerRequest.css';
 import { useMachineName } from '../lib/managedRunner';
 
@@ -79,7 +82,9 @@ type Ending =
   | { to: 'done'; body: { option?: number; text?: string; sendAsWritten?: true } }
   | { to: 'decline'; body: { reason: string; sendAsWritten?: true } }
   // WIKI_CREATE's Create wiki: the owner's door that makes the wiki and settles the card (design §3.6).
-  | { to: 'create-wiki'; body: Record<string, never> };
+  | { to: 'create-wiki'; body: Record<string, never> }
+  // CHANGE's Apply: the owner's door that writes the runner setting and settles the card.
+  | { to: 'apply'; body: { maxConcurrent: number } };
 
 /**
  * A request's agent-written words as the card draws them: translated while it is shown translated
@@ -109,7 +114,9 @@ const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
   CONFIRM: 'Confirm',
   WIKI_CREATE: 'Create wiki',
   SETTINGS_CHANGE: 'Save changes',
+  PROJECT_REOPEN: 'Reopen',
   BROWSER_SIGN_IN: BROWSER_SIGN_IN_COPY.openBrowser,
+  CHANGE: CHANGE_COPY.primary,
 };
 
 /** The runner a secret goes to, by the name the owner knows it by. */
@@ -118,6 +125,52 @@ function useRunnerName(runnerId: string | undefined): string {
   const runner = runners.data?.find((row) => runnerId && sameResourceId(row.id, runnerId));
   const machineNameOf = useMachineName();
   return (runner ? machineNameOf(runner) : '') || 'this runner';
+}
+
+/** The runner row a CHANGE names: its live Max Concurrent, how many sessions run now, and its name. */
+function useChangeRunner(runnerId: string | undefined): { name: string; live: number | null; running: number | null } {
+  const runners = useQuery({ ...runnersQuery(), enabled: Boolean(runnerId) });
+  const row = runners.data?.find((r) => runnerId && sameResourceId(r.id, runnerId));
+  const machineNameOf = useMachineName();
+  return {
+    name: (row ? machineNameOf(row) : '') || 'this runner',
+    live: typeof row?.maxConcurrent === 'number' ? row.maxConcurrent : null,
+    running: typeof row?.activeSessions === 'number' ? row.activeSessions : null,
+  };
+}
+
+/** A CHANGE card's setting block: live value → editable number, what is running, and what the number would do. */
+function ChangeSetting({ spec, value, onValue }: {
+  spec: NonNullable<OwnerRequest['changeSpec']>;
+  value: string;
+  onValue: (value: string) => void;
+}): JSX.Element {
+  const { name, live, running } = useChangeRunner(spec.runnerId);
+  const current = live ?? spec.before;
+  const n = changeNumber(value);
+  return (
+    <div className="owner-request-change">
+      <div className="owner-request-change-setting">{CHANGE_COPY.setting(name)}</div>
+      <div className="owner-request-change-row">
+        <span className="owner-request-change-live">{current}</span>
+        <span aria-hidden="true">→</span>
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          className="owner-request-change-input"
+          aria-label={CHANGE_COPY.numberLabel}
+          value={value}
+          invalid={n === null}
+          onChange={(event) => onValue(event.target.value)}
+        />
+        {running !== null ? <span className="owner-request-change-running">{CHANGE_COPY.runningNow(running)}</span> : null}
+      </div>
+      {current !== spec.before ? <p className="owner-request-change-was">{CHANGE_COPY.wasWhenAsked(spec.before)}</p> : null}
+      {n !== null && n < current ? <p className="owner-request-change-effect">{CHANGE_COPY.lowering(n)}</p> : null}
+      {n !== null && n > current ? <p className="owner-request-change-effect">{CHANGE_COPY.raising(n)}</p> : null}
+    </div>
+  );
 }
 
 /** The tasks a request holds up, linked by title. A task that cannot be read keeps a link with no name. */
@@ -403,6 +456,8 @@ export function OwnerRequestCard(props: {
   request: OwnerRequest;
   now?: number;
   onChat?: ChatAbout;
+  /** The conversation drawing the card, so a PROJECT_REOPEN names its askers only outside the asking session. */
+  viewedFromSessionId?: string | null;
 }): JSX.Element {
   // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) are answered through the door of
   // what they point at, so they draw their own body in the same frame.
@@ -411,6 +466,10 @@ export function OwnerRequestCard(props: {
   if (props.request.kind === 'SETTINGS_CHANGE') {
     if (props.request.state === 'PENDING') return <SettingsChangeCard request={props.request} />;
     if (props.request.state === 'DONE' || props.request.state === 'DECLINED') return <SettingsChangeFolded request={props.request} />;
+  }
+  if (props.request.kind === 'PROJECT_REOPEN') {
+    if (props.request.state === 'PENDING') return <ProjectReopenCard request={props.request} viewedFromSessionId={props.viewedFromSessionId} />;
+    if (props.request.state === 'DONE' || props.request.state === 'DECLINED') return <ProjectReopenFolded request={props.request} now={props.now} />;
   }
   if (props.request.state === 'PENDING' && isConditionWaitingKind(props.request.kind)) {
     return <ConditionWaitingCard request={props.request} now={props.now} />;
@@ -435,6 +494,7 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState('');
   const [changing, setChanging] = useState(false);
+  const [maxValue, setMaxValue] = useState(String(request.changeSpec?.requested ?? ''));
   const runner = useRunnerName(request.secretSpec?.runnerId);
   const end = useMutation({
     mutationFn: ({ to, body }: Ending) =>
@@ -460,7 +520,9 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
     ? draft.savedId !== null || (draft.value.trim() !== '' && (!draft.save || draft.saveAs.trim() !== ''))
     : request.kind === 'DECISION'
       ? chosenOption !== null || trimmed !== ''
-      : true;
+      : request.kind === 'CHANGE'
+        ? changeNumber(maxValue) !== null
+        : true;
   const expiry = expiryText(request, now);
   const pressPrimary = () => {
     if (request.kind === 'SECRET') {
@@ -469,6 +531,10 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
         : { value: draft.value, ...(draft.save ? { saveAs: draft.saveAs.trim() } : {}) };
       setDraft(emptyDraft(request.secretSpec));
       void door.post('secret', body);
+      return;
+    }
+    if (request.kind === 'CHANGE') {
+      end.mutate({ to: 'apply', body: { maxConcurrent: changeNumber(maxValue)! } });
       return;
     }
     const body = request.kind === 'DECISION'
@@ -513,6 +579,9 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
             </Markdown>
           </div>
         )}
+        {request.kind === 'CHANGE' && request.changeSpec ? (
+          <ChangeSetting spec={request.changeSpec} value={maxValue} onValue={setMaxValue} />
+        ) : null}
         {request.blocksTaskIds.length > 0 || request.secretSpec ? (
           <dl className="owner-request-facts">
             {request.blocksTaskIds.length > 0 ? (
@@ -575,7 +644,7 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
         {failed ? (
           <Alert type="error" title={`The key did not reach ${runner}`} description={grant.removalNote ?? 'Enter it again.'} />
         ) : null}
-        {end.isError && answerRefusedUntranslated(end.error) && end.variables && end.variables.to !== 'create-wiki' ? (
+        {end.isError && answerRefusedUntranslated(end.error) && end.variables && end.variables.to !== 'create-wiki' && end.variables.to !== 'apply' ? (
           <RefusedAnswerFoot
             error={end.error}
             resend={(sendAsWritten) => {
@@ -703,6 +772,11 @@ function outcomeLine(request: OwnerRequest, runner: string): string {
     if (label) return said ? `${label}: “${said}”` : label;
     return said ? `“${said}”` : 'Answered';
   }
+  if (request.kind === 'CHANGE' && request.changeSpec) {
+    const { applied, actualBefore } = request.answer ?? {};
+    const spec = request.changeSpec;
+    return CHANGE_COPY.applied(runner, actualBefore ?? spec.before, applied ?? spec.requested, spec.requested);
+  }
   if (request.kind === 'BROWSER_SIGN_IN') return BROWSER_SIGN_IN_COPY.signedIn(request.browserSite ?? '');
   if (request.kind === 'WIKI_CREATE') return request.answer?.name ? `Created the wiki ${request.answer.name}` : 'Wiki created';
   return request.kind === 'CONFIRM' ? 'Confirmed' : 'Marked done';
@@ -768,6 +842,9 @@ export function OwnerRequestResolved({ request, now = Date.now() }: { request: O
   if (request.kind === 'SETTINGS_CHANGE' && (request.state === 'DONE' || request.state === 'DECLINED')) {
     return <SettingsChangeFolded request={request} />;
   }
+  if (request.kind === 'PROJECT_REOPEN' && (request.state === 'DONE' || request.state === 'DECLINED')) {
+    return <ProjectReopenFolded request={request} now={now} />;
+  }
   return <AgentRequestResolved request={request} now={now} />;
 }
 
@@ -778,7 +855,7 @@ function AgentRequestResolved({ request: given, now }: { request: OwnerRequest; 
   // pending, or never to be confirmed (§2, §6.1, §6.4) — so the card never implies gone while a copy may remain.
   const held = request.kind === 'SECRET' ? request.secretGrant : null;
   const grant = held && (request.state === 'DONE' || removalToTell(held)) ? held : null;
-  const runner = useRunnerName(request.kind === 'SECRET' ? request.secretSpec?.runnerId : undefined);
+  const runner = useRunnerName(request.kind === 'SECRET' ? request.secretSpec?.runnerId : request.kind === 'CHANGE' ? request.changeSpec?.runnerId : undefined);
   const when = request.resolvedAt ? decisionReceiptTime(request.resolvedAt, new Date(now)) : null;
   const by = [endedBy(request), when].filter(Boolean).join(' · ');
   const device = deviceLabel(request.resolvedClient);
@@ -818,12 +895,13 @@ function SnoozedRequest({ request, until, now }: { request: OwnerRequest; until:
 
 /** One request where a conversation draws it: whole, folded for later, or as its summary. */
 function ConversationRequest({ request, onChat }: { request: OwnerRequest; onChat?: ChatAbout }): JSX.Element {
+  // A transcript only draws the requests its own session filed, so the card never names that session as the asker.
   const snoozes = useSnoozes();
   const now = Date.now();
   if (request.state !== 'PENDING') return <OwnerRequestResolved request={request} now={now} />;
   const until = snoozes[request.id] ?? 0;
   if (until > now) return <SnoozedRequest request={request} until={until} now={now} />;
-  return <OwnerRequestCard request={request} now={now} onChat={onChat} />;
+  return <OwnerRequestCard request={request} now={now} onChat={onChat} viewedFromSessionId={request.askedBySessionId} />;
 }
 
 /**

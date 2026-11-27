@@ -456,7 +456,13 @@ public enum SessionProjectLandings {
         let branch = branchOf(ref)
         guard let membership, !membership.projectTitle.isEmpty else { return branch }
         let ids = [membership.projectId, PublicID.toPublic(membership.projectId)]
-        return ids.contains { branch == "project/\($0)" } ? membership.projectTitle : branch
+        if ids.contains(where: { branch == "project/\($0)" }) { return membership.projectTitle }
+        // The readable name: `project/<slug>-<8 chars of the public id>`, or the 8 chars alone.
+        let short = String(ids[1].prefix(8))
+        if branch == "project/\(short)" || (branch.hasPrefix("project/") && branch.hasSuffix("-\(short)")) {
+            return membership.projectTitle
+        }
+        return branch
     }
 
     private static func branchOf(_ ref: String?) -> String {

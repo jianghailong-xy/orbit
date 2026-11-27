@@ -66,7 +66,7 @@ func assertCodexOrbitMCPContextForwarded(t *testing.T, args []string) {
 	// scheduled run's session lists no schedule_run_report, ORBIT_BROWSER, without which the browser tools are absent,
 	// ORBIT_WORKFLOWS, without which a session whose Agent has Workflows off is offered the workflow tool, and the
 	// runner's mark, without which the Plan gate cannot tell a session process that lost its socket from a terminal).
-	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_BROWSER","ORBIT_WORKFLOWS","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID","ORBIT_SUBAGENT_REMOTE_MODE"]`
+	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_DOCUMENTS","ORBIT_BROWSER","ORBIT_WORKFLOWS","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID","ORBIT_SUBAGENT_REMOTE_MODE","ORBIT_TOOL_OOM_BASELINE"]`
 	for i, arg := range args {
 		if arg == want {
 			if i == 0 || args[i-1] != "-c" {
@@ -307,8 +307,9 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 		}
 		cliParts = append(cliParts, value)
 	}
-	if len(cliParts) < 2 || strings.Join(cliParts, "\n\n") != orbitCLIInstructions(exe, false, true, true, true) {
-		t.Fatalf("orbit CLI context in %d values = %q, want %q", len(cliParts), strings.Join(cliParts, "\n\n"), orbitCLIInstructions(exe, false, true, true, true))
+	wantCLI := compose(testShape(exe, false, true, true, true), codexProfile).System
+	if len(cliParts) < 2 || strings.Join(cliParts, "\n\n") != wantCLI {
+		t.Fatalf("orbit CLI context in %d values = %q, want %q", len(cliParts), strings.Join(cliParts, "\n\n"), wantCLI)
 	}
 	if !strings.HasPrefix(cliParts[0], agentPrimerLead) {
 		t.Fatalf("the first orbit CLI value does not open with the agent primer: %q", cliParts[0])
@@ -371,7 +372,7 @@ func TestCodexCompactionRefreshesInstructionContextOnNextTurn(t *testing.T) {
 	if generation != 1 {
 		t.Fatalf("post-compaction generation = %d, want 1", generation)
 	}
-	refreshed := codexAgentAdditionalContext(AgentExecConfig{}, "", generation, false, true, true)
+	refreshed := codexAgentAdditionalContextOf(AgentExecConfig{}, "", generation, false, true, true)
 	imageDelivery, ok := refreshed["orbit_00000001_image_delivery"].(map[string]interface{})
 	if !ok || imageDelivery["value"] != codexImageDeliveryInstructions {
 		t.Fatalf("image delivery instructions not restored after compaction: %#v", refreshed)
@@ -558,7 +559,7 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 	if !strings.Contains(input[0]["text"].(string), codexImageDeliveryInstructions) {
 		t.Fatalf("legacy input is missing image delivery instructions: %#v", input)
 	}
-	items := codexInjectedAgentItems(job.Agent, "/usr/local/bin/orbit", false, true, true)
+	items := codexInjectedAgentItemsOf(job.Agent, "/usr/local/bin/orbit", false, true, true)
 	if len(items) != 1 || items[0]["role"] != "developer" {
 		t.Fatalf("injected items = %#v", items)
 	}
@@ -577,7 +578,7 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 
 func TestCodexAdditionalContextChunksLongOwnerInstructionsLosslessly(t *testing.T) {
 	want := strings.Repeat("界abc", 900)
-	context := codexAgentAdditionalContext(AgentExecConfig{AppendSystemPrompt: want}, "/usr/local/bin/orbit", 7, false, true, true)
+	context := codexAgentAdditionalContextOf(AgentExecConfig{AppendSystemPrompt: want}, "/usr/local/bin/orbit", 7, false, true, true)
 	keys := make([]string, 0, len(context))
 	for key := range context {
 		if strings.HasPrefix(key, "orbit_00000007_agent_append_") {

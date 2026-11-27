@@ -21,7 +21,7 @@ for (const kind of ['CONFIRMATION', 'QUESTION', 'NOTIFY'] as const) {
     try {
       await db.user.create({ data: { id: ownerId, email: `${ownerId}@hold.invalid`, name: 'Hold spec', passwordHash: 'x' } });
       const coordinator = await db.session.create({ data: {
-        ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', status: 'AWAITING_INPUT',
+        ownerId, creatorId: ownerId, title: 'Coordinator', prompt: 'Coordinate', provider: 'codex', turnState: null,
       } });
       const project = await db.project.create({ data: {
         ownerId, title: 'Hold project', goal: 'Bounded wait', coordinatorEnabled: true,

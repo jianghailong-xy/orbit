@@ -63,6 +63,9 @@ const GUARD_CALLERS: Record<string, Caller> = {
   SharedStreamGuard: 'public',
   // The help doors: open signed out; a credential sent along only says whether the reader is an admin.
   HelpReaderGuard: 'public',
+  // The Drive switch admits nobody by itself: the drive door's credential guard says who, and the download link's
+  // signed token, which no guard checks, keeps it public.
+  DriveEnabledGuard: 'public',
 };
 
 const REQUEST_METHODS: Record<number, string> = {
@@ -277,6 +280,26 @@ const SENDING_A_NOTIFICATION: readonly string[] = [
   '- `{"delivered": false, "reason": "NOT_ACCEPTED"}`: APNs and FCM accepted it for none of your devices.',
 ];
 
+/**
+ * GET /api/sessions/listing pages a workspace's session list (docs/session-list-scale-design.md §3.2). Its answer
+ * has a field a client must act on, `restarted`, so the shape is written out here.
+ */
+const PAGING_A_SESSION_LIST: readonly string[] = [
+  '## Paging a workspace’s session list',
+  '',
+  '`GET /api/sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limit=40][&after=<cursor>]`',
+  'answers one page of the list as top-level entries, with an ETag answered `304` when nothing moved:',
+  '',
+  '| Field | Meaning |',
+  '| --- | --- |',
+  '| `folders` | The folder rows, `{ folderId, rowCount, needsYou, running, jobs }`: only on a first page without `folderId`. |',
+  '| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator }`, in list order (in Open: Pinned, then Needs you, then Working, then the rest, each newest listed first, as the web\'s sections draw them); a project\'s `running` / `jobs` say whether a member it holds runs / has a background job moving. |',
+  '| `next` | The `after` of the following page, or `null` at the end. |',
+  '| `restarted` | `true` when `after` was written under an order the list no longer has (Completed switches order on whether any session is held by a project): this is the first page again, with its `folders`, and replaces the pages already read. Absent otherwise. |',
+  '',
+  '`limit` is 1 to 200 (40 when absent); a malformed `after` is refused `400`.',
+];
+
 export function renderApiReference(routes: ApiRoute[]): string {
   const lines: string[] = [];
   lines.push('# External HTTP API reference');
@@ -351,6 +374,7 @@ export function renderApiReference(routes: ApiRoute[]): string {
   lines.push('  a route without one returns its whole result.');
   lines.push('');
   lines.push(...SENDING_A_NOTIFICATION, '');
+  lines.push(...PAGING_A_SESSION_LIST, '');
   const byCaller = new Map<Caller, ApiRoute[]>(CALLERS.map((caller) => [caller, []]));
   for (const route of routes) byCaller.get(route.caller)!.push(route);
   lines.push('## Summary');

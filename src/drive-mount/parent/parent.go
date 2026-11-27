@@ -1,7 +1,7 @@
 //go:build linux
 
-// Package parent is the privileged parent of one runner's mount daemon (docs/orbit-files-drive-technical-design.md
-// §5.1, §5.7, §5.8): it opens /dev/fuse, mounts fuse.orbit-files at <root>/drive, and starts the daemon with the FUSE
+// Package parent is the privileged parent of one runner's mount daemon (docs/drive-technical-design.md
+// §5.1, §5.7, §5.8): it opens /dev/fuse, mounts fuse.orbit-drive at <root>/drive, and starts the daemon with the FUSE
 // descriptor inherited, as an unprivileged user with no capabilities, which serves it through go-fuse's /dev/fd/N
 // mountpoint. It is what the CSI plugin (Kubernetes) or the Docker mounter runs per runner.
 //
@@ -41,7 +41,7 @@ const ExitFenced = 3
 
 // Config is one runner's mount.
 type Config struct {
-	// Root is the plain per-runner directory the runner receives as /run/orbit-files; the drive is mounted at
+	// Root is the plain per-runner directory the runner receives as /run/orbit-drive; the drive is mounted at
 	// Root/drive, and errors.log, status.json and unsent/ sit beside it.
 	Root string
 	// SpoolDir is on the node's disk, never the runner's volume (§5.3).
@@ -89,7 +89,7 @@ func (c *Config) defaults() {
 		c.UnsentLimit = 1 << 30
 	}
 	if c.Log == nil {
-		c.Log = log.New(os.Stderr, "orbit-files-mount: ", log.LstdFlags)
+		c.Log = log.New(os.Stderr, "orbit-drive-mount: ", log.LstdFlags)
 	}
 }
 
@@ -216,7 +216,7 @@ func start(ctx context.Context, cfg *Config, who *whois) (*daemon, error) {
 	fuseFile := os.NewFile(uintptr(fd), "/dev/fuse")
 	defer fuseFile.Close() // the daemon holds the only descriptor: when it dies, the connection ends (ENOTCONN)
 	data := fmt.Sprintf("fd=%d,rootmode=40000,user_id=0,group_id=0,default_permissions,allow_other,max_read=%d", fd, 1<<20)
-	if err := unix.Mount("orbit-files", mp, "fuse.orbit-files", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, data); err != nil {
+	if err := unix.Mount("orbit-drive", mp, "fuse.orbit-drive", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, data); err != nil {
 		return nil, fmt.Errorf("mount %s: %w", mp, err)
 	}
 	conn, _ := connection(mp)

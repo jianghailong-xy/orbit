@@ -159,7 +159,7 @@ final class ProjectCrossingsTests: XCTestCase {
         let approve = ProjectCrossings.prompt(row, .approve)
         XCTAssertEqual(approve.to, "no project")
         XCTAssertEqual(approve.consequence,
-                       "Confirming takes the task out of this project; no project's acceptance counts it any more.")
+                       "Confirming takes the task out of this project as soon as you answer; no project's acceptance counts it any more.")
         XCTAssertEqual(ProjectCrossings.question(approve),
                        "Approve moving “Wire the drain watchdog” from Coordinator control loop to no project?")
         XCTAssertEqual(ProjectCrossings.prompt(row, .deny).consequence, ProjectCrossings.moveDenyConsequence)

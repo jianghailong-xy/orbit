@@ -19,12 +19,16 @@ import kotlinx.serialization.json.intOrNull
  * remote the workspace records, null with none and from a server that does not send it: what makes a wiki of it (mock 41). */
 @Serializable
 data class DirectoryWorkspace(val id: String, val name: String, val runnerId: String? = null,
-    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null)
+    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null,
+    /** `PULL_REQUEST` or `PUSH_AS_ME`; null with none chosen and from a server that does not send it. */
+    val landingMode: String? = null)
 @Serializable
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
     val displayName: String? = null, val lastHeartbeatAt: String? = null,
     /** True on the account's managed runner (Orbit Cloud); null from an older server (RunnerPage.isManaged). */
-    val managed: Boolean? = null)
+    val managed: Boolean? = null,
+    /** The runner's Max Concurrent and the sessions it runs now; null from an older server. */
+    val maxConcurrent: Int? = null, val activeSessions: Int? = null)
 @Serializable
 data class Folder(val id: String, val workspaceId: String, val name: String)
 @Serializable
@@ -96,9 +100,16 @@ data class DirectorySession(
     val queuedHeldByJobs: Int? = null,
     /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
     val queuedRunnerUpdate: JsonElement? = null,
+    /** Beside a capacity gate: whether Run now can start this queued message over the limit, and the server's sentence where it
+     *  cannot. False and null on any other row, and from an older server. */
+    val runNowAvailable: Boolean? = null, val runNowRefusal: String? = null,
+    /** On a turn started over its runner's limit, while it runs: `{active, limit, runnerName}`, kept as the JSON it came as and
+     *  read by [RunningOverLimit.of]. */
+    val runningOverLimit: JsonElement? = null,
     val runSource: String? = null,
-    /** When the session last changed for its owner, the order the Open list keeps (contracts/session-list-order.fixtures.json). Unlike
-     *  [lastTurnAt] it does not move with streamed text or background output. Null from an older server: the row reads as [createdAt]. */
+    /** When the session last changed for its owner: what every list view but Completed orders by, and the time its row shows
+     *  (contracts/session-list-order.fixtures.json). Unlike [lastTurnAt] it does not move with streamed text or background output.
+     *  Null from an older server: the row reads as [createdAt]. */
     val listedAt: String? = null,
 ) {
     /** Whether this row is a landing session (platform work), not a conversation. */
@@ -145,7 +156,10 @@ data class SessionProjectMembership(val projectId: String, val projectTitle: Str
 @Serializable
 data class SearchHit(val id: String, val title: String, val status: String = "UNKNOWN",
     val runState: String? = null, val lifecycleState: String? = null,
-    val agent: WorkspaceRef? = null, val snippet: String? = null, val matchField: String = "message")
+    val agent: WorkspaceRef? = null, val snippet: String? = null, val matchField: String = "message",
+    /** The session facts and the Background mark's inputs, as [DirectorySession] reads them; all null from an older server. */
+    val phase: String? = null, val released: Boolean? = null, val lastTurnOutcome: String? = null, val waitingOn: String? = null,
+    val endReason: String? = null, val workFinished: Boolean? = null, val activity: String? = null, val runningBgCount: Int? = null)
 @Serializable
 data class SearchResults(val q: String = "", val contentSearched: Boolean = false,
     val hits: List<SearchHit> = emptyList(), val total: Int? = null)
@@ -199,7 +213,7 @@ internal object ScheduledRunsFolder {
         else null
 }
 
-/** Where the Open list places a row: its `listedAt`, or `createdAt` from an older server. */
+/** Where the list places a row: its `listedAt`, or `createdAt` from an older server. */
 internal fun DirectorySession.listedInstant(): Instant? = runCatching { Instant.parse(listedAt ?: createdAt) }.getOrNull()
 
 /** Open's first three sections, ahead of the day sections (contracts/session-list-order.fixtures.json). */
@@ -207,19 +221,33 @@ internal const val NEEDS_YOU_GROUP = "section:needs-you"
 internal const val WORKING_GROUP = "section:working"
 
 /** Pending approvals, or a failure the server is not retrying. */
-internal fun DirectorySession.needsOwner() = pendingApprovals > 0 || (status == "FAILED" && retryAt == null)
+internal fun DirectorySession.needsOwner() = pendingApprovals > 0 || (failedForList() && retryAt == null)
 
-internal fun DirectorySession.isWorkingForList() = status == "RUNNING" || status == "PENDING" || (status == "FAILED" && retryAt != null)
+/** With the session facts, the state word's own reading ([displayRunState]); from an older server, the legacy status. */
+private fun DirectorySession.failedForList() = if (phase != null && released != null) displayRunState == RunState.FAILED else status == "FAILED"
 
+
+/** At work: the phase where the row carries one (RUNNING covers a background job or a SubAgent running between turns), otherwise the
+ * legacy status; or a failure the server is retrying (web `sessionIsWorking`). */
+internal fun DirectorySession.isWorkingForList() = when (phase) {
+    "RUNNING", "PENDING" -> true
+    "IDLE" -> false
+    else -> status == "RUNNING" || status == "PENDING"
+} || (status == "FAILED" && retryAt != null)
+
+/** [tagFiltered]: the list is narrowed to one tag, so Open draws no Pinned section. */
 fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, grouping: Grouping,
-    now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<SessionGroup> {
+    now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault(), tagFiltered: Boolean = false): List<SessionGroup> {
     val open = view == SessionView.OPEN
-    // Open orders by listedAt, which only moves when the session changes for its owner; the other views and tag groups keep the
-    // activity clock they always had.
-    fun date(s: DirectorySession) = if (open) s.listedInstant() else runCatching { Instant.parse(s.lastTurnAt ?: s.createdAt) }.getOrNull()
+    // A pin counts only in Open with no tag filter: it draws the Pinned section, and under Group by tag it leads its tag's section, as
+    // web and Apple keep it.
+    val pins = open && !tagFiltered
+    // Every view buckets by listedAt, which only moves when the session changes for its owner; all but Completed, which keeps the
+    // server's order, are ordered by it too.
+    fun date(s: DirectorySession) = s.listedInstant()
     fun created(s: DirectorySession) = runCatching { Instant.parse(s.createdAt) }.getOrNull() ?: Instant.MIN
-    val sorted = if (view == SessionView.COMPLETED) sessions else sessions.sortedWith(compareByDescending<DirectorySession> { open && it.pinnedAt != null }
-        .thenByDescending { date(it) ?: Instant.MIN }.thenByDescending { if (open) created(it) else Instant.MIN }.thenBy { it.id })
+    val sorted = if (view == SessionView.COMPLETED) sessions else sessions.sortedWith(compareByDescending<DirectorySession> { pins && it.pinnedAt != null }
+        .thenByDescending { date(it) ?: Instant.MIN }.thenByDescending { created(it) }.thenBy { it.id })
     if (grouping == Grouping.TAG) {
         val tags = sorted.mapNotNull { it.tags.firstOrNull() }.distinctBy { it.id }
             .sortedWith(compareByDescending<Tag> { it.isSystem }.thenBy { it.position }.thenBy { it.name })
@@ -229,7 +257,7 @@ fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, groupin
     val today = now.atZone(zone).toLocalDate()
     // 0 Pinned, then (Open only) Needs you and Working, then the day sections by [recencyBucket].
     fun bucket(s: DirectorySession) = when {
-        open && s.pinnedAt != null -> 0
+        pins && grouping == Grouping.RECENCY && s.pinnedAt != null -> 0
         open && s.needsOwner() -> NEEDS_YOU_BUCKET
         open && s.isWorkingForList() -> WORKING_BUCKET
         else -> recencyBucket(date(s), today, zone)

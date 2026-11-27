@@ -195,7 +195,8 @@ func skipMarkdownAttachmentSrc(src string) bool {
 		strings.HasPrefix(lower, "http://") ||
 		strings.HasPrefix(lower, "https://") ||
 		strings.HasPrefix(lower, "orbit-attachment:") ||
-		strings.HasPrefix(lower, "orbit-drive:")
+		strings.HasPrefix(lower, "orbit-drive:") ||
+		strings.HasPrefix(lower, "orbit-document:")
 }
 
 // localMarkdownLinkTarget is the file a link names: an absolute path as it is, and a relative one under the first root

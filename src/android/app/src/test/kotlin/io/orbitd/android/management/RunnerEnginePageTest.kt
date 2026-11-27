@@ -159,7 +159,7 @@ class RunnerEnginePageTest {
         assertEquals("an older runner would sign Default in again in its place", 0, shown("Add Account"))
         fixture.runnerExtra = extra(googleLogin = "unsupported_platform")
         page("engine:antigravity")
-        await("Google sign-in is not supported on macOS runners yet. Use a Gemini API key.")
+        await("Google sign-in is not supported on this runner's operating system. Use a Gemini API key.")
         assertEquals(0, shown("Add Account"))
         assertEquals("no terms where nothing signs in with Google", 0, shown("Google terms"))
     }

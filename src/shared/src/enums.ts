@@ -433,10 +433,13 @@ export enum RunEventType {
   // translation.ts). The breaker is per process and the same for every account, so it reaches every user; only a
   // nudge, to read `GET /users/me` again.
   TRANSLATION_STATUS_CHANGED = 'translation_status_changed',
-  // The owner's drive changed (docs/orbit-files-drive-technical-design.md §4.1, §5.4): a commit, create, rename, move,
+  // The owner's drive changed (docs/drive-technical-design.md §4.1, §5.4): a commit, create, rename, move,
   // delete or restore wrote rows to the change feed. Owner-scoped, and only a nudge carrying the feed's seq: a client
   // reads `GET /drive/changes` for what changed.
   DRIVE_CHANGED = 'drive_changed',
+  // An agent's directory sync into the owner's Drive started, moved or ended (docs/drive-directory-sync-design.md
+  // S4). Owner-scoped, and only a nudge naming the sync: a client reads `GET /drive/syncs`.
+  DRIVE_SYNC = 'drive_sync',
   // What some sessions' schedule cards (`GET /sessions/:id/schedule-cards`) read may have moved: a card was put up or
   // decided, a change was recorded or undone, or a schedule its cards and records name changed. Owner-scoped like the
   // libraries above, and only a nudge naming those sessions: streamForUser maps it to
@@ -464,6 +467,7 @@ export function isLifecycleType(t: RunEventType): boolean {
     t === RunEventType.TERMINALS_CHANGED ||
     t === RunEventType.TRANSLATION_STATUS_CHANGED ||
     t === RunEventType.DRIVE_CHANGED ||
+    t === RunEventType.DRIVE_SYNC ||
     t === RunEventType.SCHEDULE_CARDS_CHANGED
   );
 }

@@ -5,13 +5,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type RunEvent, Transcript } from './Transcript';
-import { DriveFilePicker } from './files/DriveFilePicker';
+import { DriveFilePicker } from './drive/DriveFilePicker';
 import { materializeReferences } from '../lib/composerRefs';
 
 /**
- * A reply that links a drive file (`orbit-drive:<id>`, which the runner writes for a path under /home/orbit/Files) draws
- * that file — name, folder, size — and opens it on the Files page; one that is trashed or gone says so. The composer's
- * Add from Files picker hands back the paths of the files picked (board docs/mocks/orbit-files/02-web frame 8).
+ * A reply that links a drive file (`orbit-drive:<id>`, which the runner writes for a path under /home/orbit/Drive, or
+ * `orbit-document:<id>`, its scheme while Drive was called Documents, which stored transcripts carry) draws that file — name, folder, size — and opens it on the Files page; one that is trashed or gone says so. The composer's
+ * Add from Files picker hands back the paths of the files picked (board docs/mocks/drive/02-web frame 8).
  */
 
 vi.mock('../api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api')>()), api: vi.fn() }));
@@ -59,18 +59,28 @@ const reply = (text: string) => {
 };
 
 describe('a reply linking a drive file', () => {
-  it('draws the file and links to it on the Files page', async () => {
+  it.each(['orbit-drive', 'orbit-document'])('draws a %s: link as the file and links to it on the Drive page', async (scheme) => {
     apiMock.mockResolvedValue(FILE);
-    await reply('Saved [sign-in-copy.md](orbit-drive:e1) for you.');
+    await reply(`Saved [sign-in-copy.md](${scheme}:e1) for you.`);
     const card = container.querySelector<HTMLAnchorElement>('a.drive-file-card');
     expect(card?.textContent).toContain('sign-in-copy.md');
-    expect(card?.textContent).toContain('Files › Orbit UI migration · 4.1 KB');
-    expect(card?.getAttribute('href')).toBe('/files?folder=f1&file=e1');
+    expect(card?.textContent).toContain('Drive › Orbit UI migration · 4.1 KB');
+    expect(card?.getAttribute('href')).toBe('/drive?folder=f1&file=e1');
+    expect(apiMock).toHaveBeenCalledWith(expect.stringContaining('e1'));
+  });
+
+  it('draws a linked folder as a folder that opens itself, with no size (a drive_sync summary links one)', async () => {
+    apiMock.mockResolvedValue({ id: 'd1', parentId: 'r1', kind: 'FOLDER', name: 'out', sizeBytes: 0, path: '/Reports/out', trashedAt: null });
+    await reply('305 files uploaded to [out](orbit-drive:d1), 0 failed.');
+    const card = container.querySelector<HTMLAnchorElement>('a.drive-file-card');
+    expect(card?.textContent).toContain('Drive › Reports');
+    expect(card?.textContent).not.toContain('0 B');
+    expect(card?.getAttribute('href')).toBe('/drive?folder=d1');
   });
 
   it('says so when the file is in Trash', async () => {
     apiMock.mockResolvedValue({ ...FILE, trashedAt: '2026-11-21T10:00:00Z' });
-    await reply('[sign-in-copy.md](orbit-drive:e1)');
+    await reply('[sign-in-copy.md](orbit-document:e1)');
     expect(container.querySelector('a.drive-file-card')).toBeNull();
     expect(container.querySelector('.drive-file-card.gone')?.textContent).toContain('In Trash');
   });
@@ -109,7 +119,7 @@ describe('the composer drive picker', () => {
     await click(option('Orbit UI migration'));
     await click(option('sign-in-copy.md'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
-    expect(onPick).toHaveBeenCalledWith([{ id: 'e1', name: 'sign-in-copy.md', path: '/home/orbit/Files/Orbit UI migration/sign-in-copy.md' }]);
+    expect(onPick).toHaveBeenCalledWith([{ id: 'e1', name: 'sign-in-copy.md', path: '/home/orbit/Drive/Orbit UI migration/sign-in-copy.md' }]);
   });
 
   it("opens on the session's project folder", async () => {
@@ -118,7 +128,7 @@ describe('the composer drive picker', () => {
     await mount(<DriveFilePicker projectFolder={{ id: 'p1', title: 'Orbit UI migration' }} onClose={() => {}} onPick={onPick} />);
     await click(option('sign-in-copy.md'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
-    expect(onPick.mock.calls[0]![0][0].path).toBe('/home/orbit/Files/Orbit UI migration/sign-in-copy.md');
+    expect(onPick.mock.calls[0]![0][0].path).toBe('/home/orbit/Drive/Orbit UI migration/sign-in-copy.md');
   });
 
   it('falls back to the drive root when the project has no folder yet', async () => {
@@ -151,14 +161,19 @@ describe('the composer drive picker', () => {
       await new Promise((r) => setTimeout(r, 50));
     });
     expect(searches[0]).toContain('q=budg');
-    expect(option('budget.xlsx')?.textContent).toContain('Files/Finance/2026');
+    expect(option('budget.xlsx')?.textContent).toContain('Drive/Finance/2026');
     await click(option('budget.xlsx'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
-    expect(onPick).toHaveBeenCalledWith([{ id: 'e7', name: 'budget.xlsx', path: '/home/orbit/Files/Finance/2026/budget.xlsx' }]);
+    expect(onPick).toHaveBeenCalledWith([{ id: 'e7', name: 'budget.xlsx', path: '/home/orbit/Drive/Finance/2026/budget.xlsx' }]);
   });
 
   it('sends a picked chip as the file path', () => {
-    const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1', path: '/home/orbit/Files/P/brief.md' } };
-    expect(materializeReferences('Check #brief.md too', refs)).toBe('Check /home/orbit/Files/P/brief.md too');
+    const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1', path: '/home/orbit/Drive/P/brief.md' } };
+    expect(materializeReferences('Check #brief.md too', refs)).toBe('Check /home/orbit/Drive/P/brief.md too');
+  });
+
+  it('sends a chip without a path as an orbit-drive: link', () => {
+    const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1' } };
+    expect(materializeReferences('Check #brief.md too', refs)).toBe('Check [brief.md](orbit-drive:e1) too');
   });
 });

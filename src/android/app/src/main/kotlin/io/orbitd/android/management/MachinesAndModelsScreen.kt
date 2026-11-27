@@ -37,7 +37,7 @@ import kotlinx.serialization.json.jsonObject
  * one keeps what was read before.
  */
 @Stable
-internal class MachinesAndModelsModel(private val api: ManagementApi) {
+internal class MachinesAndModelsModel(val api: ManagementApi) {
     val machines = RunnersModel(api)
     var keys by mutableStateOf<List<JsonObject>>(emptyList()); private set
     /** Why the last read of the keys failed, while none has been read. */
@@ -351,6 +351,8 @@ private fun KeysSection(model: MachinesAndModelsModel, page: (String) -> Unit) {
                     }
                     // Every engine it runs on: one key, under each engine that can spend it.
                     KeyEngines.line(key)?.let { Text(it, Modifier.testTag("key-engines"), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+                    // A key an account refused runs on: the provider's words, the next trial, Check again (§8).
+                    key.str("id")?.takeIf { it.isNotEmpty() }?.let { AccountHealthProviderLine(model.api, it) }
                 }
                 if (key.bool("enabled") == false) Text(MachinesAndModels.DISABLED, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 else if (deepSeek != null) DeepSeekBalance.rowValue(DeepSeekBalance.state(model.balances[deepSeek]))?.let {

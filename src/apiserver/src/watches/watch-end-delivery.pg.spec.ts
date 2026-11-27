@@ -56,6 +56,7 @@ import {
 } from './watch-delivery.service';
 import { WatchEvaluatorOptions, WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -261,9 +262,9 @@ async function insertTask(owner: string, status: string): Promise<string> {
 async function insertSession(owner: string, status: string, runnerId: string): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id")
-     VALUES ($1,'watch observer','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5)`,
+     VALUES ($1,'watch observer','the opening prompt',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,'claude',TRUE,1,now(),$5)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;
@@ -388,7 +389,7 @@ async function turnsOn(sessionId: string): Promise<TurnRow[]> {
 
 async function sessionOf(id: string) {
   const { rows } = await sql.query<{ status: string; endReason: string | null; completed: boolean; trashed: boolean; cancelling: boolean }>(
-    `SELECT "status", "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
+    `SELECT ${wordSql()} AS status, "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
             "deleted_at" IS NOT NULL AS "trashed", "cancel_requested_at" IS NOT NULL AS "cancelling"
        FROM "session" WHERE "id" = $1`,
     [id],
@@ -699,8 +700,8 @@ test('an end turn never revives an observer whose life is over: Completed, ended
   const { delivery } = await worker();
   const cases = [
     { name: 'moved to Completed', finish: `UPDATE "session" SET "completed_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_COMPLETED' },
-    { name: 'its run succeeded', finish: `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
-    { name: 'ended, interrupted with an end reason', finish: `UPDATE "session" SET "status" = 'INTERRUPTED', "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
+    { name: 'its run succeeded', finish: `UPDATE "session" SET "turn_state" = NULL, "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
+    { name: 'ended, interrupted with an end reason', finish: `UPDATE "session" SET "turn_state" = 'ABANDONED', "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'being ended', finish: `UPDATE "session" SET "cancel_requested_at" = now(), "end_reason" = 'ended' WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
     { name: 'in Trash', finish: `UPDATE "session" SET "deleted_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_IN_TRASH' },
   ];

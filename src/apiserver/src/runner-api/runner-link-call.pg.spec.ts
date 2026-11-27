@@ -62,7 +62,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { type PrismaClient, RunStatus } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, SESSION_CLAUDE_STEER_WITHDRAW_V1 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -91,6 +92,8 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { listenForRunnerLinkCalls } from './runner-link-call';
 import { readRunnerLink, RUNNER_LINK, runnerLinkCredential, signRunnerLinkToken, type RunnerLinkState } from './runner-link-token';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -354,7 +357,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status: RunStatus.PENDING,
+        turnState: 'QUEUED',
         dispatchOrigin: 'USER',
         startsTaskWork: false,
       },
@@ -381,7 +384,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
         prompt: title,
         provider: 'claude',
         providerBuiltin: true,
-        status,
+        turnState: turnStateOfWord(status),
         dispatchOrigin: 'USER',
         startsTaskWork: false,
         startedAt: new Date(),
@@ -416,7 +419,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
 
   async function sessionRow(sessionId: string) {
     const { rows } = await sql.query<{ status: string; claimRequestId: string | null; runClaimedAt: Date | null }>(
-      `SELECT status, claim_request_id AS "claimRequestId", run_claimed_at AS "runClaimedAt" FROM "session" WHERE id = $1`,
+      `SELECT ${wordSql()} AS status, claim_request_id AS "claimRequestId", run_claimed_at AS "runClaimedAt" FROM "session" WHERE id = $1`,
       [sessionId],
     );
     return rows[0];
@@ -433,7 +436,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
   /** Takes this machine's queued sessions out of the claim queue, so a case claims only its own. */
   const clearQueue = () =>
     sql.query(
-      `UPDATE "session" SET "cancel_requested_at" = now() WHERE "assigned_runner_id" = $1 AND status = 'PENDING'`,
+      `UPDATE "session" SET "cancel_requested_at" = now() WHERE "assigned_runner_id" = $1 AND turn_state = 'QUEUED'`,
       [runnerId],
     );
 
@@ -647,7 +650,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
     await prisma.session.create({
       data: {
         id: theirs, ownerId: strangerOwner, creatorId: strangerOwner, assignedRunnerId: strangerRunner, title: 'theirs',
-        prompt: 'theirs', provider: 'claude', providerBuiltin: true, status: RunStatus.RUNNING, dispatchOrigin: 'USER', startsTaskWork: false,
+        prompt: 'theirs', provider: 'claude', providerBuiltin: true, turnState: 'IN_FLIGHT', dispatchOrigin: 'USER', startsTaskWork: false,
       },
     });
     const crossed = await send(door.linkPort, 'GET', '/api/runner/sessions/claim', viaLink({

@@ -8,11 +8,11 @@ import { HttpException } from '@nestjs/common';
 import {
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import {
@@ -312,7 +312,7 @@ async function world(stack: Stack, label: string, automatic = true): Promise<Wor
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -382,7 +382,7 @@ async function doneCodeTask(
       title,
       prompt: title,
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
@@ -430,7 +430,7 @@ async function doneCodeTask(
   await db.$transaction(async (tx) => {
     const finished = await tx.session.update({
       where: { id: sessionId },
-      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000)},
+      data: { turnState: null, finishedAt: new Date(Date.now() - 60_000)},
       select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
     });
     await settleDeliveredIdentityAfterFinish(tx, finished);
@@ -464,10 +464,19 @@ async function report(stack: Stack, w: World, job: IntegrationJobCommand, result
 async function failedLanding(stack: Stack, w: World, label: string) {
   const task = await doneCodeTask(stack, w, label);
   const landing = await onlyClaim(stack, w, 'LAND_TASK');
+  // Revision 42 (W4): a red landing goes first to its task's own work session while that session could take it. These
+  // cases are about the coordinator's handling of the item, so a person ended the work session first and the failure
+  // is the coordinator's from the start (W-T6).
+  await stack.db.session.update({
+    where: { id: task.sessionId }, data: { endReason: 'ended' },
+  });
   const answer = await report(stack, w, landing, RED_LANDING);
   assert.equal(answer.accepted, true);
   const [item] = await itemsWhere(stack.db, { taskId: task.taskId });
   assert.ok(item, 'the red landing opened an item');
+  assert.equal((await stack.db.projectOpenItem.findUniqueOrThrow({
+    where: { id: item.id }, select: { workSessionOfferedAt: true },
+  })).workSessionOfferedAt, null, 'CONTROL: the failure was not handed to the work session a person ended (W4)');
   await receiveOpenItem(stack.db, item.id);
   return { ...task, firstJobId: landing.jobId, itemId: item.id };
 }
@@ -908,7 +917,7 @@ test('a task rerun queued or running is progress: it has no deadline, then its l
       const retried = await retryTask(stack, w, red.taskId);
       await makeDue(stack, red.itemId);
       // Isolate the handling-job exemption from the taken-up exemption.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
 
       assert.deepEqual(await stack.escalation.sweep(), [], 'a queued rerun has no escalation deadline');
       let held = await item(stack.db, red.itemId);
@@ -950,7 +959,7 @@ test('a promotion re-check queued or running is progress: it cannot escalate bef
       const retried = await retryCandidate(stack, w, blocked.promotionId);
       await makeDue(stack, blocked.itemId);
       // Isolate the handling-job exemption from the taken-up exemption.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
       assert.deepEqual(await stack.escalation.sweep(), [], 'a queued re-check has no deadline');
       let read = await stack.openItems.list(w.ownerId, w.projectId);
       const queued = read.withCoordinator.find((row) => row.itemId === blocked.itemId);
@@ -976,7 +985,7 @@ test('a promotion re-check queued or running is progress: it cannot escalate bef
       const secondRetry = await retryCandidate(stack, v, again.promotionId);
       await makeDue(stack, again.itemId);
       // Isolate the handling-job exemption from the taken-up exemption.
-      await stack.db.session.update({ where: { id: v.coordinatorSessionId }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
+      await stack.db.session.update({ where: { id: v.coordinatorSessionId }, data: { turnState: null, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
       assert.deepEqual(await stack.escalation.sweep(), [], 'the queued failing re-check is still progress');
       const red = await onlyClaim(stack, v, 'CHECK_PROMOTION');
       assert.deepEqual(await stack.escalation.sweep(), [], 'the running failing re-check is still progress');

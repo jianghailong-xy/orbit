@@ -511,4 +511,13 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(grep.name, "Grep")
         XCTAssertEqual(words.text, "Three callers, all in quota/.")
     }
+
+    func testTheSheetNamesAModelWithoutItsBuildNumber() {
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "DeepSeek V4.1 Flash 1017")),
+                       "DeepSeek V4.1 Flash")
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "Kimi K3")), "Kimi K3")
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "Opus 5.5")), "Opus 5.5")
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "GPT-6.2-Sol")), "GPT-6.2-Sol")
+        XCTAssertEqual(SubagentSessionSummary.sheetModelLabel(run(modelLabel: "Qwen 235")), "Qwen 235")
+    }
 }

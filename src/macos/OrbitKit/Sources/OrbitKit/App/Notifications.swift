@@ -161,6 +161,9 @@ public enum AppIntent: Equatable, Sendable {
     /// Needs you section (docs/mocks/waiting-on-you-removal/02 ④). The id is the push's own when it
     /// carries one, so that card is the one lit; nil opens the section on the oldest waiting.
     case openTerminalRequests(requestID: String?)
+    /// A key or pool login that needs action (push kind `account-needs-action` without a `runnerID`): the
+    /// Providers page, where the key's and the pool's rows draw the block and Check again (contract §1).
+    case openProviders
     /// A scheduled task's alert (push kind `schedule`, apiserver `PushService.notifySchedule`): the run's session when
     /// it names one, else the schedule's detail on the Scheduled page (docs/scheduled-tasks-design.md §7.3).
     case openSchedule(scheduleID: String, sessionID: String?)
@@ -201,6 +204,8 @@ public enum Notifications {
         case .wikiCreate: return "Review"
         case .settingsChange: return "Review"
         case .browserSignIn: return BrowserSignInCopy.action
+        case .change: return "Review"
+        case .projectReopen: return "Review"
         }
     }
 
@@ -240,12 +245,17 @@ public enum Notifications {
     /// where Later and Update Now are.
     public static let runnerUpdatingKind = "runner-updating"
     /// The server's runner pushes that name a `runnerID` and no session; a tap opens that runner.
-    static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked"]
+    static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked",
+                                       AccountHealth.pushKind]
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"
     /// An agent asking to take a task out of its project. A tap opens the conversation that draws
     /// the decision card when the payload names one, and the project otherwise.
     public static let crossingRequestKind = "crossing-request"
+    /// A decision card that became the owner's (apiserver `PushService.notifyDecisionCards`): an evidence card, an owner
+    /// confirmation, a project's criteria, standard-set, done or Record as done… card. `cardKind` says which; a tap opens
+    /// the conversation the card is drawn in, and naming none it opens nothing.
+    public static let decisionCardKind = "decision-card"
 
     public static func content(for event: NotificationEvent) -> NotificationContent {
         switch event {
@@ -302,6 +312,9 @@ public enum Notifications {
             if let sid = userInfo[keySession] { return .open(.session(sid)) }
             return userInfo[keyProject].map { .openProject(projectID: $0) }
         }
+        if userInfo[keyKind] == decisionCardKind {
+            return userInfo[keySession].map { .open(.session($0)) }
+        }
         if userInfo[keyKind] == "terminal-login" {
             return .openTerminalRequests(requestID: userInfo[keyTerminalLogin])
         }
@@ -317,10 +330,12 @@ public enum Notifications {
             return .openOwnerRequest(requestID: request)
         }
         guard let sid = userInfo[keySession] else {
-            // The machine's alerts (updating, an engine signed out, Claude blocked in its region) open the runner.
+            // The machine's alerts (updating, an engine signed out, Claude blocked in its region, an account needing action) open the runner.
             if let kind = userInfo[keyKind], runnerKinds.contains(kind), let runner = userInfo[keyRunner] {
                 return .open(.runner(PublicID.toPublic(runner)))
             }
+            // A key or a pool login has no runner: its row is on Providers.
+            if userInfo[keyKind] == AccountHealth.pushKind { return .openProviders }
             // A watch's alert names no session and carries no actions: tapping it opens the watch.
             return userInfo[keyWatch].map { .open(.watch($0)) }
         }

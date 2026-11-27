@@ -84,7 +84,8 @@ test('a heartbeat the gateway forwarded is answered with what waits, and recorde
   const [sql] = w.hintQueries.filter((q) => q.includes('conversation_turn'));
   assert.match(sql, /"assigned_runner_id" = \?::uuid/);
   assert.match(sql, /t\.status = 'PENDING' OR \(t\.status = 'IN_FLIGHT' AND t\."lease_deadline_at" < now\(\)\)/);
-  assert.match(sql, /s\.status = 'PENDING'/);
+  // The claim hint: a held session whose turn is queued, by its turn state (sessions/session-turn-state.ts).
+  assert.match(sql, /s\."finished_at" IS NULL AND \(CASE WHEN s\."finished_at" IS NULL THEN s\."turn_state" END\) = 'QUEUED'/);
   // The approvals: decided ones of the runner's open sessions, while the reader the card names is still there.
   assert.match(sql, /JOIN "approval" a ON a\."session_id" = s\.id AND a\.status IN \('ALLOWED', 'DENIED'\)/);
   assert.match(sql, /WHEN a\."background_job_id" IS NOT NULL THEN a\."background_job_id" = ANY \(s\."running_bg_shells"\)/);

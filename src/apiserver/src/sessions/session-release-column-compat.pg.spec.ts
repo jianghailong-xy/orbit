@@ -24,8 +24,12 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import {
-  PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, SessionRunSource,
+  PrismaClient,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -37,6 +41,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { ReaperService } from '../realtime/reaper.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
+import { fixtureFacts, wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -120,7 +125,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
       assignedRunnerId: w.runnerId,
       title: 'a conversation',
       prompt: 'Explain the error in the log',
-      status: RunStatus.RUNNING,
+      turnState: 'IN_FLIGHT',
       provider: 'claude',
       providerBuiltin: true,
       engine: 'claude',
@@ -128,7 +133,7 @@ async function session(db: PrismaClient, w: World, data: Record<string, unknown>
       runSource: SessionRunSource.MANUAL,
       startedAt: new Date(),
       runtimeSessionId: randomUUID(),
-      ...data,
+      ...fixtureFacts(data),
     },
   });
   return id;
@@ -154,7 +159,7 @@ test('release_cause and session_release_cause_chk are gone; the writers, and dep
     await sql.end().catch(() => undefined);
   });
   const row = async (id: string) => (await sql.query(
-    `SELECT status::text AS status, finished_at, end_reason, last_turn_outcome, deleted_at FROM "session"
+    `SELECT ${wordSql()} AS status, finished_at, end_reason, last_turn_outcome, deleted_at FROM "session"
       WHERE id = $1::uuid`, [id])).rows[0] as {
     status: string; finished_at: Date | null; end_reason: string | null; last_turn_outcome: string | null;
     deleted_at: Date | null;

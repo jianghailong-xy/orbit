@@ -339,6 +339,42 @@ class EntrypointTest(EntrypointFixture):
         self.popen.assert_not_called()
         self.foreground.assert_not_called()
 
+    def test_init_volume_opens_the_volume_s_tmp_directory_like_tmp(self):
+        if os.geteuid() != 0:
+            self.skipTest("init-volume requires root; mapped filesystem check unavailable")
+        tmp = self.runner.ROOT / ".orbit-tmp"
+        tmp.mkdir(mode=0o700)  # as the kubelet makes a subPath: the volume root's mode
+        self.runner.main(["init-volume"])
+        self.assertEqual(stat.S_IMODE(tmp.lstat().st_mode), 0o1777)
+
+    def test_init_volume_replaces_a_link_in_the_tmp_directory_s_place_without_touching_its_target(self):
+        if os.geteuid() != 0:
+            self.skipTest("init-volume requires root; mapped filesystem check unavailable")
+        target = self.runner.ROOT / "elsewhere"
+        target.mkdir(mode=0o700)
+        tmp = self.runner.ROOT / ".orbit-tmp"
+        tmp.symlink_to(target)
+        self.runner.main(["init-volume"])
+        self.assertTrue(tmp.is_dir() and not tmp.is_symlink())
+        self.assertEqual(stat.S_IMODE(tmp.lstat().st_mode), 0o1777)
+        self.assertEqual(stat.S_IMODE(target.lstat().st_mode), 0o700)
+
+    def test_init_volume_makes_no_tmp_directory_for_a_template_with_a_tmp_of_its_own(self):
+        if os.geteuid() != 0:
+            self.skipTest("init-volume requires root; mapped filesystem check unavailable")
+        self.runner.main(["init-volume"])
+        self.assertFalse((self.runner.ROOT / ".orbit-tmp").exists())
+
+    def test_a_fresh_volume_with_the_template_s_tmp_directory_still_registers(self):
+        # The kubelet makes the template's /tmp directory on the volume before any container starts.
+        self.runner.prepare()
+        home = self.runner.paths()[0]
+        (home / ".orbit-tmp").mkdir(mode=0o1777)
+        self.start()
+        self.popen.assert_called_once()
+        self.assertEqual(json.loads(self.config.read_text())["workDir"], str(home))
+        self.assertFalse((home / "orbit-repos").exists())
+
     def test_runtime_rejects_other_uid_with_production_constants(self):
         self.runner.UID = self.runner.GID = 10001
         with mock.patch.object(self.runner.os, "geteuid", return_value=0):

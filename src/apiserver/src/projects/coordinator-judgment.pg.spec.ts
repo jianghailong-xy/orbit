@@ -6,12 +6,12 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, PermissionMode, RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -34,6 +34,7 @@ import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.servi
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { establishProjectContractForPgTest } from './project-contract-test-helper';
 import { ProjectsService } from './projects.service';
+import { WORD_SELECT } from '../test-support/session-word';
 
 /**
  * Unit T3 against a real PostgreSQL, because every claim it makes is the DATABASE's.
@@ -136,7 +137,7 @@ async function deliveryWorld(db: PrismaClient, label: string) {
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId,
       assignedRunnerId: runnerId, title: `coordinator: ${label}`, prompt: `coordinator: ${label}`,
-      provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      provider: 'claude', turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER, titleManagedByProject: true, numTurns: 1,
       startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
@@ -512,7 +513,7 @@ test('a second wake opens a second session — an ended judgment is never resume
       // The judgment does its work and ends, which is the ordinary end of one.
       await stack.sessions.end(target.ownerId, firstId);
       const ended = await stack.db.session.findUniqueOrThrow({
-        where: { id: firstId }, select: { finishedAt: true, status: true },
+        where: { id: firstId }, select: { ...WORD_SELECT },
       });
       assert.ok(ended.finishedAt, 'the first judgment really has finished');
 
@@ -744,7 +745,7 @@ test('an exception item delivered to the coordinator records its facts beside th
         data: {
           id: landedSessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId,
           assignedRunnerId: w.runnerId, taskId: landed.taskId, title: 'landed', prompt: 'landed',
-          provider: 'claude', status: RunStatus.SUCCEEDED, finishedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
+          provider: 'claude', turnState: null, finishedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
           branch: 'orbit/item-card',
         },
       });

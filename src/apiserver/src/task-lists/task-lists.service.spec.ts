@@ -142,7 +142,8 @@ test('deleting a list disarms its tasks before tearing down their runs', async (
   assert.deepEqual(sessionWhere, {
     ownerId: OWNER_ID,
     task: { listId: LIST_ID },
-    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    // Held: every run that has not been released (TASK_OCCUPYING's rows, on `finished_at`).
+    finishedAt: null,
   });
   // Disarmed *and* released. The hold belonged to the list that is going away, so leaving it set
   // would leave tasks that can neither start themselves, be started, nor ever be resumed.

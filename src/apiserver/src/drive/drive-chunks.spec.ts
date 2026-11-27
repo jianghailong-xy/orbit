@@ -1,5 +1,5 @@
 /**
- * The pieces of the drive's chunked store that need no database (docs/orbit-files-drive-technical-design.md §2.2, §2.3):
+ * The pieces of the drive's chunked store that need no database (docs/drive-technical-design.md §2.2, §2.3):
  * the ranged read of each store, the byte cap on a chunk's temporary file, and the chunk door's refusals of what it can
  * tell is wrong before it reads a byte. drive-chunk-store.pg.spec.ts holds the rest against a real database and a real S3
  * server.

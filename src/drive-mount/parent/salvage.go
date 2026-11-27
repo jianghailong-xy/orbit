@@ -25,7 +25,7 @@ func Salvage(root, spool string, limit int64) int {
 	if err != nil || len(entries) == 0 {
 		return 0
 	}
-	rep := drivefs.NewReporter(drivefs.ReporterOptions{Dir: root, ShownDir: "/run/orbit-files", UnsentLimit: limit})
+	rep := drivefs.NewReporter(drivefs.ReporterOptions{Dir: root, ShownDir: "/run/orbit-drive", UnsentLimit: limit})
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if e.Type().IsRegular() {

@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import { feishuDerivedUuid } from './feishu-direct.service';
 
 /**
@@ -96,7 +97,7 @@ export async function reserveOpenSlot(tx: Prisma.TransactionClient, request: Fei
     WITH counted AS (
       SELECT t."open_access_open_id" = ${openId} AS "theirs",
              ((s."id" IS NULL AND t."created_at" > now() - ${RESERVATION_HOLD}::interval)
-               OR (s."status" IN ('PENDING', 'RUNNING') AND s."deleted_at" IS NULL)) AS "running",
+               OR (${sessionTurnStateSql('s')} IN ('QUEUED', 'IN_FLIGHT') AND s."deleted_at" IS NULL)) AS "running",
              (t."created_at" >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                AND (s."id" IS NOT NULL OR t."created_at" > now() - ${RESERVATION_HOLD}::interval)) AS "today"
       FROM "feishu_thread" t

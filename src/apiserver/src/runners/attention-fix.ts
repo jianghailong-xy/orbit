@@ -18,6 +18,7 @@ import { signedOutEngineRefusal, type EnginePreflightRunner } from '../sessions/
 import { lastProviderByWorkspace, DEFAULT_AGENT_PROVIDER } from '../workspaces/workspace-provider';
 import { runnerIsOnline } from './runner-presence';
 import { heldFilter, isReleased } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus, readLandingSettlements } from '../sessions/session-legacy-words';
 
 /**
  * Fix with an agent (docs/mocks/install-failed-fix-with-agent, and the board on task 34x9udvOf5AQdLYqYE9N4):
@@ -254,14 +255,15 @@ async function fixesOf(
     select: {
       id: true,
       workspaceId: true,
-      status: true,
+      // What the released session's word is derived from (sessions/session-legacy-words.ts), the release column among them.
+      ...LEGACY_STATUS_SELECT,
       completedAt: true,
       archivedAt: true,
-      finishedAt: true,
       workspace: { select: { name: true } },
     },
   });
   const byId = new Map(sessions.map((s) => [s.id, s]));
+  const landings = await readLandingSettlements(prisma, sessions);
   for (const { runnerId, key, entry } of wanted) {
     const session = byId.get(entry.sessionId);
     if (!session?.workspaceId) continue;
@@ -273,7 +275,8 @@ async function fixesOf(
       fixing.set(runnerId, list);
     } else if (isReleased(session)) {
       const list = handled.get(runnerId) ?? [];
-      list.push({ ...parsed, ...place, status: String(session.status) as RunnerAgentFixHandled['status'] });
+      const status = legacySessionStatus(session, landings.get(session.id));
+      list.push({ ...parsed, ...place, status: String(status) as RunnerAgentFixHandled['status'] });
       handled.set(runnerId, list);
     }
   }

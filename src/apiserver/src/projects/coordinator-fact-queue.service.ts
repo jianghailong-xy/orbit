@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-import { heldFilter } from '../common/session-release';
-import { UNSETTLED_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import {
   CoordinatorDeliveryService, DELIVERY_COORDINATOR_SESSION_UNAVAILABLE,
 } from './coordinator-delivery.service';
@@ -12,6 +11,7 @@ import {
 } from './coordinator-evidence-queue';
 import { type WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { DependentReadyProducer } from './dependent-ready.producer';
+import { blockedLineFactFor } from './project-line-blocked';
 import { conversationIsOver } from './project-open-item';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskRunStoppedProducer } from './task-run-stopped.producer';
@@ -44,8 +44,7 @@ export class CoordinatorFactQueueService {
           ...(sessionId ? { coordinatorSessionId: sessionId } : {
             coordinatorSession: {
               // Idle and still held: no turn queued or running, not released.
-              ...heldFilter(),
-              status: { notIn: UNSETTLED_SESSION_STATUSES },
+              ...turnStateFilter([null, 'ABANDONED']),
               endReason: null, completedAt: null, archivedAt: null, deletedAt: null,
               cancelRequestedAt: null, retryAt: null,
             },
@@ -107,6 +106,11 @@ export class CoordinatorFactQueueService {
     const sessionId = (row.detail as { sessionId?: string } | null)?.sessionId;
     if (!sessionId) return null;
     const stopKey = row.subjectVersion.slice(sessionId.length + 1);
+    if (stopKey.startsWith('line:')) return blockedLineFactFor(this.prisma, row.subjectVersion, new Date());
+    if (stopKey.startsWith('idle:')) {
+      const fact = await this.stopped.idleFactFor(sessionId, new Date());
+      return fact && fact.subjectVersion === row.subjectVersion ? fact : null;
+    }
     return this.stopped.factFor(sessionId, stopKey.startsWith('engine:')
       ? { engineTurnEndSeq: Number(stopKey.slice('engine:'.length)) }
       : { turnId: stopKey });

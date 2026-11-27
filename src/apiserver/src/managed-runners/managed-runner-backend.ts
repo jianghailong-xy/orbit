@@ -141,8 +141,8 @@ export interface ManagedCredential {
 }
 
 /**
- * Where the Orbit Files drive's mount credential of a generation is delivered for the mounter, never the instance
- * (docs/orbit-files-drive-technical-design.md §4.3, §6.1): on Kubernetes, Secret `mrf-<runner uuid>` in the files
+ * Where the drive's mount credential of a generation is delivered for the mounter, never the instance
+ * (docs/drive-technical-design.md §4.3, §6.1): on Kubernetes, Secret `mrf-<runner uuid>` in the files
  * namespace, which the CSI plugin reads when the kubelet publishes the drive.
  */
 export interface ManagedDriveMountDelivery {
@@ -181,9 +181,11 @@ export interface ManagedInstance {
    *  Pod that has ended and that the manager's stop-report finalizer holds is not being removed: it
    *  waits for `removeInstance`.) */
   readonly removing: boolean;
-  /** How it ended, by its host's report: its runner's exit code (null when the host gives none) and
-   *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
-  readonly exit: { readonly code: number | null; readonly outOfMemory: boolean } | null;
+  /** How it ended, by its host's report: its runner's exit code (null when the host gives none),
+   *  whether it was killed at its memory limit, and whether its host evicted it for filling its
+   *  temporary storage (`storageFull`, Kubernetes: present only when true). Null while it has not
+   *  ended, or when it never ran. */
+  readonly exit: { readonly code: number | null; readonly outOfMemory: boolean; readonly storageFull?: boolean } | null;
   /** The image it was made from, when its host says and that is not the one this backend makes instances from
    *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on; Kubernetes: a Pod
    *  container's image against the profile's `runner.image`). Absent otherwise. */
@@ -352,7 +354,7 @@ export interface ManagedRunnerBackend {
   /** Remove a retired generation's credential, by the identity it was read with. */
   removeCredential(mapping: ManagedRunner, credential: ManagedCredential): Promise<void>;
 
-  /** The drive's mount credential: present only where runner instances receive the Orbit Files drive. */
+  /** The drive's mount credential: present only where runner instances receive the drive. */
   readonly driveMount?: ManagedDriveMountDelivery;
 
   // ── the instance ──

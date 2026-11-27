@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { uuidToBase62 } from '@orbit/shared';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -13,6 +14,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { readOpenListVersion } from './open-list-version';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * One workspace's `since=` read (`GET /sessions?runnerId=R&workspaceId=B&view=open&since=`, the web
@@ -121,7 +123,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }): Promise
     (await db.session.create({
       data: {
         ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: 'ols',
-        provider: 'claude', providerBuiltin: true, status, startedAt: new Date(), taskId,
+        provider: 'claude', providerBuiltin: true, turnState: turnStateOfWord(status), startedAt: new Date(), taskId,
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
     })).id;
@@ -166,7 +168,7 @@ test('(i) a write the B column does not show leaves its since= read with nothing
   const otherProject = await f.db.project.create({ data: { ownerId: f.ownerId, title: 'ols elsewhere' } });
   const writes: Array<[string, () => Promise<unknown>]> = [
     ["an A session's title", () => f.db.session.update({ where: { id: f.a2 }, data: { title: 'a2 renamed' } })],
-    ["an A session's status", () => f.db.session.update({ where: { id: f.a1 }, data: { status: RunStatus.AWAITING_INPUT } })],
+    ["an A session's status", () => f.db.session.update({ where: { id: f.a1 }, data: { turnState: null } })],
     ["an A session's last activity", () => f.db.$executeRaw`UPDATE session SET last_turn_at = now() WHERE id = ${f.a2}::uuid`],
     ['a turn on an A session', () => f.db.conversationTurn.create({
       data: { sessionId: f.a1, seq: 1, kind: 'message', status: 'IN_FLIGHT', clientTurnId: randomUUID(), deliveredAt: new Date() },
@@ -182,7 +184,7 @@ test('(i) a write the B column does not show leaves its since= read with nothing
     ['a new session in A', () => f.db.session.create({
       data: {
         ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.a, assignedRunnerId: f.runnerId, title: 'a3', prompt: 'ols',
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       },
     })],
     ['an A session finishing', () => f.db.session.update({ where: { id: f.a2 }, data: { completedAt: new Date() } })],
@@ -257,7 +259,7 @@ test('(ii) a write the B column shows comes back as exactly that change, and onl
   const b3 = (await f.db.session.create({
     data: {
       ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.b, assignedRunnerId: f.runnerId, title: 'b3', prompt: 'ols',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
     },
   })).id;
   answer = delta(await f.readB(cursor));

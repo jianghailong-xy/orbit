@@ -44,7 +44,7 @@ public enum ShareMarkdown {
         for run in runs.prefix(listedRuns) {
             // `agent` is the workspace, served under both names.
             let workspace = run.agent?.name.flatMap { $0.isEmpty ? nil : " · \($0)" } ?? ""
-            out.append("- \(runLabel(run.resolvedRunState)) · \(time(run.createdAt))\(workspace)")
+            out.append("- \(runLabel(run)) · \(time(run.createdAt))\(workspace)")
         }
         if runs.count > listedRuns { out.append("- …and \(runs.count - listedRuns) earlier") }
         return out.joined(separator: "\n") + "\n"
@@ -81,6 +81,17 @@ public enum ShareMarkdown {
         if replaced.count == 1 { return "Replaces \(replaced[0].title ?? "")" }
         if replaced.count > 1 { return "Replaces \(replaced.count) earlier attempts" }
         return nil
+    }
+
+    /// A task run in the task panel's words: the state word and its marks ("Idle · Finished",
+    /// `SessionDisplay`), else, from an older server, its run state's, a held queued run reading "On hold".
+    public static func runLabel(_ run: SessionRef) -> String {
+        let facts = run.displayFacts
+        if let state = SessionDisplay.state(facts) {
+            return SessionDisplay.written(state, SessionDisplay.marks(facts) ?? [])
+        }
+        if run.resolvedRunState == .queued && run.waitingOn == .hold { return "On hold" }
+        return runLabel(run.resolvedRunState)
     }
 
     /// A run's state in the task panel's words (web `SESSION_STATE_META`).

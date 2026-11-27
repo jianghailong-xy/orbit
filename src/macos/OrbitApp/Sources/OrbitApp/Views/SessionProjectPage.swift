@@ -56,7 +56,7 @@ struct SessionProjectRowView: View {
                     HStack(spacing: 8) {
                         Text(row.title).foregroundStyle(.primary).lineLimit(1).layoutPriority(1)
                         Spacer(minLength: 8)
-                        if let timestamp = row.lastTurnAt ?? row.createdAt,
+                        if let timestamp = row.listedAt ?? row.createdAt,
                            let relative = RelativeTime.format(timestamp) {
                             Text(relative).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
                         }
@@ -117,7 +117,7 @@ struct SessionProjectRowView: View {
                 .layoutPriority(1)
             Spacer(minLength: 8)
             liveIndicator
-            if let timestamp = row.lastTurnAt ?? row.createdAt,
+            if let timestamp = row.listedAt ?? row.createdAt,
                let relative = RelativeTime.format(timestamp) {
                 Text(relative)
                     .font(.orbitMeta)

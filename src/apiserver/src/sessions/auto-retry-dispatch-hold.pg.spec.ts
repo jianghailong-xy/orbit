@@ -124,11 +124,11 @@ async function seedArmedSession(
 ): Promise<void> {
   await admin.query(
     `INSERT INTO "session"("id","owner_id","creator_id","task_id","workspace_id",
-                           "assigned_runner_id","title","prompt","provider","status",
+                           "assigned_runner_id","title","prompt","provider","turn_state",
                            "starts_task_work","num_turns","started_at","runtime_session_id",
                            "retry_at","retry_attempts","updated_at")
      VALUES ($1::uuid,$2::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,'armed','opening prompt',
-             'claude','AWAITING_INPUT'::"run_status",TRUE,1,clock_timestamp(),gen_random_uuid(),
+             'claude',NULL,TRUE,1,clock_timestamp(),gen_random_uuid(),
              $6::timestamptz,0,clock_timestamp())`,
     [sessionId, OWNER_ID, taskId, WORKSPACE_ID, RUNNER_ID, armedAt.toISOString()],
   );

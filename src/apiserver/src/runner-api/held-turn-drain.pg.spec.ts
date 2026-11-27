@@ -10,7 +10,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -23,6 +24,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
+import { wordOf, WORD_SELECT } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -61,7 +63,7 @@ test('a message held for its translation survives the drain of an ending session
     const session = await db.session.create({
       data: {
         ownerId, creatorId: ownerId, assignedRunnerId: runnerId, provider: 'claude', model: 'claude-opus-5-5',
-        title: 'held session', prompt: 'work', status: RunStatus.RUNNING,
+        title: 'held session', prompt: 'work', turnState: 'IN_FLIGHT',
         engineTurnActive: true, dispatchOrigin: SessionDispatchOrigin.USER,
       },
       select: { id: true },
@@ -105,8 +107,8 @@ test('a message held for its translation survives the drain of an ending session
   await t.test('a finalize drains the session, and a message still being translated stays held', async () => {
     const s = await sessionWithHeld('TRANSLATING');
     await api.finalize({ id: runnerId }, s.sessionId, { status: SharedRunStatus.FAILED, error: 'the engine exited' } as never);
-    const session = await db.session.findUniqueOrThrow({ where: { id: s.sessionId }, select: { status: true } });
-    assert.equal(session.status, RunStatus.FAILED, 'the finalize ended the run');
+    const session = await db.session.findUniqueOrThrow({ where: { id: s.sessionId }, select: { ...WORD_SELECT } });
+    assert.equal(wordOf(session), RunStatus.FAILED, 'the finalize ended the run');
     assert.equal((await turnRow(s.runningId)).status, 'ANSWERED', 'the running turn is drained');
     assert.deepEqual(await turnRow(s.heldId), {
       status: 'HELD', translationState: 'TRANSLATING', displayPrompt: '{"roots_installed":0}',

@@ -309,7 +309,7 @@ final class StartProjectCardCopyParityTests: XCTestCase {
         XCTAssertTrue(web.contains("`project/${project[1]!.slice(0, 5)}…`"),
                       "the web no longer shortens a project branch the way this end does")
         let settings = ProjectStartSettings(line: .projectBranch,
-                                            projectBranchName: "refs/heads/project/34WvwUS8YMXf",
+                                            projectBranchName: "refs/heads/project/34WvwUS8YMXfOfWbMqVuu",
                                             automatic: false, maxConcurrentTasks: Self.count,
                                             mergeCheckCommand: nil)
         XCTAssertEqual(RunSettings.parts(settings).map(\.text),

@@ -25,7 +25,7 @@ import (
 	"unicode/utf8"
 )
 
-// The file tools (docs/orbit-files-design.md §2.2, §2.3): how an agent keeps a screenshot or a report in Orbit instead
+// The file tools (docs/drive-design.md §2.2, §2.3): how an agent keeps a screenshot or a report in Orbit instead
 // of committing it, and gets it back. `file_upload`, `file_fetch` and `file_list` are `orbit file upload|fetch|list`
 // (file_cli.go), which run the runFileTool below: one implementation, two doors.
 //
@@ -115,7 +115,7 @@ type fileAnswer struct {
 	Label     string `json:"label,omitempty"`
 	MimeType  string `json:"mimeType"`
 	SizeBytes int64  `json:"sizeBytes"`
-	// Empty only on a row from before Orbit Files, whose bytes the server has not hashed yet.
+	// Empty only on a row from before Drive, whose bytes the server has not hashed yet.
 	SHA256    string `json:"sha256,omitempty"`
 	Link      string `json:"link"`
 	CreatedAt string `json:"createdAt,omitempty"`
@@ -281,7 +281,7 @@ func (t *Transport) listFiles(filter url.Values) (json.RawMessage, error) {
 // downloadFile streams one file's bytes into this session's uploads directory, under the file's own id, because two
 // files of a folder can share a name, and answers where they went, their sha256 and their length. saveLocalFile puts
 // them there only once they are all in and match `want`, so a dropped connection or a wrong byte leaves no file that
-// looks fetched. `want` is empty for a row from before Orbit Files, which has no sha256 to match. The bytes also go to
+// looks fetched. `want` is empty for a row from before Drive, which has no sha256 to match. The bytes also go to
 // keep, for a caller that reads them: what was checked, and not what a path holds afterwards.
 func (t *Transport) downloadFile(parent context.Context, sessionID, fileID, name, want string, keep io.Writer) (path, sum string, size int64, err error) {
 	noteTransportAttempt()
@@ -523,7 +523,7 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 	return out, nil
 }
 
-// newFileUploadScope also accepts the mounted drive. The ~/Files symlink and the mount point
+// newFileUploadScope also accepts the mounted drive. The ~/Drive symlink and the mount point
 // resolve to the same root, so access through either spelling is checked against the mount.
 func newFileUploadScope(sessionID string) localFileScope {
 	scope := newSessionFileScope(sessionID)
@@ -612,7 +612,7 @@ func fileScopeError(path, reason, sessionID string) error {
 	}
 	if driveMounted() {
 		return fmt.Errorf("file_upload: %s is outside the allowed paths: %s. Use this session's checkout, "+
-			"its uploads directory (%s), or the mounted Orbit Files drive. %s", path, reason, uploads, next)
+			"its uploads directory (%s), or the mounted Drive. %s", path, reason, uploads, next)
 	}
 	return fmt.Errorf("file_upload: %s is %s, so nothing was uploaded. file_upload reads only this session's checkout and "+
 		"its uploads directory, %s, the same rule a reply's links follow. %s", path, reason, uploads, next)
@@ -805,7 +805,7 @@ func bundlePathProblem(rel string) string {
 }
 
 // fetchFile is file_fetch. A bundle's bytes are its manifest, which is saved and read out: a judge usually wants a few
-// of a folder's files, and picks them from this (docs/orbit-files-design.md §6, item 2).
+// of a folder's files, and picks them from this (docs/drive-design.md §6, item 2).
 func fetchFile(t *Transport, tool fileToolContext, id string) (fileAnswer, error) {
 	var out fileAnswer
 	sessionID, err := fileSessionOf(tool, "file_fetch")

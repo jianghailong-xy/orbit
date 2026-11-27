@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Session 顶栏：去项目页的链接</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef0f3;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:#1f2329}
+.b-part{width:1180px;padding:32px 40px 28px;font:15px/1.6 Inter,'Noto Sans SC',sans-serif}
+h1{font-size:22px;margin:0 0 4px}
+h2{font-size:17px;margin:0 0 14px}
+.lead{color:#646a73;font-size:13.5px;margin:0 0 22px;line-height:1.6}
+.ftitle{font-size:14px;font-weight:700;margin:0 0 8px;display:flex;gap:10px;align-items:baseline}
+.ftitle small{font-weight:400;color:#646a73;font-size:12.5px}
+.rec{display:inline-block;background:#e8f7ee;color:#1a7f45;font-size:11px;font-weight:700;border-radius:4px;padding:0 6px}
+.frame{margin-bottom:22px}
+.pane{--bg:#fff;--t1:#1f2329;--t2:#646a73;--t3:#8f959e;--line:#eceef1;--hov:rgba(0,0,0,.05);--bub:#eaf1fe;
+ position:relative;background:var(--bg);color:var(--t1);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;width:1100px;height:132px}
+.pane.dark{--bg:#202023;--t1:#e3e6ea;--t2:#a7adb6;--t3:#8b9099;--line:#343437;--hov:rgba(255,255,255,.08);--bub:#2b3242}
+.pane.tall{height:330px}
+.hdr{display:flex;align-items:center;gap:12px;height:64px;padding:0 24px;border-bottom:1px solid var(--line)}
+.name{font-size:16px;font-weight:700;flex:1;min-width:0}
+.ubub{position:absolute;right:24px;top:84px;width:360px;height:34px;border-radius:14px;background:var(--bub)}
+/* today: 32x32 text buttons, 14px glyphs, grey, header gap 12 */
+.btn{flex:none;position:relative;display:grid;place-items:center;border-radius:6px;color:var(--t2)}
+.btn.old{width:32px;height:32px}.btn.old svg{width:14px;height:14px}
+/* proposal: one group, 28x28, 16px glyphs, gap 2 */
+.grp{flex:none;display:flex;align-items:center;gap:2px;margin-right:-6px}
+.btn.new{width:28px;height:28px;color:var(--t1)}.btn.new svg{width:16px;height:16px}
+.btn.new.grey{color:var(--t2)}
+.btn.hover{background:var(--hov)}
+.btn.press{background:var(--hov);box-shadow:inset 0 0 0 100px var(--hov)}
+.btn.live{color:#1a9a56}
+.dark .btn.live{color:#3fcf7f}
+.btn.live i{position:absolute;right:3px;top:3px;width:6px;height:6px;border-radius:50%;background:#34c759;box-shadow:0 0 0 2px var(--bg)}
+.tip{position:absolute;font-size:12px;line-height:22px;padding:0 8px;border-radius:5px;background:#1f2329;color:#fff;white-space:nowrap}
+.menu{position:absolute;right:24px;top:58px;width:232px;background:var(--bg);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.14),0 0 0 1px var(--line);padding:6px;font-size:13.5px}
+.menu div{height:32px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:6px;color:var(--t1)}
+.menu div:first-child{background:var(--hov)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.mk{position:absolute;z-index:3;width:20px;height:20px;border-radius:50%;background:#e5484d;color:#fff;font-size:11.5px;font-weight:700;display:grid;place-items:center}
+.ring{position:absolute;z-index:3;border:2px dashed #e5484d;border-radius:8px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.note{background:#fff;border-radius:10px;padding:16px 20px;font-size:13px;line-height:1.75;margin-bottom:14px}
+.note h3{margin:0 0 6px;font-size:14px}
+.note ol,.note ul{margin:0;padding-left:0;list-style:none}
+.n{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#e5484d;color:#fff;font-size:11px;font-weight:700;margin-right:4px;vertical-align:1px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{border-bottom:1px solid #eceef1;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#646a73;font-weight:600;font-size:12.5px}
+.zoom{display:flex;gap:40px;align-items:center;background:#fff;border-radius:10px;padding:20px 28px;margin-bottom:22px}
+.zoom .cell{display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12.5px;color:#646a73}
+.zoom .big{display:flex;align-items:center;gap:0;transform:scale(3);transform-origin:center;height:100px;justify-content:center;width:240px}
+.zoom .big .hdrlike{display:flex;align-items:center;gap:12px}
+.arrow{font-size:28px;color:#8f959e}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#f1f2f4;border-radius:4px;padding:0 4px}
+
+.pane{height:auto;padding-bottom:18px}
+.hdr{height:auto;min-height:64px;padding:12px 24px}
+.main{flex:1;min-width:0}
+.back{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:1.3;color:var(--t3);margin-bottom:3px;max-width:100%}
+.back.hov{color:#3370ff}
+.back svg{width:12px;height:12px;flex:none}
+.back .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl{display:flex;align-items:center;gap:8px;min-width:0}
+.tl .name{flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cb{flex:none;display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border:1px solid #bcd3ff;border-radius:999px;background:#eaf1ff;color:#3370ff;font-size:10px;font-weight:600;line-height:1.25}
+.dark .cb{border-color:rgba(91,140,255,.32);background:rgba(91,140,255,.16);color:#5b8cff}
+.cb.link svg{width:9px;height:9px}
+.cb.hov{background:#dbe7ff;border-color:#9dbdff}
+.pbtn{flex:none;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:6px;color:var(--t2);font-size:13px}
+.pbtn svg{width:15px;height:15px}
+.cmp td:first-child{white-space:nowrap;color:#646a73}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute">
+ <defs>
+  <symbol id="g-export" viewBox="64 64 896 896"><path fill="currentColor" d="M880 912H144c-17.7 0-32-14.3-32-32V144c0-17.7 14.3-32 32-32h360c4.4 0 8 3.6 8 8v56c0 4.4-3.6 8-8 8H184v656h656V520c0-4.4 3.6-8 8-8h56c4.4 0 8 3.6 8 8v360c0 17.7-14.3 32-32 32zM770.87 199.13l-52.2-52.2a8.01 8.01 0 014.7-13.6l179.4-21c5.1-.6 9.5 3.7 8.9 8.9l-21 179.4c-.8 6.6-8.9 9.4-13.6 4.7l-52.4-52.4-256.2 256.2a8.03 8.03 0 01-11.3 0l-42.4-42.4a8.03 8.03 0 010-11.3l256.1-256.3z"/></symbol>
+  <symbol id="g-more" viewBox="64 64 896 896"><path fill="currentColor" d="M456 231a56 56 0 10112 0 56 56 0 10-112 0zm0 280a56 56 0 10112 0 56 56 0 10-112 0zm0 280a56 56 0 10112 0 56 56 0 10-112 0z"/></symbol>
+  <!-- proposed: horizontal ellipsis with dots a touch larger than antd's, and an open tray with an up arrow (the share glyph macOS/iOS use) -->
+  <symbol id="g-dots" viewBox="0 0 16 16"><circle cx="3" cy="8" r="1.45" fill="currentColor"/><circle cx="8" cy="8" r="1.45" fill="currentColor"/><circle cx="13" cy="8" r="1.45" fill="currentColor"/></symbol>
+  <symbol id="g-share" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M5.6 6.2H4.6a1.1 1.1 0 0 0-1.1 1.1v5.6a1.1 1.1 0 0 0 1.1 1.1h6.8a1.1 1.1 0 0 0 1.1-1.1V7.3a1.1 1.1 0 0 0-1.1-1.1h-1"/><path d="M8 1.6v8.2"/><path d="M5.7 3.9 8 1.6l2.3 2.3"/></g></symbol>
+
+  <symbol id="g-left" viewBox="64 64 896 896"><path fill="currentColor" d="M872 474H286.9l350.2-304c5.6-4.9 2.2-14-5.2-14h-88.5c-3.9 0-7.6 1.4-10.5 3.9L155 487.8a31.96 31.96 0 000 48.3L535.1 866c1.5 1.3 3.3 2 5.2 2h91.5c7.4 0 10.8-9.2 5.2-14L286.9 550H872c4.4 0 8-3.6 8-8v-60c0-4.4-3.6-8-8-8z"/></symbol>
+  <symbol id="g-chev" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="g-grid" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="7.5" height="7.5" rx="1.8"/><rect x="14" y="2.5" width="7.5" height="7.5" rx="1.8"/><rect x="2.5" y="14" width="7.5" height="7.5" rx="1.8"/><rect x="14" y="14" width="7.5" height="7.5" rx="1.8"/></g></symbol>
+ </defs>
+</svg>
+<section class="b-part" id="part-1">
+ <h1>Session 顶栏：去项目页的链接</h1>
+ <p class="lead">只出现在「协调项目的 Session」上。这种 Session 建立时就以项目命名，所以今天标题上方的「← 项目名」几乎总是把标题再说一遍，旁边的 Coordinator 徽章又说了一次同一个关系。右侧 ▦ 3 按钮（打开项目的 Session 栏）和 ⋯ / 分享不变。示例标题为虚构。</p>
+ <div class="frame">
+  <div class="ftitle">① 今天 <small>12px 灰色「← 项目名」一行 + 标题 + Coordinator 徽章；项目名与标题相同</small></div>
+  <div class="pane" style="width:1100px"><div class="hdr"><div class="main"><div class="back"><svg><use href="#g-left"/></svg><span class="nm">Checkout flow migration + data backfill</span></div><div class="tl"><div class="name">Checkout flow migration + data backfill</div><span class="cb">Coordinator</span></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div></div>
+ </div>
+ <div class="frame">
+  <div class="ftitle">② 建议 · 方案 C <span class="rec">推荐</span> <small>去掉上面那一行；Coordinator 徽章本身成为链接，末尾加 ›，点它去项目页</small></div>
+  <div class="pane" style="width:1100px"><div class="hdr"><div class="main"><div class="tl"><div class="name">Checkout flow migration + data backfill</div><span class="cb link">Coordinator<svg><use href="#g-chev"/></svg></span></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div></div>
+ </div>
+ <div class="frame">
+  <div class="ftitle">③ 备选 · 方案 A <small>保留一行但不重复标题：▦ Coordinator · Open project ›；徽章并进这一行，标题行只剩标题</small></div>
+  <div class="pane" style="width:1100px"><div class="hdr"><div class="main"><div class="back"><svg style="width:13px;height:13px"><use href="#g-grid"/></svg><span class="nm">Coordinator · Open project</span><svg style="width:10px;height:10px"><use href="#g-chev"/></svg></div><div class="tl"><div class="name">Checkout flow migration + data backfill</div></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div></div>
+ </div>
+ <div class="note">
+  <h3>为什么</h3>
+  <ul>
+   <li><span class="n">1</span>重复：项目名 = Session 名时，「← 项目名」不提供新信息，却占一整行，标题像被说了两遍。</li>
+   <li><span class="n">2</span>「←」读作「返回」，但人多半是从 Session 列表进来的，不是从项目页；这是「去项目页」，用 › 更准确。</li>
+   <li><span class="n">3</span>Coordinator 徽章和这条链接说的是同一个关系，合成一个元素，顶栏少一样东西。</li>
+   <li><span class="n">4</span>C 让宽窗口顶栏回到「只有标题一行」（session-header-compact 的裁定），顶栏矮 18px。</li>
+  </ul>
+ </div>
+</section>
+<section class="b-part" id="part-2">
+ <h2>④ 方案 C 的状态</h2>
+ <div class="cols">
+  <div><div class="ftitle">悬停 <small>徽章底色加深，提示带项目名</small></div>
+   <div class="pane" style="width:532px"><div class="hdr"><div class="main"><div class="tl"><div class="name">Checkout flow migration + data backfill</div><span class="cb link hov">Coordinator<svg><use href="#g-chev"/></svg></span></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div><div class="tip" style="left:120px;top:58px">Open project · Checkout flow migration + data backfill</div></div></div>
+  <div><div class="ftitle">Session 改过名 <small>项目名只在提示和无障碍名称里</small></div>
+   <div class="pane" style="width:532px"><div class="hdr"><div class="main"><div class="tl"><div class="name">Checkout migration — week 2 follow-up</div><span class="cb link">Coordinator<svg><use href="#g-chev"/></svg></span></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div><div class="tip" style="left:120px;top:58px">Open project · Checkout flow migration + data backfill</div></div></div>
+ </div>
+ <div class="cols" style="margin-top:22px">
+  <div><div class="ftitle">长标题 <small>标题省略，徽章不被挤掉</small></div><div class="pane" style="width:532px"><div class="hdr"><div class="main"><div class="tl"><div class="name">Checkout flow migration + data backfill for the EU and US regions, then the cutover rehearsal</div><span class="cb link">Coordinator<svg><use href="#g-chev"/></svg></span></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div></div></div>
+  <div><div class="ftitle">暗色</div><div class="pane dark" style="width:532px"><div class="hdr"><div class="main"><div class="tl"><div class="name">Checkout flow migration + data backfill</div><span class="cb link">Coordinator<svg><use href="#g-chev"/></svg></span></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div></div></div>
+ </div>
+</section>
+<section class="b-part" id="part-3">
+ <h2>待定 · 要你拍板</h2>
+ <div class="cols">
+  <div><div class="ftitle">方案 C <span class="rec">推荐</span> <small>徽章即链接</small></div><div class="pane" style="width:532px"><div class="hdr"><div class="main"><div class="tl"><div class="name">Checkout flow migration + data backfill</div><span class="cb link">Coordinator<svg><use href="#g-chev"/></svg></span></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div></div></div>
+  <div><div class="ftitle">方案 A <small>一行链接；改过名时显示项目名（下）</small></div><div class="pane" style="width:532px"><div class="hdr"><div class="main"><div class="back"><svg style="width:13px;height:13px"><use href="#g-grid"/></svg><span class="nm">Coordinator · Open project</span><svg style="width:10px;height:10px"><use href="#g-chev"/></svg></div><div class="tl"><div class="name">Checkout flow migration + data backfill</div></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div></div><div style="height:10px"></div><div class="pane" style="width:532px"><div class="hdr"><div class="main"><div class="back"><svg style="width:13px;height:13px"><use href="#g-grid"/></svg><span class="nm">Coordinator · Checkout flow migration + data backfill</span><svg style="width:10px;height:10px"><use href="#g-chev"/></svg></div><div class="tl"><div class="name">Checkout migration — week 2 follow-up</div></div></div><span class="pbtn"><svg><use href="#g-grid"/></svg>3</span><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div></div></div>
+ </div>
+ <div class="note" style="margin-top:16px">
+  <table class="cmp">
+   <tr><th></th><th>C 徽章即链接</th><th>A 一行链接</th></tr>
+   <tr><td>顶栏高度</td><td>一行（矮 18px）</td><td>两行（同今天）</td></tr>
+   <tr><td>改过名时看得到项目名</td><td>否，只在提示里</td><td>是</td></tr>
+   <tr><td>点击目标</td><td>18px 高的徽章，较小</td><td>整行文字，较宽</td></tr>
+  </table>
+  <p style="margin:10px 0 0">推荐 C：协调 Session 几乎都与项目同名，A 那一行多数时候只剩「Open project」，占一行不划算；改名的少数情况，提示里有项目名。若你常给协调 Session 改名，选 A。</p>
+ </div>
+ <div class="note">
+  <h3>落地（按代价排）</h3>
+  <table>
+   <tr><th>改动</th><th>位置</th><th>代价</th></tr>
+   <tr><td>C：删掉项目那条「← 项目名」；顶栏的 Coordinator 徽章变成按钮（›、提示 Open project · 项目名、点击去项目页）</td><td><code>WorkspaceView.tsx</code></td><td>小</td></tr>
+   <tr><td>徽章按钮的悬停 / 聚焦样式</td><td><code>index.css</code></td><td>小</td></tr>
+   <tr><td>测试：项目返回链接的用例改为点徽章</td><td>WorkspaceView 测试</td><td>小</td></tr>
+  </table>
+  <p style="margin:8px 0 0;color:#646a73">不动：任务 Session 的「← 任务名」（标题与任务名通常不同）、右侧 ▦ 项目 Session 按钮、列表行里的 Coordinator 标记、手机左上的返回列表按钮。iOS / Android 顶栏是否同改，另议。</p>
+ </div>
+</section>
+</body></html>

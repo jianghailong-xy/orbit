@@ -49,7 +49,7 @@ final class AntigravityGoogleClientTests: XCTestCase {
             XCTAssertEqual(EngineAuth.remedy(forProvider: "antigravity", googleLogin: runner.antigravity?.googleLogin), .connectGemini)
             XCTAssertNotNil(EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin))
         }
-        XCTAssertEqual(EngineAuth.antigravityLoginHint(.unsupportedPlatform), "Google sign-in is not supported on macOS runners yet. Use a Gemini API key.")
+        XCTAssertEqual(EngineAuth.antigravityLoginHint(.unsupportedPlatform), "Google sign-in is not supported on this runner's operating system. Use a Gemini API key.")
         XCTAssertEqual(RunnerPageFormat.engineStatus(try XCTUnwrap(data["unknown"]?.engines?.first))?.text,
                        "Couldn’t check")
         XCTAssertEqual(RunnerPageFormat.engineStatus(try XCTUnwrap(data["env-key"]?.engines?.first))?.text, "env key")
@@ -100,7 +100,7 @@ final class AntigravityGoogleClientTests: XCTestCase {
         let health = try XCTUnwrap(RunnerPageFormat.engines(runner).first)
         XCTAssertEqual(RunnerPageFormat.engineStatus(health, runner: runner)?.text, "env key")
         XCTAssertFalse(RunnerPageFormat.antigravityCanSignIn(runner))
-        XCTAssertEqual(EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin), "Google sign-in is not supported on macOS runners yet. Use a Gemini API key.")
+        XCTAssertEqual(EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin), "Google sign-in is not supported on this runner's operating system. Use a Gemini API key.")
         XCTAssertTrue(RunnerPageFormat.engineWindows(runner, engine: "antigravity").isEmpty)
         let choice = try XCTUnwrap(SessionProviderChoices.providers(for: "antigravity", sources: ChoiceSources(configured: [], engines: runner.engines,
             antigravity: runner.antigravity)).first { $0.slug == "antigravity" })

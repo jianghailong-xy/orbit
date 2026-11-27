@@ -18,6 +18,8 @@ public enum OwnerRequests {
         case .wikiCreate: return "WIKI"
         case .settingsChange: return "SETTINGS"
         case .browserSignIn: return "SIGN IN"
+        case .change: return ChangeCopy.tag
+        case .projectReopen: return "REOPEN"
         }
     }
 
@@ -31,6 +33,8 @@ public enum OwnerRequests {
         case .wikiCreate: return "Create wiki"
         case .settingsChange: return SettingsChangeCopy.save
         case .browserSignIn: return BrowserSignInCopy.openBrowser
+        case .change: return ChangeCopy.primary
+        case .projectReopen: return ProjectReopenCopy.reopen
         }
     }
 
@@ -175,7 +179,7 @@ public enum OwnerRequests {
         switch request.kind {
         case .secret:   return draft.body != nil
         case .decision: return option != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .manualStep, .confirm, .wikiCreate, .settingsChange, .browserSignIn: return true
+        case .manualStep, .confirm, .wikiCreate, .settingsChange, .browserSignIn, .change, .projectReopen: return true
         }
     }
 
@@ -198,6 +202,7 @@ public enum OwnerRequests {
     /// What came of it: the summary's second line.
     public static func outcomeLine(_ request: OwnerRequest, runner: String) -> String {
         let note = request.resolutionNote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if request.kind == .projectReopen { return ProjectReopenCopy.outcomeLine(request) }
         if request.kind == .browserSignIn, request.state == .declined { return BrowserSignInCopy.notNow }
         switch request.state {
         case .declined:  return note.map { $0.isEmpty ? "Declined" : "Declined: “\($0)”" } ?? "Declined"
@@ -220,6 +225,10 @@ public enum OwnerRequests {
         if request.kind == .wikiCreate { return WikiStartCopy.created(request.answer?.name) }
         if request.kind == .settingsChange {
             return SettingsChangeCopy.changed(SettingsFromConversation.entries(request.payload).count)
+        }
+        if request.kind == .change, let spec = request.changeSpec {
+            return ChangeCopy.applied(runner: runner, from: request.answer?.actualBefore ?? spec.before,
+                                      to: request.answer?.applied ?? spec.requested, requested: spec.requested)
         }
         if request.kind == .browserSignIn { return request.browserSite.map(BrowserSignInCopy.signedIn) ?? "Signed in" }
         return request.kind == .confirm ? "Confirmed" : "Marked done"
@@ -428,5 +437,25 @@ public enum BrowserSignInCopy {
         var base = baseURL.absoluteString
         while base.hasSuffix("/") { base.removeLast() }
         return URL(string: "\(base)/runners/\(PublicID.toPublic(runnerId))/browser?control=1")
+    }
+}
+
+/// The CHANGE card's words: the web's `CHANGE_COPY` (lib/ownerRequests.ts), said the same way.
+public enum ChangeCopy {
+    public static let tag = "SETTING"
+    public static let primary = "Apply"
+    public static let numberLabel = "Max Concurrent"
+    public static func setting(_ runner: String) -> String { "\(runner) · Max Concurrent" }
+    public static func runningNow(_ n: Int) -> String { "\(n) running now" }
+    public static func wasWhenAsked(_ before: Int) -> String { "Was \(before) when asked." }
+    public static func lowering(_ n: Int) -> String { "Nothing running stops. New sessions wait until fewer than \(n) run." }
+    public static func raising(_ n: Int) -> String { "Up to \(n) sessions can run at once on this machine." }
+    public static func applied(runner: String, from: Int, to: Int, requested: Int) -> String {
+        "Applied: \(runner) Max Concurrent \(from) → \(to)\(to != requested ? " (asked for \(requested))" : "")"
+    }
+
+    /// The line under the number: what it would do against the live value (nil when equal).
+    public static func effect(value: Int, live: Int) -> String? {
+        value < live ? lowering(value) : value > live ? raising(value) : nil
     }
 }

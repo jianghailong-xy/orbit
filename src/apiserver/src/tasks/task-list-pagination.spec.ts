@@ -1,15 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { TaskStatus } from '@orbit/shared';
+import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { TasksService } from './tasks.service';
 import { recordingQueryRaw } from './query-raw-test-helper';
 import { everyPrerequisiteDoneOrRetiredSql } from './task-dependencies';
 import { taskCarriedSql } from '../sessions/task-work-carrier';
+import { isDeepStrictEqual } from 'node:util';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 /** One row of the carrier read behind `running` / `queued` (sessions/task-work-carrier.ts). */
 const carrier = (taskId: string, status: RunStatus) => ({
-  taskId, sessionId: `session-${taskId}`, status, runReason: 'TURN',
+  taskId, sessionId: `session-${taskId}`, finishedAt: null,
+  // The carrier read answers the resolved turn state (sessionTurnStateSql), not the stored word.
+  turnState: ({ PENDING: 'QUEUED', RUNNING: 'IN_FLIGHT' } as Record<string, string | undefined>)[status] ?? null,
+  runReason: 'TURN',
   runningBgJobs: [], runningBgJobActivity: {}, startedAt: null,
 });
 
@@ -37,10 +43,11 @@ test('legacy list handles more than PostgreSQL bind limit without a giant task-i
   const result = await service.list(OWNER_ID);
 
   assert.equal(result.length, 40_001);
-  // The live overlay is the owner's carriers, bound to the owner alone — never to 40,001 ids.
+  // The live overlay is the owner's carriers, bound to the owner alone — never to 40,001 ids. The one
+  // other bind is the runner offline window the held-run join reads (runnerUnavailableSql), a constant.
   assert.equal(raw.statements.length, 1);
-  assert.deepEqual(raw.statements[0].values, [OWNER_ID]);
-  assert.match(raw.statements[0].text, /carrier\."owner_id" = \$1::uuid/);
+  assert.deepEqual(raw.statements[0].values, [RUNNER_OFFLINE_AFTER_MS, OWNER_ID]);
+  assert.match(raw.statements[0].text, /carrier\."owner_id" = \$2::uuid/);
   assert.equal(dependencyChunks.length, 9);
   assert.equal(dependencyChunks.flat().length, 40_001);
   assert.ok(dependencyChunks.every((chunk) => chunk.length <= 5_000));
@@ -69,8 +76,9 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
       },
       count: async (args: any) => {
         countWheres.push(args.where);
-        if (args.where.sessions?.some?.status === RunStatus.RUNNING) return 1;
-        if (args.where.sessions?.some?.status === RunStatus.PENDING) return 2;
+        // A turn in flight, and one queued (sessions/session-turn-state.ts).
+        if (isDeepStrictEqual(args.where.sessions?.some, turnStateFilter(['IN_FLIGHT']))) return 1;
+        if (isDeepStrictEqual(args.where.sessions?.some, turnStateFilter(['QUEUED']))) return 2;
         return 17;
       },
       groupBy: async () => [
@@ -293,7 +301,7 @@ test('running filter is applied before pagination from live session state', asyn
 
   assert.deepEqual(findManyWhere, {
     ownerId: OWNER_ID,
-    sessions: { some: { status: RunStatus.RUNNING } },
+    sessions: { some: turnStateFilter(['IN_FLIGHT']) },
   });
 });
 

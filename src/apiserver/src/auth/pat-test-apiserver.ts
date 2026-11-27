@@ -108,6 +108,9 @@ export async function startApiserver(databaseUrl: string, jwtSecret: string, env
     PORT: String(port),
     NO_COLOR: '1',
     CORS_ORIGINS: 'http://127.0.0.1',
+    // Drive is off unless switched on (drive/drive-switch.ts); the servers these specs start have it, as Orbit's
+    // own deployment does. A spec of the switch itself passes ORBIT_DRIVE_ENABLED in `env`.
+    ORBIT_DRIVE_ENABLED: 'true',
     ...env,
   };
   delete childEnv.NODE_TEST_CONTEXT;

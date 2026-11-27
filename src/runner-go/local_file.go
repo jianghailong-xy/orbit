@@ -13,14 +13,41 @@ import (
 	"time"
 )
 
+// The plain directory a runner Pod receives the drive in (drive.orbit.dev), and the ones a Pod of an older CSI driver
+// receives instead until those Pods have drained (drive-csi/README.md): /run/orbit-documents of documents.orbit.dev and
+// /run/orbit-files of files.orbit.dev.
+const driveRootPath = "/run/orbit-drive"
+
+var driveLegacyRootPaths = []string{"/run/orbit-documents", "/run/orbit-files"}
+
+// driveFSTypes are the mount daemon's FUSE types: fuse.orbit-drive, and the ones it had under the older drivers.
+var driveFSTypes = map[string]bool{"fuse.orbit-drive": true, "fuse.orbit-documents": true, "fuse.orbit-files": true}
+
 var (
-	mountinfoPath  = "/proc/self/mountinfo"
-	driveMountPath = "/run/orbit-files/drive"
-	driveHomePath  = "/home/orbit/Files"
-	// driveParentPath is the plain directory the daemon mounts below. A sandbox that binds paths is given this one:
-	// it receives a remount of drive/, where a bind of drive/ itself would keep the dead mount (design §7.2).
-	driveParentPath = "/run/orbit-files"
+	mountinfoPath = "/proc/self/mountinfo"
+	// driveParentPath is the plain directory the daemon mounts below: whichever of the roots this Pod has. A
+	// sandbox that binds paths is given this one: it receives a remount of drive/, where a bind of drive/ itself would
+	// keep the dead mount (design §7.2).
+	driveParentPath = pickDriveRoot(driveRootPath, driveLegacyRootPaths...)
+	driveMountPath  = filepath.Join(driveParentPath, "drive")
+	driveHomePath   = "/home/orbit/Drive"
+	// driveStaleHomePaths are where earlier runners linked the drive (as Documents, before that Files). They are no
+	// longer the drive: ensureDriveLink removes one that is a link to the mount.
+	driveStaleHomePaths = []string{"/home/orbit/Documents", "/home/orbit/Files"}
+	// driveStaleLinkTargets are the mounts those earlier runners linked to, under the older drivers' roots: a link to
+	// one of them is the earlier runner's too, even in a Pod whose drive is now below /run/orbit-drive.
+	driveStaleLinkTargets = []string{"/run/orbit-documents/drive", "/run/orbit-files/drive"}
 )
+
+// pickDriveRoot is root, or else the first of legacy that is a directory: a Pod of an older CSI driver.
+func pickDriveRoot(root string, legacy ...string) string {
+	for _, dir := range append([]string{root}, legacy...) {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	return root
+}
 
 // driveStatusPath is the daemon's status.json, in the plain parent directory beside the mount.
 var driveStatusPath = filepath.Join(driveParentPath, "status.json")
@@ -49,7 +76,7 @@ func driveUncommittedHandles() int {
 	return status.UncommittedHandles
 }
 
-// driveGrantRoots is what an engine's sandbox or working-directory grant names for the Orbit Files drive: the parent
+// driveGrantRoots is what an engine's sandbox or working-directory grant names for the drive: the parent
 // and both spellings of the drive, or nothing on a runner that has no drive mounted (design §7.1, §7.2).
 func driveGrantRoots() []string {
 	if !driveMounted() {
@@ -70,7 +97,7 @@ func driveMounted() bool {
 		if ok && len(fields) >= 6 && unescapeMountinfo(fields[4]) == driveMountPath {
 			// A later mount at the same point hides the earlier one.
 			fstype, _, _ := strings.Cut(filesystem, " ")
-			mounted = fstype == "fuse.orbit-files"
+			mounted = driveFSTypes[fstype]
 		}
 	}
 	return mounted

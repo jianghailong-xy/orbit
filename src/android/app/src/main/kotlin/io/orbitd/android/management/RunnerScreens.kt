@@ -1,5 +1,6 @@
 package io.orbitd.android.management
 
+import io.orbitd.android.directory.QueuedCapacity
 import android.content.Intent
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
@@ -829,6 +830,27 @@ private fun RunnerCapacity(runner: JsonObject, now: Long, model: RunnersModel, n
             }
         }
         HorizontalDivider()
+        // How far over Max Concurrent Run now may take this runner (docs/mocks/queued-run-now, decision C); 0 turns it off. Not drawn
+        // for a server that does not send it.
+        runner.int("burstConcurrent")?.let { burst ->
+            var picking by remember { mutableStateOf(false) }
+            Box {
+                Row(Modifier.fillMaxWidth().clickable(role = Role.DropdownList) { picking = true }.padding(vertical = 10.dp).testTag("runner-extra-sessions")) {
+                    Text(QueuedCapacity.EXTRA_SESSIONS_ON_DEMAND, Modifier.weight(1f)); Text("$burst", color = Ink.muted)
+                }
+                DropdownMenu(picking, { picking = false }) {
+                    (0..QueuedCapacity.MAX_EXTRA_SESSIONS).forEach { slots ->
+                        DropdownMenuItem(text = { Text("$slots") }, trailingIcon = if (slots == burst) { { Text("✓") } } else null, onClick = {
+                            picking = false
+                            if (slots != burst) scope.launch {
+                                model.press { api.patch("runners/$id", buildJsonObject { put("burstConcurrent", slots) }) }?.let(notice::show)
+                            }
+                        })
+                    }
+                }
+            }
+            HorizontalDivider()
+        }
         var expanded by remember { mutableStateOf(false) }
         val current = RunnerPage.keepFreeValue(runner.int("minFreeDiskMb"))
         Box {
@@ -986,6 +1008,11 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
     // either account ends. One swap per runner at a time; busy from the press until the list says where it stands.
     var settingDefault by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
     var swapPressing by remember(id, engine) { mutableStateOf(false) }
+    // Default's Sign out…: the first question, then — once the runner refuses over sessions running on Default — the second, which resends
+    // with force. [signOutSent] is this page's own request awaiting the runner's word in the list's `accountRemove`.
+    var signingOut by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
+    var forcingSignOut by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
+    var signOutSent by remember(id, engine) { mutableStateOf(false) }
     fun show(failure: String?) { failure?.let(notice::show) }
     fun closeSignIn() { signingIn = null; landedHere = null; scope.launch { model.load() } }
     // Said for a moment, then read again now rather than on the next pass.
@@ -1071,6 +1098,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                             foldsBack = signingIn == line.id && landedHere == line.id && line.auth == "yes" && RunnerPage.loginExpiresLine(line, now) == null,
                             signIn = { signingIn = line.id }, close = ::closeSignIn, landed = { landed(line.id) },
                             rename = { renaming = line }, remove = { removing = line }, pause = { pausing = line },
+                            signOut = if (RunnerPage.offersSignOut(engine, line, runner)) { { signingOut = line } } else null,
                             setDefault = if (RunnerPage.offersSetDefault(engine, line)) { { settingDefault = line } } else null,
                             setDefaultBlocked = RunnerPage.setDefaultBlocked(runner, offline, swapPressing),
                             resume = { scope.launch { show(pause(line, null)) } }, openSession = ::openSession)
@@ -1168,6 +1196,38 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             } }) { Text(RunnerAccountCopy.SET_DEFAULT_CONFIRM) } },
             dismissButton = { TextButton(onClick = { settingDefault = null }) { Text("Cancel") } })
     }
+    // The runner's word on this page's own sign-out: sessions running on Default raise the second question; any other end settles it.
+    val signOutState = runner.obj("accountRemove")
+    LaunchedEffect(signOutState) {
+        if (!signOutSent || signOutState == null || signOutState.str("engine") != engine || signOutState.str("account") != "default" ||
+            signOutState.str("status") == "pending") return@LaunchedEffect
+        signOutSent = false
+        if (signOutState.str("status") == "failed" && RunnerPage.inUseSessions(signOutState, engine, "default").isNotEmpty()) {
+            forcingSignOut = health?.let { RunnerPage.accountLines(it, EngineAccounts.usage(engine, runner)) }?.firstOrNull { it.isDefault }
+        }
+    }
+    fun signOut(line: RunnerPage.AccountLine, force: Boolean) = scope.launch {
+        signOutSent = true
+        model.press { api.post("runners/$id/accounts/$engine/default/sign-out", buildJsonObject { put("force", force) }) }?.let {
+            signOutSent = false
+            notice.show("${RunnerAccountCopy.defaultSignOutFailed(line.name)} — $it")
+        }
+    }
+    signingOut?.let { line ->
+        val question = RunnerPage.signOutQuestion(runner, engine, line)
+        AlertDialog(onDismissRequest = { signingOut = null }, title = { Text(question.first) }, text = { Text(question.second) },
+            confirmButton = { TextButton(onClick = { signingOut = null; signOut(line, false) }, modifier = Modifier.testTag("sign-out-confirm")) {
+                Text(RunnerAccountCopy.DEFAULT_SIGN_OUT_CONFIRM, color = Ink.red) } },
+            dismissButton = { TextButton(onClick = { signingOut = null }) { Text("Cancel") } })
+    }
+    forcingSignOut?.let { line ->
+        val count = RunnerPage.inUseSessions(runner.obj("accountRemove"), engine, line.id).size
+        val question = RunnerPage.signOutAgainQuestion(line, count)
+        AlertDialog(onDismissRequest = { forcingSignOut = null }, title = { Text(question.first) }, text = { Text(question.second) },
+            confirmButton = { TextButton(onClick = { forcingSignOut = null; signOut(line, true) }, modifier = Modifier.testTag("sign-out-force")) {
+                Text(RunnerAccountCopy.DEFAULT_SIGN_OUT_CONFIRM, color = Ink.red) } },
+            dismissButton = { TextButton(onClick = { forcingSignOut = null }) { Text("Cancel") } })
+    }
     pausing?.let { line -> AccountPauseDialog(line.name, PAUSE_SCOPE, onDismiss = { pausing = null }) { minutes -> pause(line, minutes) } }
 }
 
@@ -1233,7 +1293,7 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                        signingIn: Boolean, next: Boolean, canPause: Boolean, alone: Boolean, removable: Boolean, foldsBack: Boolean, signIn: () -> Unit,
                        close: () -> Unit, landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit,
                        openSession: (String) -> Unit, regionBlocked: Boolean = false, setDefault: (() -> Unit)? = null,
-                       setDefaultBlocked: String? = null) {
+                       setDefaultBlocked: String? = null, signOut: (() -> Unit)? = null) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
     val paused = RunnerPage.isPaused(line.pausedUntil, now)
@@ -1277,6 +1337,12 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                             Text(setDefaultBlocked ?: RunnerAccountCopy.SET_DEFAULT_HINT, style = MaterialTheme.typography.labelSmall, color = Ink.muted)
                         }
                     }, enabled = setDefaultBlocked == null, modifier = Modifier.testTag("account-set-default"), onClick = { menu = false; setDefault() })
+                    if (signOut != null) {
+                        HorizontalDivider()
+                        DropdownMenuItem(text = { Text(RunnerAccountCopy.DEFAULT_SIGN_OUT, color = if (RunnerPage.canSignOut(offline, removal?.first == true)) Ink.red else Ink.muted) },
+                            enabled = RunnerPage.canSignOut(offline, removal?.first == true), modifier = Modifier.testTag("account-sign-out"),
+                            onClick = { menu = false; signOut() })
+                    }
                     if (removable) {
                         // Default comes off Orbit's list, not the machine: nothing goes to the runner, so it is offered offline too.
                         val enabled = line.isDefault || !offline
@@ -1325,8 +1391,14 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
         }
         // Refused over sessions running in it: those sessions, each a way to it, in place of the machine's sentence.
         val inUse = RunnerPage.inUseSessions(runner.obj("accountRemove"), engine, line.id)
-        if (inUse.isNotEmpty()) AccountInUse(engine, inUse, openSession)
+        if (line.isDefault && removal?.first == true && RunnerPage.offersSignOut(engine, line, runner)) {
+            Text(RunnerAccountCopy.DEFAULT_SIGNING_OUT, Modifier.testTag("account-signing-out"), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        }
+        if (inUse.isNotEmpty() && !line.isDefault) AccountInUse(engine, inUse, openSession)
+        else if (inUse.isNotEmpty()) Text(RunnerPage.signOutInUse(line.name, inUse.size), style = MaterialTheme.typography.labelMedium, color = Ink.red)
         else removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
+        // A refusal the provider stated, or runs that would not start: why Orbit passes over this account, with Check again.
+        runner.text("id").takeIf { it.isNotEmpty() }?.let { AccountHealthLine(api, it, engine, line.id) }
         if (signingIn) RunnerSignInCard(api, runner, engine, account = line.signInAccount, autoStart = true, onClose = close, onSignedIn = landed)
         else {
             // Paused is the row's state; Resume and a new duration are its menu's.

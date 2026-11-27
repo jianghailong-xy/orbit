@@ -126,7 +126,7 @@ struct CrossingDecisionCard: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(shown.enumerated()), id: \.element.id) { index, row in
                 if index > 0 { Divider() }
-                rowView(row)
+                rowView(row, in: batch)
             }
             if batch.rows.count > shown.count {
                 Divider()
@@ -139,7 +139,13 @@ struct CrossingDecisionCard: View {
         }
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
 
-        ForEach(CrossingBatches.reasons(batch), id: \.self) { reason in
+        let reasons = CrossingBatches.reasons(batch)
+        if !reasons.isEmpty {
+            Text(CrossingBatches.reasonsHead(reasons.count))
+                .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        ForEach(reasons, id: \.self) { reason in
             Text(reason)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .padding(.horizontal, 10).padding(.vertical, 8)
@@ -147,12 +153,15 @@ struct CrossingDecisionCard: View {
                 .background(Color.primary.opacity(0.05),
                             in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
         }
-        Text(CrossingBatches.consequence(batch))
-            .font(.orbitLabel).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        // What a yes does, only while there is a yes to give.
+        if batch.verdict == nil {
+            Text(CrossingBatches.consequence(batch))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
-    private func rowView(_ row: ProjectCrossing) -> some View {
+    private func rowView(_ row: ProjectCrossing, in batch: CrossingBatch) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(CrossingBatches.rowTitle(row))
                 .font(.orbitProse)
@@ -163,7 +172,7 @@ struct CrossingDecisionCard: View {
             if let line = CrossingBatches.withdrawnLine(row) {
                 Text(line).font(.orbitLabel).foregroundStyle(.secondary)
             }
-            if let state = CrossingBatches.stateLine(row) {
+            if let state = CrossingBatches.stateLine(row, in: batch) {
                 Text(state).font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
             }
             if ProjectCrossings.isAnswerable(row.state), let refusal = console.crossingRefusals[row.id] {

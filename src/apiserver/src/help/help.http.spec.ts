@@ -102,6 +102,58 @@ test('GET /api/help/articles/:slug: an article\'s front matter and Markdown, to 
   assert.equal(missing.status, 404);
 });
 
+test('GET /api/help?lang=zh-Hans: the same articles, with translated titles and summaries', async (t) => {
+  const get = await boot(t);
+  const { status, json } = await get('/api/help?lang=zh-Hans');
+  assert.equal(status, 200);
+  // The categories are the help center's own chrome and stay English.
+  assert.equal(json.categories[0].title, 'Get started');
+  assert.equal(json.articles.length, (await get('/api/help')).json.articles.length);
+  assert.deepEqual(json.articles.find((a: { slug: string }) => a.slug === 'machine-offline'), {
+    slug: 'machine-offline',
+    title: '机器显示为离线',
+    summary: '为什么会这样，以及如何在一分钟内把它恢复。',
+    category: 'machines-and-engines',
+    routes: ['/settings/machines/:id', '/infrastructure'],
+    errors: ['runner.offline'],
+    platforms: ['web', 'macos', 'ios', 'android'],
+    common: true,
+    updated: '2026-11-14',
+  });
+});
+
+test('GET /api/help/articles/:slug?lang=zh-Hans: the translated prose, the English article\'s other fields', async (t) => {
+  const get = await boot(t);
+  const { status, json } = await get('/api/help/articles/machine-offline?lang=zh-Hans');
+  assert.equal(status, 200);
+  assert.equal(json.title, '机器显示为离线');
+  assert.equal(json.category, 'machines-and-engines');
+  assert.deepEqual(json.routes, ['/settings/machines/:id', '/infrastructure']);
+  assert.equal(json.updated, '2026-11-14');
+  assert.match(json.body, /Orbit 会把机器标记为 \*\*Offline\*\*/);
+  assert.match(json.body, /```bash\norbit status\n```/);
+});
+
+test('GET /api/help/search?lang=zh-Hans: a Chinese query finds the Chinese article, a compound query is segmented', async (t) => {
+  const get = await boot(t);
+  const single = await get(`/api/help/search?q=${encodeURIComponent('离线')}&lang=zh-Hans`);
+  assert.equal(single.status, 200);
+  const [first] = single.json.hits;
+  assert.equal(first.slug, 'machine-offline');
+  assert.equal(first.title, '机器显示为离线');
+  assert.ok(first.snippet.matches.length > 0);
+  // Written without a space: 机器 + 离线, both in the article.
+  const compound = await get(`/api/help/search?q=${encodeURIComponent('机器离线')}&lang=zh-Hans`);
+  assert.ok(compound.json.hits.some((h: { slug: string }) => h.slug === 'machine-offline'));
+});
+
+test('an unknown help language is a 400 at every door', async (t) => {
+  const get = await boot(t);
+  for (const route of ['/api/help?lang=xx', '/api/help/articles/machine-offline?lang=xx', '/api/help/search?q=offline&lang=xx']) {
+    assert.equal((await get(route)).status, 400, route);
+  }
+});
+
 test('Admin & self-hosting: absent from the index and a 404 to signed-out callers and members, served to admins', async (t) => {
   const get = await boot(t);
   for (const bearer of [undefined, 'member']) {
@@ -185,6 +237,33 @@ test('a broken article stops the boot rather than serving a library with a hole 
   assert.throws(() => parseArticle('wiki', 'a.md', ok.replace('[web]', '[web, vax]')), /unknown platform/);
   const a = parseArticle('wiki', 'a.md', ok);
   assert.throws(() => new HelpLibrary([a, { ...a, category: 'get-started' }]), /used twice/);
+});
+
+test('a translation takes its prose over the English article, and a missing one falls back to English', () => {
+  const ok = '---\ntitle: T\nsummary: S\ncategory: wiki\nroutes: [/wiki]\nerrors: []\nplatforms: [web]\ncommon: false\nupdated: 2026-11-14\n---\nBody\n';
+  const other = parseArticle('wiki', 'b.md', ok.replace('title: T', 'title: B'));
+  const library = new HelpLibrary([parseArticle('wiki', 'a.md', ok), other]);
+  library.addTranslation('zh-Hans', 'wiki', 'a.md', '---\ntitle: 甲\nsummary: 乙\n---\n\n中文正文。\n');
+  assert.equal(library.article('a', false, 'zh-Hans')?.title, '甲');
+  assert.deepEqual(library.article('a', false, 'zh-Hans')?.routes, ['/wiki']);
+  assert.equal(library.article('b', false, 'zh-Hans')?.title, 'B', 'an untranslated article is the English one');
+  assert.equal(library.index(false, 'zh-Hans').articles.find((a) => a.slug === 'b')?.title, 'B');
+  assert.throws(
+    () => library.addTranslation('zh-Hans', 'wiki', 'a.md', '---\ntitle: 甲\nsummary: 乙\n---\nagain\n'),
+    /translated twice/,
+  );
+  assert.throws(
+    () => library.addTranslation('zh-Hans', 'wiki', 'gone.md', '---\ntitle: 甲\nsummary: 乙\n---\nx\n'),
+    /no English article/,
+  );
+  assert.throws(
+    () => library.addTranslation('zh-Hans', 'get-started', 'a.md', '---\ntitle: 甲\nsummary: 乙\n---\nx\n'),
+    /not the article's category/,
+  );
+  assert.throws(
+    () => library.addTranslation('zh-Hans', 'wiki', 'b.md', '---\ntitle: 甲\nsummary: 乙\nroutes: [/wiki]\n---\nx\n'),
+    /belongs to the English article/,
+  );
 });
 
 test('plainText: what a reader sees of the Markdown', () => {

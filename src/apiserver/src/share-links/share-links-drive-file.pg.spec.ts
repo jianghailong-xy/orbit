@@ -1,5 +1,5 @@
 /**
- * One-file share links (docs/orbit-files-drive-technical-design.md §9; migration 1340; share-links.service.ts putDriveFile),
+ * One-file share links (docs/drive-technical-design.md §9; migration 1340; share-links.service.ts putDriveFile),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, through the real controllers' methods:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/share-links/share-links-drive-file.pg.spec.ts
@@ -39,6 +39,9 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { SharedController } from '../shared/shared.controller';
 import { ShareLinksController } from './share-links.controller';
 import { ShareLinksService } from './share-links.service';
+
+// These specs share drive files, which Drive must be on for (drive/drive-switch.ts).
+process.env.ORBIT_DRIVE_ENABLED = 'true';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);

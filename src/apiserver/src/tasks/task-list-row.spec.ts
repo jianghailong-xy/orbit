@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { TasksController } from './tasks.controller';
+import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { TASK_LIST_SELECT, TasksService } from './tasks.service';
 import { recordingQueryRaw } from './query-raw-test-helper';
 
@@ -39,7 +40,7 @@ test('listRow reuses the page select and restricts live overlays to the one owne
   // The runnable read answers with the row's id; the carrier read with the one session queued on it.
   const raw = recordingQueryRaw((sql) => (sql.includes('"runReason"')
     ? [{
-      taskId: TASK_ID, sessionId: 'session-1', status: 'PENDING', runReason: 'TURN',
+      taskId: TASK_ID, sessionId: 'session-1', finishedAt: null, turnState: 'QUEUED', runReason: 'TURN',
       runningBgJobs: [], runningBgJobActivity: {}, startedAt: null,
     }]
     : [{ id: TASK_ID }]));
@@ -67,7 +68,7 @@ test('listRow reuses the page select and restricts live overlays to the one owne
   assert.equal(taskRead.select, TASK_LIST_SELECT, 'the endpoint must not grow a second list DTO');
   const busyRead = raw.statements.find(({ text }) => text.includes('"runReason"'));
   assert.ok(busyRead, 'the live overlay is the carrier read');
-  assert.deepEqual(busyRead.values, [OWNER_ID, TASK_ID], 'restricted to the one owned task');
+  assert.deepEqual(busyRead.values, [RUNNER_OFFLINE_AFTER_MS, OWNER_ID, TASK_ID], 'restricted to the one owned task (after the runner offline window the held-run join binds)');
   assert.equal(row.running, false);
   assert.equal(row.queued, true);
   assert.equal(row.runReason, 'TURN');

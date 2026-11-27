@@ -90,7 +90,7 @@ const ASK_MODES: ReadonlySet<string> = new Set([
  */
 /** What Codex Auto says when its sandbox could not start on the session's Orbit Cloud runner. */
 export const CODEX_CLOUD_SANDBOX_OFF_NOTE =
-  "Codex's sandbox is unavailable on Orbit Cloud: commands run unconfined inside your Cloud runner.";
+  "Codex's own sandbox cannot start on Orbit Cloud, so it is off: your Cloud runner's container isolates its commands instead.";
 
 const ALLOW_MODES: ReadonlySet<string> = new Set([PermissionMode.AUTO, PermissionMode.BYPASS]);
 
@@ -423,7 +423,8 @@ export function derivePermissionSemantics(
 
   // Codex Auto on an Orbit Cloud runner whose sandbox probe failed: the runner starts it with
   // danger-full-access and keeps Auto's approval policy, so there is no workspace-write sandbox to
-  // claim. Same words as the runner's transcript notice (codexCloudSandboxPermissionSemantics).
+  // claim; the runner's container is the boundary. Same words as the runner's report
+  // (codexCloudSandboxPermissionSemantics).
   if (provider === AgentProvider.CODEX && mode === PermissionMode.AUTO && codexSandboxUnavailable === true) {
     return {
       mode,
@@ -432,7 +433,7 @@ export function derivePermissionSemantics(
       honored: false,
       sandbox: 'off',
       note: CODEX_CLOUD_SANDBOX_OFF_NOTE,
-      shortNote: 'sandbox off on Orbit Cloud, commands run unconfined',
+      shortNote: "Codex sandbox off, the Cloud runner's container isolates commands",
     };
   }
 

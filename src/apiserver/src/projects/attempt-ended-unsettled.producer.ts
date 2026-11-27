@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { Injectable, Logger } from '@nestjs/common';
-import { uuidToBase62 } from '@orbit/shared';
-import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { RunStatus, uuidToBase62 } from '@orbit/shared';
+import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +13,7 @@ import {
 } from './coordinator-judgment.service';
 import { attemptEndedUnsettledFact } from './coordinator-wake';
 import { isReleased, sessionReleasedSql } from '../common/session-release';
+import { LEGACY_STATUS_SELECT, legacySessionStatus } from '../sessions/session-legacy-words';
 
 /** The project vanished between the committed attempt read and wake authorization. */
 export const ATTEMPT_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -64,7 +65,8 @@ export type AttemptEndedDelivery =
 
 interface AttemptSessionSnapshot {
   id: string;
-  status: RunStatus;
+  /** The legacy word, derived from the facts (sessions/session-legacy-words.ts), never the stored one. */
+  word: RunStatus;
   /** Released: its release column, `finished_at`, is set (common/session-release.ts). */
   released: boolean;
   retryAt: Date | null;
@@ -138,7 +140,7 @@ export class AttemptEndedUnsettledProducer {
         taskId: task.id,
         projectId: null,
         sessionId,
-        sessionStatus: session.status,
+        sessionStatus: session.word,
         sessionReleased: session.released,
         l2RefusalCode: ATTEMPT_WAKE_NO_PROJECT_COORDINATOR,
       });
@@ -151,7 +153,7 @@ export class AttemptEndedUnsettledProducer {
       taskId: task.id,
       taskStatus: task.status,
       sessionId,
-      sessionStatus: session.status,
+      sessionStatus: session.word,
     });
     if (!fact) {
       await this.resolveHumanSignal(task.id, projectId);
@@ -184,7 +186,7 @@ export class AttemptEndedUnsettledProducer {
       taskId: task.id,
       projectId,
       sessionId,
-      sessionStatus: session.status,
+      sessionStatus: session.word,
       sessionReleased: session.released,
       l2RefusalCode: result.refusalCode,
     });
@@ -254,8 +256,7 @@ export class AttemptEndedUnsettledProducer {
       where: { id: sessionId },
       select: {
         id: true,
-        status: true,
-        finishedAt: true,
+        ...LEGACY_STATUS_SELECT,
         retryAt: true,
         engineTurnActive: true,
         startsTaskWork: true,
@@ -287,7 +288,8 @@ export class AttemptEndedUnsettledProducer {
     if (!session) return null;
     return {
       id: session.id,
-      status: session.status,
+      // A task's run is never a LANDING container, so no landing row.
+      word: legacySessionStatus(session),
       released: isReleased(session),
       retryAt: session.retryAt,
       engineTurnActive: session.engineTurnActive,

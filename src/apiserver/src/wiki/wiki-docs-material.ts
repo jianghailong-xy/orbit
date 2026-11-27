@@ -331,6 +331,8 @@ async function searchRecords(db: Reader, ownerId: string, condition: StoredSessi
              SELECT s."id" FROM "session" s JOIN "task" k ON k."id" = s."task_id"
               WHERE s."owner_id" = ${ownerId}::uuid AND k."owner_id" = ${ownerId}::uuid AND k."project_id" = ANY(${projects}::uuid[]))
        AND t."kind" IN ('message', 'steer') AND t."created_at" >= ${from} AND t."created_at" < ${to}
+       -- A wiki chat's words reach a section only through a card the owner pressed (contract docs.follow.material, D11).
+       AND NOT EXISTS (SELECT 1 FROM "session" c WHERE c."id" = t."session_id" AND c."wiki_chat_space_id" IS NOT NULL)
        AND char_length(t."content") BETWEEN 2 AND 4000 AND t."content" ILIKE ANY(${likes}::text[])
      ORDER BY t."created_at" DESC
      LIMIT 200`);
@@ -502,6 +504,8 @@ async function placeRecords(
       if (item.via) unresolved.push({ kind: item.kind, ref: item.ref, entryId: item.via.entryId });
       continue;
     }
+    // A call that reads the wiki holds the wiki's own words: no material for a document to be written from.
+    if (record.readsWiki) continue;
     const key = `${item.kind}:${record.ref}`;
     if (seen.has(key)) continue;
     seen.add(key);

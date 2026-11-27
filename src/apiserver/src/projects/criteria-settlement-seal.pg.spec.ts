@@ -90,7 +90,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { ProjectStatus, RunStatus, type PrismaClient } from '@prisma/client';
+import { ProjectStatus, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -256,7 +257,7 @@ test('a tightening re-seals the standard set, so the confirmation it was settled
       taskId: work.id,
       title: 'ran orbit/seal',
       prompt: 'do the work',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+      turnState: null, finishedAt: new Date(), 
       branch: 'orbit/seal',
       isolationStatus: 'worktree',
     },

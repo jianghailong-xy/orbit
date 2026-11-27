@@ -35,7 +35,13 @@ data class OwnerRequestSecretGrant(val state: String, val endReason: String? = n
 @Serializable
 data class OwnerRequestAnswer(val option: Int? = null, val text: String? = null,
     /** WIKI_CREATE once DONE: the wiki made, by id and name. */
-    val spaceId: String? = null, val name: String? = null)
+    val spaceId: String? = null, val name: String? = null,
+    /** CHANGE once DONE: the value written, and the one the runner held just before. */
+    val applied: Int? = null, val actualBefore: Int? = null)
+
+/** CHANGE: `owner_request.change_spec`, written by the server when the request is filed. [before] is the value then. */
+@Serializable
+data class OwnerRequestChangeSpec(val runnerId: String, val field: String = "maxConcurrent", val requested: Int, val before: Int)
 
 @Serializable
 data class OwnerRequest(
@@ -53,6 +59,8 @@ data class OwnerRequest(
     /** SECRET: what ends the key (design §6.1) — its task, or, for a session with no task, the session. */
     val secretScope: String? = null,
     val secretGrant: OwnerRequestSecretGrant? = null,
+    /** CHANGE: the runner setting asked for, and its value when it was asked. */
+    val changeSpec: OwnerRequestChangeSpec? = null,
     val verifyHint: String? = null,
     /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
     val repoUrlNorm: String? = null,
@@ -99,7 +107,11 @@ object OwnerRequests {
     const val WIKI_CREATE = "WIKI_CREATE"
     /** An agent proposing changes to the owner's own Settings (docs/settings-from-conversation-design.md §5.1). */
     const val SETTINGS_CHANGE = "SETTINGS_CHANGE"
-    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, BROWSER_SIGN_IN)
+    /** An agent proposing a runner's Max Concurrent, which the owner applies with one press (docs/design/owner-request-change.md). */
+    const val CHANGE = "CHANGE"
+    /** An agent asking the owner to reopen a settled project (docs/project-reopen-request-design.md §6). */
+    const val PROJECT_REOPEN = "PROJECT_REOPEN"
+    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, BROWSER_SIGN_IN, CHANGE, PROJECT_REOPEN)
     /** An agent asking the owner to sign in to a site in the Orbit Cloud runner's browser. Signed in is answered from the browser tab. */
     const val BROWSER_SIGN_IN = "BROWSER_SIGN_IN"
 
@@ -142,12 +154,12 @@ object OwnerRequests {
     const val later = "Later"
 
     /** The tag beside a card's title. */
-    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; SETTINGS_CHANGE -> "SETTINGS"; BROWSER_SIGN_IN -> "SIGN IN"; else -> kind }
+    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; SETTINGS_CHANGE -> "SETTINGS"; CHANGE -> ChangeCopy.tag; BROWSER_SIGN_IN -> "SIGN IN"; PROJECT_REOPEN -> "REOPEN"; else -> kind }
     /** The card's primary button. */
-    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; SETTINGS_CHANGE -> SettingsChangeCopy.save; BROWSER_SIGN_IN -> "Open browser"; else -> "Confirm" }
+    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; SETTINGS_CHANGE -> SettingsChangeCopy.save; CHANGE -> ChangeCopy.primary; BROWSER_SIGN_IN -> "Open browser"; PROJECT_REOPEN -> ProjectReopenCopy.reopen; else -> "Confirm" }
     /** A push's primary action, which opens the card on its input. */
     fun pushAction(kind: String): String? = when (kind) {
-        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE, SETTINGS_CHANGE -> "Review"; BROWSER_SIGN_IN -> "Sign in"; else -> null
+        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, CHANGE, PROJECT_REOPEN -> "Review"; BROWSER_SIGN_IN -> "Sign in"; else -> null
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
 
@@ -228,6 +240,7 @@ object OwnerRequests {
 
     /** The summary's second line: what came of it. */
     fun outcomeLine(request: OwnerRequest, runner: String): String {
+        if (request.kind == PROJECT_REOPEN) return ProjectReopenCopy.outcomeLine(request)
         val note = request.resolutionNote?.trim()?.takeIf { it.isNotEmpty() }
         return when (request.state) {
             "DECLINED" -> if (request.kind == BROWSER_SIGN_IN) notNow else note?.let { "Declined: “$it”" } ?: "Declined"
@@ -248,6 +261,9 @@ object OwnerRequests {
                 }
                 request.kind == CONFIRM -> "Confirmed"
                 request.kind == SETTINGS_CHANGE -> SettingsChangeCopy.changed(SettingsFromConversation.entries(request.payload).size)
+                request.kind == CHANGE && request.changeSpec != null -> request.changeSpec.let {
+                    ChangeCopy.applied(runner, request.answer?.actualBefore ?: it.before, request.answer?.applied ?: it.requested, it.requested)
+                }
                 request.kind == WIKI_CREATE -> request.answer?.name?.takeIf { it.isNotEmpty() }?.let { "Created the wiki $it" } ?: "Wiki created"
                 request.kind == BROWSER_SIGN_IN -> signedIn(request.browserSite.orEmpty())
                 else -> "Marked done"
@@ -351,6 +367,9 @@ object OwnerRequests {
         }.groupBy({ it.first }, { it.second })
     }
 
+    /** The CHANGE card's note under the number: what [n] would do to a runner now at [current], or null when it changes nothing. */
+    fun changeEffect(n: Int, current: Int): String? = when { n < current -> ChangeCopy.lowering(n); n > current -> ChangeCopy.raising(n); else -> null }
+
     /** A link the card may open: only a web page, because the address is an agent's words. */
     fun openableLink(link: String): String? = runCatching { java.net.URI(link) }.getOrNull()
         ?.takeIf { it.scheme?.lowercase() in setOf("http", "https") }?.let { link }
@@ -417,6 +436,14 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
      * refused 409 SETTINGS_STALE and nothing is written. */
     suspend fun applySettings(id: String): OwnerRequest = post(id, listOf("apply-settings"), buildJsonObject { })
 
+    /** PROJECT_REOPEN's Reopen (docs/project-reopen-request-design.md §4.2): reopens the project as the project page's press does and
+     * settles every pending reopen request of it DONE. Answers with this card. */
+    suspend fun reopenProject(id: String): OwnerRequest = post(id, listOf("reopen-project"), null)
+
+    /** CHANGE's Apply (design §3): writes the runner's Max Concurrent with [maxConcurrent] and settles the card DONE. */
+    suspend fun applyChange(id: String, maxConcurrent: Int): OwnerRequest =
+        post(id, listOf("apply"), buildJsonObject { put("maxConcurrent", maxConcurrent) })
+
     /** The key itself, optionally saved under [saveAs]. */
     suspend fun provide(id: String, value: String, saveAs: String? = null): OwnerRequest =
         post(id, listOf("secret"), buildJsonObject { put("value", value); saveAs?.let { put("saveAs", it) } })
@@ -438,4 +465,18 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
             return Wire.decode(response.body, OwnerRequest.serializer())
         } finally { bytes?.fill(0) }
     }
+}
+
+/** The CHANGE card's words (web `CHANGE_COPY`, lib/ownerRequests.ts); a test holds them equal. */
+object ChangeCopy {
+    const val tag = "SETTING"
+    const val primary = "Apply"
+    const val numberLabel = "Max Concurrent"
+    fun setting(runner: String) = "$runner · Max Concurrent"
+    fun runningNow(n: Int) = "$n running now"
+    fun wasWhenAsked(before: Int) = "Was $before when asked."
+    fun lowering(n: Int) = "Nothing running stops. New sessions wait until fewer than $n run."
+    fun raising(n: Int) = "Up to $n sessions can run at once on this machine."
+    fun applied(runner: String, from: Int, to: Int, requested: Int) =
+        "Applied: $runner Max Concurrent $from → $to${if (to != requested) " (asked for $requested)" else ""}"
 }

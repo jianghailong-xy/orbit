@@ -163,6 +163,9 @@ public struct TranscriptReducer: Sendable, Codable {
     /// seam for free. Transient like `bgLaunch`; the results are capped, since one whose call never
     /// comes (its call trimmed for good, a duplicate) must not pile up.
     private var strayResults: [RunEvent] = []
+    /// The same for a sub-agent's results (`applySubagent`): a workflow agent's call and the result it
+    /// handed back are often pages apart, and dropping the result left its card running for good.
+    private var straySubagentResults: [RunEvent] = []
     private var strayDeliveries: [String: (delivery: String, seq: Int)] = [:]
     private static let strayResultCap = 256
     /// Where each steer held unread would have been drawn when it was sent (an index into `items`): a
@@ -713,6 +716,13 @@ public struct TranscriptReducer: Sendable, Codable {
         for (parent, older) in sub.state.subagentItems {
             state.subagentItems[parent] = older + (state.subagentItems[parent] ?? [])
         }
+        // A sub-agent's results this window could not match settle the calls the page brought; the
+        // rest wait for a later page again.
+        let pendingSubagentResults = straySubagentResults
+        straySubagentResults = []
+        for ev in pendingSubagentResults {
+            if let parent = str(ev, "parentToolUseId") { applySubagent(ev, parent: parent) }
+        }
         for (id, progress) in sub.state.taskProgress where state.taskProgress[id] == nil {
             state.taskProgress[id] = progress
         }
@@ -967,7 +977,7 @@ public struct TranscriptReducer: Sendable, Codable {
     /// (`applyUserDelivery`); the console that asked calls it the moment the server confirms, ahead
     /// of that event, because the words have already gone back to its composer (web parity:
     /// `withdrawnSteers`). A turn drawn nowhere is a no-op, so the two arriving in either order
-    /// make one removal.
+    /// make one removal. A held message that failed to translate, cancelled, leaves the same way.
     public mutating func removeWithdrawnSteer(turnId: String) {
         state.queued.removeAll { $0.turnId == turnId }
         state.accepted.removeAll { $0.turnId == turnId }
@@ -1143,6 +1153,8 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.cards = turn.cards
                 bubble.translation = turn.turnTranslation
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
+                // A held opening is listed as queued: its failed line offers no Cancel.
+                bubble.opening = turn.opening == true
                 reconciled.append(bubble)
             } else {
                 var bubble = UserBubble(id: "server-\(turn.turnId)", text: turn.content,
@@ -1153,6 +1165,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                         shell: turn.kind == "shell")
                 bubble.cards = turn.cards
                 bubble.translation = turn.turnTranslation
+                bubble.opening = turn.opening == true
                 reconciled.append(bubble)
             }
         }
@@ -1440,6 +1453,10 @@ public struct TranscriptReducer: Sendable, Codable {
                             inputSeq: ev.seq, inputTruncated: ev.truncated, ts: ev.ts)
         if foregroundShell, !suppressedLiveToolIDs.contains(id), let snapshot = liveToolOutputs[id] {
             card.result = snapshot.content
+        } else if DriveTransfer.kind(name) != nil, !suppressedLiveToolIDs.contains(id),
+                  let snapshot = liveToolOutputs[id], DriveTransfer.progress(snapshot.content) != nil {
+            // A Drive transfer's byte count that crossed replicas ahead of its call (`applyToolOutput`).
+            card.result = snapshot.content
         } else if id.hasPrefix("shell-"), !foregroundShell {
             liveToolOutputs.removeValue(forKey: id)
             suppressedLiveToolIDs.insert(id)
@@ -1451,7 +1468,7 @@ public struct TranscriptReducer: Sendable, Codable {
         let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id") ?? str(ev, "id")
         // The durable result is authoritative even if it races ahead of the matching card. Retire
         // its transient channel before folding so a later NOTIFY cannot overwrite/revive it.
-        if let id, id.hasPrefix("shell-") {
+        if let id, id.hasPrefix("shell-") || liveToolOutputs[id] != nil {
             liveToolOutputs.removeValue(forKey: id)
             suppressedLiveToolIDs.insert(id)
         }
@@ -1479,6 +1496,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 card.status = isError ? .error : .ok
                 card.resultSeq = ev.seq
                 card.resultTruncated = ev.truncated
+                card.resultTs = ev.ts
                 state.items[idx] = .toolCall(card)
                 if card.id.hasPrefix("shell-") {
                     liveToolOutputs.removeValue(forKey: card.id)
@@ -1500,9 +1518,14 @@ public struct TranscriptReducer: Sendable, Codable {
     /// calls keep using `background_output` + `BackgroundProc`; requiring a `shell-…` id while
     /// excluding `run_in_background` preserves that separate tray behavior.
     private mutating func applyToolOutput(_ ev: RunEvent) {
-        guard let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id"), id.hasPrefix("shell-"),
+        // A foreground shell's output, or a Drive transfer's byte count: the runner sends the latter for a
+        // documents_put / documents_get call as one sentence (`DriveTransfer.progress`), and the card it lands on
+        // must be a transfer — checked below once the card is found.
+        guard let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id"),
               let content = str(ev, "content"), !state.status.isTerminal,
               !suppressedLiveToolIDs.contains(id) else { return }
+        let transferCount = !id.hasPrefix("shell-")
+        if transferCount, DriveTransfer.progress(content) == nil { return }
 
         // New control planes always preserve the runner's original event seq here while forcing
         // the live event's top-level seq to zero. Keep legacy missing-version compatibility, but a
@@ -1523,7 +1546,8 @@ public struct TranscriptReducer: Sendable, Codable {
             return false
         }
         if let cardIndex, case .toolCall(let card) = state.items[cardIndex],
-           card.status != .running || card.input["run_in_background"]?.boolValue == true {
+           card.status != .running || card.input["run_in_background"]?.boolValue == true
+            || (transferCount && DriveTransfer.kind(card.name) == nil) {
             liveToolOutputs.removeValue(forKey: id)
             suppressedLiveToolIDs.insert(id)
             return
@@ -1562,9 +1586,10 @@ public struct TranscriptReducer: Sendable, Codable {
         suppressedLiveToolIDs.formUnion(liveToolOutputs.keys)
         liveToolOutputs.removeAll()
         for idx in state.items.indices {
-            guard case .toolCall(var card) = state.items[idx], card.id.hasPrefix("shell-"),
-                  card.status == .running,
-                  card.input["run_in_background"]?.boolValue != true else { continue }
+            guard case .toolCall(var card) = state.items[idx], card.status == .running,
+                  card.id.hasPrefix("shell-") && card.input["run_in_background"]?.boolValue != true
+                    || DriveTransfer.kind(card.name) != nil && DriveTransfer.progress(card.result) != nil
+            else { continue }
             suppressedLiveToolIDs.insert(card.id)
             if card.result != nil {
                 card.result = nil
@@ -2373,7 +2398,14 @@ public struct TranscriptReducer: Sendable, Codable {
             guard let idx = list.lastIndex(where: {
                 if case .toolCall(let c) = $0 { return c.status == .running && (id == nil || c.id == id) }
                 return false
-            }), case .toolCall(var card) = list[idx] else { return }
+            }), case .toolCall(var card) = list[idx] else {
+                // Its call may be in an older page not loaded yet (`straySubagentResults`).
+                if id != nil {
+                    straySubagentResults.append(ev)
+                    if straySubagentResults.count > Self.strayResultCap { straySubagentResults.removeFirst() }
+                }
+                return
+            }
             card.result = result
             card.resultImages = ToolResultContent.images(ev.payload["content"])
             card.resultHasImage = ToolResultContent.hasImage(ev.payload["content"])

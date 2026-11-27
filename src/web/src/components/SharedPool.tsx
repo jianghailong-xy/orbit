@@ -32,6 +32,7 @@ import { MultiSelect } from './ui/MultiSelect';
 import { PasswordInput } from './ui/PasswordInput';
 import { Segmented } from './ui/Segmented';
 import { Switch } from './ui/Switch';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * What a Codex pool's people and its API keys (organization/project OpenAI API keys several people run
@@ -72,12 +73,14 @@ export function PeopleStack({ pool }: { pool: SharedPool }) {
   const shown = pool.people.slice(0, 5);
   const more = pool.people.length - shown.length;
   return (
-    <span className="pool-people pool-wide" title={pool.people.map((person) => person.name).join(', ')}>
-      {shown.map((person) => (
-        <PersonMark key={person.userId} pool={pool} userId={person.userId} name={person.name} size={20} />
-      ))}
-      {more > 0 && <span className="pool-people-more">+{more}</span>}
-    </span>
+    <Tooltip content={pool.people.map((person) => person.name).join(', ')} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <span className="pool-people pool-wide">
+        {shown.map((person) => (
+          <PersonMark key={person.userId} pool={pool} userId={person.userId} name={person.name} size={20} />
+        ))}
+        {more > 0 && <span className="pool-people-more">+{more}</span>}
+      </span>
+    </Tooltip>
   );
 }
 

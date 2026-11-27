@@ -68,6 +68,7 @@ That is every label a client draws (web, macOS/iOS, Android) and every sentence 
 
 - Design boards and task descriptions are often written in Chinese. That is the owner's working language, not the copy to ship: translate what you take from them.
 - `src/web/src/copyLanguage.test.ts` counts the Chinese string literals in every product source file and fails on new ones.
+- The one exception is the help center's article library: English is the source (`docs/help/<category>/<slug>.md`), and a translated copy ships beside it (`docs/help/<language>/<category>/<slug>.md`) for readers who choose that language. Those articles, and the language picker's own names for languages (English, 中文), are the only place another language ships; the help center's chrome stays English.
 
 ---
 

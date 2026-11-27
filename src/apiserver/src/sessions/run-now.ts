@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { sessionTurnStateSql } from './session-turn-state';
 import { queuedGateLateral, runNowGateRefusal, runNowOf, type QueuedGateRow } from './queued-gate';
 
 /**
@@ -53,12 +54,12 @@ export async function grantRunNow(
   seed: () => Promise<void>,
 ): Promise<RunNowResult> {
   const [row] = await prisma.$queryRaw<Array<QueuedGateRow & {
-    status: string;
+    turnState: string | null;
     runnerId: string | null;
     runnerLabel: string | null;
     passTurnId: string | null;
   }>>(Prisma.sql`
-    SELECT s.status::text AS status, s.assigned_runner_id AS "runnerId",
+    SELECT ${sessionTurnStateSql('s')} AS "turnState", s.assigned_runner_id AS "runnerId",
            COALESCE(NULLIF(btrim(r.display_name), ''), r.name) AS "runnerLabel",
            s.over_capacity_turn_id AS "passTurnId",
            q.reason, q."runnerActive", q."runnerHeld", q."runnerLimit", q."runnerBurst", q."runnerOverflow", q."passPending"
@@ -68,7 +69,7 @@ export async function grantRunNow(
      WHERE s.id = ${sessionId}::uuid AND s.owner_id = ${ownerId}::uuid AND s.deleted_at IS NULL AND s.kind = 'CONVERSATION'
   `);
   if (!row) throw new NotFoundException('session not found');
-  if (row.status !== 'PENDING') throw refused('This message is not waiting for a free slot.', row.reason);
+  if (row.turnState !== 'QUEUED') throw refused('This message is not waiting for a free slot.', row.reason);
   // A second press, or one from another device, while the pass still waits: the same answer, nothing written.
   if (row.passPending && row.passTurnId && row.runnerId) {
     return { ok: true, turnId: row.passTurnId, alreadyPassed: true, runnerId: row.runnerId };
@@ -88,7 +89,7 @@ export async function grantRunNow(
          ORDER BY ct.seq ASC
          LIMIT 1
       ) t
-     WHERE s.id = ${sessionId}::uuid AND s.status = 'PENDING' AND s.cancel_requested_at IS NULL
+     WHERE s.id = ${sessionId}::uuid AND ${sessionTurnStateSql('s')} = 'QUEUED' AND s.cancel_requested_at IS NULL
     RETURNING t.id AS "turnId"
   `);
   if (!granted) throw refused('This message is not waiting for a free slot.', row.reason);
