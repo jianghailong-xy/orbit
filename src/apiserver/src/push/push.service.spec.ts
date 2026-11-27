@@ -34,6 +34,10 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
     ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
+    // The decision cards (push/owner-cards.ts) the same count reads: no project, task or confirmation, so none.
+    project: { findMany: async () => [] },
+    task: { findMany: async () => [] },
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
   };
   const service = new PushService(prisma as any, enabledConfig());
 
@@ -65,6 +69,10 @@ function approvalPrisma() {
     ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async (): Promise<any[]> => [] },
+    // The decision cards (push/owner-cards.ts) the same count reads: no project, task or confirmation, so none.
+    project: { findMany: async () => [] },
+    task: { findMany: async () => [] },
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
     // Which of those rows nobody owes any more (`openItemsNoLongerOwed`): none, here.
     $queryRaw: async (): Promise<Array<{ id: string }>> => [],
   };

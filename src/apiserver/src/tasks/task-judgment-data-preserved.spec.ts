@@ -3558,7 +3558,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // with session_aa_status_from_facts, which writes session.status from the facts, and re-creates nine session
       // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
-      '1671_session_status_from_facts'],
+      '1671_session_status_from_facts',
+      // 1720 creates `owner_card_push` only (the decision-card push ledger), with no foreign key; no existing table,
+      // trigger, function or DONE fence is touched.
+      '1720_owner_card_push'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

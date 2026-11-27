@@ -76,6 +76,10 @@ test('an approval reaches Feishu with no device: one card for the stretch, its a
     ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
+    // The decision cards (push/owner-cards.ts) the same count reads: no project, task or confirmation, so none.
+    project: { findMany: async () => [] },
+    task: { findMany: async () => [] },
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
     $queryRaw: async () => [],
     approval: {
       findMany: async () => [
