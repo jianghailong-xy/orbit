@@ -362,7 +362,8 @@ test('the Scheduled page chat: an opening that writes nothing, a marked MANUAL s
     // The first message carries no context: counts only, after the words.
     const first = await inbox();
     assert.ok(first.content.startsWith(`${WORDS}\n\n<orbit_schedules>\n`), first.content);
-    assert.ok(first.content.includes('Scheduled tasks on this account: 2 active, 2 paused, 1 held, 1 failing.'), first.content);
+    // Three active: the two of the opening, and the one test 7 made ('Run scope').
+    assert.ok(first.content.includes('Scheduled tasks on this account: 3 active, 2 paused, 1 held, 1 failing.'), first.content);
     assert.ok(first.content.includes('The page shows every workspace.'));
     assert.ok(!first.content.includes('<schedule_data>'), 'no selection, no data block');
     assert.ok(first.content.includes('Do not call schedule_run_now. Offer "Run now" as a button'), 'the standing guidance');
