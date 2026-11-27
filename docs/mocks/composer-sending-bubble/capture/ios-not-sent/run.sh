@@ -6,7 +6,8 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 cd "$(git -C "$here" rev-parse --show-toplevel)"
-if [ "$(git config --get core.sparseCheckout || true)" = true ]; then
+if [ ! -d docs/evidence/claude-region-check-apple/probe-harness ] \
+   && [ "$(git config --get core.sparseCheckout || true)" = true ]; then
   git sparse-checkout add docs/evidence/claude-region-check-apple
 fi
 rm -rf .nsb-probe && cp -R docs/evidence/claude-region-check-apple/probe-harness .nsb-probe
