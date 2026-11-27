@@ -204,4 +204,17 @@ test('queuedReason runner_at_capacity: a runner full of turns and background-job
     assert.equal(got.queuedLimit, 3);
     assert.equal(got.queuedHeldByJobs, 4);
   });
+
+  await t.test('(8) a full runner counted for a session with a job of its own: its own job is not counted (2/2, not 3/2)', async () => {
+    const r = await runner(alice.id, 'own-job-full', { maxConcurrent: 2 });
+    await session(alice.id, r, 'a turn', RunStatus.RUNNING);
+    const other = await session(alice.id, r, 'another session\'s build', RunStatus.AWAITING_INPUT);
+    const own = await session(alice.id, r, 'a message to a session with a build of its own', RunStatus.PENDING);
+    await holders(r.id, [other, own]);
+    const got = await row(aliceToken, own);
+    assert.equal(got.queuedReason, 'runner_at_capacity');
+    assert.equal(got.queuedActive, 2, 'the session\'s own job was counted against its own message');
+    assert.equal(got.queuedLimit, 2);
+    assert.equal(got.queuedHeldByJobs, 1);
+  });
 });

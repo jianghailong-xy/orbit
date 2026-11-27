@@ -1713,9 +1713,8 @@ export interface RunnerHeartbeatResponse {
   drainScopedClaims?: boolean;
   /** This server takes a full runner's claim scope (`GET /runner/sessions/claim?fullScope=`: an ordinary claim only for
    *  the sessions named, a Run now claim for any) and a claim given back because the runner is full (return-slot
-   *  `reason: runner_full`). Said to a beat that names background-job holders (`backgroundJobSessionIds`), the
-   *  sessions that fill a runner its turn count reads as having room. Absent otherwise, and from an older server: a
-   *  runner then asks as before, and names a claim it cannot start as it waits. */
+   *  `reason: runner_full`). Said on every answer. Absent from an older server: a runner then asks as before, and a
+   *  claim it cannot start waits on it for its slot. */
   capacityClaims?: boolean;
   /** This server's operator says every replica serves SESSION_RELEASE_V1 (the switch ORBIT_SESSION_RELEASE_V1): a runner
    *  may declare it on its turn-complete and release reports. Absent from an older server and while the switch is
@@ -4031,6 +4030,15 @@ export interface ReturnSlotRequest {
    *  started has no inbox lease owner yet, so the fence for this reason is the runner, and an owner that is this
    *  process or none. Sent only to a server whose heartbeat answer says `capacityClaims`. */
   reason?: 'runner_full';
+}
+
+/** A claimed session a full runner keeps waiting for its slot (enginePhase `waiting_for_slot`), counted as the runner
+ *  admits it: what holds the runner's slots other than this session, the part of that sessions running background jobs
+ *  hold, and the runner's limit. Carried on the session list row beside that phase only (SessionsService list). */
+export interface SessionSlotWait {
+  active: number;
+  heldByJobs: number;
+  limit: number;
 }
 
 /** The session's status after a slot return: RUNNING when a turn in flight kept the slot, which the runner keeps too. */

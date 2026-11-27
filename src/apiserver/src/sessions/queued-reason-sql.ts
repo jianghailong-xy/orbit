@@ -118,7 +118,7 @@ export async function sessionCapacityGate(
   }>>(Prisma.sql`
     SELECT ${queuedReasonSql()} AS reason,
            ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS "runnerActive",
-           ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS "runnerHeld",
+           ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)} AS "runnerHeld",
            r.max_concurrent AS "runnerLimit",
            ${treeActiveTurns('s')} AS "treeActive",
            ${treeCeiling(Prisma.sql`s.assigned_runner_id`)} AS "treeLimit",

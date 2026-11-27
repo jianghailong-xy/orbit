@@ -751,7 +751,7 @@ export class QueueService {
               AND EXISTS (
                 SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
                   AND ${OVER_CAPACITY_V1} = ANY(r.capabilities)
-                  AND ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId)}
+                  AND ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId, Prisma.sql`s.id`)}
                       < r."max_concurrent" + r."burst_concurrent"
               )
             ))

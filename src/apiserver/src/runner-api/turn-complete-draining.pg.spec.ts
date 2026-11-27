@@ -382,6 +382,33 @@ test('a turn ending on a draining runner returns its slot, and Stop on the sessi
     await db.runnerPresence.update({ where: { runnerId: full.id }, data: { backgroundJobSessionIds: [] } });
     assert.equal(await claim(full), s.id);
 
+    // A claim another process of the runner holds the lease of (a runner restarted before its reclaim activated an
+    // engine) is not this process's to give back: it keeps its slot, and the session names the wait, which its row
+    // carries with the runner's counts, until an engine activates under the claim.
+    const busy = await machine('full-and-restarted');
+    await sql.query(`UPDATE "runner" SET "max_concurrent" = 1 WHERE "id" = $1::uuid`, [busy.id]);
+    const kept = await session(busy, RunStatus.RUNNING, { engineStartedAt: null });
+    await turn(kept, 'message');
+    const busyHolder = await session(busy, RunStatus.AWAITING_INPUT);
+    await db.runnerPresence.create({ data: { runnerId: busy.id, lastBeatAt: new Date(), linkState: 'HTTP', backgroundJobSessionIds: [busyHolder.id] } });
+    const restarted = randomUUID();
+    const refused = await runnerCall(busy, 'POST', `/api/runner/sessions/${uuidToBase62(kept.id)}/return-slot`,
+      { leaseOwner: restarted, reason: 'runner_full' });
+    assert.equal(refused.status, 200, refused.text);
+    assert.deepEqual([refused.json?.status, refused.json?.returned], ['RUNNING', false]);
+    const phaseOf = async (id: string) => (await sql.query<{ phase: string | null }>(
+      `SELECT "engine_phase" AS phase FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0].phase;
+    assert.equal(await phaseOf(kept.id), 'waiting_for_slot', 'the kept claim was not named as waiting for a slot');
+    assert.deepEqual((await row(kept)).slotWait, { active: 1, heldByJobs: 1, limit: 1 });
+    assert.equal(await runnerDraining(busy), false);
+    const taken = await runnerCall(busy, 'POST', `/api/runner/sessions/${uuidToBase62(kept.id)}/takeover-leases`,
+      { leaseOwner: restarted, expectedLeaseOwner: kept.lease.owner });
+    assert.equal(taken.status, 200, taken.text);
+    const activated = await runnerCall(busy, 'POST', `/api/runner/sessions/${uuidToBase62(kept.id)}/activate-leases`,
+      { leaseGeneration: randomUUID(), leaseOwner: restarted });
+    assert.equal(activated.status, 200, activated.text);
+    assert.equal(await phaseOf(kept.id), null, 'the wait was still named once an engine activated under the claim');
+
     // Without the reason the drain's fence stands: a claim never started has no lease owner to match.
     const t2 = await session(full, RunStatus.RUNNING, { inboxLeaseOwner: null, inboxLeaseGeneration: null });
     await turn(t2, 'message');
