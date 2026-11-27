@@ -458,6 +458,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /tasks/:id/dependency-graph/nodes',
   'POST /tasks/:id/execute',
   'POST /tasks/:id/progress',
+  'POST /tasks/:id/rerun-check',
   'POST /tasks/:taskId/evidence',
   'POST /tasks/:taskId/evidence/:revision/restart',
   'POST /tasks/:taskId/evidence/decision',

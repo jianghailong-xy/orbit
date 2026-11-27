@@ -52,6 +52,8 @@ struct UserBubbleView: View {
     @Environment(\.runnerUpdatingFoot) private var runnerUpdatingFoot
     /// The held tag's Cancel, offered where `HeldCancel.offers` says this message can still be taken back.
     @Environment(\.heldCancel) private var heldCancel
+    /// A `Not sent` bubble's Retry and Put back, set by the console's transcript.
+    @Environment(\.notSentActions) private var notSentActions
     /// This bubble's `Queued · runner updating` (or `· runner full`), where it is the one held. That
     /// includes a message the server has accepted but no runner has taken yet: it is not on its way
     /// anywhere while the runner is full, so it says so in place of "Sending…" (web parity: the
@@ -107,10 +109,10 @@ struct UserBubbleView: View {
                         .font(.orbitMeta).foregroundStyle(.secondary)
                 }
                 if !images.isEmpty {
-                    imageBlock
+                    imageBlock.opacity(bubble.strength)
                 }
                 if !files.isEmpty {
-                    attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }
+                    attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }.opacity(bubble.strength)
                 }
                 // The bubble is the person's words; the note delivery appended stays out of it.
                 if !bubble.text.isEmpty {
@@ -128,6 +130,7 @@ struct UserBubbleView: View {
                         // the bubble where the address was), so the bubble grows to the row for it —
                         // where every other message still sizes to its own words.
                         .frame(maxWidth: showsCard ? .infinity : nil, alignment: .leading)
+                        .opacity(bubble.strength)
                 }
                 if long {
                     Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
@@ -135,6 +138,7 @@ struct UserBubbleView: View {
                 }
                 meta
                 why
+                notSentWhy
                 if !delivered { translationFoot }
             }
             // Hover over the bubble column (not the full-width row) reveals the meta — web parity.
@@ -298,7 +302,9 @@ struct UserBubbleView: View {
                 .opacity(copyShown ? 1 : 0)
                 .allowsHitTesting(copyShown)
             }
-            if bubble.undelivered {
+            if bubble.isNotSent {
+                notSentFoot
+            } else if bubble.undelivered {
                 // Amber, not red: nothing broke on this message — the run ended before its turn
                 // came — and the auth/error card above already says why. Re-sending is the fix,
                 // and the composer (or that card's Retry) is where it happens.
@@ -341,7 +347,11 @@ struct UserBubbleView: View {
                 // Accepted, and held by a full runner or its update: the tag below says so.
                 EmptyView()
             } else if awaitingServer {
-                if bubble.queued { QueuedWord(label: "Queued for next turn") } else { Text("Sending…").font(.orbitMeta).foregroundStyle(.secondary) }
+                if bubble.queued, !bubble.isSending {
+                    QueuedWord(label: "Queued for next turn")
+                } else {
+                    Text(UserBubble.sendingLabel).font(.orbitMeta).foregroundStyle(.secondary)
+                }
                 // A queued message can be withdrawn until the runner leases it (web parity). Offered
                 // only once the server `turnId` is known — the DELETE keys on it — which lands a tick
                 // after send. `contentShape` widens the small hit target for touch.
@@ -403,6 +413,45 @@ struct UserBubbleView: View {
             .buttonStyle(.plain).foregroundStyle(.tint)
             .padding(.leading, 2).contentShape(Rectangle())
         }
+    }
+
+    /// `⚠ Not sent · Retry · Put back in the composer` (web copy): the server refused this send, or did
+    /// not answer in time. Retry is off while another send is on its way. On the Mac the reason is the
+    /// foot's tooltip, as on web; a touch screen has no hover, so on iPhone it is printed under the foot
+    /// instead (`notSentWhy`) — board 04-native-parity, decision 8.
+    private var notSentFoot: some View {
+        HStack(spacing: 4) {
+            Text(UserBubble.notSentLabel).font(.orbitMeta.weight(.semibold)).foregroundStyle(.red)
+            if let actions = notSentActions {
+                let bubble = self.bubble
+                Text("·").font(.orbitMeta).foregroundStyle(.secondary)
+                Button { actions.retry(bubble) } label: {
+                    Text(UserBubble.retryLabel).font(.orbitMeta)
+                }
+                .buttonStyle(.plain).foregroundStyle(.tint)
+                .disabled(!actions.retryEnabled).contentShape(Rectangle())
+                Text("·").font(.orbitMeta).foregroundStyle(.secondary)
+                Button { actions.putBack(bubble) } label: {
+                    Text(UserBubble.putBackLabel).font(.orbitMeta)
+                }
+                .buttonStyle(.plain).foregroundStyle(.tint).contentShape(Rectangle())
+            }
+        }
+        #if os(macOS)
+        .help(bubble.notSentReason ?? "")
+        #endif
+    }
+
+    /// A `Not sent` bubble's reason as one red line under its foot: iPhone only, which has no hover
+    /// for the tooltip the Mac shows (decision 8).
+    @ViewBuilder
+    private var notSentWhy: some View {
+        #if os(iOS)
+        if bubble.isNotSent, let reason = bubble.notSentReason, !reason.isEmpty {
+            Text(reason).font(.orbitMeta).foregroundStyle(.red)
+                .multilineTextAlignment(.trailing)
+        }
+        #endif
     }
 
     /// Why a message only the server's receipt speaks for did not land, in the sender's words, under
@@ -742,5 +791,27 @@ struct TurnHeadRowView: View {
         Text(TurnHead.label(line, running: true, now: now) ?? "")
             .font(.orbitLabel).monospacedDigit().foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// What a message the server refused, or did not answer in time, has while its bubble reads
+/// `Not sent`: Retry, the same message under the same key (`ConsoleModel.retryUnsent`), and Put back,
+/// its words and files back in the composer (`ConsoleModel.putBackUnsent`).
+struct NotSentActions {
+    let retry: (UserBubble) -> Void
+    let putBack: (UserBubble) -> Void
+    /// Off while another send is on its way: one at a time.
+    let retryEnabled: Bool
+}
+
+private struct NotSentActionsKey: EnvironmentKey {
+    static let defaultValue: NotSentActions? = nil
+}
+
+extension EnvironmentValues {
+    /// Set by `TranscriptView`: a `Not sent` bubble's Retry and Put back. Nil where there is no console.
+    var notSentActions: NotSentActions? {
+        get { self[NotSentActionsKey.self] }
+        set { self[NotSentActionsKey.self] = newValue }
     }
 }

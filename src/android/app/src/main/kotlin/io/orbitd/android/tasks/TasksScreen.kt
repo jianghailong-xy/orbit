@@ -10,10 +10,10 @@ import io.orbitd.android.navigation.OrbitRoute
 
 @Composable
 fun TasksScreen(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, revision: Long,
-    open: (OrbitRoute) -> Unit, back: () -> Unit = {}) {
+    open: (OrbitRoute) -> Unit, from: String? = null, back: () -> Unit = {}) {
     val resources = remember(handle, route.id) { ReaderResources(app.session, handle) }
     CompositionLocalProvider(LocalReaderResources provides resources) {
-    if (route.destination == Destination.TASK && route.id != null) TaskDetail(app, handle, route.id, revision, open, back)
+    if (route.destination == Destination.TASK && route.id != null) TaskDetail(app, handle, route.id, revision, open, back, from)
     else TaskBrowser(app, handle, route, revision, open)
     }
 }

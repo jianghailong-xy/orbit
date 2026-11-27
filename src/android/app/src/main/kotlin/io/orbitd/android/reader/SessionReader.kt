@@ -60,6 +60,10 @@ import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.CoordinatorHandoff
+import io.orbitd.android.composer.echoed
+import io.orbitd.android.composer.isCreate
+import io.orbitd.android.composer.shownBy
+import io.orbitd.android.composer.words
 import io.orbitd.android.composer.CoordinatorHandoffApi
 import io.orbitd.android.composer.CreatedWorkspaceLine
 import io.orbitd.android.composer.HandedOverBanner
@@ -468,6 +472,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         cancellableHeldTurn(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
     }
     val liveTail = transcript != null && state.window.newerAfter == null
+    // The outbox's message and the one the server took last, while nothing of the server's draws them yet: an echo replaces either,
+    // never stands beside it (docs/mocks/composer-sending-bubble).
+    val pendingShown = composerState.draft.pending?.takeIf { pending ->
+        !isCreate(pending.endpoint) && !echoed(pending.words, pending.afterSeq, state.window.events)
+    }
+    val sentShown = composerState.sent?.takeIf { !it.shownBy(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events) }
     val queuedShown = if (liveTail) queued.size else 0
     // Opened onto a waiting card: once placed, at the rail — the item before the queue and the tail — whose card then brings its
     // own top into view. Once per open; a jump the open itself asked for (a record) wins.
@@ -1036,6 +1046,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 over?.let { RunningOverLimitFoot(it, Modifier.align(Alignment.End)) }
                             }
                         }
+                        // The reader's own message the server has not drawn yet (docs/mocks/composer-sending-bubble): taken, as the
+                        // ordinary bubble until the queue or its echo does; on its way, or not sent, as the outbox's bubble.
+                        sentShown?.let { sent -> item(key = "sent:${sent.turnId}") { SentBubble(sent.words, sent.attachments, openLink) } }
+                        pendingShown?.let { pending -> item(key = "pending-send:${pending.clientTurnId}") {
+                            val ready = composerState.loaded && !composerState.sending && !composerState.busy
+                            PendingSendBubble(pending.words, pending.attachments, composerState.sending, composerState.notSentReason,
+                                retry = if (ready && !state.denied) composer::retrySend else null,
+                                putBack = if (ready) composer::putBackUnsent else null, open = openLink)
+                        } }
                     }
                     // At the live tail, under everything the conversation said and above the cards that ask the owner something.
                     if (live != null && displayedRows.isNotEmpty()) recapCard?.let { card ->
