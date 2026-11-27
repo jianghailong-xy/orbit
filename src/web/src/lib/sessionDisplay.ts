@@ -48,30 +48,21 @@ export type SessionMark =
   | 'NEEDS_YOU'
   | 'FAILED'
   | 'RETRYING'
-  | 'ON_HOLD'
-  | 'INTERRUPTED'
-  | 'BACKGROUND'
-  | 'WILL_RESUME'
-  | 'FINISHED'
-  | 'ENDED';
+  | 'ON_HOLD';
 
-/** The only colour a mark may carry: amber = the person has to act, red = a failure nobody is retrying, green = the
- *  work finished, grey = everything else. */
-export type SessionMarkTone = 'amber' | 'red' | 'green' | 'grey';
+/** The only colour a mark may carry: amber = the person has to act, red = a failure nobody is retrying, grey = everything
+ *  else. */
+export type SessionMarkTone = 'amber' | 'red' | 'grey';
 
 export const SESSION_MARKS: Record<SessionMark, { word: string; tone: SessionMarkTone }> = {
   NEEDS_YOU: { word: 'Needs you', tone: 'amber' },
   FAILED: { word: 'Failed', tone: 'red' },
   RETRYING: { word: 'Retrying', tone: 'grey' },
   ON_HOLD: { word: 'On hold', tone: 'grey' },
-  INTERRUPTED: { word: 'Interrupted', tone: 'grey' },
-  BACKGROUND: { word: 'Background', tone: 'grey' },
-  WILL_RESUME: { word: 'Will resume', tone: 'grey' },
-  FINISHED: { word: 'Finished', tone: 'green' },
-  ENDED: { word: 'Ended', tone: 'grey' },
 };
 
-/** The fields beside the six facts that a mark reads: the approvals count and the background work the server counts. */
+/** The fields beside the six facts that a mark reads: the approvals count, and the background work the server counts
+ *  (read by sessionRowIcons). */
 export type SessionMarkSource = SessionStateSource & {
   pendingApprovals?: number | null;
   runningBgCount?: number | null;
@@ -95,23 +86,33 @@ const releasedByFailure = (session: SessionStateSource): boolean =>
 export function sessionMarks(session: SessionMarkSource): SessionMark[] | null {
   if (!hasFacts(session)) return null;
   const waitingOn = session.waitingOn;
-  const released = session.released === true;
   const failure = releasedByFailure(session);
   const out: SessionMark[] = [];
   if (waitingOn === 'PERSON' || (session.pendingApprovals ?? 0) > 0) out.push('NEEDS_YOU');
   if (failure) out.push(waitingOn === 'WAKE' ? 'RETRYING' : 'FAILED');
   if (waitingOn === 'HOLD') out.push('ON_HOLD');
-  if (!released && phaseOf(session) === 'IDLE' && session.lastTurnOutcome === 'INTERRUPTED')
-    out.push('INTERRUPTED');
-  if (!released && (session.activity === 'BACKGROUND_JOB' || (session.runningBgCount ?? 0) > 0)) out.push('BACKGROUND');
-  // An idle session a watch or wake-up will resume is just Idle: no mark (the owner, 2026-11-27).
-  if (!released && waitingOn === 'WAKE' && phaseOf(session) !== 'IDLE') out.push('WILL_RESUME');
-  if (released && session.workFinished === true) out.push('FINISHED');
-  if (released && session.workFinished !== true && !failure && !sessionReleasedByMove(session)) out.push('ENDED');
   return out;
 }
 
-/** The state word and the marks as one line of text, separated by " · " (the board's Markdown form: `Idle · Finished`).
+/** A fact a list row draws as an icon on its title line, not as a mark (the owner, 2026-11-27): background work still
+ *  running, and a wake (a watch, a scheduled wake-up or an armed retry) that will resume it. */
+export type SessionRowIcon = 'BACKGROUND' | 'WILL_RESUME';
+
+export const SESSION_ROW_ICON_TIPS: Record<SessionRowIcon, string> = {
+  BACKGROUND: 'Background work running',
+  WILL_RESUME: 'Will resume',
+};
+
+/** The title-line icons of a held session, in drawing order. Interrupted, Finished and Ended are not drawn at all. */
+export function sessionRowIcons(session: SessionMarkSource): SessionRowIcon[] {
+  if (!hasFacts(session) || session.released === true) return [];
+  const out: SessionRowIcon[] = [];
+  if (session.activity === 'BACKGROUND_JOB' || (session.runningBgCount ?? 0) > 0) out.push('BACKGROUND');
+  if (session.waitingOn === 'WAKE') out.push('WILL_RESUME');
+  return out;
+}
+
+/** The state word and the marks as one line of text, separated by " · " (the board's Markdown form: `Idle · Needs you`).
  *  Null from an older control plane. */
 export function sessionDisplayText(session: SessionMarkSource): string | null {
   const state = sessionDisplayState(session);

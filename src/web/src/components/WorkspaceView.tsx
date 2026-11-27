@@ -636,8 +636,15 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { sessionDisplayState, sessionDisplayText, sessionMarks, sessionReleasedByMove } from '../lib/sessionDisplay';
-import { SessionMarkChips, SessionStateGlyph } from './SessionStateDisplay';
+import {
+  sessionDisplayState,
+  sessionDisplayText,
+  sessionMarks,
+  sessionReleasedByMove,
+  sessionRowIcons,
+  type SessionRowIcon,
+} from '../lib/sessionDisplay';
+import { SessionMarkChips, SessionRowIcons, SessionStateGlyph } from './SessionStateDisplay';
 import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState } from '../lib/steerDelivery';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import { MainCheckoutCtx, type MainCheckoutTarget } from '../lib/mainCheckout';
@@ -1638,7 +1645,8 @@ export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
 export function SessionTitleRow({
   session: s,
   hoverTipOpen = false,
-}: { session: any; hoverTipOpen?: boolean }) {
+  icons = [],
+}: { session: any; hoverTipOpen?: boolean; icons?: readonly SessionRowIcon[] }) {
   return (
     <div className="session-title-row">
       <div className="session-title">{s.title}</div>
@@ -1650,6 +1658,7 @@ export function SessionTitleRow({
           <span className="session-merge-badge">⚠</span>
         </Tooltip>
       )}
+      <SessionRowIcons icons={icons} />
       {/* The list row's `shared` (docs/share-links-design.md §8). The tip is hover only: on a touch screen
           a tap opens the row. */}
       {s.shared === true && (
@@ -2103,7 +2112,7 @@ const SessionEntryRow = memo(function SessionEntryRow({
           />
         ) : (
           <>
-            <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
+            <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} icons={sessionRowIcons(actionSession)} />
             {/* One line under the title, and all of it is what the session is doing
                 or waiting on, else its recap (sessionLine). Tags are filed and
                 filtered by, not drawn on the row (the owner, 2026-10-22). */}

@@ -6411,6 +6411,13 @@ button.toast--pill:focus-visible {
   flex: none;
   opacity: 0.7;
 }
+/* Background work running, or a wake that will resume the session (lib/sessionDisplay sessionRowIcons): a grey glyph
+   beside the time. */
+.session-row-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+}
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
   display: inline-flex;
@@ -6654,11 +6661,6 @@ button.toast--pill:focus-visible {
   border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error);
-}
-.session-mark.tone-green {
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  color: var(--success);
 }
 .session-head-state {
   display: inline-flex;

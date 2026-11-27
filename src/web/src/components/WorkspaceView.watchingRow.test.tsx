@@ -259,19 +259,23 @@ describe('the session list over a session a watch will resume', { timeout: 60_00
 });
 
 describe('the session list row with three marks', { timeout: 60_000 }, () => {
-  // jsdom lays nothing out: that no chip is clipped is the stylesheet's wrapping, seen in the 1440 px screenshot.
-  it('draws all three chips, and no "+N"', async () => {
+  // Interrupted is not drawn; Background is a title-line icon, not a chip (the owner, 2026-11-27); Needs you stays a chip.
+  it('draws Background as an icon on the title line and Needs you as its only chip', async () => {
     listed = [WATCHING, PLAIN, THREE];
     await mountList();
     await act(async () => {
-      await vi.waitFor(() => expect(listRow(THREE.title).querySelector('.session-marks')).not.toBeNull(), {
+      await vi.waitFor(() => expect(listRow(THREE.title).querySelector('.session-row-icon')).not.toBeNull(), {
         timeout: 20_000,
         interval: 20,
       });
     });
 
+    const icons = [...listRow(THREE.title).querySelectorAll('.session-title-row .session-row-icon')];
+    expect(icons.map((icon) => [icon.getAttribute('data-icon'), icon.getAttribute('aria-label')])).toEqual([
+      ['BACKGROUND', 'Background work running'],
+    ]);
     const chips = [...listRow(THREE.title).querySelectorAll('.session-marks .session-mark')];
-    expect(chips.map((chip) => chip.textContent)).toEqual(['Needs you', 'Interrupted', 'Background']);
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Needs you']);
   });
 
   it('lets the chips wrap under a readable line, in a row that grows with them', () => {

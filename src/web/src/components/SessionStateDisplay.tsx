@@ -1,6 +1,12 @@
 import { ClockCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
-import { SESSION_MARKS, type SessionDisplayState, type SessionMark } from '../lib/sessionDisplay';
+import {
+  SESSION_MARKS,
+  SESSION_ROW_ICON_TIPS,
+  type SessionDisplayState,
+  type SessionMark,
+  type SessionRowIcon,
+} from '../lib/sessionDisplay';
 import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
@@ -61,7 +67,9 @@ const MARK_ICON: Record<SessionMark, ReactNode> = {
   FAILED: <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />,
   RETRYING: <path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.8v2.6h-2.6" />,
   ON_HOLD: <path d="M6 4v8M10 4v8" />,
-  INTERRUPTED: <path d="M4 8h8" />,
+};
+
+const ROW_ICON: Record<SessionRowIcon, ReactNode> = {
   BACKGROUND: (
     <>
       <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
@@ -74,9 +82,23 @@ const MARK_ICON: Record<SessionMark, ReactNode> = {
       <circle cx="8" cy="8" r="1.9" />
     </>
   ),
-  FINISHED: <path d="M3.5 8.4l3 3 6-6.6" />,
-  ENDED: <rect x="4.25" y="4.25" width="7.5" height="7.5" rx="1" />,
 };
+
+/** A list row's title-line icons (lib/sessionDisplay sessionRowIcons), beside the guests icon: each a grey glyph whose
+ *  tip says what it means. */
+export function SessionRowIcons({ icons }: { icons: readonly SessionRowIcon[] }) {
+  return (
+    <>
+      {icons.map((icon) => (
+        <Tooltip key={icon} content={SESSION_ROW_ICON_TIPS[icon]} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className="session-row-icon" data-icon={icon} aria-label={SESSION_ROW_ICON_TIPS[icon]}>
+            {svg(ROW_ICON[icon], 12)}
+          </span>
+        </Tooltip>
+      ))}
+    </>
+  );
+}
 
 /** The marks after the state word, in the order given. `max` (a narrow row) draws the first ones and "+N" for the rest. */
 export function SessionMarkChips({ marks, max }: { marks: readonly SessionMark[] | null; max?: number }) {

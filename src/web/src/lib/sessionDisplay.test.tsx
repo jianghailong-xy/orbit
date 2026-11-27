@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { LinkPreview } from '@orbit/shared';
-import { SESSION_MARKS, sessionDisplayState, sessionDisplayText, sessionMarks } from './sessionDisplay';
+import { SESSION_MARKS, sessionDisplayState, sessionDisplayText, sessionMarks, sessionRowIcons } from './sessionDisplay';
 import { sessionStateWord } from './sessionState';
 import { sessionIsWorking, sessionNeedsOwner } from './sessionGrouping';
 import { SITUATIONS } from './sessionPhaseFields.fixture';
@@ -53,27 +53,28 @@ type Group = 'Needs you' | 'Working' | '-';
 const groupOf = (p: Record<string, any>): Group =>
   sessionNeedsOwner(p as never) ? 'Needs you' : sessionIsWorking(p as never) ? 'Working' : '-';
 
-/** The board's after column, per row with the facts: state, icon, marks; and the group, the same before and after. */
-const AFTER: Record<number, { state: string; icon: string; marks: string[]; group: Group }> = {
+/** The board's after column, per row with the facts: state, icon, marks, the list row's title-line icons (Interrupted,
+ *  Finished and Ended are not drawn; Background and Will resume are icons: the owner, 2026-11-27); and the group, the
+ *  same before and after. */
+const AFTER: Record<number, { state: string; icon: string; marks: string[]; icons?: string[]; group: Group }> = {
   1: { state: 'Queued', icon: 'clock', marks: [], group: 'Working' },
   3: { state: 'Running', icon: 'spinner', marks: [], group: 'Working' },
   5: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
-  7: { state: 'Idle', icon: 'circle', marks: ['Interrupted'], group: '-' },
-  9: { state: 'Idle', icon: 'circle', marks: ['Finished'], group: '-' },
+  7: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
+  9: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
   11: { state: 'Idle', icon: 'circle', marks: ['Failed'], group: 'Needs you' },
-  13: { state: 'Idle', icon: 'circle', marks: ['Ended'], group: '-' },
-  15: { state: 'Running', icon: 'spinner', marks: ['Background'], group: 'Working' },
+  13: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
+  15: { state: 'Running', icon: 'spinner', marks: [], icons: ['BACKGROUND'], group: 'Working' },
   17: { state: 'Running', icon: 'spinner', marks: ['Needs you'], group: 'Needs you' },
   19: { state: 'Queued', icon: 'clock', marks: ['On hold'], group: 'Working' },
-  21: { state: 'Idle', icon: 'circle', marks: ['Ended'], group: '-' },
-  23: { state: 'Idle', icon: 'circle', marks: ['Ended'], group: '-' },
-  25: { state: 'Idle', icon: 'circle', marks: ['Interrupted'], group: '-' },
+  21: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
+  23: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
+  25: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
   27: { state: 'Running', icon: 'spinner', marks: [], group: 'Working' },
   29: { state: 'Running', icon: 'spinner', marks: [], group: 'Working' },
-  // Idle is Idle: a watch or wake-up to come draws no mark (the owner, 2026-11-27).
-  31: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
+  31: { state: 'Idle', icon: 'circle', marks: [], icons: ['WILL_RESUME'], group: '-' },
   33: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
-  35: { state: 'Idle', icon: 'circle', marks: ['Ended'], group: '-' },
+  35: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
 };
 
 /** What web drew before this change for each row without the facts (capture/web-rows.json): the row glyph, the
@@ -139,6 +140,7 @@ describe('the board on web: facts present', () => {
       // The two functions.
       expect(sessionDisplayState(p)).toMatchObject({ word: want.state, icon: want.icon, phase: p.phase });
       expect(markWords(p)).toEqual(want.marks);
+      expect(sessionRowIcons(p)).toEqual(want.icons ?? []);
       const text = [want.state, ...want.marks].join(' · ');
       // Session list row: the state icon from phase alone, and the marks after its line.
       const glyph = renderToStaticMarkup(<StatusIcon session={p} />);
@@ -174,6 +176,7 @@ describe('the board on web: facts absent (an older server) draws what it drew be
       const p = r.payload;
       expect(sessionDisplayState(p)).toBeNull();
       expect(sessionMarks(p)).toBeNull();
+      expect(sessionRowIcons(p)).toEqual([]);
       expect(sessionDisplayText(p)).toBeNull();
       const icon = renderToStaticMarkup(<StatusIcon session={p} />);
       expect(antGlyph(icon)).toBe(glyph);
@@ -214,7 +217,7 @@ describe('the marks the fixture has no row for, on server-shaped payloads', () =
     expect(sessionStateWord(p)).toBe('Idle');
     const shared = renderToStaticMarkup(<SharedSessionStatus head={p} canReply={false} />);
     expect(shared.indexOf('Idle')).toBeLessThan(shared.indexOf('Completed'));
-    expect(marksIn(shared)).toEqual(['ENDED']);
+    expect(marksIn(shared)).toEqual([]);
   });
 });
 
