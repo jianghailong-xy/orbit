@@ -1,0 +1,355 @@
+<!-- DESIGN MOCK (2026-11-27). Drive on the web, made consistent with the session console.
+     Both frames are drawn with the shipped stylesheets (foundation.css, index.css, DrivePage.css, Button.css, TextControls.css) and the
+     page's real class names, so "Today" is the page as it ships; "Proposed" adds only the overrides in <style id="after">.
+     File names, sessions, sizes and times are demo data.
+     Render: node docs/mocks/drive/render.mjs $PWD/docs/mocks/drive/05-web-consistency.html $PWD/docs/mocks/drive/05-web-consistency.png parts -->
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Drive · consistency with the session console</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<link rel="stylesheet" href="../../../src/web/src/pages/DrivePage.css">
+<style>
+  html, body { height: auto !important; background: #e6e6ea; }
+  body, .b-board, .b-part { font: 14px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .b-board { width: 1640px; padding: 32px 40px 40px; background: #e6e6ea; color: #1f2329; }
+  .b-board h1 { font-size: 24px; margin: 0 0 4px; }
+  .b-lede { color: #555b66; margin: 0 0 20px; }
+  .b-part { padding: 18px 20px 22px; margin-bottom: 26px; background: #f4f4f6; border-radius: 14px; }
+  .b-part > h2 { font-size: 17px; margin: 0 0 10px; display: flex; gap: 10px; align-items: center; }
+  .b-tag { font: 600 12px/1 Inter, sans-serif; padding: 5px 8px; border-radius: 6px; }
+  .b-tag.today { background: #fde8e6; color: #b3261e; } .b-tag.after { background: #dcf3e5; color: #17683b; }
+  .b-frame { position: relative; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px #d4d4da; }
+  /* The fixed upload tray lands in the frame's corner, as it does in the window's. */
+  .b-frame .app-shell { --app-vh: 820px; transform: translateZ(0); }
+  .b-frame .app-main { padding-left: var(--panel-gap); }
+  .b-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; margin: 14px 4px 0; font-size: 13px; color: #3d424b; }
+  .b-notes p { margin: 0; } .b-notes b { color: #1f2329; }
+  .b-mk { position: absolute; z-index: 300; display: inline-flex; width: 20px; height: 20px; border-radius: 50%;
+          background: #e0453a; color: #fff; font: 700 11.5px/20px Inter, sans-serif; justify-content: center; box-shadow: 0 0 0 2px #fff; }
+  .b-mk.g { background: #23a15a; }
+  .b-num { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: #e0453a; color: #fff; font: 700 11px/18px Inter, sans-serif;
+           justify-content: center; margin-right: 6px; vertical-align: 1px; }
+  .b-num.g { background: #23a15a; }
+  .b-cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .b-card { background: #fff; border-radius: 12px; padding: 14px 16px; font-size: 13px; color: #3d424b; box-shadow: 0 0 0 1px #e1e1e6; }
+  .b-card h3 { margin: 0 0 6px; font-size: 14.5px; color: #1f2329; display: flex; gap: 8px; align-items: center; }
+  .b-card ol, .b-card ul { margin: 0; padding-left: 20px; } .b-card li { margin-bottom: 4px; }
+  .b-rec { background: #dcf3e5; color: #17683b; font: 600 11.5px/1 Inter, sans-serif; padding: 4px 7px; border-radius: 5px; }
+  .b-ref { display: flex; gap: 16px; align-items: flex-start; margin-top: 10px; }
+  .b-ref > div { flex: 1; }
+  .b-cost td, .b-cost th { padding: 6px 10px; border-bottom: 1px solid #e6e6ea; text-align: left; vertical-align: top; font-size: 13px; }
+  .b-cost { border-collapse: collapse; width: 100%; background: #fff; border-radius: 12px; overflow: hidden; }
+  .b-cost th { background: #f7f7f9; font-weight: 600; color: #1f2329; }
+  svg.b-ic { width: 14px; height: 14px; display: inline-block; vertical-align: -2px; }
+  .files-tray .b-ic { width: 13px; height: 13px; }
+  /* Drawn hover state (a screenshot has no pointer). */
+  .b-hover { background: var(--bg-hover) !important; }
+</style>
+
+<!-- The proposal, written as it would land in DrivePage.css. Scoped to .v-after so "Today" stays the shipped page. -->
+<style id="after">
+  /* 6 · 7 · 8: the head keeps Search, New folder and Upload; Upload is tinted like New session, never solid. */
+  .v-after .files-head-actions .orbit-input { width: 240px; }
+  .v-after .files-upload { background: var(--brand-tint); border-color: var(--brand-border); color: var(--brand); font-weight: 500; }
+  /* 7 (option A): Trash and Storage are places, so they sit under the folder tree as rows. */
+  .v-after .files-tree { display: flex; flex-direction: column; }
+  .v-after .files-tree-places { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
+  .v-after .files-tree-places .files-tree-row { padding-left: 8px; color: var(--text-2); }
+  .v-after .files-tree-places .files-tree-row svg { color: var(--text-3); }
+  /* 10: a selected row is the session list's: rounded and inset, not a full-width block. */
+  .v-after .files-list { border-collapse: separate; border-spacing: 0; }
+  .v-after .files-row td:first-child { border-radius: 8px 0 0 8px; }
+  .v-after .files-row td:last-child { border-radius: 0 8px 8px 0; }
+  .v-after .files-row.selected td, .v-after .files-row.b-hover td { border-bottom-color: transparent; }
+  /* 6: the writer is grey text that links on hover; blue is left to the one action and the selection. */
+  .v-after .files-writer-agent { color: var(--text-2); }
+  /* 9: a row's ⋯ shows on the selected row and under the pointer only. */
+  .v-after .files-row .files-row-more { visibility: hidden; }
+  .v-after .files-row.selected .files-row-more, .v-after .files-row.b-hover .files-row-more { visibility: visible; }
+  /* 5 · 11 · 12: the details pane has a title bar like the project column: × first, the name in at most two lines. */
+  .v-after .files-pane-bar { display: flex; align-items: flex-start; gap: 8px; margin: -4px 0 0 -6px; }
+  .v-after .files-pane-close { flex: none; width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--text-3);
+                               display: inline-flex; align-items: center; justify-content: center; }
+  .v-after .files-pane-name { word-break: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+                              overflow: hidden; line-height: 1.45; padding-top: 2px; }
+  .v-after .files-pane-kind { margin-left: 30px; }
+  .v-after .files-pane-more { height: var(--orbit-control-height); width: var(--orbit-control-height); border-radius: 10px; }
+  /* 1 · 2: with the details open, the tray docks in the pane's empty foot, inside its border; it ends on a whole row. */
+  .v-after .files-tray { right: calc(var(--panel-gap) + 13px); bottom: calc(var(--panel-gap) + 13px); width: calc(336px - 26px); box-shadow: none; }
+  .v-after .files-tray-list { max-height: 232px; -webkit-mask-image: linear-gradient(#000 calc(100% - 18px), transparent); }
+  .v-after .files-tray-when { color: var(--text-4); margin-left: 6px; white-space: nowrap; }
+  .v-after .files-tray-current a { color: var(--text-2); }
+  .v-after .files-tray-head-warn { color: var(--warning-solid); }
+</style>
+
+<body><div class="b-board">
+<h1>Drive · 与会话页统一（Web）</h1>
+<p class="b-lede">两帧都用线上样式表（index.css / DrivePage.css / Button.css / TextControls.css）和页面真实的 class 画出：「今天」就是线上样子，「建议」只多了本页
+<code>&lt;style id="after"&gt;</code> 里的覆盖。红点编号对应上一轮评审的 1–13 条；绿点是改后的同一处。文件名、会话名、大小、时间都是示例数据。</p>
+
+<section class="b-part" id="part-1">
+  <h2><span class="b-tag today">① 今天</span>选中一个文件，右侧打开详情，上传托盘里有 4 次同步</h2>
+  <div class="b-frame" id="f-today"></div>
+  <div class="b-notes">
+    <p><span class="b-num">1</span><b>托盘压住详情面板</b>：<code>position: fixed; right: 24px</code> 贴窗口角，横跨两块面板之间的缝。</p>
+    <p><span class="b-num">2</span><b>托盘最后一行被切半</b>：<code>max-height: 280px</code> 不按行收。</p>
+    <p><span class="b-num">3</span><b>标题写「Synced 4 folders」</b>，其实两次各有 4 个失败。</p>
+    <p><span class="b-num">4</span><b>同一对文件夹出现两次</b>（一次 ✓、一次 ⚠），没有时间，分不出哪次是最新。</p>
+    <p><span class="b-num">5</span><b>详情标题在词中间断行</b>（<code>break-all</code>）；Path 又把整串文件名重复一遍。</p>
+    <p><span class="b-num">6</span><b>蓝色太多</b>：实心 Upload、实心 Share link…、每行一个蓝色作者链接、托盘每条一个蓝色会话名。</p>
+    <p><span class="b-num">7</span><b>头部四个文字按钮</b>；Trash、Storage 是「去处」不是「动作」。</p>
+    <p><span class="b-num">8</span><b>搜索框没有放大镜</b>，占位文字还是旧名「Search all of Files」。</p>
+    <p><span class="b-num">9</span><b>每行常驻 ⋯</b>，右侧一整列重复的点。</p>
+    <p><span class="b-num">10</span><b>选中行是通栏直角色块</b>，而左边树和会话列表都是圆角内缩。</p>
+    <p><span class="b-num">11</span><b>详情面板没有 ×</b>，只能靠取消选中关闭。</p>
+    <p><span class="b-num">12</span><b>⋯ 按钮 32px 高</b>，旁边 Download / Share 是控件默认高度。</p>
+    <p><span class="b-num">13</span><b>时间只有「00:58」</b>；会话列表今天写「2h ago」，更早写「11/26, 09:50」。</p>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2><span class="b-tag after">② 建议</span>同一时刻，按会话页的规矩收拾</h2>
+  <div class="b-frame v-after" id="f-after"></div>
+  <div class="b-notes">
+    <p><span class="b-num g">1</span><b>开着详情时，托盘落进详情面板底部的空白</b>，在面板边框之内、与面板同宽，不压列表也不跨缝；不开详情时仍在窗口角。</p>
+    <p><span class="b-num g">2</span><b>按整行收</b>，底部 18px 渐隐，提示还能往下滚。</p>
+    <p><span class="b-num g">3</span><b>标题说实话</b>：「3 syncs · 2 with failures」，失败数用警示色。</p>
+    <p><span class="b-num g">4</span><b>同一对文件夹只留最近一次</b>，每条带时间（与会话列表同一种写法）。</p>
+    <p><span class="b-num g">5</span><b>标题只在 . - 处断、最多两行</b>，完整名字悬停可见；Path 只写所在文件夹。</p>
+    <p><span class="b-num g">6</span><b>蓝色只留给 Upload 和选中</b>：作者、托盘会话名改灰字，悬停才下划线；Share link… 改普通按钮。</p>
+    <p><span class="b-num g">7</span><b>头部只剩 Search · New folder · Upload</b>；Trash、Storage 成为树底部的两行（见 ④ 方案 A）。</p>
+    <p><span class="b-num g">8</span><b>放大镜 + 「Search Drive」</b>。</p>
+    <p><span class="b-num g">9</span><b>⋯ 只在选中行和悬停行出现</b>（图中第 4 行画的是悬停）。</p>
+    <p><span class="b-num g">10</span><b>选中行圆角 8px</b>，和树、会话列表一致。</p>
+    <p><span class="b-num g">11</span><b>详情面板标题栏首位 ×</b>，同项目会话栏。</p>
+    <p><span class="b-num g">12</span><b>⋯ 改成控件同高的方形按钮</b>，三颗按钮一条线。</p>
+    <p><span class="b-num g">13</span><b>时间沿用会话列表的格式</b>：一天内「2h ago」，更早「11/26, 09:50」。</p>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>③ 参照：会话页里被借用的三样东西</h2>
+  <div class="b-ref">
+    <div class="b-card"><h3>主操作 = 浅蓝底按钮</h3>
+      <div class="session-new" style="width:300px;margin:8px 0"><svg class="b-ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>New session</div>
+      <p style="margin:4px 0 0">会话页没有实心蓝按钮。Drive 的 Upload 用同一组 token：<code>--brand-tint</code> 底、<code>--brand-border</code> 边、<code>--brand</code> 字。</p></div>
+    <div class="b-card"><h3>右栏 = × + 标题 + 灰色副标题</h3>
+      <div style="display:flex;gap:8px;align-items:flex-start;margin:8px 0"><span style="color:var(--text-3);font-size:18px;line-height:22px">×</span>
+        <div><div style="font-weight:600;font-size:15px">Sample project</div><div style="color:var(--text-3);font-size:12px">Project · 30 sessions</div></div></div>
+      <p style="margin:4px 0 0">详情面板照这个排：× 在最前，名字粗体，下一行灰字写类型与大小。</p></div>
+    <div class="b-card"><h3>行 = 圆角选中、灰色副信息、同一种时间</h3>
+      <div class="session-row active" style="min-height:52px;border-radius:8px;margin:8px 0"><div style="min-width:0"><div style="font-weight:500">Sample session title</div>
+        <div style="color:var(--text-3);font-size:13px">Last reply, in grey</div></div><span style="margin-left:auto;color:var(--text-3);font-size:12px">11/26, 09:50</span></div>
+      <p style="margin:4px 0 0">副信息是灰字；时间一天内「2h ago」，更早「月/日, 时:分」。</p></div>
+  </div>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>④ 待定 · 要你拍板：Trash 和 Storage 放哪</h2>
+  <div class="b-cmp">
+    <div class="b-card"><h3>方案 A · 树底部两行 <span class="b-rec">推荐</span></h3>
+      <ul><li>头部只剩搜索和两个动作，和会话页头部一样轻。</li>
+      <li>Trash、Storage 是「去处」，和文件夹同一列、同一种行，点进去仍是现在的 /drive/trash、/drive/storage。</li>
+      <li>代价：树很长时它们贴在底部（<code>margin-top: auto</code>），不会被滚走。</li></ul></div>
+    <div class="b-card"><h3>方案 B · 留在头部，改成两个图标按钮</h3>
+      <ul><li>位置不变，老用户不用重新找。</li>
+      <li>头部仍有 5 个控件；图标按钮需要 tooltip 才知道是什么。</li>
+      <li>和会话页头部（⋯、分享）的图标按钮风格一致。</li></ul></div>
+  </div>
+</section>
+
+<section class="b-part" id="part-5">
+  <h2>⑤ 落地（按代价排）</h2>
+  <table class="b-cost">
+    <tr><th style="width:90px">代价</th><th>改什么</th><th style="width:240px">文件</th></tr>
+    <tr><td>纯 CSS</td><td>6 灰色作者 · 9 ⋯ 悬停出现 · 10 圆角选中 · 12 ⋯ 同高 · 5 标题断行/两行 · 2 托盘按行收 + 渐隐 · 1 开着详情时托盘落进详情面板底部</td><td><code>pages/DrivePage.css</code></td></tr>
+    <tr><td>小改 TSX</td><td>8 搜索放大镜 + 「Search Drive」· 6 Upload 浅蓝、Share link… 普通 · 11 详情 × · 5 Path 只写文件夹 · 13 时间用会话列表的格式</td><td><code>pages/DrivePage.tsx</code>、<code>lib/drive.ts</code></td></tr>
+    <tr><td>小改 TSX</td><td>3 托盘标题如实 · 4 同一对文件夹只留最近一次并带时间</td><td><code>components/drive/DriveUploadTray.tsx</code></td></tr>
+    <tr><td>看 ④</td><td>7 Trash / Storage 进树底部（A）或改图标按钮（B）</td><td><code>pages/DrivePage.tsx</code></td></tr>
+    <tr><td>不在这轮</td><td>上一轮 P3：长名中间省略、视频图标、「Drive」出现三次、⚠/✓ 粗细、树行高</td><td>—</td></tr>
+  </table>
+</section>
+</div>
+
+<script>
+const IC = {
+  folder: '<path d="M2 6.5A2.5 2.5 0 0 1 4.5 4h4l2 2.2h9A2.5 2.5 0 0 1 22 8.7v9.8A2.5 2.5 0 0 1 19.5 21h-15A2.5 2.5 0 0 1 2 18.5z" fill="currentColor"/>',
+  file: '<path d="M6 2.5h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-17a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M14 2.5v5h5" fill="none" stroke="currentColor" stroke-width="1.5"/>',
+  newfolder: '<path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M12 11v6M9 14h6" stroke="currentColor" stroke-width="1.7"/>',
+  up: '<path d="M12 16V4M7 9l5-5 5 5M5 20h14" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  down: '<path d="M12 4v12M7 11l5 5 5-5M5 20h14" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  trash: '<path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>',
+  db: '<ellipse cx="12" cy="6" rx="7" ry="2.5" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M5 6v12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" stroke="currentColor" stroke-width="1.7" fill="none"/>',
+  more: '<circle cx="6" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="18" cy="12" r="1.7" fill="currentColor"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>',
+  search: '<circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.9" fill="none"/><path d="M15.5 15.5L20 20" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  warn: '<path d="M12 3.5L2.5 20h19z" fill="currentColor"/><path d="M12 10v4.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1.2" fill="#fff"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
+  right: '<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
+  downc: '<path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
+};
+const ic = (n, cls = 'b-ic') => `<svg class="${cls}" viewBox="0 0 24 24">${IC[n]}</svg>`;
+const btn = (label, icon, extra = '', variant = 'default') =>
+  `<button class="orbit-button orbit-button-${variant} orbit-button-middle ${extra}"><span class="orbit-button-icon">${ic(icon)}</span><span>${label}</span></button>`;
+
+const SERIES = 'lecture-series-2026.S01E';
+const files = [
+  ['01', '1.6 GB', 58], ['02', '842 MB', 53], ['03', '844 MB', 54], ['04', '834 MB', 54], ['05', '835 MB', 43], ['06', '848 MB', 43],
+  ['07', '856 MB', 43], ['08', '861 MB', 44], ['09', '858 MB', 49], ['10', '860 MB', 49], ['11', '1.2 GB', 51],
+].map(([ep, size, min]) => ({ name: `${SERIES}${ep}.1080p.WEB-DL.H264.AAC.mkv`, size, min }));
+const WRITER = 'Agent in Sync lecture recordings to Orbit';
+
+function frame(after) {
+  const mk = (n) => ` data-mk="${n}"`;
+  const tree = (name, depth, { open, active, kids } = {}) =>
+    `<div class="files-tree-row${active ? ' active' : ''}" style="padding-left:${depth * 14 + 4}px">
+       <button class="files-tree-toggle">${kids === false ? '' : ic(open ? 'downc' : 'right', 'b-ic')}</button>
+       ${ic('folder', 'b-ic files-folder-icon')}<span class="files-tree-name">${name}</span></div>`;
+  const head = `
+    <header class="files-head">
+      <h1>Drive</h1>
+      <div class="files-head-actions">
+        ${after
+          ? `<span class="orbit-text-control orbit-input orbit-input-affix" data-size="small"${mk(8)}><span class="orbit-input-prefix" style="color:var(--text-3);display:inline-flex;margin-right:6px">${ic('search')}</span><input class="orbit-input-field" placeholder="Search Drive"></span>
+             ${btn('New folder', 'newfolder')}
+             <span${mk(7)}>${btn('Upload', 'up', 'files-upload')}</span>`
+          : `<input class="orbit-text-control orbit-input" data-size="small" placeholder="Search all of Files" style="width:190px"${mk(8)}>
+             ${btn('New folder', 'newfolder')}
+             <span${mk(6)}>${btn('Upload', 'up', '', 'primary')}</span>
+             <span${mk(7)}>${btn('Trash', 'trash')}</span>
+             ${btn('Storage', 'db')}`}
+      </div>
+    </header>`;
+  const places = after
+    ? `<div class="files-tree-places">
+         <div class="files-tree-row">${ic('trash')}<span class="files-tree-name">Trash</span></div>
+         <div class="files-tree-row">${ic('db')}<span class="files-tree-name">Storage</span></div>
+       </div>` : '';
+  // The board's clock is 02:58; the session list floors to whole hours.
+  const when = (min) => (after ? `${Math.floor((178 - min) / 60)}h ago` : `00:${String(min).padStart(2, '0')}`);
+  const rows = files.map((f, i) => `
+    <tr class="files-row${i === 0 ? ' selected' : ''}${after && i === 3 ? ' b-hover' : ''}">
+      <td class="files-col-name"><span class="files-name-cell">${ic('file', 'b-ic files-file-icon')}<span class="files-name">${f.name}</span></span></td>
+      <td class="files-col-writer"><a class="files-writer-agent"${i === 1 ? mk(6) : ''}>${WRITER}</a></td>
+      <td class="files-col-size">${f.size}</td>
+      <td class="files-col-when">${when(f.min)}</td>
+      <td class="files-col-more"><button class="files-row-more"${i === 4 ? mk(9) : ''}>${ic('more')}</button></td>
+    </tr>`).join('');
+  const sel = files[0];
+  const pane = `
+    <aside class="files-pane">
+      ${after
+        ? `<div class="files-pane-bar"><button class="files-pane-close"${mk(11)}>${ic('close')}</button><h2 class="files-pane-name"${mk(5)}>${sel.name}</h2></div>
+           <div class="files-pane-kind">MKV · ${sel.size}</div>`
+        : `<h2 class="files-pane-name"${mk(5)}>${sel.name}</h2><div class="files-pane-kind"${mk(11)}>${sel.size}</div>`}
+      <dl class="files-pane-facts">
+        <dt>Last written</dt><dd>${after ? '2h ago' : '00:58'}</dd>
+        <dt>By</dt><dd><a class="files-writer-agent">${WRITER}</a></dd>
+        <dt>Path</dt><dd class="files-pane-path">${after ? '/Drive/Recordings/Lecture series 2026/' : `/Drive/Recordings/Lecture series 2026/${sel.name}`}</dd>
+        <dt>Earlier versions</dt><dd>None</dd>
+      </dl>
+      <div class="files-pane-actions">
+        ${btn('Download', 'down')}
+        ${btn('Share link…', 'link', '', after ? 'default' : 'primary')}
+        <button class="files-pane-more"${mk(12)}>${ic('more')}</button>
+      </div>
+    </aside>`;
+  const sync = (src, dest, status, line, time, warn) => `
+    <li class="files-tray-row files-tray-sync files-tray-sync-${warn ? 'failed' : 'done'}">
+      <div class="files-tray-name"><span class="files-tray-file"><b>${src}/</b></span><span class="files-tray-where"> → ${dest}</span>
+        <span class="files-tray-action">${warn ? `<span class="files-tray-warn">${ic('warn')}</span>` : ic('check')}</span></div>
+      <div class="files-tray-status">${line}${warn ? ' · <button>Details</button>' : ''}${after ? `<span class="files-tray-when">${time}</span>` : ''}</div>
+      <div class="files-tray-current"><a>${status}</a></div>
+    </li>`;
+  const S = 'Sync lecture recordings to Orbit';
+  const tray = `
+    <section class="files-tray">
+      <header class="files-tray-head"><span${mk(3)}>${after ? '3 syncs · <span class="files-tray-head-warn">2 with failures</span>' : 'Synced 4 folders'}</span>
+        <span class="files-tray-head-actions"><button>Clear finished</button><button>Hide</button></span></header>
+      <ul class="files-tray-list">
+        ${after
+          ? sync('lectures-stage', 'Recordings/Lecture series 2026', S, 'Synced 7 files · 4 failed', '2h ago', true)
+            + sync('books-stage', 'Books', S, 'Synced 11,271 files · 4 failed', '3h ago', true)
+            + sync('papers-stage', 'Papers', S, 'Synced 38 files · 212 MB', '11/26, 21:40', false)
+          : sync('books-stage', 'Books', S, 'Synced 4 files · 566 MB', '', false)
+            + sync('lectures-stage', 'Recordings/Lecture series 2026', S, 'Synced 4 files · 4.2 GB', '', false)
+            + sync('lectures-stage', 'Recordings/Lecture series 2026', S, 'Synced 7 files · 4 failed', '', true)
+            + sync('books-stage', 'Books', S, 'Synced 11,271 files · 4 failed', '', true)}
+      </ul>
+    </section>`;
+  return `
+  <div class="app-shell"><main class="app-main"><div class="app-view">
+    <div class="files-page">
+      ${head}
+      <div class="files-body">
+        <nav class="files-tree"${mk(10)}>
+          <div>
+          ${tree('Drive', 0, { open: true })}
+          ${tree('Books', 1)}${tree('Lab evidence', 1)}${tree('Papers', 1)}
+          ${tree('Recordings', 1, { open: true })}${tree('Lecture series 2026', 2, { open: true, active: true, kids: false })}
+          ${tree('Datasets', 1)}
+          </div>
+          ${places}
+        </nav>
+        <section class="files-list-wrap">
+          <div class="files-crumbs">Drive <span class="files-crumb-sep"> › </span><button class="files-link-button">Recordings</button><span class="files-crumb-sep"> › </span><span class="files-crumb-here">Lecture series 2026</span></div>
+          <table class="files-list">
+            <thead><tr><th class="files-col-name">Name</th><th class="files-col-writer">Last written by</th><th class="files-col-size">Size</th><th class="files-col-when"${mk(13)}>Modified</th><th class="files-col-more"></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          ${tray}
+        </section>
+        ${pane}
+      </div>
+    </div>
+  </div></main></div>`;
+}
+
+for (const [id, after] of [['f-today', false], ['f-after', true]]) {
+  const host = document.getElementById(id);
+  host.innerHTML = frame(after);
+}
+// Marks: number 10 points at the selected row, not the tree; 1 at the tray's corner over the pane.
+window.drawMarks = () => {
+  document.querySelectorAll('.b-mk').forEach((m) => m.remove());
+  for (const host of document.querySelectorAll('.b-frame')) {
+    const after = host.classList.contains('v-after');
+    const fr = host.getBoundingClientRect();
+    const put = (el, n, dx = -10, dy = -10) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const m = document.createElement('span');
+      m.className = 'b-mk' + (after ? ' g' : '');
+      m.textContent = n;
+      m.style.left = Math.max(2, r.left - fr.left + dx) + 'px';
+      m.style.top = Math.max(2, r.top - fr.top + dy) + 'px';
+      host.appendChild(m);
+    };
+    for (const el of host.querySelectorAll('[data-mk]')) {
+      const n = el.dataset.mk;
+      if (n === '10') continue;
+      if (n === '11' && !after) continue;
+      // Offsets keep each mark off its own text: header controls get it above, row-end controls to their right.
+      const at = { '6': [-10, -18], '7': [-10, -18], '8': [-10, -18], '9': [22, -2], '12': [10, -18], '11': [-6, -20], '13': [-24, -2] }[n] || [-24, -2];
+      const w = el.getBoundingClientRect().width;
+      if (n === '13') at[0] = w + 4;          // right of "Modified", clear of "Size"
+      if (n === '5' && after) at[0] = w - 6;  // the title's far end, clear of the ×
+      put(el, n, ...at);
+    }
+    if (!after) { const p = host.querySelector('.files-pane').getBoundingClientRect(); const m = document.createElement('span');
+      m.className = 'b-mk'; m.textContent = '11'; m.style.left = (p.right - fr.left - 30) + 'px'; m.style.top = (p.top - fr.top + 10) + 'px'; host.appendChild(m); }
+    const lis = host.querySelectorAll('.files-tray-row');
+    const list = host.querySelector('.files-tray-list');
+    if (after) { put(lis[0], '4', -22, 6); put(list, '2', -22, list.getBoundingClientRect().height - 14); }
+    else { put(lis[1], '4', -22, 6); put(list, '2', -22, list.getBoundingClientRect().height - 14); }
+    put(host.querySelector('.files-row.selected td'), '10', -24, 6);
+    const tray = host.querySelector('.files-tray');
+    put(tray, '1', tray.getBoundingClientRect().width - 10, -12);
+  }
+};
+window.drawMarks();
+</script>
+</body></html>
