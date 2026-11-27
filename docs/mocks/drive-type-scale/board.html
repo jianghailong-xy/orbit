@@ -263,6 +263,17 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
 .tbtn.prim .badge { box-shadow:0 0 0 2px var(--brand); }
 .tbtn.prim.on .badge { box-shadow:0 0 0 2px var(--brand-strong); }
 .tbtn.prim .ring circle:first-child { stroke:rgba(255,255,255,.35); } .tbtn.prim .ring circle:last-child { stroke:#fff; }
+
+.btn.icon.on { background:var(--bg-hover); color:var(--text-1); border-color:var(--border); }
+.btn.icon .dot2 { position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--warning-solid,#fa8c16); box-shadow:0 0 0 2px var(--bg-base); }
+.pop { position:absolute; z-index:10; width:300px; background:var(--bg-raised); border:1px solid var(--border); border-radius:12px;
+       box-shadow:0 2px 6px rgba(0,0,0,.08), 0 16px 40px rgba(0,0,0,.14); padding:6px; font-size:14px; font-weight:400; }
+.pop .meter { margin:0; border:0; padding:10px 10px 8px; border-radius:8px; }
+.pop .meter.hov { background:var(--bg-hover); }
+.pop .meter .more2 { margin-top:8px; color:var(--text-3); font-size:12.5px; display:flex; justify-content:space-between; } .pop .meter .more2 a { color:var(--brand); }
+.pop hr { border:0; border-top:1px solid var(--border-subtle); margin:6px 4px; }
+.pop .mi { display:flex; align-items:center; gap:10px; height:36px; padding:0 10px; border-radius:8px; color:var(--text-1); }
+.pop .mi .v { margin-left:auto; color:var(--text-3); font-size:13px; } .pop .mi .ch { color:var(--text-4); }
 </style></head><body>
 <div class="board">
 <h1 class="bt">Drive · one type scale and rhythm with the session console</h1>
@@ -297,7 +308,18 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
         <div class="search"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
+        <div class="btn icon on" title="Settings" style="position:relative"><span class="mk abs" style="left:-10px;top:-12px">7</span><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div>
         <div class="tbtn prim" style="position:relative"><span class="mk abs" style="left:-10px;top:-12px">6</span><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div>
+      </div>
+      <div class="pop" style="right:146px;top:62px">
+        <div class="meter hov" style="position:relative"><span class="mk abs" style="left:-30px;top:10px">8</span>
+          <div class="lab"><span>Storage</span><b>47.1 GB</b></div>
+          <div class="bar"><i class="c-drive" style="flex:41.6"></i><i class="c-trash" style="flex:3.1"></i><i class="c-other" style="flex:2.4"></i></div>
+          <div class="lg"><span style="--dot:var(--brand)">Drive 41.6</span><span style="--dot:#a8acb3">Trash 3.1</span><span style="--dot:#0d9488">Other 2.4 GB</span></div>
+          <div class="more2"><span>No limit set</span><a>Open Storage ›</a></div>
+        </div>
+        <hr>
+        <div class="mi"><svg class="ic sm" viewBox="0 0 24 24"><path d="M5 7h14M10 4h4M7 7l1 13h8l1-13"/></svg>Trash<span class="v">3.1 GB</span><span class="ch">›</span></div>
       </div>
     </div>
     <div class="body">
@@ -311,14 +333,6 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Video</div>
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>scratch</div>
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>书格</div>
-        <div class="sp"></div>
-        <div class="meter hov" style="position:relative"><span class="mk abs" style="left:-22px;top:12px">8</span>
-          <div class="lab"><span>Storage</span><b>47.1 GB</b></div>
-          <div class="bar"><i class="c-drive" style="flex:41.6"></i><i class="c-trash" style="flex:3.1"></i><i class="c-other" style="flex:2.4"></i></div>
-          <div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#0d9488">Other</span></div>
-          <div class="trq" style="position:relative"><span class="mk abs" style="left:-30px;top:3px">7</span><i class="sw"></i><span>Trash</span><span class="go">›</span><span class="v">3.1 GB</span></div>
-          <div class="tip" style="left:212px;bottom:0"><div><span class="k">Drive</span>41.6 GB</div><div><span class="k">Trash</span>3.1 GB</div><div><span class="k">Other files</span>2.4 GB</div><div style="border-top:1px solid #3a3f47;margin-top:4px;padding-top:4px"><span class="k">No limit set</span>Open Storage ›</div></div>
-        </div>
       </div>
       <div class="list">
         <span class="mk abs" style="left:2px;top:50px">4</span>
@@ -354,13 +368,13 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
 <h3>What changes, by mark</h3>
 <ol>
 <li><b>Header.</b> No full-width rule; padding 24px like the session column. The title shows the path: “Drive”, or “Drive / Books” inside a folder, with the parent in grey. It replaces the 12px breadcrumb line above the table, so the page names its place once and not three times.</li>
-<li><b>Controls</b>: Search, New folder, Upload, then the Agents toggle at the end, 34px with 14px text. Agents is the page’s one primary (solid blue) button, because handing work to an agent is the main thing you do here; Upload and New folder are plain. Search is named <b>“Search Drive”</b> (it said “Search all of Files”, an old name).</li>
+<li><b>Controls</b>: Search, New folder, Upload, the Settings gear, then Agents at the end, 34px with 14px text. Agents is the page’s one primary (solid blue) button, because handing work to an agent is the main thing you do here; Upload and New folder are plain. Search is named <b>“Search Drive”</b> (it said “Search all of Files”, an old name).</li>
 <li><b>Tree</b> rows are 34px and 14px, with the same outline folder icons as the app nav. The selected row looks like a selected nav item.</li>
 <li><b>Rows</b> are 48px with 14px names. The table uses fixed column widths: Name takes the remaining space and the other columns stay together on the right, so a wide window no longer opens a gap of about 900px between “Last written by” and Size.</li>
 <li><b>Last written by</b> is grey (text-2), with a small agent glyph in place of the words “Agent in”. The session title turns into a blue underlined link only when you hover the row. Blue is left for selection and actions, as in the session list. The “···” menu also shows only on hover.</li>
 <li><b>Agents</b> closes the header and opens the chat in a right-hand panel. The activity log is kept apart from the chat, behind one icon in the panel’s top-right corner that carries the amber count. Failures in the log offer <b>Have the agent fix it</b>, which hands them to the session that ran the sync. It replaces the round floating chat button and the sync tray, so nothing floats over the list. Frames 4–6.</li>
-<li><b>Trash</b> is not a folder row or a button. It is the grey segment’s own legend line under the storage bar (“■ Trash › 3.1 GB”, 12.5px grey), so it appears once, that turns blue on hover and opens Trash. While you drag a file it becomes a drop target. Row menus keep “Move to Trash”, and the toast’s Undo is the usual way back.</li>
-<li><b>Storage meter</b> sits at the foot of the tree and opens Storage. It reads <code>GET /drive/usage</code>, which the Storage page already calls. With no limit set (the default) the bar is the account’s total split into Drive, Trash and Other, with no grey track, so it does not read as “full”. Hover shows the numbers. States: frame 3.</li>
+<li><b>Settings</b> (mark 7) is an icon-only gear button before Agents. Its menu holds the two things that are about the drive as a whole, not the folder you are in: the storage meter and Trash. Neither takes a row in the tree any more. The gear carries an amber dot when storage is 90% full or more (red when full), so a full drive is not hidden behind it.</li>
+<li><b>Storage meter</b> (mark 8) is the top of the Settings menu and opens Storage. It reads <code>GET /drive/usage</code>, which the Storage page already calls. With no limit set (the default) the bar is the account’s total split into Drive, Trash and Other, with no grey track, so it does not read as “full”. Hover shows the numbers. States: frame 3.</li>
 <li style="list-style:none;margin-left:-18px;color:#646a73">Frame 2: when a file is selected and the details pane opens, the table drops “Last written by” (the pane shows it as “By”), so names are not cut off.</li>
 </ol>
 <h3>Type and spacing</h3>
@@ -372,7 +386,7 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
 <tr><td>Column head</td><td class="was">12</td><td class="now">13 · 36px</td></tr>
 <tr><td>Writer, dates</td><td class="was">13 blue / 13</td><td class="now">13.5 grey</td></tr>
 <tr><td>Breadcrumb</td><td class="was">12 line</td><td class="now">in title</td></tr>
-<tr><td>Header actions</td><td class="was">5</td><td class="now">3 + Agents</td></tr>
+<tr><td>Header actions</td><td class="was">5</td><td class="now">3 + ⚙ + Agents</td></tr>
 <tr><td>Tray</td><td class="was">12 · r10</td><td class="now">14/13 · r12</td></tr>
 <tr><td>Details pane</td><td class="was">15 / 12 facts</td><td class="now">16 / 13.5</td></tr>
 <tr><td>Gutters</td><td class="was">16–20</td><td class="now">24</td></tr>
@@ -403,6 +417,7 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
         <div class="search"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
+        <div class="btn icon" title="Settings" style="position:relative"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div>
         <div class="tbtn prim"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents</div>
       </div>
     </div>
@@ -413,13 +428,6 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Lab evidence</div>
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Video</div>
         <div class="tr l2"><span class="tg">›</span><svg class="ic sm fd" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>书格</div>
-        <div class="sp"></div>
-        <div class="meter">
-          <div class="lab"><span>47.1 GB of 100 GB</span><b>47%</b></div>
-          <div class="bar track"><i class="c-drive" style="width:41.6%"></i><i class="c-trash" style="width:3.1%"></i><i class="c-other" style="width:2.4%"></i></div>
-          <div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#2dd4bf">Other</span></div>
-          <div class="trq"><i class="sw"></i><span>Trash</span><span class="go">›</span><span class="v">3.1 GB</span></div>
-        </div>
       </div>
       <div class="list">
         <table>
@@ -448,7 +456,7 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
     </div>
   </main>
 </div>
-<div class="fh" style="margin-top:36px"><span class="n">3</span>Storage meter states (the tree’s foot, enlarged 1.3× to read; one component, one line of text under the bar at most)</div>
+<div class="fh" style="margin-top:36px"><span class="n">3</span>Storage meter states (the top of the Settings menu, enlarged 1.3× to read; one component, one line of text under the bar at most)</div>
 <div class="states" style="zoom:1.3"><div class="st-card"><h5>A · No limit (default)</h5><p>quotaBytes is null. The bar is the split of what you keep, with no track and no percentage.</p><div class="win"><div class="meter " style="border-top:0;padding-top:4px">
 <div class="lab"><span>Storage</span><b>47.1 GB</b></div><div class="bar"><i class="c-drive" style="flex:41.6"></i><i class="c-trash" style="flex:3.1"></i><i class="c-other" style="flex:2.4"></i></div><div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#a8acb3">Trash</span><span style="--dot:#0d9488">Other</span></div></div></div></div><div class="st-card"><h5>B · Limit, under 90%</h5><p>The deployment sets a limit. Grey track; segments are shares of the limit.</p><div class="win"><div class="meter " style="border-top:0;padding-top:4px">
 <div class="lab"><span>47.1 GB of 100 GB</span><b>47%</b></div><div class="bar track"><i class="c-drive" style="width:41.6%"></i><i class="c-trash" style="width:3.1%"></i><i class="c-other" style="width:2.4%"></i></div><div class="lg"><span style="--dot:var(--brand)">Drive</span><span style="--dot:#a8acb3">Trash</span><span style="--dot:#0d9488">Other</span></div></div></div></div><div class="st-card"><h5>C · 90% or more</h5><p>Amber. If Trash holds space, the way to free it is one click away.</p><div class="win"><div class="meter warn" style="border-top:0;padding-top:4px">
@@ -472,6 +480,7 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
         <div class="search" style="width:220px"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
+        <div class="btn icon" title="Settings" style="position:relative"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div>
         <div class="tbtn prim on"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div>
       </div>
     </div>
