@@ -1027,7 +1027,9 @@ test('(p) NATS is named to the apiserver and the link gateway alone, and stores 
 // hints and turn prefix requests and reads live streams and the answers to its requests, and its processes ask and
 // answer each other on api.> (2026-10-28, the top of this file); the gateway reads runners' hints and requests, publishes
 // live streams, answers a request once, and relays the browser's byte streams on vnc.> (docs/runner-browser-design.md §4,
-// 2026-11-17), which the apiserver sends on vnc.*.down and reads on vnc.*.up (the viewer route, 2026-11-18). No trace or debug logging, here or in the service's command (p). Changing
+// 2026-11-17), which the apiserver sends on vnc.*.down and reads on vnc.*.up (the viewer route, 2026-11-18); its nodes
+// ask each other for a runner process's heartbeat facts on lfx.<runnerId> and take the answers on their own inbox,
+// _LFX.> (docs/runner-link-design.md §15.17, 2026-11-27). No trace or debug logging, here or in the service's command (p). Changing
 // any of it is a new decision, made here.
 test('(q) the runner link\'s NATS configuration is exactly the one task B4 added: two nkey users, each allowed only what it does', () => {
   const conf = readFileSync(path.join(repo, NATS_CONF), 'utf8');
@@ -1048,8 +1050,8 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
     '{',
     'nkey: $RUNNER_LINK_NATS_GATEWAY_KEY',
     'permissions: {',
-    'publish: { allow: ["ses.*.live", "vnc.>"] }',
-    'subscribe: { allow: ["rnr.>", "vnc.>"] }',
+    'publish: { allow: ["ses.*.live", "vnc.>", "lfx.*"] }',
+    'subscribe: { allow: ["rnr.>", "vnc.>", "lfx.*", "_LFX.>"] }',
     'allow_responses: true',
     '}',
     '}',

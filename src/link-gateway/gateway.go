@@ -50,6 +50,8 @@ type gateway struct {
 	watchers *watcherBook
 	// streams is every byte stream of the gateway's connections (streams.go).
 	streams *streamBook
+	// facts is the heartbeat facts of every runner process this node holds (facts.go).
+	facts *factStore
 
 	// forward hands an Rpc to a backend (forwardRPC); nil without backends.
 	forward func(c *conn, rpc *linkpb.Rpc)
@@ -79,6 +81,8 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 	g.credit = newCreditBook(g, cfg.link)
 	g.watchers = newWatcherBook(cfg.link.WatchersTTL)
 	g.streams = newStreamBook()
+	g.facts = newFactStore(time.Now)
+	g.metrics.factProcesses.fn = func() float64 { return float64(g.facts.processes()) }
 	g.metrics.openStreams.fn = func() float64 { return float64(g.streams.open()) }
 	g.metrics.ingestEvents.fn = func() float64 { return float64(g.credit.depth().Events) }
 	g.metrics.ingestBytes.fn = func() float64 { return float64(g.credit.depth().Bytes) }
