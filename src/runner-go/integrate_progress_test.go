@@ -547,6 +547,39 @@ func TestV2PushWaitsForAClearAnswer(t *testing.T) {
 			t.Fatal("no synchronous PUSH report was sent")
 		}
 	})
+	t.Run("an ALREADY_LANDED main sync asks the same way", func(t *testing.T) {
+		// J-S3's push of the main sync its answer rests on goes through the same boundary: the task's
+		// branch is already in main by another route, and the line, behind main, would take the sync.
+		r, cp, transport := run(t, "sync-cancel")
+		r.checkout("main")
+		mustRun(t, r.work, "git", "merge", "--quiet", "--no-ff", "-m", "batch merge", "task/sync-cancel")
+		r.push("main")
+		before := r.originRev("refs/heads/project/line")
+		pushes := watchIntegrationPush(t)
+		job := v2Job(r, "task/sync-cancel", "project/line")
+		cp.answer = func(_ int, req IntegrationJobProgressRequest) (int, string) {
+			if req.Phase == "PUSH" {
+				return http.StatusOK, `{"accepted":true,"cancelRequested":true}`
+			}
+			return http.StatusOK, `{"accepted":true,"cancelRequested":false}`
+		}
+		runIntegrationJobAndReport(context.Background(), context.Background(), transport, job)
+		reports, _, results, _ := cp.snapshot()
+		if len(results) != 1 || results[0].State != "CANCELLED" || results[0].Phase != "PUSH" {
+			t.Fatalf("results = %+v, want one CANCELLED / PUSH", results)
+		}
+		for _, report := range reports {
+			if report.Phase == "REBASE" || report.Phase == "MERGE" {
+				t.Fatalf("the job reached %s: this is a landing of the task's work, not J-S3's sync", report.Phase)
+			}
+		}
+		if pushes.count(r.work) != 0 {
+			t.Fatalf("the push was attempted %d time(s) after a cancelled answer", pushes.count(r.work))
+		}
+		if after := r.originRev("refs/heads/project/line"); after != before {
+			t.Fatalf("the line moved from %s to %s", before, after)
+		}
+	})
 	t.Run("a promotion asks the same way", func(t *testing.T) {
 		// M-S4's push is the same synchronous report as J-S6's, and a landing of the project branch
 		// into main must be held by it too.

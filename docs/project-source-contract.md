@@ -445,7 +445,7 @@ apiserver 没有 checkout，runner 有。因此 ref→SHA 的解析必须在 run
 
 **SR49（`fixAction` 是封闭集合且必须可执行）**：`fixAction` 的取值封闭于上表第六列。每一个值必须对应用户在 UI/CLI 上**做得到**的一个动作。这满足兄弟任务 `34D2AgMRztyeLUaaV9CWM` 的"所有失败码有明确修复动作"。
 
-`DEPENDENCY_BASE_NOT_LANDED` 配的是 `SYNC_INTEGRATION_LINE`，不是 2026-09-23 之前那个 LAND_PREREQUISITE（"先把前置落地"）。G5 拒绝的时候，前置**已经**落地了：`requiredContains` 只由前置的落地回执组成（集成线契约 §1.5 L10），G5 找不到的每一个提交，都有一条回执说它落地了。G5 缺的是"落地的那个提交不在这次起跑的线上"——前置的成果进了 upstream，而这条线还没吸收 upstream。所以动作是让线追上它（下一次落地作业的 main 同步，或者手工把 upstream 合进集成线，不 rebase、不 force push），然后再开工。在那之前再开工，只会得到同一个拒绝：新的开工从同一个 tip 起跑，要求的是同一组提交。
+`DEPENDENCY_BASE_NOT_LANDED` 配的是 `SYNC_INTEGRATION_LINE`，不是 2026-09-23 之前那个 LAND_PREREQUISITE（"先把前置落地"）。G5 拒绝的时候，前置**已经**落地了：`requiredContains` 只由前置的落地回执组成（集成线契约 §1.5 L10），G5 找不到的每一个提交，都有一条回执说它落地了。G5 缺的是"落地的那个提交不在这次起跑的线上"——前置的成果进了 upstream，而这条线还没吸收 upstream。所以动作是让线追上它（下一次落地作业的 main 同步，或者手工把 upstream 合进集成线，不 rebase、不 force push），然后再开工。下一次落地答 `ALREADY_LANDED` 也算：它的源只经刚合出的 main 同步才在线上时，runner 把这次同步推上线（集成线契约 §2.4 J-S3，修订 46），所以前置经批量合并队列先进了 upstream 的，它自己的落地一结束线就含它，不再要人手工同步。在那之前再开工，只会得到同一个拒绝：新的开工从同一个 tip 起跑，要求的是同一组提交。
 
 > 实现记（2026-09-23）：这三个检出期的码（G4/G5/G6）由 runner 在 pin 冻结**之后**判出，0231 的冻结守卫不让 PINNED 再变成 REFUSED，所以它们不落在会话的 SOURCE 列上，只作为 `<code>: <reason>` 成为这次运行的 error。控制面在 runner 收尾这次运行时认出它，把拒绝记在**任务**上（`task.dispatch_refusal`，迁移 0298：码、fixAction、时间、哪次运行、基线 SHA、缺失的提交及落地它们的前置任务），在任务评论里写明下一步，并把 TASK_DISPATCH_REFUSED 事实投递给项目的常驻协调会话。之前这样被拒的开工只在那一条会话的 error 里有一行，任务、例外待办与唤醒台账都没有记录。SR50 的 `SOURCE_UNRESOLVED` blocker 至今没有写入方。
 

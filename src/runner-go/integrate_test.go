@@ -1321,7 +1321,8 @@ func emptyBranchAt(t *testing.T, r *integrationRepo, at string) string {
 
 // landOntoTheLine lands a branch on project/line under a check that fails if it ever runs and drops a
 // marker when it does. It answers what the job came to, the steps it reported and whether the check
-// ran. No case here may move the line, whichever way it ends, so that is asserted for all of them.
+// ran. No case here may move the line, whichever way it ends, so that is asserted for all of them —
+// except to the main sync an ALREADY_LANDED names as `landedSha` (J-S3), which keptPath asks for.
 func landOntoTheLine(t *testing.T, r *integrationRepo, branch, sessionBase string) (integrationResult, []string, bool) {
 	t.Helper()
 	marker := filepath.Join(t.TempDir(), "check-ran")
@@ -1338,7 +1339,8 @@ func landOntoTheLine(t *testing.T, r *integrationRepo, branch, sessionBase strin
 	result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
 		phases = append(phases, phase)
 	})
-	if got := r.originRev("refs/heads/project/line"); got != before {
+	if got := r.originRev("refs/heads/project/line"); got != before &&
+		(result.State != "ALREADY_LANDED" || got != result.LandedSha) {
 		t.Errorf("the target moved: %s -> %s", before, got)
 	}
 	_, err := os.Stat(marker)
@@ -1405,7 +1407,9 @@ type keptPath struct {
 	state, phase string
 	phases       []string
 	// Whether the answer names the absorb it made.
-	mainSync  bool
+	mainSync bool
+	// Whether the answer pushed that absorb: an ALREADY_LANDED whose source the line holds only through it.
+	syncsLine bool
 	conflicts []string
 	checkRan  bool
 }
@@ -1425,6 +1429,9 @@ func (want keptPath) assert(t *testing.T, result integrationResult, phases []str
 	}
 	if !slices.Equal(result.Conflicts, want.conflicts) {
 		t.Errorf("conflicts = %v, want %v", result.Conflicts, want.conflicts)
+	}
+	if synced := result.LandedSha != ""; synced != want.syncsLine {
+		t.Errorf("landed %q, want the line synced: %v", result.LandedSha, want.syncsLine)
 	}
 	if checkRan != want.checkRan {
 		t.Errorf("the check ran: %v, want %v", checkRan, want.checkRan)
@@ -1491,10 +1498,16 @@ func TestIntegrationMainSyncConflictStandsForABranchWithCommits(t *testing.T) {
 // from a landing that already happened (`merge-base S T` answers S in both), so it gets no empty-branch
 // answer. A tip on either side is ALREADY_LANDED after the absorb, and a conflicting absorb stands. The
 // two rows on an upstream commit are what keeps sourceCarriesTheAbsorb and sourceCarriesAnEarlierAbsorb
-// from pushing a bare main sync, now that a tip named as its own base never reaches either.
+// from landing a bare main sync as the task's work, now that a tip named as its own base never reaches
+// either. Their answer is still ALREADY_LANDED, and the line holds it: the tip is on the line only
+// through the sync, so J-S3 pushes that sync (the 2026-11-27 incident) and checks nothing.
 func TestIntegrationWithoutASessionBaseKeepsItsPath(t *testing.T) {
 	t.Parallel()
 	alreadyLanded := keptPath{state: "ALREADY_LANDED", phase: "REBASE", phases: []string{"FETCH", "MAIN_SYNC"}, mainSync: true}
+	syncedLine := keptPath{
+		state: "ALREADY_LANDED", phase: "VERIFY", phases: []string{"FETCH", "MAIN_SYNC", "PUSH", "VERIFY"},
+		mainSync: true, syncsLine: true,
+	}
 	for _, tc := range []struct {
 		name string
 		line func(t *testing.T, r *integrationRepo)
@@ -1507,8 +1520,8 @@ func TestIntegrationWithoutASessionBaseKeepsItsPath(t *testing.T) {
 		},
 		{name: "behind, clean absorb, the tip on both sides", line: lineBehindCleanly, at: "main~1", want: alreadyLanded},
 		{name: "behind, clean absorb, the tip on the line alone", line: lineBehindCleanly, at: "project/line", want: alreadyLanded},
-		{name: "behind, clean absorb, the upstream's tip", line: lineBehindWithNothingOfItsOwn, at: "main", want: alreadyLanded},
-		{name: "behind, clean absorb, an upstream commit before its tip", line: lineBehindWithNothingOfItsOwn, at: "main~1", want: alreadyLanded},
+		{name: "behind, clean absorb, the upstream's tip", line: lineBehindWithNothingOfItsOwn, at: "main", want: syncedLine},
+		{name: "behind, clean absorb, an upstream commit before its tip", line: lineBehindWithNothingOfItsOwn, at: "main~1", want: syncedLine},
 		{name: "behind, conflicting absorb", line: lineBehindConflicting, at: "main~1", want: keptMainSyncConflict},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
