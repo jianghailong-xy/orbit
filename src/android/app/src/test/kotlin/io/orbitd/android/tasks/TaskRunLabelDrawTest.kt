@@ -53,17 +53,18 @@ class TaskRunLabelDrawTest {
     private val baseline = Json.parseToJsonElement(File(dir, "legacy-baseline.android.json").readText()).jsonObject["rows"]!!.jsonArray
         .map { it.jsonObject["runBadge"]!!.jsonPrimitive.content }
 
-    /** The board's task run label, after: the state and the marks for each row with the facts. */
+    /** The board's task run label, after: the state and the marks for each row with the facts. Interrupted, Background, Will resume,
+     * Finished and Ended are not marks (the owner, 2026-11-27). */
     private val after = mapOf(
-        1 to ("QUEUED" to listOf()), 3 to ("RUNNING" to listOf()), 5 to ("IDLE" to listOf()), 7 to ("IDLE" to listOf("INTERRUPTED")),
-        9 to ("IDLE" to listOf("FINISHED")), 11 to ("IDLE" to listOf("FAILED")), 13 to ("IDLE" to listOf("ENDED")),
-        15 to ("RUNNING" to listOf("BACKGROUND")), 17 to ("RUNNING" to listOf("NEEDS_YOU")), 19 to ("QUEUED" to listOf("ON_HOLD")),
-        21 to ("IDLE" to listOf("ENDED")), 23 to ("IDLE" to listOf("ENDED")), 25 to ("IDLE" to listOf("INTERRUPTED")),
+        1 to ("QUEUED" to listOf()), 3 to ("RUNNING" to listOf()), 5 to ("IDLE" to listOf()), 7 to ("IDLE" to listOf()),
+        9 to ("IDLE" to listOf()), 11 to ("IDLE" to listOf("FAILED")), 13 to ("IDLE" to listOf()),
+        15 to ("RUNNING" to listOf()), 17 to ("RUNNING" to listOf("NEEDS_YOU")), 19 to ("QUEUED" to listOf("ON_HOLD")),
+        21 to ("IDLE" to listOf()), 23 to ("IDLE" to listOf()), 25 to ("IDLE" to listOf()),
         27 to ("RUNNING" to listOf()), 29 to ("RUNNING" to listOf()), 31 to ("IDLE" to listOf()), 33 to ("IDLE" to listOf()),
-        35 to ("IDLE" to listOf("ENDED")),
+        35 to ("IDLE" to listOf()),
     )
     private val words = mapOf("QUEUED" to "Queued", "RUNNING" to "Running", "IDLE" to "Idle")
-    private val marks = listOf("NEEDS_YOU", "FAILED", "RETRYING", "ON_HOLD", "INTERRUPTED", "BACKGROUND", "WILL_RESUME", "FINISHED", "ENDED")
+    private val marks = listOf("NEEDS_YOU", "FAILED", "RETRYING", "ON_HOLD")
 
     @Before fun start() { ManagementFixture.reset() }
 

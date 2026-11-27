@@ -1145,10 +1145,11 @@ export const renameSession = (sessionId: string, title: string) =>
 export const interruptSession = (
   sessionId: string,
   followUp?: { content: string; attachmentIds?: string[] },
-  options?: { stopBackgroundWork?: boolean },
+  options?: { stopBackgroundWork?: boolean; signal?: AbortSignal },
 ) =>
   api<{ ok: true; turnId?: string; seq?: number }>(`/sessions/${sessionId}/interrupt`, {
     method: 'POST',
+    signal: options?.signal,
     ...(followUp || options?.stopBackgroundWork
       ? {
           body: {
