@@ -31685,6 +31685,9 @@ td > .routing-report-tier + .model-routing-flag {
     width: 420px;
     margin: var(--panel-gap) var(--panel-gap) var(--panel-gap) 0;
     box-shadow: var(--panel-shadow);
+    /* No slide-in: the conversation narrows at once, so a column fading in left a blank strip for a
+       few frames and then a ghost of the panel, which read as the page flickering (owner 11-27). */
+    animation: none;
   }
 
   /* Scheduled: the list is one panel and the inspector beside it another. */
