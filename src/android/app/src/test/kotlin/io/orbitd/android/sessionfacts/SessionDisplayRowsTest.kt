@@ -3,6 +3,7 @@ package io.orbitd.android.sessionfacts
 import io.orbitd.android.directory.DirectorySession
 import io.orbitd.android.directory.SessionDisplay
 import io.orbitd.android.directory.SessionDisplayState
+import io.orbitd.android.directory.SessionRowIcon
 import io.orbitd.android.directory.SessionHeader
 import io.orbitd.android.directory.SessionLine
 import io.orbitd.android.directory.displayFacts
@@ -55,12 +56,13 @@ class SessionDisplayRowsTest {
     }
 
     /** A row with the facts: the board's after column. */
-    private fun withFacts(row: Int, state: SessionDisplayState, marks: List<String>, group: String) {
+    private fun withFacts(row: Int, state: SessionDisplayState, marks: List<String>, group: String, icons: List<SessionRowIcon> = listOf()) {
         val p = payload(row)
         assertEquals("row $row must carry the facts", true, p["released"] is JsonPrimitive && p["phase"] is JsonPrimitive)
         val s = session(row)
         assertEquals("row $row state", state, SessionDisplay.state(s.displayFacts))
         assertEquals("row $row marks", marks, SessionDisplay.marks(s.displayFacts)!!.map { it.word })
+        assertEquals("row $row title-line icons", icons, SessionDisplay.rowIcons(s.displayFacts))
         // The same two functions read the task's session ref, which carries the same facts.
         assertEquals("row $row task ref state", state, SessionDisplay.state(SessionDisplay.facts(p)))
         assertEquals("row $row task ref marks", marks, SessionDisplay.marks(SessionDisplay.facts(p))!!.map { it.word })
@@ -82,6 +84,7 @@ class SessionDisplayRowsTest {
             .jsonObject["name"]!!.jsonPrimitive.content))
         assertNull("row $row state", SessionDisplay.state(s.displayFacts))
         assertNull("row $row marks", SessionDisplay.marks(s.displayFacts))
+        assertEquals("row $row title-line icons", listOf<SessionRowIcon>(), SessionDisplay.rowIcons(s.displayFacts))
         assertNull("row $row task ref state", SessionDisplay.state(SessionDisplay.facts(p)))
         assertNull("row $row task ref marks", SessionDisplay.marks(SessionDisplay.facts(p)))
         assertEquals("row $row list row value", before["word"]!!.jsonPrimitive.content, rowValue(s))
@@ -101,36 +104,36 @@ class SessionDisplayRowsTest {
     @Test fun row04_running_withoutFacts_drawsToday() = withoutFacts(4)
     @Test fun row05_heldIdle_withFacts_isIdleWithNoMark() = withFacts(5, I, listOf(), "-")
     @Test fun row06_heldIdle_withoutFacts_drawsToday() = withoutFacts(6)
-    @Test fun row07_stoppedTurn_withFacts_isIdleInterrupted() = withFacts(7, I, listOf("Interrupted"), "-")
+    @Test fun row07_stoppedTurn_withFacts_isIdleWithNoMark() = withFacts(7, I, listOf(), "-")
     @Test fun row08_stoppedTurn_withoutFacts_drawsToday() = withoutFacts(8)
-    @Test fun row09_taskRunFinished_withFacts_isIdleFinished() = withFacts(9, I, listOf("Finished"), "-")
+    @Test fun row09_taskRunFinished_withFacts_isIdleWithNoMark() = withFacts(9, I, listOf(), "-")
     @Test fun row10_taskRunFinished_withoutFacts_drawsToday() = withoutFacts(10)
     @Test fun row11_releasedByAFailedTurn_withFacts_isIdleFailedInNeedsYou() = withFacts(11, I, listOf("Failed"), "Needs you")
     @Test fun row12_releasedByAFailedTurn_withoutFacts_drawsToday() = withoutFacts(12)
-    @Test fun row13_releasedByEnd_withFacts_isIdleEnded() = withFacts(13, I, listOf("Ended"), "-")
+    @Test fun row13_releasedByEnd_withFacts_isIdleWithNoMark() = withFacts(13, I, listOf(), "-")
     @Test fun row14_releasedByEnd_withoutFacts_drawsToday() = withoutFacts(14)
-    @Test fun row15_aJobWithNoTurn_withFacts_isRunningBackgroundInWorking() = withFacts(15, R, listOf("Background"), "Working")
+    @Test fun row15_aJobWithNoTurn_withFacts_isRunningWithTheBackgroundIconInWorking() =
+        withFacts(15, R, listOf(), "Working", listOf(SessionRowIcon.BACKGROUND))
     @Test fun row16_aJobWithNoTurn_withoutFacts_drawsToday() = withoutFacts(16)
     @Test fun row17_waitingOnAnApproval_withFacts_isRunningNeedsYou() = withFacts(17, R, listOf("Needs you"), "Needs you")
     @Test fun row18_waitingOnAnApproval_withoutFacts_drawsToday() = withoutFacts(18)
     @Test fun row19_onHold_withFacts_isQueuedOnHold() = withFacts(19, Q, listOf("On hold"), "Working")
     @Test fun row20_onHold_withoutFacts_drawsToday() = withoutFacts(20)
-    @Test fun row21_endRunnerNeverConfirmed_withFacts_isIdleEnded() = withFacts(21, I, listOf("Ended"), "-")
+    @Test fun row21_endRunnerNeverConfirmed_withFacts_isIdleWithNoMark() = withFacts(21, I, listOf(), "-")
     @Test fun row22_endRunnerNeverConfirmed_withoutFacts_drawsToday() = withoutFacts(22)
-    @Test fun row23_oldPlainSucceeded_withFacts_isIdleEnded() = withFacts(23, I, listOf("Ended"), "-")
+    @Test fun row23_oldPlainSucceeded_withFacts_isIdleWithNoMark() = withFacts(23, I, listOf(), "-")
     @Test fun row24_oldPlainSucceeded_withoutFacts_drawsToday() = withoutFacts(24)
-    @Test fun row25_endingAfterAnInterruptedTurn_withFacts_isIdleInterrupted() = withFacts(25, I, listOf("Interrupted"), "-")
+    @Test fun row25_endingAfterAnInterruptedTurn_withFacts_isIdleWithNoMark() = withFacts(25, I, listOf(), "-")
     @Test fun row26_endingAfterAnInterruptedTurn_withoutFacts_drawsToday() = withoutFacts(26)
     @Test fun row27_engineStartedItsOwnTurn_withFacts_isRunningWithNoMarkInWorking() = withFacts(27, R, listOf(), "Working")
     @Test fun row28_engineStartedItsOwnTurn_withoutFacts_drawsToday() = withoutFacts(28)
     @Test fun row29_subAgentRunning_withFacts_isRunningWithNoMarkInWorking() = withFacts(29, R, listOf(), "Working")
     @Test fun row30_subAgentRunning_withoutFacts_drawsToday() = withoutFacts(30)
-    // Idle is Idle: a watch or wake-up to come draws no mark (the owner, 2026-11-27).
-    @Test fun row31_willWake_withFacts_isPlainIdle() = withFacts(31, I, listOf(), "-")
+    @Test fun row31_willWake_withFacts_isIdleWithTheWillResumeIcon() = withFacts(31, I, listOf(), "-", listOf(SessionRowIcon.WILL_RESUME))
     @Test fun row32_willWake_withoutFacts_drawsToday() = withoutFacts(32)
     @Test fun row33_unknownStatusHeld_withFacts_isIdleWithNoMark() = withFacts(33, I, listOf(), "-")
     @Test fun row34_unknownStatusHeld_withoutFacts_drawsToday() = withoutFacts(34)
-    @Test fun row35_unknownStatusReleased_withFacts_isIdleEnded() = withFacts(35, I, listOf("Ended"), "-")
+    @Test fun row35_unknownStatusReleased_withFacts_isIdleWithNoMark() = withFacts(35, I, listOf(), "-")
     @Test fun row36_unknownStatusReleased_withoutFacts_drawsToday() = withoutFacts(36)
 
     /** Beyond the table: the marks the fixture has no row for, each from its one fact (rules.mjs). */
@@ -144,10 +147,13 @@ class SessionDisplayRowsTest {
         assertEquals(listOf("Failed"), SessionDisplay.marks(s.displayFacts)!!.map { it.word })
         assertEquals("Needs you", group(s))
     }
-    @Test fun aParkedSessionWithAProcessLeftUpIsBackground() {
-        assertEquals(listOf("Background"), SessionDisplay.marks(SessionDisplay.Facts("IDLE", false, "ANSWERED", runningBgCount = 2))!!.map { it.word })
-        assertEquals(listOf<String>(), SessionDisplay.marks(SessionDisplay.Facts("IDLE", true, "ANSWERED", workFinished = true, runningBgCount = 2))!!
-            .map { it.word }.filter { it == "Background" })
+    @Test fun aParkedSessionWithAProcessLeftUpHasTheBackgroundIcon() {
+        val held = SessionDisplay.Facts("IDLE", false, "ANSWERED", runningBgCount = 2)
+        assertEquals(listOf<String>(), SessionDisplay.marks(held)!!.map { it.word })
+        assertEquals(listOf(SessionRowIcon.BACKGROUND), SessionDisplay.rowIcons(held))
+        assertEquals(listOf<SessionRowIcon>(), SessionDisplay.rowIcons(SessionDisplay.Facts("IDLE", true, "ANSWERED", workFinished = true, runningBgCount = 2)))
+        assertEquals(listOf(SessionRowIcon.BACKGROUND, SessionRowIcon.WILL_RESUME),
+            SessionDisplay.rowIcons(SessionDisplay.Facts("IDLE", false, "ANSWERED", waitingOn = "WAKE", runningBgCount = 1)))
     }
     @Test fun aPhaseThisBuildDoesNotKnowOrNoReleasedIsAnOlderServer() {
         assertNull(SessionDisplay.state(SessionDisplay.Facts("SLEEPING", false)))

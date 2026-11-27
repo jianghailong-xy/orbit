@@ -25,19 +25,22 @@ enum class SessionDisplayState(val word: String, val icon: Icon) {
 }
 
 /** One mark per fact. [tone] is the only colour a mark may carry: amber = the person has to act, red = a failure nobody is retrying,
- * green = the work finished, grey = everything else. */
+ * grey = everything else. */
 enum class SessionMark(val word: String, val tone: Tone) {
     NEEDS_YOU("Needs you", Tone.AMBER),
     FAILED("Failed", Tone.RED),
     RETRYING("Retrying", Tone.GREY),
-    ON_HOLD("On hold", Tone.GREY),
-    INTERRUPTED("Interrupted", Tone.GREY),
-    BACKGROUND("Background", Tone.GREY),
-    WILL_RESUME("Will resume", Tone.GREY),
-    FINISHED("Finished", Tone.GREEN),
-    ENDED("Ended", Tone.GREY);
+    ON_HOLD("On hold", Tone.GREY);
 
-    enum class Tone { AMBER, RED, GREEN, GREY }
+    enum class Tone { AMBER, RED, GREY }
+}
+
+/** A fact a list row draws as a grey icon at the end of its title line, not as a mark (the owner, 2026-11-27; web `sessionRowIcons`):
+ * background work still running, and a wake (a watch, a scheduled wake-up or an armed retry) that will resume it. [tip] is its label.
+ * Interrupted, Finished and Ended are not drawn at all. */
+enum class SessionRowIcon(val tip: String) {
+    BACKGROUND("Background work running"),
+    WILL_RESUME("Will resume"),
 }
 
 object SessionDisplay {
@@ -63,23 +66,25 @@ object SessionDisplay {
      * failure is red Failed whatever its error says (no client matches error text); one the server will retry (`waitingOn` WAKE) is grey
      * Retrying instead. Null from an older control plane. */
     fun marks(f: Facts): List<SessionMark>? {
-        val state = state(f) ?: return null
-        val released = f.released == true
+        if (state(f) == null) return null
         val failure = releasedByFailure(f)
         return buildList {
             if (f.waitingOn == "PERSON" || f.pendingApprovals > 0) add(SessionMark.NEEDS_YOU)
             if (failure) add(if (f.waitingOn == "WAKE") SessionMark.RETRYING else SessionMark.FAILED)
             if (f.waitingOn == "HOLD") add(SessionMark.ON_HOLD)
-            if (!released && state == SessionDisplayState.IDLE && f.lastTurnOutcome == "INTERRUPTED") add(SessionMark.INTERRUPTED)
-            if (!released && (f.activity == "BACKGROUND_JOB" || f.runningBgCount > 0)) add(SessionMark.BACKGROUND)
-            // An idle session a watch or wake-up will resume is just Idle: no mark (the owner, 2026-11-27).
-            if (!released && f.waitingOn == "WAKE" && phaseOf(f) != SessionDisplayState.IDLE) add(SessionMark.WILL_RESUME)
-            if (released && f.workFinished == true) add(SessionMark.FINISHED)
-            if (released && f.workFinished != true && !failure && !SessionFacts.releasedByMove(f.released, f.endReason)) add(SessionMark.ENDED)
         }
     }
 
-    /** The state word and the marks as one line, [separator] between them: " · " in Markdown (`Idle · Finished`), ", " where a
+    /** The title-line icons of a held session, in drawing order. Empty from an older control plane and for a released session. */
+    fun rowIcons(f: Facts): List<SessionRowIcon> {
+        if (state(f) == null || f.released == true) return emptyList()
+        return buildList {
+            if (f.activity == "BACKGROUND_JOB" || f.runningBgCount > 0) add(SessionRowIcon.BACKGROUND)
+            if (f.waitingOn == "WAKE") add(SessionRowIcon.WILL_RESUME)
+        }
+    }
+
+    /** The state word and the marks as one line, [separator] between them: " · " in Markdown (`Idle · Needs you`), ", " where a
      * screen reader says them. Null from an older control plane. */
     fun text(f: Facts, separator: String = " · "): String? {
         val state = state(f) ?: return null

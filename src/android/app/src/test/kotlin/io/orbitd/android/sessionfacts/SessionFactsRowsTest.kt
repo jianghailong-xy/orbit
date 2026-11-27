@@ -26,10 +26,10 @@ class SessionFactsRowsTest {
     private fun word(s: DirectorySession) = SessionHeader.statusWord(s, now = now)
     private fun shown(s: DirectorySession) = SessionDisplay.text(s.displayFacts, ", ")
 
-    @Test fun aFinishedTaskRunReadsFinished() {
-        // The Finished mark reads the server's `workFinished` alone (the board: nothing re-derived).
-        assertEquals("Idle, Finished", shown(s("SUCCEEDED", "task_done", true, "ANSWERED", workFinished = true, phase = "IDLE")))
-        assertEquals("Idle, Finished", shown(s("CANCELLED", null, true, "ANSWERED", workFinished = true, phase = "IDLE")))
+    @Test fun aFinishedTaskRunReadsIdle() {
+        // Finished is not drawn (the owner, 2026-11-27): the state word alone.
+        assertEquals("Idle", shown(s("SUCCEEDED", "task_done", true, "ANSWERED", workFinished = true, phase = "IDLE")))
+        assertEquals("Idle", shown(s("CANCELLED", null, true, "ANSWERED", workFinished = true, phase = "IDLE")))
         assertEquals("Idle", word(s("SUCCEEDED", null, true, "ANSWERED", workFinished = true, phase = "IDLE", kind = "LANDING")))
         assertEquals(RunState.SUCCEEDED, s("SUCCEEDED", "task_done", true, "ANSWERED", phase = "IDLE").displayRunState)
         assertNull(shown(s("SUCCEEDED", "task_done")))
@@ -52,26 +52,26 @@ class SessionFactsRowsTest {
         assertEquals("Queued", shown(s("PENDING", released = false, phase = "PENDING")))
         assertEquals("Queued", word(s("PENDING")))
     }
-    @Test fun anEndNobodyConfirmedReadsEndedNotFailed() {
+    @Test fun anEndNobodyConfirmedIsNotFailed() {
         assertEquals(RunState.ENDED, s("FAILED", "ended", true, "FAILED", phase = "IDLE").displayRunState)
-        assertEquals("Idle, Ended", shown(s("FAILED", "ended", true, "FAILED", phase = "IDLE")))
+        assertEquals("Idle", shown(s("FAILED", "ended", true, "FAILED", phase = "IDLE")))
         assertEquals("Idle, Failed", shown(s("FAILED", released = true, outcome = "FAILED", phase = "IDLE")))
         assertEquals("Failed", word(s("FAILED")))
     }
-    @Test fun anOldPlainSucceededReadsEndedNotSucceeded() {
-        assertEquals("Idle, Ended", shown(s("SUCCEEDED", null, true, "ANSWERED", phase = "IDLE")))
+    @Test fun anOldPlainSucceededReadsIdleNotSucceeded() {
+        assertEquals("Idle", shown(s("SUCCEEDED", null, true, "ANSWERED", phase = "IDLE")))
         assertEquals("Succeeded", word(s("SUCCEEDED")))
     }
-    @Test fun anInterruptedSessionBeingEndedReadsInterruptedUntilReleased() {
-        assertEquals("Idle, Interrupted", shown(s("INTERRUPTED", "ended", false, "INTERRUPTED", phase = "IDLE")))
+    @Test fun anInterruptedSessionBeingEndedReadsIdle() {
+        assertEquals("Idle", shown(s("INTERRUPTED", "ended", false, "INTERRUPTED", phase = "IDLE")))
         assertEquals(RunState.INTERRUPTED, s("INTERRUPTED", "ended", false, "INTERRUPTED", phase = "IDLE").displayRunState)
-        assertEquals("Idle, Ended", shown(s("INTERRUPTED", "ended", true, "INTERRUPTED", phase = "IDLE")))
+        assertEquals("Idle", shown(s("INTERRUPTED", "ended", true, "INTERRUPTED", phase = "IDLE")))
         assertEquals("Ended", word(s("INTERRUPTED", "ended")))
         assertEquals("Interrupted", word(s("INTERRUPTED")))
     }
     @Test fun aSessionRunningOnlyABackgroundJobKeepsToday() {
         assertEquals("Background process running", word(s("AWAITING_INPUT", bg = 1)))
-        assertEquals("Running, Background", shown(s("AWAITING_INPUT", released = false, phase = "RUNNING", bg = 1)))
+        assertEquals("Running", shown(s("AWAITING_INPUT", released = false, phase = "RUNNING", bg = 1)))
         assertEquals(s("AWAITING_INPUT").displayRunState, s("AWAITING_INPUT", released = false, phase = "RUNNING", bg = 1).displayRunState)
     }
 

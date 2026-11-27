@@ -49,7 +49,6 @@ internal fun SessionStateGlyph(state: SessionDisplayState, modifier: Modifier = 
 internal fun SessionMark.color(): Color = when (tone) {
     SessionMark.Tone.AMBER -> LocalOrbitColors.current.needsYou
     SessionMark.Tone.RED -> MaterialTheme.colorScheme.error
-    SessionMark.Tone.GREEN -> LocalOrbitColors.current.success
     SessionMark.Tone.GREY -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
@@ -58,11 +57,20 @@ private val SessionMark.icon: Int get() = when (this) {
     SessionMark.FAILED -> R.drawable.ic_mark_failed
     SessionMark.RETRYING -> R.drawable.ic_mark_retrying
     SessionMark.ON_HOLD -> R.drawable.ic_mark_on_hold
-    SessionMark.INTERRUPTED -> R.drawable.ic_mark_interrupted
-    SessionMark.BACKGROUND -> R.drawable.ic_mark_background
-    SessionMark.WILL_RESUME -> R.drawable.ic_mark_will_resume
-    SessionMark.FINISHED -> R.drawable.ic_mark_finished
-    SessionMark.ENDED -> R.drawable.ic_mark_ended
+}
+
+/** A list row's title-line icons ([SessionDisplay.rowIcons]): grey glyphs before the state icon, each saying its [SessionRowIcon.tip]
+ * to a screen reader. The terminal and the eye are the glyphs the row drew for the same facts before the session facts. */
+@Composable
+internal fun SessionRowIcons(icons: List<SessionRowIcon>) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    icons.forEach { icon ->
+        val drawable = when (icon) {
+            SessionRowIcon.BACKGROUND -> R.drawable.ic_terminal
+            SessionRowIcon.WILL_RESUME -> R.drawable.ic_eye
+        }
+        Icon(painterResource(drawable), icon.tip, Modifier.size(14.dp).testTag("session-row-icon:${icon.name}"), tint = muted)
+    }
 }
 
 /** The marks after the state word, in the order given. [max] (a phone row) draws the first ones and "+N" for the rest. The words are

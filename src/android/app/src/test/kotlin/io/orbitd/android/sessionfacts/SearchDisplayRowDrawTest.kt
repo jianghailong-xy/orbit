@@ -53,7 +53,7 @@ class SearchDisplayRowDrawTest {
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
     private val facts = setOf("phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished", "activity", "runningBgCount")
     private val stateTags = listOf("QUEUED", "RUNNING", "IDLE").map { "session-state-icon:$it" }
-    private val markTags = listOf("NEEDS_YOU", "FAILED", "RETRYING", "ON_HOLD", "INTERRUPTED", "BACKGROUND", "WILL_RESUME", "FINISHED", "ENDED")
+    private val markTags = listOf("NEEDS_YOU", "FAILED", "RETRYING", "ON_HOLD")
 
     private fun present(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun values() = compose.onNodeWithTag("search-row", useUnmergedTree = true).fetchSemanticsNode().let { node ->

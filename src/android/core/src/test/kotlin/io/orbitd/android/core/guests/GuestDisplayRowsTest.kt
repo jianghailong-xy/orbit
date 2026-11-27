@@ -61,40 +61,40 @@ class GuestDisplayRowsTest {
     @Test fun pending_matchesWeb() = matchesWeb("PENDING", Q, listOf<String>())
     @Test fun running_matchesWeb() = matchesWeb("RUNNING", R, listOf<String>())
     @Test fun awaitingInput_matchesWeb() = matchesWeb("AWAITING_INPUT", I, listOf<String>())
-    @Test fun interrupted_matchesWeb() = matchesWeb("INTERRUPTED", I, listOf("Interrupted"))
-    @Test fun succeeded_matchesWeb() = matchesWeb("SUCCEEDED", I, listOf("Finished"))
+    @Test fun interrupted_matchesWeb() = matchesWeb("INTERRUPTED", I, listOf<String>())
+    @Test fun succeeded_matchesWeb() = matchesWeb("SUCCEEDED", I, listOf<String>())
     @Test fun failed_matchesWeb() = matchesWeb("FAILED", I, listOf("Failed"))
-    @Test fun cancelled_matchesWeb() = matchesWeb("CANCELLED", I, listOf("Ended"))
-    @Test fun jobRunning_matchesWeb() = matchesWeb("job running", R, listOf("Background"))
+    @Test fun cancelled_matchesWeb() = matchesWeb("CANCELLED", I, listOf<String>())
+    @Test fun jobRunning_matchesWeb() = matchesWeb("job running", R, listOf<String>())
     @Test fun waitingOnAnApproval_matchesWeb() = matchesWeb("waiting on an approval", R, listOf("Needs you"))
-    @Test fun watchArmed_matchesWeb() = matchesWeb("watch armed", I, listOf())
+    @Test fun watchArmed_matchesWeb() = matchesWeb("watch armed", I, listOf<String>())
     @Test fun pausedAccount_matchesWeb() = matchesWeb("paused account", Q, listOf("On hold"))
-    @Test fun settledLanding_matchesWeb() = matchesWeb("settled landing", I, listOf("Finished"))
-    @Test fun endedRunnerNeverConfirmed_matchesWeb() = matchesWeb("ended, runner never confirmed", I, listOf("Ended"))
-    @Test fun oldPlainRowStoredSucceeded_matchesWeb() = matchesWeb("old plain row stored SUCCEEDED", I, listOf("Ended"))
-    @Test fun endingAfterAnInterruptedTurn_matchesWeb() = matchesWeb("ending after an interrupted turn", I, listOf("Interrupted"))
+    @Test fun settledLanding_matchesWeb() = matchesWeb("settled landing", I, listOf<String>())
+    @Test fun endedRunnerNeverConfirmed_matchesWeb() = matchesWeb("ended, runner never confirmed", I, listOf<String>())
+    @Test fun oldPlainRowStoredSucceeded_matchesWeb() = matchesWeb("old plain row stored SUCCEEDED", I, listOf<String>())
+    @Test fun endingAfterAnInterruptedTurn_matchesWeb() = matchesWeb("ending after an interrupted turn", I, listOf<String>())
     @Test fun parkedEngineStartedItsOwnTurn_matchesWeb() = matchesWeb("parked, engine started its own turn", R, listOf<String>())
     @Test fun parkedSubAgentRunning_matchesWeb() = matchesWeb("parked, sub-agent running", R, listOf<String>())
-    @Test fun parkedBackgroundProcessLeftUp_matchesWeb() = matchesWeb("parked, background process left up", I, listOf("Background"))
-    @Test fun parkedRetryArmed_matchesWeb() = matchesWeb("parked, retry armed", I, listOf())
+    @Test fun parkedBackgroundProcessLeftUp_matchesWeb() = matchesWeb("parked, background process left up", I, listOf<String>())
+    @Test fun parkedRetryArmed_matchesWeb() = matchesWeb("parked, retry armed", I, listOf<String>())
     @Test fun failedRetryArmed_matchesWeb() = matchesWeb("failed, retry armed", I, listOf("Retrying"))
     @Test fun failedRunnerOffline_matchesWeb() = matchesWeb("failed, runner offline", I, listOf("Failed"))
-    @Test fun approvalBesideABackgroundJob_matchesWeb() = matchesWeb("approval beside a background job", R, listOf("Needs you", "Background"))
-    @Test fun interruptedAProcessUpRetryArmed_matchesWeb() = matchesWeb("interrupted, a process up, retry armed", I, listOf("Interrupted", "Background"))
+    @Test fun approvalBesideABackgroundJob_matchesWeb() = matchesWeb("approval beside a background job", R, listOf("Needs you"))
+    @Test fun interruptedAProcessUpRetryArmed_matchesWeb() = matchesWeb("interrupted, a process up, retry armed", I, listOf<String>())
 
-    /** A filed session: the state and marks as ever, then Completed (web puts it after them, never instead). */
+    /** A filed session: the state and marks as ever (Finished is not drawn), then Completed (web puts it after them, never instead). */
     @Test fun aFiledSessionSaysCompletedAfterItsStateAndMarks() {
         val row = row(JsonObject(payload("SUCCEEDED", "guestRow") + ("lifecycleState" to JsonPrimitive("COMPLETED"))))
         assertEquals("Idle", row.state.word)
         assertEquals(GuestTone.IDLE, row.state.tone)
-        assertEquals("${row.ownerName} · Idle · Finished · Completed", SharedWithMe.subtitle(row))
+        assertEquals("${row.ownerName} · Idle · Completed", SharedWithMe.subtitle(row))
     }
 
     /** What a mark reads beside the facts: the approvals count too, where a payload sends it. */
     @Test fun theCountsBesideTheFactsAreReadWhenSent() {
         val p = payload("AWAITING_INPUT", "guestRow")
         val more = JsonObject(p + ("runningBgCount" to JsonPrimitive(1)) + ("pendingApprovals" to JsonPrimitive(1)))
-        for (shown in listOf(row(more).state, head(more))) assertEquals(listOf("Needs you", "Background"), shown.marks!!.map { it.word })
+        for (shown in listOf(row(more).state, head(more))) assertEquals(listOf("Needs you"), shown.marks!!.map { it.word })
     }
 
     private companion object {
