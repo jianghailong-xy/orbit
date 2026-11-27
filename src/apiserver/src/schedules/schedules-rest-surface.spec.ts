@@ -2,7 +2,8 @@
  * The shape of the scheduled tasks' doors (docs/scheduled-tasks-design.md §9.1), read off the controllers themselves:
  *
  *   (a) REST has exactly the read and control routes, the drafts of the Scheduled page, Change…'s conversation
- *       (which opens a session, as a draft does; the session changes the schedule), the two card presses and rename:
+ *       and the page chat (each opens a session, as a draft does; the session changes the schedule), the two card
+ *       presses and rename:
  *       no route creates a schedule or changes one (no POST /schedules, no PATCH or PUT anywhere under it), except
  *       POST /schedules/:id/rename, the one door that changes a schedule, whose body is the title alone (§8.4,
  *       owner 2026-11-26). No other controller in the server serves a path under /schedules or /schedule-*.
@@ -54,6 +55,7 @@ test('(a) REST is read, control, drafts, the two presses and rename: nothing els
     'GET /schedules/:id',
     'GET /schedules/:id/change',
     'GET /schedules/:id/runs',
+    'GET /schedules/chat',
     'GET /schedules/drafts',
     'GET /sessions/:id/schedule-cards',
     'POST /schedule-requests/:id/allow',
@@ -65,6 +67,7 @@ test('(a) REST is read, control, drafts, the two presses and rename: nothing els
     'POST /schedules/:id/resume',
     'POST /schedules/:id/run',
     'POST /schedules/:id/undo',
+    'POST /schedules/chat',
     'POST /schedules/drafts',
   ].sort());
   for (const r of routesOf(SchedulesController)) {

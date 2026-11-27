@@ -251,7 +251,7 @@ import { forkRefusalBody } from '../tasks/task-fork';
 import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { driveContextOutsideChat, readDriveChatContext, sameDriveChatContext } from '../drive/drive-chat-context';
-import { chatFiledItsOpening } from './chat-opening';
+import { chatFiledItsOpening, sessionChatOrigin } from './chat-opening';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
 import { INTEGRATION_ITEM_KINDS, openItemInWorkSessionHands, openItemOwed, openItemVisible } from '../projects/project-open-item';
@@ -1447,6 +1447,12 @@ export class SessionsService {
        * `runSource: SCHEDULE_CHANGE`.
        */
       changeSchedule?: { scheduleId: string; opening: unknown };
+      /**
+       * This session is the Scheduled page's chat (docs/scheduled-chat-design.md §4.3). Internal: set only by its door
+       * (schedules/schedule-page-chat.ts). `session.schedule_chat_at` is written in the row's own INSERT, and 1740's
+       * guard refuses every later write of it; the session is otherwise an ordinary MANUAL one.
+       */
+      scheduleChat?: boolean;
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -1997,6 +2003,8 @@ export class SessionsService {
             scheduleChangeOpening: opts.changeSchedule.opening as Prisma.InputJsonValue,
           }
           : {}),
+        // The page chat for its whole life, from this statement (migration 1740); the guard refuses every later write.
+        ...(opts?.scheduleChat ? { scheduleChatAt: new Date() } : {}),
         startsTaskWork: opts?.startsTaskWork ?? false,
         // A task session must remain discoverable in Open even if an internal caller
         // accidentally asks for the legacy "system" provenance.
@@ -5275,6 +5283,10 @@ export class SessionsService {
       lastUserFromSessionId: string | null;
       lastUserFromTitle: string | null;
       lastUserFromOrbit: Prisma.JsonValue | null;
+      // Which chat door opened it (`sessionChatOrigin`): read, never spread.
+      wikiChatSpaceId: string | null;
+      openedBy: string;
+      scheduleChatAt: Date | null;
       lastUserFromExternalSource: string | null;
       lastUserFromExternalName: string | null;
       // The rolling recap and when it was written (0418): the line the list prefers to the raw
@@ -5400,6 +5412,10 @@ export class SessionsService {
         s.effort,
         s.fast_mode       AS "fastMode",
         s.run_source      AS "runSource",
+        -- The chat door that opened it, for the row's origin tag (From Wiki, From Drive, From Scheduled).
+        s.wiki_chat_space_id AS "wikiChatSpaceId",
+        s.opened_by       AS "openedBy",
+        s.schedule_chat_at AS "scheduleChatAt",
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
@@ -5656,6 +5672,8 @@ export class SessionsService {
         effort: r.effort,
         fastMode: r.fastMode,
         runSource: r.runSource,
+        // Which chat door opened it, for the row's origin tag (@orbit/shared SESSION_ORIGIN_TAGS); null for the rest.
+        chatOrigin: sessionChatOrigin(r),
         lastAssistantText: r.lastAssistantText,
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
@@ -6089,8 +6107,8 @@ export class SessionsService {
     const detail = withSessionCapabilities({
       ...rest,
       // Which chat door opened it, for the header's origin tag (@orbit/shared SESSION_ORIGIN_TAGS: From Wiki, From
-      // Drive); null for every other session. `openedBy` itself stays internal.
-      chatOrigin: rest.wikiChatSpaceId ? 'WIKI_CHAT' : openedBy === 'DRIVE_CHAT' ? 'DRIVE_CHAT' : null,
+      // Drive, From Scheduled); null for every other session. `openedBy` itself stays internal.
+      chatOrigin: sessionChatOrigin({ wikiChatSpaceId: rest.wikiChatSpaceId, openedBy, scheduleChatAt: rest.scheduleChatAt }),
       engine,
       // What its Trash note says when a file is keeping it there past the 30 days.
       trashHold: session.deletedAt ? await trashHoldOf(this.prisma, session.id) : null,

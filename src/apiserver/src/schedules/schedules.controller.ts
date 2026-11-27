@@ -7,6 +7,8 @@
  *   GET    /api/schedules                         list (not ENDED unless ?state=), with the page's timeline runs
  *   GET    /api/schedules/drafts                  the Scheduled page's drafts: PENDING create cards
  *   POST   /api/schedules/drafts                  the quick-add line: a sentence opens an ordinary session
+ *   GET    /api/schedules/chat                    the page chat: the open one, and Orbit's opening for a new one
+ *   POST   /api/schedules/chat                    the page chat: the person's first words open it (owner channel)
  *   GET    /api/schedules/:id                     the inspector, with this month's use
  *   GET    /api/schedules/:id/runs                runs, newest first
  *   POST   /api/schedules/:id/{pause,resume,run,undo}
@@ -45,8 +47,16 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { SessionsService } from '../sessions/sessions.service';
 import { actingSession } from '../wiki/wiki.controller';
-import { ScheduleChangeDto, ScheduleDecisionDto, ScheduleDraftDto, ScheduleRenameDto, ScheduleUndoDto } from './dto';
+import {
+  ScheduleChangeDto,
+  ScheduleDecisionDto,
+  ScheduleDraftDto,
+  SchedulePageChatDto,
+  ScheduleRenameDto,
+  ScheduleUndoDto,
+} from './dto';
 import { ScheduleChangeConversations } from './schedule-change-conversation';
+import { SchedulePageChats } from './schedule-page-chat';
 import { ScheduleReadsService } from './schedule-reads.service';
 import { ScheduleRunsService } from './schedule-runs.service';
 import { scheduleRunView } from './schedule-views';
@@ -84,6 +94,19 @@ export function scheduleDraftPrompt(text: string): string {
 
 const READ = { workspaceConfinable: false } as const;
 
+/**
+ * The page chat's doors are the person's: a session (one acting through `X-Orbit-Session`) reads and changes schedules
+ * with its own tools, and neither opens a conversation in the person's name nor reads the person's chat.
+ */
+function refusePageChatFromSession(req: Headers): void {
+  if (actingSession(req.headers) !== null) {
+    throw new ForbiddenException({
+      code: 'SCHEDULE_CHAT_FROM_SESSION',
+      message: "A session manages schedules with the schedule tools; the Scheduled page's chat is the person's door.",
+    });
+  }
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class SchedulesController {
@@ -93,6 +116,7 @@ export class SchedulesController {
     private readonly reads: ScheduleReadsService,
     private readonly sessions: SessionsService,
     private readonly changes: ScheduleChangeConversations,
+    private readonly pageChats: SchedulePageChats,
   ) {}
 
   @Get('schedules')
@@ -124,6 +148,35 @@ export class SchedulesController {
       { credential: user.credential },
     );
     return { sessionId: (session as { id: string }).id, session };
+  }
+
+  /**
+   * The Scheduled page's chat (docs/scheduled-chat-design.md §4.1, §4.3): the account's open page chat, if any, and the
+   * opening Orbit draws from its schedules for a new one. Nothing is written and no engine starts: the chat exists from
+   * the person's first words (`POST`). Declared before `schedules/:id`, which would take `chat` for an id.
+   */
+  @Get('schedules/chat')
+  @PatScope('sessions:read', READ)
+  pageChat(@CurrentUser() user: AuthUser, @Req() req: Headers) {
+    refusePageChatFromSession(req);
+    return this.pageChats.read(user.userId);
+  }
+
+  /**
+   * Opens the page chat in the named workspace with the person's first words, or says them in that workspace's open
+   * one (`created: false`). It opens a session and changes no schedule: the session changes schedules with its own
+   * tools, under their envelope.
+   */
+  @Post('schedules/chat')
+  @PatScope('sessions:write', { workspaceConfinable: { body: { workspaceId: 'workspace' }, requires: ['workspaceId'] } })
+  @HttpCode(HttpStatus.OK)
+  openPageChat(
+    @CurrentUser() user: AuthUser,
+    @Body(PublicIdPipe.forFields('workspaceId')) dto: SchedulePageChatDto,
+    @Req() req: Headers,
+  ) {
+    refusePageChatFromSession(req);
+    return this.pageChats.open(user, dto.workspaceId, dto.text);
   }
 
   /**

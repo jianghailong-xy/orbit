@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ScheduleRunsModule } from './schedule-runs.module';
 import { ScheduleChangeConversations } from './schedule-change-conversation';
+import { SchedulePageChats } from './schedule-page-chat';
 import { SchedulesController } from './schedules.controller';
 import { SchedulesModule } from './schedules.module';
 
@@ -10,6 +11,6 @@ import { SchedulesModule } from './schedules.module';
 @Module({
   imports: [SchedulesModule, ScheduleRunsModule, SessionsModule],
   controllers: [SchedulesController],
-  providers: [ScheduleChangeConversations],
+  providers: [ScheduleChangeConversations, SchedulePageChats],
 })
 export class ScheduleDoorsModule {}

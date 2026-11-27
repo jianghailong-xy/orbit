@@ -3580,7 +3580,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1730 adds the nullable `session.client_request_id` (no row is rewritten) and a partial unique index on
       // (owner_id, client_request_id) over the rows that carry one. Only `session` is touched; no trigger, function of
       // one, preserved relation or DONE fence changes.
-      '1730_session_client_request_id'],
+      '1730_session_client_request_id',
+      // 1740 adds the nullable `session.schedule_chat_at` (catalog-only) and a BEFORE UPDATE OF guard that refuses a
+      // change of it; 1741 builds a partial index CONCURRENTLY over the rows that carry one. Only `session` is touched;
+      // no row is written, and no preserved relation, trigger, function of one or DONE fence changes.
+      '1740_session_schedule_chat',
+      '1741_session_schedule_chat_index'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

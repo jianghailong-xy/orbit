@@ -38,6 +38,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { ScheduleReadsService } from './schedule-reads.service';
 import { ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
 import { ScheduleChangeConversations } from './schedule-change-conversation';
+import { SchedulePageChats } from './schedule-page-chat';
 import { SchedulesController } from './schedules.controller';
 import { SchedulesService } from './schedules.service';
 
@@ -77,7 +78,9 @@ before(async () => {
   // The real create door, as the quick-add line uses it; its runner and realtime sides are no-ops here.
   const quiet = new Proxy({}, { get: () => () => undefined });
   const sessions = new SessionsService(db as never, quiet as never, quiet as never);
-  rest = new SchedulesController(schedules, runs, reads, sessions, new ScheduleChangeConversations(prisma, sessions));
+  rest = new SchedulesController(
+    schedules, runs, reads, sessions, new ScheduleChangeConversations(prisma, sessions), new SchedulePageChats(prisma, sessions),
+  );
 });
 
 after(async () => {
