@@ -13,3 +13,13 @@ API 36, light, against the composer fixture (`src/android/scripts/composer-fixtu
 | `echo-replaced.png` | The fixture took that message at 25 s: its echo replaces the Not sent bubble, drawn once. |
 | `refused.png` | 409 "the session has ended": the same foot, the server's reason as one red line. |
 | `put-back.png` | Put back in the composer: the words back in the box, the bubble gone, nothing sent. |
+
+## New session's first message
+
+Same device, display and fixture, from `ComposerDeviceTest#newSessionFirstMessageSendingBubbleStates` (`identity-new-session.txt`),
+beside the board `../03-new-session.html`. The bubble is top-aligned, in the engine picker's place.
+
+| Frame | State |
+| --- | --- |
+| `new-session-sending.png` | POST /sessions held 6 s: dimmed bubble, `Sending…`, the box empty and Send off; the session opens on the answer. |
+| `new-session-not-sent.png` | Held 25 s: at 20 s the foot reads `⚠ Not sent · Retry · Put back in the composer`. Retry resends the same `clientRequestId`; the fixture holds exactly one session per id. |
