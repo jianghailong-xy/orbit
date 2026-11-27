@@ -54,7 +54,7 @@ public enum SessionDisplayState: String, Equatable, Sendable, CaseIterable {
 /// One fact that is not activity, drawn as its own mark after the state word, never in place of the
 /// state icon. Declared in drawing order.
 public enum SessionMark: String, Equatable, Sendable, CaseIterable {
-    case needsYou, failed, retrying, onHold, interrupted, background, willResume, finished, ended
+    case needsYou, failed, retrying, onHold
 
     public var word: String {
         switch self {
@@ -62,11 +62,6 @@ public enum SessionMark: String, Equatable, Sendable, CaseIterable {
         case .failed:      return "Failed"
         case .retrying:    return "Retrying"
         case .onHold:      return "On hold"
-        case .interrupted: return "Interrupted"
-        case .background:  return "Background"
-        case .willResume:  return "Will resume"
-        case .finished:    return "Finished"
-        case .ended:       return "Ended"
         }
     }
 
@@ -76,22 +71,37 @@ public enum SessionMark: String, Equatable, Sendable, CaseIterable {
         case .failed:      return "xmark"
         case .retrying:    return "arrow.clockwise"
         case .onHold:      return "pause"
-        case .interrupted: return "minus"
-        case .background:  return "terminal"
-        case .willResume:  return "eye"
-        case .finished:    return "checkmark"
-        case .ended:       return "stop"
         }
     }
 
-    /// Amber: the person has to act. Red: a failure nobody is retrying. Green: the work finished.
-    /// Everything else is grey.
+    /// Amber: the person has to act. Red: a failure nobody is retrying. Everything else is grey.
     public var tone: SessionStatusGlyph.Tone {
         switch self {
         case .needsYou: return .warning
         case .failed:   return .error
-        case .finished: return .success
         default:        return .neutral
+        }
+    }
+}
+
+/// A fact a list row draws as a grey icon at the end of its title line, not as a mark (the owner,
+/// 2026-11-27): background work still running, and a wake (a watch, a scheduled wake-up or an armed
+/// retry) that will resume it. Interrupted, Finished and Ended are not drawn at all.
+public enum SessionRowIcon: String, Equatable, Sendable, CaseIterable {
+    case background, willResume
+
+    public var symbol: String {
+        switch self {
+        case .background: return "terminal"
+        case .willResume: return "eye"
+        }
+    }
+
+    /// The icon's tooltip and VoiceOver label.
+    public var tip: String {
+        switch self {
+        case .background: return "Background work running"
+        case .willResume: return "Will resume"
         }
     }
 }
@@ -133,17 +143,20 @@ public enum SessionDisplay {
     /// The marks, in drawing order, each read from its own fact.
     public static func marks(_ f: SessionDisplayFacts) -> [SessionMark]? {
         guard hasFacts(f) else { return nil }
-        let released = f.released == true
         var out: [SessionMark] = []
         if f.waitingOn == .person || (f.pendingApprovals ?? 0) > 0 { out.append(.needsYou) }
         if releasedByFailure(f) { out.append(f.waitingOn == .wake ? .retrying : .failed) }
         if f.waitingOn == .hold { out.append(.onHold) }
-        if !released && f.phase == .idle && f.lastTurnOutcome == .interrupted { out.append(.interrupted) }
-        if !released && (f.activity == "BACKGROUND_JOB" || (f.runningBgCount ?? 0) > 0) { out.append(.background) }
-        // An idle session a watch or wake-up will resume is just Idle: no mark (the owner, 2026-11-27).
-        if !released && f.waitingOn == .wake && f.phase != .idle { out.append(.willResume) }
-        if released && f.workFinished == true { out.append(.finished) }
-        if released && f.workFinished != true && !releasedByFailure(f) && !releasedByMove(f) { out.append(.ended) }
+        return out
+    }
+
+    /// The title-line icons of a held session, in drawing order (web `sessionRowIcons`). Empty from an
+    /// older server and for a released session.
+    public static func rowIcons(_ f: SessionDisplayFacts) -> [SessionRowIcon] {
+        guard hasFacts(f), f.released != true else { return [] }
+        var out: [SessionRowIcon] = []
+        if f.activity == "BACKGROUND_JOB" || (f.runningBgCount ?? 0) > 0 { out.append(.background) }
+        if f.waitingOn == .wake { out.append(.willResume) }
         return out
     }
 
@@ -157,12 +170,12 @@ public enum SessionDisplay {
     }
 
     /// The state word and the marks as one sentence, separated as shared Markdown writes them:
-    /// "Idle · Finished".
+    /// "Idle · Needs you".
     public static func written(_ state: SessionDisplayState, _ marks: [SessionMark]) -> String {
         ([state.word] + marks.map(\.word)).joined(separator: " · ")
     }
 
-    /// The same, as a row's VoiceOver value: "Idle, Interrupted".
+    /// The same, as a row's VoiceOver value: "Idle, Needs you".
     public static func spoken(_ state: SessionDisplayState, _ marks: [SessionMark]) -> String {
         ([state.word] + marks.map(\.word)).joined(separator: ", ")
     }

@@ -46,3 +46,19 @@ struct SessionMarkPill: View {
         }
     }
 }
+
+/// A list row's title-line icons (`SessionDisplay.rowIcons`): grey glyphs at the end of the first
+/// line, each with its tip as tooltip and VoiceOver label.
+struct SessionRowIconsView: View {
+    let icons: [SessionRowIcon]
+
+    var body: some View {
+        ForEach(icons, id: \.self) { icon in
+            Image(systemName: icon.symbol)
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                .help(icon.tip)
+                .accessibilityLabel(icon.tip)
+        }
+    }
+}

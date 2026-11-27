@@ -77,11 +77,10 @@ final class UnknownStatusPhaseReadingTests: XCTestCase {
             (#""status":"MYSTERY","released":false,"phase":"IDLE""#, "Idle"),
             (#""status":"MYSTERY","released":false,"phase":"RUNNING""#, "Running"),
             (#""status":"MYSTERY","released":false,"phase":"PENDING""#, "Queued"),
-            (#""status":"MYSTERY","released":false,"phase":"IDLE","lastTurnOutcome":"INTERRUPTED""#, "Idle · Interrupted"),
-            // Finished is `workFinished` alone; an end reason is not re-read into it.
-            (#""status":"RUNNING","released":true,"phase":"IDLE","endReason":"task_done""#, "Idle · Ended"),
+            (#""status":"MYSTERY","released":false,"phase":"IDLE","lastTurnOutcome":"INTERRUPTED""#, "Idle"),
+            (#""status":"RUNNING","released":true,"phase":"IDLE","endReason":"task_done""#, "Idle"),
             (#""status":"RUNNING","released":true,"phase":"IDLE","lastTurnOutcome":"FAILED""#, "Idle · Failed"),
-            (#""status":"RUNNING","released":true,"phase":"IDLE","endReason":"ended","lastTurnOutcome":"FAILED""#, "Idle · Ended"),
+            (#""status":"RUNNING","released":true,"phase":"IDLE","endReason":"ended","lastTurnOutcome":"FAILED""#, "Idle"),
             // Absent fields: the legacy reading, as before.
             (#""status":"RUNNING""#, "Running"),
             (#""status":"SUCCEEDED""#, "Finished"),
@@ -89,15 +88,15 @@ final class UnknownStatusPhaseReadingTests: XCTestCase {
             (#""status":"RUNNING","released":true"#, "Running"),
             (#""status":"RUNNING","released":false,"phase":"RUNNING","activity":"TURN""#, "Running"),
             (#""status":"PENDING","released":false,"phase":"PENDING","activity":"TURN""#, "Queued"),
-            // A RUNNING phase is Running whatever runs: the engine's own turn, or a job (which wears its mark).
+            // A RUNNING phase is Running whatever runs: the engine's own turn, or a job (drawn as a row icon, not a mark).
             (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"TURN""#, "Running"),
             (#""status":"MYSTERY","released":false,"phase":"RUNNING","activity":"TURN""#, "Running"),
-            (#""status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Running · Background"),
-            (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Running · Background"),
-            // A held queued run is Queued with On hold beside it; a finished run wears Finished by workFinished.
+            (#""status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Running"),
+            (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Running"),
+            // A held queued run is Queued with On hold beside it; a finished or ended run is Idle alone.
             (#""status":"PENDING","released":false,"phase":"PENDING","activity":"TURN","waitingOn":"HOLD""#, "Queued · On hold"),
-            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","workFinished":true"#, "Idle · Finished"),
-            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED""#, "Idle · Ended"),
+            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","workFinished":true"#, "Idle"),
+            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED""#, "Idle"),
         ]
         for (json, label) in cases {
             XCTAssertEqual(ShareMarkdown.runLabel(try run(json)), label, json)

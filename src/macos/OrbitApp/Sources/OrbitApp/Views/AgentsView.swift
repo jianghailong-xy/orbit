@@ -1819,6 +1819,8 @@ struct AgentSessionRow: View {
     /// which keeps the glyph and the value the row always had.
     private var displayState: SessionDisplayState? { SessionDisplay.state(session.displayFacts) }
     private var marks: [SessionMark] { SessionDisplay.marks(session.displayFacts) ?? [] }
+    /// Background and Will resume, drawn at the end of the title line rather than as marks.
+    private var rowIcons: [SessionRowIcon] { SessionDisplay.rowIcons(session.displayFacts) }
     /// The row's VoiceOver value: "Idle, Interrupted", else, from an older server, `statusWord`.
     private var statusValue: String {
         if let displayState { return SessionDisplay.spoken(displayState, marks) }
@@ -1839,7 +1841,13 @@ struct AgentSessionRow: View {
             HStack(spacing: 8) {
                 StatusGlyphView(glyph: displayState?.glyph ?? .make(for: session, watching: watching, machine: machine))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(session.title ?? "Untitled session").lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(session.title ?? "Untitled session").lineLimit(1)
+                        if !rowIcons.isEmpty {
+                            Spacer(minLength: 4)
+                            SessionRowIconsView(icons: rowIcons)
+                        }
+                    }
                     HStack(spacing: 7) {
                         SessionCoordinatorBadge(session: session)
                         Text(line.text).font(.orbitListSubtitle)
@@ -1882,6 +1890,7 @@ struct AgentSessionRow: View {
                     .lineLimit(1)
                     .layoutPriority(1)
                 Spacer(minLength: 8)
+                SessionRowIconsView(icons: rowIcons)
                 liveIndicator
                 if let rel = relTime {
                     Text(rel)
@@ -1915,6 +1924,7 @@ struct AgentSessionRow: View {
             HStack(spacing: 8) {
                 Text(session.title ?? "Untitled session").lineLimit(1)
                 Spacer(minLength: 8)
+                SessionRowIconsView(icons: rowIcons)
                 liveIndicator
                 if let rel = relTime {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)

@@ -3,7 +3,7 @@
 // listRow, sessionSummary (`session.updated`), taskRun and searchHit (null for the settled landing, which search never
 // answers), real rows read back through the tip's services (sessions/session-payloads.fixture.ts). `live` is one parked
 // session as `session.updated` reports it while a background job is added and then cleared. `web` beside each payload is
-// what web's own sessionDisplayState / sessionMarks (src/web/src/lib/sessionDisplay.ts) answer for it. OrbitKit's
+// what web's own sessionDisplayState / sessionMarks / sessionRowIcons (src/web/src/lib/sessionDisplay.ts) answer for it. OrbitKit's
 // BackgroundMarkPayloadTests reads the result, background-payloads.json.
 //   DATABASE_URL=<throwaway, migrated> node make-background-payloads.cjs    (apiserver built: tsc -p tsconfig.test.json)
 'use strict';
@@ -56,6 +56,7 @@ async function main() {
   const answer = (payload) => ({
     state: web.sessionDisplayState(payload).word,
     marks: web.sessionMarks(payload).map((m) => web.SESSION_MARKS[m].word),
+    rowIcons: web.sessionRowIcons(payload),
   });
   const read = (payload) => (payload ? { payload, web: answer(payload) } : null);
 
