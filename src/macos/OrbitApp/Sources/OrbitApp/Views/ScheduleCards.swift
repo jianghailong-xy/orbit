@@ -278,6 +278,8 @@ struct ScheduleRecordLineView: View {
     let record: ScheduleChangeRecord
     let undo: (() async -> String?)?
     let open: (() -> Void)?
+    /// In the Scheduled page's chat the schedule's name is a link that opens it (board scheduled-chat 01 ③, 4 ③).
+    var titleLink = false
     @State private var busy = false
     @State private var undone = false
     @State private var said: String?
@@ -288,9 +290,20 @@ struct ScheduleRecordLineView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "calendar").foregroundStyle(Color.scheduleAccent)
-                (Text(parts.lead) + Text(parts.title).bold() + Text(parts.rest))
-                    .foregroundStyle(undoable || record.undo == nil ? .primary : .secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if titleLink, let open {
+                    Button(action: open) {
+                        (Text(parts.lead) + Text(parts.title).foregroundColor(.accentColor) + Text(parts.rest))
+                            .foregroundStyle(undoable || record.undo == nil ? .primary : .secondary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("schedule-record-name")
+                } else {
+                    (Text(parts.lead) + Text(parts.title).bold() + Text(parts.rest))
+                        .foregroundStyle(undoable || record.undo == nil ? .primary : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Spacer(minLength: 8)
                 if record.undo != nil, let undo {
                     Button(SC.Actions.undo) {
@@ -528,6 +541,8 @@ struct ScheduleRunReportView: View {
 /// render; every press goes through `ScheduledModel` and reads the conversation's cards back.
 struct ScheduleConsoleCard: View {
     @Environment(AppModel.self) private var appModel
+    /// Set in the Scheduled page's chat: the schedule opens on the page (beside the column, or in place of the sheet).
+    @Environment(\.scheduledChatOpenSchedule) private var chatOpenSchedule
     let console: ConsoleModel
     let kind: DeliveredDecisionCard.Kind
 
@@ -554,7 +569,10 @@ struct ScheduleConsoleCard: View {
                         await console.refreshScheduleCards(force: true)
                         return said
                     },
-                    open: { appModel.openSchedule(record.scheduleId) })
+                    open: {
+                        if let chatOpenSchedule { chatOpenSchedule(record.scheduleId) } else { appModel.openSchedule(record.scheduleId) }
+                    },
+                    titleLink: chatOpenSchedule != nil)
             }
         case .scheduleChangeOpening:
             // A change conversation opens with Orbit's message, before the person's first words (§8.2).

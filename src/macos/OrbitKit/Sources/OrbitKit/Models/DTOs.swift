@@ -2344,8 +2344,8 @@ public struct ResumeRequest: Codable, Sendable {
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
-                stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil,
-                driveContext: DriveChatContext? = nil, context: SchedulePageChatContext? = nil,
+                stopSessionId: String? = nil, context: SchedulePageChatContext? = nil,
+                wikiContext: WikiChatContext? = nil, driveContext: DriveChatContext? = nil,
                 skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
         self.driveContext = driveContext
         self.context = context

@@ -28,6 +28,10 @@ struct ScheduledMacPage: View {
             }
         }
         .navigationTitle(SC.Page.title)
+        // The chat's button at the toolbar's end (board scheduled-chat 01 ①, 4): a third column beside the panel.
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { ScheduledChatButton() }
+        }
     }
 
     private func content(_ scheduled: ScheduledModel) -> some View {

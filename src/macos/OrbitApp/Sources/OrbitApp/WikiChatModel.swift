@@ -48,11 +48,12 @@ extension WikiChatSeeChanges {
 
 /// Where a chat is docked, which decides its words, where its chats are read and made, what a message carries beside
 /// the words and which cards it draws (the web's `ChatOrigin`, board drive-chat 02): the Wiki, whose scope is a space,
-/// or Drive, which has one scope (`DriveChatLogic.scope`). The panel, the composer, the history and the round button
-/// are the same for both.
+/// Drive, which has one scope (`DriveChatLogic.scope`), or the Scheduled page, which has one too
+/// (`ScheduledChatLogic.scope`, board scheduled-chat 01 part 4). The panel, the composer and the history are the same.
 enum ChatOrigin: Equatable {
     case wiki
     case drive
+    case scheduled
 
     /// The words that differ by origin.
     struct Copy {
@@ -66,6 +67,8 @@ enum ChatOrigin: Equatable {
         let noWorkspace: String
         /// Under a new chat's empty state while its box is empty.
         let examples: [String]
+        /// After the examples: what applies at once and what needs Allow (the Scheduled chat's opening, §4.1).
+        var closing: String = ""
     }
 
     var copy: Copy {
@@ -79,6 +82,12 @@ enum ChatOrigin: Equatable {
                         emptyNote: DriveChatCopy.emptyNote, placeholder: DriveChatCopy.placeholder,
                         chooseWorkspace: DriveChatCopy.chooseWorkspace, noWorkspace: DriveChatCopy.noWorkspace,
                         examples: DriveChatCopy.examples)
+        case .scheduled:
+            // The opening's own words come from the server (`WikiChatModel.copy`); these stand until it is read.
+            return Copy(history: ScheduledChatCopy.history, noHistory: ScheduledChatCopy.noHistory, emptyHint: "",
+                        emptyNote: "", placeholder: ScheduledChatCopy.placeholder,
+                        chooseWorkspace: ScheduledChatCopy.chooseWorkspace, noWorkspace: ScheduledChatCopy.noWorkspace,
+                        examples: [])
         }
     }
 }
@@ -164,6 +173,18 @@ final class WikiChatModel {
     /// narrower they overlay the list (board drive-chat 02 ③).
     var windowWidth: CGFloat = 0
 
+    // Scheduled's own (board scheduled-chat 01 part 4, docs/scheduled-chat-design.md §3-§5): the opening and the
+    // account's open chat as `GET /schedules/chat` answered, the page chats of the Open list, the cards waiting in them,
+    // and the page's workspace filter, which a message carries and Runs in starts on.
+    /// `GET /schedules/chat`, as answered.
+    private(set) var scheduledRead: SchedulePageChatResponse?
+    /// The Open list's page chats (`chatOrigin == SCHEDULE_CHAT`), as the host hands them over.
+    private(set) var scheduledSessions: [Session] = []
+    /// The schedule cards waiting on the owner in each open page chat, by the storage key of its session id.
+    private(set) var scheduledWaiting: [String: Int] = [:]
+    /// The Scheduled page's workspace filter.
+    private(set) var scheduledFilter: String?
+
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
     /// The cards on screen, by how many views show each: what a nudge re-reads beyond the open chat's.
@@ -175,7 +196,16 @@ final class WikiChatModel {
     }
 
     /// The words this chat says where they differ by origin.
-    var copy: ChatOrigin.Copy { origin.copy }
+    var copy: ChatOrigin.Copy {
+        guard origin == .scheduled, let opening = scheduledRead?.opening else { return origin.copy }
+        // Orbit's opening (§4.1): the counts and the next run, then the examples, then what applies at once.
+        let base = origin.copy
+        return ChatOrigin.Copy(history: base.history, noHistory: base.noHistory,
+                               emptyHint: [opening.summary, opening.nextText].compactMap { $0 }.joined(separator: " "),
+                               emptyNote: opening.examplesLead, placeholder: base.placeholder,
+                               chooseWorkspace: base.chooseWorkspace, noWorkspace: base.noWorkspace,
+                               examples: opening.examples, closing: opening.closing)
+    }
 
     // MARK: what is read off the server
 
@@ -240,6 +270,7 @@ final class WikiChatModel {
     /// button at rest.
     func load(spaceID: String) async {
         if origin == .drive { return await loadDrive() }
+        if origin == .scheduled { return await loadScheduled() }
         guard let read = try? await api.wikiChats(spaceID: spaceID) else { return }
         if lists[spaceID] != read { lists[spaceID] = read }
         // The button says a rewrite came out updated: read the chats that hold cards until the card is found.
@@ -254,6 +285,8 @@ final class WikiChatModel {
     /// Every card of a chat.
     func loadCards(chat sessionID: String) async {
         if origin == .drive { return await loadDriveCards(chat: sessionID) }
+        // A page chat's cards and change lines are its console's own (`ConsoleModel.refreshScheduleCards`).
+        if origin == .scheduled { return }
         guard sessionID != WikiChatLogic.newChat,
               let read = try? await api.wikiChatDrafts(sessionID: sessionID) else { return }
         var ids: [String] = []
@@ -324,6 +357,12 @@ final class WikiChatModel {
             guard let self else { return }
             self.nudgeTask = nil
             // Hidden since it was asked: owed, one read when the app is shown (§4 R3).
+            if origin == .scheduled {
+                VisibilityGate.app.read("scheduled-chat.loaded") { [weak self] in
+                    Task { await self?.reloadLoaded() }
+                }
+                return
+            }
             VisibilityGate.app.read(origin == .drive ? "drive-chat.loaded" : "wiki-chat.loaded") { [weak self] in
                 Task { await self?.reloadLoaded() }
             }
@@ -368,7 +407,8 @@ final class WikiChatModel {
 
     /// Which chat the panel opens on: Drive's leaves a completed chat be (`driveChatToOpen`).
     private func toOpen(_ chats: [WikiChatRow]?) -> String {
-        origin == .drive ? DriveChatLogic.toOpen(chats) : WikiChatLogic.toOpen(chats)
+        if origin == .scheduled { return ScheduledChatLogic.toOpen(chats, openID: scheduledRead?.sessionId) }
+        return origin == .drive ? DriveChatLogic.toOpen(chats) : WikiChatLogic.toOpen(chats)
     }
 
     /// Open the panel on the chat holding `card` — the floating line's press, Activity's banner.
@@ -395,6 +435,8 @@ final class WikiChatModel {
     func hiddenByOwner(_ spaceID: String) -> Bool {
         // Drive's ✕ is kept per account on this device (board drive-chat 02 ① note 5).
         if origin == .drive { return account.map { UserDefaults.standard.bool(forKey: DriveChatLogic.closedKey(account: $0)) } ?? false }
+        // Scheduled keeps the opposite: whether it was left open, never open the first time (D3 A).
+        if origin == .scheduled { return !scheduledRemembered }
         return (UserDefaults.standard.dictionary(forKey: Self.hiddenKey)?[PublicID.storageKey(spaceID)] as? Bool) == true
     }
 
@@ -403,6 +445,12 @@ final class WikiChatModel {
             guard let account else { return }
             if hidden { UserDefaults.standard.set(true, forKey: DriveChatLogic.closedKey(account: account)) }
             else { UserDefaults.standard.removeObject(forKey: DriveChatLogic.closedKey(account: account)) }
+            return
+        }
+        if origin == .scheduled {
+            guard let account else { return }
+            if hidden { UserDefaults.standard.removeObject(forKey: ScheduledChatLogic.shownKey(account: account)) }
+            else { UserDefaults.standard.set(true, forKey: ScheduledChatLogic.shownKey(account: account)) }
             return
         }
         var all = UserDefaults.standard.dictionary(forKey: Self.hiddenKey) ?? [:]
@@ -421,6 +469,8 @@ final class WikiChatModel {
     /// unless the owner hid it (`WikiChatLogic.opensByDefault`). Called once the chats are read and whenever the
     /// width or the page changes; a panel already open is left as it is.
     func openByDefault(spaceID: String, settingsOnTop: Bool) {
+        // The Scheduled page never opens the chat by itself: it only shows it again where it was left open.
+        if origin == .scheduled { return restoreScheduled() }
         let fits = WikiChatLogic.opensByDefault(sheet: asSheet, settingsOnTop: settingsOnTop, hiddenByOwner: hiddenByOwner(spaceID))
         if presented {
             // Narrowed to a phone's width, or turned to Settings: a panel the page opened folds away with it.
@@ -480,6 +530,7 @@ final class WikiChatModel {
             focusCard = driveCards(chat).first { $0.needsYou }?.id
             return
         }
+        if origin == .scheduled { return }
         focusCard = openChatCards.first { WikiChatLogic.cardNeedsYou($0.card) }.map { PublicID.storageKey($0.id) }
     }
 
@@ -509,7 +560,15 @@ final class WikiChatModel {
         guard let spaceID, let asked = history?.query else { return }
         history?.loading = true
         let read: WikiChatList?
-        if origin == .drive {
+        if origin == .scheduled {
+            // Open from the list the host keeps, Completed one page of the session list's (design §3).
+            let open = scheduledSessions
+            let fab = lists[spaceID]?.fab ?? WikiChatFabCounts()
+            read = (try? await api.listSessions(view: .completed)).map { completed in
+                WikiChatList(spaceId: spaceID, fab: fab,
+                             chats: ScheduledChatLogic.history(open: open, completed: completed, query: asked))
+            }
+        } else if origin == .drive {
             let choices = workspaceChoices
             read = (try? await api.driveChats(q: asked, offset: offset)).map { DriveChatLogic.hostList($0, choices: choices) }
         } else {
@@ -612,6 +671,12 @@ final class WikiChatModel {
         origin == .drive ? DriveChatLogic.context(attachments) : nil
     }
 
+    /// What a Scheduled page chat's message carries: the page's workspace filter and the schedule chip
+    /// (`scheduledChatContext`).
+    var scheduleContext: SchedulePageChatContext? {
+        origin == .scheduled ? ScheduledChatLogic.context(filter: scheduledFilter, attachments: attachments) : nil
+    }
+
     /// Drive: the files the chip names beside the folder (the selection, or the file open).
     func files(_ files: WikiChatLogic.Files?) {
         attachments = WikiChatLogic.attach(attachments, .files(files))
@@ -638,7 +703,12 @@ final class WikiChatModel {
         creating = true
         defer { creating = false }
         do {
-            if origin == .drive {
+            if origin == .scheduled {
+                // The door takes the words and the workspace alone: the chat starts as any new session there (§4.3).
+                let words = first.words.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !words.isEmpty else { return false }
+                made = try await api.openScheduledChat(workspaceID: workspaceID, text: words).sessionId
+            } else if origin == .drive {
                 // What is not shown is not sent: no chip shown goes as `noFolder` (`createDriveChat`).
                 guard let request = DriveChatLogic.createRequest(first, workspaceId: workspaceID, context: driveContext,
                                                                  clientTurnId: turn) else { return false }
@@ -711,8 +781,9 @@ final class WikiChatModel {
 extension WikiChatModel {
     /// Where a new chat may run besides the server's default: the owner's workspaces, as the host lists them.
     func setWorkspaceChoices(_ choices: [WikiChatWorkspace]) {
-        guard origin == .drive, choices != workspaceChoices else { return }
+        guard origin != .wiki, choices != workspaceChoices else { return }
         workspaceChoices = choices
+        if origin == .scheduled { return storeScheduled() }
         if let read = driveRead { storeDrive(read) }
     }
 
@@ -811,9 +882,80 @@ extension WikiChatModel {
 
     /// The account signed in: its ✕ and its seen marks.
     func signedIn(_ account: String?) {
-        guard origin == .drive, account != self.account else { return }
+        guard origin != .wiki, account != self.account else { return }
         self.account = account
         seenMarks = account.flatMap { UserDefaults.standard.stringArray(forKey: DriveChatLogic.seenKey(account: $0)) } ?? []
+    }
+}
+
+// MARK: - Scheduled (board scheduled-chat 01 part 4; the web's scheduledChat.ts and ScheduledChatPanel.tsx)
+
+extension WikiChatModel {
+    /// Whether the page chat was left open on this device for the signed-in account (D3 A: never the first time).
+    var scheduledRemembered: Bool {
+        account.map { UserDefaults.standard.bool(forKey: ScheduledChatLogic.shownKey(account: $0)) } ?? false
+    }
+
+    /// What the Scheduled page hands over: its Open list's sessions and its workspace filter.
+    func setScheduledPage(sessions: [Session], filter: String?) {
+        guard origin == .scheduled else { return }
+        let chats = sessions.filter(ScheduledChatLogic.isScheduledChat)
+        if chats != scheduledSessions { scheduledSessions = chats }
+        if filter != scheduledFilter { scheduledFilter = filter }
+        storeScheduled()
+    }
+
+    fileprivate func storeScheduled() {
+        let workspace = ScheduledChatLogic.defaultWorkspace(filter: scheduledFilter, choices: workspaceChoices)
+        let host = ScheduledChatLogic.hostList(sessions: scheduledSessions, workspace: workspace, choices: workspaceChoices,
+                                               waitingCards: scheduledWaiting.values.reduce(0, +))
+        if lists[ScheduledChatLogic.scope] != host { lists[ScheduledChatLogic.scope] = host }
+    }
+
+    /// `GET /schedules/chat` (the opening and the account's open chat), then the cards waiting in each open chat:
+    /// the button's amber count, read from the chats and never stored (design §3).
+    fileprivate func loadScheduled() async {
+        if let read = try? await api.scheduledChat(timezone: TimeZone.current.identifier), scheduledRead != read {
+            scheduledRead = read
+        }
+        var waiting: [String: Int] = [:]
+        for row in (lists[ScheduledChatLogic.scope]?.chats ?? []).prefix(DriveChatLogic.chatsRead) {
+            guard let cards = try? await api.sessionScheduleCards(sessionID: row.sessionId) else { continue }
+            waiting[PublicID.storageKey(row.sessionId)] = cards.cards.filter { $0.state == "PENDING" }.count
+        }
+        if waiting != scheduledWaiting { scheduledWaiting = waiting }
+        storeScheduled()
+    }
+
+    /// Where the chat is a column, the page shows it again if it was left open there; a sheet never opens by itself.
+    fileprivate func restoreScheduled() {
+        let scope = ScheduledChatLogic.scope
+        guard !presented, ScheduledChatLogic.opensOnPage(sheet: asSheet, remembered: scheduledRemembered) else { return }
+        if spaceID != scope { follow(spaceID: scope, page: nil) }
+        chat = toOpenScheduled()
+        focusCard = nil
+        presented = true
+    }
+
+    private func toOpenScheduled() -> String {
+        ScheduledChatLogic.toOpen(list(ScheduledChatLogic.scope)?.chats, openID: scheduledRead?.sessionId)
+    }
+
+    /// The toolbar's Chat button (board 4 ①): opens the chat — the one with a card waiting, else the open one, else a
+    /// new one — or, pressed while it is open, closes it. Open or closed is kept on this device.
+    func toggleScheduled() {
+        if presented { closeByOwner() } else { openFromButton(spaceID: ScheduledChatLogic.scope) }
+    }
+
+    /// The row selected in the list follows into the composer as its chip, until another is selected (§2.4).
+    func followSchedule(_ schedule: (id: String, title: String)?) {
+        follow(spaceID: ScheduledChatLogic.scope, page: nil)
+        files(schedule.map { ScheduledChatLogic.chip(scheduleID: $0.id, title: $0.title) })
+    }
+
+    /// ‹ Chat: the chat sheet comes back on the chat it showed.
+    func reopenScheduled() {
+        presented = true
     }
 }
 

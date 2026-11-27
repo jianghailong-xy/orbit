@@ -383,6 +383,8 @@ struct ScheduledPage: View {
         }
         .scheduleRenameAlert($renaming, draft: $renameDraft)
         .toolbar {
+            // The chat (board scheduled-chat 01 part 4 ①): a sheet on a phone, the third column on a wide iPad.
+            ToolbarItem(placement: .topBarTrailing) { ScheduledChatButton() }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Toggle(SC.Page.showPastRuns, isOn: $scheduled.showPastRuns)
@@ -400,7 +402,7 @@ struct ScheduledPage: View {
             }
         }
         .sheet(isPresented: Binding(get: { scheduled.inspectedID != nil },
-                                    set: { if !$0 { scheduled.inspectedID = nil } })) {
+                                    set: { if !$0 { scheduled.inspectedID = nil; scheduled.inspectedFromChat = false } })) {
             if let id = scheduled.inspectedID {
                 ScheduleDetailPanel(scheduleID: id)
                     .presentationDetents([.large])
@@ -726,7 +728,18 @@ struct ScheduleDetailPanel: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { model.scheduled?.inspectedID = nil }
+                    if model.scheduled?.inspectedFromChat == true {
+                        // Opened from a change line in the chat's sheet: ‹ Chat goes back to the conversation (board 4 ③).
+                        Button { model.backToScheduledChat() } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "chevron.left").fontWeight(.semibold)
+                                Text(ScheduledChatCopy.back)
+                            }
+                        }
+                        .accessibilityIdentifier("schedule-back-to-chat")
+                    } else {
+                        Button("Close") { model.scheduled?.inspectedID = nil }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

@@ -434,6 +434,8 @@ private struct CompactSections: View {
                     .drawerToggle(open: openDrawer)
                     .refreshable { await model.scheduled?.load() }
             }
+            // The chat as a two-height sheet from the toolbar's button (board scheduled-chat 01 part 4 ②).
+            .scheduledChatSheetHost()
 
         // RUNNERS — the Machines & models page → a machine's record → an engine's or its name's page, a
         // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a

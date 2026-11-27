@@ -338,7 +338,9 @@ struct WikiChatPanel: View {
 
     private var title: String {
         if chat.history != nil { return WikiChatCopy.historyTitle }
-        guard chat.chat != WikiChatLogic.newChat else { return WikiChatCopy.newChat }
+        guard chat.chat != WikiChatLogic.newChat else {
+            return chat.origin == .scheduled ? ScheduledChatCopy.title : WikiChatCopy.newChat
+        }
         let row = chat.openChatRow?.title
         let session = model.session(id: chat.chat)?.title
         return [session, row].compactMap { $0 }.first { !$0.isEmpty } ?? WikiChatCopy.newChat
@@ -696,6 +698,13 @@ private struct WikiChatNewBody: View {
                            chat.draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             examples
                         }
+                        // The Scheduled chat's opening ends with what applies at once and what needs Allow (§4.1).
+                        if !chat.copy.closing.isEmpty {
+                            Text(chat.copy.closing)
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("scheduled-chat-closing")
+                        }
                     }
                 }
                 .font(.orbitSubtext)
@@ -817,6 +826,9 @@ private struct WikiChatRunningBody: View {
             }
             if let console {
                 WikiChatConversation(console: console, registry: model.consoleRegistry)
+                    // The Scheduled chat's Run now buttons, each after the answer that offered it (design §4.6): set
+                    // nearest the transcript, so it stands over the line below for a Scheduled chat alone.
+                    .scheduledChatTranscript(chat.origin == .scheduled ? runNowCards(console) : nil)
                     // Drive's change cards and overwrite questions, each after its turn (board drive-chat 02 ② ③).
                     .environment(\.transcriptChatCards, chat.origin == .drive ? driveCards : nil)
                 if let ended = endedLine(console) {
@@ -836,6 +848,14 @@ private struct WikiChatRunningBody: View {
     }
 
     private var session: Session? { model.session(id: sessionID) }
+
+    private func runNowCards(_ console: ConsoleModel) -> TranscriptChatCards {
+        let offers = ScheduledChatLogic.runNowOffers(console.state.items)
+        let byID = Dictionary(offers.map { ($0.id, $0.scheduleID) }, uniquingKeysWith: { a, _ in a })
+        return TranscriptChatCards(
+            cards: offers.map { TranscriptChatCard(id: $0.id, turnId: $0.turnID) },
+            render: { id in AnyView(ScheduledRunNowOffer(scheduleID: byID[id] ?? "")) })
+    }
 
     private var driveCards: TranscriptChatCards {
         let chat = chat
@@ -952,6 +972,7 @@ struct WikiChatComposer: View {
         let chat = chat
         var composing = WikiChatComposing(context: { chat.context }, driveContext: { chat.driveContext },
                                           accepted: { chat.sent() })
+        composing.scheduleContext = { chat.scheduleContext }
         if let creates {
             composing.create = { first in
                 await chat.create(spaceID: creates.spaceID, workspaceID: creates.workspaceID, first)
@@ -1035,9 +1056,14 @@ private struct WikiChatChips: View {
 
     /// Drive: the files beside the folder — `lease-2026.pdf`, or `12 files` (board drive-chat 02 ③).
     private func filesChip(_ files: WikiChatLogic.Files) -> some View {
-        let label = DriveChatCopy.selection(files.names)
+        // On Scheduled the chip is the selected row: its title, as the web's `Engine version bump ✕` (§2.4).
+        let scheduled = chat.origin == .scheduled
+        let label = scheduled ? (files.names.first ?? "") : DriveChatCopy.selection(files.names)
         return chip(remove: WikiChatCopy.remove(label), cross: { chat.crossFiles() }) {
-            Text(label).lineLimit(1).truncationMode(.middle)
+            HStack(spacing: 4) {
+                if scheduled { Image(systemName: "calendar").font(.orbitMeta) }
+                Text(label).lineLimit(1).truncationMode(.middle)
+            }
         }
         .help(files.names.joined(separator: "\n"))
         .accessibilityIdentifier("drive-chat-files-chip")

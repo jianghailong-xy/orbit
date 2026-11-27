@@ -3270,6 +3270,7 @@ final class ConsoleModel {
     func send(authoritative: RunStatus? = nil, overrideText: String? = nil,
               overrideAttachments: [TurnAttachment]? = nil, takesStagedAttachments: Bool = false,
               queueForNextTurn: Bool = false,
+              scheduleContext: SchedulePageChatContext? = nil,
               wikiContext: WikiChatContext? = nil, driveContext: DriveChatContext? = nil,
               accepted onAccepted: (@MainActor () -> Void)? = nil) async {
         guard !sending, !waitingForUploads else { return }
@@ -3282,6 +3283,7 @@ final class ConsoleModel {
         // the row once the server took them. A sentence handed in (a card's own) carries neither.
         let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)
         let driveContext = driveContext ?? (fromComposer ? wikiChat?.driveContext() : nil)
+        let scheduleContext = scheduleContext ?? (fromComposer ? wikiChat?.scheduleContext() : nil)
         let onAccepted = onAccepted ?? (fromComposer ? wikiChat?.accepted : nil)
         // A chip is staged the moment an image is picked, while its bytes are still going up (see
         // `attach`). Sending in that window would leave the image behind for good: only chips that
@@ -3465,6 +3467,7 @@ final class ConsoleModel {
                                               text: text, shell: shell, attachmentIds: attachmentIds,
                                               queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
                                               driveContext: driveContext,
+                                              scheduleContext: scheduleContext,
                                               skipTranslation: skipTranslation,
                                               optimizedTranslation: optimizedTranslation)
             if fromComposer { promptOptimizer.sent() }
@@ -3768,6 +3771,7 @@ final class ConsoleModel {
                           attachmentIds: [String], queueForNextTurn: Bool = false,
                           wikiContext: WikiChatContext? = nil,
                           driveContext: DriveChatContext? = nil,
+                          scheduleContext: SchedulePageChatContext? = nil,
                           skipTranslation: Bool = false,
                           optimizedTranslation: String? = nil) async throws -> TurnAccepted {
         // Built once, for the same reason the endpoint is chosen once: every attempt must send the
@@ -3789,6 +3793,8 @@ final class ConsoleModel {
                                           // Only ever the answer to the question that asked about
                                           // stopping this exact run, and only for this one send.
                                           stopSessionId: confirmedStopSessionID,
+                                          // A Scheduled page chat's view, which revives it too.
+                                          context: scheduleContext,
                                           // A wiki chat's page and selection, which revive it too.
                                           wikiContext: wikiContext,
                                           driveContext: driveContext,
@@ -3798,6 +3804,7 @@ final class ConsoleModel {
                                                  shell: shell, attachmentIds: attachmentIds,
                                                  queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
                                                  driveContext: driveContext,
+                                                 context: scheduleContext,
                                                  skipTranslation: skipTranslation,
                                                  optimizedTranslation: optimizedTranslation)
         // A run that is letting go frees the task within a couple of seconds, so this waits it out
@@ -7157,6 +7164,8 @@ struct WikiChatComposing {
     let context: @MainActor () -> WikiChatContext?
     /// A Drive chat's folder and files (board drive-chat 02), beside the words; nil on the Wiki.
     var driveContext: @MainActor () -> DriveChatContext? = { nil }
+    /// A Scheduled page chat's workspace filter and schedule chip (board scheduled-chat 01), beside the words.
+    var scheduleContext: @MainActor () -> SchedulePageChatContext? = { nil }
     let accepted: @MainActor () -> Void
     /// True once the chat is made; false when it was refused, which the panel says.
     var create: (@MainActor (WikiChatLogic.FirstMessage) async -> Bool)?

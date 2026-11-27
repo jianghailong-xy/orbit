@@ -44,6 +44,8 @@ let injectedTagLabels: [String: String] = [
     "list-conditions": "list conditions",
     "orbit-session-message": "session message",
     "orbit-session-reply": "session reply",
+    // A Scheduled page chat's view (`<orbit_schedules>`, docs/scheduled-chat-design.md §4.2).
+    "orbit_schedules": "Scheduled view",
 ]
 
 /// Blocks `describeNote` leaves unnamed, so a note holding only them draws no line. The external

@@ -39,6 +39,8 @@ final class ScheduledModel {
     var workspaceFilter: String?
     /// The schedule whose detail panel is up.
     var inspectedID: String?
+    /// That schedule's sheet was opened from the chat's sheet: its head says ‹ Chat (board scheduled-chat 01 part 4 ③).
+    var inspectedFromChat = false
     /// The schedule whose title the Mac's detail panel is editing in place (Rename…, §8.4).
     var renamingID: String?
     /// The draft panel: the sentence typed and the session it opened.

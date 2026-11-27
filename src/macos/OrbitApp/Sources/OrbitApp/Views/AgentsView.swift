@@ -1788,6 +1788,26 @@ struct NewSessionView: View {
     }
 }
 
+/// `From Scheduled` after a page chat's title (design §4.3 D4 A; the web's `.session-origin-tag`): a card left in the
+/// chat is reachable from the session list. Nothing for any other session.
+struct SessionOriginTagView: View {
+    let session: Session
+
+    var body: some View {
+        if let tag = ScheduledChatLogic.originTag(session.chatOrigin) {
+            Text(tag)
+                .font(.orbitMeta)
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .lineLimit(1)
+                .fixedSize()
+                .accessibilityIdentifier("session-origin-tag")
+        }
+    }
+}
+
 struct AgentSessionRow: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -1845,6 +1865,7 @@ struct AgentSessionRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(session.title ?? "Untitled session").lineLimit(1)
+                        SessionOriginTagView(session: session)
                         if !rowIcons.isEmpty {
                             Spacer(minLength: 4)
                             SessionRowIconsView(icons: rowIcons)
@@ -1891,6 +1912,7 @@ struct AgentSessionRow: View {
                 Text(session.title ?? "Untitled session")
                     .lineLimit(1)
                     .layoutPriority(1)
+                SessionOriginTagView(session: session)
                 Spacer(minLength: 8)
                 SessionRowIconsView(icons: rowIcons)
                 liveIndicator
@@ -1925,6 +1947,7 @@ struct AgentSessionRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 Text(session.title ?? "Untitled session").lineLimit(1)
+                SessionOriginTagView(session: session)
                 Spacer(minLength: 8)
                 SessionRowIconsView(icons: rowIcons)
                 liveIndicator

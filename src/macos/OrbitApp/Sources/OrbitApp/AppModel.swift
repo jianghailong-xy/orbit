@@ -572,6 +572,9 @@ final class AppModel {
     /// The Drive chat beside the drive's files (board docs/mocks/drive-chat/02-native): the Wiki chat's model, panel and
     /// button, docked on Drive (`ChatOrigin.drive`).
     private(set) var driveChat: WikiChatModel?
+    /// The Scheduled page's chat (board docs/mocks/scheduled-chat/01-board-4.png): the Wiki chat's model and panel,
+    /// opened by the page's toolbar button (`ChatOrigin.scheduled`).
+    private(set) var scheduledChat: WikiChatModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
     /// What the next cold launch draws first (`persistLaunchSnapshot` / `restoreLaunchSnapshot`),
@@ -689,6 +692,7 @@ final class AppModel {
         drive = driveModel
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
         driveChat = WikiChatModel(baseURL: url, tokenStore: tokenStore, origin: .drive)
+        scheduledChat = WikiChatModel(baseURL: url, tokenStore: tokenStore, origin: .scheduled)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
         launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
@@ -1223,7 +1227,44 @@ final class AppModel {
         nav.path = []
         scheduled?.draftPanel = nil
         scheduled?.changeDraft = nil
+        scheduled?.inspectedFromChat = false
         scheduled?.inspectedID = id
+    }
+
+    /// A schedule's name in a Scheduled chat's change line (board scheduled-chat 01 part 4 ③): in a column the
+    /// schedule opens beside the chat; in a sheet the chat folds and the schedule's own sheet opens with ‹ Chat.
+    func openScheduleFromChat(_ id: String) {
+        runScheduledChatSteps(ScheduledChatLogic.nameTapped(id, sheet: scheduledChat?.asSheet ?? false))
+    }
+
+    /// ‹ Chat on a schedule's sheet: back to the conversation it was opened from.
+    func backToScheduledChat() {
+        runScheduledChatSteps(ScheduledChatLogic.backToChat())
+    }
+
+    /// One sheet shows at a time on a phone: each step that takes one away waits for it to go.
+    private func runScheduledChatSteps(_ steps: [ScheduledChatLogic.Step]) {
+        Task { @MainActor [weak self] in
+            for step in steps {
+                guard let self else { return }
+                switch step {
+                case .closeChat:
+                    scheduledChat?.close()
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                case .openChat:
+                    scheduledChat?.reopenScheduled()
+                case .openSchedule(let id, let backToChat):
+                    scheduled?.draftPanel = nil
+                    scheduled?.changeDraft = nil
+                    scheduled?.inspectedFromChat = backToChat
+                    scheduled?.inspectedID = id
+                case .closeSchedule:
+                    scheduled?.inspectedID = nil
+                    scheduled?.inspectedFromChat = false
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                }
+            }
+        }
     }
 
     /// Open the session in its workspace, with the list on the Scheduled runs folder.
@@ -1414,6 +1455,8 @@ final class AppModel {
             if let wikiChat { Task { await wikiChat.reloadLoaded() } }
         } else if selectedSection == .drive, let driveChat {
             Task { await driveChat.reloadLoaded() }
+        } else if selectedSection == .scheduled, let scheduledChat {
+            Task { await scheduledChat.reloadLoaded() }
         } else if let wiki, wiki.spacesState.hasLoaded {
             Task { await wiki.loadSpaces() }
         }
@@ -1921,6 +1964,8 @@ final class AppModel {
         // panel moves, and as the Wiki comes and goes).
         let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID
             : selectedSection == .drive ? driveChat?.focusedSessionID : nil)
+            // The Scheduled page's chat streams the same way while it is open on Scheduled.
+            ?? (selectedSection == .scheduled ? scheduledChat?.focusedSessionID : nil)
         // Every focused console needs an exact-detail fallback, not only cold deep links. If an
         // Open row is filed or purged on another client, the next list refresh removes it; retaining
         // this last loaded snapshot makes `needsExactRefresh` detect that absence and GET the new

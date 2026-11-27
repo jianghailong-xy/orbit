@@ -135,6 +135,10 @@ struct MainView: View {
 
     /// The wiki chat open as a column beside the Wiki's page — the inspector, not a phone's sheet.
     private var wikiChatColumn: Bool {
+        if model.selectedSection == .scheduled, let scheduled = model.scheduledChat {
+            // The Scheduled chat's column wants the width too (design §6: the sidebar folds below 1440).
+            return scheduled.presented && scheduled.asSheet == false
+        }
         guard model.selectedSection == .wiki, let chat = model.wikiChat else { return false }
         return chat.presented && !chat.asSheet
     }
@@ -732,11 +736,12 @@ struct SectionDetail: View {
             DriveChatColumn()
         case .scheduled:
             #if os(iOS)
-            // The detail is the page's own bottom panel.
-            ContentUnavailableView(section.title, systemImage: section.systemImage)
+            // The detail is the page's own bottom panel; the chat, while open, is this column (board scheduled-chat
+            // 01 part 4: the iPad's third column).
+            ScheduledChatDetail()
             #else
-            // The right-hand panel shows a row's detail or a draft.
-            ScheduledMacDetail()
+            // The right-hand panel shows a row's detail or a draft, and the chat a third column beside it.
+            ScheduledMacDetail().scheduledChatColumn()
             #endif
         case .following:
             WatchDetailView()
