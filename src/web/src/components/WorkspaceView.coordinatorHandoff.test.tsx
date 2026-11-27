@@ -553,7 +553,12 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
   describe('the task run sidebar in its own run conversation (docs/task-run-sidebar-design.md, D2 = B)', () => {
     const TASK = '0195c0de-0000-7000-8000-0000000000f1';
     const taskRun = () => session({ title: 'Task: Fix the red checks', taskId: TASK, taskTitle: 'Fix the red checks' });
-    const taskOpen = () => new URLSearchParams(search).get('task');
+    const badge = () => mounted().querySelector<HTMLButtonElement>('.workspace-title-line button.coordinator-badge-link');
+    /** Whether the task is open beside the conversation: held there, so the address never names it (owner 11-27). */
+    const taskOpen = () => {
+      expect(new URLSearchParams(search).get('task')).toBeNull();
+      return badge()?.getAttribute('aria-pressed') === 'true';
+    };
     /** A window `width` px wide: min-width and max-width queries answer for it, nothing else matches. */
     const windowWidth = (width: number) => vi.stubGlobal('matchMedia', (query: string) => {
       const bounds = [...query.matchAll(/\((min|max)-width:\s*(\d+)px\)/g)];
@@ -575,6 +580,10 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
         removeItem: (k: string) => void store.delete(k),
       });
     });
+    // The task held beside a conversation outlives an unmount, so a test that leaves it open closes it.
+    afterEach(async () => {
+      if (container && badge()?.getAttribute('aria-pressed') === 'true') await act(async () => badge()!.click());
+    });
     const remount = async () => {
       const mountedRoot = root;
       await act(async () => mountedRoot?.unmount());
@@ -587,31 +596,27 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       windowWidth(wide);
       detail = taskRun();
       await mount();
-      await waitFor(() => expect(taskOpen()).toBe(encodeId(TASK)));
-      const badge = mounted().querySelector<HTMLButtonElement>('.workspace-title-line button.coordinator-badge-link')!;
-      await waitFor(() => expect(badge.getAttribute('aria-pressed')).toBe('true'));
+      await waitFor(() => expect(taskOpen()).toBe(true));
     });
 
     it('remembers a close in that conversation, and opening it again forgets the close', async () => {
       windowWidth(wide);
       detail = taskRun();
       await mount();
-      await waitFor(() => expect(taskOpen()).toBe(encodeId(TASK)));
-      const badge = () => mounted().querySelector<HTMLButtonElement>('.workspace-title-line button.coordinator-badge-link')!;
-      await act(async () => badge().click());
-      await waitFor(() => expect(taskOpen()).toBeNull());
+      await waitFor(() => expect(taskOpen()).toBe(true));
+      await act(async () => badge()!.click());
+      await waitFor(() => expect(taskOpen()).toBe(false));
       expect(JSON.parse(store.get('orbit.taskRunSidebarClosed') ?? '[]')).toEqual([encodeId(SESSION)]);
 
       // Back in the same conversation later: it stays closed.
       await remount();
       await settle();
       await settle();
-      expect(taskOpen()).toBeNull();
-      expect(badge().getAttribute('aria-pressed')).toBe('false');
+      expect(taskOpen()).toBe(false);
 
       // Opened again by hand, the close is forgotten and the next visit opens it by default.
-      await act(async () => badge().click());
-      await waitFor(() => expect(taskOpen()).toBe(encodeId(TASK)));
+      await act(async () => badge()!.click());
+      await waitFor(() => expect(taskOpen()).toBe(true));
       expect(JSON.parse(store.get('orbit.taskRunSidebarClosed') ?? '[]')).toEqual([]);
     });
 
@@ -621,7 +626,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       await mount();
       await settle();
       await settle();
-      expect(taskOpen()).toBeNull();
+      expect(taskOpen()).toBe(false);
     });
 
     it('opens nothing by itself in a conversation that is no task\'s run', async () => {
@@ -630,7 +635,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       await mount();
       await settle();
       await settle();
-      expect(taskOpen()).toBeNull();
+      expect(taskOpen()).toBe(false);
     });
   });
 
