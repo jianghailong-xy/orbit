@@ -236,7 +236,7 @@ interface ResolvedActor {
   session: { mode: string; engine: string | null; workspaceId: string | null } | null;
   /** The schedule the calling session serves a run of (`session.scheduleRunId`), or null. */
   servesScheduleId: string | null;
-  /** The person's words that asked for the change, when it comes from the schedule's change conversation (§8.2). */
+  /** The person's words that asked for the change, from its change conversation (§8.2) or the page chat (chat §4.4). */
   askedText?: string | null;
 }
 
@@ -406,10 +406,20 @@ function needOf(s: { workspaceId: string; accessLevel: AccessLevel; rule: unknow
   };
 }
 
-/** The person's latest message in a session: the words a change from it was asked with. */
-async function personsLatestWords(tx: Tx, sessionId: string): Promise<string | null> {
+/**
+ * The words a change from a session was asked with: the person's message of the turn that made the call. The inbox
+ * hands a session one message/shell turn at a time, so the one IN_FLIGHT is the turn the call came from; a message
+ * queued behind it, or sent while it runs, is a later seq and not its words. A turn of nobody's words (a wake, a
+ * session's reply) speaks with the person's last message before it. With no turn in flight, the latest message.
+ */
+async function personsWordsOfTurn(tx: Tx, sessionId: string): Promise<string | null> {
+  const delivering = await tx.conversationTurn.findFirst({
+    where: { sessionId, status: 'IN_FLIGHT', kind: { in: ['message', 'shell'] } },
+    orderBy: { seq: 'desc' },
+    select: { seq: true },
+  });
   const turns = await tx.conversationTurn.findMany({
-    where: { sessionId, kind: 'message', senderSessionId: null },
+    where: { sessionId, kind: 'message', senderSessionId: null, ...(delivering ? { seq: { lte: delivering.seq } } : {}) },
     orderBy: { seq: 'desc' },
     take: 10,
     select: { content: true, clientTurnId: true },
@@ -1465,17 +1475,20 @@ export class SchedulesService {
         workspaceId: true,
         scheduleRun: { select: { scheduleId: true } },
         changeScheduleId: true,
+        scheduleChatAt: true,
         owner: { select: { preferences: true } },
       },
     });
     if (!session) throw refusal('NOT_FOUND', 'SESSION_NOT_FOUND', 'The calling session does not exist.');
     const isRun = scheduleId !== null && session.scheduleRun?.scheduleId === scheduleId;
-    // The schedule's own change conversation speaks for the person (§8.2): what it changes is theirs, in their words.
+    // The schedule's own change conversation speaks for the person (§8.2), and the Scheduled page's chat does for any
+    // of the owner's schedules (scheduled-chat-design §4.4): what it changes is theirs, in their words of that turn.
     // It is still judged as a session (§4): what grows the envelope waits for the owner's Allow.
-    const isChange = scheduleId !== null && session.changeScheduleId === scheduleId;
+    const isChange = scheduleId !== null && !isRun
+      && (session.changeScheduleId === scheduleId || session.scheduleChatAt !== null);
     return {
       changedBy: isRun ? 'RUN' : isChange ? 'USER' : 'SESSION',
-      ...(isChange ? { askedText: await personsLatestWords(tx, session.id) } : {}),
+      ...(isChange ? { askedText: await personsWordsOfTurn(tx, session.id) } : {}),
       sessionId: session.id,
       servesScheduleId: session.scheduleRun?.scheduleId ?? null,
       session: {
