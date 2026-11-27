@@ -191,8 +191,9 @@ test('a session the region check holds moves at once, with its waiting message; 
   assert.equal(MOVE_REFUSAL.STOP, 'Stop the session first.');
   // Held, but something of it is still asking: not the hold's to waive.
   assert.equal(sessionMoveVerdict(moveFacts({ regionHeld: true, liveApprovals: 1 })).reason, MOVE_REFUSAL.STOP);
-  assert.equal(sessionMoveVerdict(moveFacts({ regionHeld: true, cancelRequestedAt: new Date() })).reason, MOVE_REFUSAL.ENDING);
-  // Only a queued session is held; an idle one still ends first, and the session's own refusals still stand.
+  // Its end already asked for: no longer held for its region, but being released, which the move waits for.
+  assert.deepEqual(sessionMoveVerdict(moveFacts({ regionHeld: true, cancelRequestedAt: new Date() })), { reason: null, needsEnd: true });
+  // Only a queued session is held; an idle one is still released first, and the session's own refusals still stand.
   assert.deepEqual(sessionMoveVerdict(moveFacts({ regionHeld: true, turnState: null, queuedTurns: 0 })), { reason: null, needsEnd: true });
   assert.equal(sessionMoveVerdict(moveFacts({ regionHeld: true, taskId: 'task-1' })).reason, MOVE_REFUSAL.TASK);
   assert.equal(sessionMoveVerdict(moveFacts({ regionHeld: true, mergeStatus: 'pending' })).reason, MOVE_REFUSAL.MERGE);

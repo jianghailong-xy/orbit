@@ -70,7 +70,8 @@ const AFTER: Record<number, { state: string; icon: string; marks: string[]; grou
   25: { state: 'Idle', icon: 'circle', marks: ['Interrupted'], group: '-' },
   27: { state: 'Running', icon: 'spinner', marks: [], group: 'Working' },
   29: { state: 'Running', icon: 'spinner', marks: [], group: 'Working' },
-  31: { state: 'Idle', icon: 'circle', marks: ['Will resume'], group: '-' },
+  // Idle is Idle: a watch or wake-up to come draws no mark (the owner, 2026-11-27).
+  31: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
   33: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
   35: { state: 'Idle', icon: 'circle', marks: ['Ended'], group: '-' },
 };

@@ -78,7 +78,14 @@ internal fun DriveFilePage(store: DriveStore, route: OrbitRoute, open: (OrbitRou
     var renaming by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
-    PageBar.Bind(route, name, actions = {
+    // The chat's chips: the file's folder and the file (board ① note: a file's page adds its name).
+    LaunchedEffect(shown?.id, shown?.path) {
+        shown?.let { file ->
+            val folderName = file.path?.substringBeforeLast('/')?.substringAfterLast('/')?.ifEmpty { null } ?: DriveLogic.TITLE
+            store.chat.here = DriveChatHere(file.parentId?.takeIf { file.path?.substringBeforeLast('/')?.isNotEmpty() == true }, folderName, file.id, file.name)
+        }
+    }
+    PageBar.Bind(route, name, folds = store.chat.shown && store.chat.expanded, actions = {
         IconButton(onClick = { shown?.let { actions.handOff(it, ShareSend) } }, enabled = shown != null) { Icon(painterResource(R.drawable.ic_share), DriveLogic.SEND_A_COPY) }
         Box {
             IconButton(onClick = { menu = true }, Modifier.testTag("drive-file-more")) { Icon(painterResource(R.drawable.ic_more), "More") }
@@ -129,7 +136,8 @@ internal fun DriveFilePage(store: DriveStore, route: OrbitRoute, open: (OrbitRou
                     }
                 }
                 WriterCard(store, shown, earlier, openSession) { open(OrbitRoute(Destination.DRIVE_TRASH)) }
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // 88 under the buttons, so the chat's round button never covers them (board frame 4 note).
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 88.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { actions.download(shown) }, Modifier.weight(1f).testTag("drive-file-download")) { Text(DriveLogic.DOWNLOAD) }
                     Button(onClick = { sharing = true }, Modifier.weight(1f).testTag("drive-file-share")) { Text(DriveLogic.SHARE_LINK) }
                 }
@@ -138,7 +146,8 @@ internal fun DriveFilePage(store: DriveStore, route: OrbitRoute, open: (OrbitRou
             if (moving) MoveDialog(store, shown, actions) { moving = false }
             if (sharing) ShareDialog(store, shown) { sharing = false }
         }
-        DriveSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(12.dp))
+        // Over the chat's round button in the corner.
+        DriveSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 84.dp))
     }
 }
 

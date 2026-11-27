@@ -7,7 +7,6 @@ import io.orbitd.android.directory.RunState
 import io.orbitd.android.directory.SessionHeader
 import io.orbitd.android.directory.displayRunState
 import io.orbitd.android.directory.effectiveRunState
-import io.orbitd.android.directory.runEnded
 import io.orbitd.android.push.pushStale
 import io.orbitd.android.reader.WorktreeBarLogic
 import io.orbitd.android.tasks.TaskDetailLogic
@@ -16,7 +15,8 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Plan step 5.4: the five sites that decided on exact terminal words, each with the session facts present and absent. */
+/** Plan step 5.4: the sites that decided on exact terminal words, each with the session facts present and absent. Site 2, the wait
+ * after End and Move, went when the server took the release over (a move is one request). */
 class SessionFactsSitesTest {
     private fun row(json: String) = Json.parseToJsonElement(json).jsonObject
     private fun directorySession(json: String): DirectorySession =
@@ -43,17 +43,6 @@ class SessionFactsSitesTest {
         assertFalse(pushStale(row("""{"status":"FAILED"}"""), false))
         assertTrue(pushStale(row("""{"status":"FAILED","completedAt":"x"}"""), false))
         assertTrue(pushStale(row("""{"status":"SUCCEEDED","retryAt":"x"}"""), true))
-    }
-
-    // Site 2: the wait after End (directory/DirectoryActions.kt).
-    @Test fun theWaitAfterEndReadsReleasedWhenSent() {
-        assertTrue(runEnded(row("""{"status":"AWAITING_INPUT","released":true}""")))
-        assertFalse(runEnded(row("""{"status":"CANCELLED","released":false}""")))
-    }
-    @Test fun theWaitAfterEndFallsBackToTheTerminalStatusWhenAbsent() {
-        for (s in listOf("SUCCEEDED", "FAILED", "CANCELLED")) assertTrue(s, runEnded(row("""{"status":"$s"}""")))
-        assertTrue(runEnded(row("""{"status":"RUNNING","runStatus":"FAILED"}""")))
-        for (s in listOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED")) assertFalse(s, runEnded(row("""{"status":"$s"}""")))
     }
 
     // Site 3: Commit versus Merge (reader/WorktreeBar.kt).

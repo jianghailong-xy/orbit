@@ -59,7 +59,7 @@ class SessionDisplayRowDrawTest {
         19 to Triple("QUEUED", listOf("ON_HOLD"), "Queued, On hold"), 21 to Triple("IDLE", listOf("ENDED"), "Idle, Ended"),
         23 to Triple("IDLE", listOf("ENDED"), "Idle, Ended"), 25 to Triple("IDLE", listOf("INTERRUPTED"), "Idle, Interrupted"),
         27 to Triple("RUNNING", listOf(), "Running"), 29 to Triple("RUNNING", listOf(), "Running"),
-        31 to Triple("IDLE", listOf("WILL_RESUME"), "Idle, Will resume"), 33 to Triple("IDLE", listOf(), "Idle"),
+        31 to Triple("IDLE", listOf(), "Idle"), 33 to Triple("IDLE", listOf(), "Idle"),
         35 to Triple("IDLE", listOf("ENDED"), "Idle, Ended"),
     )
     private val stateTags = listOf("QUEUED", "RUNNING", "IDLE").map { "session-state-icon:$it" }

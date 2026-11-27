@@ -3,7 +3,7 @@ import { Prisma, Runner } from '@prisma/client';
 import { usedRunnerEngines } from '../common/runner-engines';
 import { runnerOs } from '../common/runner-platform';
 import { PrismaService } from '../prisma/prisma.service';
-import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runner-presence';
+import { RUNNER_BEATS, runnerIsOnline, runnerPresentAt } from '../runners/runner-presence';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -86,7 +86,7 @@ export class RunnerRunnersController {
       online: runnerIsOnline(runner, now),
       status: runner.status,
       version: runner.version,
-      lastHeartbeatAt: runnerLastBeatAt(runner),
+      lastHeartbeatAt: runnerPresentAt(runner),
       maxConcurrent: runner.maxConcurrent,
       ...(os ? { os } : {}),
       ...(engines

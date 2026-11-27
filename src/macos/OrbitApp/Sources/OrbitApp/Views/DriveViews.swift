@@ -46,7 +46,10 @@ struct DriveDetailColumn: View {
 // MARK: - the list
 
 private struct DriveListColumn: View {
+    @Environment(AppModel.self) private var app
     @Bindable var model: DriveModel
+    /// The details overlaid on the list were closed (✕ or Esc) for this selection; the selection stays.
+    @State private var overlayClosedFor: Set<String>?
     @State private var renaming: String?
     @State private var renameText = ""
     @State private var moving: [String]?
@@ -59,6 +62,36 @@ private struct DriveListColumn: View {
         VStack(spacing: 0) {
             table
             if dropTargeted { dropBand }
+        }
+        // While the Drive chat holds the third column, a file's details overlay the list's right side (board
+        // drive-chat 02 ③): 280 wide, with a shadow, closed by ✕ or Esc with the selection kept; never for a
+        // multiple selection, and at 1760 or wider they stand beside the chat instead (`DriveChatColumn`).
+        .overlay(alignment: .trailing) {
+            if overlaysDetails {
+                DriveInspector(model: model)
+                    .frame(width: 280)
+                    .frame(maxHeight: .infinity)
+                    .background(.background)
+                    .overlay(alignment: .leading) { Divider() }
+                    .overlay(alignment: .topTrailing) {
+                        Button { overlayClosedFor = model.selection } label: {
+                            Image(systemName: "xmark").font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
+                                .frame(width: 22, height: 22)
+                        }
+                        .buttonStyle(.plain)
+                        .keyboardShortcut(.cancelAction)
+                        .help("Close")
+                        .padding(6)
+                    }
+                    .shadow(color: .black.opacity(0.12), radius: 14, x: -6, y: 0)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .accessibilityIdentifier("drive-details-overlay")
+            }
+        }
+        .onChange(of: model.selection) { _, selection in
+            if overlayClosedFor != selection { overlayClosedFor = nil }
+            // A row's details open: its mark is seen.
+            if selection.count == 1, let id = selection.first { app.driveChat?.opened(id) }
         }
         .overlay {
             if let error = model.loadError, model.listing == nil {
@@ -98,28 +131,44 @@ private struct DriveListColumn: View {
 
     private var selectedEntries: [DriveEntry] { model.rows.filter { model.selection.contains($0.id) } }
 
+    /// A row a Drive chat left a mark on: light green across the row, until it is opened (board drive-chat 02 ②).
+    private func marked(_ entry: DriveEntry) -> Bool {
+        app.driveChat?.mark(entry.id) != nil && !model.selection.contains(entry.id)
+    }
+
+    private var overlaysDetails: Bool {
+        guard let chat = app.driveChat, chat.presented, !chat.asSheet, model.selection.count == 1,
+              overlayClosedFor != model.selection else { return false }
+        return DriveChatLogic.detailsOverlay(chatOpen: true, windowWidth: Double(chat.windowWidth))
+    }
+
     private var table: some View {
         Table(of: DriveEntry.self, selection: $model.selection) {
-            TableColumn("Name") { entry in nameCell(entry) }
+            TableColumn("Name") { entry in nameCell(entry).modifier(MarkedCell(marked: marked(entry))) }
                 .width(min: 160, ideal: 240)
             TableColumn(model.searching ? "Folder" : "Last written by") { entry in
-                if model.searching {
-                    Text(DriveLogic.searchFolder(entry.folderPath)).foregroundStyle(.secondary)
-                } else if entry.isFolder {
-                    Text("—").foregroundStyle(.tertiary)
-                } else {
-                    DriveWriterLabel(model: model, writer: entry.lastWriter)
+                Group {
+                    if model.searching {
+                        Text(DriveLogic.searchFolder(entry.folderPath)).foregroundStyle(.secondary)
+                    } else if entry.isFolder {
+                        Text("—").foregroundStyle(.tertiary)
+                    } else {
+                        DriveWriterLabel(model: model, writer: entry.lastWriter)
+                    }
                 }
+                .modifier(MarkedCell(marked: marked(entry)))
             }
             .width(min: 110, ideal: 170)
             TableColumn("Size") { entry in
                 Text(DriveLogic.sizeColumn(entry, folderCount: model.folderCounts[entry.id]))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .modifier(MarkedCell(marked: marked(entry)))
             }
             .width(min: 56, ideal: 70)
             TableColumn("Modified") { entry in
                 Text(DriveLogic.formatWhen(entry.mtime)).foregroundStyle(.secondary)
+                    .modifier(MarkedCell(marked: marked(entry)))
             }
             .width(min: 64, ideal: 80)
         } rows: {
@@ -137,6 +186,7 @@ private struct DriveListColumn: View {
             rowMenu(ids)
         } primaryAction: { ids in
             guard ids.count == 1, let entry = model.rows.first(where: { $0.id == ids.first }) else { return }
+            app.driveChat?.opened(entry.id)
             if entry.isFolder {
                 model.open(folder: entry.id)
             } else if model.searching {
@@ -169,6 +219,8 @@ private struct DriveListColumn: View {
                     .onExitCommand { renaming = nil }
             } else {
                 Text(entry.name).lineLimit(1).truncationMode(.middle)
+                // What a Drive chat made, moved in or renamed, until the row is opened (board drive-chat 02 ②).
+                if let mark = app.driveChat?.mark(entry.id) { DriveMarkPill(mark: mark) }
                 if model.link(of: entry) != nil {
                     Image(systemName: "link").font(.orbitMeta).foregroundStyle(.secondary)
                         .accessibilityLabel("Shared")
@@ -304,6 +356,19 @@ private struct DriveListColumn: View {
             }
         }
         group.notify(queue: .main) { if !urls.isEmpty { done(urls) } }
+    }
+}
+
+/// A marked row's cell: the light green ground runs under the whole row, past the cell's own insets.
+private struct MarkedCell: ViewModifier {
+    let marked: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                if marked { Color.driveMarkedRow.padding(.horizontal, -8).padding(.vertical, -6) }
+            }
     }
 }
 

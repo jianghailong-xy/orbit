@@ -943,7 +943,7 @@ export class SessionsController {
   }
 
   /** What the Move panel shows: this workspace's folders, the other workspaces the session can or
-   *  cannot move to and why, and whether it has to be ended first. See SessionsService.moveTargets. */
+   *  cannot move to and why, and whether the move releases it first. See SessionsService.moveTargets. */
   @PatScope('sessions:read', { workspaceConfinable: false })
   @Get(':id/move-targets')
   moveTargets(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
@@ -951,7 +951,7 @@ export class SessionsController {
   }
 
   /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted);
-   *  with a `workspaceId` other than its own, move an ended session to that workspace (and folder).
+   *  with a `workspaceId` other than its own, move the session to that workspace (and folder), releasing an idle one first.
    *  A move the rules refuse is a 409 with the reason. See SessionsService.move. */
   @PatScope('sessions:write', { workspaceConfinable: false })
   @Post(':id/move')

@@ -66,6 +66,10 @@ type fakeWorkGateway struct {
 	// onStream, when set, takes each byte stream frame a connection carries (link_streams_test.go), on its reading
 	// goroutine.
 	onStream func(c *fakeWorkConn, f *linkpb.Frame)
+	// onMessage, when set, takes every message a connection reads, before it is joined (link_slow_path_test.go).
+	onMessage func(c *fakeWorkConn, data []byte)
+	// pings counts the pings the runner's connections sent.
+	pings atomic.Int64
 
 	conns      []*fakeWorkConn
 	upgrades   []time.Time
@@ -178,7 +182,10 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	ws, err := websocket.Accept(w, r, nil)
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{OnPingReceived: func(context.Context, []byte) bool {
+		g.pings.Add(1)
+		return true
+	}})
 	if err != nil {
 		return
 	}
@@ -195,6 +202,12 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 			_, data, err := ws.Read(context.Background())
 			if err != nil {
 				return nil, err
+			}
+			g.mu.Lock()
+			onMessage := g.onMessage
+			g.mu.Unlock()
+			if onMessage != nil {
+				onMessage(c, data)
 			}
 			var f linkpb.Frame
 			if err := proto.Unmarshal(data, &f); err != nil {
@@ -570,6 +583,7 @@ func newLinkWorkRig(t *testing.T) *linkWorkRig {
 	r.m = newLinkMode(r.t, r.logs.log)
 	r.trust(g.roots(), nil)
 	r.m.work.pingEvery, r.m.work.pingTimeout = 200*time.Millisecond, 2*time.Second
+	r.m.work.youngBackoff = 0 // the tests that reconnect would each wait up to 8 s; the R7 tests set it
 	r.t.link = r.m
 	t.Cleanup(r.m.close)
 	return r

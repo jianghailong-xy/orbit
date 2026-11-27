@@ -88,7 +88,6 @@ import {
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
-import { engineNamingJob } from '../sessions/naming';
 import {
   batchActiveTurns,
   overCapacityPassPendingSql,
@@ -126,6 +125,7 @@ import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 import { holdNoticeSql } from './hold-notice';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
+import { chatFiledItsOpening } from '../sessions/chat-opening';
 import {
   runAccessLevel,
   scheduleRunAgentFields,
@@ -1007,10 +1007,10 @@ export class QueueService {
     // @@unique([sessionId, seq]) for the seq the message had already taken, after committing the
     // session to RUNNING.
     //
-    // And a wiki chat lays no turn down here: its opening turn was filed with the session, under the
-    // owner's own UUID (SessionsService.writeChat), so its words are first-hand. A seed under
+    // And a wiki chat or a Drive chat lays no turn down here: its opening turn was filed with the session, under
+    // the owner's own UUID (SessionsService.writeChat), so its words are first-hand. A seed under
     // `initial-` would hand the engine the same message twice.
-    if (!session.importedAt && session.prompt !== '' && !session.wikiChatSpaceId) {
+    if (!session.importedAt && session.prompt !== '' && !chatFiledItsOpening(session)) {
       await withTransactionRetry(this.prisma, async (tx) => {
         await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
         const seedClientTurnId = `initial-${session.id}`;
@@ -1239,9 +1239,6 @@ export class QueueService {
         ? ((await forkAuthorityBindings(this.prisma, [session])).get(session.id) ?? null)
         : await this.sourceBinding(session.sourceCodebaseId),
     );
-    // A session nothing else will name is named by the engine about to run it (engineNamingJob). An Ask is not:
-    // its title is its first question, and no model is asked for another (help-ask.ts; board 03).
-    const naming = session.helpAsk == null ? engineNamingJob(session, provider, configuredRow) : undefined;
     return {
       sessionId: session.id,
       provider,
@@ -1397,7 +1394,8 @@ export class QueueService {
         env: exec.env,
       },
       source,
-      ...(naming ? { naming } : {}),
+      // No `naming`: a session is titled only on the server's DeepSeek key (SessionsService.beautifySessionLater),
+      // never by the engine running it on the session's own provider.
     };
   }
 

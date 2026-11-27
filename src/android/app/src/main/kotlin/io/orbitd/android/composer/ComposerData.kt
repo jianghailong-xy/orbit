@@ -41,11 +41,28 @@ data class ComposerDraft(val text: String = "", val selectionStart: Int = 0, val
     val attachments: List<StagedAttachment> = emptyList(), val pending: PendingSend? = null,
     val resumeConfig: JsonObject = JsonObject(emptyMap()), val createdSessionId: String? = null)
 
-data class DraftTarget(val workspaceId: String, val folderId: String? = null, val runnerId: String? = null) {
+data class DraftTarget(val workspaceId: String, val folderId: String? = null, val runnerId: String? = null,
+    /** A page's chat whose first message opens it through the page's own door ([ChatDoor]): "drive". Its draft is its own. */
+    val chat: String? = null) {
     val isMachineDraft get() = runnerId != null && workspaceId.isEmpty()
     val key get() = if (isMachineDraft) "new-session:runner:${ObjectId.canonical(runnerId!!) ?: runnerId}"
+        else if (chat != null) "new-chat:$chat:${ObjectId.canonical(workspaceId) ?: workspaceId}"
         else "new-session:${ObjectId.canonical(workspaceId) ?: workspaceId}:${folderId?.let(ObjectId::canonical) ?: folderId.orEmpty()}"
 }
+
+/**
+ * How a page's chat (PageChat) sends through the composer: the door its first message opens the chat by — `POST /api/drive/chats`
+ * for Drive, in place of `POST /sessions` — and what every later message carries beside its words (`{ driveContext }`). Set on the
+ * composer by the page while it shows the chat.
+ */
+class ChatDoor(
+    /** The create's path, under the API's root. */
+    val createPath: List<String>,
+    /** The create's body from the words, the turn's id, the composer's picks (model, effort, mode) and the files sent. */
+    val createBody: (text: String, clientTurnId: String, config: JsonObject, attachmentIds: List<String>) -> JsonObject,
+    /** What a later message carries beside its words, or null for nothing. */
+    val turnExtra: () -> JsonObject? = { null },
+)
 
 data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded: Boolean = false,
     val busy: Boolean = false, val waiting: Boolean = false, val error: String? = null,

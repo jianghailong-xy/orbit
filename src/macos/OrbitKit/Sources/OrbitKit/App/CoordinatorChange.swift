@@ -30,9 +30,8 @@ public enum CoordinatorChangeCopy {
 
     /// The confirmation when the conversation can come along: both ways, the move first. `files` is
     /// the sentence about changes left on the branch (`SessionMoveCopy.filesSentence`), when there are any.
-    public static func moveParagraphs(to: String, from: String, needsEnd: Bool, files: String?) -> [String] {
+    public static func moveParagraphs(to: String, from: String, files: String?) -> [String] {
         var move = ["this conversation goes to \(to) and continues there."]
-        if needsEnd { move.append("It ends first.") }
         if let files { move.append(files) }
         return [
             "Move conversation: \(move.joined(separator: " "))",

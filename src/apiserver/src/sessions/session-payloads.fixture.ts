@@ -56,6 +56,7 @@ export const FIXTURE_CASES: readonly FixtureCase[] = [
   { label: 'SUCCEEDED', status: RunStatus.SUCCEEDED, row: { endReason: 'task_done', lastTurnOutcome: 'ANSWERED' } },
   { label: 'FAILED', status: RunStatus.FAILED, row: { lastTurnOutcome: 'FAILED', error: 'engine exited' } },
   { label: 'CANCELLED', status: RunStatus.CANCELLED, row: { endReason: 'ended', lastTurnOutcome: 'ANSWERED' } },
+  { label: 'released by a move', status: RunStatus.CANCELLED, row: { endReason: 'moved', lastTurnOutcome: 'ANSWERED' } },
   {
     label: 'job running',
     status: RunStatus.AWAITING_INPUT,

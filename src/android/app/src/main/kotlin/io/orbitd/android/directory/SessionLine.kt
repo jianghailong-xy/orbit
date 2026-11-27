@@ -88,10 +88,12 @@ data class SessionLine(val text: String, val tone: Tone) {
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
             if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
-            // Parked on a live watch that will resume it, in the Watching strip's own line.
-            if (live && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
+            // Parked on a live watch that will resume it, in the Watching strip's own line. Not for a session the server calls
+            // IDLE: a wake to come needs no words of its own (the owner, 2026-11-27; web `resumeWords`).
+            val idle = SessionDisplay.state(s.displayFacts) == SessionDisplayState.IDLE
+            if (live && !idle && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
             // The same place for a wait the server reports and this caller holds no watch for (OrbitKit `resumesOnItsOwn`).
-            if (live && s.resumesOnItsOwn) return SessionLine(SessionLineCopy.waitingToResume, Tone.WATCHING)
+            if (live && !idle && s.resumesOnItsOwn) return SessionLine(SessionLineCopy.waitingToResume, Tone.WATCHING)
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
             s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
@@ -286,6 +288,8 @@ internal val DirectorySession.effectiveRunState: RunState get() {
  * released, and null when the payload carries no `released` (an older server). */
 internal val DirectorySession.releasedRunState: RunState? get() {
     if (released != true) return null
+    // A move let it go: to its reader it is the idle session it was (SessionFacts.releasedByMove).
+    if (SessionFacts.releasedByMove(released, endReason)) return RunState.AWAITING_INPUT
     return when (SessionFacts.afterRelease(endReason, lastTurnOutcome, workFinished, isLanding)) {
         "FINISHED" -> RunState.SUCCEEDED
         "FAILED" -> RunState.FAILED

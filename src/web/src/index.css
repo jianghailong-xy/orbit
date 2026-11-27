@@ -14752,6 +14752,15 @@ button.chat-jump-start:hover {
   font-weight: 600;
   letter-spacing: 0.04em;
 }
+.evidence-decision-submitted {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.evidence-decision-submitted + .criteria-provenance {
+  margin-left: 8px;
+}
 .criteria-decision .approval-body {
   background: var(--bg-raised);
   padding: 10px 14px 4px;
@@ -15397,24 +15406,58 @@ button.chat-jump-start:hover {
     width: 40px;
     height: 40px;
   }
-  .tdp-head-actions {
+  .tdp-head > .tdp-head-actions {
     order: 2;
     flex: 1 1 100%;
     flex-wrap: wrap;
     gap: 8px;
   }
-  .tdp-head-actions > * {
+  .tdp-head > .tdp-head-actions > * {
     flex: 1 1 0;
   }
-  .tdp-head-actions > .orbit-button {
+  .tdp-head > .tdp-head-actions > .orbit-button {
     height: 40px;
   }
   /* Run now sits in a span — the Tooltip needs it to still fire while the button is disabled —
      and the running-session case in a Link. Stretch what is inside those two as well. */
-  .tdp-head-actions > a > .orbit-button,
-  .tdp-head-actions > span > .orbit-button {
+  .tdp-head > .tdp-head-actions > a > .orbit-button,
+  .tdp-head > .tdp-head-actions > span > .orbit-button {
     flex: 1;
     height: 40px;
+  }
+}
+/* The task panel's header: a first row with the project (when there is one) on the left and the
+   presses on the right, and the title in the row below with the panel's whole width. Beside the
+   presses it was squeezed to ~180px in a 420px panel (docs/mocks/task-panel-header, A). */
+.tdp-head.has-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding-top: 12px;
+}
+.tdp-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 32px;
+  margin-bottom: 6px;
+}
+.tdp-toolbar > .tdp-project-line {
+  flex: 1 1 160px;
+  margin: 0;
+}
+.tdp-toolbar > .tdp-head-actions {
+  margin-left: auto;
+}
+/* Phone: the same rows, at the 40px touch target the composer's buttons take at this width. */
+@media (max-width: 600px) {
+  .tdp-toolbar > .orbit-button-icon-only,
+  .tdp-toolbar > .tdp-head-actions .orbit-button {
+    height: 40px;
+  }
+  .tdp-toolbar > .orbit-button-icon-only {
+    width: 40px;
   }
 }
 .tdp-title {
@@ -15422,7 +15465,8 @@ button.chat-jump-start:hover {
   font-weight: 600;
   color: var(--text-1);
   line-height: 1.4;
-  word-break: break-word;
+  /* Break inside a word only when the word is wider than the line. */
+  overflow-wrap: break-word;
 }
 .tdp-meta {
   display: flex;
@@ -15515,6 +15559,8 @@ button.chat-jump-start:hover {
   align-items: center;
   gap: 5px;
   width: fit-content;
+  max-width: 100%;
+  white-space: nowrap;
   margin-top: 10px;
   padding: 0 8px;
   border: 1px solid var(--border-subtle);
@@ -15523,6 +15569,11 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   font-size: 12px;
   line-height: 20px;
+}
+/* One line: a narrow panel cuts the method short rather than wrapping the pill. */
+.tdp-judgment > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tdp-judgment.is-judged .anticon {
   color: var(--success-solid);
@@ -21065,87 +21116,112 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-3);
 }
-/* The ordinary empty state: the engine, where it runs, then the instruction. The model is said once,
-   in the composer (docs/mocks/new-session-top ③). */
-.np-empty-copy {
-  margin-top: 20px;
-  font-size: 17px;
-  color: var(--text-3);
-}
-/* `in [workspace ▾] › [folder ▾]` under the engine (docs/mocks/new-session-top ②⑤): quiet chips, grey on hover,
-   tinted while their menu is open, like the engine's name above them. */
+/* Where the session runs, under the engine (docs/mocks/new-session-place, option A): one bordered pill,
+   `[workspace] / [folder] ▾`, grey on hover, tinted while its menu is open. */
 .np-place {
   display: flex;
-  align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 2px;
-  margin-top: 6px;
+  margin-top: 8px;
   max-width: 100%;
+}
+.np-place-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  max-width: 100%;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.np-place-pill:hover {
+  background: var(--bg-hover);
+}
+.np-place-pill.open {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+  box-shadow: 0 0 0 3px var(--brand-tint);
+}
+.np-place-pill > .anticon {
+  flex: none;
   font-size: 13px;
   color: var(--text-3);
 }
-.np-place-in {
-  margin-right: 2px;
+.np-place-pill.open > .anticon,
+.np-place-pill.open .np-chev {
+  color: var(--brand-strong);
 }
-.np-place-sep {
+.np-place-slash {
   color: var(--text-4);
-}
-.np-place-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  max-width: 220px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: var(--text-2);
-  font: inherit;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.np-place-chip:hover {
-  background: var(--bg-hover);
-}
-.np-place-chip.open {
-  background: var(--brand-tint);
-  color: var(--brand-strong);
-}
-.np-place-chip.open .np-chev {
-  color: var(--brand-strong);
-}
-.np-place-chip > .anticon {
-  flex: none;
-  font-size: 13px;
 }
 .np-place-name {
   min-width: 0;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.np-place-list {
-  width: 260px;
-  max-height: 360px;
-  overflow-y: auto;
+/* Its menu (docs/mocks/new-session-place 02, option D): the workspaces, each with its folders one level down, under a
+   search pinned over the list. */
+.orbit-menu.np-place-menu {
+  width: 300px;
+  max-height: min(440px, var(--available-height));
 }
-.np-place-list .np-row > .anticon {
-  flex: none;
+.orbit-menu.np-place-level {
+  width: 250px;
+  max-height: min(400px, var(--available-height));
+}
+.np-place-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 8px 0;
+  padding: 0 10px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--bg-hover);
   color: var(--text-3);
 }
-.np-place-check {
-  margin-left: auto;
-  color: var(--brand);
+.np-place-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-1);
 }
-/* A phone has no room for the icons: the names and their ▾ (board ⑥). */
+.np-place-ws {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.np-place-count,
+.np-place-where {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-4);
+}
+.np-place-where {
+  margin-left: 8px;
+}
+/* None, a level's empty choice: plain text, no icon. */
+.orbit-menu-item.np-place-none:not([data-selected]) {
+  color: var(--text-2);
+}
+/* A phone: each name stops sooner. */
 @media (max-width: 960px) {
-  .np-place-chip > .anticon {
-    display: none;
-  }
-  .np-place-chip {
-    max-width: 160px;
+  .np-place-name {
+    max-width: 130px;
   }
 }
 .np-card {
@@ -29885,6 +29961,11 @@ button.agent-progress-agent:hover {
 .wk-chat-choice .m { font-size: 12px; color: var(--text-3); }
 .wk-chat-body { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
 .wk-chat-empty { margin: 34px 16px; text-align: center; font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
+/* A new Drive chat's examples under its empty state (board drive-chat 01 ②): a press fills the box and sends nothing. */
+.wk-chat-examples { margin: 14px 0 0; padding-left: 18px; text-align: left; font-size: 12.5px; color: var(--text-2); }
+.wk-chat-examples li { margin: 4px 0; }
+.wk-chat-example { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.wk-chat-example:hover { color: var(--brand); }
 /* The panel's composer is the session page's (board 43): its box 12px in from the panel's edges, as the short one it
    replaced was — 374 wide in the default panel, where its toolbar keeps one line as it is. Dragged narrower (to 320),
    the toolbar does what the session page's does on a phone (the 600px block of .composer-toolbar): tighter gaps, the
@@ -31727,42 +31808,60 @@ td > .routing-report-tier + .model-routing-flag {
 
   /* Drive: with a file's details open, the head, folders and list are one panel and the details
      another. The body steps aside (display: contents) so the details can stand beside the head too. */
-  .app-shell .app-main > .app-view:has(> .files-page .files-pane) {
+  .app-shell .app-main > .app-view:has(.files-page .files-pane:not(.is-over)) {
     background: none;
     border: 0;
     border-radius: 0;
     box-shadow: none;
   }
-  .app-shell .files-page:has(.files-pane) {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) {
     display: grid;
     grid-template-columns: 220px minmax(0, 1fr) auto;
     grid-template-rows: auto minmax(0, 1fr);
   }
-  .app-shell .files-page:has(.files-pane) > .files-body {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) > .files-body {
     display: contents;
   }
-  .app-shell .files-page:has(.files-pane) > .files-head {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) > .files-head {
     grid-column: 1 / 3;
     background: var(--bg-base);
     border: 1px solid var(--border-subtle);
     border-radius: var(--panel-radius) var(--panel-radius) 0 0;
   }
-  .app-shell .files-page:has(.files-pane) .files-tree {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) .files-tree {
     background: var(--bg-base);
     border-left: 1px solid var(--border-subtle);
     border-bottom: 1px solid var(--border-subtle);
     border-radius: 0 0 0 var(--panel-radius);
   }
-  .app-shell .files-page:has(.files-pane) .files-list-wrap {
+  .app-shell .files-page:has(.files-pane:not(.is-over)) .files-list-wrap {
     background: var(--bg-base);
     border-right: 1px solid var(--border-subtle);
     border-bottom: 1px solid var(--border-subtle);
     border-radius: 0 0 var(--panel-radius) 0;
   }
-  .app-shell .files-page .files-pane {
+  .app-shell .files-page .files-pane:not(.is-over) {
     grid-column: 3;
     grid-row: 1 / 3;
     margin-left: var(--panel-gap);
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+  }
+  /* Drive with its chat docked (board drive-chat 01 ②): the files and the chat are two panels on the canvas. The chat's
+     host steps aside, so the files page is the panel — or, with a file's details open, its own panels are. */
+  .app-shell .wk-chat-frame.is-drive.is-columned:has(> :is(.wk-chat-panel, .wk-chat-slot)) > .wk-chat-host {
+    padding: 0;
+    overflow: hidden;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .wk-chat-frame.is-drive.is-columned > .wk-chat-host > .files-page:not(:has(.files-pane:not(.is-over))) {
+    box-sizing: border-box;
+    overflow: hidden;
     background: var(--bg-base);
     border: 1px solid var(--border-subtle);
     border-radius: var(--panel-radius);

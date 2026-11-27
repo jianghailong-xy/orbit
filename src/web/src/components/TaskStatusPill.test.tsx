@@ -51,10 +51,10 @@ describe('TaskStatusPill on a live run, as the board draws it', () => {
   };
 
   // taskRunOverlay answers WAITING for all three: a RESUME_SESSION watch, a scheduled wake-up, an armed retry.
-  it('reads "Idle" with Will resume for a parked run a watch or an armed retry will wake', () => {
+  it('reads a plain "Idle" for a parked run a watch or an armed retry will wake', () => {
     const html = renderToStaticMarkup(<TaskStatusPill {...row} runReason="WAITING" />);
-    expect(html).toMatch(/^<span class="task-status-pill-run"><span class="status-pill todo">.*?data-state="IDLE".*?<circle .*?>Idle<\/span>/);
-    expect(draw({ ...row, runReason: 'WAITING' })).toEqual({ text: 'IdleWill resume', marks: ['WILL_RESUME'] });
+    expect(html).toMatch(/^<span class="status-pill todo">.*?data-state="IDLE".*?<circle .*?>Idle<\/span>$/);
+    expect(draw({ ...row, runReason: 'WAITING' })).toEqual({ text: 'Idle', marks: [] });
   });
   // A failed turn with a retry armed has released its session (Idle, Retrying on the session's own surfaces), so it
   // carries no task: the row says no run is live, and the pill keeps the task's own lifecycle word.

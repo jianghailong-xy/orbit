@@ -150,6 +150,10 @@ func linkProgressKind(eventType string, payload map[string]interface{}) string {
 // linkTrimFieldBytes is the largest top-level field of a payload a trimmed event keeps.
 const linkTrimFieldBytes = 4 << 10
 
+// linkTrimmedMaxBytes is the most a trimmed payload of kept fields may take; past it, only the size is kept. It was
+// linkBatchMaxBytes when that was 1 MiB, and stays 1 MiB now that a batch is smaller.
+const linkTrimmedMaxBytes = 1 << 20
+
 // linkTrimmedPayload is what an event whose payload the link cannot carry goes with instead: every top-level field of
 // at most linkTrimFieldBytes, how many bytes the payload had (omittedBytes), and the names of the fields left out
 // (omittedFields). Ids, flags and short texts survive, so the event still reads as what it was.
@@ -168,7 +172,7 @@ func linkTrimmedPayload(payload map[string]interface{}, size int) []byte {
 	out["omittedBytes"] = size
 	out["omittedFields"] = omitted
 	b, err := json.Marshal(out)
-	if err != nil || len(b) > linkBatchMaxBytes {
+	if err != nil || len(b) > linkTrimmedMaxBytes {
 		// So many small fields that even they are too much: the size is all that is left.
 		b, _ = json.Marshal(map[string]interface{}{"omittedBytes": size, "omittedFields": []string{"*"}})
 	}

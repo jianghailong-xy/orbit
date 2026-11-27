@@ -53,7 +53,7 @@ import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
   RUNNER_SILENT_AFTER_MS,
   RunnerPresenceService,
-  runnerLastBeatAt,
+  runnerPresentAt,
   type CellLosses,
   type RunnerBeats,
 } from '../runners/runner-presence';
@@ -183,7 +183,7 @@ function massDisconnectOf(
   runner: RunnerBeats | null | undefined,
   now: number,
 ): MassDisconnect | undefined {
-  const beat = runnerLastBeatAt(runner)?.getTime();
+  const beat = runnerPresentAt(runner)?.getTime();
   if (beat === undefined || now - beat > MASS_DISCONNECT_HOLD_MS) return undefined;
   return disconnects.find((d) => d.from <= beat && beat <= d.to);
 }
@@ -252,7 +252,7 @@ function runnerLooksOffline(
   if (!runner) return true;
   if (claimedAt && now - claimedAt.getTime() <= RUNNER_REAP_AFTER_MS) return false;
   if (signedOff(runner)) return true;
-  return now - (runnerLastBeatAt(runner)?.getTime() ?? 0) > RUNNER_REAP_AFTER_MS;
+  return now - (runnerPresentAt(runner)?.getTime() ?? 0) > RUNNER_REAP_AFTER_MS;
 }
 
 /**

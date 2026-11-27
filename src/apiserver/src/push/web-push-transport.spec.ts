@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { createECDH, createPublicKey, verify } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { uuidToBase62 } from '@orbit/shared';
@@ -62,6 +64,21 @@ function browserKeys() {
 
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/sub-1';
 const ALERT = { v: 1, type: 'alert', title: 'T', body: 'B', tag: 't', url: '/' } as const;
+
+test('a decision card opens, in the browser, the conversation its card is drawn in — a project’s too', () => {
+  // The send PushService makes for an evidence card (the shared Android fixture's `decision-card` sample).
+  const sample = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'))
+    .samples.find((candidate: { name: string }) => candidate.name === 'decision-card');
+  assert.ok(sample, 'the shared Android fixture has no decision-card sample');
+  const evidence = webPushMessage(JSON.stringify(sample.source), 'alert', sample.collapseId);
+  assert.deepEqual(evidence, {
+    v: 1, type: 'alert', title: 'Archive the August receipts', body: 'Does this evidence settle the task? · Revision 1',
+    tag: sample.collapseId, url: `/sessions/${uuidToBase62(sample.source.sessionID)}`,
+  });
+  // A project's card names its project too; the tap still opens the coordinator conversation, where the card is.
+  const project = webPushMessage(JSON.stringify({ ...sample.source, cardKind: 'DONE_REQUEST', projectID: SESSION }), 'alert', 'k');
+  assert.equal(project && 'url' in project ? project.url : null, `/sessions/${uuidToBase62(sample.source.sessionID)}`);
+});
 
 test('a send carries a VAPID JWT for the push service\'s origin, signed by the configured key', async () => {
   const keys = vapidKeys();

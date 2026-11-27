@@ -7,7 +7,6 @@ import {
   folderNameFailure,
   foldersByName,
   listShowsFolders,
-  moveConfirmAction,
   moveConfirmParagraphs,
   moveConfirmTitle,
   moveFailureText,
@@ -15,7 +14,6 @@ import {
   moveTargetFooter,
   moveTargetRows,
   movedToFolderToast,
-  runWorkspaceMove,
   sessionFolderListing,
   sessionsInFolder,
 } from './sessionFolders';
@@ -203,15 +201,13 @@ describe('a workspace step', () => {
 });
 
 describe('the confirmation', () => {
-  it('names unmerged changes, a rebuilt conversation and an end first', () => {
+  it('names unmerged changes and a rebuilt conversation, and says nothing of the server letting an idle session go', () => {
     const a = answer({ needsEnd: true, branch: 'orbit/review-import-3fa21c', changedFiles: 4, unmergedFiles: 3, mergeTarget: 'main' });
     expect(moveConfirmParagraphs(a, target({ conversation: 'rebuilt' }), 'orbit')).toEqual([
       'The conversation moves with it. Your next message continues it in wikova-develop.',
       'Earlier parts of the conversation are summarized for the agent.',
       '3 changed files aren’t merged into main yet. They stay on branch orbit/review-import-3fa21c in orbit.',
-      'The session ends first.',
     ]);
-    expect(moveConfirmAction(a)).toBe('End and Move');
   });
 
   it('says one unmerged file in the singular, and merged changes plainly', () => {
@@ -221,7 +217,6 @@ describe('the confirmation', () => {
     );
     const merged = answer({ branch: 'b', changedFiles: 2, unmergedFiles: 0 });
     expect(moveConfirmParagraphs(merged, target(), 'orbit')[1]).toBe('Changes made so far stay on branch b in orbit.');
-    expect(moveConfirmAction(merged)).toBe('Move');
   });
 
   it('shows only the reason, preserving the server’s words and punctuation', () => {
@@ -233,90 +228,10 @@ describe('the confirmation', () => {
   });
 });
 
-describe('runWorkspaceMove', () => {
-  const noSleep = async () => {};
-
-  it('moves an ended session straight away', async () => {
-    const calls: string[] = [];
-    const out = await runWorkspaceMove({
-      endingFirst: false,
-      end: async () => calls.push('end'),
-      ended: async () => true,
-      move: async () => calls.push('move'),
-      phase: (p) => calls.push(p),
-      sleep: noSleep,
-    });
-    expect(out).toBeNull();
-    expect(calls).toEqual(['moving', 'move']);
-  });
-
-  it('ends first, waits until the session has ended, then moves', async () => {
-    const calls: string[] = [];
-    let looks = 0;
-    const out = await runWorkspaceMove({
-      endingFirst: true,
-      end: async () => calls.push('end'),
-      ended: async () => ++looks >= 3,
-      move: async () => calls.push('move'),
-      phase: (p) => calls.push(p),
-      sleep: noSleep,
-    });
-    expect(out).toBeNull();
-    expect(calls).toEqual(['ending', 'end', 'moving', 'move']);
-    expect(looks).toBe(3);
-  });
-
-  it('waits on a session already ending (409), and stops on any other end failure', async () => {
-    const already = await runWorkspaceMove({
-      endingFirst: true,
-      end: async () => {
-        throw new ApiError('already ending', 409);
-      },
-      ended: async () => true,
-      move: async () => {},
-      sleep: noSleep,
-    });
-    expect(already).toBeNull();
-    const failed = await runWorkspaceMove({
-      endingFirst: true,
-      end: async () => {
-        throw new ApiError('runner offline', 503);
-      },
-      ended: async () => true,
-      move: async () => {},
-      sleep: noSleep,
-    });
-    expect(failed).toBe('The session couldn’t be ended, so it wasn’t moved: runner offline.');
-  });
-
-  it('gives up when the session never ends, and says why a move was refused', async () => {
-    const timedOut = await runWorkspaceMove({
-      endingFirst: true,
-      end: async () => {},
-      ended: async () => false,
-      move: async () => {},
-      sleep: noSleep,
-      timeoutMs: 3,
-      intervalMs: 1,
-    });
-    expect(timedOut).toBe('The session hasn’t finished ending, so it wasn’t moved. Try again once it has ended.');
-    const refused = await runWorkspaceMove({
-      endingFirst: false,
-      end: async () => {},
-      ended: async () => true,
-      move: async () => {
-        throw new ApiError('The session woke up; stop it first.', 409);
-      },
-      sleep: noSleep,
-    });
-    expect(refused).toBe('The session woke up; stop it first.');
-  });
-});
-
 describe('a project’s coordinator in the Move panel', () => {
   const coordinates = { projectId: 'p1', title: 'Session list redesign' };
 
-  it('says the project goes with it, and what an ended coordinator misses', () => {
+  it('says the project goes with it, and where Orbit’s updates wait once a held coordinator is let go', () => {
     const a = answer({ coordinates, needsEnd: true, branch: 'b', changedFiles: 3, unmergedFiles: 3, mergeTarget: 'main' });
     expect(moveConfirmTitle(target({ name: 'orbit-prod' }), a)).toBe('Move the coordinator to orbit-prod?');
     expect(moveConfirmTitle(target({ name: 'orbit-prod' }), answer())).toBe('Move to orbit-prod?');
@@ -324,7 +239,9 @@ describe('a project’s coordinator in the Move panel', () => {
       'The conversation moves with it. Your next message continues it in orbit-prod.',
       'Session list redesign is coordinated from orbit-prod from now on, and its row moves to orbit-prod’s list. Its tasks keep running where they are.',
       '3 changed files aren’t merged into main yet. They stay on branch b in orbit.',
-      'The session ends first. Until you message it again, Orbit’s updates for the project wait on the project page.',
+      'Until you message it again, Orbit’s updates for the project wait on the project page.',
     ]);
+    // One already released has nothing to add.
+    expect(moveConfirmParagraphs({ ...a, needsEnd: false }, target({ name: 'orbit-prod' }), 'orbit')).toHaveLength(3);
   });
 });

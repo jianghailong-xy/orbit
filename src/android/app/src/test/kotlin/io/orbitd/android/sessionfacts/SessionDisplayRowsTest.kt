@@ -125,7 +125,8 @@ class SessionDisplayRowsTest {
     @Test fun row28_engineStartedItsOwnTurn_withoutFacts_drawsToday() = withoutFacts(28)
     @Test fun row29_subAgentRunning_withFacts_isRunningWithNoMarkInWorking() = withFacts(29, R, listOf(), "Working")
     @Test fun row30_subAgentRunning_withoutFacts_drawsToday() = withoutFacts(30)
-    @Test fun row31_willWake_withFacts_isIdleWillResume() = withFacts(31, I, listOf("Will resume"), "-")
+    // Idle is Idle: a watch or wake-up to come draws no mark (the owner, 2026-11-27).
+    @Test fun row31_willWake_withFacts_isPlainIdle() = withFacts(31, I, listOf(), "-")
     @Test fun row32_willWake_withoutFacts_drawsToday() = withoutFacts(32)
     @Test fun row33_unknownStatusHeld_withFacts_isIdleWithNoMark() = withFacts(33, I, listOf(), "-")
     @Test fun row34_unknownStatusHeld_withoutFacts_drawsToday() = withoutFacts(34)

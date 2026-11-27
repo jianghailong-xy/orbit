@@ -119,6 +119,8 @@ type testConn struct {
 	done   chan struct{}
 	err    error
 	outID  uint64
+	// pieces counts the Chunks read, which read joins before frames sees them.
+	pieces atomic.Int64
 }
 
 // dial upgrades with token; a refusal comes back as the HTTP response.
@@ -163,8 +165,11 @@ func helloFrame(process string) *linkpb.Frame {
 	}}}
 }
 
+// read takes the gateway's frames, joining those it sends in pieces (Chunk) as a runner does.
 func (tc *testConn) read() {
 	defer close(tc.done)
+	var chunks reassembler
+	defer chunks.close()
 	for {
 		_, data, err := tc.ws.Read(context.Background())
 		if err != nil {
@@ -175,6 +180,16 @@ func (tc *testConn) read() {
 		if err := proto.Unmarshal(data, f); err != nil {
 			tc.err = err
 			return
+		}
+		if c := f.GetChunk(); c != nil {
+			tc.pieces.Add(1)
+			if f, err = chunks.add(c); err != nil {
+				tc.err = err
+				return
+			}
+			if f == nil {
+				continue
+			}
 		}
 		tc.frames <- f
 	}
