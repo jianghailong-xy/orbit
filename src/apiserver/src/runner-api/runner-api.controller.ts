@@ -207,10 +207,7 @@ import {
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import type { TaskRunsWith } from '../workspaces/start-anchor';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
-import {
-  normalizeBuiltinPermissionMode,
-  normalizeEffortForRuntimeModel,
-} from '../common/runtime-provider';
+import { normalizeEffortForRuntimeModel } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import {
   reportsSuccessWithNoEnd,
@@ -255,6 +252,7 @@ import {
 } from '../projects/coordinator-opening';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
+import { claimPermissionMode, claimPermissionModeLogLine } from '../queue/claim-permission-mode';
 import { QueueService } from '../queue/queue.service';
 import { approvalRequestEvent, RealtimeService, type RestatedSeqs } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -621,7 +619,6 @@ import {
   checkOnlyRuleCoversApproval,
   runAccessLevel,
   scheduleRunAgentFields,
-  scheduleRunPermissionMode,
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
@@ -4723,18 +4720,22 @@ export class RunnerApiController {
       const [maxSeqRow] = await this.prisma.$queryRaw<Array<{ max: number }>>`
         SELECT coalesce(max("seq"), 0) AS "max" FROM "run_event" WHERE "session_id" = ${s.id}::uuid
       `;
-      const handedPermissionMode = normalizeBuiltinPermissionMode(
-        provider,
-        runnerModel,
-        // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
-        scheduleRunPermissionMode(permissionMode, runAccessLevel(s.scheduleRun), provider),
-        customRow?.enabled === true,
-        runner.runsAsRoot,
-        s.assignedRunner?.modelCatalog,
-      );
+      // As the claim hands it (QueueService.buildSession, claim-permission-mode.ts): the mode asked for but for the
+      // substitutions that are not predictions, each logged and recorded. The root check is this runner's own report.
+      const claimedMode = claimPermissionMode(provider, permissionMode, runAccessLevel(s.scheduleRun), runner.runsAsRoot);
+      const handedPermissionMode = claimedMode.mode;
+      if (claimedMode.substitution) {
+        this.logger.log(claimPermissionModeLogLine({
+          sessionId: s.id,
+          provider,
+          model: runnerModel,
+          mode: handedPermissionMode,
+          substitution: claimedMode.substitution,
+        }));
+      }
       // The reclaim re-spawns the engine in this mode: until it says otherwise, the session's actual mode, as a
       // claim's is (actual-permission-mode.ts).
-      await recordActualPermissionMode(this.prisma, s.id, handedPermissionMode, 'CLAIM');
+      await recordActualPermissionMode(this.prisma, s.id, handedPermissionMode, 'CLAIM', null, claimedMode.substitution);
       // The stored session model wins over Runtime/ModelProvider defaults, so a resumed process
       // keeps the model it was created with; cross-provider ids are still coerced safely.
       const workspaceCfg: AgentExecConfig = {

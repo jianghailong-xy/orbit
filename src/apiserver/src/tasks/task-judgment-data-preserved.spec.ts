@@ -3431,7 +3431,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1540 adds a partial index on activity. No preserved relation or row is changed.
       // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, to 1495 after main took
       // 1491, and to 1540 after other branches took 1495 (1537 the highest on any branch then).
-      '1540_default_permission_mode_audit'],
+      '1540_default_permission_mode_audit',
+      // 1740 adds the nullable session_permission_mode_change.requested_mode and .reason and one check on that table;
+      // it is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      // Numbered above main's 1730, the highest on any branch when it was written.
+      '1740_permission_mode_change_claim_substitution'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

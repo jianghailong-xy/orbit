@@ -77,10 +77,7 @@ import {
   poolSwitchNotice,
   selectPoolMember,
 } from '../providers/pool-select';
-import {
-  normalizeBuiltinPermissionMode,
-  normalizeEffortForRuntimeModel,
-} from '../common/runtime-provider';
+import { normalizeEffortForRuntimeModel } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
@@ -125,11 +122,11 @@ import { openingTurnId } from '../sessions/orbit-authored-turn';
 import {
   runAccessLevel,
   scheduleRunAgentFields,
-  scheduleRunPermissionMode,
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
 import { claimModelLogLine } from './claim-model-log';
+import { claimPermissionMode, claimPermissionModeLogLine } from './claim-permission-mode';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -1221,23 +1218,29 @@ export class QueueService {
     // A session nothing else will name is named by the engine about to run it (engineNamingJob). An Ask is not:
     // its title is its first question, and no model is asked for another (help-ask.ts; board 03).
     const naming = session.helpAsk == null ? engineNamingJob(session, provider, configuredRow) : undefined;
-    // Configured providers still borrow one of these runtimes, so the same runtime-level
-    // guard applies to API/MCP/old-client input as it does to built-in identities; their
-    // vendor-defined model space is exempt from the Claude allow-list though.
-    // The root check rides along here for the same reason: a Bypass default reaching a root
-    // runner is a session that exits during startup, and this is the last place before it does.
-    const handedPermissionMode = normalizeBuiltinPermissionMode(
+    // The mode as asked, but for the substitutions that are not predictions: a scheduled run on Claude Code runs in
+    // Auto, and Bypass reaching a root runner (a session that would exit during startup) runs as Auto. A Claude model
+    // whose catalogue row lists no Auto is handed Auto all the same: its engine says what it settles on, and the runner
+    // corrects it when it settles lower (claim-permission-mode.ts). Each substitution is logged and recorded.
+    const claimedMode = claimPermissionMode(
       provider,
-      runnerModel,
-      // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
-      scheduleRunPermissionMode(permissionMode, runAccessLevel(session.scheduleRun), provider),
-      customRow?.enabled === true,
+      permissionMode,
+      runAccessLevel(session.scheduleRun),
       session.assignedRunner?.runsAsRoot,
-      session.assignedRunner?.modelCatalog,
     );
+    const handedPermissionMode = claimedMode.mode;
+    if (claimedMode.substitution) {
+      this.logger.log(claimPermissionModeLogLine({
+        sessionId: session.id,
+        provider,
+        model: runnerModel,
+        mode: handedPermissionMode,
+        substitution: claimedMode.substitution,
+      }));
+    }
     // The mode this claim hands the runner is the session's actual mode until its engine says otherwise
     // (actual-permission-mode.ts): for an engine that reports none, it is the whole answer.
-    await recordActualPermissionMode(this.prisma, session.id, handedPermissionMode, 'CLAIM');
+    await recordActualPermissionMode(this.prisma, session.id, handedPermissionMode, 'CLAIM', null, claimedMode.substitution);
     return {
       sessionId: session.id,
       provider,

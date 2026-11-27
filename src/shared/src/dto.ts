@@ -262,6 +262,22 @@ export type PermissionModeChangeCause = (typeof PERMISSION_MODE_CHANGE_CAUSES)[n
 /** The system event subtype a runner reports a mode correction it made by itself with, carrying `mode`. */
 export const PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE = 'permission_mode_corrected';
 
+/**
+ * The system event subtype a runner reports a correction the engine would not take with (runner-go
+ * claude_mode_correction.go): `mode` is the mode the engine stays in, `requested` the one asked for, `reason` the
+ * engine's own words. Not a mode change: the mode recorded already is the one the engine said it settled on.
+ */
+export const PERMISSION_MODE_CORRECTION_FAILED_EVENT_SUBTYPE = 'permission_mode_correction_failed';
+
+/**
+ * Why a claim handed the runner another mode than the one the session asked for (`session_permission_mode_change.reason`,
+ * migration 1740). These are the claim's only substitutions, and neither predicts what the engine can do:
+ *  - ROOT_RUNNER: Bypass on a runner that runs as root, where Claude Code exits before it says anything; Auto instead;
+ *  - SCHEDULED_RUN: a scheduled run on Claude Code, which runs in Auto whatever its level.
+ */
+export const CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS = ['ROOT_RUNNER', 'SCHEDULED_RUN'] as const;
+export type ClaimPermissionModeSubstitutionReason = (typeof CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS)[number];
+
 /** One change of the mode a session's engine actually runs in, oldest first on the session detail. */
 export interface SessionPermissionModeChange {
   /** Null for the session's first recorded mode. */
@@ -271,6 +287,10 @@ export interface SessionPermissionModeChange {
   /** For OWNER_PICK, the app it came from (`web`, `ios`, `macos`, `android`, `terminal`) when known. */
   client: string | null;
   at: string;
+  /** For a CLAIM that handed another mode than the session asked for: the mode asked for. Absent otherwise. */
+  requestedMode?: string;
+  /** And why (CLAIM_PERMISSION_MODE_SUBSTITUTION_REASONS). Absent otherwise. */
+  reason?: ClaimPermissionModeSubstitutionReason;
 }
 
 /**

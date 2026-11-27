@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import {
+  type ClaimPermissionModeSubstitutionReason,
   PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE,
   PermissionMode,
   type PermissionModeChangeCause,
@@ -23,7 +24,8 @@ import {
  *  - a runner's `permission_mode_corrected` event records a correction it made by itself (RUNNER_CORRECTION).
  *
  * Every change is one row of session_permission_mode_change naming its cause; recording the mode already recorded
- * writes nothing.
+ * writes nothing. A claim that hands another mode than the session asked for says so on its row: the mode asked for
+ * and why (migration 1740, queue/claim-permission-mode.ts).
  */
 
 const KNOWN_MODES = new Set<string>(Object.values(PermissionMode));
@@ -33,11 +35,18 @@ export function isKnownPermissionMode(mode: unknown): mode is PermissionMode {
   return typeof mode === 'string' && KNOWN_MODES.has(mode);
 }
 
+/** A claim's mode that is not the one the session asked for: the mode asked for, and why (claimPermissionMode). */
+export interface ClaimedModeSubstitution {
+  requestedMode: PermissionMode;
+  reason: ClaimPermissionModeSubstitutionReason;
+}
+
 /**
  * Record that the session's engine now runs in `mode`, and why. One statement: it locks the session row, moves the
  * two columns only when the mode differs from the one recorded, and inserts the change row only then. Returns
  * whether anything changed. A mode this server does not know is ignored. clock_timestamp(), not now(): two changes
- * recorded in one transaction must not share a time, or the detail could not order them.
+ * recorded in one transaction must not share a time, or the detail could not order them. `substitution` is a CLAIM's
+ * only, and rides on its row.
  */
 export async function recordActualPermissionMode(
   db: Pick<Prisma.TransactionClient, '$queryRaw'>,
@@ -45,6 +54,7 @@ export async function recordActualPermissionMode(
   mode: unknown,
   cause: PermissionModeChangeCause,
   client?: string | null,
+  substitution?: ClaimedModeSubstitution | null,
 ): Promise<boolean> {
   if (!isKnownPermissionMode(mode)) return false;
   const rows = await db.$queryRaw<Array<{ id: string }>>`
@@ -57,8 +67,10 @@ export async function recordActualPermissionMode(
       WHERE s."id" = "prev"."id" AND "prev"."from_mode" IS DISTINCT FROM ${mode}
       RETURNING "prev"."from_mode"
     )
-    INSERT INTO "session_permission_mode_change" ("id", "session_id", "from_mode", "to_mode", "cause", "client", "created_at")
-    SELECT ${randomUUID()}::uuid, ${sessionId}::uuid, "moved"."from_mode", ${mode}, ${cause}, ${client ?? null}, clock_timestamp()
+    INSERT INTO "session_permission_mode_change"
+      ("id", "session_id", "from_mode", "to_mode", "cause", "client", "requested_mode", "reason", "created_at")
+    SELECT ${randomUUID()}::uuid, ${sessionId}::uuid, "moved"."from_mode", ${mode}, ${cause}, ${client ?? null},
+      ${substitution?.requestedMode ?? null}, ${substitution?.reason ?? null}, clock_timestamp()
     FROM "moved"
     RETURNING "id"
   `;
@@ -129,12 +141,21 @@ export function configTurnPayload(content: string | null | undefined): { permiss
 export const PERMISSION_MODE_CHANGES_INCLUDE = {
   orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   take: SESSION_PERMISSION_MODE_CHANGES_LIMIT,
-  select: { fromMode: true, toMode: true, cause: true, client: true, createdAt: true },
+  select: { fromMode: true, toMode: true, cause: true, client: true, requestedMode: true, reason: true, createdAt: true },
 } satisfies Prisma.Session$permissionModeChangesArgs;
 
-/** Those rows as the detail answers them, oldest first. None read (an older row shape) is none. */
+/** Those rows as the detail answers them, oldest first. None read (an older row shape) is none. A claim's substitution
+ *  is carried only on the row that made one, so every other row keeps the shape it had. */
 export function permissionModeChangesOf(
-  rows: ReadonlyArray<{ fromMode: string | null; toMode: string; cause: string; client: string | null; createdAt: Date }> | undefined,
+  rows: ReadonlyArray<{
+    fromMode: string | null;
+    toMode: string;
+    cause: string;
+    client: string | null;
+    requestedMode?: string | null;
+    reason?: string | null;
+    createdAt: Date;
+  }> | undefined,
 ): SessionPermissionModeChange[] {
   return [...(rows ?? [])].reverse().map((row) => ({
     fromMode: row.fromMode,
@@ -142,5 +163,8 @@ export function permissionModeChangesOf(
     cause: row.cause as PermissionModeChangeCause,
     client: row.client,
     at: row.createdAt.toISOString(),
+    ...(row.requestedMode && row.reason
+      ? { requestedMode: row.requestedMode, reason: row.reason as ClaimPermissionModeSubstitutionReason }
+      : {}),
   }));
 }

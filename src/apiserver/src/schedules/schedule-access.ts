@@ -204,8 +204,9 @@ export const CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
  * on them and timed out; on 2026-11-18 an OPEN_PR run's SubAgent, which then took the session's stored mode, waited
  * 2 hours on one. The level's denials still hold: Claude's --disallowedTools (scheduleRunDisallowedTools) and the
  * server doors (scheduleRunDeniesApproval, checkOnlyRefusesApproval) refuse them in every mode. Claude only: no other
- * engine's Auto has a classifier (permissionSemantics.ts), so every other engine keeps the session's mode. A model
- * with no Auto runs as Default (normalizeBuiltinPermissionMode).
+ * engine's Auto has a classifier (permissionSemantics.ts), so every other engine keeps the session's mode. On a model
+ * with no Auto the run's engine starts in Default and says so (the claim hands it Auto all the same,
+ * queue/claim-permission-mode.ts); a SubAgent's mode is still normalized (normalizeBuiltinPermissionMode).
  */
 export function scheduleRunPermissionMode(
   mode: PermissionMode,
