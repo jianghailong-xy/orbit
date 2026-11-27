@@ -194,7 +194,9 @@ async function refusalOf(run: () => Promise<unknown>): Promise<RefusalView> {
     assert.ok(body && typeof body === 'object', `expected a structured refusal, got ${JSON.stringify(body)}`);
     return body as RefusalView;
   }
-  throw new assert.AssertionError({ message: `expected a refusal; it was accepted: ${JSON.stringify(outcome)}` });
+  // A task row carries bigint columns, which JSON.stringify refuses: printed as strings, so the red says what was accepted.
+  const shown = JSON.stringify(outcome, (_key, value) => (typeof value === 'bigint' ? value.toString() : value));
+  throw new assert.AssertionError({ message: `expected a refusal; it was accepted: ${shown}` });
 }
 
 /** The refusal names its code, the model, the runner and the models to pick instead. */
