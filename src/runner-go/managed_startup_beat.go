@@ -2,8 +2,42 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
+
+// runnerProcessStarted is when this process began, as near as Go can say: what the startup line measures a managed
+// instance's first heartbeat from.
+var runnerProcessStarted = time.Now()
+
+// startupBeatTiming is what a managed instance's first heartbeat took, as the runner logs it (startupBeatLine).
+type startupBeatTiming struct {
+	taken bool
+	// How long it waited before the first attempt, and whether the engine probe had answered by then (else
+	// managedStartupProbeWait ran out, or the instance stopped).
+	waited time.Duration
+	probed bool
+	// How many beats were sent, and how long the last one took from its send to its answer.
+	attempts      int
+	lastRoundTrip time.Duration
+	// From the process's start to the end of the last attempt.
+	sinceStart time.Duration
+}
+
+// startupBeatLine says where a managed instance's first heartbeat spent its time, so that a slow start says whether it
+// waited for the engine probe, for the control plane's answer, or for attempts the control plane refused.
+func startupBeatLine(t startupBeatTiming) string {
+	outcome := "taken"
+	if !t.taken {
+		outcome = "not taken"
+	}
+	probe := "after the engine probe answered"
+	if !t.probed {
+		probe = "without the engine probe's answer"
+	}
+	return fmt.Sprintf("startup heartbeat: %s, %s after the runner started: waited %s, %s; %d attempt(s), the last answered in %s",
+		outcome, roundedDuration(t.sinceStart), roundedDuration(t.waited), probe, t.attempts, roundedDuration(t.lastRoundTrip))
+}
 
 // A managed instance's first heartbeat goes before its first claim (docs/managed-runner-design.md,
 // "Implementation record: capacity, wake and sleep"). The manager makes a mapping READY only on a
