@@ -2605,6 +2605,10 @@ export interface RunnerRemovedDefault {
   /** As on its account (RunnerEngineAccount.fingerprintPrefix): a remaining account showing the same
    *  one is the same login. Absent where the runner read none. */
   fingerprintPrefix?: string;
+  /** Whether its login is still on the machine, as the runner reports it for Default. Clients leave
+   *  the line out on `no` (the login is gone, there is nothing to offer back) and show it on `yes`,
+   *  `unknown` and when absent (an older apiserver). */
+  auth?: RunnerEngineAccount['auth'];
 }
 
 export interface DshRuntimeHealth {
