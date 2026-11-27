@@ -1,5 +1,20 @@
+import { useEffect, useState } from 'react';
 import { LoadingOutlined } from '@ant-design/icons';
-import { permissionModeLabel, type ModeCapsule } from '../lib/sessionPermissionMode';
+import { modeCapsule, permissionModeLabel, type ModeCapsule, type ModeCapsuleInput } from '../lib/sessionPermissionMode';
+
+/** `modeCapsule` as a composer reads it now, read again when a switch under way stops counting as one: nothing
+ *  else re-renders for that. */
+export function useModeCapsule(input: Omit<ModeCapsuleInput, 'now'>): ModeCapsule {
+  const capsule = modeCapsule({ ...input, now: Date.now() });
+  const [, setTick] = useState(0);
+  const until = capsule.switchingUntil;
+  useEffect(() => {
+    if (until === null) return;
+    const timer = setTimeout(() => setTick((tick) => tick + 1), Math.max(0, until - Date.now()) + 50);
+    return () => clearTimeout(timer);
+  }, [until]);
+  return capsule;
+}
 
 /**
  * What the composer's Mode capsule says (docs/mocks/permission-mode-actual, the owner's A1): the mode the

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgentProvider, type RunnerModelCatalog } from '@orbit/shared';
 import {
-  clampPermissionModeForModel,
+  clampPermissionModeForEngine,
   CLAUDE_EFFORT_OPTIONS,
   CODEX_EFFORT_OPTIONS,
   contextWindowFor,
@@ -135,10 +135,10 @@ describe('Claude model capabilities', () => {
     expect(supportsAuto('gpt-5.6-sol', CODEX, 'codex')).toBe(true);
   });
 
-  it('clamps Auto when the effective Runtime default cannot run it', () => {
-    expect(clampPermissionModeForModel('auto', 'claude-haiku-4-5', CLAUDE, 'claude')).toBe('default');
-    expect(clampPermissionModeForModel('auto', 'claude-opus-5', CLAUDE, 'claude')).toBe('auto');
-    expect(clampPermissionModeForModel('plan', 'claude-haiku-4-5', CLAUDE, 'claude')).toBe('plan');
+  it('sends the intent as picked on Claude Code, a model with no Auto included', () => {
+    expect(supportsAuto('claude-haiku-4-5', CLAUDE, 'claude')).toBe(false);
+    expect(clampPermissionModeForEngine('auto', CLAUDE)).toBe('auto');
+    expect(clampPermissionModeForEngine('plan', CLAUDE)).toBe('plan');
   });
 
   it('takes Auto from the assigned runner’s catalog rather than a list in the repo', () => {
@@ -152,14 +152,8 @@ describe('Claude model capabilities', () => {
       ],
     };
     expect(supportsAuto('claude-opus-5-5', CLAUDE, 'claude', null, catalog)).toBe(true);
-    expect(clampPermissionModeForModel('auto', 'claude-opus-5-5', CLAUDE, 'claude', null, catalog)).toBe(
-      'auto',
-    );
     // And a row that withholds Auto wins over the fallback list, which still lists Opus 5.
     expect(supportsAuto('claude-opus-5', CLAUDE, 'claude', null, catalog)).toBe(false);
-    expect(clampPermissionModeForModel('auto', 'claude-opus-5', CLAUDE, 'claude', null, catalog)).toBe(
-      'default',
-    );
     // A model the runner has not reported keeps the fallback answer — silence is not "no".
     expect(supportsAuto('claude-sonnet-5', CLAUDE, 'claude', null, catalog)).toBe(true);
   });
@@ -253,7 +247,7 @@ describe('effort, permission and Auto by the engine, never the provider’s slug
     expect(permissionModeSupported('plan', DSH)).toBe(false);
     expect(permissionModeSupported('auto', DSH)).toBe(true);
     expect(permissionModeSupported('plan', CLAUDE)).toBe(true);
-    expect(clampPermissionModeForModel('plan', 'acp-pro', DSH, 'deepseek', configured, catalog)).toBe('default');
+    expect(clampPermissionModeForEngine('plan', DSH)).toBe('default');
   });
 
   it('leaves Auto to a key’s own model space on Claude Code', () => {

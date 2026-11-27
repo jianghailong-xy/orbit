@@ -576,12 +576,10 @@ import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
-import { PermissionModeLine } from './PermissionModeLine';
-import { ModeCapsuleValue, ModeOptionLabel, ModeReason } from './ModeCapsule';
+import { modeChangeInserts } from './PermissionModeLine';
+import { ModeCapsuleValue, ModeOptionLabel, ModeReason, useModeCapsule } from './ModeCapsule';
 import {
   autoMenuNote,
-  modeCapsule,
-  modeChangeLines,
   type ModeCapsule,
 } from '../lib/sessionPermissionMode';
 import type {
@@ -6791,20 +6789,19 @@ export function WorkspaceView({
     () =>
       !selectedId || selectedTrashed || !permissionModeChanges
         ? []
-        : modeChangeLines(permissionModeChanges, {
-            intent: effectivePermissionMode,
-            actual: recordedPermissionMode,
-            engine: shownEngine,
-            modelHasAuto: lineModelHasAuto,
-            modelLabel: lineModelLabel,
-            runsAsRoot: runner.runsAsRoot,
-            scheduled: isScheduleRun,
-          }).flatMap((line) => {
-            const anchor = decisionReceiptAnchor(transcriptEvents, line.at);
-            return anchor === null
-              ? []
-              : [{ anchor, moment: line.at, key: `mode-change:${line.key}`, element: <PermissionModeLine line={line} /> }];
-          }),
+        : modeChangeInserts(
+            permissionModeChanges,
+            {
+              intent: effectivePermissionMode,
+              actual: recordedPermissionMode,
+              engine: shownEngine,
+              modelHasAuto: lineModelHasAuto,
+              modelLabel: lineModelLabel,
+              runsAsRoot: runner.runsAsRoot,
+              scheduled: isScheduleRun,
+            },
+            transcriptEvents,
+          ),
     [
       effectivePermissionMode,
       isScheduleRun,
@@ -10721,21 +10718,12 @@ export function WorkspaceView({
     runsAsRoot: runner.runsAsRoot,
     scheduled: isScheduleRun,
   };
-  const shownModeCapsule = modeCapsule({
+  const shownModeCapsule = useModeCapsule({
     ...shownModeFacts,
     actual: recordedPermissionMode,
     latest: permissionModeChanges?.at(-1) ?? null,
     pickedAt: modePickedAt?.sessionId === selectedId ? modePickedAt.at : null,
-    now: Date.now(),
   });
-  // A switch under way stops being one when its window closes, which nothing else re-renders for.
-  const [, setModeSwitchTick] = useState(0);
-  const modeSwitchingUntil = shownModeCapsule.switchingUntil;
-  useEffect(() => {
-    if (modeSwitchingUntil === null) return;
-    const timer = setTimeout(() => setModeSwitchTick((tick) => tick + 1), Math.max(0, modeSwitchingUntil - Date.now()) + 50);
-    return () => clearTimeout(timer);
-  }, [modeSwitchingUntil]);
   // Auto stays selectable on a model with no Auto, and its row says what the session does instead (C1).
   const autoModeNote = autoMenuNote(shownModeFacts, !!recordedPermissionMode);
   const shownEffortLabel = shownEffortOptions.find((o) => o.value === shownEffort)?.label ?? shownEffort;
