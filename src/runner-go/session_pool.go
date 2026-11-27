@@ -83,15 +83,12 @@ type liveSession struct {
 
 	active        bool // owns a turn permit
 	permitPending bool // server claim is installed but still waiting for local capacity
-	// slotWaitNotify, set by the session's supervisor (setSlotWaitNotifier), is told when waitActive first finds
-	// this session's claim waiting for a slot — with the slots background jobs hold of the rest — and again
-	// when the slot is granted, so the session can say why its claimed turn has not started.
-	slotWaitNotify func(waiting bool, heldByJobs int)
 	// returningSlot: waitActive is giving this session's pending claim back (returnFullSlot); no permit is granted
 	// under it meanwhile, since the control plane may already have put the session back in its queue.
 	returningSlot bool
 	// slotReturnRefused is the permit generation whose claim the control plane would not take back (a turn was
-	// already leased under it, or the session is not this process's to return): that claim waits here for its slot.
+	// already leased under it, or another process of this runner holds its lease): that claim waits here for its slot,
+	// and the control plane, refusing, names the wait on the session (enginePhase waiting_for_slot).
 	slotReturnRefused uint64
 	// Incremented for every server claim, including a claim that races the tail
 	// of the prior turn while active is still true locally. A late ack may release
@@ -461,11 +458,13 @@ func (p *sessionPool) admissionOccupancyLocked() (int, []string) {
 	return len(occupied), backgroundOnly
 }
 
-// canClaim says whether this runner asks for a claim at all, by the count canAdmitTurnLocked admits against: below
-// max, any claim; at or over it, only one claimScope names — a Run now claim while burst room is left, or a message
-// for a session whose own background job holds its slot — so that a claim is never taken that cannot start here.
-// An older control plane takes no scope: there, as before, the runner asks while burst room is left, and a claim it
-// cannot start waits for its slot, named as it waits (waitActive).
+// canClaim says whether this runner asks for a claim at all. It reads admissionOccupancyLocked — permits, claims still
+// pending, reclaims under way and background-only holders, the count the heartbeat reports as idleCapacity — which is
+// at least canAdmitTurnLocked's (permits plus other sessions' holders) for every session but a holder itself, whose
+// own job canAdmitTurnLocked leaves out. So: below max, any claim; at or over it, only one claimScope names — a Run now
+// claim while burst room is left, or a message for one of those holders, which the slot its own job holds admits —
+// and a claim it is handed anyway is given back (waitActive). An older control plane takes no scope: there, as before,
+// the runner asks while burst room is left, and a claim it cannot start waits here for its slot.
 func (p *sessionPool) canClaim() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -505,11 +504,17 @@ func (p *sessionPool) fullClaimScopeLocked(occupied int, holders []string) ([]st
 	return append([]string{}, holders...), true
 }
 
-// setCapacityClaims records whether the control plane takes a full runner's claim scope and its returned claims.
+// setCapacityClaims records whether the control plane takes a full runner's claim scope and its returned claims. A
+// change wakes every waiter: a claim that landed before the first heartbeat answer said so — a cold supervisor's
+// included — is given back now rather than at some later change of the pool.
 func (p *sessionPool) setCapacityClaims(on bool) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.capacityClaims == on {
+		return
+	}
 	p.capacityClaims = on
-	p.mu.Unlock()
+	p.signalLocked(nil)
 }
 
 // idleForTmpSweep says whether nothing is running here that could be using /tmp: no session holds a turn, an
@@ -928,13 +933,6 @@ func (p *sessionPool) otherBackgroundHoldersLocked(job *ClaimedSession) int {
 		}
 	}
 	return holders
-}
-
-// setSlotWaitNotifier installs the supervisor's slotWaitNotify for s.
-func (p *sessionPool) setSlotWaitNotifier(s *liveSession, notify func(waiting bool, heldByJobs int)) {
-	p.mu.Lock()
-	s.slotWaitNotify = notify
-	p.mu.Unlock()
 }
 
 // turnsInFlightLocked counts the sessions a turn is running in right now: every permit holder — a
@@ -1773,8 +1771,8 @@ func (p *sessionPool) canReturnFullSlotLocked(s *liveSession) bool {
 
 // giveBackFullSlot asks the control plane to take back s's claim under permit, retrying a control plane it cannot
 // reach until the session or the runner ends. Taken back — or no longer held there at all — the claim is withdrawn
-// here and the session waits cold for its next claim. Refused (a turn was already leased under the claim), the claim
-// stays and waits for its slot, which waitActive then names.
+// here and the session waits cold for its next claim. Refused (a turn was already leased under the claim, or another
+// process holds its lease), the claim stays and waits here for its slot; the control plane names that wait.
 func (p *sessionPool) giveBackFullSlot(s *liveSession, permit uint64, ret func(context.Context, string) (string, bool, error), sessionCtx, shutdown context.Context) {
 	status, returned, err := "", false, error(nil)
 	for delay := time.Second; ; delay = min(2*delay, 30*time.Second) {
@@ -1820,12 +1818,7 @@ func (p *sessionPool) giveBackFullSlot(s *liveSession, permit uint64, ret func(c
 //
 // Once the pool is closed for an update, a permit no longer starts a turn: the
 // wait goes on until the stop that follows, and ends on shutdown like any other.
-//
-// A claim that finds no slot is announced through the session's slotWaitNotify once, and the grant that
-// ends its wait once more. Not while the pool drains or is closed for an update: that wait is the
-// update's, and the session's row says so (runner_updating), not that a slot is full.
 func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Context) bool {
-	announced := false
 	for {
 		p.mu.Lock()
 		if p.sessions[s.id] != s || s.detaching {
@@ -1837,13 +1830,8 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			s.permitPending = false
 			cancels := p.evictWarmExcessLocked()
 			p.signalLocked(s)
-			notify := s.slotWaitNotify
 			p.mu.Unlock()
 			runCancels(cancels)
-			if announced && notify != nil {
-				notify(false, 0)
-			}
-			announced = false
 			continue
 		}
 		// A claim this runner has no slot for goes back to the control plane's queue rather than waiting here: the
@@ -1857,11 +1845,6 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			p.giveBackFullSlot(s, permit, ret, sessionCtx, shutdown)
 			continue
 		}
-		var announce func(bool, int)
-		heldByJobs := 0
-		if s.permitPending && !announced && !p.closedForUpdate && !p.drainingForUpdate && s.slotWaitNotify != nil {
-			announce, heldByJobs, announced = s.slotWaitNotify, p.otherBackgroundHoldersLocked(s.job), true
-		}
 		ready := s.active && !s.evictRequested && !p.closedForUpdate && !s.heldForUpdate
 		if ready && p.accountSwapHoldsLocked(s) {
 			if !s.heldForSwap {
@@ -1873,12 +1856,7 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			if s.completingTurn {
 				s.startedWhileCompleting = true
 			}
-			notify := s.slotWaitNotify
 			p.mu.Unlock()
-			// A later claim can give the permit outright (activatePrepared) rather than through the grant above.
-			if announced && notify != nil {
-				notify(false, 0)
-			}
 			return true
 		}
 		wake := s.wake
@@ -1886,9 +1864,6 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			wake = p.changed
 		}
 		p.mu.Unlock()
-		if announce != nil {
-			announce(true, heldByJobs)
-		}
 		select {
 		case <-wake:
 		case <-sessionCtx.Done():

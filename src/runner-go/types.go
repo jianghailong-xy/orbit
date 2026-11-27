@@ -547,9 +547,8 @@ type HeartbeatResponse struct {
 	// runner claims nothing while it drains, as before.
 	DrainScopedClaims bool `json:"drainScopedClaims,omitempty"`
 	// CapacityClaims: the control plane takes a full runner's claim scope (GET /runner/sessions/claim?fullScope=) and
-	// takes back a claim the runner cannot start (return-slot reason runner_full). Said to a beat that names
-	// background-job holders; false/absent otherwise and on older control planes, which hand out claims as before, and a
-	// claim the runner cannot start then waits for its slot, named as it waits.
+	// takes back a claim the runner cannot start (return-slot reason runner_full). Said on every answer; absent from older
+	// control planes, which hand out claims as before, and a claim the runner cannot start then waits for its slot.
 	CapacityClaims bool `json:"capacityClaims,omitempty"`
 	// SessionReleaseV1: this server's operator says every replica serves the session-release protocol (the apiserver's
 	// switch ORBIT_SESSION_RELEASE_V1), so this runner may report a failed turn and the release separately

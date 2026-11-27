@@ -167,13 +167,9 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 // Engine phases Orbit names. Deliberately its own small vocabulary rather than the CLI's: the
 // clients read this, and passing a provider's internal spinner states straight through would make
 // every one of them a compatibility surface.
-//
-// waiting_for_slot is the runner's own, not an engine's: a claimed turn its admission has no slot for yet
-// (sessionPool.waitActive), named by the supervisor for every engine alike.
 const (
-	enginePhaseCompacting     = "compacting"
-	enginePhaseWaitingForSlot = "waiting_for_slot"
-	enginePhaseNone           = "none"
+	enginePhaseCompacting = "compacting"
+	enginePhaseNone       = "none"
 )
 
 // claudeEnginePhase reads the engine-phase ping the CLI emits as a `system`/`status` frame and

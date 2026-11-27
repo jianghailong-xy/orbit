@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -267,10 +266,12 @@ func TestAFullRunnerNeverTakesAndParksAClaim(t *testing.T) {
 }
 
 // A claim taken while a slot was free, then left with none when another session starts a background job before it
-// lands, is given back at once. One the control plane will not take back — a message was already handed out under
-// it — waits here for its slot, and says why (waiting_for_slot, with the slots the jobs hold), and says so again when
-// the slot comes. So does every wait on an older control plane, which takes no return.
-func TestAClaimLeftWithNoSlotIsGivenBackOrNamedAsItWaits(t *testing.T) {
+// lands, is given back at once. So is one that landed on a cold supervisor before any heartbeat answer said the
+// control plane takes returns (the reviewer's probe: the beat named no holder, a job started, the claim arrived): the
+// answer that says so wakes the wait, and the claim goes back then. One the control plane will not take back — a
+// message was already handed out under it — waits here for its slot (the control plane names that wait), and starts
+// when a job ends.
+func TestAClaimLeftWithNoSlotIsGivenBackOrWaitsForItsSlot(t *testing.T) {
 	pool := newSessionPool(2)
 	returns := &slotReturns{}
 	returns.install(pool)
@@ -286,57 +287,55 @@ func TestAClaimLeftWithNoSlotIsGivenBackOrNamedAsItWaits(t *testing.T) {
 	waitActiveFor(t, pool, late)
 	awaitCondition(t, 5*time.Second, "the claim left with no slot was not given back", func() bool {
 		pending, _ := pendingOf(pool, late)
-		return !pending && len(returns.returned()) == 1
+		return !pending && reflect.DeepEqual(returns.returned(), []string{"late"})
 	})
 
-	type note struct {
-		waiting    bool
-		heldByJobs int
-	}
-	notes := make(chan note, 8)
-	for _, c := range []struct {
-		name  string
-		setup func()
-	}{
-		{"refused", func() { returns.answer = func(string) (string, bool, error) { return stRunning, false, nil } }},
-		{"older server", func() { pool.setCapacityClaims(false) }},
-	} {
-		name := c.name
-		t.Run(name, func(t *testing.T) {
-			returns.mu.Lock()
-			c.setup()
-			returns.mu.Unlock()
-			id := "kept-" + strings.ReplaceAll(name, " ", "-")
-			kept := registerPoolSession(t, pool, id, false)
-			pool.setSlotWaitNotifier(kept, func(waiting bool, heldByJobs int) { notes <- note{waiting, heldByJobs} })
-			if _, ok := pool.activate(poolJob(id)); !ok {
-				t.Fatal("the claim was not installed")
-			}
-			started := waitActiveFor(t, pool, kept)
-			select {
-			case got := <-notes:
-				if got != (note{true, 2}) {
-					t.Fatalf("announced %+v, want waiting with the 2 sessions whose jobs hold the slots", got)
-				}
-			case <-time.After(5 * time.Second):
-				t.Fatal("the claim waiting for a slot was never named")
-			}
-			pool.releaseWorktreeBackgroundJob("held-2", "bgj_2")
-			select {
-			case ok := <-started:
-				if !ok {
-					t.Fatal("the claim did not start once a job ended")
-				}
-			case <-time.After(5 * time.Second):
-				t.Fatal("the claim did not start once a job ended")
-			}
-			if got := <-notes; got.waiting {
-				t.Fatalf("the grant was announced as %+v, want the wait's end", got)
-			}
-			parkPoolSession(pool, kept)
-			pool.holdWorktreeForRunnerJob("held-2", "bgj_2", "sleep")
+	t.Run("a cold supervisor before the control plane said it takes returns", func(t *testing.T) {
+		pool.setCapacityClaims(false)
+		cold := registerPoolSession(t, pool, "cold", false) // registered idle, as the startup reclaim registers it
+		if _, ok := pool.activate(poolJob("cold")); !ok {
+			t.Fatal("the claim was not installed")
+		}
+		waitActiveFor(t, pool, cold)
+		time.Sleep(100 * time.Millisecond)
+		if pending, _ := pendingOf(pool, cold); !pending {
+			t.Fatal("with no word from the control plane the claim did not wait")
+		}
+		pool.setCapacityClaims(true) // the next heartbeat answer
+		awaitCondition(t, 5*time.Second, "the claim stayed parked after the control plane said it takes returns", func() bool {
+			pending, _ := pendingOf(pool, cold)
+			return !pending && reflect.DeepEqual(returns.returned(), []string{"late", "cold"})
 		})
-	}
+	})
+
+	t.Run("refused", func(t *testing.T) {
+		returns.mu.Lock()
+		returns.answer = func(string) (string, bool, error) { return stRunning, false, nil }
+		returns.mu.Unlock()
+		kept := registerPoolSession(t, pool, "kept", false)
+		if _, ok := pool.activate(poolJob("kept")); !ok {
+			t.Fatal("the claim was not installed")
+		}
+		started := waitActiveFor(t, pool, kept)
+		awaitCondition(t, 5*time.Second, "the refused return was never asked", func() bool {
+			return len(returns.returned()) == 3
+		})
+		if pending, _ := pendingOf(pool, kept); !pending {
+			t.Fatal("a claim the control plane kept was withdrawn here")
+		}
+		pool.releaseWorktreeBackgroundJob("held-2", "bgj_2")
+		select {
+		case ok := <-started:
+			if !ok {
+				t.Fatal("the kept claim did not start once a job ended")
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the kept claim did not start once a job ended")
+		}
+		if got := returns.returned(); len(got) != 3 {
+			t.Fatalf("a refused claim was asked about again: %v", got)
+		}
+	})
 }
 
 // waitActiveWithin is waitActive bounded by d: whether the session's turn got its permit in that time.
