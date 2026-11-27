@@ -56,6 +56,7 @@
       "points": [
         "task_start runs work that is already recorded, on its assignee, once its prerequisites are DONE.",
         "New task runs and coordinator judgments start in Auto on engines that support it, regardless of the account's default permission mode.",
+        "So a task runs only on a model that has Auto. On Claude Code the assignee's runner says which models do: a pin to one without is refused when the task is created or pinned, with the models to pick instead, and a task pinned to one earlier is not started.",
         "task_create with startNow: true records the work and starts it on one card.",
         "runAt starts it once, at a set time; it is not a deadline (that is dueDate).",
         "startWhen starts it once, when something outside Orbit becomes true (\"when a third OSD is in\"); a schedule with a WHEN rule runs each time it does. The agent writes a read-only check command, runs it once, and the card shows you that command verbatim before anything is created; your runner then runs it unattended, with no secret in it. When you answer a question with \"wait until X\", the agent proposes that card instead of keeping a note to itself, and condition_get reads either one back.",
