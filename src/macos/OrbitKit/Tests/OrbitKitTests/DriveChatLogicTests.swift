@@ -291,10 +291,26 @@ final class DriveChatLogicTests: XCTestCase {
             createdAt: "2026-11-26T10:30:00.000Z")
         let cards = DriveChatLogic.cards(groups: [later, first], questions: [lease])
         XCTAssertEqual(cards.map(\.turnId), ["t1", "t2", "t3"], "oldest first")
-        let placed = DriveChatLogic.place(cards, lastItemOfTurn: ["t1": "item-9", "t2": "item-14"])
-        XCTAssertEqual(placed.after["item-9"]?.map(\.id), [cards[0].id])
-        XCTAssertEqual(placed.after["item-14"]?.map(\.id), [cards[1].id])
-        XCTAssertEqual(placed.rest.map(\.id), [cards[2].id], "a turn not read yet goes under the conversation")
+        // The conversation places them (`TranscriptRows.build`, the web's `useDriveChatCards`): after the last item of
+        // their turn — a turn runs from the message carrying its `turnId` to the next one that does — and a card whose
+        // turn is not among the items read under the conversation.
+        var reducer = TranscriptReducer()
+        reducer.apply(RunEvent(seq: 1, type: .user, turnId: "t1", payload: .object(["text": .string("Sort these")])))
+        reducer.apply(RunEvent(seq: 2, type: .assistant, turnId: "t1", payload: .object(["text": .string("Moved 24.")])))
+        reducer.apply(RunEvent(seq: 3, type: .user, turnId: "t2", payload: .object(["text": .string("Move the lease")])))
+        reducer.apply(RunEvent(seq: 4, type: .assistant, turnId: "t2", payload: .object(["text": .string("Keep both?")])))
+        let rows = TranscriptRows.build(state: reducer.state, statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+                                        chatCards: cards.map { TranscriptChatCard(id: $0.id, turnId: $0.turnId) })
+        let order = rows.compactMap { row -> String? in
+            switch row {
+            case .item(.user(let bubble)): return "you: \(bubble.text)"
+            case .item(.assistant(let bubble)): return "agent: \(bubble.text)"
+            case .chatCard(let card): return card.id
+            default: return nil
+            }
+        }
+        XCTAssertEqual(order, ["you: Sort these", "agent: Moved 24.", cards[0].id,
+                               "you: Move the lease", "agent: Keep both?", cards[1].id, cards[2].id])
         XCTAssertEqual(DriveChatLogic.needYou(groups: [first, group(.pending)], questions: [lease]), 2)
     }
 

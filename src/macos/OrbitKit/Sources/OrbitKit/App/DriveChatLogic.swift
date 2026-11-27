@@ -357,21 +357,6 @@ public enum DriveChatLogic {
             .map(\.element)
     }
 
-    /// Where each card goes in a conversation (`useDriveChatCards`): after the last item of its turn, by the item's id;
-    /// a card whose turn is not among the items read goes under the conversation (`rest`), oldest first.
-    public static func place(_ cards: [Card], lastItemOfTurn: [String: String]) -> (after: [String: [Card]], rest: [Card]) {
-        var after: [String: [Card]] = [:]
-        var rest: [Card] = []
-        for card in cards {
-            if let anchor = lastItemOfTurn[PublicID.storageKey(card.turnId)] ?? lastItemOfTurn[card.turnId] {
-                after[anchor, default: []].append(card)
-            } else {
-                rest.append(card)
-            }
-        }
-        return (after, rest)
-    }
-
     /// What waits on the owner beyond the approvals the chats read counts: held groups and open questions.
     public static func needYou(groups: [DriveChatChangeGroup], questions: [DriveChatQuestion]) -> Int {
         groups.filter(needsYou).count + questions.filter(needsYou).count
