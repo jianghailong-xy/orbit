@@ -5336,6 +5336,8 @@ export class SessionsService {
       queuedPassPending: boolean | null;
       runnerLabel: string | null;
       overLimitActive: number | bigint | null;
+      slotWaitHeld: number | bigint | null;
+      slotWaitLimit: number | null;
       overLimitLimit: number | null;
       queuedRunnerSelfUpdate: Prisma.JsonValue;
       queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
@@ -5578,6 +5580,12 @@ export class SessionsService {
             + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)}
         END AS "overLimitActive",
         CASE WHEN ${sessionTurnStateSql('s')} = 'IN_FLIGHT' AND s.over_capacity_turn_id IS NOT NULL THEN r.max_concurrent END AS "overLimitLimit",
+        -- A claimed turn the runner has no slot for yet (enginePhase waiting_for_slot): the slots other sessions'
+        -- background jobs hold of its limit, for "All 4 slots are in use, 3 by background jobs". Only such a row pays.
+        CASE WHEN s.engine_phase = 'waiting_for_slot' THEN
+          ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)}
+        END AS "slotWaitHeld",
+        CASE WHEN s.engine_phase = 'waiting_for_slot' THEN r.max_concurrent END AS "slotWaitLimit",
         -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
         -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
         -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
@@ -5723,6 +5731,10 @@ export class SessionsService {
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
         // Run now (docs/mocks/queued-run-now) beside a slot gate, and how far over the runner may go.
         ...queuedRunNowOf(r),
+        // Beside enginePhase waiting_for_slot only: the limit, and the slots background jobs hold of it.
+        slotWait: r.slotWaitHeld == null || r.slotWaitLimit == null
+          ? null
+          : { heldByJobs: Number(r.slotWaitHeld), limit: r.slotWaitLimit },
         // A turn its owner started over the runner's limit, while it runs: "over limit · 17/16".
         runningOverLimit: r.overLimitActive == null || r.overLimitLimit == null
           ? null

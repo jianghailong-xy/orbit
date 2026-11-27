@@ -707,7 +707,11 @@ export class QueueService {
             AND (${overflow}::boolean OR ${scopedClaim}::boolean OR (
               -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
               -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
-              ${runnerActiveTurns(runnerId)}
+              -- Plus the slots other sessions' background jobs hold, which the runner admits a turn
+              -- against (runnerBackgroundHeldSessions): counted by turns alone, a runner whose jobs and
+              -- turns fill it was handed a claim it could not start, and the row read RUNNING, "Getting
+              -- the session ready", until a turn ended, instead of queued behind a full runner.
+              ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId, Prisma.sql`s.id`)}
                 < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runnerId})
               -- Batch-run cap, independent of the runner cap above: a closed set the user
               -- dispatched together, with the cap they chose for it.

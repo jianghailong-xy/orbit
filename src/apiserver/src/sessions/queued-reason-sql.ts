@@ -42,11 +42,12 @@ export function queuedReasonSql(): Prisma.Sql {
               -- here would send the reader to the wrong cause. Ends only when the update does.
               WHEN r.heartbeat_draining IS TRUE
                 THEN 'runner_updating'
-              -- Turns plus the sessions its background jobs hold a slot for: what the runner itself
-              -- admits against (runnerBackgroundHeldSessions). Turns alone read 10 of 16 on a machine
-              -- whose other 6 slots were held by bg_run jobs, and this row said nothing at all.
+              -- Turns plus the slots other sessions' background jobs hold: what the runner itself
+              -- admits against, and the claim's own gate (runnerBackgroundHeldSessions). Turns alone read
+              -- 10 of 16 on a machine whose other 6 slots were held by bg_run jobs, and this row said
+              -- nothing at all.
               WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)}
-                   + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
+                   + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`, Prisma.sql`s.id`)} >= r.max_concurrent
                 THEN 'runner_at_capacity'
               WHEN s.root_session_id IS NOT NULL
                    AND ${treeActiveTurns('s')} >= ${treeCeiling(Prisma.sql`s.assigned_runner_id`)}

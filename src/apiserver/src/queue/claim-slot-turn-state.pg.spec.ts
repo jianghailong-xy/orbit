@@ -312,8 +312,29 @@ test('claim, slots and dispatch read the turn state, and select what the stored 
     assert.equal(await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'] } as never), null,
       'the turn in flight holds the one slot');
     await db.runner.update({ where: { id: gated.runnerId }, data: { maxConcurrent: 2 } });
+    // Two parked sessions the runner's beat names as held by background jobs, beside the queued session's own: the
+    // runner admits a turn against turns plus other sessions' holders, those up to every slot but one, so on 2 slots the
+    // turn and one holder fill it and the claim waits queued rather than RUNNING on a runner that cannot start it.
+    const holders: string[] = [];
+    for (const title of ['a build in bg_run', 'a remote submit in bg_run']) {
+      const held = await db.session.create({
+        data: {
+          ownerId, creatorId: ownerId, title, prompt: 'p', turnState: null,
+          assignedRunnerId: gated.runnerId, provider: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER,
+          runningBgJobs: ['bgj_held'],
+        },
+      });
+      holders.push(held.id);
+    }
+    await db.runnerPresence.update({ where: { runnerId: gated.runnerId }, data: { backgroundJobSessionIds: [gated.id, ...holders] } });
+    assert.equal(await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'] } as never), null,
+      'the turn and the background-job holders, capped at one slot, fill the two');
+    await db.runner.update({ where: { id: gated.runnerId }, data: { maxConcurrent: 3 } });
+    assert.equal(await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'] } as never), null,
+      'on three slots the turn and the two holders fill it');
+    await db.runnerPresence.update({ where: { runnerId: gated.runnerId }, data: { backgroundJobSessionIds: [gated.id, holders[0]] } });
     assert.equal((await queue.claimSessionForRunner({ id: gated.runnerId, supportedProviders: ['claude'] } as never))?.sessionId, gated.id,
-      'the phase-RUNNING parked session holds none');
+      'one holder ended: a slot is free, the queued session\'s own job holds none against it, and the phase-RUNNING parked session holds none');
 
     const claimed: string[] = [gated.title];
     for (const row of rows) {

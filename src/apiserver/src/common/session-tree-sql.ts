@@ -83,19 +83,29 @@ export function runnerActiveTurns(runnerIdSql: Prisma.Sql): Prisma.Sql {
 }
 
 /**
- * Sessions on a runner that run no turn but hold one of its slots through a background job: open
- * (held), not IN_FLIGHT, and named by the runner's last beat (runner_presence.background_job_session_ids,
- * migration 0780; runners/runner-background-holders.ts). The runner itself admits against turns
- * plus these (src/runner-go/session_pool.go), so a count of turns alone reads a full machine as
- * having room. The queued explanation reads it, and so does Run now's overflow claim, which may go
- * past the limit only up to max + burst of what the runner admits against; the ordinary claim gate
- * counts turns, and the runner holds back its claims by itself. Ask it only of a runner known to be online: a
- * stale presence row still names the holders of its last beat.
+ * The slots of a runner that sessions running no turn hold through a background job: open (held),
+ * not IN_FLIGHT, and named by the runner's last beat (runner_presence.background_job_session_ids,
+ * migration 0780; runners/runner-background-holders.ts), one slot each up to every slot but one.
+ * The runner itself admits against turns plus these, and keeps its last slot for a turn
+ * (src/runner-go/session_pool.go backgroundSlotsLocked): jobs alone never fill it, so a count of
+ * every holder would read a machine that takes the next turn as full. A count of turns alone reads
+ * a full machine as having room. The queued explanation reads it, and so does Run now's overflow
+ * claim, which may go past the limit only up to max + burst of what the runner admits against; the
+ * ordinary claim gate counts turns, and the runner holds back its claims by itself. The machine
+ * page's "N of M running" counts every holder (runningSessionCounts), not these slots. Ask it only
+ * of a runner known to be online: a stale presence row still names the holders of its last beat.
+ *
+ * exceptSessionSql leaves one session's own jobs out, as the runner leaves out those of the session it
+ * is admitting (canAdmitTurnLocked): a queued session's own build does not keep its next message waiting.
  */
-export function runnerBackgroundHeldSessions(runnerIdSql: Prisma.Sql): Prisma.Sql {
+export function runnerBackgroundHeldSessions(runnerIdSql: Prisma.Sql, exceptSessionSql?: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`(
-    SELECT count(*) FROM "session" held
+    SELECT LEAST(
+      count(*),
+      GREATEST((SELECT hr."max_concurrent" FROM "runner" hr WHERE hr.id = ${runnerIdSql}) - 1, 0)
+    ) FROM "session" held
     WHERE held."assigned_runner_id" = ${runnerIdSql}
+      ${exceptSessionSql ? Prisma.sql`AND held.id <> ${exceptSessionSql}` : Prisma.empty}
       AND ${sessionHeldSql('held')}
       AND ${sessionTurnStateSql('held')} IS DISTINCT FROM 'IN_FLIGHT'
       AND held.id = ANY(

@@ -184,4 +184,26 @@ test('queuedReason runner_at_capacity: a runner full of turns and background-job
     assert.equal(got.queuedReason, 'runner_offline');
     assert.equal(got.queuedHeldByJobs, null);
   });
+
+  await t.test('(7) jobs alone never fill the last slot: it is a turn\'s, as on the runner', async () => {
+    const r = await runner(alice.id, 'jobs-only', { maxConcurrent: 3 });
+    const jobs = [
+      await session(alice.id, r, 'a build', RunStatus.AWAITING_INPUT),
+      await session(alice.id, r, 'a watch script', RunStatus.AWAITING_INPUT),
+      await session(alice.id, r, 'a remote submit', RunStatus.AWAITING_INPUT),
+    ];
+    const queued = await session(alice.id, r, 'the next message', RunStatus.PENDING);
+    await holders(r.id, jobs);
+    const got = await row(aliceToken, queued);
+    assert.equal(got.queuedReason, null, 'three job holders on three slots leave one for a turn');
+    assert.equal(got.queuedHeldByJobs, null);
+
+    // With a turn in that slot the runner is full, and the jobs are counted for the slots they take: two.
+    await session(alice.id, r, 'the turn in the last slot', RunStatus.RUNNING);
+    const full = await row(aliceToken, queued);
+    assert.equal(full.queuedReason, 'runner_at_capacity');
+    assert.equal(full.queuedActive, 3);
+    assert.equal(full.queuedLimit, 3);
+    assert.equal(full.queuedHeldByJobs, 2);
+  });
 });
