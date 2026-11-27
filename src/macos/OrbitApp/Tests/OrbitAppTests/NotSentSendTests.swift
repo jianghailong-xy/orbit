@@ -6,21 +6,23 @@ import XCTest
 import OrbitKit
 @testable import OrbitApp
 
-/// The turn door, scripted: each POST to `/sessions/S1/turns` takes the next step — an answer, a
-/// dropped connection, or no answer at all. Every other request is a 404. Records each attempt's
-/// `clientTurnId` and how many held requests were ended by the client.
+/// The two send doors, scripted: each POST to `/sessions/S1/turns` or `/sessions/S1/interrupt` takes
+/// the next step — an answer, a dropped connection, or no answer at all. Every other request is a 404.
+/// Records each attempt's `clientTurnId` and door, and how many held requests were ended by the client.
 private final class ScriptedTurnURLProtocol: URLProtocol, @unchecked Sendable {
     enum Step { case answer(Int, String), drop, hold }
 
     private static let lock = NSLock()
     private static var steps: [Step] = []
     private static var keys: [String] = []
+    private static var paths: [String] = []
     private static var ended = 0
 
     static func script(_ next: [Step]) {
         lock.lock(); defer { lock.unlock() }
         steps = next
         keys = []
+        paths = []
         ended = 0
     }
 
@@ -35,6 +37,12 @@ private final class ScriptedTurnURLProtocol: URLProtocol, @unchecked Sendable {
         return keys
     }
 
+    /// The door of every attempt so far, in order: `turns` or `interrupt`.
+    static var doors: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return paths
+    }
+
     /// Held requests the client ended.
     static var endedCount: Int {
         lock.lock(); defer { lock.unlock() }
@@ -47,13 +55,16 @@ private final class ScriptedTurnURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard request.httpMethod == "POST", request.url!.path.hasSuffix("/sessions/S1/turns") else {
+        let path = request.url!.path
+        guard request.httpMethod == "POST",
+              path.hasSuffix("/sessions/S1/turns") || path.hasSuffix("/sessions/S1/interrupt") else {
             return respond(404, "")
         }
         let body = Self.body(of: request)
         let key = (try? JSONSerialization.jsonObject(with: body) as? [String: Any])?["clientTurnId"] as? String
         Self.lock.lock()
         Self.keys.append(key ?? "")
+        Self.paths.append(request.url!.lastPathComponent)
         let step = Self.steps.isEmpty ? Step.hold : Self.steps.removeFirst()
         Self.lock.unlock()
         switch step {
@@ -339,6 +350,117 @@ final class NotSentSendTests: XCTestCase {
         XCTAssertEqual(console.composerText, "Ship the quarterly report", "the words are back in the box")
         XCTAssertFalse(users(console).contains { $0.text == "Ship the quarterly report" }, "the bubble steps aside")
         XCTAssertNil(console.statusMessage)
+        XCTAssertTrue(store.sends(in: "S1").isEmpty)
+    }
+
+    // MARK: stop and send this instead
+
+    /// What the interrupt door answers: the follow-up's turn, and nothing about its placement.
+    private static let queued = #"{"ok":true,"turnId":"t2","seq":4}"#
+    private static let busy = #"{"statusCode":409,"message":"the next turn is starting"}"#
+
+    private func stopAndSend(_ console: ConsoleModel, _ words: String) async {
+        console.composerText = words
+        await console.interruptAndSend()
+    }
+
+    private func queuedBubbles(_ console: ConsoleModel) -> [UserBubble] { console.state.queued }
+
+    func testARefusedFollowUpKeepsItsBubbleAsNotSent() async throws {
+        ScriptedTurnURLProtocol.script([.answer(409, Self.busy)])
+        let store = UnsentSendMemoryStore()
+        let console = try console(store: store)
+        await stopAndSend(console, "Do this instead")
+
+        XCTAssertEqual(ScriptedTurnURLProtocol.doors, ["interrupt"])
+        let bubble = try XCTUnwrap(queuedBubbles(console).last, "the bubble stays")
+        XCTAssertEqual(bubble.text, "Do this instead")
+        XCTAssertTrue(bubble.isNotSent)
+        XCTAssertEqual(bubble.notSentReason, "the next turn is starting")
+        XCTAssertEqual(console.composerText, "", "nothing is put back until the person asks")
+        XCTAssertNil(console.statusMessage, "no Couldn't send line")
+        XCTAssertFalse(console.sending)
+        XCTAssertEqual(store.sends(in: "S1").map(\.reason), ["the next turn is starting"], "kept for a restart")
+        XCTAssertEqual(store.sends(in: "S1").map(\.stopsTurn), [true])
+    }
+
+    func testAnUnansweredFollowUpReadsNotSentAtTheLimitWithTheRequestEnded() async throws {
+        ScriptedTurnURLProtocol.script([.hold])
+        let console = try console()
+        XCTAssertEqual(console.sendAnswerTimeout, 20, "the composer send's limit")
+        console.sendAnswerTimeout = 0.4
+        let started = Date()
+        await stopAndSend(console, "Do this instead")
+
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5, "the limit, not the 60 s request timeout")
+        let bubble = try XCTUnwrap(queuedBubbles(console).last)
+        XCTAssertTrue(bubble.isNotSent)
+        XCTAssertEqual(bubble.notSentReason, UserBubble.notAnsweredReason)
+        for _ in 0..<200 where ScriptedTurnURLProtocol.endedCount == 0 { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(ScriptedTurnURLProtocol.endedCount, 1, "the request was ended, not left open")
+        XCTAssertNil(console.statusMessage, "no Couldn't send line")
+        XCTAssertFalse(console.sending, "Send is on again")
+    }
+
+    func testRetryOfAFollowUpStopsAndSendsUnderTheSameClientTurnId() async throws {
+        ScriptedTurnURLProtocol.script([.answer(409, Self.busy)])
+        let store = UnsentSendMemoryStore()
+        let console = try console(store: store)
+        await stopAndSend(console, "Do this instead")
+        let notSent = try XCTUnwrap(queuedBubbles(console).last)
+
+        ScriptedTurnURLProtocol.then([.drop, .answer(200, Self.queued)])
+        await console.retryUnsent(notSent)
+
+        XCTAssertEqual(ScriptedTurnURLProtocol.doors, ["interrupt", "interrupt", "interrupt"])
+        XCTAssertEqual(Set(ScriptedTurnURLProtocol.attempts).count, 1, "one clientTurnId throughout")
+        let sent = try XCTUnwrap(queuedBubbles(console).last)
+        XCTAssertEqual(sent.id, notSent.id, "the same row")
+        XCTAssertFalse(sent.isNotSent)
+        XCTAssertEqual(sent.turnId, "t2")
+        XCTAssertEqual(queuedBubbles(console).count, 1, "never a second bubble")
+        XCTAssertNil(console.statusMessage)
+        XCTAssertTrue(store.sends(in: "S1").isEmpty, "nothing left to retry")
+    }
+
+    func testPutBackReturnsAFollowUpsWordsAndNothingIsSent() async throws {
+        ScriptedTurnURLProtocol.script([.answer(409, Self.busy)])
+        let store = UnsentSendMemoryStore()
+        let console = try console(store: store)
+        await stopAndSend(console, "Do this instead")
+
+        console.putBackUnsent(try XCTUnwrap(queuedBubbles(console).last))
+
+        XCTAssertEqual(console.composerText, "Do this instead")
+        XCTAssertTrue(queuedBubbles(console).isEmpty, "the bubble goes")
+        XCTAssertTrue(store.sends(in: "S1").isEmpty)
+        XCTAssertEqual(ScriptedTurnURLProtocol.attempts.count, 1, "nothing is sent")
+    }
+
+    func testAReloadedFollowUpsRetryStillStopsTheTurn() async throws {
+        ScriptedTurnURLProtocol.script([])
+        let store = UnsentSendMemoryStore([
+            UnsentSend(clientTurnId: "c-stop", sessionID: "S1", text: "Do this instead", draft: "Do this instead",
+                       reason: "the next turn is starting", afterSeq: 3, stopsTurn: true),
+        ])
+        let console = try console(store: store)
+        ScriptedTurnURLProtocol.then([.answer(200, Self.queued)])
+        await console.retryUnsent(try XCTUnwrap(last(console)))
+
+        XCTAssertEqual(ScriptedTurnURLProtocol.doors, ["interrupt"])
+        XCTAssertEqual(ScriptedTurnURLProtocol.attempts, ["c-stop"])
+        XCTAssertTrue(store.sends(in: "S1").isEmpty)
+    }
+
+    func testARepeatWhoseFollowUpALaterStopDroppedHandsTheWordsBack() async throws {
+        ScriptedTurnURLProtocol.script([.answer(409, Self.busy), .answer(200, #"{"ok":true}"#)])
+        let store = UnsentSendMemoryStore()
+        let console = try console(store: store)
+        await stopAndSend(console, "Do this instead")
+        await console.retryUnsent(try XCTUnwrap(queuedBubbles(console).last))
+
+        XCTAssertTrue(queuedBubbles(console).isEmpty, "no bubble left waiting on nothing")
+        XCTAssertEqual(console.composerText, "Do this instead")
         XCTAssertTrue(store.sends(in: "S1").isEmpty)
     }
 

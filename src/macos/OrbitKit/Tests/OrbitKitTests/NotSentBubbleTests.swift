@@ -258,7 +258,11 @@ final class NotSentBubbleTests: XCTestCase {
         XCTAssertTrue(post.contains("return try await answered(within: sendAnswerTimeout) {"),
                       "the replays and the handoff wait run inside the one deadline")
         XCTAssertTrue(post.contains("defer { group.cancelAll() }"), "past it the request is ended")
+        let interrupt = try section(console, from: "private func postInterrupt(", to: "private func answered<")
+        XCTAssertTrue(interrupt.contains("return try await answered(within: sendAnswerTimeout) {"),
+                      "a stop-and-send's follow-up waits the same deadline")
         let api = try source("src/macos/OrbitKit/Sources/OrbitKit/Net/APIClient.swift")
+        XCTAssertTrue(api.contains("try await postCancellable(\"sessions/\\(sessionID)/interrupt\", body: req)"))
         XCTAssertTrue(api.contains("try await postCancellable(\"sessions/\\(sessionID)/turns\", body: req)"))
         XCTAssertTrue(api.contains("try await postCancellable(\"sessions/\\(sessionID)/resume\", body: req)"))
     }
