@@ -605,7 +605,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 Destination.GUEST_SESSION -> route.id?.let { GuestSessionPage(app, signedIn.handle, route, it) }
                                 Destination.DRIVE, Destination.DRIVE_FILE, Destination.DRIVE_TRASH, Destination.DRIVE_STORAGE ->
-                                    DriveDestination(app, signedIn.handle, route, ::open) { navigation = navigation.back() }
+                                    DriveDestination(app, signedIn.handle, route, api, data, ::open) { navigation = navigation.back() }
                                 // The timeline (board 01 ②) has its own bottom sheet. Change… opens the schedule's draft
                                 // change conversation (§8.2), no longer a blank new session.
                                 // A scheduled task's and a condition's pending items head the page (no Waiting on you page): the account's

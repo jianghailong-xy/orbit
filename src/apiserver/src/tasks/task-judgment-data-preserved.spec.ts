@@ -3559,6 +3559,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers with turn_state or finished_at added to their column lists. Only `session` is touched; no row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1671_session_status_from_facts',
+      // 1680 adds a nullable session.drive_chat_prompt_digest and conversation_turn.drive_context (catalog-only) and
+      // widens session_opened_by_check by 'DRIVE_CHAT' NOT VALID; 1681 validates it and builds a partial index
+      // CONCURRENTLY. No row is written, and no preserved relation's trigger, function or DONE fence changes.
+      '1680_drive_chat_session',
+      '1681_drive_chat_session_index',
+      // 1700 creates four new tables for a Drive chat's changes (drive_chat_change_group, drive_chat_change,
+      // drive_chat_held_change, drive_chat_question), each with foreign keys to "user" and, for the group and the
+      // question, "session". No row is written, and no preserved relation's trigger, function or DONE fence changes.
+      '1700_drive_chat_change_group',
       // 1711 (deploy D4) drops session.status, the type run_status and what exists only for them (1671's trigger and
       // function, session_turn_state_of_status, the nine-argument session_legacy_status, the two word CHECKs, six
       // indexes), points three session functions at the eight-argument projector, and re-creates the 13 session triggers

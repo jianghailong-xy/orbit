@@ -762,6 +762,18 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // in Trash (`drive_removed_entry.successor_id`), read by id and checked. An entry's address like `entryId`, with no
   // foreign key on purpose, so it may name a file since purged. Never a fence.
   'successorId',
+  // A Drive chat's changes (migration 1700, apiserver drive/drive-chat-changes.ts): a change's or a held write's group,
+  // the folders an entry was in before and after a change, the version an edit replaced, and an overwrite question's
+  // own id and its two files and destination folder. Addresses the owner's Drive-chat routes answer and accept, read by
+  // id and checked. Never a fence.
+  'groupId',
+  'beforeParentId',
+  'afterParentId',
+  'replacedVersionId',
+  'questionId',
+  'sourceEntryId',
+  'targetEntryId',
+  'destParentId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

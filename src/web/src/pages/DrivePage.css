@@ -1,5 +1,12 @@
 /* Drive (board docs/mocks/drive/02-web). */
 
+/* The chat's host around the files (board docs/mocks/drive-chat/01): the page fills it as it filled the view. */
+.wk-chat-frame.is-drive,
+.wk-chat-frame.is-drive > .wk-chat-host {
+  height: 100%;
+  min-height: 0;
+}
+
 .files-page {
   display: flex;
   flex-direction: column;
@@ -1036,4 +1043,140 @@
 .drive-xfer-fold.drive-sync .drive-xfer-link:disabled {
   color: inherit;
   cursor: default;
+}
+
+/* What a Drive chat changed (board drive-chat 01 ③): a green row and a mark, until the row is opened. */
+.files-row.marked,
+.files-tree-row.marked {
+  background: var(--success-bg, rgba(46, 160, 67, 0.12));
+}
+.files-mark {
+  flex: none;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--success, #1a7f37);
+  background: var(--success-bg, rgba(46, 160, 67, 0.16));
+}
+
+/* File details while the chat is open in a window under 1760 (board ④): over the list's right, with a shadow. */
+.files-page.details-over .files-body {
+  position: relative;
+}
+.files-page.details-over .files-pane.is-over {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  width: 336px;
+  max-width: 100%;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.14);
+}
+.files-pane-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.files-pane-close:hover {
+  background: var(--bg-hover-strong);
+}
+
+/* The chat's cards (components/drive/DriveChangeCards). */
+.drive-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0;
+}
+.drive-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--success, #1a7f37);
+  border-radius: 8px;
+  background: var(--bg-base);
+  font-size: 13px;
+}
+.drive-card.needs-you {
+  border-left-color: var(--warning, #d97706);
+}
+.drive-card.undone {
+  border-left-color: var(--border);
+  color: var(--text-3);
+}
+.drive-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+.drive-card-state {
+  font-weight: 500;
+  color: var(--text-3);
+}
+.drive-card.needs-you .drive-card-state {
+  color: var(--warning, #d97706);
+}
+.drive-card-items {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.drive-card-items li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drive-card-more,
+.drive-card-note {
+  margin-top: 4px;
+  color: var(--text-3);
+}
+.drive-card-error {
+  margin-top: 4px;
+  color: var(--error);
+}
+.drive-card-file {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+}
+.drive-card-file .path {
+  overflow-wrap: anywhere;
+}
+.drive-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.wk-chat-files-toggle {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+.wk-chat-files-names {
+  margin: 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  max-width: 220px;
+  max-height: 120px;
+  overflow: auto;
+}
+.files-row.marked.selected {
+  background: var(--brand-tint);
+  box-shadow: inset 3px 0 0 var(--success, #1a7f37);
 }

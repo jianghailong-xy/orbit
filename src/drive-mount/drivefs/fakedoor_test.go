@@ -36,6 +36,8 @@ type fakeDoor struct {
 	removed  map[string]*fakeRemoved
 	puts     int
 	fail     func(r *http.Request) int // a status to answer instead, or 0
+	// refuseWrite answers a POST with a refusal of the door's (status, code, message) instead of making it, or status 0.
+	refuseWrite func(route string, body map[string]interface{}) (int, string, string)
 	// delay is how long to keep a request waiting before serving it, holding nothing else up.
 	delay func(r *http.Request) time.Duration
 	// loseCommitAnswers commits are applied and then answered 502, as when the answer is lost on the way.
@@ -174,6 +176,12 @@ func (f *fakeDoor) serve(w http.ResponseWriter, r *http.Request) {
 	var body map[string]interface{}
 	if r.Method == http.MethodPost {
 		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	if f.refuseWrite != nil && r.Method == http.MethodPost {
+		if st, code, message := f.refuseWrite(route, body); st != 0 {
+			refuse(w, st, code, map[string]interface{}{"message": message})
+			return
+		}
 	}
 	str := func(k string) string { s, _ := body[k].(string); return s }
 	reply := func(v interface{}) { _ = json.NewEncoder(w).Encode(v) }

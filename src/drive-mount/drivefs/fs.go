@@ -317,6 +317,12 @@ func errno(err error) fuse.Status {
 		return fuse.EPERM
 	case door.CodeStorageFull:
 		return fuse.Status(syscall.ENOSPC)
+	case door.CodeDriveChatNoOverwrite:
+		// A Drive chat never replaces a file: the name is taken, and the owner is asked (§5.8).
+		return fuse.Status(syscall.EEXIST)
+	case door.CodeDriveChatHeld, door.CodeDriveChatTurnFull:
+		// The turn's limit: nothing was changed, and the owner's Apply makes what is held.
+		return fuse.Status(syscall.EDQUOT)
 	}
 	if s := door.StatusOf(err); s == 404 {
 		return fuse.ENOENT
@@ -324,6 +330,16 @@ func errno(err error) fuse.Status {
 		return fuse.EINVAL
 	}
 	return fuse.EIO
+}
+
+// isDriveChatRefusal is a Drive chat's write the door refused by the chat's rules rather than the drive's: the agent
+// reads why in errors.log, since the errno alone cannot say it.
+func isDriveChatRefusal(err error) bool {
+	switch door.CodeOf(err) {
+	case door.CodeDriveChatNoOverwrite, door.CodeDriveChatHeld, door.CodeDriveChatTurnFull:
+		return true
+	}
+	return false
 }
 
 // statusError carries a status of the daemon's own choosing through a Go error.
