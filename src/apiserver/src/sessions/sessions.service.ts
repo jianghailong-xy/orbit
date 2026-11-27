@@ -166,6 +166,7 @@ import {
 import {
   ANCHOR_ROLE,
   anchoredSeed,
+  projectTaskRunAnchor,
   sessionAnchor,
   taskRunAnchor,
   type AnchorSeed,
@@ -3235,19 +3236,30 @@ export class SessionsService {
    * What a task's next fresh run starts on (start-anchor.ts TaskRunsWith), by the resolution its
    * dispatch makes (TasksService.execute → create() with the task's pins and taskRunAnchor): the task
    * payload's `runsWith` and `orbit status` read this. Routing aside, a run created now gets this pair.
+   * `projectId`, when given, is the project the task is filed under as a write leaves it (null: none), and
+   * names the anchor instead of the task's stored project; a task not written yet has only that.
    */
   async taskRunsWith(
     ownerId: string,
-    task: { id?: string | null; engine?: string | null; provider?: string | null; workspaceId?: string | null },
+    task: {
+      id?: string | null;
+      projectId?: string | null;
+      engine?: string | null;
+      provider?: string | null;
+      workspaceId?: string | null;
+    },
   ): Promise<TaskRunsWith> {
     const taskId = task.id;
+    const projectId = task.projectId;
     const pinned = !!(task.engine || task.provider);
     let seed: ReadSeed | null | undefined;
     const target = {
       engine: task.engine,
       provider: task.provider,
       workspaceId: task.workspaceId,
-      anchor: taskId ? () => taskRunAnchor(this.prisma, taskId) : undefined,
+      anchor: projectId !== undefined
+        ? (projectId ? () => projectTaskRunAnchor(this.prisma, projectId) : undefined)
+        : taskId ? () => taskRunAnchor(this.prisma, taskId) : undefined,
     };
     const source = (): Pick<TaskRunsWith, 'source' | 'anchorSessionId'> => pinned
       ? { source: 'TASK_PIN', anchorSessionId: null }
