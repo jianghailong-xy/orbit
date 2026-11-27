@@ -383,7 +383,7 @@ describe('the mode a session is actually running in (docs/mocks/permission-mode-
   it('the Agent tools drawer says the same mode and gap', async () => {
     await mount(`/sessions/${NO_AUTO}`, 'Default');
     await act(async () => {
-      mounted().querySelector('.workspace-header button[title="More actions"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      mounted().querySelector('.workspace-header button[aria-label="More actions"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     const door = await vi.waitFor(() => {
       const found = [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-closed]) [role="menuitem"]')].find((el) =>

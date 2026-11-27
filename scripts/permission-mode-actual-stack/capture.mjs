@@ -113,7 +113,7 @@ async function act(page, s) {
     await pill.hover();
     await page.locator('.orbit-tooltip').waitFor();
   } else if (s.open === 'drawer') {
-    await page.locator('.workspace-header button[title="More actions"]').click();
+    await page.locator('.workspace-header button[aria-label="More actions"]').click();
     await page.locator('[role="menuitem"]', { hasText: 'Agent tools' }).click();
     await page.locator('.agent-tools').waitFor();
   }
