@@ -16,12 +16,33 @@ production, and no production row is read.
 | `walk.mjs`, `walk.sh` | One walk pass, §7.3's scenarios against a real runner (go build of `src/runner-go`) whose only engine is the fake claude, read back from the database. `--code` says which deploy's writer the two statement rows follow |
 | `recheck.mjs` | An earlier pass's sessions, read from another replica (S12) |
 | `compare.mjs` | Pass against pass, scenario by scenario, and a recheck's payloads |
+| `load.mjs` | API and runner load for a hand-over (T17): a second runner, and the owner's calls (sessions made, followed up and ended, the session lists, task runs batch-stopped) sent in turn to the serving containers, each call recorded with the release that answered |
+| `seed-c8.sql` | The four §3.4 C8 rows T16b found on the production backup, which the shapes lack (D2-era: it names the column) |
+| `windows.mjs` | The records by window: lock waits, every HTTP error by release, the writer loop's statements and rows |
 
 **D3 to D4 (task T17).** On a database D4 migrated (no `session.status`): `census.cjs` reports the projector's words
-and checks `phase` only; `seed-shapes.cjs` writes the facts; `writer-loop.cjs` takes `WRITER_CODE=d3`; `walk.mjs` takes
-`--code d3|d4` and reads words through the projector. Give `rehearse.sh census` a `KIT_IMAGE` built from D3 or D4 code.
-`rehearse.sh` has no step that builds or hands over D3 or D4 images, and the D1/D2 scripts it calls (the plans seed and
-plans, the backfill, the SQL census, the phase down script) are D2-era: they need the column.
+and checks `phase` only; `seed-shapes.cjs` writes the facts; `writer-loop.cjs` takes `WRITER_CODE=d3` (and
+`WRITER_CYCLE=parked`, which leaves no cycled row RUNNING for the reaper to release); `walk.mjs` takes `--code d3|d4`
+and reads words through the projector. The D1/D2 scripts `rehearse.sh` calls for the plans, the backfill, the SQL
+census and the phase down script are D2-era: they need the column. So the copy is seeded at D2 and handed to D3.1 before
+1711 runs. `build-images.sh` takes `SIDES`, and `rehearse.sh` the steps of its header from `stop-slots` on. A hand-over
+is the upgrade skill's: `next <side>` starts the new release beside both slots (it migrates as it boots, answering to
+`apiserver` too), `replace a|b <side>` replaces each slot in turn, and `next-stop` ends it. `census-pair` runs the census
+in two releases' images in one exported snapshot, so they count the same rows while the load writes. The run of
+2026-11-27, with every command, is in docs/session-status-rehearsal.md under "D3 to D4":
+
+    SIDES="d2=5a08c866c4 d3=feeb45cf16 d31=7474f16158 d4=<project head>" PROJECT=orbit-link-t17 WEB_IMAGE=<web image> \
+      scripts/acceptance/session-status-rehearsal/build-images.sh /mnt/tmp/t17
+    export LM_PROJECT=orbit-link-t17 LM_DIR=/mnt/tmp/t17/lm OUT=/mnt/tmp/t17/out LM_HTTP_PORT=58086 ...   # every LM_*_PORT
+    UP_SIDE=d2 $R/rehearse.sh up; $R/rehearse.sh stop-slots; KIT_IMAGE=$LM_PROJECT-apiserver:d2 $R/rehearse.sh seed
+    $R/rehearse.sh seed-c8; $R/rehearse.sh replace a d31; $R/rehearse.sh replace b d31     # 1671 at the first boot
+    $R/rehearse.sh census-pair c1 d31 d4; KIT_IMAGE=$LM_PROJECT-apiserver:d31 $R/rehearse.sh writer-on; $R/rehearse.sh load-on
+    $R/walk.sh wd31 http://<apiserver's address>:3000/api d3
+    $R/rehearse.sh next d4                                                                  # 1711 at its boot
+    $R/walk.sh h1-mix http://<apiserver's address>:3000/api d3                              # D3.1 beside D4
+    $R/rehearse.sh replace a d4; $R/rehearse.sh replace b d4; $R/rehearse.sh next-stop
+    $R/rehearse.sh drop-down; ... next d31, replace a d31, replace b d31, next-stop          # the rollback
+    $R/rehearse.sh load-off; $R/rehearse.sh stop-load; node $R/windows.mjs $OUT <name>=<from>..<to> ...; $R/rehearse.sh down
 
 Run, in order (each step writes its records into `$OUT`, default `/mnt/tmp/t16/out`, and a line into `timeline.log`):
 

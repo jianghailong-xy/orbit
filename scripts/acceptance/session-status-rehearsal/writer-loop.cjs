@@ -8,10 +8,12 @@
 //            the word alone, as a D1 replica's enqueue, claim and turn-complete write it;
 //   beat     every 15 s, the seeded runners' heartbeat and presence, so the reaper treats them as online and their
 //            held rows keep their shape.
+// WRITER_CYCLE=parked cycles AWAITING_INPUT <-> PENDING only: a cycled session left RUNNING on a seeded runner, whose
+// turn no runner takes, is released by the reaper within about five minutes, after which the cycle matches no row.
 // No lock_timeout: a writer queues behind a migration's lock as a server's does, and how long it queued is the point.
 // Every statement is timed; one that takes over 100 ms is logged with its time, and a summary line is printed every
 // 10 s. Stops on SIGTERM and prints a last summary.
-//   docker run -d --network <net> -e DATABASE_URL=... [-e WRITER_CODE=d3] -v <this dir>:/kit:ro <project>-apiserver:d2 node /kit/writer-loop.cjs
+//   docker run -d --network <net> -e DATABASE_URL=... [-e WRITER_CODE=d3] [-e WRITER_CYCLE=parked] -v <this dir>:/kit:ro <project>-apiserver:d2 node /kit/writer-loop.cjs
 'use strict';
 const path = require('node:path');
 
@@ -72,7 +74,9 @@ async function main() {
   const ingested = parked.slice(10).map((r) => r.id);
   console.log(JSON.stringify({ t: new Date().toISOString(), start: { cyclers: cyclers.length, ingested: ingested.length } }));
   const word = new Map(cyclers.map((id) => [id, 'AWAITING_INPUT']));
-  const NEXT = { AWAITING_INPUT: 'PENDING', PENDING: 'RUNNING', RUNNING: 'AWAITING_INPUT' };
+  const NEXT = process.env.WRITER_CYCLE === 'parked'
+    ? { AWAITING_INPUT: 'PENDING', PENDING: 'AWAITING_INPUT' }
+    : { AWAITING_INPUT: 'PENDING', PENDING: 'RUNNING', RUNNING: 'AWAITING_INPUT' };
   let tick = 0;
   let lastSummary = Date.now();
   while (!stopping) {

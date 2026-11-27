@@ -14,6 +14,8 @@
 //   docker run --rm --network <net> -e DATABASE_URL=... -v <this dir>:/kit:ro <project>-apiserver:d2 node /kit/census.cjs [label]
 //   API_DIST=$PWD/src/apiserver/dist DATABASE_URL=... node scripts/acceptance/session-status-rehearsal/census.cjs [label]
 // Prints one JSON document (and a Markdown table under "markdown").
+// CENSUS_SNAPSHOT=<id> reads in that exported snapshot (pg_export_snapshot), so censuses run in two releases' images
+// count the very same rows while the stack writes (rehearse.sh census-pair).
 'use strict';
 const path = require('node:path');
 
@@ -42,19 +44,34 @@ function kindOf(row, stored, projected) {
   return null;
 }
 
+const SNAPSHOT = process.env.CENSUS_SNAPSHOT;
+/** The census's reads, in the exported snapshot when one is named. */
+function reading(fn) {
+  if (!SNAPSHOT) return fn(db);
+  if (!/^[0-9A-F-]+$/i.test(SNAPSHOT)) throw new Error(`CENSUS_SNAPSHOT ${SNAPSHOT}`);
+  return db.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    await tx.$executeRawUnsafe(`SET TRANSACTION SNAPSHOT '${SNAPSHOT}'`);
+    return fn(tx);
+  }, { timeout: 300_000, maxWait: 30_000 });
+}
+
 async function main() {
   const t0 = Date.now();
+  const { storedWord, rows } = await reading(async (q) => {
   // Deploy D4 dropped the stored word: without the column there is nothing to compare the projector's word with.
-  const [{ present: storedWord }] = await db.$queryRawUnsafe(`
+  const [{ present: storedWord }] = await q.$queryRawUnsafe(`
     SELECT EXISTS (SELECT 1 FROM information_schema.columns
                     WHERE table_schema = current_schema() AND table_name = 'session' AND column_name = 'status') AS present`);
-  const rows = await db.$queryRawUnsafe(`
+  const rows = await q.$queryRawUnsafe(`
     SELECT s."id"::text AS id, ${storedWord ? 's."status"::text' : 'NULL::text'} AS status, s."turn_state", s."phase",
            s."finished_at", s."end_reason", s."retry_at",
            s."last_turn_outcome", s."started_at", s."import_source_cwd", s."kind", s."completed_at", s."archived_at",
            s."deleted_at", s."engine_turn_active", s."running_subagents", s."running_bg_jobs",
            l."settled_at" AS landing_settled_at, l."settled_as" AS landing_settled_as
       FROM "session" s LEFT JOIN "project_landing" l ON l."session_id" = s."id"`);
+  return { storedWord, rows };
+  });
   const lines = new Map();
   const totals = { rows: rows.length, wordChanged: 0, unlisted: 0, heldChanged: 0, phaseDisagrees: 0, turnStateDisagrees: 0,
     phaseNull: 0, runStateChanged: 0, sessionStateChanged: 0 };
@@ -116,7 +133,7 @@ async function main() {
   }
   const ok = !totals.unlisted && !totals.heldChanged && totals.phaseDisagrees === 0 && !totals.turnStateDisagrees
     && (storedWord || totals.phaseNull === 0);
-  console.log(JSON.stringify({ label, at: new Date().toISOString(), readMs: Date.now() - t0, storedWord, ok, totals, byKind, unlistedSamples: samples, lines: table, markdown: md }, null, 1));
+  console.log(JSON.stringify({ label, at: new Date().toISOString(), snapshot: SNAPSHOT ?? null, readMs: Date.now() - t0, storedWord, ok, totals, byKind, unlistedSamples: samples, lines: table, markdown: md }, null, 1));
   return ok;
 }
 

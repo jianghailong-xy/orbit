@@ -19,6 +19,24 @@
 #   rehearse.sh stop-load   writer loop and lock sampler off, with their summaries
 #   rehearse.sh down        remove the stack and every container this script started
 #
+# The D3 to D4 rehearsal (task T17) adds, with images from build-images.sh SIDES=... and UP_SIDE naming the side `up`
+# starts both slots at (default d1):
+#   rehearse.sh stop-slots          both apiservers stopped (to seed a database nothing serves)
+#   rehearse.sh seed-c8             seed-c8.sql: the four C8 rows, after `seed` (the D2-era scripts need the column)
+#   rehearse.sh replace a|b <side>  one slot stopped (graceful) and started again from <side>'s image, which runs
+#                                   prisma migrate deploy as it boots; the other slot serves meanwhile
+#   rehearse.sh next <side>         the upgrade skill's hand-over: $P-apiserver-next from <side>'s image starts beside
+#                                   both slots and answers to `apiserver` too, migrating as it boots, while they serve
+#   rehearse.sh next-stop           $P-apiserver-next stops (after both slots were replaced by its release)
+#   rehearse.sh extra <side>        $P-apiserver-extra from <side>'s image beside the slots, answering as apiserver-b
+#   rehearse.sh extra-stop
+#   rehearse.sh writer-on           writer loop (WRITER_CODE=d3, WRITER_CYCLE=parked) and lock sampler on
+#   rehearse.sh load-on | load-off  load.mjs (API and the load runner) against the serving containers
+#   rehearse.sh drop-down           scripts/session-status-drop-down.sql, timed, and 1711's _prisma_migrations row
+#   rehearse.sh census-pair <label> <side> <side>   the census in both images, in one exported snapshot, then census-same
+#   rehearse.sh census-same <label> <label>   two censuses give every row the same projected words, line for line
+# Every container change rewrites $OUT/state/targets, the serving containers load.mjs sends to.
+#
 # Records go to $OUT (default /mnt/tmp/t16/out): one file per step, and timeline.log.
 # KIT_IMAGE names the apiserver image the census and the shape seed run in (default $LM_PROJECT-apiserver:d2); for a
 # D4 database give it an image built from D3 or D4 code. The steps up, rewind, seed, d1, gate, backfill, plans, d2,
@@ -41,7 +59,7 @@ mkdir -p "$OUT"
 stamp() { date -u +%FT%T.%3NZ; }
 log() { echo "$(stamp) $*" | tee -a "$OUT/timeline.log"; }
 psqlc() { docker exec -i "$PG" psql -U orbit -d orbit -X -v ON_ERROR_STOP=1 "$@"; }
-kit() { docker run --rm --network "$NET" -e DATABASE_URL="$DB_URL" -v "$HERE:/kit:ro" -v "$REPO/scripts:/scripts:ro" "${KIT_IMAGE:-$P-apiserver:d2}" "$@"; }
+kit() { docker run --rm --network "$NET" -e DATABASE_URL="$DB_URL" ${CENSUS_SNAPSHOT:+-e CENSUS_SNAPSHOT="$CENSUS_SNAPSHOT"} -v "$HERE:/kit:ro" -v "$REPO/scripts:/scripts:ro" "${KIT_IMAGE:-$P-apiserver:d2}" "$@"; }
 has_status() { [ "$(psqlc -At -c "SELECT count(*) FROM information_schema.columns WHERE table_name = 'session' AND column_name = 'status'")" = 1 ]; }
 healthy() { docker exec "$1" node -e "fetch('http://127.0.0.1:3000/api').then(()=>process.exit(0)).catch(()=>process.exit(1))" 2>/dev/null; }
 wait_healthy() {
@@ -56,17 +74,53 @@ wait_healthy() {
 migrations() {
   psqlc -A -F $'\t' -c "SELECT migration_name, started_at, finished_at,
       round(extract(epoch FROM finished_at - started_at)::numeric * 1000) AS ms, applied_steps_count, rolled_back_at
-    FROM _prisma_migrations WHERE migration_name ~ '^16[0-9][0-9]_' ORDER BY started_at"
+    FROM _prisma_migrations WHERE migration_name ~ '^1[67][0-9][0-9]_' ORDER BY started_at"
 }
 image_of() { docker inspect -f '{{.Config.Image}} {{.Image}}' "$1"; }
+running() { [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
+side_of() { cat "$OUT/state/side-$1" 2>/dev/null || echo "${UP_SIDE:-d1}"; }
+write_targets() {
+  mkdir -p "$OUT/state"
+  local c
+  for c in "$P-apiserver" "$P-apiserver-b" "$P-apiserver-next" "$P-apiserver-extra"; do
+    running "$c" && echo "$c $(side_of "$c") $(docker inspect -f "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}}" "$c")"
+  done > "$OUT/state/targets.new" || true
+  mv "$OUT/state/targets.new" "$OUT/state/targets"
+  log "targets: $(tr '\n' ';' < "$OUT/state/targets")"
+}
+# The slot's own configuration, kept from the Compose container the first time it is replaced.
+save_config() {
+  local c=$1 slot=$2
+  [ -f "$OUT/state/env-$slot" ] && return
+  (umask 077; docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$c" | grep -vE '^(PATH|NODE_VERSION|YARN_VERSION|HOSTNAME)=' | grep . > "$OUT/state/env-$slot")
+  docker inspect -f '{{range .HostConfig.Binds}}-v {{.}} {{end}}' "$c" > "$OUT/state/binds-$slot"
+}
+# start_as <container> <slot whose configuration it takes> <side> <alias>...
+start_as() {
+  local c=$1 slot=$2 side=$3; shift 3
+  local aliases=() a
+  for a in "$@"; do aliases+=(--network-alias "$a"); done
+  # shellcheck disable=SC2046
+  docker run -d --name "$c" --network "$NET" "${aliases[@]}" --env-file "$OUT/state/env-$slot" $(cat "$OUT/state/binds-$slot") \
+    --label "t17.side=$side" "$P-apiserver:$side" >/dev/null
+  echo "$side" > "$OUT/state/side-$c"
+}
+stop_timed() {
+  local c=$1 t0; t0=$(date +%s%N)
+  docker stop -t 30 "$1" >/dev/null
+  log "$c stopped in $(( ($(date +%s%N) - t0) / 1000000 )) ms (exit $(docker inspect -f '{{.State.ExitCode}}' "$c"))"
+}
+migrate_log() { docker logs "$1" 2>&1 | grep -E 'migration|Applying|applied|All migrations|No pending' | head -30 > "$2" || true; }
 
 case "${1:-}" in
 up)
-  for side in d1 d2; do docker image inspect "$P-apiserver:$side" >/dev/null; done
-  docker tag "$P-apiserver:d1" "$P-apiserver:local"
-  log "up: apiserver and apiserver-b at D1 ($(docker image inspect -f '{{index .Config.Labels "t16.source"}}' "$P-apiserver:d1"))"
+  up=${UP_SIDE:-d1}
+  if [ -z "${UP_SIDE:-}" ]; then for side in d1 d2; do docker image inspect "$P-apiserver:$side" >/dev/null; done; fi
+  docker tag "$P-apiserver:$up" "$P-apiserver:local"
+  log "up: apiserver and apiserver-b at $up ($(docker image inspect -f '{{index .Config.Labels "t16.source"}}' "$P-apiserver:$up"))"
   bash "$REPO/scripts/acceptance/landing-measured/stack.sh" up --no-build > "$OUT/up.log" 2>&1 || { tail -40 "$OUT/up.log"; exit 1; }
   log "up: $(image_of "$P-apiserver") / $(image_of "$P-apiserver-b")"
+  mkdir -p "$OUT/state"; echo "$up" > "$OUT/state/side-$P-apiserver"; echo "$up" > "$OUT/state/side-$P-apiserver-b"
   migrations | tail -5 | tee "$OUT/up-migrations.tsv"
   ;;
 rewind)
@@ -190,6 +244,136 @@ cutover)
 migrations)
   migrations
   ;;
+stop-slots)
+  stop_timed "$P-apiserver-b"; stop_timed "$P-apiserver"
+  write_targets
+  ;;
+seed-c8)
+  psqlc < "$HERE/seed-c8.sql" | tee "$OUT/seed-c8.txt"
+  log "seed-c8: $(grep -A2 c8_rows "$OUT/seed-c8.txt" | sed -n 3p | tr -d ' ') rows"
+  ;;
+replace)
+  slot=${2:?a or b} side=${3:?side}
+  case "$slot" in a) c=$P-apiserver alias=apiserver ;; b) c=$P-apiserver-b alias=apiserver-b ;; *) exit 2 ;; esac
+  save_config "$c" "$slot"
+  old="$(side_of "$c") $(running "$c" && image_of "$c" || echo stopped)"
+  log "replace $slot: $c ($old) replaced by $side; serving: $(grep -v "^$c " "$OUT/state/targets" 2>/dev/null | awk '{print $1"="$2}' | tr '\n' ' ')"
+  if running "$c"; then stop_timed "$c"; fi
+  docker rm "$c" >/dev/null
+  write_targets
+  t0=$(date +%s%N)
+  start_as "$c" "$slot" "$side" "$alias"
+  wait_healthy "$c"
+  log "replace $slot: $(image_of "$c") up in $(( ($(date +%s%N) - t0) / 1000000 )) ms"
+  stamp_=$(date -u +%H%M%S)
+  migrate_log "$c" "$OUT/replace-$slot-$side-$stamp_-migrate.log"
+  log "replace $slot: migrate log: $(tr '\n' ' ' < "$OUT/replace-$slot-$side-$stamp_-migrate.log" | cut -c1-300)"
+  write_targets
+  migrations | tail -3 | tee -a "$OUT/migrations.tsv"
+  ;;
+next)
+  side=${2:?side}
+  c=$P-apiserver-next
+  save_config "$P-apiserver" a
+  docker rm -f "$c" >/dev/null 2>&1 || true
+  log "next: $c from $side starts beside $(awk '{print $1"="$2}' "$OUT/state/targets" | tr '\n' ' ')(prisma migrate deploy at boot)"
+  t0=$(date +%s%N)
+  start_as "$c" a "$side" apiserver apiserver-next
+  wait_healthy "$c"
+  log "next: $(image_of "$c") healthy $(( ($(date +%s%N) - t0) / 1000000 )) ms after start"
+  migrate_log "$c" "$OUT/next-$side-$(date -u +%H%M%S)-migrate.log"
+  docker logs "$c" 2>&1 | grep -E 'migration|Applying|applied|All migrations|No pending' | head -10 | sed 's/^/  /'
+  write_targets
+  migrations | tail -3 | tee -a "$OUT/migrations.tsv"
+  ;;
+next-stop)
+  c=$P-apiserver-next
+  stop_timed "$c"; docker rm "$c" >/dev/null
+  write_targets
+  ;;
+extra)
+  side=${2:?side}
+  c=$P-apiserver-extra
+  save_config "$P-apiserver-b" b
+  docker rm -f "$c" >/dev/null 2>&1 || true
+  t0=$(date +%s%N)
+  start_as "$c" b "$side" apiserver-b apiserver-extra
+  wait_healthy "$c"
+  log "extra: $(image_of "$c") healthy $(( ($(date +%s%N) - t0) / 1000000 )) ms after start"
+  migrate_log "$c" "$OUT/extra-$side-migrate.log"
+  write_targets
+  ;;
+extra-stop)
+  c=$P-apiserver-extra
+  stop_timed "$c"; docker rm "$c" >/dev/null
+  write_targets
+  ;;
+writer-on)
+  docker rm -f t16-writer >/dev/null 2>&1 || true
+  docker run -d --name t16-writer --network "$NET" -e DATABASE_URL="$DB_URL" -e WRITER_CODE=d3 -e WRITER_CYCLE=parked \
+    -v "$HERE:/kit:ro" "${KIT_IMAGE:-$P-apiserver:d2}" node /kit/writer-loop.cjs >/dev/null
+  setsid bash "$HERE/sample-locks.sh" "$PG" "$OUT/locks.jsonl" > /dev/null 2>&1 < /dev/null &
+  echo $! > "$OUT/sampler.pid"
+  log "writer-on: writer loop (d3, parked cycle) and lock sampler on"
+  ;;
+load-on)
+  [ -x "$LM_DIR/bin/orbit" ] || bash "$REPO/scripts/acceptance/landing-measured/stack.sh" build-runner
+  [ -x "$LM_DIR/bin/orbit-load" ] || cp -p "$LM_DIR/bin/orbit" "$LM_DIR/bin/orbit-load"
+  rm -f "$OUT/load.stop"
+  write_targets
+  OUT=$OUT setsid node "$HERE/load.mjs" >> "$OUT/load.log" 2>&1 < /dev/null &
+  echo $! > "$OUT/load.pid"
+  for _ in $(seq 1 120); do grep -q 'targets ' "$OUT/load.log" && break; sleep 1; done
+  log "load-on: $(grep 'targets ' "$OUT/load.log" | tail -1)"
+  ;;
+load-off)
+  touch "$OUT/load.stop"
+  [ -f "$OUT/load.pid" ] && timeout 120 tail --pid="$(cat "$OUT/load.pid")" -f /dev/null || true
+  log "load-off: $(tail -2 "$OUT/load.log" | tr '\n' ' ' | cut -c1-300)"
+  ;;
+drop-down)
+  log "drop-down: scripts/session-status-drop-down.sql while $(awk '{print $1"="$2}' "$OUT/state/targets" | tr '\n' ' ')serve"
+  t0=$(date +%s%N)
+  psqlc -c '\timing on' -f - < "$REPO/scripts/session-status-drop-down.sql" > "$OUT/drop-down.txt" 2>&1
+  log "drop-down: exit 0 in $(( ($(date +%s%N) - t0) / 1000000 )) ms: $(grep -E 'Time:|NOTICE|ERROR' "$OUT/drop-down.txt" | tr '\n' ' ' | cut -c1-300)"
+  psqlc -c '\timing on' -c "DELETE FROM _prisma_migrations WHERE migration_name = '1711_session_status_drop'" | tee -a "$OUT/drop-down.txt"
+  psqlc -At -c "SELECT count(*) FROM information_schema.columns WHERE table_name = 'session' AND column_name = 'status'" | sed 's/^/status column: /' | tee -a "$OUT/drop-down.txt"
+  psqlc -At -c "SELECT count(*) FILTER (WHERE status IS NULL) AS null_words, count(*) AS rows FROM session" | sed 's/^/null words|rows: /' | tee -a "$OUT/drop-down.txt"
+  psqlc -At -c "SELECT tgname FROM pg_trigger WHERE tgname = 'session_aa_status_from_facts'" | sed 's/^/trigger: /' | tee -a "$OUT/drop-down.txt"
+  ;;
+census-pair)
+  # census-pair <label> <side> <side>: the census in each release's image, both in one exported snapshot, then
+  # census-same over the two.
+  label=${2:?label} s1=${3:?side} s2=${4:?side}
+  docker exec "$PG" rm -f /tmp/t17-snapshot
+  docker exec -i "$PG" psql -U orbit -d orbit -X -q > /dev/null 2>&1 <<'SQL' &
+SET application_name = 't17-census-snapshot';
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+\o /tmp/t17-snapshot
+SELECT pg_export_snapshot();
+\o
+SELECT pg_sleep(900);
+SQL
+  for _ in $(seq 1 60); do docker exec "$PG" test -s /tmp/t17-snapshot && break; sleep 0.5; done
+  snap=$(docker exec "$PG" sh -c 'grep -Eo "[0-9A-F]+-[0-9A-F]+-[0-9]+" /tmp/t17-snapshot | head -1')
+  log "census-pair $label: snapshot $snap"
+  for side in "$s1" "$s2"; do
+    CENSUS_SNAPSHOT=$snap KIT_IMAGE=$P-apiserver:$side "$0" census "$label-$side"
+  done
+  psqlc -At -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 't17-census-snapshot'" >/dev/null
+  "$0" census-same "$label-$s1" "$label-$s2"
+  ;;
+census-same)
+  node -e '
+    const [a, b] = process.argv.slice(1).map((l) => require(`${process.env.OUT}/census-${l}.json`));
+    const key = (t) => [t.projected, t.runProjected, t.stateProjected, t.endReason, t.outcome, t.kind, t.imported, t.filed].join("|");
+    const sum = (j) => { const m = new Map(); for (const t of j.lines) m.set(key(t), (m.get(key(t)) ?? 0) + t.rows); return m; };
+    const [ma, mb] = [sum(a), sum(b)];
+    const diff = [...new Set([...ma.keys(), ...mb.keys()])].filter((k) => ma.get(k) !== mb.get(k));
+    console.log(`${a.label} (${a.totals.rows} rows, ${ma.size} lines) against ${b.label} (${b.totals.rows} rows, ${mb.size} lines): ${diff.length} lines differ`);
+    for (const k of diff.slice(0, 20)) console.log(`  ${k}: ${ma.get(k) ?? 0} vs ${mb.get(k) ?? 0}`);
+  ' "${2:?label}" "${3:?label}" | tee -a "$OUT/census-same.txt"
+  ;;
 stop-load)
   [ -f "$OUT/sampler.pid" ] && { kill -- -"$(cat "$OUT/sampler.pid")" 2>/dev/null || true; rm -f "$OUT/sampler.pid"; }
   psqlc -At -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 't16-lock-sampler'" >/dev/null || true
@@ -199,8 +383,9 @@ stop-load)
   log "stop-load: writer $(grep -c '"slow"' "$OUT/writer-loop.jsonl" || true) slow lines; $(wc -l < "$OUT/locks.jsonl" 2>/dev/null || echo 0) lock samples with a waiter"
   ;;
 down)
-  docker rm -f t16-writer "$P-apiserver-b" >/dev/null 2>&1 || true
+  # replace re-creates the slots outside Compose, so its down would leave them (and the network) behind.
+  docker rm -f t16-writer "$P-apiserver" "$P-apiserver-b" "$P-apiserver-next" "$P-apiserver-extra" >/dev/null 2>&1 || true
   bash "$REPO/scripts/acceptance/landing-measured/stack.sh" down
   ;;
-*) sed -n '2,24p' "$0"; exit 2 ;;
+*) sed -n '2,42p' "$0"; exit 2 ;;
 esac
