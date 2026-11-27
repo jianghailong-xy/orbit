@@ -56,10 +56,10 @@
     "endReason": {
       "type": "string",
       "nullable": true,
-      "values": ["task_done", "task_cancelled", "ended", "completed", "deleted", "cancelled", "idle", "orphaned"],
+      "values": ["task_done", "task_cancelled", "ended", "completed", "deleted", "cancelled", "moved", "idle", "orphaned"],
       "sharedConstant": "SessionEndReason, LEGACY_END_REASONS",
       "decidedBy": "session.end_reason",
-      "meaning": "why an end was asked for, as stored; null when none was. idle and orphaned have no writer left. session.ended sends the reason the end settled with"
+      "meaning": "why an end was asked for, as stored; null when none was. idle and orphaned have no writer left. moved is a move to another workspace letting the session go (POST /sessions/:id/move): a client draws a released session with it as a held idle one (no Ended mark, its idle word, no ended banner) and still resumes it on the next message. session.ended sends the reason the end settled with"
     },
     "workFinished": {
       "type": "boolean",
@@ -104,6 +104,7 @@
     { "id": "SUCCEEDED", "given": { "finishedAt": "set", "startedAt": "set", "endReason": "task_done", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "ANSWERED", "waitingOn": null, "endReason": "task_done", "workFinished": true } },
     { "id": "FAILED", "given": { "finishedAt": "set", "lastTurnOutcome": "FAILED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "FAILED", "waitingOn": null, "endReason": null, "workFinished": false } },
     { "id": "CANCELLED", "given": { "finishedAt": "set", "endReason": "ended", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "ANSWERED", "waitingOn": null, "endReason": "ended", "workFinished": false } },
+    { "id": "released by a move", "given": { "finishedAt": "set", "endReason": "moved", "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": true, "lastTurnOutcome": "ANSWERED", "waitingOn": null, "endReason": "moved", "workFinished": false } },
     { "id": "job running", "given": { "finishedAt": null, "turnState": null, "runningBgJobs": ["bgj_fixture"], "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "RUNNING", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": null, "endReason": null, "workFinished": false } },
     { "id": "waiting on an approval", "given": { "finishedAt": null, "turnState": "IN_FLIGHT", "pendingApprovals": 1 }, "expect": { "phase": "RUNNING", "released": false, "lastTurnOutcome": null, "waitingOn": "PERSON", "endReason": null, "workFinished": false } },
     { "id": "watch armed", "given": { "finishedAt": null, "turnState": null, "resumeWatch": true, "lastTurnOutcome": "ANSWERED" }, "expect": { "phase": "IDLE", "released": false, "lastTurnOutcome": "ANSWERED", "waitingOn": "WAKE", "endReason": null, "workFinished": false } },

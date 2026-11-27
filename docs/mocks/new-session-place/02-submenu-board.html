@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>New session · place menu with submenus</title>
+<style>
+  :root{--text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;--text-4:#a8acb3;--border:#dee0e3;--border-subtle:#eceef1;
+    --brand:#3370ff;--brand-tint:#ebf1ff;--brand-strong:#245bdb;--bg-hover:#f2f3f5;--mark:#e5484d}
+  *{box-sizing:border-box}
+  body{margin:0;background:#eef0f3;font-family:-apple-system,BlinkMacSystemFont,Inter,'Noto Sans SC',sans-serif;color:var(--text-1)}
+  .board{width:1960px;padding:44px 48px 48px}
+  h1{margin:0 0 6px;font-size:30px;letter-spacing:-.01em}
+  .lede{font-size:16px;color:#4a505a;margin-bottom:30px;line-height:1.6;max-width:1700px}
+  .row{display:flex;gap:40px;margin-bottom:40px;align-items:flex-start}
+  .col{width:912px;flex:none}
+  .cap{font-size:20px;font-weight:650;margin-bottom:4px}
+  .tag{display:inline-block;font-size:13px;font-weight:600;padding:2px 8px;border-radius:6px;margin-left:8px;vertical-align:3px}
+  .tag.rec{background:#e3f6ea;color:#1f7a3f}.tag.alt{background:#fff;color:#646a73;border:1px solid #d4d7dc}
+  .capsub{font-size:14.5px;color:#4a505a;margin-bottom:12px;line-height:1.55}
+  .shot{position:relative;width:912px;height:560px;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 24px rgba(0,0,0,.08)}
+  .shot>img{position:absolute;left:-78px;top:-40px;width:1068px}
+  .notes{margin:14px 0 0;padding-left:22px;font-size:14.5px;line-height:1.65;color:#30353c}
+  .notes li{margin-bottom:4px}
+  .m{position:absolute;width:28px;height:28px;border-radius:50%;background:var(--mark);color:#fff;font:700 15px/28px Inter,sans-serif;text-align:center;box-shadow:0 0 0 3px #fff;z-index:5}
+  .ring{position:absolute;border:3px solid var(--mark);border-radius:10px}
+
+  /* hero */
+  .hero{position:absolute;left:0;right:0;top:90px;display:flex;flex-direction:column;align-items:center;text-align:center}
+  .mark{width:112px;height:112px;border-radius:29px;background:linear-gradient(135deg,#d97757,#c15f3c);box-shadow:0 10px 28px rgba(193,95,60,.34);display:flex;align-items:center;justify-content:center}
+  .name{margin-top:22px;display:inline-flex;align-items:center;gap:8px;font-size:28px;font-weight:650}
+  .chev{font-size:11px;color:var(--text-4)}
+  .empty{margin-top:26px;font-size:24px;color:var(--text-3)}
+  .ic{width:20px;height:20px;flex:none;color:var(--text-3)}
+
+  /* A: one place pill */
+  .pill{margin-top:16px;display:inline-flex;align-items:center;gap:9px;height:46px;padding:0 18px;border:1px solid var(--border);border-radius:23px;background:#fff;font-size:21px;color:var(--text-1);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .pill.open{border-color:#adc6ff;background:var(--brand-tint);box-shadow:0 0 0 3px rgba(51,112,255,.12)}
+  .pill .slash{color:var(--text-4);margin:0 2px}
+  .pill .dim{color:var(--text-2)}
+  .pill .chev{margin-left:2px}
+
+  /* menu */
+  .pop{position:absolute;background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.14);padding:6px;font-size:16px;text-align:left;z-index:3}
+  .search{display:flex;align-items:center;gap:8px;height:38px;margin:2px 2px 6px;padding:0 10px;border-radius:9px;background:#f5f6f7;color:var(--text-4);font-size:14.5px}
+  .hd{font-size:12px;color:var(--text-3);padding:8px 10px 4px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  .it{display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;border-radius:8px;color:var(--text-1)}
+  .it.on{background:var(--brand-tint);font-weight:600}
+  .it.hover{background:var(--bg-hover)}
+  .it.sub{padding-left:38px}
+  .it .ck{margin-left:auto;color:var(--brand);font-weight:700}
+  .it .meta{margin-left:auto;color:var(--text-4);font-size:13px;font-weight:400}
+  .it.muted{color:var(--text-2)}
+  .sp{height:1px;background:var(--border-subtle);margin:5px 4px}
+
+  /* A states strip */
+  .states{position:absolute;inset:0;padding:26px 24px;display:grid;grid-template-columns:170px 1fr;row-gap:22px;align-items:center;font-size:14.5px}
+  .states .lbl{color:var(--text-2);line-height:1.4}
+  .states .pill{margin-top:0}
+  .states .lbl b{color:var(--text-1);display:block;font-weight:600}
+
+  /* B: labelled fields */
+  .fields{margin-top:18px;display:flex;gap:12px}
+  .field{width:236px;height:58px;border:1px solid var(--border);border-radius:12px;padding:8px 14px;text-align:left;display:flex;flex-direction:column;justify-content:center}
+  .field .k{font-size:12.5px;color:var(--text-3)}
+  .field .v{display:flex;align-items:center;gap:7px;font-size:16.5px;margin-top:2px}
+  .field .v .chev{margin-left:auto}
+  .field.ghost{border-style:dashed;color:var(--text-3)}
+  .field.ghost .v{color:var(--text-3)}
+
+  /* C: composer */
+  .comp{position:absolute;left:28px;right:28px;bottom:26px;height:112px;border:1px solid #c9cdd4;border-radius:24px;background:#fff}
+  .comp .ph{position:absolute;left:24px;top:20px;font-size:17px;color:var(--text-4)}
+  .comp .bar{position:absolute;left:16px;right:16px;bottom:12px;display:flex;align-items:center;gap:10px;font-size:14.5px;color:var(--text-2)}
+  .comp .plus{font-size:22px;width:32px;text-align:center}
+  .comp .cchip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--border);border-radius:15px;color:var(--text-1)}
+  .comp .cchip .ic{width:15px;height:15px}
+  .comp .r{margin-left:auto;display:flex;gap:14px;align-items:center}
+  .comp .send{width:34px;height:34px;border-radius:50%;background:#d7dae0}
+
+  /* phone */
+  .phone{position:relative;width:300px;height:560px;border-radius:36px;background:#fff;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 24px rgba(0,0,0,.08);flex:none}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.14);padding:10px 10px 22px;font-size:15px}
+  .grab{width:38px;height:5px;border-radius:3px;background:#d4d7dc;margin:0 auto 8px}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.28)}
+
+  table{border-collapse:collapse;width:100%;font-size:14.5px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  th,td{padding:10px 14px;border-bottom:1px solid #eceef1;text-align:left;vertical-align:top;line-height:1.55}
+  th{background:#f6f7f9;font-weight:650;color:#30353c}
+  .panel{background:#fff;border-radius:12px;padding:18px 22px;box-shadow:0 1px 2px rgba(0,0,0,.05);font-size:14.5px;line-height:1.7}
+  .panel h3{margin:0 0 8px;font-size:17px}
+  .decide{border-left:4px solid #f5a623}
+  code{font-family:'JetBrains Mono',monospace;font-size:13px;background:#f2f3f5;padding:1px 5px;border-radius:4px}
+
+  .shot.tall{height:640px}
+  .pop .sub{position:absolute;background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.14);padding:6px;width:250px}
+  .it .chevr{margin-left:auto;color:var(--text-4);font-size:13px}
+  .it .cnt{color:var(--text-4);font-size:13px;margin-left:auto;margin-right:6px}
+  .it.parent{background:var(--bg-hover)}
+  .cols{display:flex}
+  .cols .colx{width:240px;padding:0 2px}
+  .cols .colx+.colx{border-left:1px solid var(--border-subtle);padding-left:6px}
+  .match .pth{color:var(--text-3);font-size:13px;margin-left:6px}
+  .p-hd{display:flex;align-items:center;gap:8px;padding:2px 6px 8px;font-weight:600;font-size:15px}
+  .p-hd .bk{color:var(--brand);font-weight:500}
+  mark{background:#fff3bf;color:inherit;padding:0 1px;border-radius:2px}
+</style></head><body><svg width="0" height="0" style="position:absolute">
+  <symbol id="star" viewBox="0 0 24 24"><path fill="#fff" d="M12 2l1.2 7.3L19 4.6l-4.6 5.8L22 12l-7.6 1.6 4.6 5.8-5.8-4.7L12 22l-1.2-7.3L5 19.4l4.6-5.8L2 12l7.6-1.6L5 4.6l5.8 4.7z"/></symbol>
+  <symbol id="ws" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7l2 1.5L5 10"/></g></symbol>
+  <symbol id="fd" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.4" d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z"/></symbol>
+  <symbol id="sr" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></g></symbol>
+</svg>
+<div class="board">
+  <h1>New session · the place menu with submenus (Web first)</h1>
+  <div class="lede">With many workspaces and folders, the one long menu (option A as shipped) scrolls: the folder section sits below every workspace, and the search box scrolls away with it.
+  Below are three ways to use a secondary level. The pill itself stays as shipped. Data is from your screenshot.</div>
+
+  <div class="row">
+    <div class="col">
+      <div class="cap">① Today, with many workspaces</div>
+      <div class="capsub">Your screenshot: 17 workspaces push the folders off the bottom.</div>
+      <div class="shot tall" style="background:#fff"><img src="10-today-long.png" alt="" style="position:absolute;left:150px;top:0;width:612px"></div>
+      <ol class="notes">
+        <li><b>Two lists in one scroll.</b> To reach a folder you scroll past every workspace; to reach a workspace low in the list you scroll back up past the folders.</li>
+        <li><b>Folders of another workspace can't be reached.</b> Picking one takes two trips: switch the workspace, reopen, pick its folder.</li>
+        <li><b>The search box scrolls away</b> with the list, so it is not there when the list is long, which is when it is needed.</li>
+      </ol>
+    </div>
+
+    <div class="col">
+      <div class="cap">② Option D: workspaces, each with its folders as a submenu<span class="tag rec">Recommended</span></div>
+      <div class="capsub">The top level is the workspaces only. A workspace that has folders shows ›; hovering it opens its folders beside it. Clicking the row itself picks that workspace with no folder.</div>
+      <div class="shot tall">
+        <div class="hero" style="top:24px">
+          <div class="mark" style="width:72px;height:72px;border-radius:19px"><svg width="40" height="40"><use href="#star"/></svg></div>
+          <div class="name" style="margin-top:12px;font-size:22px">Claude Code <span class="chev">▾</span></div>
+          <div class="pill open"><svg class="ic" style="color:var(--brand-strong)"><use href="#ws"/></svg>orbit-ws01<span class="slash">/</span><svg class="ic" style="color:var(--brand-strong)"><use href="#fd"/></svg>Orbit Session<span class="chev">▾</span></div>
+        </div>
+        <div class="pop" style="left:150px;top:214px;width:300px">
+          <div class="search"><svg class="ic" style="width:15px;height:15px"><use href="#sr"/></svg>Find a workspace or folder</div>
+          <div class="it on"><svg class="ic"><use href="#ws"/></svg>orbit-ws01<span class="cnt">8</span><span class="ck" style="margin-left:0;margin-right:8px">✓</span><span class="chevr" style="margin-left:0">›</span></div>
+          <div class="it parent"><svg class="ic"><use href="#ws"/></svg>orbit-develop<span class="cnt">5</span><span class="chevr">›</span></div>
+          <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-macos<span class="chevr" style="visibility:hidden">›</span></div>
+          <div class="it"><svg class="ic"><use href="#ws"/></svg>Penetration Testing</div>
+          <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-prod-fcm</div>
+          <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit<span class="cnt">2</span><span class="chevr">›</span></div>
+          <div class="it"><svg class="ic"><use href="#ws"/></svg>kiktok-macos</div>
+          <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-jdcloud</div>
+          <div class="it" style="color:var(--text-4)">…</div>
+          <div class="sub" style="left:296px;top:88px">
+            <div class="it muted">None</div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Android</div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Cloud</div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Drive</div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Gateway</div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>The current workspace comes first, ticked; the others follow in sidebar order. Its own folders are one hover away, never a scroll.</li>
+        <li><b>A folder in another workspace is one pick:</b> hover orbit-develop › click a folder, and the draft moves to both at once.</li>
+        <li>The search stays fixed above the list. Typing turns the menu into one flat list of matches (③).</li>
+        <li>Keyboard: ↑/↓ over workspaces, → opens the folders, ← goes back, Enter picks. The web's <code>Menu</code> already has these submenus.</li>
+        <li>A count before › says how many folders a workspace has; a workspace with none has no ›.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="cap">③ Option D · searching, and on a phone</div>
+      <div class="capsub">Typing flattens both levels into one list; on a phone the submenu is a page the sheet slides to.</div>
+      <div style="display:flex;gap:24px">
+        <div class="shot tall" style="width:588px">
+          <div class="pop" style="left:40px;top:40px;width:340px">
+            <div class="search" style="color:var(--text-1)"><svg class="ic" style="width:15px;height:15px"><use href="#sr"/></svg>dri</div>
+            <div class="hd">Workspaces</div>
+            <div class="it" style="color:var(--text-3)">No matches</div>
+            <div class="hd">Folders</div>
+            <div class="it match hover"><svg class="ic"><use href="#fd"/></svg><span>Orbit <mark>Dri</mark>ve</span><span class="pth">in orbit-ws01</span></div>
+            <div class="it match"><svg class="ic"><use href="#fd"/></svg><span><mark>Dri</mark>ver tests</span><span class="pth">in orbit-develop</span></div>
+          </div>
+          <ul class="notes" style="position:absolute;left:400px;top:30px;width:170px;margin:0;font-size:13.5px">
+            <li>A folder match names its workspace.</li>
+            <li>Picking it sets both.</li>
+          </ul>
+        </div>
+        <div class="phone" style="height:640px">
+          <div class="hero" style="top:90px">
+            <div class="mark" style="width:60px;height:60px;border-radius:16px"><svg width="34" height="34"><use href="#star"/></svg></div>
+            <div class="name" style="font-size:18px;margin-top:12px">Claude Code <span class="chev">▾</span></div>
+          </div>
+          <div class="scrim"></div>
+          <div class="sheet" style="height:420px">
+            <div class="grab"></div>
+            <div class="p-hd"><span class="bk">‹ Workspaces</span></div>
+            <div class="hd">Folders in orbit-develop</div>
+            <div class="it muted">None</div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Driver tests</div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Releases</div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Wiki</div>
+            <div class="it"><svg class="ic"><use href="#fd"/></svg>Polish</div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>macOS: a native submenu (NSMenu does this already). iOS: a SwiftUI <code>Menu</code> nested in the menu. Android: the sheet's second page, as drawn.</li>
+      </ul>
+    </div>
+
+    <div class="col">
+      <div class="cap">④ Option E: two columns side by side<span class="tag alt">Alternative</span></div>
+      <div class="capsub">Workspaces on the left, the highlighted workspace's folders on the right, both always visible (a column browser).</div>
+      <div class="shot tall">
+        <div class="pop" style="left:110px;top:60px;width:520px">
+          <div class="search"><svg class="ic" style="width:15px;height:15px"><use href="#sr"/></svg>Find a workspace or folder</div>
+          <div class="cols">
+            <div class="colx">
+              <div class="hd">Workspace</div>
+              <div class="it on"><svg class="ic"><use href="#ws"/></svg>orbit-ws01<span class="chevr">›</span></div>
+              <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-develop<span class="chevr">›</span></div>
+              <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-macos</div>
+              <div class="it"><svg class="ic"><use href="#ws"/></svg>Penetration Testing</div>
+              <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-prod-fcm</div>
+              <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit</div>
+              <div class="it" style="color:var(--text-4)">…</div>
+            </div>
+            <div class="colx">
+              <div class="hd">Folder · optional</div>
+              <div class="it muted">None</div>
+              <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Android</div>
+              <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Cloud</div>
+              <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Drive</div>
+              <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Gateway</div>
+              <div class="it on"><svg class="ic"><use href="#fd"/></svg>Orbit Session<span class="ck">✓</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Pro: both choices visible at once; easy to compare folders across workspaces.</li>
+        <li>Con: 520px wide under a centred pill, and no native control does this on macOS, iOS or Android: each would be custom. On a phone it collapses to ③'s drill-in anyway.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="cap">⑤ Option F: folders first, workspaces in a submenu<span class="tag alt">Alternative</span></div>
+      <div class="capsub">Optimised for the common change, a folder in the same workspace: those are the top level, and every other workspace hides behind one row.</div>
+      <div class="shot" style="height:470px">
+        <div class="pop" style="left:150px;top:40px;width:300px">
+          <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-ws01<span class="chevr">Switch ›</span></div>
+          <div class="sp"></div>
+          <div class="hd">Folder · optional</div>
+          <div class="it muted">None</div>
+          <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Android</div>
+          <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Cloud</div>
+          <div class="it"><svg class="ic"><use href="#fd"/></svg>Orbit Drive</div>
+          <div class="it on"><svg class="ic"><use href="#fd"/></svg>Orbit Session<span class="ck">✓</span></div>
+          <div class="sub" style="left:296px;top:0">
+            <div class="it on"><svg class="ic"><use href="#ws"/></svg>orbit-ws01<span class="ck">✓</span></div>
+            <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-develop</div>
+            <div class="it"><svg class="ic"><use href="#ws"/></svg>orbit-macos</div>
+            <div class="it"><svg class="ic"><use href="#ws"/></svg>Penetration Testing</div>
+            <div class="it" style="color:var(--text-4)">…</div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Pro: the shortest path for folders in the current workspace.</li>
+        <li>Con: a folder in another workspace is still two trips, and switching workspace is hidden one level down.</li>
+      </ul>
+    </div>
+    <div class="col">
+      <table>
+        <tr><th></th><th>Today</th><th>D · submenus</th><th>E · two columns</th><th>F · folders first</th></tr>
+        <tr><td>Long lists</td><td>One scroll for both</td><td>Workspaces only scroll</td><td>Each column scrolls</td><td>Folders only scroll</td></tr>
+        <tr><td>Folder in another workspace</td><td>2 trips</td><td><b>1 pick</b></td><td>1 pick</td><td>2 trips</td></tr>
+        <tr><td>Folder here</td><td>Scroll down</td><td>Hover › then pick</td><td>Pick</td><td><b>Pick</b></td></tr>
+        <tr><td>Native on Mac / iOS / Android</td><td>Yes</td><td><b>Yes</b> (submenu / drill-in)</td><td>Custom everywhere</td><td>Yes</td></tr>
+        <tr><td>Width</td><td>280</td><td>300 + 250 on hover</td><td>520</td><td>300 + 250 on hover</td></tr>
+      </table>
+      <div class="panel decide" style="margin-top:20px">
+        <h3>To decide</h3>
+        <ol style="margin:0;padding-left:20px">
+          <li><b>D, E or F?</b> I recommend D.</li>
+          <li><b>In D, should the current workspace's folders also sit at the top level?</b> It saves the hover for the commonest change but brings back a second section. I suggest not: the current workspace is the first row, so its folders are one hover away.</li>
+          <li><b>All four clients, as before?</b> Web first, then macOS/iOS/Android in the same change.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div></body></html>

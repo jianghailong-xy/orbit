@@ -130,13 +130,13 @@ final class CoordinatorChangeTests: XCTestCase {
         XCTAssertEqual(CoordinatorChangeCopy.title(project: "Website Revamp", to: "orbit-prod"),
                        "Coordinate Website Revamp from orbit-prod?")
         XCTAssertEqual(CoordinatorChangeCopy.moveParagraphs(
-            to: "orbit-prod", from: "orbit", needsEnd: true,
+            to: "orbit-prod", from: "orbit",
             files: "3 changed files aren’t merged into main yet. They stay on branch b in orbit."), [
-            "Move conversation: this conversation goes to orbit-prod and continues there. It ends first. 3 changed files aren’t merged into main yet. They stay on branch b in orbit.",
+            "Move conversation: this conversation goes to orbit-prod and continues there. 3 changed files aren’t merged into main yet. They stay on branch b in orbit.",
             "Start a new one there: this conversation is completed and stays readable in orbit, and a new, empty one opens in orbit-prod.",
             "Either way, its tasks keep running where they are.",
         ])
-        XCTAssertEqual(CoordinatorChangeCopy.moveParagraphs(to: "b", from: "a", needsEnd: false, files: nil).first,
+        XCTAssertEqual(CoordinatorChangeCopy.moveParagraphs(to: "b", from: "a", files: nil).first,
                        "Move conversation: this conversation goes to b and continues there.")
     }
 
@@ -219,10 +219,9 @@ final class CoordinatorChangeTests: XCTestCase {
                        "The conversation moves with it. Your next message continues it in orbit-prod.\n\n"
                        + "Website Revamp is coordinated from orbit-prod from now on, and its row moves to "
                        + "orbit-prod’s list. Its tasks keep running where they are.\n\n"
-                       + "The session ends first. Until you message it again, Orbit’s updates for the project "
-                       + "wait on the project page.")
+                       + "Until you message it again, Orbit’s updates for the project wait on the project page.")
         XCTAssertFalse(SessionMoveCopy.confirmMessage(try coordinatorAnswer(), to: prod, from: "orbit")
-            .contains("ends first"))
+            .contains("Orbit’s updates"), "an already released coordinator has nothing to add")
     }
 
     // MARK: the web's words
@@ -245,7 +244,6 @@ final class CoordinatorChangeTests: XCTestCase {
                         "startThere: '\(CoordinatorChangeCopy.startThere)'",
                         "`Coordinate ${project} from ${to}?`",
                         "`this conversation goes to ${to} and continues there.`",
-                        "'It ends first.'",
                         "`Move conversation: ${move.join(' ')}`",
                         "`Start a new one there: this conversation is completed and stays readable in ${from}, and a new, empty one opens in ${to}.`",
                         "'Either way, its tasks keep running where they are.'",
@@ -296,8 +294,7 @@ final class CoordinatorChangeTests: XCTestCase {
                      "Button(CoordinatorChangeCopy.newAction(pick.row.name, outgoing: outgoing),",
                      "role: outgoing == .open ? .destructive : nil) {",
                      "Button(CoordinatorChangeCopy.cancel, role: .cancel) {}",
-                     "await model.moveSession(sessionID, to: target, folder: nil,",
-                     "endingFirst: targets.needsEnd) { changePhase = $0 }",
+                     "await model.moveSession(sessionID, to: target, folder: nil)",
                      "files: SessionMoveCopy.filesSentence(targets, from: from ?? \"\"))"] {
             XCTAssertTrue(view.contains(part), "ProjectsView lacks `\(part)`")
         }

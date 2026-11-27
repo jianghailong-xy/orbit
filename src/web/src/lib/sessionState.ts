@@ -7,7 +7,7 @@ import {
   type SessionTurnOutcome,
   type SessionWaitingOn,
 } from '@orbit/shared';
-import { sessionDisplayState } from './sessionDisplay';
+import { sessionDisplayState, sessionReleasedByMove } from './sessionDisplay';
 
 /**
  * A session has two independent product dimensions:
@@ -282,6 +282,8 @@ function runStateFromPhaseFields(session: SessionStateSource): SessionRunState |
   if (!phase || typeof session.released !== 'boolean') return null;
   const outcome = sessionLastTurnOutcomeOf(session);
   if (session.released) {
+    // A move let it go; to its reader it is the idle session it was (sessionReleasedByMove).
+    if (sessionReleasedByMove(session)) return 'AWAITING_INPUT';
     if (!session.endReason && outcome === 'FAILED') return 'FAILED';
     return sessionFinishedTheWork(session) ? 'SUCCEEDED' : 'ENDED';
   }

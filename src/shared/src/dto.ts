@@ -150,7 +150,8 @@ export interface SessionMoveTargets {
   folders: SessionMoveFolder[];
   /** Why the session cannot move to another workspace at all; null when it can. */
   reason: string | null;
-  /** Idle but not ended: it has to be ended before it moves (the panel's End and Move). */
+  /** Still held (idle, or already being let go): the move releases it first, on the server. Kept for older clients that end
+   *  it themselves; newer ones read it only for a coordinator's confirmation. */
   needsEnd: boolean;
   /** The branch its changes stay on in the old workspace's repository. */
   branch: string | null;

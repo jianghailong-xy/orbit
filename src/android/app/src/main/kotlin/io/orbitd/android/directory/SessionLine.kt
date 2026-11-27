@@ -288,6 +288,8 @@ internal val DirectorySession.effectiveRunState: RunState get() {
  * released, and null when the payload carries no `released` (an older server). */
 internal val DirectorySession.releasedRunState: RunState? get() {
     if (released != true) return null
+    // A move let it go: to its reader it is the idle session it was (SessionFacts.releasedByMove).
+    if (SessionFacts.releasedByMove(released, endReason)) return RunState.AWAITING_INPUT
     return when (SessionFacts.afterRelease(endReason, lastTurnOutcome, workFinished, isLanding)) {
         "FINISHED" -> RunState.SUCCEEDED
         "FAILED" -> RunState.FAILED

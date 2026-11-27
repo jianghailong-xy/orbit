@@ -41,12 +41,15 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
     suspend fun resumeFuse(projectId: String, episodeId: String) { mutate(listOf("projects", projectId, "fuse", episodeId, "resume")) }
     suspend fun restore(id: String) { mutate(listOf("sessions", id, "restore")) }
     suspend fun delete(id: String, permanent: Boolean) { mutate(listOf("sessions", id) + if (permanent) listOf("purge") else emptyList(), HttpMethod.DELETE) }
-    suspend fun end(id: String) { mutate(listOf("sessions", id, "end")) }
+    /** File a session in a folder, or move it to another workspace. A move to another workspace of a session still held waits
+     * while the server lets it go (up to 45 s, SessionsService.releaseForMove), longer than OkHttp's 10 s read and 30 s call. */
     suspend fun move(id: String, workspace: String?, folder: String?) {
-        mutate(listOf("sessions", id, "move"), body = buildJsonObject {
+        val body = buildJsonObject {
             put("folderId", folder?.let(::JsonPrimitive) ?: JsonNull)
             workspace?.let { put("workspaceId", it) }
-        })
+        }
+        api.request(handle, ApiRequest(listOf("sessions", id, "move"), HttpMethod.POST, body = body.toString().encodeToByteArray(),
+            readTimeoutSeconds = 60, callTimeoutSeconds = 75))
     }
     suspend fun createFolder(workspace: String, name: String) {
         mutate(listOf("session-folders"), body = buildJsonObject { put("workspaceId", workspace); put("name", name.trim()) })

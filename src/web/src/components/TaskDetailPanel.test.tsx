@@ -465,12 +465,18 @@ describe('the task panel’s delete', () => {
     expect(deleteButton(renderPanel(task()))).toBeNull();
   });
 
-  it('leaves ⋯ and Close beside the actions row rather than in it, so the phone rule keeps them by the title', () => {
-    // Below 600px index.css lifts exactly `.tdp-head > .orbit-button-icon-only` — the panel's own two
-    // window buttons — out of the pressing row and leaves them on the title's line.
+  it('leaves ⋯ and Close beside the actions rather than in them, at the end of the header’s first row', () => {
+    // A long action label wraps the actions inside their own box; the panel's own two window
+    // buttons are the toolbar's last children, so they stay at its right end.
     expect(renderPanel(task())).toMatch(
-      /<div class="tdp-head-actions">[\s\S]*?<\/div><button[^>]*aria-label="More actions"[\s\S]*?<button[^>]*aria-label="Close"/,
+      /<div class="tdp-head-actions">[\s\S]*?<\/div><button[^>]*aria-label="More actions"[\s\S]*?<button[^>]*aria-label="Close"[^>]*><[\s\S]*?<\/button><\/div><div class="tdp-head-main">/,
     );
+  });
+
+  it('gives the title its own row under the presses (docs/mocks/task-panel-header, A)', () => {
+    const html = renderPanel(task());
+    expect(html).toContain('<div class="tdp-head has-toolbar"><div class="tdp-toolbar">');
+    expect(html.indexOf('aria-label="Close"')).toBeLessThan(html.indexOf('class="tdp-title"'));
   });
 });
 
