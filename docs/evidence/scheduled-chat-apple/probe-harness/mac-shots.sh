@@ -29,7 +29,9 @@ for width in 1010 1460; do
   for _ in $(seq 1 60); do [ -s "$png" ] && break; sleep 1; done
   kill "$app" 2>/dev/null; wait "$app" 2>/dev/null
   if [ -s "$png" ]; then
-    echo "$width: $(python3 -c "import struct,sys;d=open(sys.argv[1],'rb').read(24);print('%dx%d px'%struct.unpack('>II',d[16:24]))" "$png")"
+    for f in "$png" "${png%.png}-window.png"; do
+      [ -s "$f" ] && echo "$width: $(basename "$f") $(python3 -c "import struct,sys;d=open(sys.argv[1],'rb').read(24);print('%dx%d px'%struct.unpack('>II',d[16:24]))" "$f")"
+    done
   else
     echo "$width: no picture"; STATUS=1
   fi

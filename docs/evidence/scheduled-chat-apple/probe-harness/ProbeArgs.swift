@@ -64,6 +64,14 @@ enum ProbeArgs {
             window.setFrame(frame, display: true, animate: false)
         }
         try? await Task.sleep(nanoseconds: 6_000_000_000)
+        // The window server's copy of the whole window, past the screen's edge too: what the inspector-style column is
+        // drawn in (the app's own render below leaves a separately hosted column blank). Written beside the PNG.
+        let shot = Process()
+        shot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        shot.arguments = ["-o", "-x", "-l", "\(window.windowNumber)",
+                          path.replacingOccurrences(of: ".png", with: "-window.png")]
+        try? shot.run()
+        shot.waitUntilExit()
         guard let view = window.contentView?.superview ?? window.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
