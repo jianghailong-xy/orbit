@@ -456,8 +456,10 @@ struct BranchLabelView: View {
 
 /// Status-aware "Merge to main" control (mirrors web `MergeButton`): idle → a Merge button with an
 /// optional target-branch menu; pending → "Merging…"; merged → a ✓ chip; already-in-main → "✓ In
-/// main"; conflict → "Resolve in session"; error → "Retry merge".
+/// main"; pull_request → the pull request's state, opening it; conflict → "Resolve in session";
+/// error → "Retry merge".
 private struct WorktreeMergeControl: View {
+    @Environment(\.openURL) private var openURL
     let console: ConsoleModel
     let detail: SessionDetail
     let branch: String
@@ -493,6 +495,15 @@ private struct WorktreeMergeControl: View {
             let landed = detail.mergeTarget
                 ?? (targets.contains("main") ? "main" : targets.contains("master") ? "master" : "main")
             WTChip(title: "✓ In \(landed)")
+        } else if status == "pull_request" {
+            let line = WorktreeBarLogic.mergePullRequestLine(detail.mergePullRequest, target: detail.mergeTarget ?? defaultTarget ?? "main")
+            if let url = line.url.flatMap(URL.init(string:)) {
+                Button { openURL(url) } label: { WTChip(title: line.label + " ↗", color: pullRequestInk(line.tone)) }
+                    .buttonStyle(.plain)
+                    .help(line.detail)
+            } else {
+                WTChip(title: line.label, color: pullRequestInk(line.tone)).help(line.detail)
+            }
         } else if status == "pending" {
             WTPillButton(title: "Merging…", disabled: true) {}
         } else if status == "conflict" || status == "error" {
@@ -514,6 +525,16 @@ private struct WorktreeMergeControl: View {
             mergeSplit(title: "Merge to \(targetName(target))",
                        tint: .accentColor, busy: busy, primaryTarget: target,
                        targets: targets, currentTarget: target)
+        }
+    }
+
+    /// The pull request's tone, in `LandingPullRequestBlock`'s inks.
+    private func pullRequestInk(_ tone: LandingPullRequestCard.Tone) -> Color {
+        switch tone {
+        case .blue: return .accentColor
+        case .green: return .green
+        case .red: return .red
+        case .amber: return ProjectPalette.warningInk
         }
     }
 
