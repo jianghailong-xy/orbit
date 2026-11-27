@@ -56,6 +56,7 @@ import {
 } from './watch-delivery.service';
 import { WatchEvaluatorOptions, WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -388,7 +389,7 @@ async function turnsOn(sessionId: string): Promise<TurnRow[]> {
 
 async function sessionOf(id: string) {
   const { rows } = await sql.query<{ status: string; endReason: string | null; completed: boolean; trashed: boolean; cancelling: boolean }>(
-    `SELECT "status", "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
+    `SELECT ${wordSql()} AS status, "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
             "deleted_at" IS NOT NULL AS "trashed", "cancel_requested_at" IS NOT NULL AS "cancelling"
        FROM "session" WHERE "id" = $1`,
     [id],

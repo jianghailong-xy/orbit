@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- The board's frames (01-board.html, left) beside the built page (right): this branch's src/web on
+     vite, Chromium, 1280-wide desktop, 2x, fed by src/web/ui-migration's fixtures. The send's POST is
+     held, accepted or refused per scene (capture/capture.mjs); "Today" is the build of 1a4b20265a,
+     before the change. Board crops: capture/render-sel.mjs with the '.b-pane' selector. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sending… bubble — board beside the built page</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  body { margin: 0; background: #eef0f3; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: var(--text-1); background: #fff;
+            padding: 26px 32px 28px; width: 1500px; box-sizing: border-box; margin: 0 0 2px; }
+  .b-part h1 { font-size: 21px; margin: 0 0 4px; }
+  .b-sub { color: var(--text-2); font-size: 13.5px; margin: 0 0 6px; max-width: 1300px; }
+  .b-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+  .b-n { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px;
+         background: #16833a; color: #fff; font: 700 12.5px/1 Inter, sans-serif; }
+  .b-n.bad { background: var(--error-solid); }
+  .b-two { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  .b-lab { font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 6px; }
+  .b-two img { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15,23,42,.09), 0 1px 3px rgba(15,23,42,.06); }
+  .b-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 10px 2px 0; }
+  .b-cap b { color: var(--text-1); }
+  .b-cap code { font-size: 11.5px; background: #f0f2f5; padding: 0 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<section class="b-part">
+  <h1>Board beside the built page</h1>
+  <p class="b-sub">Left: the frame as drawn on the board. Right: the built page in Chromium, sending the same words. The
+    fixture session runs Claude (Opus 5) with no workspace bar, so the model control and the strip above the box differ from
+    the board. That comes from the fixture data, not the change.</p>
+</section>
+<section class="b-part">
+  <div class="b-h"><span class="b-n bad">1</span>Today: the build before the change, 1.5 s after Enter</div>
+  <div class="b-two"><div><p class="b-lab">Board</p><img src="board-pane-1.png"></div><div><p class="b-lab">Built page</p><img src="real/today.png"></div></div>
+  <p class="b-cap">The same picture as the reported screenshot: the words still in the box and a grey spinner on Send.</p>
+</section>
+<section class="b-part">
+  <div class="b-h"><span class="b-n">2</span>Sending…: right after Enter, the POST held</div>
+  <div class="b-two"><div><p class="b-lab">Board</p><img src="board-pane-2.png"></div><div><p class="b-lab">Built page</p><img src="real/sending.png"></div></div>
+  <p class="b-cap">As drawn: dimmed bubble, <code>Sending…</code> in its foot, an empty box, and Send a plain disabled arrow.
+    <b>Found and fixed by this shot:</b> the first build also drew <code>Working for 1s</code> under the bubble and kept a
+    spinner on Send. A message the server has not taken has opened no turn, so neither belongs there.</p>
+</section>
+<section class="b-part">
+  <div class="b-h"><span class="b-n">3</span>Sent: accepted, with the next message typed while it was on its way</div>
+  <div class="b-two"><div><p class="b-lab">Board</p><img src="board-pane-3.png"></div><div><p class="b-lab">Built page</p><img src="real/sent.png"></div></div>
+  <p class="b-cap">Full strength, nothing in its foot, and the typed sentence still in the box. The turn's own clock
+    (<code>Working for 1s</code>) starts here, where the board drew "Thinking…". That's the page's existing turn head.</p>
+</section>
+<section class="b-part">
+  <div class="b-h"><span class="b-n">4</span>No answer: 20 s after Enter, hovering the line</div>
+  <div class="b-two"><div><p class="b-lab">Board</p><img src="board-pane-4.png"></div><div><p class="b-lab">Built page</p><img src="real/not-answered.png"></div></div>
+  <p class="b-cap">As drawn, after a real 20-second wait: <code>⚠ Not sent · Retry · Put back in the composer</code>, with the
+    reason in the tooltip. The real tooltip opens above the line, where the board drew it below.</p>
+</section>
+<section class="b-part">
+  <div class="b-h"><span class="b-n">5</span>Refused: the server answered 400</div>
+  <div class="b-two"><div><p class="b-lab">Board</p><img src="board-pane-5.png"></div><div><p class="b-lab">Built page</p><img src="real/refused.png"></div></div>
+  <p class="b-cap">The same line, with the server's sentence in the tooltip and no toast.</p>
+</section>
+</body>
+</html>

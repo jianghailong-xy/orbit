@@ -495,7 +495,7 @@ export class QueueService {
         }>>(Prisma.sql`
         UPDATE "session" SET
           -- QUEUED to IN_FLIGHT (docs/session-status-retirement-plan.md §1.4). The engine claim guards (migration 1641)
-          -- test exactly this transition; migration 1671's trigger keeps the stored word from it, for rollback only.
+          -- test exactly this transition.
           "turn_state" = 'IN_FLIGHT',
           -- The pass is spent by whichever claim starts its turn. An overflow claim keeps it, so the RUNNING row says
           -- it runs over the limit until that turn ends (turnComplete clears it); an ordinary one started the turn in

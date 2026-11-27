@@ -41,7 +41,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { ReaperService } from '../realtime/reaper.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
-import { fixtureFacts } from '../test-support/session-word';
+import { fixtureFacts, wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -159,7 +159,7 @@ test('release_cause and session_release_cause_chk are gone; the writers, and dep
     await sql.end().catch(() => undefined);
   });
   const row = async (id: string) => (await sql.query(
-    `SELECT status::text AS status, finished_at, end_reason, last_turn_outcome, deleted_at FROM "session"
+    `SELECT ${wordSql()} AS status, finished_at, end_reason, last_turn_outcome, deleted_at FROM "session"
       WHERE id = $1::uuid`, [id])).rows[0] as {
     status: string; finished_at: Date | null; end_reason: string | null; last_turn_outcome: string | null;
     deleted_at: Date | null;

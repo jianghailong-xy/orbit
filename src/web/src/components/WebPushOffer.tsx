@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { CloseOutlined } from '@ant-design/icons';
 import { Button } from './ui/Button';
 import { useToast } from '../lib/toast';
 import { enableWebPush, getWebPushConfig, getWebPushState, webPushSupported } from '../lib/webPush';
+import { useIsMobile } from '../lib/useMediaQuery';
 
 /** Set once the offer was answered either way: it is shown once per browser (docs/web-push-design.md, D1 = B). */
 export const WEB_PUSH_OFFER_DISMISSED_KEY = 'orbit.webPushOffer.dismissed';
@@ -13,6 +14,13 @@ export const WEB_PUSH_OFFER_TEXT = 'Get Orbit alerts in this browser';
 export const WEB_PUSH_OFFER_MORE = ', even with no Orbit tab open.';
 export const WEB_PUSH_OFFER_TURN_ON = 'Turn on';
 export const WEB_PUSH_OFFER_NOT_NOW = 'Not now';
+
+const OFFER_KEY = ['push', 'web-offer'] as const;
+
+/** Hides the offer everywhere it is mounted, now and on any later mount, once this browser's notifications were answered. */
+export function endWebPushOffer(queryClient: QueryClient): void {
+  queryClient.setQueryData(OFFER_KEY, null);
+}
 
 /**
  * Whether to offer this browser's notifications: the server sends web push, the browser can show it, it has never
@@ -33,15 +41,17 @@ async function offerable(): Promise<string | null> {
  */
 export function WebPushOffer({ placement }: { placement: 'bar' | 'rail' }) {
   const toast = useToast();
-  const offer = useQuery({ queryKey: ['push', 'web-offer'], queryFn: offerable, retry: false, staleTime: Infinity });
-  const [answered, setAnswered] = useState(false);
+  const queryClient = useQueryClient();
+  // One offer on screen: the bar where the nav is a drawer (≤960px), the rail's card beside the nav otherwise.
+  const shown = useIsMobile() === (placement === 'bar');
+  const offer = useQuery({ queryKey: OFFER_KEY, queryFn: offerable, retry: false, staleTime: Infinity });
   const [busy, setBusy] = useState(false);
   const publicKey = offer.data ?? null;
-  if (!publicKey || answered) return null;
+  if (!publicKey || !shown) return null;
 
   const end = () => {
     localStorage.setItem(WEB_PUSH_OFFER_DISMISSED_KEY, new Date().toISOString());
-    setAnswered(true);
+    endWebPushOffer(queryClient);
   };
   const turnOn = async () => {
     setBusy(true);

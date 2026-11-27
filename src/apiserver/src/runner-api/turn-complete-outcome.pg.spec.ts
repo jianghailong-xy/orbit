@@ -41,6 +41,8 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from './runner-api.controller';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -194,7 +196,7 @@ test('turn-complete records the turn outcome on the turn and on the session', {
       `SELECT status, outcome, error FROM "conversation_turn" WHERE id = $1::uuid`, [turnId],
     )).rows[0] as { status: string; outcome: string | null; error: string | null };
     const session = (await sql.query(
-      `SELECT status::text AS status, last_turn_outcome, finished_at FROM "session" WHERE id = $1::uuid`,
+      `SELECT ${wordSql()} AS status, last_turn_outcome, finished_at FROM "session" WHERE id = $1::uuid`,
       [f.sessionId],
     )).rows[0] as { status: string; last_turn_outcome: string | null; finished_at: Date | null };
     console.log(`# ${JSON.stringify({ turn, session })}`);
@@ -346,6 +348,7 @@ test('turn-complete records the turn outcome on the turn and on the session', {
     const written = await fixture(db, 'backfill-written', 'message', { status: RunStatus.FAILED });
     await sql.query(`UPDATE "session" SET last_turn_outcome = 'CANCELLED' WHERE id = $1::uuid`, [written.sessionId]);
     const ids = made.map((m) => m.id);
+    await restoreStatusColumn(sql);
     await sql.query(D3_DOWN);
     for (const [i, c] of cases.entries()) {
       await sql.query(`UPDATE "session" SET status = $2::run_status WHERE id = ANY($1::uuid[])`, [ids.slice(3 * i, 3 * i + 3), c.status]);

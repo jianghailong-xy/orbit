@@ -20,6 +20,7 @@ import {
 } from './lock-order-fixture';
 import { newFixtureIds, seedLockFixture, seedThreePartyFixture } from './orbit-lock-fixture';
 import { runScenario, type ScenarioOutcome } from './pg-barrier';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -244,7 +245,7 @@ test('the canonical lock order holds from both directions', { skip: !URL, timeou
         await capacity.query('ROLLBACK');
         await admission.query('COMMIT');
         const { rows } = await admin.query<{ status: string }>(
-          `SELECT "status"::text AS status FROM "session" WHERE "id" = $1::uuid`,
+          `SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`,
           [ids.telemetrySessionId],
         );
         assert.equal(rows[0].status, 'RUNNING', 'the refused write left something behind');

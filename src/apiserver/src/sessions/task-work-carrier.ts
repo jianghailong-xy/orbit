@@ -22,7 +22,7 @@ const turnSql = (session: string): string => sessionTurnStateSql(session).sql;
  * Whether a work session is still CARRYING its task: the one definition behind every surface that
  * shows a task as running, and every Run door that decides whether a press would start it.
  *
- * `session.status` answers a narrower question, and answers it correctly: is a turn queued or
+ * A session's status word answers a narrower question, and answers it correctly: is a turn queued or
  * executing. Runner slots (the turn state IN_FLIGHT), spawn admission and `session_create(wait)`
  * (`UNSETTLED_SESSION_STATUSES`), a watch's SESSION_TURN_SETTLED and the stall reclaim
  * (`TASK_OCCUPYING`) are about turns and claims, and stay on them — see
@@ -86,7 +86,7 @@ export function sessionWakeSourceSql(session: string): string {
  *
  * The three-status list is implied by the clause after it and is stated anyway: it is what lets the
  * planner read it as an index condition (`session_owner_status_task_idx`), which it cannot see
- * through the OR. `finished_at IS NULL` is implied by the status list (session_release_fact_chk) and
+ * through the OR. `finished_at IS NULL` is implied by the status list (a held word) and
  * is stated anyway for the same kind of reason: it is the execution claim index's predicate
  * (`session_task_execution_claim_idx_finished_at`, migration 1426, beside `deleted_at IS NULL`), and
  * the planner matches a partial index only by a predicate it can read here, never through a CHECK.

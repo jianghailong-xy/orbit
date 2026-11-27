@@ -51,7 +51,7 @@ final class TranscriptWindowReplacementWiringTests: XCTestCase {
         let loop = try code(console, from: "func run() async {", to: "private func seedTailPage() async {")
         XCTAssertTrue(loop.contains("if outcome == .resync { await replaceWindow() }"),
                       "a resync asks whether to keep the window, rather than re-seeding under the reader")
-        let catchUp = try code(console, from: "private func catchUpToTail() async {",
+        let catchUp = try code(console, from: "private func catchUpToTail(",
                                to: "private func replaceWindow() async {")
         XCTAssertTrue(catchUp.hasSuffix("await replaceWindow() }"),
                       "a catch-up out of budget goes the same way as a resync")
@@ -65,6 +65,31 @@ final class TranscriptWindowReplacementWiringTests: XCTestCase {
         XCTAssertTrue(replace.contains("await seedTailPage()"), "at the tail it is re-seeded from a tail page")
         XCTAssertFalse(replace.contains("resetForResync()"), "only the reducer's rule drops the window")
         XCTAssertFalse(console.contains("reseedFromTailPage"), "no path re-seeds without asking")
+    }
+
+    /// A reopened window reads its gap in one page before the stream opens (web 4e53172f02, `catchUp`);
+    /// a dropped stream still pages through what it missed. Whatever the read did — landed, replaced the
+    /// window, or failed and left it — the stream resumes from the window's own max seq, so a failed read
+    /// falls back to replaying the gap from the kept seq. The read's own rule is driven in
+    /// OrbitAppTests' `ReopenCatchUpTests`.
+    func testAReopenReadsItsGapOnceBeforeTheStreamResumesFromTheWindow() throws {
+        let console = try app("ConsoleModel.swift")
+        let loop = try code(console, from: "func run() async {", to: "private func seedTailPage() async {")
+        XCTAssertTrue(loop.contains("var catchUpPending = !coldOpen"), "a restored window is the reopen")
+        XCTAssertTrue(loop.contains("if catchUpPending { await catchUpOnReopen() } else if catchUpAfterFailure { await catchUpToTail() }"),
+                      "the reopen reads one page; only a failed attempt pages through its gap")
+        let reopen = try XCTUnwrap(loop.range(of: "await catchUpOnReopen()"))
+        let connect = try XCTUnwrap(loop.range(of: "stream.events(sessionID: sessionID, sinceSeq: reducer.state.maxSeq)",
+                                               range: reopen.upperBound..<loop.endIndex),
+                                    "the stream opens after the read, from the window's max seq")
+        XCTAssertLessThan(reopen.lowerBound, connect.lowerBound)
+
+        let read = try code(console, from: "func catchUpOnReopen() async {", to: "private func catchUpToTail(")
+        XCTAssertTrue(read.contains("guard let page = try? await api.eventPageAfter(sessionID: sessionID, after: reducer.state.maxSeq, limit: Self.tailPage, timeout: Self.pageTimeout) else { return }"),
+                      "one page after the kept max seq; a failed read returns with the window untouched")
+        XCTAssertTrue(read.contains("if page.after != nil, !readingHistory { await replaceWindow() return }"),
+                      "wider than a page at the tail: replaced from a tail page, not paged through")
+        XCTAssertFalse(read.contains("for "), "the reopen itself never loops over pages")
     }
 
     func testAKeptWindowHoldsTheStreamOffUntilTheReaderReachesTheLatest() throws {

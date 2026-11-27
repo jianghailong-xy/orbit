@@ -60,6 +60,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/daemon-routes-over-http';
 
 declare global {
@@ -179,7 +180,7 @@ test('a claim whose runner hung up claims nothing', {
   /** What the database says about a session, read on a connection the door never used. */
   async function row(sessionId: string): Promise<{ status: string; startedAt: Date | null }> {
     const { rows } = await sql.query<{ status: string; startedAt: Date | null }>(
-      'SELECT status, started_at AS "startedAt" FROM "session" WHERE id = $1',
+      `SELECT ${wordSql()} AS status, started_at AS "startedAt" FROM "session" WHERE id = $1`,
       [sessionId],
     );
     return rows[0];

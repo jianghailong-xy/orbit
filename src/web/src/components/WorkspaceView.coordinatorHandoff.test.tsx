@@ -500,7 +500,21 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     expect(await hoverTooltip(badge!)).toBe('Open task · Fix the red checks');
     expect(badge?.getAttribute('aria-label')).toBe('Task · Open task Fix the red checks');
     await act(async () => badge!.click());
-    await waitFor(() => expect(new URLSearchParams(search).get('task')).toBeTruthy());
+    // Open beside the conversation, with the address left as it was (owner 2026-11-27).
+    await waitFor(() => expect(badge?.getAttribute('aria-pressed')).toBe('true'));
+    expect(new URLSearchParams(search).get('task')).toBeNull();
+  });
+
+  it('the title reads the same hovered as at rest: no tooltip, no ›, still Session settings to a screen reader', async () => {
+    // docs/mocks/session-title-hover (owner 2026-11-27): on hover the › took room and pushed the Task badge.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const title = line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
+    expect(title.getAttribute('aria-label')).toBe('Session settings');
+    expect(title.querySelector('.workspace-name-chevron, .anticon')).toBeNull();
+    expect(await hoverTooltip(title)).toBeNull();
   });
 
   it('the Task badge toggles its task beside the conversation, one column at a time with session settings', async () => {
@@ -512,7 +526,10 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
     const badge = () => line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link')!;
     const title = () => line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
-    const taskOpen = () => new URLSearchParams(search).get('task') != null;
+    const taskOpen = () => {
+      expect(new URLSearchParams(search).get('task')).toBeNull();
+      return badge().getAttribute('aria-pressed') === 'true';
+    };
 
     await act(async () => title().click());
     await waitFor(() => expect(title().getAttribute('aria-expanded')).toBe('true'));
