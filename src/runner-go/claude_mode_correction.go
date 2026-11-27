@@ -80,10 +80,11 @@ func newClaudeModeCorrection(args []string) *claudeModeCorrection {
 	return c
 }
 
-// supersede is called before a setconfig turn tells the engine a mode. From then on the engine's mode is
-// that request's to settle: a first init frame read after it reports the mode a person asked for, which
-// is no settling below the spawn's, and a correction already on its way is not reported as the mode the
-// session runs in, since the person's request is behind it in the same queue.
+// supersede is called before a setconfig turn tells the engine a mode: the owner's pick, or a change Orbit
+// made. From then on the engine's mode is that request's to settle: a first init frame read after it
+// reports the mode that was asked for, which is no settling below the spawn's, and a correction already on
+// its way is not reported as the mode the session runs in, since the setconfig's request is behind it in
+// the same queue.
 //
 // It and begin hold one lock, so a correction is either written to stdin before the setconfig's frame,
 // or not written at all.
@@ -142,7 +143,7 @@ func (c *claudeModeCorrection) report(ctx context.Context, rt *claudeRuntime, p 
 	switch {
 	case err == nil && c.wasSuperseded():
 		logln("interactive run", sessionID, "— permission mode: the engine took Auto after settling on", p.settled+
-			", but a mode the owner picked has been sent since; that change reports the mode the engine runs in")
+			", but a setconfig has sent the engine a mode since; that change reports the mode the engine runs in")
 	case err == nil:
 		logln("interactive run", sessionID, "— permission mode: the engine settled on", p.settled,
 			"although it was spawned in Auto; switched it to Auto")

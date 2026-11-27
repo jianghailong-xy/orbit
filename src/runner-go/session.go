@@ -2911,8 +2911,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				}
 				for _, f := range frames {
 					if f.subtype == ctrlSetPermissionMode {
-						// A mode a person picked is about to reach the engine, which no correction may
-						// overtake (claude_mode_correction.go).
+						// The mode the session's config now names (the owner's pick, or a change Orbit made)
+						// is about to reach the engine, and no correction may overtake it
+						// (claude_mode_correction.go).
 						modeFix.supersede()
 					}
 				}
