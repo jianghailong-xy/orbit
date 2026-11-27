@@ -29,4 +29,11 @@ class SessionDisplayCopyParityTest {
             .map { it.groupValues[1] }.toList()
         assertEquals(SessionMark.entries.map { it.name }, declared)
     }
+
+    @Test fun theRowIconTipsAreTheWebs() {
+        SessionRowIcon.entries.forEach { icon ->
+            val line = "  ${icon.name}: '${icon.tip}',"
+            assertTrue("sessionDisplay.ts no longer says \"$line\"", web.contains(line))
+        }
+    }
 }

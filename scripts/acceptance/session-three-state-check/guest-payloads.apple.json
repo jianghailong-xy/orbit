@@ -203,10 +203,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Interrupted"
-   ],
-   "line": "Idle · Interrupted",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -237,10 +235,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Interrupted"
-   ],
-   "line": "Idle · Interrupted",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -273,10 +269,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Finished"
-   ],
-   "line": "Idle · Finished",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -307,10 +301,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Finished"
-   ],
-   "line": "Idle · Finished",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -413,10 +405,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Ended"
-   ],
-   "line": "Idle · Ended",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -447,10 +437,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Ended"
-   ],
-   "line": "Idle · Ended",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -483,10 +471,8 @@
   "web": {
    "state": "Running",
    "icon": "spinner",
-   "marks": [
-    "Background"
-   ],
-   "line": "Running · Background",
+   "marks": [],
+   "line": "Running",
    "completed": false
   },
   "payload": {
@@ -517,10 +503,8 @@
   "web": {
    "state": "Running",
    "icon": "spinner",
-   "marks": [
-    "Background"
-   ],
-   "line": "Running · Background",
+   "marks": [],
+   "line": "Running",
    "completed": false
   },
   "payload": {
@@ -759,10 +743,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Finished"
-   ],
-   "line": "Idle · Finished",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -793,10 +775,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Finished"
-   ],
-   "line": "Idle · Finished",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -829,10 +809,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Ended"
-   ],
-   "line": "Idle · Ended",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -863,10 +841,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Ended"
-   ],
-   "line": "Idle · Ended",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -899,10 +875,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Ended"
-   ],
-   "line": "Idle · Ended",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -933,10 +907,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Ended"
-   ],
-   "line": "Idle · Ended",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -969,10 +941,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Interrupted"
-   ],
-   "line": "Idle · Interrupted",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -1003,10 +973,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Interrupted"
-   ],
-   "line": "Idle · Interrupted",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -1513,10 +1481,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Interrupted"
-   ],
-   "line": "Idle · Interrupted",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {
@@ -1547,10 +1513,8 @@
   "web": {
    "state": "Idle",
    "icon": "circle",
-   "marks": [
-    "Interrupted"
-   ],
-   "line": "Idle · Interrupted",
+   "marks": [],
+   "line": "Idle",
    "completed": false
   },
   "payload": {

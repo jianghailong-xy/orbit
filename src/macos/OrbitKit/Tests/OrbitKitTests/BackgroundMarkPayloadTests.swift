@@ -2,11 +2,12 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The Background mark against web on the paths that hand `runningBgCount` and `activity` to `SessionDisplay`: search,
+/// The Background row icon (a mark until the owner's 2026-11-27 change) against web on the paths that hand
+/// `runningBgCount` and `activity` to `SessionDisplay`: search,
 /// the task run label, shared Markdown and the live `session.updated`, on the cross-client check's server-built payloads
 /// (scripts/acceptance/session-three-state-check/background/background-payloads.json: 23 cases, and one session as a
-/// background job is added and cleared; `web` is what web's `sessionDisplayState` / `sessionMarks` answer for the same
-/// payload).
+/// background job is added and cleared; `web` is what web's `sessionDisplayState` / `sessionMarks` / `sessionRowIcons`
+/// answer for the same payload).
 final class BackgroundMarkPayloadTests: XCTestCase {
     private static let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -28,6 +29,7 @@ final class BackgroundMarkPayloadTests: XCTestCase {
         let payload: [String: Any]
         let state: String
         let marks: [String]
+        let rowIcons: [String]
 
         init(_ read: Any?) throws {
             let read = try XCTUnwrap(read as? [String: Any])
@@ -35,9 +37,21 @@ final class BackgroundMarkPayloadTests: XCTestCase {
             let web = read["web"] as! [String: Any]
             state = web["state"] as! String
             marks = web["marks"] as! [String]
+            rowIcons = web["rowIcons"] as! [String]
         }
 
         var written: String { ([state] + marks).joined(separator: " \u{00B7} ") }
+    }
+
+    /// Web's name for a row icon: FAILED, RETRYING, ON_HOLD, BACKGROUND, WILL_RESUME.
+    private static func webName(_ icon: SessionRowIcon) -> String {
+        switch icon {
+        case .failed:     return "FAILED"
+        case .retrying:   return "RETRYING"
+        case .onHold:     return "ON_HOLD"
+        case .background: return "BACKGROUND"
+        case .willResume: return "WILL_RESUME"
+        }
     }
 
     private func decode<T: Decodable>(_ type: T.Type, _ payload: [String: Any]) throws -> T {
@@ -48,6 +62,8 @@ final class BackgroundMarkPayloadTests: XCTestCase {
                         file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertEqual(SessionDisplay.state(facts)?.word, web.state, "\(message) state", file: file, line: line)
         XCTAssertEqual(SessionDisplay.marks(facts)?.map(\.word), web.marks, "\(message) marks", file: file, line: line)
+        XCTAssertEqual(SessionDisplay.rowIcons(facts).map(Self.webName), web.rowIcons, "\(message) row icons",
+                       file: file, line: line)
     }
 
     func testTheFixtureHoldsThe23CasesAndWebDrawsBackgroundOnFour() throws {
@@ -56,7 +72,7 @@ final class BackgroundMarkPayloadTests: XCTestCase {
         for kind in ["listRow", "sessionSummary", "taskRun", "searchHit"] {
             let drawn = try all.compactMap { c -> String? in
                 guard c[kind] is [String: Any] else { return nil }
-                return try Answer(c[kind]).marks.contains("Background") ? c["name"] as? String : nil
+                return try Answer(c[kind]).rowIcons.contains("BACKGROUND") ? c["name"] as? String : nil
             }
             XCTAssertEqual(drawn, Self.backgroundCases, kind)
         }
@@ -111,7 +127,7 @@ final class BackgroundMarkPayloadTests: XCTestCase {
         var rows = [try decode(Session.self, try Answer(steps[0]["listRow"]).payload)]
         XCTAssertEqual(SessionDisplay.marks(rows[0].displayFacts), [])
 
-        for (step, marks) in [(steps[1], [SessionMark.background]), (steps[2], [])] {
+        for (step, icons) in [(steps[1], [SessionRowIcon.background]), (steps[2], [])] {
             let name = step["name"] as! String
             let web = try Answer(step["sessionSummary"])
             let summary = try decode(ControlSessionSummary.self, web.payload)
@@ -120,7 +136,7 @@ final class BackgroundMarkPayloadTests: XCTestCase {
             }
             rows[index] = row
             assert(row.displayFacts, matches: web, name)
-            XCTAssertEqual(SessionDisplay.marks(row.displayFacts), marks, name)
+            XCTAssertEqual(SessionDisplay.rowIcons(row.displayFacts), icons, name)
             // The row then reads as the list would send it.
             let listed = try decode(Session.self, try Answer(step["listRow"]).payload)
             XCTAssertEqual(row.activity, listed.activity, name)
@@ -138,6 +154,6 @@ final class BackgroundMarkPayloadTests: XCTestCase {
         let merged = row.applying(try decode(ControlSessionSummary.self, payload))
         XCTAssertEqual(merged.activity, "BACKGROUND_JOB")
         XCTAssertEqual(merged.runningBgCount, 1)
-        XCTAssertEqual(SessionDisplay.marks(merged.displayFacts), [.background])
+        XCTAssertEqual(SessionDisplay.rowIcons(merged.displayFacts), [.background])
     }
 }
