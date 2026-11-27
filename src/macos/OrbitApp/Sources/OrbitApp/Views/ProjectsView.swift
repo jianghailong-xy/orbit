@@ -397,7 +397,7 @@ struct ProjectDetailView: View {
     /// it was read from (nil when there is no conversation to bring).
     @State private var changingTo: CoordinatorChangePick?
     /// Move conversation's step while it runs (an End first can take a while).
-    @State private var changePhase: SessionWorkspaceMove.Phase?
+    @State private var changeMoving = false
     /// Delivery's press to the agent's way while a merge into main is live: asked first, then
     /// written (owner decision 2026-11-10). Nil while nothing is being asked.
     @State private var confirmingAgentPush: ProjectIntegrationView?
@@ -1173,7 +1173,7 @@ struct ProjectDetailView: View {
         let from = store.coordinator?.coordination.workspaceName
         if pick.row.way == .move, let targets = pick.targets {
             return CoordinatorChangeCopy.moveParagraphs(
-                to: pick.row.name, from: from ?? "", needsEnd: targets.needsEnd,
+                to: pick.row.name, from: from ?? "",
                 files: SessionMoveCopy.filesSentence(targets, from: from ?? ""))
         }
         return CoordinatorChangeCopy.newParagraphs(to: pick.row.name, from: from,
@@ -1181,19 +1181,17 @@ struct ProjectDetailView: View {
                                                    reason: pick.row.reason)
     }
 
-    /// Move conversation: End it first when the server says so, then move it into the picked
-    /// workspace's No Folder (the project page files nothing); the project's coordination goes with
-    /// it on the server. The page is read again either way, since a move stopped after the End has
-    /// still ended the conversation.
+    /// Move conversation: into the picked workspace's No Folder (the project page files nothing); the
+    /// project's coordination goes with it on the server, which lets a held conversation go first. The
+    /// page is read again either way, since a move that stopped waiting may have left it released.
     private func moveCoordinatorConversation(_ store: ProjectDetailModel, to row: CoordinatorChangeRow,
                                              targets: SessionMoveTargets) {
         guard let sessionID = CoordinatorChangeLogic.conversationID(store.coordinator),
               let target = targets.targets.first(where: { $0.workspaceId == row.workspaceId }) else { return }
-        changePhase = targets.needsEnd ? .ending : .moving
+        changeMoving = true
         Task {
-            let refused = await model.moveSession(sessionID, to: target, folder: nil,
-                                                  endingFirst: targets.needsEnd) { changePhase = $0 }
-            changePhase = nil
+            let refused = await model.moveSession(sessionID, to: target, folder: nil)
+            changeMoving = false
             await store.load()
             if let refused { notice = refused }
         }
@@ -1389,12 +1387,12 @@ struct ProjectDetailView: View {
                 // coordinator, somewhere it can open.
                 if status.state == .unavailable || status.state == .trashed {
                     Button(CoordinatorChangeCopy.button) { pageSheet = .coordinatorChange }
-                        .disabled(store.busy || changePhase != nil)
+                        .disabled(store.busy || changeMoving)
                 }
-                if let changePhase {
+                if changeMoving {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text(SessionMoveCopy.progress(changePhase)).font(.orbitLabel).foregroundStyle(.secondary)
+                        Text(SessionMoveCopy.moving).font(.orbitLabel).foregroundStyle(.secondary)
                     }
                 }
                 if status.state == .live, coordination.session != nil {
@@ -1428,7 +1426,7 @@ struct ProjectDetailView: View {
                     .menuStyle(.button)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(store.busy || changePhase != nil)
+                    .disabled(store.busy || changeMoving)
                     // On the menu that asks, so the panel opens against it rather than at the top of
                     // the page.
                     .orbitConfirmation(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace) {
