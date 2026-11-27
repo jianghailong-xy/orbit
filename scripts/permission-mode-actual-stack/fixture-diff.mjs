@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { S, WT, call, readState } from './lib.mjs';
 
 // PMA_FIXTURES names another builder module (modeChange, modeFacts) to hold to the same answers, such as an earlier revision's.
-const { modeChange, modeFacts } = await import(process.env.PMA_FIXTURES || `${WT}/src/web/src/test/permissionModeFixtures.ts`);
+const { modeChange, modeFacts, wikiChatDetail } = await import(process.env.PMA_FIXTURES || `${WT}/src/web/src/test/permissionModeFixtures.ts`);
 const state = readState();
 const { accessToken } = await call('POST', '/auth/login', undefined, { email: state.owner.email, password: state.owner.password });
 const out = `${S}/payloads`;
@@ -20,6 +20,7 @@ const differ = (where, real, fixture) => differences.push({ where, real, fixture
 const INSTANT = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k]]));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const kind = (v) => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v);
 
 const lists = {};
 for (const r of Object.values(state.runners)) {
@@ -62,10 +63,31 @@ for (const s of Object.values(state.sessions)) {
   console.log(`${s.key}: intent ${detail.permissionMode}, running ${detail.actualPermissionMode} at ${detail.actualPermissionModeAt}; ${changes.length} change(s) ` +
     `[${changes.map((c) => `${c.cause}${c.client ? `/${c.client}` : ''}`).join(', ')}]; Open list row ${JSON.stringify(rowFacts)}`);
 }
+// The wiki chat's detail (GET /sessions/:id), as components/WikiChat.permissionModeActual.test.tsx builds it: the same
+// keys, each with a value of the same kind, and the mode facts held to the builders as above. A chat is in no Open list.
+for (const s of Object.values(state.wikiChats)) {
+  const detail = await call('GET', `/sessions/${s.id}`, accessToken);
+  writeFileSync(`${out}/${s.key}.detail.json`, JSON.stringify(detail, null, 2) + '\n');
+  const changes = detail.permissionModeChanges ?? [];
+  const rebuilt = changes.map((c) => modeChange(c.cause, c.toMode, c.fromMode, c.at, c.cause === 'OWNER_PICK' ? c.client : undefined));
+  if (!same(changes, rebuilt)) differ(`${s.key} changes`, changes, rebuilt);
+  const built = wikiChatDetail(
+    { id: s.id, title: s.title, workspace: detail.workspace, assignedRunnerId: detail.assignedRunnerId, model: detail.model, permissionMode: detail.permissionMode,
+      running: !!s.openTurnId },
+    rebuilt,
+  );
+  for (const [key, value] of Object.entries(built)) {
+    if (!(key in detail)) differ(`${s.key} detail.${key}`, 'absent', value);
+    else if (kind(detail[key]) !== kind(value)) differ(`${s.key} detail.${key} kind`, detail[key], value);
+    else if (!['workspace', 'actualPermissionModeAt', 'permissionModeChanges', 'numTurns'].includes(key) && !same(detail[key], value)) differ(`${s.key} detail.${key}`, detail[key], value);
+  }
+  for (const key of Object.keys(built.workspace)) if (!(key in detail.workspace)) differ(`${s.key} detail.workspace.${key}`, 'absent', built.workspace[key]);
+  console.log(`${s.key}: intent ${detail.permissionMode}, running ${detail.actualPermissionMode}; ${changes.length} change(s); ${Object.keys(built).length} fixture keys held to the real detail`);
+}
 for (const [name, l] of Object.entries(lists)) writeFileSync(`${out}/open-list.${name}.json`, JSON.stringify({ path: l.path, body: l.body }, null, 2) + '\n');
 
 if (differences.length === 0) {
-  console.log(`no differences: every mode field of ${Object.keys(state.sessions).length} details and their Open list rows is what the fixture builders make`);
+  console.log(`no differences: every mode field of ${Object.keys(state.sessions).length} details and their Open list rows, and of ${Object.keys(state.wikiChats).length} wiki chat details, is what the fixture builders make`);
 } else {
   for (const d of differences) console.log(`DIFFERENCE ${d.where}\n  real:    ${JSON.stringify(d.real)}\n  fixture: ${JSON.stringify(d.fixture)}`);
   console.log(`${differences.length} difference(s)`);

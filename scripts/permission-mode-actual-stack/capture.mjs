@@ -8,7 +8,7 @@ import { chromium } from '@playwright/test';
 import { createServer, request as httpRequest } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
-import { API, WT, agentToolsReport, heartbeat, iso, readState, services, sleep } from './lib.mjs';
+import { API, WT, agentToolsReport, call, heartbeat, iso, readState, services } from './lib.mjs';
 
 const dist = resolve(process.argv[2] ?? 'dist');
 const out = resolve(process.argv[3] ?? 'shots');
@@ -16,6 +16,7 @@ const board = `${WT}/docs/mocks/permission-mode-actual/frames`;
 mkdirSync(`${out}/payloads`, { recursive: true });
 const state = readState();
 const { prisma, api } = services();
+const { accessToken: token } = await call('POST', '/auth/login', undefined, { email: state.owner.email, password: state.owner.password });
 
 // ── the web, with /api passed through to the stack ────────────────────────────────────────────────────────────────────────
 const upstream = new URL(API);
@@ -61,10 +62,29 @@ const SCENES = [
   { name: '4-c1-draft-no-auto', frame: '01-web-10', caption: 'C1: Haiku 4.5 picked in the model menu: Auto stays the pick, labelled "starts in Default".',
     path: draftPath, pickModel: 'Haiku 4.5', open: 'menu' },
 ];
+// The Wiki's chat panel, whose composer and conversation are the session page's own (components/WikiChatPanel.tsx).
+const W = state.wikiChats;
+const chatPath = (chat) => `/wiki/${state.wiki.slug}?chat=${chat}`;
+const wiki = (scene) => ({ ...scene, wiki: true, height: scene.height ?? 860 });
+SCENES.push(
+  wiki({ name: 'wiki-1-running-auto', frame: '01-web-01', caption: 'Wiki chat ①: the engine runs in Auto; the capsule says Auto.', path: chatPath(W.wikiRunning.id) }),
+  wiki({ name: 'wiki-1-running-auto-menu', frame: '01-web-02', caption: 'Wiki chat ①: the menu, the check on Auto; no head.', path: chatPath(W.wikiRunning.id), open: 'menu' }),
+  wiki({ name: 'wiki-2-switching', frame: '01-web-03', caption: 'Wiki chat, A1 short: "Default → Auto" with a spinner while the runner switches it, and why on hover.',
+    path: chatPath(W.wikiCorrecting.id), open: 'hover', before: 'engineReportsDefault', session: W.wikiCorrecting }),
+  wiki({ name: 'wiki-2-lasting', frame: '01-web-04', caption: 'Wiki chat, A1 lasting: Haiku 4.5 has no Auto: "Default" with a dot; the menu head says why.',
+    path: chatPath(W.wikiNoAuto.id), open: 'menu' }),
+  wiki({ name: 'wiki-3-lines', frame: '01-web-07', caption: 'Wiki chat, B1: each recorded change where it happened, with who or what made it.', path: chatPath(W.wikiNoAuto.id), height: 1000 }),
+  wiki({ name: 'wiki-4-c1-new-no-auto', frame: '01-web-10', caption: 'Wiki chat, C1: a new chat with Haiku 4.5 picked: Auto stays the pick, labelled "starts in Default".',
+    path: chatPath('new'), pickModel: 'Haiku 4.5', open: 'menu' }),
+  // Last, because they write: what the panel sends when the owner picks, and what the server stored.
+  wiki({ name: 'wiki-5-model-pick', frame: '01-web-04', caption: 'Wiki chat: a model with no Auto picked in a running Auto chat. The pick sends no mode; the intent stays Auto.',
+    path: chatPath(W.wikiRunning.id), pickModel: 'Haiku 4.5', open: 'menu', stored: W.wikiRunning.id }),
+  wiki({ name: 'wiki-6-new-chat-sends-intent', frame: '01-web-10', caption: 'Wiki chat: Haiku 4.5 and Auto picked, then sent. Auto goes as picked and is stored; the session will start in Default.',
+    path: chatPath('new'), pickModel: 'Haiku 4.5', repick: ['Plan', 'Auto'], send: 'Which heartbeat marks a runner offline?' }),
+);
 
 /** The engine's report that Claude settled in Default, through the real ingest, right before the shot that shows the switch. */
-async function engineReportsDefault() {
-  const s = S.correcting;
+async function engineReportsDefault(s = S.correcting) {
   await api.events({ id: s.runnerId }, s.uuid, { events: [{ seq: ++s.seq, type: 'system', ts: iso(), turnId: s.openTurnId,
     payload: { subtype: 'agent_tools', agentTools: agentToolsReport('default') } }] });
 }
@@ -92,11 +112,16 @@ async function open(s) {
     if (!/^\/api\/sessions(\/[^/]+)?$/.test(path) || response.request().method() !== 'GET') return;
     try { answers.push({ url: response.url().replace(WEB, ''), status: response.status(), body: await response.json() }); } catch { /* not JSON */ }
   });
+  const sent = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() !== 'GET' && /\/(config|chats)$/.test(path)) sent.push(`${request.method()} ${path} ${request.postData()}`);
+  });
   await page.goto(s.path);
   await page.locator('.composer-toolbar [data-mode-gap]').waitFor({ timeout: 60_000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1200);
-  return { context, page, answers };
+  return { context, page, answers, sent };
 }
 
 async function act(page, s) {
@@ -106,6 +131,18 @@ async function act(page, s) {
     await page.waitForTimeout(600);
   }
   const pill = page.locator('.composer-toolbar .composer-pill:has([data-mode-gap])');
+  for (const mode of s.repick ?? []) {
+    await pill.locator('[role="combobox"]').click();
+    await page.locator('[role="listbox"] [role="option"]', { hasText: new RegExp(`^${mode}`) }).first().click();
+    await page.waitForTimeout(600);
+  }
+  if (s.send) {
+    await page.locator('.wk-chat-panel textarea').fill(s.send);
+    await page.locator('.wk-chat-panel textarea').press('Enter');
+    await page.waitForURL((u) => u.searchParams.get('chat') !== 'new', { timeout: 60_000 });
+    await page.locator('.composer-toolbar [data-mode-gap]').waitFor();
+    await page.waitForTimeout(1500);
+  }
   if (s.open === 'menu') {
     await pill.locator('[role="combobox"]').click();
     await page.locator('[role="listbox"] [role="option"]').first().waitFor();
@@ -166,15 +203,21 @@ async function beside(s, shot, size) {
 }
 
 for (const s of SCENES) {
-  if (s.before === 'engineReportsDefault') await engineReportsDefault();
-  const { context, page, answers } = await open(s);
+  if (s.before === 'engineReportsDefault') await engineReportsDefault(s.session);
+  const { context, page, answers, sent } = await open(s);
   await act(page, s);
-  const box = s.open === 'drawer' ? await page.locator('[role="dialog"]:has(.agent-tools)').boundingBox() : await columnBox(page);
+  const box = s.open === 'drawer' ? await page.locator('[role="dialog"]:has(.agent-tools)').boundingBox()
+    : s.wiki ? await page.locator('.wk-chat-panel').boundingBox() : await columnBox(page);
   const clip = { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
   const shot = `${out}/${s.name}.png`;
   await page.screenshot({ path: shot, clip });
   const seen = await facts(page);
+  const chat = s.send ? new URL(page.url()).searchParams.get('chat') : s.stored;
   await context.close();
+  if (chat) {
+    const detail = await call('GET', `/sessions/${chat}`, token);
+    console.log(`${s.name}: sent ${sent.join(' | ')}; stored: model ${detail.model}, permissionMode ${detail.permissionMode}`);
+  }
   writeFileSync(`${out}/payloads/${s.name}.json`, JSON.stringify(answers, null, 2) + '\n');
   await beside(s, shot, clip);
   console.log(`${s.name} (beside ${s.frame}): ${JSON.stringify(seen)}; the page read ${answers.map((a) => `${a.url} ${a.status}`).join(', ')}`);
