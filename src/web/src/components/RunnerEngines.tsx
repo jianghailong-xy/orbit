@@ -2005,6 +2005,8 @@ export function MachineEngines({
         const open = openAccounts.includes(accountsGroup(runner.id, engine));
         // A Default removed from Orbit ends its engine's group (RemovedDefault).
         const removed = accounts.length > 0 ? health?.removedDefault : undefined;
+        // Its line goes once the login is off the machine (auth `no`); an absent auth shows it.
+        const removedLine = removed?.auth === 'no' ? undefined : removed;
         // What a removal leaves: an account on its way out is as good as gone.
         const staying = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
         return (
@@ -2033,14 +2035,14 @@ export function MachineEngines({
                 others={staying.filter((entry) => entry.id !== account.id).length}
                 next={account.id === next}
                 duplicateOf={repeats.get(account.id)}
-                lastOfGroup={index === accounts.length - 1 && !removed}
+                lastOfGroup={index === accounts.length - 1 && !removedLine}
                 envKey={runsOnEnvKey(health, account)}
                 regionBlocked={blockedForRegion}
                 signIn={signIn}
                 onSignIn={onSignIn}
               />
             ))}
-            {accountEngine !== null && open && removed && <RemovedDefault runner={runner} engine={accountEngine} removed={removed} />}
+            {accountEngine !== null && open && removedLine && <RemovedDefault runner={runner} engine={accountEngine} removed={removedLine} />}
           </Fragment>
         );
   };

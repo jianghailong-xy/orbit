@@ -390,12 +390,12 @@ test('session detail serves its runner’s engines as the runner list does, a De
     {
       engine: 'codex', installed: true, auth: 'yes',
       accounts: [{ id: '3fa91c2e', name: 'Work', home: '/root/.orbit/codex-accounts/3fa91c2e', auth: 'yes' }],
-      removedDefault: { home: '/root/.codex', name: 'Machine login' },
+      removedDefault: { home: '/root/.codex', name: 'Machine login', auth: 'no' },
     },
     {
       engine: 'antigravity', installed: true, version: '1.4.3', auth: 'no', authSource: 'google',
       accounts: [{ id: '9c8b7a6d', home: '/root/.orbit/antigravity-accounts/9c8b7a6d', auth: 'no' }],
-      removedDefault: { home: '/root/.orbit/antigravity/google' },
+      removedDefault: { home: '/root/.orbit/antigravity/google', auth: 'no' },
     },
   ]);
   // What those are read from stays on the server.
