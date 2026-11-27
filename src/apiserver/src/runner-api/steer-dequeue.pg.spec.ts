@@ -121,6 +121,7 @@ before(async () => {
       coordinator_context_key text,
       sender_session_id uuid,
       wiki_context jsonb,
+      drive_context jsonb,
       external_sender_source text,
       external_sender_id text,
       external_sender_name text,

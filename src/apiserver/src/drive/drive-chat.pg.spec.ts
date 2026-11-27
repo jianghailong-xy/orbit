@@ -410,7 +410,8 @@ test('the Drive chat: made as a session, run where the owner last chatted, liste
     const out = await deliver(false);
     assert.ok(out!.includes(`- ${driveChatGuidance(true)[5]}`), out!);
     assert.match(out!, /mounted at ~\/Files/u);
-    assert.ok(!out!.includes('drive_* tools'));
+    // Since 5afbca5c81 a Cloud chat reads ~/Files but changes the drive only through the drive_* tools.
+    assert.match(out!, /Make every change to the drive with the drive_\* tools, never with file commands on ~\/Files/u);
     assert.equal((await sessionRow(chatId)).drive_chat_prompt_digest, driveChatGuidanceDigest(driveChatGuidance(true).join('\n')));
   });
 
