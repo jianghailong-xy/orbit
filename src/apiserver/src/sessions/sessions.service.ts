@@ -163,6 +163,7 @@ import {
   credentialIsAnthropicBound,
   type WikiChatContext,
   type DriveChatContext,
+  type SchedulePageChatContext,
   type TranslationActionResponse,
   type TranslationLanguage,
   type ApprovalTranslation,
@@ -250,6 +251,7 @@ import { SourceResolutionRefusal } from '../projects/source-selector';
 import { forkRefusalBody } from '../tasks/task-fork';
 import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
+import { readSchedulePageChatContext, sameSchedulePageChatContext } from '../schedules/schedule-page-chat-note';
 import { driveContextOutsideChat, readDriveChatContext, sameDriveChatContext } from '../drive/drive-chat-context';
 import { chatFiledItsOpening, sessionChatOrigin } from './chat-opening';
 import { branchName } from '../projects/project-criterion-landing';
@@ -8279,6 +8281,8 @@ export class SessionsService {
       assertEngineSessionRow(session);
       if (wikiContext && !session.wikiChatSpaceId) throw wikiContextOutsideChat();
       if (driveContext && session.openedBy !== 'DRIVE_CHAT') throw driveContextOutsideChat();
+      // A page chat's view; any other session ignores it.
+      const scheduleContext = session.scheduleChatAt ? readSchedulePageChatContext(dto.context) : null;
       turnRunnerId = session.assignedRunnerId;
       // A committed operation owns its key even after its Session later ends or moves to Trash.
       // Check the durable receipt while holding the Session lock before any lifecycle, attachment
@@ -8334,6 +8338,7 @@ export class SessionsService {
             && existing.requestFingerprint !== opts?.requestFingerprint)
           || !sameWikiChatContext(existing.wikiContext, wikiContext)
           || !sameDriveChatContext(existing.driveContext, driveContext)
+          || !sameSchedulePageChatContext(existing.scheduleContext, scheduleContext)
         ) {
           throw new ConflictException(
             'clientTurnId was already used with a different turn payload',
@@ -8360,7 +8365,7 @@ export class SessionsService {
       if (translateFrom && dto.content) {
         return {
           turn: await this.insertHeldTurnLocked(
-            tx, ownerId, session, dto, translateFrom, intent, wikiContext, driveContext, opts?.clearSettledWorktreeState === true,
+            tx, ownerId, session, dto, translateFrom, intent, wikiContext, driveContext, scheduleContext, opts?.clearSettledWorktreeState === true,
             opts?.listed === true,
           ),
           placement: 'queued' as const,
@@ -8550,6 +8555,7 @@ export class SessionsService {
         ...senderClientColumns(opts?.senderClient),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
         ...(driveContext ? { driveContext: driveContext as unknown as Prisma.InputJsonValue } : {}),
+        ...(scheduleContext ? { scheduleContext: scheduleContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       await opts?.onTurnWritten?.(tx, turn);
@@ -8678,6 +8684,7 @@ export class SessionsService {
     intent: SessionTurnIntent | undefined,
     wikiContext: WikiChatContext | null,
     driveContext: DriveChatContext | null,
+    scheduleContext: SchedulePageChatContext | null,
     clearSettledWorktreeState: boolean,
     listed: boolean,
   ): Promise<ConversationTurn> {
@@ -8692,6 +8699,7 @@ export class SessionsService {
       ...(intent === 'NEXT_TURN' ? { sendIntent: 'NEXT_TURN' as const } : {}),
       ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       ...(driveContext ? { driveContext: driveContext as unknown as Prisma.InputJsonValue } : {}),
+      ...(scheduleContext ? { scheduleContext: scheduleContext as unknown as Prisma.InputJsonValue } : {}),
       ...heldTurnColumns(content, from),
     });
     await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -11898,6 +11906,7 @@ export class SessionsService {
     if (!session) throw new NotFoundException('session not found');
     if (wikiContext && !session.wikiChatSpaceId) throw wikiContextOutsideChat();
     if (driveContext && session.openedBy !== 'DRIVE_CHAT') throw driveContextOutsideChat();
+    const scheduleContext = session.scheduleChatAt ? readSchedulePageChatContext(dto.context) : null;
     // Reviving is an engine door: the platform's landing container has nothing to revive (§2.9 LS6).
     assertEngineSessionRow(session);
     // The run this request may stop is an engine door too, named in the body rather than the path.
@@ -12207,6 +12216,7 @@ export class SessionsService {
           )
           || !sameWikiChatContext(existing.wikiContext, wikiContext)
           || !sameDriveChatContext(existing.driveContext, driveContext)
+          || !sameSchedulePageChatContext(existing.scheduleContext, scheduleContext)
         ) {
           throw new ConflictException(
             'clientTurnId was already used with a different resume payload',
@@ -12309,6 +12319,7 @@ export class SessionsService {
         ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
         ...(driveContext ? { driveContext: driveContext as unknown as Prisma.InputJsonValue } : {}),
+        ...(scheduleContext ? { scheduleContext: scheduleContext as unknown as Prisma.InputJsonValue } : {}),
         ...(reviveHeldFrom && dto.content ? heldTurnColumns(dto.content, reviveHeldFrom) : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);

@@ -314,6 +314,7 @@ import { documentsClaimFields } from '../drive/drive-switch';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
 import { appendDriveChatNotes } from '../drive/drive-chat-notes';
 import { appendScheduleChangeNote } from '../schedules/schedule-change-conversation';
+import { appendSchedulePageChatNote } from '../schedules/schedule-page-chat-note';
 import {
   type TaskFailure,
   recordTaskFailure,
@@ -1092,6 +1093,8 @@ interface HandedTurn {
   wikiContext: unknown;
   /** A Drive chat's folder and selection, as ids (migration 1680): what `appendDriveChatNotes` reads. */
   driveContext: unknown;
+  /** A Scheduled page chat's workspace filter and selected schedule, as ids (migration 1762): what `appendSchedulePageChatNote` reads. */
+  scheduleContext: unknown;
 }
 // How many times one message may be handed to an engine with nothing under it answering before the
 // control plane stops putting it back on the queue at once. A message that deserves another delivery
@@ -6144,7 +6147,8 @@ export class RunnerApiController {
                    "external_sender_source" AS "externalSenderSource",
                    "external_sender_name" AS "externalSenderName",
                    "wiki_context" AS "wikiContext",
-                   "drive_context" AS "driveContext"
+                   "drive_context" AS "driveContext",
+                   "schedule_context" AS "scheduleContext"
             FROM "conversation_turn" turn
             WHERE turn.id = ${owned[0].inboxRequestTurnId}::uuid
               AND turn."session_id" = ${sessionId}::uuid
@@ -6411,7 +6415,8 @@ export class RunnerApiController {
                   "external_sender_source" AS "externalSenderSource",
                   "external_sender_name" AS "externalSenderName",
                   "wiki_context" AS "wikiContext",
-                  "drive_context" AS "driveContext"
+                  "drive_context" AS "driveContext",
+                   "schedule_context" AS "scheduleContext"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
@@ -6455,6 +6460,8 @@ export class RunnerApiController {
             assignedRunnerId: true,
             // A schedule's change conversation names its schedule on every message (appendScheduleChangeNote).
             changeScheduleId: true,
+            // A Scheduled page chat's messages carry `<orbit_schedules>` (appendSchedulePageChatNote).
+            scheduleChatAt: true,
           },
         });
         // A message turn that already produced runtime output is a lease re-delivery.
@@ -6573,6 +6580,15 @@ export class RunnerApiController {
             content = await appendScheduleChangeNote(
               tx,
               { ownerId: sessionContext.ownerId, scheduleId: sessionContext.changeScheduleId },
+              content,
+            );
+          }
+          // A Scheduled page chat's message: `<orbit_schedules>` with the counts and the page's view (scheduled-chat-design.md
+          // §4.2), after the person's words. Not on a steer, which joins a turn that already has it.
+          if (t.kind === 'message' && sessionContext?.scheduleChatAt) {
+            content = await appendSchedulePageChatNote(
+              tx,
+              { ownerId: sessionContext.ownerId, context: t.scheduleContext },
               content,
             );
           }

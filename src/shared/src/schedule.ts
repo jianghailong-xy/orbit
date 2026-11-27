@@ -2505,3 +2505,12 @@ export function scheduleStartedOnText(input: {
     body: scheduleFill(RS.startedOn.body, { why, try: n, time: localParts(new Date(tries[index]!.startedAt), input.timezone).time }),
   };
 }
+
+/**
+ * What a Scheduled page chat message carries of the page it was sent from (docs/scheduled-chat-design.md §4.2): the
+ * workspace the list is filtered to and the schedule whose chip is on, as ids. Never text: delivery reads what they name.
+ */
+export interface SchedulePageChatContext {
+  scheduleFilter?: string;
+  scheduleId?: string;
+}

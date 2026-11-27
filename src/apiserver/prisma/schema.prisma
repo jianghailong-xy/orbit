@@ -3340,6 +3340,9 @@ model ConversationTurn {
   /// migration 1680), as ids. Delivery reads what they name and appends it as `<orbit_drive_chat>`, so `content` stays
   /// the owner's words. Null for every other turn.
   driveContext    Json?     @map("drive_context")
+  /// A Scheduled page chat's message: the workspace filter and selected schedule (`{ scheduleFilter?, scheduleId? }`,
+  /// migration 1762), as ids. Delivery reads what they name and appends `<orbit_schedules>`. Null for every other turn.
+  scheduleContext Json?     @map("schedule_context")
   answeredAt      DateTime? @map("answered_at")
   /// How this turn's latest completion ended (migration 1201, CHECK conversation_turn_outcome_chk):
   /// ANSWERED | FAILED | INTERRUPTED | CANCELLED, written by runner turn-complete in the write that settles
