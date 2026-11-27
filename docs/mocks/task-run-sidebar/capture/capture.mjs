@@ -10,6 +10,7 @@ mkdirSync(OUT, { recursive: true });
 const { chromium } = await import(`${W}/node_modules/playwright/index.mjs`);
 const { installFixtures, installFixedDate, FIXTURE_IDS, FIXED_NOW } = await import(`${W}/src/web/ui-migration/fixtures.mjs`);
 const { SESSION, SESSION_PATH } = await import(`${W}/src/web/ui-migration/session-fixtures.mjs`);
+const { answerListing } = await import(`${W}/src/web/ui-migration/session-listing-fixtures.mjs`);
 const { uuidToBase62 } = await import(`${W}/src/shared/dist/index.js`).catch(() => import(`${W}/node_modules/@orbit/shared/dist/index.js`));
 
 const T = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.png': 'image/png' };
@@ -136,6 +137,8 @@ for (const [name, s, sceneWidth] of SCENES) {
     if (req.method() !== 'GET') return r.fallback();
     if (p === `/api${SESSION_PATH}`) return json(r, row);
     if (p === '/api/sessions') return json(r, [row]);
+    // The session column reads GET /sessions/listing, whose entries carry the same row (taskId and all).
+    if (p === '/api/sessions/listing') return json(r, answerListing([row], [], new URL(req.url()).searchParams));
     if (p === `/api${SESSION_PATH}/events/page`) return json(r, { events, hasMore: false });
     if (p === `/api/tasks/${TASK}`) return json(r, s.task);
     if (p === `/api/tasks/${TASK}/evidence`) return json(r, s.evidence ?? []);
