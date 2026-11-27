@@ -52,6 +52,15 @@ S3_ACCESS_KEY_ID="${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KE
 S3_SECRET_ACCESS_KEY="${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"
 S3_REGION="${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-us-east-1}}}"
 BUCKET_SYNC_TARGET="${SYNC_TARGET%/}-bucket"
+# The archive's off-host copy in an S3 bucket, as <bucket>/<prefix>, e.g. orbit-pg-archive/prod. With it set the archive
+# goes there instead of to ORBIT_BACKUP_SYNC_TARGET, which then takes only the files copies. Endpoint, region and key pair
+# default to the Drive bucket's. Give the prefix to the archive alone: the copy deletes whatever there it did not put there.
+ARCHIVE_S3_TARGET="${ORBIT_BACKUP_S3_TARGET:-}"
+ARCHIVE_S3_ENDPOINT="${ORBIT_BACKUP_S3_ENDPOINT:-$S3_ENDPOINT}"
+ARCHIVE_S3_REGION="${ORBIT_BACKUP_S3_REGION:-$S3_REGION}"
+ARCHIVE_S3_ACCESS_KEY_ID="${ORBIT_BACKUP_S3_ACCESS_KEY_ID:-$S3_ACCESS_KEY_ID}"
+ARCHIVE_S3_SECRET_ACCESS_KEY="${ORBIT_BACKUP_S3_SECRET_ACCESS_KEY:-$S3_SECRET_ACCESS_KEY}"
+ARCHIVE_S3_NAME="s3://${ARCHIVE_S3_TARGET%/}"
 # The database that names those files (POSTGRES_DB in docker-compose.yml); PGDATABASE here is postgres.
 FILES_DB=orbit
 # When the off-host files copy was last pruned: at most once per interval, since it lists the whole copy.
@@ -324,6 +333,82 @@ sync_archive() {
   [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $SYNC_TARGET"
 }
 
+need_rclone() { command -v rclone >/dev/null 2>&1 || apk add --no-cache rclone >/dev/null 2>&1; }
+
+# rclone against the archive's bucket, with no config file: everything it needs is here.
+archive_rclone() {
+  RCLONE_S3_ACCESS_KEY_ID="$ARCHIVE_S3_ACCESS_KEY_ID" RCLONE_S3_SECRET_ACCESS_KEY="$ARCHIVE_S3_SECRET_ACCESS_KEY" \
+    rclone --config /dev/null --s3-provider Other --s3-force-path-style \
+      --s3-endpoint "$ARCHIVE_S3_ENDPOINT" --s3-region "$ARCHIVE_S3_REGION" --contimeout 15s --timeout 600s "$@"
+}
+
+# What the last rclone said on stderr, as rsync_said does for rsync.
+rclone_said() { tr -d '\r' < "$s3_stderr" | grep -v ' NOTICE: ' | tr '\n' ' ' | tail -c 300; }
+
+# A directory of the bucket in the shape of an rsync listing, the size second and the name last, so that archive_owns reads it.
+# A prefix with nothing under it lists empty, and so does a bucket not made yet (rclone's exit 3), which the first copy makes.
+s3_list() {
+  listed=0
+  listing="$(archive_rclone lsf --format sp --separator ' ' "$@" 2>"$s3_stderr")" || listed=$?
+  case "$listed" in
+    0) printf '%s\n' "$listing" | awk 'NF {print "-", $0}' ;;
+    3) ;;
+    *) return 1 ;;
+  esac
+}
+
+fetch_s3() { archive_rclone copyto ":s3:${ARCHIVE_S3_TARGET%/}/wal/$1" "$2" 2>"$s3_stderr" || { rclone_said; return 1; }; }
+
+# The archive to the bucket, with the guards sync_archive has: never an empty archive, never over another cluster's or one
+# further on. WAL goes first, on its own and deleting nothing, so the bucket holds a segment to read before a base backup.
+# Then `rclone sync`, which deletes only after every copy has gone through, and not at all after an error, so the bucket
+# keeps its old base backups until the new ones are there. --size-only because nothing here changes once named: a segment
+# is never overwritten and a base backup is renamed into place whole; it spares reading every object's metadata.
+sync_archive_s3() {
+  MIRRORED=no
+  if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then
+    log "ERROR: refusing off-host sync to $ARCHIVE_S3_NAME: $ARCHIVE_DIR holds no base backup or no WAL, and --delete would empty the target"
+    return 1
+  fi
+  if [ -z "$ARCHIVE_S3_ENDPOINT" ] || [ -z "$ARCHIVE_S3_ACCESS_KEY_ID" ] || [ -z "$ARCHIVE_S3_SECRET_ACCESS_KEY" ]; then
+    log "ERROR: cannot sync to $ARCHIVE_S3_NAME: set ORBIT_BACKUP_S3_ENDPOINT and the S3 key pair, or the Drive bucket's"
+    return 1
+  fi
+  if ! need_rclone; then
+    log "ERROR: cannot install rclone, skipping off-host sync to $ARCHIVE_S3_NAME"
+    return 1
+  fi
+  if ! s3_stderr="$(mktemp)"; then
+    log "ERROR: off-host sync to $ARCHIVE_S3_NAME failed: could not make a temporary file"
+    return 1
+  fi
+  if s3_round; then rm -f "$s3_stderr"; return 0; fi
+  rm -f "$s3_stderr"
+  return 1
+}
+
+s3_round() {
+  remote="${ARCHIVE_S3_TARGET%/}"
+  if ! remote_wal="$(s3_list ":s3:$remote/wal/")" || ! remote_base="$(s3_list -R --files-only ":s3:$remote/base/")"; then
+    log "ERROR: off-host sync to $ARCHIVE_S3_NAME failed: could not read the target: $(rclone_said)"
+    return 1
+  fi
+  archive_owns "$ARCHIVE_S3_NAME" fetch_s3 || return 1
+  if ! archive_rclone copy --size-only --log-level INFO --stats 0 "$WAL_DIR" ":s3:$remote/wal" 2>"$s3_stderr"; then
+    log "ERROR: off-host sync to $ARCHIVE_S3_NAME failed: $(rclone_said)"
+    return 1
+  fi
+  sent="$(grep -c ': Copied' "$s3_stderr" || true)"
+  if ! archive_rclone sync --size-only --log-level INFO --stats 0 --exclude '/base/.staging-*/**' --exclude '/metrics/**' \
+       "$ARCHIVE_DIR" ":s3:$remote" 2>"$s3_stderr"; then
+    log "ERROR: off-host sync to $ARCHIVE_S3_NAME failed: $(rclone_said)"
+    return 1
+  fi
+  MIRRORED=yes
+  changed="$((sent + $(grep -c -E ': (Copied|Deleted)' "$s3_stderr" || true)))"
+  [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $ARCHIVE_S3_NAME"
+}
+
 # Copy the attachment files to the same machine. A name is a sha256 and never changes its
 # bytes, so each poll carries only what is new.
 sync_files() {
@@ -561,7 +646,11 @@ mkdir -p "$BASE_DIR" "$WAL_DIR"
 # A base backup cut short when this container stopped: an upgrade recreates it when this script
 # changes. Nothing is running yet, and no later run would come back for this one's disk space.
 rm -rf "$BASE_DIR"/.staging-*
-log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR${SYNC_TARGET:+, mirroring to $SYNC_TARGET and $FILES_SYNC_TARGET}"
+if [ -n "$ARCHIVE_S3_TARGET" ]; then
+  log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR, mirroring to $ARCHIVE_S3_NAME${SYNC_TARGET:+ and $FILES_SYNC_TARGET}"
+else
+  log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR${SYNC_TARGET:+, mirroring to $SYNC_TARGET and $FILES_SYNC_TARGET}"
+fi
 write_metrics
 while :; do
   if backup_due; then
@@ -571,8 +660,12 @@ while :; do
   # The archive first: bytes reach the files directory before the row naming them commits, so
   # a round that finishes leaves the mirror with the bytes of every row in its WAL. Neither
   # copy failing stops the other.
+  # With a bucket for the archive, ORBIT_BACKUP_SYNC_TARGET is only where the files go.
+  if [ -n "$ARCHIVE_S3_TARGET" ]; then
+    sync_archive_s3 || MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
+  fi
   if sync_ready; then
-    sync_archive || MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
+    [ -n "$ARCHIVE_S3_TARGET" ] || sync_archive || MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
     sync_files || MIRROR_FAILED_FILES=$((MIRROR_FAILED_FILES + 1))
     bucket_copied=no
     if [ "$FILES_S3_MIRROR" = 1 ]; then
@@ -582,7 +675,7 @@ while :; do
     rm -f "$rsync_stderr"
   elif [ -n "$SYNC_TARGET" ]; then
     # A target and no way to reach it (sync_ready said why): nothing was copied.
-    MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
+    [ -n "$ARCHIVE_S3_TARGET" ] || MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
     MIRROR_FAILED_FILES=$((MIRROR_FAILED_FILES + 1))
     [ "$FILES_S3_MIRROR" != 1 ] || MIRROR_FAILED_BUCKET=$((MIRROR_FAILED_BUCKET + 1))
   elif [ "$FILES_S3_MIRROR" = 1 ]; then
