@@ -87,12 +87,12 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 589 |
+| `user` | 590 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **924** |
+| **Total** | **925** |
 
 ## Public routes
 
@@ -614,6 +614,7 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `POST` | `/api/tasks/:id/execute` | body `RunTaskDto`; path `id` | `TasksController.execute` |
 | `GET` | `/api/tasks/:id/progress` | path `id` | `TaskProgressController.get` |
 | `POST` | `/api/tasks/:id/progress` | body `ReportTaskProgressDto`; path `id` | `TaskProgressController.report` |
+| `POST` | `/api/tasks/:id/rerun-check` | path `id` | `TaskRerunCheckController.rerun` |
 | `GET` | `/api/tasks/:id/row` | path `id` | `TasksController.listRow` |
 | `DELETE` | `/api/tasks/:id/share` | path `id` | `ShareLinksController.turnOffTaskLink` |
 | `GET` | `/api/tasks/:id/share` | path `id` | `ShareLinksController.taskLink` |

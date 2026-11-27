@@ -7,6 +7,7 @@ from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
+import task_card_states
 
 SESSION='01a0cca7-8609-70ed-a0e2-d4b55b832b60'
 CREATED='01a0cca7-8609-70ed-a0e2-d4b55b832b70'
@@ -21,7 +22,7 @@ class State:
         self.rows=[]; self.turns={}; self.attachments={}; self.calls=[]; self.attempts={}; self.controls=[]
         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
         self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]; self.discussion=False
-        self.rejectTurnOnce=False; self.rejectTurnStatus=409; self.sendEvents=[]
+        self.rejectTurnOnce=False; self.rejectTurnStatus=409; self.postDelay=0; self.createDelay=0; self.sendEvents=[]
         # A07c scenarios: fields over the session, the runner, the account's providers/pools, the retry door's answer.
         self.extraDetail={}; self.runnerExtra={}; self.providers=None; self.pools=[]; self.retryMessage={'text':'last failed message'}
         # GET /users/me, for a scenario that needs the account's preferences (translation): None answers as before.
@@ -31,6 +32,8 @@ class State:
         # Drive and its chat (board docs/mocks/drive-chat/02-native.html frames 9–12): the chats read's chats and button counts, each
         # chat's change groups and overwrite questions, and the chats made and presses taken through /api/drive/chats.
         self.driveChats=[]; self.driveFab={'needsYou':0,'working':False}; self.driveGroups=[]; self.driveQuestions=[]; self.drivePosts=[]
+        # The task card's state (task_card_states.STATES): the task the conversation runs, and the reads beside it, by path.
+        self.taskReads={}
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
@@ -67,10 +70,15 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/__control':
             with state.lock:
                 if body.get('reset'): state.reset()
-                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus',
+                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus','postDelay','createDelay',
                           'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me','queuedTurns',
                           'driveChats','driveFab','driveGroups','driveQuestions']:
                     if k in body: setattr(state,k,body[k])
+                # The task card: this conversation becomes a run of a task in that state, on a branch of its own.
+                if body.get('taskCard'):
+                    card=task_card_states.scenarios(SESSION,WORKSPACE)[body['taskCard']]
+                    state.extraDetail={**state.extraDetail,**card['session']}
+                    state.taskReads=task_card_states.reads(body['taskCard'],SESSION,WORKSPACE)
                 # Account events (a clone's `agent.changed` frame) to relay once on the next poll of /api/events.
                 state.sendEvents=state.sendEvents+body.get('events',[])
                 # Files a scenario's transcript links to, served as the attachments the app downloads.
@@ -110,7 +118,11 @@ class Handler(BaseHTTPRequestHandler):
             for field in ['codexAccount','claudeAccount']:
                 if field in body and not re.fullmatch(r'default|[0-9a-f]{8}',body[field]):
                     return self.reply({'message':f'{field} must be default or an account id'},400)
-            state.creations.append(body); return self.reply({'id':CREATED})
+            # An answer on its way (seconds), as for a turn; a repeat of a clientRequestId is answered with the session the first made.
+            time.sleep(state.createDelay)
+            with state.lock:
+                if not any(c.get('clientRequestId')==body.get('clientRequestId') for c in state.creations): state.creations.append(body)
+            return self.reply({'id':CREATED})
         if path=='/api/attachments':
             time.sleep(state.uploadDelay)
             if state.uploadFailures>0: state.uploadFailures-=1; return self.reply({'message':'injected upload failure'},503)
@@ -123,6 +135,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({'id':key})
         if path.endswith('/turns') and method=='POST' or path.endswith('/resume'):
             key=body['clientTurnId']
+            # An answer on its way (seconds): the Sending… bubble's wait, or — past 20 s — one the device ends.
+            time.sleep(state.postDelay)
             with state.lock:
                 state.attempts[key]=state.attempts.get(key,0)+1
                 if key in state.turns and state.turns[key]['request']!=body: return self.reply({'message':'same key changed body'},409)
@@ -200,6 +214,7 @@ class Handler(BaseHTTPRequestHandler):
             except (BrokenPipeError,ConnectionResetError): pass
             self.close_connection=True; return
         if path.startswith('/api/drive/'): return self.drive(url)
+        if path in state.taskReads: return self.reply(state.taskReads[path])
         if path=='/api/users/me' and state.me is not None: return self.reply(state.me)
         if path=='/api/workspaces': return self.reply([{'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'enabled':True}])
         if path==f'/api/workspaces/{WORKSPACE}': return self.reply({'id':WORKSPACE,'name':'Composer fixture','runnerId':RUNNER,'provider':'codex','model':'fixture-model'})

@@ -216,7 +216,10 @@ func TestRunLoopBeatsBeforeAManagedInstanceClaims(t *testing.T) {
 		t.Error("a beat counts as taken only once the control plane has answered it")
 	}
 
-	startup := strings.Index(body, "managedStartupBeat(loopCtx, engineHealth.probed(), managedStartupProbeWait, managedStartupBeatRetry, heartbeatInterval,")
+	startup := strings.Index(body, "probed := engineHealth.probed()")
+	if call := strings.Index(body, "managedStartupBeat(loopCtx, probed, managedStartupProbeWait, managedStartupBeatRetry, heartbeatInterval,"); call < startup {
+		t.Fatal("the startup beat does not wait for the engine probe it names")
+	}
 	opened := strings.Index(body, "close(startupBeatDone)")
 	ticks := strings.Index(body, "beatUntilStopped(hbStop, ticker.C, hbNow, beat)")
 	if startup < 0 || opened < startup || ticks < opened {
@@ -238,5 +241,25 @@ func TestRunLoopBeatsBeforeAManagedInstanceClaims(t *testing.T) {
 	}
 	if strings.Count(body, "t.claimSession(") != 1 {
 		t.Error("runLoop claims somewhere other than its claim loop")
+	}
+}
+
+// The startup heartbeat's line says whether it was taken, when after the start, how long it waited and for what, and
+// how many attempts it took with the last one's round trip.
+func TestStartupBeatLine(t *testing.T) {
+	got := startupBeatLine(startupBeatTiming{
+		taken: true, waited: 7*time.Second + 300*time.Millisecond, probed: true,
+		attempts: 1, lastRoundTrip: 850 * time.Millisecond, sinceStart: 9*time.Second + 1400*time.Microsecond,
+	})
+	want := "startup heartbeat: taken, 9.001s after the runner started: waited 7.3s, after the engine probe answered; " +
+		"1 attempt(s), the last answered in 850ms"
+	if got != want {
+		t.Fatalf("line = %q\nwant   %q", got, want)
+	}
+	got = startupBeatLine(startupBeatTiming{waited: 20 * time.Second, attempts: 15, lastRoundTrip: 2 * time.Second, sinceStart: 30 * time.Second})
+	want = "startup heartbeat: not taken, 30s after the runner started: waited 20s, without the engine probe's answer; " +
+		"15 attempt(s), the last answered in 2s"
+	if got != want {
+		t.Fatalf("line = %q\nwant   %q", got, want)
 	}
 }
