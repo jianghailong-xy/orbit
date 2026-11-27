@@ -42,8 +42,8 @@ AGENTS = [
     {"id": "a1", "name": "dev-box", "provider": "claude", "lastProvider": "claude", "runnerId": "mini", "enabled": True,
      "enableWorktree": True, "effort": "", "workDir": "/Users/probe/orbit", "appendSystemPrompt": "",
      "workDirExists": True, "workDirIsGit": True},
-    {"id": "a2", "name": "orbit-ws01", "provider": "claude", "lastProvider": "claude", "runnerId": "ws01",
-     "enabled": True, "enableWorktree": True, "effort": "", "workDir": "/root/orbit", "appendSystemPrompt": "",
+    {"id": "a2", "name": "laptop", "provider": "claude", "lastProvider": "claude", "runnerId": "macbook",
+     "enabled": True, "enableWorktree": True, "effort": "", "workDir": "/Users/probe/orbit-laptop", "appendSystemPrompt": "",
      "workDirExists": True, "workDirIsGit": True},
 ]
 CLAUDE_MODELS = [{"value": "claude-opus-5-5", "label": "Opus 5.5", "reasoningLevels": ["low", "medium", "high", "max"]}]
@@ -56,7 +56,7 @@ def runner(rid, name):
             "modelCatalog": {"claude": CLAUDE_MODELS}, "runtimeDefaultModels": {"claude": "claude-opus-5-5"}}
 
 
-RUNNERS = [runner("mini", "Mac mini"), runner("ws01", "orbit-ws01")]
+RUNNERS = [runner("mini", "Mac mini"), runner("macbook", "MacBook")]
 
 # ── the schedules (board 4 ①) ───────────────────────────────────────────────────────────────────────────
 
@@ -77,7 +77,7 @@ def schedule(sid, title, rule, access, state, ws="a1", ws_name="dev-box", next_d
 def schedules():
     return [
         schedule("sch1", "Codex stable check", {"kind": "DAILY", "time": "06:00"}, "CHECK_ONLY", "ACTIVE",
-                 ws="a2", ws_name="orbit-ws01", next_due=ahead(1, 6)),
+                 ws="a2", ws_name="laptop", next_due=ahead(1, 6)),
         schedule("sch2", "Nightly dependency audit", {"kind": "WEEKLY", "time": "07:00", "weekdays": WEEKDAYS},
                  "OPEN_PR", "ACTIVE", next_due=ahead(1, 7), revision=2),
         schedule("sch3", "Changelog watch (docs)", {"kind": "DAILY", "time": "09:00"}, "CHECK_ONLY", "PAUSED",
@@ -158,9 +158,9 @@ def plain_session():
 OPENING = {
     "counts": {"total": 4, "active": 2, "paused": 2, "held": 0, "failing": 0},
     "next": {"scheduleId": "sch1", "title": "Codex stable check", "at": ahead(1, 6), "timezone": "UTC",
-             "workspaceId": "a2", "workspaceName": "orbit-ws01"},
+             "workspaceId": "a2", "workspaceName": "laptop"},
     "summary": "You have 4 scheduled tasks: 2 active, 2 paused, none failing.",
-    "nextText": "Next: Codex stable check, tomorrow at 06:00 on orbit-ws01.",
+    "nextText": "Next: Codex stable check, tomorrow at 06:00 on laptop.",
     "examplesLead": "Ask about them, or tell me what to change. For example:",
     "examples": ["Pause everything on my laptop until Monday", "Why did the last run take so long?",
                  "Every weekday at 09:00, check a changelog and tell me what's new"],

@@ -1,5 +1,8 @@
 import SwiftUI
 import OrbitKit
+#if os(macOS)
+import AppKit
+#endif
 
 // TEMPORARY evidence probe (see README.md): where one launch opens — the Scheduled section, whose toolbar holds the
 // chat's button (board docs/mocks/scheduled-chat/01-board-4.png).
@@ -39,5 +42,32 @@ enum ProbeArgs {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             if model.scheduledChat?.presented == false { model.scheduledChat?.toggleScheduled() }
         }
+        #if os(macOS)
+        // `-probe.capture <png> -probe.windowWidth <points>`: the window at that width — wider than a CI runner's
+        // 1024-point screen if asked — rendered by the app itself, so no screen limits the picture.
+        if let path = defaults.string(forKey: "probe.capture") {
+            await capture(to: path, width: defaults.double(forKey: "probe.windowWidth"))
+            NSApp.terminate(nil)
+        }
+        #endif
     }
+
+    #if os(macOS)
+    @MainActor
+    static func capture(to path: String, width: Double) async {
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && $0.frame.width > 400 })
+        else { return }
+        if width > 0 {
+            var frame = window.frame
+            frame.size = NSSize(width: width, height: 720)
+            window.setFrame(frame, display: true, animate: false)
+        }
+        try? await Task.sleep(nanoseconds: 6_000_000_000)
+        guard let view = window.contentView?.superview ?? window.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
+    #endif
 }

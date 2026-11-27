@@ -142,6 +142,12 @@ final class ScheduledChatShotTests: ProbeCase {
             press(name)
             settle(2)
             note("\(tag): the chat still shows after the name: \(chatShows(app, timeout: 3))")
+            #if os(macOS)
+            // The probe window is 1010 points: the chat slid over the inspector, and a name closes it to show the
+            // inspector (design §6), so no column is squeezed.
+            XCTAssertFalse(chatShows(app, timeout: 3), "\(tag): under 1200 points a name closes the slide-over")
+            XCTAssertTrue(appears(app, "Nightly dependency audit", timeout: 5), "\(tag): the inspector shows the schedule")
+            #endif
             XCTAssertFalse(app.buttons.matching(identifier: "schedule-back-to-chat").firstMatch.exists,
                            "\(tag): no ‹ Chat beside a column")
             shot("\(platform)-3-name-opens-schedule")

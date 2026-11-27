@@ -22,6 +22,10 @@ Every write is answered 409: the probe presses nothing that changes data. All da
 Run on a Mac with Xcode and XcodeGen: `bash run.sh` (`PASSES=ios`, `ipad` or `mac` for one). Pictures and notes land
 in `shots/<pass>/`.
 
-Where XCUITest cannot reach `testmanagerd` (a Mac without an interactive test session), `mac-shots.sh` launches the Mac
-probe app directly with `-probe.inspect sch2 -probe.chat YES` (a row selected, then the chat's button pressed in code)
-and photographs its window with `screencapture`; a second launch without `-probe.chat` shows whether open was remembered.
+`mac-shots.sh` launches the Mac probe app directly with `-probe.inspect sch2 -probe.chat YES -probe.capture <png>
+-probe.windowWidth <points>`: a row selected, the chat's button pressed in code, the window set to 1010 and then 1460
+points and rendered by the app itself (`ProbeArgs.capture`), so a window wider than a CI runner's 1024-point screen is
+photographed whole. It needs a logged-in screen; orbit-ws05's Mac mini has none, so the Mac pass and these pictures run
+on GitHub's macos-26 runner (`client.shots.yml`, put in place of `.github/workflows/client.yml` on a probe branch only).
+
+Sample names are neutral: workspaces `dev-box` (on "Mac mini") and `laptop` (on "MacBook").

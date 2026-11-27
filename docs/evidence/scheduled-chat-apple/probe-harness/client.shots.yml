@@ -34,12 +34,17 @@ jobs:
         run: |
           PASSES=mac bash run.sh 2>&1 | tee run-output.log
           exit "${PIPESTATUS[0]}"
+      - name: The window at 1010 and 1460 points, rendered by the app
+        id: widths
+        continue-on-error: true
+        working-directory: docs/evidence/scheduled-chat-apple/probe-harness
+        run: bash mac-shots.sh 2>&1 | tee mac-widths-output.log; exit "${PIPESTATUS[0]}"
       - name: Keep logs beside the shots
         if: always()
         working-directory: docs/evidence/scheduled-chat-apple/probe-harness
         run: |
           mkdir -p shots
-          cp run-output.log shots/ 2>/dev/null || true
+          cp run-output.log mac-widths-output.log shots/ 2>/dev/null || true
           { swift --version 2>&1 | head -2; xcodebuild -version; sw_vers; } > shots/toolchain.txt
           find shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
           python3 - shots <<'PY'
@@ -50,12 +55,12 @@ jobs:
                   if safe != name:
                       os.rename(os.path.join(root, name), os.path.join(root, safe))
           PY
-          echo "capture=${{ steps.capture.outcome }}" > shots/outcomes.txt
+          echo "capture=${{ steps.capture.outcome }} widths=${{ steps.widths.outcome }}" > shots/outcomes.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: schedchat-mac-shots
           path: docs/evidence/scheduled-chat-apple/probe-harness/shots
       - name: Fail as the capture did
-        if: steps.capture.outcome != 'success'
+        if: steps.capture.outcome != 'success' || steps.widths.outcome != 'success'
         run: exit 1
