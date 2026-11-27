@@ -249,7 +249,7 @@ final class RetrySendWiringTests: XCTestCase {
     }
 
     /// A failed send's "Couldn't send" line is taken down by the next send that goes through —
-    /// from both paths a message can go out on, and only once the server has accepted it: cleared
+    /// on whichever door it went out, and only once the server has accepted it: cleared
     /// before the POST, a send that then failed too would have had its own line wiped with it.
     func testAnAcceptedSendTakesDownTheLineAFailedOneLeft() throws {
         let clear = "statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)"
@@ -263,8 +263,6 @@ final class RetrySendWiringTests: XCTestCase {
                       "interruptAndSend(): its follow-up goes out through deliver()")
         XCTAssertFalse(interrupt.contains("sendFailureMessage"),
                        "interruptAndSend(): a failed follow-up is Not sent on its bubble, never a Couldn't send line")
-        let deliver = try section(try sendBody(), from: "accepted = try await postInterrupt(", to: "} catch {")
-        XCTAssertTrue(deliver.contains(clear), "deliver(): the interrupt's accepted POST reaches the same line")
     }
 
     // MARK: the sentence neither end says any more

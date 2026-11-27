@@ -97,7 +97,7 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(cancel.contains("reducer.removeWithdrawnSteer(turnId: turnId)"))
         XCTAssertTrue(cancel.contains("composerText = HeldCancel.composer(composerText, restoring: words)"))
         XCTAssertTrue(cancel.contains("attach(filename: ref.name"))
-        XCTAssertTrue(model.contains("translation: accepted.turnTranslation)"), "the send answer's chip")
+        XCTAssertTrue(model.contains("translation: accepted.turnTranslation,"), "the send answer's chip")
         XCTAssertTrue(model.contains("catch where SessionTranslation.refusedUntranslated(error) {"))
     }
 
