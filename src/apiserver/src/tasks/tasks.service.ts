@@ -2961,7 +2961,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * Whether the model decides Auto for a run of this task (task-run-auto.ts): it starts on Claude Code on
    * its own sign-in, by the start resolution's own rule (SessionsService.taskRunsWith). False for a start
-   * that would be refused for a reason of its own (a credential gone), which it then gives itself.
+   * that would be refused for a reason of its own (a credential gone), which it then gives itself; and for
+   * a task with no assignee that nothing gives an engine to (no pin, no project coordinator to follow),
+   * whose run has no engine until it is assigned.
    */
   private async modelDecidesAuto(ownerId: string, subject: TaskRunAutoSubject): Promise<boolean> {
     // A pin naming another engine, or a credential other than Claude Code's own sign-in (a key, a pool,
@@ -2977,6 +2979,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       provider: subject.provider,
       workspaceId: subject.assigneeId,
     });
+    if (!subject.assigneeId && runsWith.source === 'DEFAULT') return false;
     return runsWith.refusal == null && runsWith.engine === AgentProvider.CLAUDE && runsWith.providerBuiltin;
   }
 
@@ -2985,10 +2988,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * null. A pin door judges only a pinned model; a start judges the run it would create.
    *
    * The answer is the assignee's runner's. A task with no assignee is judged on the static list
-   * `autoAvailable` falls back to when no runner is in view, but only when its pins say it runs on Claude
-   * Code's own sign-in: otherwise it has no engine yet either, and is judged when it is assigned (update)
-   * or started. The runner's answer is read first, so the engine is resolved only for a model that would
-   * not have Auto there.
+   * `autoAvailable` falls back to when no runner is in view, on the engine its pins or its project's
+   * coordinator give it; with neither it has no engine yet, and is judged when it is assigned (update) or
+   * started. The runner's answer is read first, so the engine is resolved only for a model that would not
+   * have Auto there.
    */
   private async taskModelAutoRefusal(
     ownerId: string,
@@ -2999,13 +3002,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     known?: TaskRunAutoRunner | null,
   ): Promise<Record<string, unknown> | null> {
     if (door === 'pin' && subject.model == null) return null;
-    const onClaudeSignIn = pinsClaudeSignIn(subject);
-    if (!subject.assigneeId && !onClaudeSignIn) return null;
     const runner = !subject.assigneeId ? null
       : known !== undefined ? known : await this.autoRunnerOf(ownerId, subject.assigneeId);
     const refusal = claudeRunAutoRefusal({ model: subject.model, runner }, door, ids);
     if (!refusal) return null;
-    if (onClaudeSignIn || (await this.modelDecidesAuto(ownerId, subject))) return refusal;
+    if (pinsClaudeSignIn(subject) || (await this.modelDecidesAuto(ownerId, subject))) return refusal;
     return null;
   }
 

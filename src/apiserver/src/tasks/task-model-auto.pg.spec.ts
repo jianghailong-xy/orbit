@@ -12,9 +12,9 @@
  *      reason naming the model and models that have Auto, and no row. A model pinned alone is judged
  *      on the engine the assignee's seed gives it; the same model on Cursor CLI, whose Auto is
  *      runtime-wide, is written.
- *  (1b) a task with no assignee: a pin on Claude Code's own sign-in is judged on the static list
- *      `autoAvailable` falls back to; a model pinned alone, whose engine nobody knows yet, is judged when
- *      the task is assigned.
+ *  (1b) a task with no assignee is judged on the static list `autoAvailable` falls back to, on the engine
+ *      its pins or its project's coordinator give it; a model pinned alone with neither, whose engine
+ *      nobody knows yet, is judged when the task is assigned.
  *  (2) batch create and its dry run: the item without Auto refuses the whole batch, naming its index.
  *  (3) update: a re-pin without Auto is refused and the stored pin stays; so is a move of a pinned task
  *      to an assignee whose runner withholds Auto from that model.
@@ -262,6 +262,27 @@ test('task create, pin and start keep every task run on a model that has Auto', 
     assert.match(unassigned.message ?? '', /^Task runs start in Auto, and claude-haiku-4-5 has no Auto, so nothing was written\. /);
     assert.equal(await tasksTitled(h.db, 'unassigned-haiku'), 0);
 
+    // A model pinned alone, in a project whose coordinator runs on Claude Code: an unpinned run of the project's
+    // task starts on the coordinator's pair (start-anchor.ts), so that is the engine it is judged on.
+    const coordinator = randomUUID();
+    await h.db.session.create({
+      data: {
+        id: coordinator, title: 'coordinating', prompt: 'coordinate', ownerId: a.ownerId, creatorId: a.ownerId,
+        workspaceId: a.workspaceId, assignedRunnerId: a.runnerId, status: 'AWAITING_INPUT', provider: 'claude', engine: 'claude',
+      },
+    });
+    const projectId = randomUUID();
+    await h.db.project.create({
+      data: { id: projectId, ownerId: a.ownerId, title: `anchored-${RUN}`, coordinatorSessionId: coordinator, coordinatorEnabled: false },
+    });
+    const anchored = await refusalOf(() => h.tasks.create(a.ownerId, {
+      ...createDto(a, 'unassigned-anchored', { model: HAIKU }), assigneeId: null, projectId,
+    } as never));
+    assert.equal(anchored.code, CODE, JSON.stringify(anchored));
+    assert.equal(anchored.runner, null);
+    assert.equal(await tasksTitled(h.db, 'unassigned-anchored'), 0);
+
+    // With no project and no engine pin, nothing gives it an engine yet: it is judged once it is assigned.
     const later = (await h.tasks.create(a.ownerId, {
       ...createDto(a, 'unassigned-later', { model: HAIKU }), assigneeId: null,
     } as never) as { id: string }).id;
