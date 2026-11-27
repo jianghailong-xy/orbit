@@ -7,12 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const apiMock = vi.hoisted(() => vi.fn());
 vi.mock('../../api', () => ({ api: apiMock }));
 
-import { driveSyncIdOf, resetDriveSyncs, type DriveSyncView } from '../../lib/driveSyncs';
+import { driveSyncIdOf, refreshDriveSyncs, resetDriveSyncs, type DriveSyncView } from '../../lib/driveSyncs';
 import { DriveSyncCard } from './DriveSyncCard';
 
 /**
- * An agent's drive_sync call drawn as its sync's card (board docs/mocks/drive-sync-card): every state, the fold
- * of a clean end, the failed paths, and a sync read by id once it is too old for the tray's list.
+ * An agent's drive_sync call drawn as its sync's card (board docs/mocks/drive-sync-card): every state, a clean
+ * end left open until Hide folds it, the failed paths, and a sync read by id once it is too old for the tray's list.
  */
 
 const sync = (over: Partial<DriveSyncView> = {}): DriveSyncView => ({
@@ -105,17 +105,34 @@ describe('the sync card', () => {
     expect(text).toContain('Open folder');
   });
 
-  it('folds a clean end to one line', async () => {
+  it('keeps a clean end open, and Hide folds it to one line', async () => {
     const text = await draw([sync({ status: 'DONE', filesDone: 28701, bytesSent: 2_600_000_000_000, currentPath: null, endedAt: '2026-11-24T21:03:00Z' })]);
-    expect(host.querySelector('section.drive-xfer')).toBeNull();
-    expect(text).toContain('Synced 28,701 files to');
-    expect(text).toContain('/书格');
+    expect(host.querySelector('section.drive-xfer')).not.toBeNull();
+    expect(text).toContain('Synced 28,701 files');
     expect(text).toContain('4 already the same');
+    const hide = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Hide')!;
+    act(() => hide.click());
+    const folded = host.textContent?.replace(/\s+/g, ' ') ?? '';
+    expect(host.querySelector('section.drive-xfer')).toBeNull();
+    expect(folded).toContain('Synced 28,701 files to');
+    expect(folded).toContain('/书格');
+  });
+
+  it('keeps a sync that finishes while watched open', async () => {
+    await draw([sync()]);
+    expect(host.querySelector('section.drive-xfer')).not.toBeNull();
+    apiMock.mockResolvedValue({ syncs: [sync({ status: 'DONE', filesDone: 28701, currentPath: null, endedAt: '2026-11-24T21:03:00Z' })] });
+    await act(async () => {
+      await refreshDriveSyncs();
+    });
+    expect(host.textContent).toContain('Synced 28,701 files');
+    expect(host.querySelector('section.drive-xfer')).not.toBeNull();
   });
 
   it('says when there was nothing to send, and what --delete moved to Trash', async () => {
     const text = await draw([sync({ status: 'DONE', filesDone: 0, filesSame: 28701, filesDeleted: 3, endedAt: '2026-11-24T06:57:41Z' })]);
-    expect(text).toContain('Already up to date:');
+    expect(text).toContain('Already up to date');
+    expect(text).toContain('28,701 files checked');
     expect(text).toContain('3 moved to Trash');
   });
 
@@ -144,6 +161,6 @@ describe('the sync card', () => {
   it('reads a sync too old for the tray by id', async () => {
     const text = await draw([], sync({ status: 'DONE', filesDone: 9, endedAt: '2026-11-20T06:57:05Z' }));
     expect(apiMock).toHaveBeenCalledWith('/drive/syncs/s1');
-    expect(text).toContain('Synced 9 files to');
+    expect(text).toContain('Synced 9 files');
   });
 });

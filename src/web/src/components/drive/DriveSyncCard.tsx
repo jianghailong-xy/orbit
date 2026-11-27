@@ -1,5 +1,5 @@
 import '../../pages/DrivePage.css';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatSize } from '../../lib/drive';
 import { useDriveSync, syncRunning, type DriveSync } from '../../lib/driveSyncs';
@@ -34,22 +34,16 @@ function took(sync: DriveSync): string {
 
 /**
  * An agent's drive_sync (or documents_sync) call as its sync's card (board docs/mocks/drive-sync-card): the same live numbers as the
- * Drive tray, kept current after the agent's turn ends, since the sync runs in the background. A sync that ends
- * cleanly folds to one line; failures, a stop and a failed sync stay open.
+ * Drive tray, kept current after the agent's turn ends, since the sync runs in the background. The card stays open
+ * when the sync ends; Hide folds a clean one to one line.
  */
 export function DriveSyncCard({ syncId }: { syncId: string }) {
   const sync = useDriveSync(syncId);
   const navigate = useNavigate();
   const running = sync ? syncRunning(sync) : false;
   const clean = !!sync && sync.status === 'DONE' && sync.failedCount === 0;
-  const [open, setOpen] = useState(!clean);
+  const [open, setOpen] = useState(true);
   const [allFailed, setAllFailed] = useState(false);
-  // One that ends cleanly while it is watched folds to its line, as one that ended before the page opened.
-  const wasClean = useRef(clean);
-  useEffect(() => {
-    if (clean && !wasClean.current) setOpen(false);
-    wasClean.current = clean;
-  }, [clean]);
 
   if (!sync) {
     return (
@@ -89,6 +83,7 @@ export function DriveSyncCard({ syncId }: { syncId: string }) {
   }
 
   const failed = sync.status === 'FAILED';
+  const nothing = clean && sync.filesDone === 0;
   const stopped = sync.status === 'STOPPED';
   const title = running
     ? 'Syncing to Drive'
@@ -96,7 +91,9 @@ export function DriveSyncCard({ syncId }: { syncId: string }) {
       ? 'Sync failed'
       : stopped
         ? 'Sync stopped'
-        : sync.failedCount
+        : nothing
+          ? 'Already up to date'
+          : sync.failedCount
           ? `Synced ${count(sync.filesDone)} of ${count(sync.filesTotal ?? sync.filesDone + sync.failedCount)} files`
           : `Synced ${files(sync.filesDone)}`;
   const icon = running ? '⟳' : clean ? '✓' : stopped ? '■' : '!';
@@ -156,6 +153,11 @@ export function DriveSyncCard({ syncId }: { syncId: string }) {
                       </b>
                       {stopped ? ' synced' : ''} · {formatSize(sync.bytesSent)} of {formatSize(sync.bytesTotal ?? 0)}
                     </>
+                  ) : nothing ? (
+                    <>
+                      <b>{count(sync.filesSame)} files checked</b>
+                      {took(sync)}
+                    </>
                   ) : (
                     <>
                       {sync.failedCount ? <b>{count(sync.failedCount)} failed</b> : <b>{files(sync.filesDone)}</b>} ·{' '}
@@ -163,6 +165,7 @@ export function DriveSyncCard({ syncId }: { syncId: string }) {
                       {took(sync)}
                     </>
                   )}
+                  {!running && sync.filesDeleted ? ` · ${count(sync.filesDeleted)} moved to Trash` : ''}
                 </span>
                 {running && sync.rate ? (
                   <span className="drive-xfer-pace">
@@ -172,6 +175,7 @@ export function DriveSyncCard({ syncId }: { syncId: string }) {
                   </span>
                 ) : (
                   !running &&
+                  !nothing &&
                   sync.filesSame > 0 && <span className="drive-xfer-pace">{count(sync.filesSame)} already the same</span>
                 )}
               </div>
