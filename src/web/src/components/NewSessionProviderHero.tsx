@@ -395,10 +395,7 @@ export function NewSessionProviderHero({
             <span className="np-dot">·</span>
             <Link to={`/settings/machines/${encodeId(runnerId)}`}>Manage</Link>
           </div>
-        ) : (
-          // The model is said once, in the composer, where it is changed (docs/mocks/new-session-top ③).
-          <div className="np-empty-copy">Send a task to get started.</div>
-        ))}
+        ) : null)}
       {cantRunNote}
       {note && <div className="np-note">{note}</div>}
     </div>

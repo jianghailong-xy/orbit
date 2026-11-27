@@ -1548,10 +1548,6 @@ struct NewSessionView: View {
                             Text(blocker)
                                 .font(.callout).foregroundStyle(.secondary).lineLimit(2)
                                 .multilineTextAlignment(.center)
-                        } else {
-                            Text("Send a task to get started.")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text(heroSubtitle).font(.footnote).foregroundStyle(.tertiary).lineLimit(1)
                         }
                         // Nothing on this machine runs the draft (board ④): the send waits, and
                         // another provider's key is the way out here.
@@ -1789,19 +1785,6 @@ struct NewSessionView: View {
     private var currentProviderChoice: ProviderChoice {
         currentEngine.provider
             ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
-    }
-
-    /// The full model name (the composer footer only carries a truncated one). No funding label:
-    /// for a configured provider it's a constant the user already set and isn't actionable here, so
-    /// the credential earns a line only when it's broken — matching web, where it surfaces solely as
-    /// the provider's `unavailable` warning (not yet modelled on the native ProviderChoice).
-    /// No account either (web parity): the composer's quota gauge names it in its detail.
-    private var heroSubtitle: String {
-        draft.providerCapabilitiesResolved
-            ? AgentDefaults.friendlyName(draft.modelID, engine: draft.engine, provider: draft.provider,
-                                         catalog: draft.modelCatalog,
-                                         configured: draft.configuredProviders)
-            : "Runtime default"
     }
 }
 

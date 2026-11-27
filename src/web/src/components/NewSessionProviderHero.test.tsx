@@ -91,7 +91,9 @@ describe('NewSessionProviderHero', () => {
   it('uses the iOS empty-state hierarchy for an ordinary new session', () => {
     const html = markup('claude');
 
-    expect(html).toContain('<div class="np-empty-copy">Send a task to get started.</div>');
+    // Under the engine and where it runs, nothing more: no instruction line (owner 2026-11-27).
+    expect(html).not.toContain('Send a task to get started.');
+    expect(html).not.toContain('np-empty-copy');
     // The model is said once, in the composer (docs/mocks/new-session-top ③).
     expect(html).not.toContain('np-current-model');
     expect(html).not.toContain('Claude Opus 5');
@@ -143,7 +145,6 @@ describe('NewSessionProviderHero', () => {
     it('says the workspace and the folder in one pill under the engine', () => {
       const html = markup('claude', { place: place() });
       expect(html.indexOf('np-name')).toBeLessThan(html.indexOf('np-place'));
-      expect(html.indexOf('np-place')).toBeLessThan(html.indexOf('np-empty-copy'));
       expect(html.match(/np-place-pill/g)).toHaveLength(1);
       expect(html).toContain('aria-label="Runs in: orbit-ws01 / Orbit Session"');
       expect(html).toContain('np-place-slash');

@@ -96,10 +96,6 @@ fun NewSessionComposer(
                     val engine = state.catalog?.engineOf(effective)
                         ?: ProviderEngines.sessionEngine(effective.text("engine") ?: effective.text("lastEngine"), effective.text("provider"), emptyList())
                     val engineName = ProviderEngines.cliName(engine)
-                    val modelId = effective.text("model").orEmpty()
-                    val modelName = if (modelId.isBlank()) "Runtime default"
-                        else state.catalog?.modelLabel(engine, effective.text("provider") ?: engine, modelId)
-                            ?: if (engine == ProviderEngines.CLAUDE) ProviderEngines.claudeModelName(modelId) else modelId
                     val choosable = state.loaded && !state.busy && state.draft.pending == null && state.draft.createdSessionId == null
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         ProviderMark(AgentBrand.of(engine), engineName)
@@ -123,11 +119,6 @@ fun NewSessionComposer(
                             // A workspace and a folder of it, or none: the draft that place keeps (`DraftTarget`), with what was typed there.
                             onPick = { id, folder -> replace(route.copy(workspaceId = id, folderId = folder)) },
                         )
-                        Spacer(Modifier.height(18.dp))
-                        Text("Send a task to get started.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(5.dp))
-                        Text(modelName, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                     }
                     if (choosingEngine) EngineChoices(model, state, effective, handle.account.server, openRunner) { choosingEngine = false }
                 }
