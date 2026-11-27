@@ -411,6 +411,35 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && model.state.value.loaded }
         if (setup == null) awaitText("No messages yet")
     }
+    /** A new session's first message waits as the bubble in the engine picker's place (docs/mocks/composer-sending-bubble/03-new-session.html):
+     * Sending… while the create is out; past 20 s Not sent, and Retry resends the same clientRequestId — one session, never two. */
+    @Test fun newSessionFirstMessageSendingBubbleStates() = journey("new-session-bubble") {
+        login()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.startNewSession()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        control("""{"createDelay":6}""")
+        compose.onNodeWithTag("composer-input").performTextInput("Build me a thing")
+        clickSendWhenEnabled()
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("pending-send:sending").fetchSemanticsNodes().isNotEmpty() }
+        SystemClock.sleep(1500); compose.waitForIdle(); capture("new-session-sending")
+        awaitCreatedSession()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.startNewSession()
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("new-session-engine") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        control("""{"createDelay":25}""")
+        compose.onNodeWithTag("composer-input").performTextInput("Second first message")
+        clickSendWhenEnabled()
+        compose.waitUntil(24000) { compose.onAllNodesWithTag("pending-send:not-sent").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle(); capture("new-session-not-sent")
+        control("""{"createDelay":0}""")
+        compose.onNodeWithTag("pending-send:retry").performClick()
+        awaitCreatedSession()
+        val ids = stats()["creations"]!!.jsonArray.map { it.jsonObject["clientRequestId"]!!.jsonPrimitive.content }
+        assertEquals("one create per message, the Retry added none", 2, ids.toSet().size)
+        assertEquals(2, ids.size)
+    }
+
     @Test fun newSessionUsesWorkspaceDraftAndNavigatesAfterCreation() = journey("new-session") {
         login()
         compose.onNodeWithContentDescription("Back").performClick()
