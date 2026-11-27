@@ -2,16 +2,21 @@ package io.orbitd.android.reader
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -70,15 +75,18 @@ private fun SentAttachments(attachments: List<StagedAttachment>, open: (String) 
 }
 
 @Composable
-private fun FootDot() = Text("·", Modifier.clearAndSetSemantics { }, color = MaterialTheme.colorScheme.onSurfaceVariant,
-    style = MaterialTheme.typography.labelSmall)
+private fun FootDot() = Text("·", Modifier.padding(horizontal = 3.dp).clearAndSetSemantics { },
+    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
 
+/** A link of the foot as the board draws it on Android: the accent, semibold, in a 12 dp pill 6 by 2 inside — no button's 58 dp
+ * minimum width, which spread the foot unevenly — with a touch target of its own. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FootButton(label: String, tag: String, press: (() -> Unit)?) =
-    TextButton(onClick = { press?.invoke() }, modifier = Modifier.testTag(tag), enabled = press != null,
-        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-    }
+    Text(label, Modifier.testTag(tag).minimumInteractiveComponentSize().clip(RoundedCornerShape(12.dp))
+        .clickable(enabled = press != null, role = Role.Button) { press?.invoke() }.padding(horizontal = 6.dp, vertical = 2.dp),
+        color = if (press != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
 
 /** The board's dimmed bubble (web `.chat-user-wrap.is-pending`). */
 private const val DIMMED = 0.55f
