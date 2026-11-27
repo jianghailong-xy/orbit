@@ -1,0 +1,532 @@
+<!-- DESIGN MOCK (2026-11-27). The Drive chat in the native apps: the web board 01-board.html (commit 53a33e5506, owner took
+     Q1-Q4 A) in the Wiki chat's native pattern (docs/wiki-chat-design.md §4.1 "iPad 与 macOS", WikiChatViews.swift).
+     iPad regular width and Mac: the third column. iPhone and Android: a sheet. UI copy is what the web ships
+     (src/web/src/lib/driveChat.ts, driveChanges.ts). File names, sessions, sizes and dates are demo data.
+     Render: node docs/mocks/drive/render.mjs "$PWD/docs/mocks/drive-chat/02-native.html" "$PWD/docs/mocks/drive-chat/02-native.png" -->
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Drive chat - native</title>
+<link rel="stylesheet" href="../drive/board.css">
+<style>
+.board { width:2000px; }
+h2.dn-sec { font-size:20px; margin:40px 0 14px; padding-top:20px; border-top:1px solid #d6d6dc; }
+.dn-wide { display:grid; grid-template-columns:1320px 1fr; gap:28px; align-items:start; margin-bottom:30px; }
+.dn-four { display:grid; grid-template-columns:repeat(4, 430px); gap:34px 50px; align-items:start; }
+.side code, .note code, .dn-tb code, .dn-q code, .lede code { background:rgba(0,0,0,.06); padding:0 4px; border-radius:4px; }
+
+/* ---------- shared chat parts ---------- */
+.dn-chat { display:flex; flex-direction:column; background:#fff; min-width:0; font-size:14px; line-height:1.5; }
+.dn-head { display:flex; align-items:center; gap:10px; padding:12px 16px 10px; border-bottom:1px solid var(--sep); }
+.dn-head .t { font-weight:600; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.dn-head .caret { color:var(--t2); font-size:11px; }
+.dn-head .sp { flex:1; }
+.dn-hb { width:30px; height:30px; border-radius:50%; background:rgba(120,120,128,.12); color:var(--t2); display:flex; align-items:center; justify-content:center; font-size:15px; flex:none; }
+.dn-runs { display:flex; gap:8px; align-items:center; padding:8px 16px; font-size:13px; color:var(--t2); }
+.dn-runs b { color:var(--t1); font-weight:400; } .dn-runs i { font-style:normal; font-size:10px; }
+.dn-body { flex:1; padding:12px 14px; display:flex; flex-direction:column; gap:11px; overflow:hidden; justify-content:flex-end; }
+.dn-body.top { justify-content:flex-start; }
+.dn-empty { text-align:center; color:var(--t2); padding:14px 12px 0; }
+.dn-ex { display:flex; flex-direction:column; gap:7px; align-items:center; margin-top:16px; }
+.dn-ex span { border:1px solid var(--sep); border-radius:14px; padding:6px 12px; font-size:12.5px; color:#44444c; text-align:center; }
+.dn-u { align-self:flex-end; max-width:84%; background:var(--brand); color:#fff; border-radius:17px; padding:8px 13px; }
+.dn-att { align-self:flex-end; font-size:12px; color:var(--t2); margin-top:-6px; }
+.dn-a a { color:var(--brand); text-decoration:none; }
+.dn-card { border:1px solid var(--sep); border-radius:12px; overflow:hidden; background:#fff; flex:none; }
+.dn-card .h { display:flex; align-items:center; gap:8px; padding:9px 12px; background:var(--green-bg); font-weight:600; font-size:13.5px; }
+.dn-card .h .st { margin-left:auto; font-weight:500; font-size:12.5px; color:#17683b; }
+.dn-card.wait .h { background:var(--amber-bg); } .dn-card.wait .h .st { color:var(--amber); }
+.dn-card.undone .h { background:var(--grey-bg); } .dn-card.undone .h .st { color:var(--t2); }
+.dn-card .b { padding:8px 12px; font-size:13px; }
+.dn-op { display:flex; gap:8px; padding:2px 0; align-items:baseline; }
+.dn-op b { flex:none; width:76px; font-weight:600; font-size:12.5px; color:#55555e; }
+.dn-op span { min-width:0; overflow-wrap:anywhere; }
+.dn-more { color:var(--t2); font-size:12.5px; padding-top:3px; }
+.dn-file { padding:3px 0 6px; } .dn-file b { display:block; font-size:12px; color:#55555e; }
+.dn-file .p { display:block; overflow-wrap:anywhere; } .dn-file .f { display:block; color:var(--t2); font-size:12.5px; }
+.dn-acts { display:flex; gap:8px; padding:8px 12px 10px; border-top:1px solid var(--sep); }
+.dn-btn { border:1px solid #d9d9df; border-radius:7px; padding:4px 12px; font-size:12.5px; font-weight:500; background:#fff; }
+.dn-btn.pri { background:var(--brand); border-color:var(--brand); color:#fff; }
+.dn-acts.dn-col2 { flex-direction:column; }
+.dn-acts.dn-col2 .dn-btn, .dn-acts.dn-fill .dn-btn { border:0; border-radius:10px; background:#eeeef2; color:var(--brand); text-align:center; padding:9px; font-size:14.5px; font-weight:600; }
+.dn-acts.dn-col2 .dn-btn.pri { background:var(--brand); color:#fff; }
+.dn-acts.dn-fill .dn-btn { flex:1; }
+.dn-comp { margin:2px 12px 12px; border:1px solid var(--sep); border-radius:18px; padding:9px 11px; background:#fff; box-shadow:0 1px 5px rgba(0,0,0,.05); flex:none; }
+.dn-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:7px; }
+.dn-chip { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; background:rgba(120,120,128,.12); border-radius:8px; padding:3px 7px 3px 8px; white-space:nowrap; }
+.dn-chip i { font-style:normal; font-size:10px; font-weight:700; color:var(--t2); }
+.dn-chip svg.ic { width:13px; height:13px; }
+.dn-ph { color:var(--t3); font-size:14px; padding:1px 2px 10px; }
+.dn-tools { display:flex; align-items:center; gap:12px; font-size:12.5px; color:var(--t2); }
+.dn-tools .m { margin-left:auto; } .dn-tools .m b { color:var(--t1); }
+.dn-send { width:28px; height:28px; border-radius:50%; background:#c9cdd4; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; }
+.dn-fab { position:absolute; right:24px; bottom:24px; width:52px; height:52px; border-radius:50%; background:var(--brand); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,.22); z-index:2; }
+.dn-fab svg { width:25px; height:25px; }
+.dn-badge { position:absolute; top:-4px; right:-4px; min-width:20px; height:20px; border-radius:10px; background:#f08c00; color:#fff; font:700 11px/17px Inter,sans-serif; border:1.5px solid #fff; text-align:center; padding:0 4px; }
+.dn-badge.ok { background:var(--green); }
+.dn-ring { position:absolute; inset:-5px; border-radius:50%; border:3px solid transparent; border-top-color:var(--brand); border-right-color:var(--brand); }
+.dn-mark { display:inline-block; font-size:11px; font-weight:600; border-radius:999px; padding:0 7px; background:#d3f2de; color:#17683b; margin-left:6px; flex:none; line-height:18px; }
+.dn-mark.mv { background:#e0f0ff; color:#17598f; }
+.chg { background:#eefaf1 !important; }
+.dn-nm { display:flex; align-items:center; min-width:0; } .dn-nm > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+
+/* ---------- iPad ---------- */
+.dn-pad { width:1194px; height:790px; background:#fff; border-radius:26px; border:9px solid #1b1b1f; overflow:hidden; display:flex; position:relative; box-sizing:content-box; box-shadow:0 18px 50px rgba(0,0,0,.18); }
+.dn-pad .win { display:none; }
+.dn-psb { width:290px; flex:none; background:#f4f4f7; border-right:1px solid var(--sep); padding:34px 10px 12px; position:relative; }
+.dn-psb .it { display:flex; gap:12px; align-items:center; height:40px; padding:0 12px; border-radius:10px; font-size:15px; }
+.dn-psb .it.on { background:var(--brand-bg); font-weight:600; color:#2546b8; }
+.dn-psb .sec { font-size:12.5px; color:var(--t2); padding:14px 12px 4px; }
+.dn-psb .brand { font-size:20px; font-weight:700; padding:0 12px 12px; }
+.dn-psb .foot { position:absolute; left:14px; right:14px; bottom:16px; display:flex; gap:10px; }
+.dn-psb .foot span { background:var(--brand); color:#fff; border-radius:22px; padding:10px; text-align:center; font-weight:600; flex:1; }
+.dn-psb .foot span.g { flex:0 0 42px; background:#e6e6eb; color:#44444c; padding:10px 0; }
+.dn-col { width:420px; flex:none; background:var(--grp); border-right:1px solid var(--sep); padding-top:30px; overflow:hidden; font-size:15px; }
+.dn-col .nav { display:flex; align-items:center; padding:2px 16px; min-height:40px; color:var(--brand); }
+.dn-col .nav .act { margin-left:auto; display:flex; gap:18px; }
+.dn-col .big { font-size:29px; font-weight:700; padding:0 18px 8px; }
+.dn-col .row { padding:8px 14px; }
+.dn-detail { flex:1; min-width:0; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--t2); padding-top:30px; }
+.dn-detail > svg.ic { width:52px; height:52px; margin-bottom:10px; }
+.dn-detail b { font-size:20px; color:var(--t1); }
+.dn-pad .dn-chat { flex:1; padding-top:26px; }
+
+/* ---------- Mac ---------- */
+.mac .dn-chat { width:400px; flex:none; border-left:1px solid var(--sep); font-size:13px; }
+.mac .dn-head { height:52px; padding:0 14px; } .mac .dn-head .t { font-size:14px; }
+.mac .dn-hb { width:26px; height:26px; font-size:13px; }
+.mac .dn-comp { border-radius:12px; }
+.mac .lh, .mac .lr { grid-template-columns:minmax(0,1fr) 150px 56px 58px; gap:8px; padding:7px 14px; }
+.mac .lr.sel { background:var(--brand); color:#fff; } .mac .lr.sel .w, .mac .lr.sel .s, .mac .lr.sel .d { color:#fff; }
+.dn-listwrap { flex:1; min-height:0; position:relative; }
+.dn-over { position:absolute; right:0; top:0; bottom:0; width:280px; background:#fcfcfd; border-left:1px solid var(--sep); box-shadow:-10px 0 28px rgba(0,0,0,.12); padding:12px 16px; z-index:2; }
+.dn-over .x { text-align:right; color:var(--t2); }
+.dn-prev { height:170px; border:1px solid var(--sep); border-radius:8px; background:#fff; padding:12px; font-size:9.5px; color:#66666e; line-height:1.6; overflow:hidden; margin-top:6px; }
+.dn-prev b { display:block; font-size:12px; color:var(--t1); margin-bottom:5px; } .dn-prev em { font-style:normal; background:#fff3bf; }
+
+/* ---------- state strips ---------- */
+.dn-states { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:14px; width:1212px; }
+.dn-state { background:#fff; border-radius:12px; padding:14px 16px; display:flex; gap:16px; align-items:center; font-size:12.5px; color:#55555e; line-height:1.45; }
+.dn-state .dn-fab { position:relative; right:auto; bottom:auto; flex:none; }
+.dn-state b { display:block; font-size:14px; color:var(--t1); }
+
+/* ---------- iPhone ---------- */
+.dn-iph { height:880px; }
+.dn-iph .sbar, .dn-pad .sbar { position:absolute; left:0; right:0; top:0; display:flex; justify-content:space-between; padding:9px 24px 0; font-size:13px; font-weight:600; z-index:6; }
+.dn-iph { padding-top:30px; }
+.dn-iph .dn-fab { right:16px; bottom:30px; width:56px; height:56px; }
+.dn-sheet { position:absolute; left:0; right:0; bottom:0; background:#fff; border-radius:22px 22px 0 0; box-shadow:0 -6px 30px rgba(0,0,0,.16); display:flex; flex-direction:column; z-index:3; padding-bottom:6px; }
+.dn-sheet .grab { width:36px; height:5px; border-radius:3px; background:#c7c7cc; margin:7px auto 0; flex:none; }
+.dn-sheet .dn-chat { flex:1; min-height:0; }
+.dn-sheet .dn-head { border-bottom:0; padding-top:10px; }
+.dn-sheet.half { height:490px; }
+.dn-sheet.full { top:52px; }
+.dn-iph.back { background:#000; } .dn-iph.back .sbar { color:#fff; }
+.dn-under { position:absolute; left:14px; right:14px; top:38px; height:60px; background:#8f8f95; border-radius:16px; }
+
+/* ---------- Android ---------- */
+.ad { --p:#0066BE; --on:#1C1C1E; --v:#555861; --sc:#E4EFFC; --onsc:#123451; --ol:#c9cbd1;
+      width:430px; height:880px; background:#FDFDFE; color:var(--on); border-radius:26px; position:relative; overflow:hidden; font:15px/1.45 Roboto,Inter,sans-serif; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.08); }
+.ad .sbar { height:30px; display:flex; justify-content:space-between; align-items:center; padding:0 22px; font-size:13px; font-weight:500; }
+.ad .top { display:flex; align-items:center; gap:4px; height:56px; padding:0 8px; }
+.ad .top .ib { width:44px; height:44px; display:flex; align-items:center; justify-content:center; }
+.ad .top .t { flex:1; font-size:21px; padding-left:6px; }
+.ad .crumb2 { font-size:13px; color:var(--v); padding:0 20px 6px; }
+.ad .li { display:flex; align-items:center; gap:16px; padding:9px 20px; min-height:56px; }
+.ad .li .l { flex:1; min-width:0; }
+.ad .li .h { font-size:16px; }
+.ad .li .s { font-size:13.5px; color:var(--v); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ad .li .s a { color:var(--p); text-decoration:none; }
+.ad .li .tr { color:var(--v); font-size:13.5px; white-space:nowrap; }
+.dn-upl { position:absolute; right:16px; bottom:22px; height:56px; border-radius:16px; background:var(--sc); color:var(--onsc); display:flex; align-items:center; gap:10px; padding:0 20px; font-weight:500; z-index:2; box-shadow:0 3px 8px rgba(0,0,0,.18); }
+.ad .dn-fab { right:16px; bottom:92px; width:56px; height:56px; background:var(--p); }
+.ad .dn-sheet { background:#F4F5F8; border-radius:28px 28px 0 0; padding-bottom:8px; }
+.ad .dn-sheet .grab { width:32px; height:4px; background:#8e9099; margin-top:10px; }
+.ad .dn-chat { background:transparent; }
+.ad .dn-head .t { font-weight:500; font-size:17px; }
+.ad .dn-hb { background:transparent; color:var(--v); font-size:19px; }
+.ad .dn-u { background:var(--sc); color:var(--onsc); }
+.ad .dn-card, .ad .dn-comp { background:#fff; }
+.ad .dn-card { border-radius:16px; }
+.ad .dn-chip { background:var(--sc); color:var(--onsc); } .ad .dn-chip i { color:var(--onsc); }
+.ad .dn-send { background:#c9cbd1; }
+.ad .dn-a a { color:var(--p); }
+.ad .dn-acts.dn-col2 .dn-btn, .ad .dn-acts.dn-fill .dn-btn { border-radius:20px; background:transparent; border:1px solid #757881; color:var(--p); font-weight:500; font-size:14.5px; }
+.ad .dn-acts.dn-col2 .dn-btn.pri { background:var(--p); border-color:var(--p); color:#fff; }
+
+/* ---------- tables, questions ---------- */
+.dn-tb { width:100%; border-collapse:collapse; background:#fff; border-radius:12px; overflow:hidden; font-size:13.5px; line-height:1.55; }
+.dn-tb th { text-align:left; background:#f6f6f8; padding:9px 14px; border-bottom:1px solid #dcdce2; }
+.dn-tb td { padding:8px 14px; border-bottom:1px solid #ececf0; vertical-align:top; }
+.dn-q { background:#fff; border-radius:12px; border-left:4px solid #f08c00; padding:16px 20px; font-size:14px; line-height:1.65; display:flex; gap:40px; align-items:flex-start; }
+.dn-q h3 { margin:0 0 8px; font-size:16px; }
+.dn-q .rec { color:#17683b; font-weight:700; }
+.dn-opt { width:300px; flex:none; }
+.dn-opt .cap { font-weight:700; margin-bottom:8px; font-size:13.5px; }
+.dn-mini { width:300px; height:250px; position:relative; background:#FDFDFE; border:1px solid var(--sep); border-radius:18px; overflow:hidden; --p:#0066BE; --sc:#E4EFFC; --onsc:#123451; }
+.dn-mini .top { display:flex; align-items:center; gap:12px; padding:12px 14px; font-size:17px; }
+.dn-mini .top .sp { flex:1; }
+.dn-mini .ln { height:10px; border-radius:5px; background:#eceef2; margin:16px 20px; }
+.dn-mini .dn-fab { right:14px; width:50px; height:50px; background:var(--p); }
+.dn-mini .dn-upl { right:14px; bottom:14px; height:50px; }
+.dn-mini .ring { outline:2px dashed #f08c00; outline-offset:4px; }
+</style>
+<body><div class="board">
+<h1>Drive · 聊天的原生版（设计图 02：iPad、Mac、iPhone、Android）</h1>
+<p class="lede">照已通过的 web 图 <code>01-board.png</code>（提交 <code>53a33e5506</code>，owner 11-26 四个问题都取推荐）和 Wiki 聊天的原生做法（<code>docs/wiki-chat-design.md</code> §4.1「iPad 与 macOS」、<code>WikiChatViews.swift</code>）。
+iOS 是基准。<b>iPad 常规宽度和 Mac：第三栏，默认展开，<code>✕</code> 按账号记在本机。iPhone 和 Android：sheet，不自动展开。</b>同一场聊天、同一个 composer、同一套卡片和英文文案（取 web 已写好的那份）。标注用中文；文件名、会话、大小、时间都是示意。</p>
+
+<h2 class="dn-sec">iPad 与 Mac：第三栏</h2>
+
+<!-- 1 iPad new chat -->
+<div class="dn-wide">
+<div>
+  <div class="fh"><span class="n">1</span>iPad 打开 Drive：第三栏默认就在，新聊天 <span class="dec">默认展开</span><span class="dec">Runs in · 文件夹芯片</span></div>
+  <div class="dn-pad">
+    <div class="sbar"><span>9:41</span><span>100% ▮</span></div>
+    <div class="dn-psb" data-side></div>
+    <div class="dn-col">
+      <div class="nav"><span>‹ Drive</span><div class="act"><i data-ic="plus"></i><i data-ic="more"></i></div></div>
+      <div class="big">Scans</div>
+      <div data-rows="scans"></div>
+    </div>
+    <div class="dn-chat">
+      <div class="dn-head" data-mk="1"><span class="t">New chat</span><span class="caret">▾</span><span class="sp"></span><span class="dn-hb">＋</span><span class="dn-hb">→</span><span class="dn-hb">✕</span></div>
+      <div class="dn-runs" data-mk="2">Runs in <b>Orbit Cloud</b> <i>▾</i></div>
+      <div class="dn-body top">
+        <div class="dn-empty">Ask about your files, or say how to sort them.<br>Every change it makes shows here, and can be undone.
+          <div class="dn-ex" data-mk="3"><span>Sort these receipts into Receipts 2026 by month</span><span>What’s taking up the most space?</span><span>Find the lease and tell me when the notice period ends</span></div>
+        </div>
+      </div>
+      <div class="dn-comp"><div class="dn-chips"><span class="dn-chip" data-mk="4"><i data-ic="drive"></i>Folder · Scans <i>✕</i></span></div>
+        <div class="dn-ph">Ask about your files, or say how to sort them</div>
+        <div class="dn-tools"><span style="font-size:18px">＋</span><span>Auto</span><span class="m"><b>Opus 5.5</b> Default</span><span>◯</span><span class="dn-send">↑</span></div></div>
+    </div>
+  </div>
+</div>
+<div class="side"><h3>这一帧定的事</h3><ol>
+  <li><b>第三栏就是右边那一栏。</b>iPad 今天打开 Drive 是「侧栏 · 文件列表 · 空白详情」，聊天占掉空白的那栏，成为「侧栏 · Drive · 聊天」，和 web 图 ② 一样。竖屏时侧栏照旧自己收起。打开 Drive 就显示，接上等你的那场 → 最近还开着的 → <code>New chat</code>。头上是标题 <code>▾</code>（整栏换成历史：搜索、Open / Completed、每行 <code>⋯</code>，同 Wiki 45 ④）、<code>+</code>、<code>→</code> 完整会话页、<code>✕</code>。</li>
+  <li><b>Runs in</b> 只在新聊天出现，发出第一句后收起；默认值由服务端给（上次 Drive 聊天的 workspace，第一次是 Orbit Cloud）。机器离线时照 Wiki 另写一行橙字。</li>
+  <li>三条示例只在新聊天、输入框为空时出现，点一下填进输入框，不发送。</li>
+  <li><b>当前文件夹自动附上</b>，排在附件行最前，可以叉掉，叉掉就不发。顶层是 <code>Folder · Drive</code>。进到一个文件的页面时再多一个文件名芯片（文件页在 Drive 这一栏里推进，不盖聊天）。</li>
+  <li><b><code>✕</code> 按账号记在本机</b>（UserDefaults，键带账号 id）：重启、切换页面都不再自动展开，直到点一次圆按钮。iPad 变窄成 compact 时，自动展开的面板随之收起，变宽再回来；compact 里只有 sheet（同 iPhone）。</li>
+  <li>Trash、Storage 没有聊天栏，也没有圆按钮。</li>
+</ol></div>
+</div>
+
+<!-- 2 Mac changes -->
+<div class="dn-wide">
+<div>
+  <div class="fh"><span class="n">2</span>Mac：说一句就改，聊天里一张改动卡带 Undo，列表标出改了什么 <span class="dec">改动卡 · Undo</span><span class="dec">列表标记</span></div>
+  <div class="mac" style="height:660px;width:1320px">
+    <div class="msb" data-msb></div>
+    <div class="main">
+      <div class="mtool"><span style="color:var(--t2)">‹ ›</span><span class="title">Receipts 2026</span><span class="sp"></span><span class="tb"><i data-ic="newfolder"></i><i data-ic="up"></i><i data-ic="link"></i><i data-ic="trash"></i></span></div>
+      <div class="lh"><span>Name</span><span>Last written by</span><span style="text-align:right">Size</span><span style="text-align:right">Modified</span></div>
+      <div class="lr chg" data-mk="1"><span class="nm"><i data-ic="folder" class="sm"></i><span class="dn-nm"><span>2026-10</span><span class="dn-mark">New</span></span></span><span class="w">—</span><span class="s">6 items</span><span class="d">14:32</span></div>
+      <div class="lr chg"><span class="nm"><i data-ic="folder" class="sm"></i><span class="dn-nm"><span>2026-11</span><span class="dn-mark">New</span></span></span><span class="w">—</span><span class="s">4 items</span><span class="d">14:32</span></div>
+      <div class="lr"><span class="nm"><i data-ic="folder" class="sm"></i><span>2026-09</span></span><span class="w">—</span><span class="s">8 items</span><span class="d">Oct 2</span></div>
+      <div class="lr"><span class="nm"><i data-ic="folder" class="sm"></i><span>2026-08</span></span><span class="w">—</span><span class="s">11 items</span><span class="d">Sep 1</span></div>
+      <div class="lr chg" data-mk="2"><span class="nm"><i data-ic="csv" class="sm"></i><span class="dn-nm"><span>2026 totals.xlsx</span><span class="dn-mark mv">Renamed</span></span></span><span class="w"><a>Agent in Sort October receipts</a></span><span class="s">44 KB</span><span class="d">14:32</span></div>
+      <div class="lr chg"><span class="nm"><i data-ic="file" class="sm"></i><span class="dn-nm"><span>shop index.pdf</span><span class="dn-mark mv">Moved</span></span></span><span class="w"><a>Agent in Sort October receipts</a></span><span class="s">88 KB</span><span class="d">14:32</span></div>
+    </div>
+    <div class="dn-chat">
+      <div class="dn-head"><span class="t">Sort October receipts</span><span class="caret">▾</span><span class="sp"></span><span class="dn-hb">＋</span><span class="dn-hb">→</span><span class="dn-hb">✕</span></div>
+      <div class="dn-body">
+        <div class="dn-u">Put these receipts into Receipts 2026, one folder per month, and name each file by date and shop.</div>
+        <div class="dn-att" data-mk="3">⊕ Orbit attached: Folder · Scans · 12 files</div>
+        <div class="dn-a">Read all 12. 10 are receipts from October and November; I moved them into <a>2026-10</a> and <a>2026-11</a> under <a>Receipts 2026</a>. The other two were photos of receipts already scanned, so I moved them to Trash.</div>
+        <div class="dn-card" data-mk="4"><div class="h">Drive changes<span class="st">Done · 24 changes</span></div>
+          <div class="b" data-changes></div>
+          <div class="dn-acts"><span class="dn-btn">Show all</span><span class="dn-btn">Undo</span></div></div>
+      </div>
+      <div class="dn-comp"><div class="dn-ph">Ask about your files, or say how to sort them</div>
+        <div class="dn-tools"><span style="font-size:17px">＋</span><span>Auto</span><span class="m"><b>Opus 5.5</b> Default</span><span>◯</span><span class="dn-send">↑</span></div></div>
+    </div>
+  </div>
+</div>
+<div class="side"><h3>这一帧定的事</h3><ol>
+  <li><b>列表标记</b>：这场聊天新建的 <code>New</code>、移进来的 <code>Moved</code>、改名的 <code>Renamed</code>，行底浅绿；打开看过就消失，看过的记在本机、按账号。撤销掉的改动没有标记。iPad 的列表同样。</li>
+  <li>同一项改了两次，只显示最后一次的标记。</li>
+  <li><b>Mac 多选的行变成一个芯片</b> <code>12 files</code>（只选一个时写文件名），排在文件夹芯片后面。iPhone、iPad、Android 的 Drive 今天没有多选，这次不加：附上的是当前文件夹（和打开着的文件）。</li>
+  <li><b>改动卡</b>一轮一张，放在那一轮后面：<code>Done · N changes</code>，先列 4 条，<code>and N more</code>，<code>Show all</code> 展开；<code>Undo</code> 一次撤回整张。超过 200 项和撤销后的样子见下面一排。</li>
+</ol>
+<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+  <div class="dn-card wait"><div class="h">Drive changes<span class="st">Needs you</span></div><div class="b">212 changes waiting for Apply</div><div class="dn-acts"><span class="dn-btn">Show all</span><span class="dn-btn pri">Apply</span></div></div>
+  <div class="dn-card undone"><div class="h">Drive changes<span class="st">Undone</span></div><div class="b">2 left as they are</div></div>
+</div></div>
+</div>
+
+<!-- 3 Mac replace -->
+<div class="dn-wide">
+<div>
+  <div class="fh"><span class="n">3</span>Mac：要你定的覆盖是一张琥珀色卡；聊天开着时文件详情盖在列表右侧 <span class="dec">Replace a file?</span><span class="dec">Q4 A</span></div>
+  <div class="mac" style="height:640px;width:1320px">
+    <div class="msb" data-msb></div>
+    <div class="main">
+      <div class="mtool"><span style="color:var(--t2)">‹ ›</span><span class="title">Scans</span><span class="sp"></span><span class="tb"><i data-ic="newfolder"></i><i data-ic="up"></i><i data-ic="link"></i><i data-ic="trash"></i></span></div>
+      <div class="dn-listwrap">
+        <div class="lh"><span>Name</span><span>Last written by</span><span style="text-align:right">Size</span><span style="text-align:right">Modified</span></div>
+        <div class="lr"><span class="nm"><i data-ic="img" class="sm"></i><span>IMG_4907.jpg</span></span><span class="w">You</span><span class="s">1.1 MB</span><span class="d">Oct 18</span></div>
+        <div class="lr"><span class="nm"><i data-ic="file" class="sm"></i><span>receipt (2).pdf</span></span><span class="w">You</span><span class="s">88 KB</span><span class="d">Oct 24</span></div>
+        <div class="lr"><span class="nm"><i data-ic="file" class="sm"></i><span>scan 15.pdf</span></span><span class="w">You</span><span class="s">240 KB</span><span class="d">Nov 19</span></div>
+        <div class="lr sel"><span class="nm"><i data-ic="file" class="sm"></i><span>lease-2026.pdf</span></span><span class="w">You</span><span class="s">2.3 MB</span><span class="d">Sep 30</span></div>
+        <div class="lr"><span class="nm"><i data-ic="md" class="sm"></i><span>todo.md</span></span><span class="w"><a>Agent in Weekly review</a></span><span class="s">2 KB</span><span class="d">Sep 28</span></div>
+        <div class="dn-over" data-mk="1"><div class="x">✕</div>
+          <div class="dn-prev"><b>Lease agreement 2026</b>1. Term. This lease begins on January 1, 2026 and ends December 31, 2026…<br>11. Renewal. Either party may give notice of non-renewal no later than <em>60 days</em> before the end of the term…</div>
+          <div style="font-weight:700;font-size:15px;margin-top:10px">lease-2026.pdf</div><div class="sub">PDF · 2.3 MB</div>
+          <div class="kv"><span class="k">Last written</span><span>Sep 30</span><span class="k">By</span><span>You</span></div>
+          <div style="display:flex;gap:8px;margin-top:14px"><span class="wbtn">Download</span><span class="wbtn pri">Share Link…</span></div></div>
+      </div>
+    </div>
+    <div class="dn-chat">
+      <div class="dn-head"><span class="t">Lease and rent</span><span class="caret">▾</span><span class="sp"></span><span class="dn-hb">＋</span><span class="dn-hb">→</span><span class="dn-hb">✕</span></div>
+      <div class="dn-body">
+        <div class="dn-u">Move the lease into Documents/Home.</div>
+        <div class="dn-a">Documents/Home already has a <code>lease-2026.pdf</code>. It’s a different file, so I haven’t touched it. The one there is a 2-page draft: I’d keep both.</div>
+        <div class="dn-card wait" data-mk="2"><div class="h">Replace a file?<span class="st">Needs you</span></div>
+          <div class="b" data-replace></div>
+          <div class="dn-acts"><span class="dn-btn pri">Keep both</span><span class="dn-btn">Replace</span></div></div>
+      </div>
+      <div class="dn-comp"><div class="dn-chips"><span class="dn-chip"><i data-ic="drive"></i>Folder · Scans <i>✕</i></span><span class="dn-chip">lease-2026.pdf <i>✕</i></span></div><div class="dn-ph">Ask about your files, or say how to sort them</div>
+        <div class="dn-tools"><span style="font-size:17px">＋</span><span>Auto</span><span class="m"><b>Opus 5.5</b> Default</span><span>◯</span><span class="dn-send">↑</span></div></div>
+    </div>
+  </div>
+</div>
+<div class="side"><h3>这一帧定的事</h3><ol>
+  <li><b>详情让出右栏。</b>今天 Mac 的第三栏是详情（inspector）。聊天开着时第三栏是聊天，选中一个文件时详情盖在列表右侧（280，带阴影，<code>✕</code> 或 Esc 关，选中不变）；多选时不弹。窗口 ≥ 1760 时四栏并排。<code>✕</code> 收起聊天，详情回到第三栏。聊天栏默认 400，可拖 320 到页面一半（同 web）。放不下三栏时照 Wiki 收起侧栏，收栏后还原。</li>
+  <li><b>覆盖卡</b>两边各写路径、大小、谁写的、时间：<code>Already there</code> 与 <code>Incoming</code>。推荐写在 agent 的话里（与 web 现状一致，卡上不编推荐）。<code>Keep both</code> 是主按钮；按过后卡写 <code>Kept both · saved as …</code> 或 <code>Replaced. The old file is in its versions.</code></li>
+  <li>点回答里的文件链接：左边选中它并打开详情，不离开聊天。iPhone 上点链接先收起 sheet 再推进文件页。</li>
+</ol></div>
+</div>
+
+<!-- 4 iPad closed -->
+<div class="dn-wide">
+<div>
+  <div class="fh"><span class="n">4</span>收起后：右下角圆按钮，四种状态同 Wiki <span class="dec">✕ 记住</span></div>
+  <div class="dn-pad" style="height:520px">
+    <div class="sbar"><span>9:41</span><span>100% ▮</span></div>
+    <div class="dn-psb" data-side="short"></div>
+    <div class="dn-col">
+      <div class="nav"><span>‹ Drive</span><div class="act"><i data-ic="plus"></i><i data-ic="more"></i></div></div>
+      <div class="big">Scans</div>
+      <div data-rows="scans"></div>
+    </div>
+    <div class="dn-detail"><i data-ic="drive"></i><b>Drive</b>
+      <div class="dn-fab" data-mk="1"><i data-ic="bubble"></i></div></div>
+  </div>
+  <div class="dn-states">
+    <div class="dn-state"><div class="dn-fab"><i data-ic="bubble"></i></div><div><b>Chat</b>没有进行中的事</div></div>
+    <div class="dn-state"><div class="dn-fab"><span class="dn-ring"></span><i data-ic="bubble"></i></div><div><b>Working…</b>一轮在跑</div></div>
+    <div class="dn-state"><div class="dn-fab"><i data-ic="bubble"></i><span class="dn-badge">1</span></div><div><b>1 needs you</b>覆盖要定、超量要 Apply、审批</div></div>
+    <div class="dn-state"><div class="dn-fab"><i data-ic="bubble"></i><span class="dn-badge ok">✓</span></div><div><b>Drive updated</b>收起时改完了，打开即消</div></div>
+  </div>
+</div>
+<div class="side"><h3>这一帧定的事</h3><ol>
+  <li>圆按钮只有图标，文字是它的无障碍标签和 Mac 悬停提示。iPad / Mac 52 pt、距边 24，放在最右栏的右下角；iPhone / Android 56、距边 16；列表底部留 88。</li>
+  <li>点开：接上要你处理的那场，直接滚到要看的卡；同时清掉「记住收起」。</li>
+  <li>和 web 一样不做浮条（Wiki 重写完那条 <code>Wiki updated</code> 提示在这里没有对应物）。</li>
+</ol></div>
+</div>
+
+<h2 class="dn-sec">iPhone（基准）：sheet，不自动展开</h2>
+<div class="dn-four">
+<div>
+  <div class="fh"><span class="n">5</span>打开 Drive：只有圆按钮 <span class="dec">列表标记</span></div>
+  <div class="ph dn-iph"><div class="sbar"><span>9:41</span><span>▮▮▮</span></div>
+    <div class="nav"><span class="back">‹ Drive</span><div class="tt"></div><div class="act"><i data-ic="plus"></i><i data-ic="more"></i></div></div>
+    <div class="big">Receipts 2026</div>
+    <div data-rows="receipts"></div>
+    <div class="dn-fab" data-mk="1"><i data-ic="bubble"></i></div>
+  </div>
+  <p class="note"><b>1</b> 进 Drive 不弹聊天。标记跟在名字后面，行底浅绿；打开那一项就消失。顶层、文件夹页、文件页都有圆按钮，Trash、Storage 没有。</p>
+</div>
+<div>
+  <div class="fh"><span class="n">6</span>点圆按钮：半屏，新聊天 <span class="dec">Runs in · 文件夹芯片</span></div>
+  <div class="ph dn-iph"><div class="sbar"><span>9:41</span><span>▮▮▮</span></div>
+    <div class="nav"><span class="back">‹ Drive</span><div class="tt"></div><div class="act"><i data-ic="plus"></i><i data-ic="more"></i></div></div>
+    <div class="big">Scans</div>
+    <div data-rows="scans"></div>
+    <div class="dn-sheet half" data-mk="1"><div class="grab"></div><div class="dn-chat">
+      <div class="dn-head"><span class="t">New chat</span><span class="sp"></span><span class="dn-hb">→</span><span class="dn-hb">✕</span></div>
+      <div class="dn-runs">Runs in <b>Orbit Cloud</b> <i>▾</i></div>
+      <div class="dn-body top"><div class="dn-empty" style="padding-top:4px">Ask about your files, or say how to sort them.<br>Every change it makes shows here, and can be undone.
+        <div class="dn-ex" style="margin-top:10px"><span>Sort these receipts into Receipts 2026 by month</span><span>What’s taking up the most space?</span></div></div></div>
+      <div class="dn-comp"><div class="dn-chips"><span class="dn-chip"><i data-ic="drive"></i>Folder · Scans <i>✕</i></span></div><div class="dn-ph">Ask about your files, or say how to sort them</div>
+        <div class="dn-tools"><span style="font-size:18px">＋</span><span>Auto</span><span class="m"><b>Opus 5.5</b> Default</span><span>◯</span><span class="dn-send">↑</span></div></div>
+    </div></div>
+  </div>
+  <p class="note"><b>1</b> 两档（medium / large），半屏时后面的列表不变灰、能滚能进文件夹，芯片跟着走（同 Wiki：<code>presentationBackgroundInteraction</code>）。示例放不下就滚动。标题点开是菜单：<code>New chat</code> 和历史；没有单独的 <code>+</code>。</p>
+</div>
+<div>
+  <div class="fh"><span class="n">7</span>全屏：改动卡 <span class="dec">Undo</span></div>
+  <div class="ph dn-iph back"><div class="sbar"><span>9:41</span><span>▮▮▮</span></div><div class="dn-under"></div>
+    <div class="dn-sheet full"><div class="grab"></div><div class="dn-chat">
+      <div class="dn-head"><span class="t">Sort October receipts</span><span class="sp"></span><span class="dn-hb">→</span><span class="dn-hb">✕</span></div>
+      <div class="dn-body">
+        <div class="dn-u">Put these receipts into Receipts 2026, one folder per month, and name each file by date and shop.</div>
+        <div class="dn-att">⊕ Orbit attached: Folder · Scans</div>
+        <div class="dn-a">I moved 10 receipts into <a>2026-10</a> and <a>2026-11</a>, and 2 duplicate photos to Trash.</div>
+        <div class="dn-card" data-mk="1"><div class="h">Drive changes<span class="st">Done · 24 changes</span></div><div class="b" data-changes></div>
+          <div class="dn-acts dn-fill"><span class="dn-btn">Show all</span><span class="dn-btn">Undo</span></div></div>
+      </div>
+      <div class="dn-comp"><div class="dn-ph">Ask about your files, or say how to sort them</div>
+        <div class="dn-tools"><span style="font-size:18px">＋</span><span>Auto</span><span class="m"><b>Opus 5.5</b> Default</span><span>◯</span><span class="dn-send">↑</span></div></div>
+    </div></div>
+  </div>
+  <p class="note"><b>1</b> 卡上的按钮并排占满整宽。<code>Show all</code> 在卡里展开；<code>Undo</code> 按下后状态走 <code>Undoing…</code> → <code>Undone</code>。</p>
+</div>
+<div>
+  <div class="fh"><span class="n">8</span>全屏：覆盖要你定 <span class="dec">Replace a file?</span></div>
+  <div class="ph dn-iph back"><div class="sbar"><span>9:41</span><span>▮▮▮</span></div><div class="dn-under"></div>
+    <div class="dn-sheet full"><div class="grab"></div><div class="dn-chat">
+      <div class="dn-head"><span class="t">Lease and rent</span><span class="sp"></span><span class="dn-hb">→</span><span class="dn-hb">✕</span></div>
+      <div class="dn-body">
+        <div class="dn-u">Move the lease into Documents/Home.</div>
+        <div class="dn-a">Documents/Home already has a <code>lease-2026.pdf</code>. It’s a different file, so I haven’t touched it. The one there is a 2-page draft: I’d keep both.</div>
+        <div class="dn-card wait" data-mk="1"><div class="h">Replace a file?<span class="st">Needs you</span></div><div class="b" data-replace></div>
+          <div class="dn-acts dn-col2"><span class="dn-btn pri">Keep both</span><span class="dn-btn">Replace</span></div></div>
+      </div>
+      <div class="dn-comp"><div class="dn-chips"><span class="dn-chip"><i data-ic="drive"></i>Folder · Scans <i>✕</i></span></div><div class="dn-ph">Ask about your files, or say how to sort them</div>
+        <div class="dn-tools"><span style="font-size:18px">＋</span><span>Auto</span><span class="m"><b>Opus 5.5</b> Default</span><span>◯</span><span class="dn-send">↑</span></div></div>
+    </div></div>
+  </div>
+  <p class="note"><b>1</b> 按钮整宽竖排，<code>Keep both</code> 在上（同 Wiki 卡的 <code>Apply</code> 在上）。</p>
+</div>
+</div>
+
+<h2 class="dn-sec">Android：跟 iPhone 一样，用 Material 的部件</h2>
+<div class="dn-four">
+<div>
+  <div class="fh"><span class="n">9</span>打开 Drive：只有圆按钮 <span class="dec">待你定 Q1</span></div>
+  <div class="ad"><div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Receipts 2026</span><span class="ib"><i data-ic="newfolder"></i></span><span class="ib"><i data-ic="more"></i></span></div>
+    <div class="crumb2">Drive › Receipts 2026</div>
+    <div data-rows="areceipts"></div>
+    <div class="dn-fab" data-mk="1"><i data-ic="bubble"></i></div>
+    <div class="dn-upl"><i data-ic="up"></i>Upload</div>
+  </div>
+  <p class="note"><b>1</b> Android 的右下角已经有 <code>Upload</code>。图上画的是推荐 A：圆按钮叠在它上面（<code>Upload</code> 随滚动缩成图标时位置不变）。标记与 iPhone 相同。</p>
+</div>
+<div>
+  <div class="fh"><span class="n">10</span>半屏，新聊天 <span class="dec">Runs in · 文件夹芯片</span></div>
+  <div class="ad"><div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="top"><span class="ib">←</span><span class="t">Scans</span><span class="ib"><i data-ic="newfolder"></i></span><span class="ib"><i data-ic="more"></i></span></div>
+    <div class="crumb2">Drive › Scans</div>
+    <div data-rows="ascans"></div>
+    <div class="dn-sheet half" data-mk="1"><div class="grab"></div><div class="dn-chat">
+      <div class="dn-head"><span class="t">New chat</span><span class="sp"></span><span class="dn-hb">→</span><span class="dn-hb">✕</span></div>
+      <div class="dn-runs">Runs in <b>Orbit Cloud</b> <i>▾</i></div>
+      <div class="dn-body top"><div class="dn-empty" style="padding-top:4px">Ask about your files, or say how to sort them.<br>Every change it makes shows here, and can be undone.
+        <div class="dn-ex" style="margin-top:10px"><span>Sort these receipts into Receipts 2026 by month</span><span>What’s taking up the most space?</span></div></div></div>
+      <div class="dn-comp"><div class="dn-chips"><span class="dn-chip"><i data-ic="drive"></i>Folder · Scans <i>✕</i></span></div><div class="dn-ph">Ask about your files, or say how to sort them</div>
+        <div class="dn-tools"><span style="font-size:18px">＋</span><span>Auto</span><span class="m"><b>Opus 5.5</b> Default</span><span>◯</span><span class="dn-send">↑</span></div></div>
+    </div></div>
+  </div>
+  <p class="note"><b>1</b> 用非模态的 bottom sheet（半屏 / 全屏，无遮罩），后面照样能滚，和 iPhone 一致；现有页面用的 <code>ModalBottomSheet</code> 做不到。系统返回键收起。打开时圆按钮和 <code>Upload</code> 被盖住。</p>
+</div>
+<div>
+  <div class="fh"><span class="n">11</span>全屏：改动卡 <span class="dec">Undo</span></div>
+  <div class="ad"><div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="dn-sheet full" style="top:34px"><div class="grab"></div><div class="dn-chat">
+      <div class="dn-head"><span class="t">Sort October receipts</span><span class="sp"></span><span class="dn-hb">→</span><span class="dn-hb">✕</span></div>
+      <div class="dn-body">
+        <div class="dn-u">Put these receipts into Receipts 2026, one folder per month, and name each file by date and shop.</div>
+        <div class="dn-att">⊕ Orbit attached: Folder · Scans</div>
+        <div class="dn-a">I moved 10 receipts into <a>2026-10</a> and <a>2026-11</a>, and 2 duplicate photos to Trash.</div>
+        <div class="dn-card"><div class="h">Drive changes<span class="st">Done · 24 changes</span></div><div class="b" data-changes></div>
+          <div class="dn-acts dn-fill"><span class="dn-btn">Show all</span><span class="dn-btn">Undo</span></div></div>
+      </div>
+      <div class="dn-comp"><div class="dn-ph">Ask about your files, or say how to sort them</div>
+        <div class="dn-tools"><span style="font-size:18px">＋</span><span>Auto</span><span class="m"><b>Opus 5.5</b> Default</span><span>◯</span><span class="dn-send">↑</span></div></div>
+    </div></div>
+  </div>
+  <p class="note">卡片内容、状态和文案与 iPhone 相同；按钮是 Material 的描边按钮。标题菜单同样列 <code>New chat</code> 和历史。</p>
+</div>
+<div>
+  <div class="fh"><span class="n">12</span>全屏：覆盖要你定 <span class="dec">Replace a file?</span></div>
+  <div class="ad"><div class="sbar"><span>9:41</span><span>▾ ▮</span></div>
+    <div class="dn-sheet full" style="top:34px"><div class="grab"></div><div class="dn-chat">
+      <div class="dn-head"><span class="t">Lease and rent</span><span class="sp"></span><span class="dn-hb">→</span><span class="dn-hb">✕</span></div>
+      <div class="dn-body">
+        <div class="dn-u">Move the lease into Documents/Home.</div>
+        <div class="dn-a">Documents/Home already has a <code>lease-2026.pdf</code>. It’s a different file, so I haven’t touched it. The one there is a 2-page draft: I’d keep both.</div>
+        <div class="dn-card wait"><div class="h">Replace a file?<span class="st">Needs you</span></div><div class="b" data-replace></div>
+          <div class="dn-acts dn-col2"><span class="dn-btn pri">Keep both</span><span class="dn-btn">Replace</span></div></div>
+      </div>
+      <div class="dn-comp"><div class="dn-chips"><span class="dn-chip"><i data-ic="drive"></i>Folder · Scans <i>✕</i></span></div><div class="dn-ph">Ask about your files, or say how to sort them</div>
+        <div class="dn-tools"><span style="font-size:18px">＋</span><span>Auto</span><span class="m"><b>Opus 5.5</b> Default</span><span>◯</span><span class="dn-send">↑</span></div></div>
+    </div></div>
+  </div>
+  <p class="note">Android 还没有 Wiki 聊天，这是它第一个页面旁的聊天：面板和圆按钮按「来处」写成通用的，里面用会话页现成的 transcript 与 composer。</p>
+</div>
+</div>
+
+<h2 class="dn-sec">各端规则与要动的地方</h2>
+<table class="dn-tb">
+<tr><th style="width:190px"></th><th>iPad 常规宽度</th><th>Mac</th><th>iPhone · iPad compact</th><th>Android</th></tr>
+<tr><td><b>面板</b></td><td>第三栏，取代空白详情</td><td>第三栏，取代 inspector</td><td>sheet，半屏 / 全屏</td><td>sheet，半屏 / 全屏</td></tr>
+<tr><td><b>默认</b></td><td colspan="2">展开；<code>✕</code> 或收起这一栏按账号记在本机，直到再点圆按钮</td><td colspan="2">不自动展开</td></tr>
+<tr><td><b>历史（标题）</b></td><td colspan="2">整栏换成历史，Esc 回来，输入的字不丢</td><td colspan="2">标题菜单</td></tr>
+<tr><td><b>附件</b></td><td>文件夹 + 打开着的文件</td><td>文件夹 + 选中的行（<code>12 files</code>）</td><td colspan="2">文件夹 + 打开着的文件</td></tr>
+<tr><td><b>文件详情</b></td><td>在 Drive 栏里推进</td><td>盖在列表右侧；≥ 1760 四栏并排</td><td colspan="2">推进文件页（同今天）</td></tr>
+</table>
+<table class="dn-tb" style="margin-top:16px">
+<tr><th style="width:190px">哪里</th><th>改什么</th></tr>
+<tr><td><b>OrbitKit</b></td><td>Drive 聊天的模型、接口（<code>/api/drive/chats</code>、<code>groups</code>、<code>questions</code>）、文案与 web 对照测试、标记与「看过」的记录</td></tr>
+<tr><td><b>OrbitApp</b></td><td>把 <code>WikiChatHost</code> / <code>WikiChatPanel</code> / 圆按钮抽成按来处配置的一套，Wiki 与 Drive 共用；composer 仍是 <code>ComposerView</code>；两张新卡；Drive 列表行的标记；Mac 的详情改为聊天开着时盖在列表上</td></tr>
+<tr><td><b>Android</b></td><td>圆按钮、非模态 sheet、历史菜单、两张卡、行标记；<code>orbit_drive_chat</code> 附注画成 <code>Orbit attached</code></td></tr>
+</table>
+
+<h2 class="dn-sec">待你定</h2>
+<div class="dn-q">
+<div style="flex:1"><h3>Q1 · Android 右下角：圆按钮和 Upload 怎么放</h3>
+<b>A. 圆按钮叠在 Upload 上面</b> <span class="rec">（推荐）</span><br>已通过的 Android Drive 页不动，聊天仍在右下角。代价：右下角两个浮动按钮，比 iPhone 高一格。<br><br>
+<b>B. Upload 挪进顶栏，圆按钮独占右下角</b><br>位置和 iPhone 完全一样（iPhone 的上传在顶栏 <code>+</code> 里）。代价：改掉现有 Android Drive 的上传入口，上传多藏一层。</div>
+<div class="dn-opt"><div class="cap">A（推荐）</div><div class="dn-mini"><div class="top">←&nbsp; Scans<span class="sp"></span><i data-ic="newfolder"></i><i data-ic="more"></i></div><div class="ln"></div><div class="ln"></div><div class="dn-fab ring" style="bottom:76px"><i data-ic="bubble"></i></div><div class="dn-upl"><i data-ic="up"></i>Upload</div></div></div>
+<div class="dn-opt"><div class="cap">B</div><div class="dn-mini"><div class="top">←&nbsp; Scans<span class="sp"></span><span class="ring" style="display:flex"><i data-ic="plus"></i></span><i data-ic="more"></i></div><div class="ln"></div><div class="ln"></div><div class="dn-fab ring" style="bottom:14px"><i data-ic="bubble"></i></div></div></div>
+</div>
+
+</div>
+
+<script>
+const ic = (n, c = '') => `<i data-ic="${n}" class="${c}"></i>`;
+const mark = (m) => m ? `<span class="dn-mark${m === 'New' ? '' : ' mv'}">${m}</span>` : '';
+const SCANS = [['img','IMG_4821.jpg','You · Oct 3','240 KB'],['file','scan 12.pdf','You · Oct 9','88 KB'],['file','scan 13.pdf','You · Oct 11','1.1 MB'],['img','IMG_4907.jpg','You · Oct 18','240 KB'],['file','receipt (2).pdf','You · Oct 24','88 KB'],['img','IMG_5011.jpg','You · Nov 2','1.1 MB'],['file','scan 14.pdf','You · Nov 6','240 KB'],['file','lease-2026.pdf','You · Sep 30','2.3 MB'],['md','todo.md','Agent in <a>Weekly review</a> · Sep 28','2 KB']];
+const RECEIPTS = [['folder','2026-10','6 items · today 14:32','','New'],['folder','2026-11','4 items · today 14:32','','New'],['folder','2026-09','8 items · Oct 2',''],['folder','2026-08','11 items · Sep 1',''],['csv','2026 totals.xlsx','Agent in <a>Sort October receipts</a> · 14:32','44 KB','Renamed'],['file','shop index.pdf','Agent in <a>Sort October receipts</a> · 14:32','88 KB','Moved']];
+const iosRows = (rows) => `<div class="grp">${rows.map(([i,n,s,z,m]) => `<div class="row${m ? ' chg' : ''}">${ic(i,'lg')}<div class="l"><div class="dn-nm"><span>${n}</span>${mark(m)}</div><div class="sub">${s}</div></div><span class="${i === 'folder' ? 'chev' : 'v'}">${i === 'folder' ? '›' : z}</span></div>`).join('')}</div>`;
+const adRows = (rows) => rows.map(([i,n,s,z,m]) => `<div class="li${m ? ' chg' : ''}">${ic(i,'lg')}<div class="l"><div class="h dn-nm"><span>${n}</span>${mark(m)}</div><div class="s">${s}</div></div><span class="tr">${z}</span></div>`).join('');
+for (const el of document.querySelectorAll('[data-rows]')) {
+  const k = el.dataset.rows;
+  el.innerHTML = k === 'scans' ? iosRows(SCANS) : k === 'receipts' ? iosRows(RECEIPTS) : adRows(k === 'ascans' ? SCANS.slice(0, 8) : RECEIPTS);
+}
+const op = (k, d) => `<div class="dn-op"><b>${k}</b><span>${d}</span></div>`;
+for (const el of document.querySelectorAll('[data-changes]')) el.innerHTML = op('New folder','2026-10') + op('New folder','2026-11') + op('Moved','2026-10-03 Blue Bottle.pdf → /Receipts 2026/2026-10') + op('Renamed','scan 13.pdf → 2026-10-11 AWS invoice.pdf') + '<div class="dn-more">and 20 more</div>';
+const file = (k, p, f) => `<div class="dn-file"><b>${k}</b><span class="p">${p}</span><span class="f">${f}</span></div>`;
+for (const el of document.querySelectorAll('[data-replace]')) el.innerHTML = file('Already there','/Documents/Home/lease-2026.pdf','410 KB · You · Jan 4') + file('Incoming','/Scans/lease-2026.pdf','2.3 MB · You · Sep 30');
+const NAV = [['projects','Projects'],['tasks','Tasks'],['cal','Scheduled'],['book','Wiki'],['drive','Drive']];
+for (const el of document.querySelectorAll('[data-side]')) {
+  const ws = el.dataset.side === 'short' ? ['apiserver'] : ['apiserver','web','Orbit baseline','Receipts'];
+  el.innerHTML = '<div class="brand">Orbit</div>' + NAV.map(([i,n]) => `<div class="it${n === 'Drive' ? ' on' : ''}">${ic(i)}${n}</div>`).join('') + '<div class="sec">Workspaces</div>' + ws.map((n) => `<div class="it">${ic('ws')}${n}</div>`).join('') + `<div class="foot"><span>New session</span><span class="g">⚙</span></div>`;
+}
+for (const el of document.querySelectorAll('[data-msb]')) el.innerHTML = '<div class="lights"><i></i><i></i><i></i></div>' + NAV.map(([i,n]) => `<div class="it${n === 'Drive' ? ' on' : ''}">${ic(i,'sm')}${n}</div>`).join('') + '<div class="sec">Workspaces</div>' + ['apiserver','web','Orbit baseline'].map((n) => `<div class="it">${ic('ws','sm')}${n}</div>`).join('') + '<div class="sec">Projects</div><div class="it">● Orbit UI migration</div>';
+</script>
+<script src="../drive/icons.js"></script>
+<script>
+// The chat glyph (SF Symbol ellipsis.bubble), which the Drive icon set has none of.
+for (const el of document.querySelectorAll('svg.ic')) if (!el.innerHTML) {
+  el.innerHTML = '<path d="M12 3.5c-5 0-9 3.3-9 7.5 0 2.3 1.2 4.3 3.1 5.7L5.3 20.5l4.3-2.2c.8.1 1.6.2 2.4.2 5 0 9-3.3 9-7.5s-4-7.5-9-7.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="8" cy="11" r="1.2" fill="currentColor"/><circle cx="12" cy="11" r="1.2" fill="currentColor"/><circle cx="16" cy="11" r="1.2" fill="currentColor"/>';
+}
+</script>
+<script>
+// The numbered red mark on the top-left corner of every element with data-mk, inside its frame.
+for (const el of document.querySelectorAll('[data-mk]')) {
+  const f = el.closest('.mac, .ph, .ad, .dn-pad');
+  const r = el.getBoundingClientRect(), fr = f.getBoundingClientRect();
+  const m = document.createElement('span');
+  m.className = 'mk abs';
+  m.textContent = el.dataset.mk;
+  m.style.left = Math.max(2, r.left - fr.left - f.clientLeft - 9) + 'px';
+  m.style.top = Math.max(2, r.top - fr.top - f.clientTop - 9) + 'px';
+  f.appendChild(m);
+}
+</script>
+</div></body></html>

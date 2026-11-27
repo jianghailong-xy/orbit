@@ -88,6 +88,7 @@ import {
 } from './taskPages';
 import { integrationInFlight, pollWhileInFlight, streamPoll, streamStaleTime } from './listBudget';
 import { readOpenList, type OpenListAnswer } from './openListDelta';
+import { shareListingData, type SessionListingPage } from './sessionListingData';
 import type { SessionReach, SessionReachDeclaration, TaskReachDeclaration } from './sessionReach';
 
 export type { ConfiguredProvider };
@@ -232,6 +233,9 @@ export interface UserPreferences {
   translationBilingual?: boolean;
   /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
   subagentBlockedProviders?: string[];
+  /** Whether a task pinned to an account that can't run now may run elsewhere (docs/routing-account-health-design.md
+   *  §7.5). Absent means OFF: the pinned task holds. */
+  relaxBlockedPins?: boolean;
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */
@@ -453,6 +457,51 @@ export const sessionsQuery = (
   });
 };
 
+/**
+ * One workspace's session list as top-level entries, a page at a time (`GET /sessions/listing`,
+ * docs/session-list-scale-design.md §3.2): the read of a list that shows folders or projects, or of a folder's
+ * page (`folderId`), which used to be the whole Open list so the client could group it. Each page is
+ * `SESSION_PAGE_SIZE` entries; `next` is the following page's `after`.
+ *
+ * Under `['sessions']`, so every write's refresh reads it, and keyed like sessionsQuery — `['sessions',
+ * runnerId, workspaceId, view, 'listing', folderId]` — so an Open listing is an Open list to the stream
+ * (useControlPlane isOpenList): read on a `sessions.list_changed` hint naming its workspace, or by the list
+ * budget's safety read. Each page is a plain GET carrying the Open list's version ETag, so a read of pages
+ * that did not move is answered 304. BootGate warms this same key, so a page load reads it once.
+ *
+ * An answer with `restarted: true` replaces every page read before it (latestListingPages): it is applied
+ * where React Query writes the cache, so a next page, a refetch and an optimistic write all keep to it. What
+ * a read did not change keeps its object, wherever it now sits (shareListingData).
+ */
+export const sessionListingQuery = (opts: {
+  runnerId?: string | null;
+  workspaceId: string | null;
+  view: 'open' | 'completed';
+  folderId?: string | null;
+}) => {
+  const runnerId = opts.runnerId ?? null;
+  const workspaceId = opts.workspaceId ?? null;
+  const folderId = opts.folderId ?? null;
+  return infiniteQueryOptions({
+    queryKey: ['sessions', runnerId, workspaceId, opts.view, 'listing', folderId] as readonly unknown[],
+    meta: {
+      entities: ['session', 'workspace', 'tag', 'folder', 'project'],
+      sessionReach: { workspace: workspaceId } satisfies SessionReach,
+    },
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => {
+      const qs = new URLSearchParams({ workspaceId: workspaceId ?? '', view: opts.view });
+      if (folderId) qs.set('folderId', folderId);
+      qs.set('limit', String(SESSION_PAGE_SIZE));
+      if (pageParam) qs.set('after', pageParam);
+      return api<SessionListingPage>(`/sessions/listing?${qs}`);
+    },
+    getNextPageParam: (page) => page.next,
+    structuralSharing: shareListingData,
+    staleTime: streamStaleTime,
+  });
+};
+
 /** A single project's members across workspaces. Kept outside ['sessions'] so unrelated
  *  session events cannot re-read every project's full member list. */
 export const PROJECT_SESSION_REFRESH_MS = 60_000;
@@ -586,14 +635,17 @@ export const workspaceSessionCountsQuery = () =>
  * Cross-scope session search, backing the ⌘K palette. Keyed on the query itself so each distinct
  * search is its own cache entry — retyping a query the user just backspaced out of answers from
  * cache instead of re-hitting the server. An empty `q` is a real request, not a disabled one: the
- * server answers it with recents, which is what makes the palette a session switcher.
+ * server answers it with recents, which is what makes the palette a session switcher. With a
+ * `folderId` the search and the recents are that folder's alone.
  */
-export const sessionSearchQuery = (q: string) =>
+export const sessionSearchQuery = (q: string, folderId: string | null = null) =>
   queryOptions({
-    queryKey: ['session-search', q] as const,
+    queryKey: ['session-search', q, folderId] as const,
     meta: { entities: ['session', 'workspace', 'task'] },
     queryFn: () =>
-      api<SessionSearchResponse>(`/sessions/search?q=${encodeURIComponent(q)}&limit=20`),
+      api<SessionSearchResponse>(
+        `/sessions/search?q=${encodeURIComponent(q)}&limit=20${folderId ? `&folderId=${encodeURIComponent(folderId)}` : ''}`,
+      ),
     // A search result is a snapshot of a moving list; a minute of staleness is invisible inside
     // one palette session and keeps arrow-keying through results from refetching.
     staleTime: 60_000,
@@ -1789,7 +1841,8 @@ export const wikiChatDraftQuery = (draftId: string | null) =>
     enabled: draftId !== null,
     staleTime: 5_000,
     refetchInterval: (query) => {
-      const result = query.state.data?.state === 'applied' ? query.state.data.rewrite?.result : undefined;
+      const state = query.state.data?.state;
+      const result = state === 'applied' || state === 'rewritten' ? query.state.data?.rewrite?.result : undefined;
       return result === 'rewriting' || result === 'waiting' ? 15_000 : false;
     },
   });

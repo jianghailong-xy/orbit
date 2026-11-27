@@ -33,11 +33,11 @@ import {
   type Prisma,
   type PrismaClient,
   type Runner,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { isReleasedStatus } from '../common/session-release';
 import { ControlEventType, type ControlEvent, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -76,6 +76,8 @@ import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
+import { type SessionFixture, wordOf } from '../test-support/session-word';
+import { turnStateOfWord } from './session-turn-state';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -164,21 +166,21 @@ test('a session row names the session that sent the message it previews', {
   const strangerSession = (await prisma.session.create({
     data: {
       ownerId: strangerId, creatorId: strangerId, title: strangerTitle, prompt: 'p', provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
     },
   })).id;
 
   /** A session on this runner, parked between turns — the shape a live orchestrating caller has. */
-  async function session(title: string, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
+  async function session(title: string, data: SessionFixture = {}): Promise<string> {
     const id = randomUUID();
-    const fixtureStatus = data.status ?? RunStatus.AWAITING_INPUT;
+    const { status: fixtureStatus = RunStatus.AWAITING_INPUT, ...dataFacts } = data;
     await prisma.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId: workerWorkspaceId, assignedRunnerId: runnerId,
-        title, prompt: title, provider: 'claude', status: RunStatus.AWAITING_INPUT,
+        title, prompt: title, provider: 'claude', turnState: turnStateOfWord(fixtureStatus),
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
         dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
-        ...data,
+        ...dataFacts,
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: data.finishedAt ?? new Date(),
         } : {}),
@@ -192,7 +194,7 @@ test('a session row names the session that sent the message it previews', {
     session(title, { status: RunStatus.SUCCEEDED, completedAt: new Date(Date.now() - 60_000) });
 
   /** A project whose coordinator conversation is ready to be addressed. */
-  async function project(label: string, coordinator: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
+  async function project(label: string, coordinator: SessionFixture = {}) {
     const projectId = randomUUID();
     await prisma.project.create({
       data: {
@@ -345,7 +347,7 @@ test('a session row names the session that sent the message it previews', {
   async function claimAndPoll(sessionId: string): Promise<Answer> {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
-      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+      await tx.session.update({ where: { id: sessionId }, data: { turnState: 'IN_FLIGHT' } });
     });
     const delivered = await asRunner('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox?leaseGeneration=${await sessionLease(prisma, sessionId)}`);
     assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
@@ -497,7 +499,7 @@ test('a session row names the session that sent the message it previews', {
     const parked = await project('ended', { status: RunStatus.SUCCEEDED, completedAt: new Date(Date.now() - 60_000) });
     const revived = await projectSend(worker, parked.projectId, 'the landing needs a decision');
     assert.equal(revived.sessionId, parked.coordinatorSessionId, 'the ended coordinator was replaced, not revived');
-    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: parked.coordinatorSessionId } })).status, RunStatus.PENDING);
+    assert.equal(wordOf((await prisma.session.findUniqueOrThrow({ where: { id: parked.coordinatorSessionId } }))), RunStatus.PENDING);
     await assertEverywhere(parked.coordinatorSessionId, { text: 'the landing needs a decision', from: sender }, 'project revived', parked.projectId);
   });
 

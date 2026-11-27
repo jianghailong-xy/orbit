@@ -53,6 +53,45 @@ class OwnerRequestsTest {
             OwnerRequests.outcomeLine(made.copy(state = "DECLINED", answer = null, resolutionNote = "Not for this repository"), "mini"))
     }
 
+    private val change = request("""{"id":"c1","kind":"CHANGE","state":"PENDING","title":"Raise Max Concurrent on mini","why":"Queue is long",
+        "changeSpec":{"runnerId":"r1","field":"maxConcurrent","requested":6,"before":4},"answer":null,"createdAt":"2026-11-10T07:58:00Z"}""")
+
+    /** CHANGE: change_spec is parsed off the server's row, and an applied card reads what was written. */
+    @Test fun aChangeCardParsesItsSpecAndSaysWhatWasApplied() {
+        assertEquals(OwnerRequestChangeSpec("r1", "maxConcurrent", 6, 4), change.changeSpec)
+        assertTrue(OwnerRequests.CHANGE in OwnerRequests.kinds)
+        assertEquals(listOf("SETTING", "Apply", "Review"), listOf(OwnerRequests.kindTag("CHANGE"), OwnerRequests.primary("CHANGE"), OwnerRequests.pushAction("CHANGE")))
+        assertEquals(ChangeCopy.lowering(2), OwnerRequests.changeEffect(2, 4))
+        assertEquals(ChangeCopy.raising(6), OwnerRequests.changeEffect(6, 4))
+        assertNull(OwnerRequests.changeEffect(4, 4))
+        val done = request("""{"id":"c1","kind":"CHANGE","state":"DONE","title":"t","changeSpec":{"runnerId":"r1","field":"maxConcurrent","requested":6,"before":4},
+            "answer":{"applied":5,"actualBefore":3},"createdAt":"2026-11-10T07:58:00Z"}""")
+        assertEquals("Applied: mini Max Concurrent 3 → 5 (asked for 6)", OwnerRequests.outcomeLine(done, "mini"))
+        assertEquals("Applied: mini Max Concurrent 4 → 6", OwnerRequests.outcomeLine(done.copy(answer = null), "mini"))
+    }
+
+    /** The card's strings are the web card's: lib/ownerRequests.ts CHANGE_COPY, read from the source. */
+    @Test fun theChangeCardsWordsEqualTheWebCards() {
+        val source = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.map { java.io.File(it, "src/web/src/lib/ownerRequests.ts") }
+            .first { it.exists() }.readText()
+        val block = source.substringAfter("export const CHANGE_COPY = {").substringBefore("} as const;")
+        fun literal(key: String) = Regex("""\b$key: '([^']*)'""").find(block)!!.groupValues[1]
+        fun template(key: String) = Regex("""\b$key: \([^)]*\) => `([^`]*)`""").find(block)!!.groupValues[1]
+        fun fill(text: String, vararg values: Pair<String, Any>) = values.fold(text) { acc, (name, v) -> acc.replace("\${$name}", v.toString()) }
+        assertEquals(literal("tag"), ChangeCopy.tag)
+        assertEquals(literal("primary"), ChangeCopy.primary)
+        assertEquals(literal("numberLabel"), ChangeCopy.numberLabel)
+        assertEquals(fill(template("setting"), "runner" to "mini"), ChangeCopy.setting("mini"))
+        assertEquals(fill(template("runningNow"), "n" to 3), ChangeCopy.runningNow(3))
+        assertEquals(fill(template("wasWhenAsked"), "before" to 4), ChangeCopy.wasWhenAsked(4))
+        assertEquals(fill(template("lowering"), "n" to 2), ChangeCopy.lowering(2))
+        assertEquals(fill(template("raising"), "n" to 8), ChangeCopy.raising(8))
+        val applied = Regex("""applied: \([^)]*\) =>\s*`(.*)`,""").find(block)!!.groupValues[1]
+        assertEquals("Applied: \${runner} Max Concurrent \${from} → \${to}\${to !== requested ? ` (asked for \${requested})` : ''}", applied)
+        assertEquals("Applied: mini Max Concurrent 4 → 6", ChangeCopy.applied("mini", 4, 6, 6))
+        assertEquals("Applied: mini Max Concurrent 4 → 5 (asked for 6)", ChangeCopy.applied("mini", 4, 5, 6))
+    }
+
     /** The web's `ownerRequestChatContext`, word for word. */
     @Test fun chatAboutThisNamesTheRequestAndSaysItIsStillOpen() {
         assertEquals("Chat about this", OwnerRequests.chatAction)

@@ -6,10 +6,10 @@ import {
   Prisma,
   PrismaClient,
   ProjectStatus,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { uuidToBase62 } from '@orbit/shared';
@@ -264,7 +264,7 @@ async function settledProject(
       title: `coordinator: ${label}`,
       prompt: `coordinator: ${label}`,
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
       numTurns: 1,
@@ -297,7 +297,7 @@ async function settledProject(
 
   // The line, decided explicitly and started: the incident's project had been integrating into its
   // own branch for hours when the commit below arrived.
-  const line = projectBranchRef(projectId);
+  const line = projectBranchRef(projectId, `${label} project`);
   await db.$transaction((tx) => configureProjectIntegration(tx, {
     ownerId,
     projectId,
@@ -403,7 +403,7 @@ async function tasksWithWork(
       title: options.title,
       prompt: options.title,
       provider: 'claude',
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+      turnState: null, finishedAt: new Date(), 
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       branch: `orbit/${uuidToBase62(sessionId)}`,
@@ -478,7 +478,7 @@ async function coordinatorReads(db: PrismaClient, coordinatorSessionId: string):
   });
   await db.session.update({
     where: { id: coordinatorSessionId },
-    data: { status: RunStatus.AWAITING_INPUT },
+    data: { turnState: null },
   });
 }
 

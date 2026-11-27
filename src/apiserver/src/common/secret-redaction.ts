@@ -75,7 +75,7 @@ export function redactSecrets(text: string, options: { literals?: readonly strin
 }
 
 /**
- * The credentials a file is refused for (docs/orbit-files-design.md §2.9), each with what a refusal calls it. Narrower
+ * The credentials a file is refused for (docs/drive-design.md §2.9), each with what a refusal calls it. Narrower
  * than SECRETS on purpose. Taking a word too many out of a text costs that word, but refusing a file costs the whole
  * file and sends an agent back to committing it to a public repository. So each shape here is one an issuer gives its
  * keys, and none goes by a name (`password=`), a scheme (`Bearer`) or a URL's userinfo, which ordinary test logs are

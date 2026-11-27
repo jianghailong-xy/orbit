@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { SessionsService } from './sessions.service';
+import { sessionTurnStateSql } from './session-turn-state';
 
 /**
  * A WORKING ROW REPORTS HOW LONG *THIS TURN* HAS BEEN GOING, AND `last_turn_at` CANNOT TELL IT.
@@ -34,7 +35,8 @@ test('the list dates the turn in flight, gated on the states that can have one',
   // The *current* turn: one already answered is a finished turn and must not be picked up.
   assert.match(sql, /ct\.answered_at IS NULL/);
   // Only a mid-turn session has one, so settled rows never pay for the subquery.
-  assert.match(sql, /CASE WHEN s\.status IN \('RUNNING', 'PENDING'\)/);
+  // On the turn state (session-turn-state.ts): in flight or queued.
+  assert.ok(sql.includes(`CASE WHEN ${sessionTurnStateSql('s').sql} IN ('IN_FLIGHT', 'QUEUED')`), 'gated on the turn state');
   // max() takes the newest of them, and skips the undelivered rows for free — it ignores NULLs,
   // which is also why this carries no LIMIT: the unpaged list asserts it emits none.
   assert.match(sql, /SELECT max\(ct\.delivered_at\)/);

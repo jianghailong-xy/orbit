@@ -185,10 +185,11 @@ const BLANK_GUARDED: Record<string, readonly string[]> = {
   // wiki/wiki-chat.pg.spec.ts: '2. the workspace is chosen once and remembered…', whose cases include a blank workspaceId,
   // and '9. the first message's pictures and files…', whose refusals include a blank attachment id.
   'wiki-chat.controller.ts': ['workspaceId', 'attachmentIds'],
+  // drive/drive-chat.pg.spec.ts: '1. create: …', whose refusals include a blank workspaceId, a blank attachmentIds and a
+  // blank attachment id: 400, nothing made.
+  'drive-chat.controller.ts': ['workspaceId', 'attachmentIds'],
   // wiki/wiki-chat-drafts.pg.spec.ts: 'a rewrite card …', whose cases include a blank replaces: WIKI_SCHEMA, nothing made.
   'runner-wiki.controller.ts': ['replaces'],
-  // help/help-ask.pg.spec.ts: '2. asking makes an ordinary session…', whose refusals include a blank runnerId.
-  'help-ask.controller.ts': ['runnerId'],
 };
 
 test('a blank body id is not decoded — the pipe hands it straight through', () => {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
+import { sessionTurnStateSql } from '../sessions/session-turn-state';
 import { TasksService } from './tasks.service';
 import { runDoorSessionRead } from './query-raw-test-helper';
 import { fakeReceiptStore, withReceiptStore } from './task-run-receipt-fake';
@@ -85,7 +86,9 @@ test('a press refuses the run carrying the task, and never continues one still c
   const [carrier, paused] = f.sessionReads;
   assert.ok(carrier.text.includes(sessionCarriesTaskSql('s')));
   assert.ok(paused.text.includes(`AND NOT ${sessionCarriesTaskSql('s')}`));
-  assert.match(paused.text, /s\."status" IN \('AWAITING_INPUT'::"run_status", 'INTERRUPTED'::"run_status"\)/);
+  // Paused: held, and parked or its turn abandoned, read off the turn state (sessions/session-turn-state.ts).
+  assert.ok(paused.text.includes(`AND s."finished_at" IS NULL
+         AND COALESCE(${sessionTurnStateSql('s').sql}, 'PARKED') IN ('PARKED', 'ABANDONED')`));
 });
 
 test("a task with no provider/model pin dispatches nothing of its own — the run inherits the workspace's", async () => {

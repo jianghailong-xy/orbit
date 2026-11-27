@@ -302,8 +302,14 @@ const WIRED: readonly WiredWakeFact[] = [
     // turn's completion. The control is the same stop as the case beside it, with the switch off.
     event: 'TASK_RUN_STOPPED',
     producedBy: [
+      'projects/coordinator-wake.ts#lineBlockedFact',
+      'projects/coordinator-wake.ts#taskRunIdleFact',
       'projects/coordinator-wake.ts#taskRunStoppedFact',
+      'projects/project-line-blocked.service.ts#escalate',
+      'projects/project-line-blocked.ts#findBlockedLineFacts',
+      'projects/task-run-idle.service.ts#tick',
       'projects/task-run-stopped.producer.ts#factFor',
+      'projects/task-run-stopped.producer.ts#idleFactFor',
     ],
     negatives: [
       {

@@ -2088,7 +2088,7 @@ func TestCursorAutoSandboxInline(t *testing.T) {
 	}{
 		{"python-heredoc", "python3 - <<'PY'\nprint(1)\nPY", true},
 		{"python-inline", "python3 -c 'print(1)'", true},
-		{"outside-shell-path", "cat /etc/passwd", false},
+		{"outside-shell-path", "cat /etc/passwd", true}, // a read; the sandbox refuses an outside write
 		{"node-inline", "node -e 'console.log(1)'", true},
 		{"ruby-inline", "ruby -e 'puts 1'", true},
 		{"perl-inline", "perl -e 'print 1'", true},
@@ -2160,6 +2160,120 @@ func TestCursorAutoSandboxInline(t *testing.T) {
 	}
 	if dshCommandStaysInWorkspace(command, "/srv/work", "/srv/work") {
 		t.Fatal("DSH interpreter heredoc policy changed")
+	}
+}
+
+// cursorAutoRecordedReads are the six commands that raised cards in session 4FwPbT4Fa0wz8VbxYjHfVz (Cursor
+// Auto, sandbox in force), verbatim from production's approval.input for runner session
+// 8be03e4f-b83c-5fdf-91b7-08ba95568fab: reads outside the workspace, git worktree list and $(…).
+var cursorAutoRecordedReads = []string{
+	"git worktree list | rg -i 'set-as-default|0cc5aa|c333b8|f1f63a'; echo '---'; WT=$(git worktree list | awk '/0cc5aa/{print $1}'); echo \"wt=$WT\"; if [ -n \"$WT\" ]; then cd \"$WT\" && git status -sb && git diff --stat && ls -la docs/evidence 2>/dev/null | head; find . -name '*SetDefault*' -o -name '*set-as-default*' -o -name '*SetAsDefault*' 2>/dev/null | head -40; ls OrbitKitTests 2>/dev/null; find . -path '*uploads*' -name '*.png' 2>/dev/null | head; find /Users/long/.orbit/runs -path '*5OK81*' -name '*.png' 2>/dev/null | head; fi",
+	"PRIOR=/Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c\ncp \"$PRIOR/src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerEngineSetDefaultViews.swift\" src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerEngineSetDefaultViews.swift\ncp \"$PRIOR/src/macos/OrbitApp/Tests/OrbitAppTests/SetDefaultShotsTests.swift\" src/macos/OrbitApp/Tests/OrbitAppTests/SetDefaultShotsTests.swift\n# Apply the page + wiring diffs from the prior worktree onto our cherry-picked base\ngit -C \"$PRIOR\" diff -- src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerEnginePage.swift src/macos/OrbitKit/Tests/OrbitKitTests/MachinesAndModelsPageWiringTests.swift > /tmp/set-default-followup.patch\ngit apply /tmp/set-default-followup.patch && echo APPLIED_OK || echo APPLY_FAILED\ngit status --short\nwc -l /tmp/set-default-followup.patch\n",
+	"ls /Applications/Xcode*.app 2>/dev/null; xcode-select -p; echo DEVELOPER_DIR=${DEVELOPER_DIR:-}; which swift; swift --version 2>&1 | head -3\n# How other shot tests are invoked\nrg -n 'ShotsTests|xcodebuild.*OrbitApp|swift test --filter' src/macos --glob '*.{md,yml,sh,swift}' | head -40\nls src/macos/OrbitApp/Tests/OrbitAppTests/ | rg -i 'shot|render|screenshot' | head\n",
+	"ls -la /Applications/ | rg -i 'xcode|Xcode'; ls -la /Applications/Xcode.app/Contents/Developer/usr/bin/swift 2>&1 | head -3; ls /Users/long/Applications 2>/dev/null | head; mdfind 'kMDItemCFBundleIdentifier == \"com.apple.dt.Xcode\"' 2>/dev/null | head; echo '---'; # prior session may have left build artifacts / commands\nls /Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c/src/macos/build/evidence/set-default-macos 2>/dev/null\n# agent transcripts for build commands used previously\nrg -l 'SetDefaultShots|DEVELOPER_DIR.*Xcode' /Users/long/.orbit/runs/8be03e4f-b83c-5fdf-91b7-08ba95568fab/cursor/data/projects/Users-long-orbit-worktrees-8be03e4f-b83c-5fdf-91b7-08ba95568fab/agent-transcripts 2>/dev/null | head\nrg -n 'DEVELOPER_DIR|/Applications/Xcode' /Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c -g '*.md' 2>/dev/null | head\n# check client.yml for how macOS builds\nrg -n 'DEVELOPER_DIR|OrbitApp|swift test' .github/workflows/client.yml 2>/dev/null | head -40\n",
+	"ls /Applications/Xcode.app/Contents/ | head -30; ls /Applications/Xcode.app/Contents/Developer 2>&1 | head -20; ls /Applications/Xcode.app/Contents/Developer/Toolchains 2>&1 | head; # maybe xcode is incomplete?\nfile /Applications/Xcode.app; defaults read /Applications/Xcode.app/Contents/Info.plist CFBundleShortVersionString 2>&1; # check prior evidence pngs origin\nfile /Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c/src/macos/build/evidence/set-default-macos/*.png 2>&1 | head\nls -la /Users/long/.orbit/worktrees/b12cd4a3-8c1b-59b1-9515-267a36e1f48c/src/macos/build/evidence/set-default-macos/\n# Package.swift for OrbitApp tests\nhead -80 src/macos/OrbitApp/Package.swift\n",
+	"ls /Applications/Xcode.app/Contents/Developer/usr/bin/ | rg 'swift|xcodebuild' | head; ls /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift; export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer; \"$DEVELOPER_DIR/usr/bin/swift\" --version 2>&1 | head -5; \"$DEVELOPER_DIR/usr/bin/xcodebuild\" -version 2>&1 | head -5\n",
+}
+
+// TestCursorAutoSandboxReads: with the sandbox in force a command may read outside the workspace, while every
+// high-impact command still goes to a person; without the sandbox the six recorded reads still ask.
+func TestCursorAutoSandboxReads(t *testing.T) {
+	const workspace = "/Users/long/.orbit/worktrees/8be03e4f-b83c-5fdf-91b7-08ba95568fab"
+	for i, command := range cursorAutoRecordedReads {
+		if !cursorAutoAllows(command, workspace, true) {
+			t.Errorf("recorded read %d asked with the sandbox in force:\n%s", i, command)
+		}
+		if cursorAutoAllows(command, workspace, false) {
+			t.Errorf("recorded read %d allowed without the sandbox:\n%s", i, command)
+		}
+	}
+	for _, command := range []string{
+		"cat /etc/hosts",
+		"ls /Applications/Xcode.app/Contents/Developer 2>&1 | head",
+		"git worktree list --porcelain",
+		"echo $(git rev-parse HEAD)",
+		"WT=$(git worktree list | awk '{print $1}'); ls \"$WT\"",
+		"go test ./... 2>&1 | tail -20",
+		"go build ./... && go vet ./...",
+		"npm test",
+		"npm run build",
+		"yarn test",
+		"pnpm -r run lint",
+		"brew list --versions",
+		"pip3 show requests",
+		"cargo build --release",
+	} {
+		if !cursorAutoAllows(command, workspace, true) {
+			t.Errorf("sandboxed read asked: %s", command)
+		}
+	}
+	for name, command := range map[string]string{
+		"git-push":            "git push origin main",
+		"git-push-dry-run":    "git push --dry-run origin HEAD",
+		"git-fetch":           "git fetch origin",
+		"git-pull":            "git pull",
+		"git-clone":           "git clone https://example.com/repo",
+		"git-c-fetch":         "git -C /Users/long/orbit fetch origin",
+		"npm-install":         "npm install",
+		"npm-ci":              "npm ci",
+		"pnpm-install":        "pnpm install",
+		"yarn-add":            "yarn add left-pad",
+		"pip-install":         "pip3 install requests",
+		"go-get":              "go get example.com/pkg",
+		"cargo-add":           "cargo add serde",
+		"npm-i":               "npm i lodash",
+		"npm-i-prefix":        "npm i lodash --prefix .",
+		"npm-add":             "npm add lodash",
+		"pnpm-i":              "pnpm i",
+		"pnpm-add":            "pnpm add -D vitest",
+		"pnpm-ci":             "pnpm ci",
+		"yarn-install":        "yarn install --frozen-lockfile",
+		"yarn-bare":           "cd web && yarn",
+		"bun-add":             "bun add zod",
+		"bun-install":         "bun install",
+		"bun-i":               "bun i",
+		"pip-install-plain":   "pip install requests",
+		"pip-install-user":    "python3 -m pip install --user requests",
+		"pipx-install":        "pipx install black",
+		"uv-pip-install":      "uv pip install requests",
+		"uv-add":              "uv add requests",
+		"uv-tool-install":     "uv tool install ruff",
+		"brew-install":        "brew install x",
+		"brew-reinstall":      "brew reinstall x",
+		"brew-upgrade":        "brew upgrade",
+		"gem-install":         "gem install bundler",
+		"cargo-install":       "cargo install ripgrep",
+		"go-install":          "go install golang.org/x/tools/cmd/goimports@latest",
+		"inline-npm-i":        "python3 -c 'import os; os.system(\"npm i lodash\")'",
+		"osascript":           "osascript -e 'tell application \"Finder\" to quit'",
+		"kubectl-read":        "kubectl get pods -A",
+		"sudo-install":        "sudo brew install x",
+		"ssh":                 "ssh example.com uptime",
+		"scp":                 "scp x example.com:x",
+		"sudo":                "sudo xcode-select -s /Applications/Xcode.app",
+		"secret-ssh":          "cat ~/.ssh/id_ed25519",
+		"secret-ssh-abs":      "ls /Users/long/.ssh",
+		"secret-aws":          "cat /Users/long/.aws/credentials",
+		"container":           "docker run alpine true",
+		"podman":              "podman ps",
+		"tool-gate-kubectl":   "kubectl apply -f deploy.yaml",
+		"tool-gate-gh":        "gh pr create --fill",
+		"tool-gate-launchctl": "launchctl kickstart -k gui/501/x",
+		"tool-gate-publish":   "npm publish",
+		"curl-remote":         "curl https://example.com",
+		"wget":                "wget https://example.com",
+		"recursive-delete":    "rm -rf /Users/long/orbit/build",
+		"unterminated":        "cat <<'EOF'\nhello",
+		"unterminated-python": "python3 - <<'PY'\nprint(1)",
+		"substituted-push":    "echo $(git push origin HEAD)",
+		"substituted-curl":    "X=$(curl -s https://example.com/x); echo $X",
+		"worktree-remove":     "git worktree list; git worktree remove ../other",
+		"worktree-add":        "git worktree add ../other",
+		"git-reset-hard":      "git reset --hard HEAD~1",
+	} {
+		if cursorAutoAllows(command, workspace, true) {
+			t.Errorf("%s allowed with the sandbox in force: %s", name, command)
+		}
 	}
 }
 

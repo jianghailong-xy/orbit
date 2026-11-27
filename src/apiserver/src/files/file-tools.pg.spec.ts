@@ -1,5 +1,5 @@
 /**
- * The doors behind `file_upload`, `file_fetch` and `file_list` (docs/orbit-files-design.md §2.2, §2.3; migration 0464),
+ * The doors behind `file_upload`, `file_fetch` and `file_list` (docs/drive-design.md §2.2, §2.3; migration 0464),
  * held against the production apiserver — `build/main.js`, multer and every guard and pipe in front of the routes — over
  * a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
@@ -124,8 +124,8 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_BACKEND: 'local',
-    ORBIT_FILES_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
   const tempFiles = () => {
@@ -139,7 +139,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
   // An owner with two machines, and on the first a session with no task, one running a task, and one that has ended
   // its share of a task but stays the owner's; a task nobody here runs; and a stranger.
   const ownerId = randomUUID();
-  const email = `file-tools-${RUN}@orbit-files.invalid`;
+  const email = `file-tools-${RUN}@orbit-documents.invalid`;
   await db.user.create({ data: { id: ownerId, email, name: 'file tools', passwordHash: 'x' } });
   const bearer = await new JwtService({ secret: jwtSecret }).signAsync({ sub: ownerId, email });
   const machineOf = async (name: string, owner = ownerId) => {
@@ -162,7 +162,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     await db.session.create({
       data: {
         id, title, prompt: title, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machine.id,
-        status: 'AWAITING_INPUT', startedAt: new Date(), runtimeSessionId: `runtime-${id}`, taskId,
+        turnState: null, startedAt: new Date(), runtimeSessionId: `runtime-${id}`, taskId,
       },
     });
     return id;
@@ -233,7 +233,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
     created(await upload(api, `/api/runner/sessions/${b62(firstRun)}/attachments`, machine.token, { name: 'reply.png' }), 'a reply image');
     const kept = created(await upload(api, door(firstRun), machine.token, { name: 'kept.png' }), 'a file_upload');
     // One run of a task at a time: the second starts when the first has ended.
-    await db.session.update({ where: { id: firstRun }, data: { status: 'SUCCEEDED', finishedAt: new Date()} });
+    await db.session.update({ where: { id: firstRun }, data: { turnState: null, finishedAt: new Date()} });
     await copyInto(await sessionOf('the second run', inputTaskId));
     const { json } = await list(`?taskId=${b62(inputTaskId)}`);
     assert.deepEqual(

@@ -1,15 +1,17 @@
-import type { DragEvent as ReactDragEvent, ReactNode, TouchEvent as ReactTouchEvent } from 'react';
+import { memo, useRef, type DragEvent as ReactDragEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react';
 import { EllipsisOutlined } from '@ant-design/icons';
 import { Menu, type MenuItem } from './ui/Menu';
-import { actionWidths, swipeActionsOnScreen, type SwipeWidths } from '../lib/sessionSwipe';
+import { actionWidths, restingOffset, swipeActionsOnScreen, type SwipeSide } from '../lib/sessionSwipe';
 
 // One row of the session list, for a plain session and a project alike: a project's row is its
 // coordinator's session row with the project's content and actions passed in
 // (docs/session-list-projects-design.md §4). Everything a row does is written here once — keyboard
 // focus and Enter/Space, the click's guards, right-click and the held press's menu, the ⋯ menu and
 // where focus goes back to, the swipe strip and its full swipe, the drag onto a folder and its
-// image, the selected look. The list's own state for all of it (which menu is open, which row is
-// swiped, the drag in flight) is the controller the list hands every row.
+// image, the selected look. The list's gestures are the controller the list hands every row, the same
+// object for every row and every render; what of the list's state is this row's (its menu open, its
+// swipe, its drag) comes as the row's own props, so a row redraws only when something of its own
+// changed (docs/session-list-scale-design.md §4).
 
 /** One button behind a swipe, and the same action as the row's menus run it. */
 export interface SessionRowSwipeButton {
@@ -36,17 +38,14 @@ export interface SessionRowPress {
   y: number;
 }
 
-/** The list's state and gestures, shared by every row it draws. */
+/** The list's gestures, shared by every row it draws: one stable object, whose functions act on the list's
+ *  state as it is when they are called. */
 export interface SessionRowController {
   /** A touch phone: swipes and a held press, no drag, no ⋯. */
   touch: boolean;
-  menuOpenId: string | null;
   onMenuOpenChange: (id: string, open: boolean) => void;
   closeMenu: () => void;
-  pressMenu: SessionRowPress | null;
   closePressMenu: () => void;
-  /** Where the row `id`'s content rests or follows the finger. */
-  swipeState: (id: string, widths: SwipeWidths) => { offset: number; dragging: boolean; armed: boolean };
   /** A click on a row (or a control in it) that should act: false when it only ends a swipe or shuts an
    *  open one, which it then does. */
   takeClick: () => boolean;
@@ -57,8 +56,6 @@ export interface SessionRowController {
   /** Each row's ⋯ by row id, where focus goes back to when a confirmation its menu opened closes. */
   kebabRef: (id: string) => (node: HTMLButtonElement | null) => void;
   kebab: (id: string) => HTMLElement | null;
-  /** The session being dragged onto a folder, by id. */
-  draggingId: string | null;
   startDrag: (e: ReactDragEvent, subject: any) => void;
   endDrag: () => void;
 }
@@ -83,7 +80,13 @@ export function setTitleDragImage(dataTransfer: DataTransfer, title: string): vo
   window.setTimeout(() => card.remove(), 0);
 }
 
-export function SessionListRow({
+/** A row's swipe as the list holds it: the finger dragging it, or the side it was left open on. */
+export interface SessionRowSwipeState {
+  drag: { dx: number; armed: boolean } | null;
+  open: SwipeSide | null;
+}
+
+export const SessionListRow = memo(function SessionListRow({
   rows,
   id,
   subject,
@@ -97,6 +100,10 @@ export function SessionListRow({
   menuLabel = 'More actions',
   onOpen,
   data,
+  menuOpen,
+  pressAt,
+  swipeAt,
+  dragging,
   children,
 }: {
   rows: SessionRowController;
@@ -121,12 +128,25 @@ export function SessionListRow({
   /** What a click, Enter or Space opens, once the click's guards have let it through. */
   onOpen: () => void;
   data?: Record<`data-${string}`, string>;
+  /** Whether this row's ⋯ menu is open. */
+  menuOpen: boolean;
+  /** Where a held press opened this row's menu, or null. */
+  pressAt: { x: number; y: number } | null;
+  /** This row's swipe, or null when it rests closed. */
+  swipeAt: SessionRowSwipeState | null;
+  /** Whether this row is the one being dragged onto a folder. */
+  dragging: boolean;
   /** The icon and the two lines. */
   children: ReactNode;
 }) {
   const widths = actionWidths(swipe);
-  const { offset, dragging: swiping, armed } = rows.swipeState(id, widths);
-  const menuOpen = rows.menuOpenId === id;
+  const offset = swipeAt?.drag ? swipeAt.drag.dx : restingOffset(swipeAt?.open ?? null, widths);
+  const swiping = !!swipeAt?.drag;
+  const armed = !!swipeAt?.drag?.armed;
+  // The menu is built when it opens, not on every draw of the row; the last one built stays while it
+  // closes, so its exit is not an empty popup.
+  const builtMenu = useRef<MenuItem[]>([]);
+  if (menuOpen) builtMenu.current = menu(rows.closeMenu, () => rows.kebab(id));
   const canDrag = draggable && !editing;
   const open = (): void => {
     if (editing || !rows.takeClick()) return;
@@ -135,7 +155,7 @@ export function SessionListRow({
   return (
     <div
       {...data}
-      className={`session-row${className ? ` ${className}` : ''}${active ? ' active' : ''}${menuOpen ? ' menu-open' : ''}${rows.draggingId === subject.id ? ' dragging' : ''}`}
+      className={`session-row${className ? ` ${className}` : ''}${active ? ' active' : ''}${menuOpen ? ' menu-open' : ''}${dragging ? ' dragging' : ''}`}
       role="button"
       tabIndex={0}
       draggable={canDrag || undefined}
@@ -169,7 +189,7 @@ export function SessionListRow({
       onTouchEnd={rows.touchEnd}
       onTouchCancel={rows.touchCancel}
     >
-      {rows.touch && rows.pressMenu?.id === id && (
+      {rows.touch && pressAt && (
         <Menu
           open
           side="bottom"
@@ -179,7 +199,7 @@ export function SessionListRow({
           popupClassName="session-row-menu session-press-menu"
           onOpenChange={(next) => { if (!next) rows.closePressMenu(); }}
           items={menu(rows.closePressMenu)}
-          trigger={<span className="session-press-anchor" style={{ left: rows.pressMenu.x, top: rows.pressMenu.y }} />}
+          trigger={<span className="session-press-anchor" style={{ left: pressAt.x, top: pressAt.y }} />}
         />
       )}
       {rows.touch &&
@@ -223,7 +243,7 @@ export function SessionListRow({
             popupClassName="session-row-menu"
             open={menuOpen}
             onOpenChange={(next) => rows.onMenuOpenChange(id, next)}
-            items={menu(rows.closeMenu, () => rows.kebab(id))}
+            items={builtMenu.current}
             trigger={
               <button ref={rows.kebabRef(id)} type="button" className="session-kebab" aria-label={menuLabel}>
                 <EllipsisOutlined />
@@ -234,4 +254,4 @@ export function SessionListRow({
       </div>
     </div>
   );
-}
+});

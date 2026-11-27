@@ -1,5 +1,8 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.core.realtime.RunEvent
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -36,12 +39,19 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import io.orbitd.android.directory.QueuedDiskLow
 import io.orbitd.android.directory.QueuedGate
+import io.orbitd.android.directory.RunningOverLimit
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import kotlinx.coroutines.launch
 import io.orbitd.android.directory.RunnerUpdating
 import io.orbitd.android.directory.RunnerUpdatingPart
 import java.time.Instant
 import kotlinx.coroutines.delay
 
 private const val CANCEL = "Cancel"
+private const val RUNNING = "Running"
 
 /** A clock that moves every 30 seconds, for the waits counted in minutes (web `useMinuteNow`). */
 @Composable
@@ -85,13 +95,13 @@ internal fun RunnerUpdatingQueued(gate: QueuedGate, machine: String?, openSessio
  * The foot row under the message the update holds (board 2 ⑤; web `RunnerUpdatingTag`): `Queued · runner updating`, in the meta
  * voice, the reason dotted-underlined because a press opens why — the update's account and, on its own line, how long it has waited.
  * A full runner, run or batch is drawn the same way in [QueuedCapacity]'s words, `Queued · runner full` (web `CapacityHeldTag`,
- * docs/mocks/queued-card-runner-full), with nothing to press in its popover. A new session Keep Free holds reads
- * `Queued · low disk space` ([QueuedDiskLow]), likewise. With [cancel] — under an accepted message no runner has taken yet
+ * docs/mocks/queued-card-runner-full), its popover ending in [runNow] where the session can be started over the limit. A new session
+ * Keep Free holds reads `Queued · low disk space` ([QueuedDiskLow]), with nothing to press. With [cancel] — under an accepted message no runner has taken yet
  * ([cancellableHeldTurn]) — the row ends ` · Cancel`, which takes the message back (web `HeldFoot`).
  */
 @Composable
 internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Modifier = Modifier, now: Instant = rememberMinuteNow(),
-    later: (@Composable () -> Unit)? = null, cancel: (() -> Unit)? = null) {
+    later: (@Composable () -> Unit)? = null, cancel: (() -> Unit)? = null, runNow: (@Composable () -> Unit)? = null) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val style = MaterialTheme.typography.labelSmall
     var open by remember { mutableStateOf(false) }
@@ -123,8 +133,62 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
                     else if (full) QueuedCapacity.messageText(gate, machine) else RunnerUpdating.runnerUpdatingMessageText(gate, machine)
                 Text(said + (waited?.let { "\n$it." } ?: ""),
                     Modifier.testTag("runner-updating-pop:text"), style = MaterialTheme.typography.bodyMedium)
-                if (!full && !disk) later?.invoke()
+                if (full) runNow?.invoke() else if (!disk) later?.invoke()
             }
+        }
+    }
+}
+
+/**
+ * Run now in a full runner's, run's or batch's popover (docs/mocks/queued-run-now ① and ③; web `CapacityHeldTag`): the button, and
+ * under it what pressing does, or the server's sentence beside a disabled one. Nothing where [QueuedCapacity.runNowNote] has none.
+ */
+@Composable
+internal fun RunNowAction(gate: QueuedGate, machine: String?, runnerActive: Int?, runnerLimit: Int?, pending: Boolean, press: () -> Unit) {
+    val note = QueuedCapacity.runNowNote(gate, machine, runnerActive, runnerLimit) ?: return
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Button(press, Modifier.align(Alignment.End).testTag("run-now"),
+            enabled = !pending && gate.runNowAvailable && gate.runNowRefusal.isNullOrEmpty()) {
+            if (pending) CircularProgressIndicator(Modifier.padding(end = 8.dp).size(16.dp), strokeWidth = 2.dp)
+            Text(QueuedCapacity.RUN_NOW)
+        }
+        Text(note, Modifier.testTag("run-now:note"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** The seq of the message that opened the turn still running: the last one sent that was not a steer, null once a `turn_end` follows
+ *  it (web `lastUserEventSeq(events, true)`). */
+internal fun openTurnUserSeq(events: List<RunEvent>): Long? {
+    for (event in events.asReversed()) {
+        if (event.type == "turn_end") return null
+        if (event.type == "user" && (event.fields["steer"] as? JsonPrimitive)?.booleanOrNull != true) return event.seq
+    }
+    return null
+}
+
+/**
+ * Under the message whose turn was started over its runner's limit, while it runs (board ②; web `RunningOverLimitFoot`):
+ * `Running` and an amber `over limit · 17/16`, which a press explains.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun RunningOverLimitFoot(overflow: RunningOverLimit, modifier: Modifier = Modifier) {
+    val style = MaterialTheme.typography.labelSmall
+    // The web's --warning, --warning-bg and --warning-border.
+    val light = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+    val ink = if (light) Color(0xFFC2710C) else Color(0xFFE0A23B)
+    val fill = if (light) Color(0xFFFFF4E6) else Color(0x26FA8C16)
+    val edge = if (light) Color(0xFFFFD591) else Color(0x61FA8C16)
+    val hint = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    Row(modifier.testTag("over-limit-foot"), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(RUNNING, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TooltipBox(TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+            tooltip = { PlainTooltip { Text(QueuedCapacity.overLimitHint(overflow), Modifier.testTag("over-limit:hint")) } }, state = hint) {
+            Text(QueuedCapacity.overLimitTag(overflow), Modifier.clickable(role = Role.Button) { scope.launch { hint.show() } }
+                .background(fill, RoundedCornerShape(5.dp)).border(1.dp, edge, RoundedCornerShape(5.dp))
+                .padding(horizontal = 6.dp, vertical = 2.dp).testTag("over-limit"), style = style, color = ink)
         }
     }
 }

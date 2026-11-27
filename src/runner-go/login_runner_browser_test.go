@@ -69,6 +69,9 @@ type fakeLoginBrowser struct {
 	reserved string
 	refuse   error
 	ended    []string
+	// kept: tabs of sign-ins that did not succeed; releasedAll: ReleaseSignInTabs() was called.
+	kept        map[string]bool
+	releasedAll bool
 }
 
 func (b *fakeLoginBrowser) ReserveForEngineSignIn(attempt string) error {
@@ -91,6 +94,33 @@ func (b *fakeLoginBrowser) EndEngineSignIn(attempt string) {
 }
 
 func (b *fakeLoginBrowser) DevToolsEndpoint() string { return "http://127.0.0.1:9222" }
+
+func (b *fakeLoginBrowser) KeepSignInTab(tab string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.kept == nil {
+		b.kept = map[string]bool{}
+	}
+	b.kept[tab] = true
+}
+
+func (b *fakeLoginBrowser) KeepsSignInTab(tab string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.kept[tab]
+}
+
+func (b *fakeLoginBrowser) ReleaseSignInTabs(tabs ...string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.releasedAll = b.releasedAll || len(tabs) == 0
+	if len(tabs) == 0 {
+		b.kept = nil
+	}
+	for _, tab := range tabs {
+		delete(b.kept, tab)
+	}
+}
 
 func (b *fakeLoginBrowser) reservation() string {
 	b.mu.Lock()
@@ -417,12 +447,52 @@ func TestLoginClosesItsTabInTheRunnersBrowserOnceSignedIn(t *testing.T) {
 }
 
 func TestLoginKeepsItsTabInTheRunnersBrowserWhenNotSignedIn(t *testing.T) {
+	every := loginKeptTabCheckEvery
+	loginKeptTabCheckEvery = 20 * time.Millisecond
+	t.Cleanup(func() { loginKeptTabCheckEvery = every })
 	rig := newRunnerBrowserRig(t, providerCodex, LoginResultRequest{Status: loginAwaitingApproval, URL: "https://auth.openai.com/codex/device", UserCode: "ABCD-1234"})
-	rig.relay.openInLoginBrowser(context.Background(), LoginCommand{Action: "browser", Engine: providerCodex, Attempt: "A1"}, &fakeLoginBrowser{})
+	rig.mu.Lock()
+	rig.pages = []browserTarget{{ID: "TAB1", Type: "page"}}
+	rig.mu.Unlock()
+	browser := &fakeLoginBrowser{}
+	rig.relay.openInLoginBrowser(context.Background(), LoginCommand{Action: "browser", Engine: providerCodex, Attempt: "A1"}, browser)
 	rig.cancel() // failed, timed out or cancelled: never reported done
 	time.Sleep(200 * time.Millisecond)
 	if got := rig.closedTabs(); len(got) != 0 {
 		t.Fatalf("closed %v after a sign-in that did not succeed", got)
+	}
+	// Its tab keeps the browser from stopping for idleness while it is open…
+	if !browser.KeepsSignInTab("TAB1") {
+		t.Fatal("the failed sign-in's tab does not keep the browser running")
+	}
+	// …and lets it go once the owner closes it.
+	rig.mu.Lock()
+	rig.pages = nil
+	rig.mu.Unlock()
+	deadline := time.Now().Add(2 * time.Second)
+	for browser.KeepsSignInTab("TAB1") && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if browser.KeepsSignInTab("TAB1") {
+		t.Fatal("the tab the owner closed still keeps the browser running")
+	}
+}
+
+// A sign-in that succeeds settles what earlier ones' pages said: their tabs no longer keep the browser running.
+func TestLoginSignedInReleasesEarlierKeptTabs(t *testing.T) {
+	rig := newRunnerBrowserRig(t, providerCodex, LoginResultRequest{Status: loginAwaitingApproval, URL: "https://auth.openai.com/codex/device", UserCode: "ABCD-1234"})
+	browser := &fakeLoginBrowser{kept: map[string]bool{"OLD": true}}
+	rig.relay.openInLoginBrowser(context.Background(), LoginCommand{Action: "browser", Engine: providerCodex, Attempt: "A1"}, browser)
+	rig.relay.mu.Lock()
+	rig.run.reportedDone = true
+	rig.relay.mu.Unlock()
+	rig.cancel()
+	deadline := time.Now().Add(2 * time.Second)
+	for len(rig.closedTabs()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if browser.KeepsSignInTab("OLD") || browser.KeepsSignInTab("TAB1") {
+		t.Fatal("a successful sign-in left a kept tab holding the browser")
 	}
 }
 

@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import type { IntegrationCheckResult, IntegrationJobCommand, IntegrationJobResultRequest } from '@orbit/shared';
-import { type PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -108,7 +109,7 @@ async function world(stack: Stack, label: string, line: 'MAIN' | 'PROJECT_BRANCH
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: `session: ${label}`, prompt: `session: ${label}`, provider: 'claude',
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
         numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
       },
     });
@@ -288,7 +289,7 @@ async function land(stack: Stack, w: World, taskId: string, label: string): Prom
   await stack.db.session.create({
     data: {
       ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
-      title: label, prompt: label, branch, isolationStatus: 'worktree', baseSha: sha('b'), status: RunStatus.SUCCEEDED,
+      title: label, prompt: label, branch, isolationStatus: 'worktree', baseSha: sha('b'), turnState: null,
       startsTaskWork: true, finishedAt: new Date(Date.now() - 60_000), worktreeBranch: branch, worktreeDirty: false,
       changedFiles: [{ path: 'docs/the-work.md' }] as never,
     },

@@ -2,9 +2,15 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
-  CreatorType, Prisma, PrismaClient, ProjectStatus, RunnerStatus, RunStatus,
-  SessionDispatchOrigin, TaskStatus,
+  CreatorType,
+  Prisma,
+  PrismaClient,
+  ProjectStatus,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import { isReleasedStatus } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,6 +21,8 @@ import {
 import { readProjectListRollups } from './project-list-rollup';
 import { ProjectsService } from './projects.service';
 import { prismaClientFor } from '../prisma/prisma-client';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import type { SessionFixture } from '../test-support/session-word';
 
 /**
  * `GET /projects` — the buckets and `lastActivityAt` it now carries — on real PostgreSQL.
@@ -380,7 +388,7 @@ test('a dispatched task is running in the index rather than ready, and the page 
     const session = async (ownerId: string, taskId: string, status: RunStatus): Promise<void> => {
       await db.session.create({
         data: {
-          ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
+          ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', turnState: turnStateOfWord(status),
           ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
         },
@@ -723,15 +731,15 @@ test('the rail reaches the index’s running count from the rows that can be run
       ownerId: string,
       taskId: string | null,
       status: RunStatus,
-      extra: Partial<Prisma.SessionUncheckedCreateInput> = {},
+      extra: SessionFixture = {},
     ): Promise<string> => {
       const id = randomUUID();
-      const sessionStatus = extra.status ?? status;
+      const { status: sessionStatus = status, ...extraFacts } = extra;
       await db.session.create({
         data: {
           id, ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it',
-          status: sessionStatus, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
-          ...extra,
+          turnState: turnStateOfWord(sessionStatus), dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          ...extraFacts,
           ...(isReleasedStatus(sessionStatus) ? {
             finishedAt: extra.finishedAt ?? new Date(),
           } : {}),
@@ -812,7 +820,7 @@ test('the rail reaches the index’s running count from the rows that can be run
       await db.session.create({
         data: {
           id: coordinatorId, ownerId, creatorId: ownerId, title: 'the conversation on it',
-          prompt: 'coordinate', status: RunStatus.RUNNING,
+          prompt: 'coordinate', turnState: 'IN_FLIGHT',
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, lastTurnAt: turnAt,
         },
       });

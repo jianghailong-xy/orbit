@@ -75,8 +75,9 @@ class SessionProjectCopyParityTest {
         "pageProgress", "startAsked", "pageNotStarted", "startSuggestion")
     /** The web's words this table does not carry: the progress hover, which a phone has no pointer for; Open Coordinator, which no
      * session list draws; and the project page's status line before any count, its empty and its failed states, which the page here
-     * draws outside this table (`statusLabel`, its own empty line, the shared StatusMessage). */
-    private val notInThisTable = setOf("progressHint", "openCoordinator", "pageStatus", "pageEmpty", "pageUnread", "retry")
+     * draws outside this table (`statusLabel`, its own empty line, the shared StatusMessage); and `untitled`, the title of a
+     * project entry in the web's `/sessions/listing` column when the read carries none, which Android does not read. */
+    private val notInThisTable = setOf("progressHint", "openCoordinator", "pageStatus", "pageEmpty", "pageUnread", "retry", "untitled")
     /** The project row's Pause and Resume words (§4.3), which Android keeps in [ProjectPauseCopy], not in this table. */
     private val inProjectPauseCopy = setOf("pause", "resume", "pausedAtLimit", "pausedRuns", "pausedAgo", "pausedTitle", "pausedStill",
         "undo", "resumedTitle", "resumedLimitNote", "refusedTitle", "refusedReason")

@@ -8,12 +8,14 @@ import {
 } from '@orbit/shared';
 import { DEFAULT_MAIN_BRANCH } from '../lib/projectStart';
 import { formatSpan } from '../lib/watches';
+import { LandingPullRequest } from './LandingPullRequest';
 import {
   LANDING_LIVENESS_WORDS,
   LANDING_NO_REPORT_YET,
   jobPhases,
   landingNoReportFor,
 } from './ProjectPanoramaHeader';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * §7.2 V6's fields, when the task's own landing carries them. The shared read model does not
@@ -54,6 +56,8 @@ export const LANDING_LABELS: Record<IntegrationJobState, string> = {
   CANCELLED: 'Landing cancelled',
   SUPERSEDED: 'Landing superseded',
   OBSERVED: 'Observed',
+  // docs/design/protected-branch-landing.md §11.2 (a): the landing waits for GitHub on its pull request.
+  PULL_REQUEST: 'Pull request open',
 };
 
 const TONES: Record<IntegrationJobState, Tone> = {
@@ -69,6 +73,7 @@ const TONES: Record<IntegrationJobState, Tone> = {
   CANCELLED: 'muted',
   SUPERSEDED: 'muted',
   OBSERVED: 'muted',
+  PULL_REQUEST: 'blue',
 };
 
 /**
@@ -108,11 +113,13 @@ function Instant({ value }: { value: string | null }) {
   if (!value) return <>—</>;
   const at = new Date(value);
   return (
-    <time dateTime={value} title={value}>
-      {Number.isFinite(at.getTime())
-        ? at.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
-        : value}
-    </time>
+    <Tooltip content={value} delay={TEXT_TOOLTIP_DELAY_MS}>
+      <time dateTime={value}>
+        {Number.isFinite(at.getTime())
+          ? at.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
+          : value}
+      </time>
+    </Tooltip>
   );
 }
 
@@ -190,9 +197,10 @@ export function LandTaskStatus({
           Its work is on {integration.state === 'ON_UPSTREAM' ? main : 'the project branch'} by an existing receipt.
         </div>
       ) : null}
+      {job?.pullRequest ? <LandingPullRequest pullRequest={job.pullRequest} main={branchOf(job.targetRef)} /> : null}
       {job ? (
         <dl className="land-task-facts">
-          <div><dt>Target</dt><dd><code title={job.targetRef}>{branchOf(job.targetRef)}</code></dd></div>
+          <div><dt>Target</dt><dd><Tooltip content={job.targetRef} delay={TEXT_TOOLTIP_DELAY_MS} mono><code>{branchOf(job.targetRef)}</code></Tooltip></dd></div>
           <div><dt>Queue wait</dt><dd>{job.waitMs < 1000 ? '0s' : formatSpan(job.waitMs)}</dd></div>
           <div><dt>Queued</dt><dd><Instant value={job.queuedAt} /></dd></div>
           <div><dt>Started</dt><dd><Instant value={job.startedAt} /></dd></div>

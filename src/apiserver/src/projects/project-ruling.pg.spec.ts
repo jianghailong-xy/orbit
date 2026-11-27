@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import {
   PROJECT_RULING_COORDINATOR_ONLY,
   PROJECT_RULING_QUOTE_NOT_FOUND,
@@ -79,7 +80,7 @@ async function session(db: PrismaClient, ownerId: string, workspaceId: string, r
   await db.session.create({
     data: {
       id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title, prompt: title,
-      provider: 'claude', status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      provider: 'claude', turnState: null, dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
     },
   });

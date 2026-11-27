@@ -45,13 +45,13 @@ import {
   CreatorType,
   PrismaClient,
   RunnerStatus,
-  RunStatus,
   SessionDispatchOrigin,
   TaskCommentMentionDeliveryStatus,
   TaskCompletionCriterion,
   TaskStatus,
 } from '@prisma/client';
-import { isReleasedStatus } from '../common/session-release';
+import { RunStatus } from '@orbit/shared';
+import { fixtureFacts } from '../test-support/session-word';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -284,14 +284,10 @@ test('a shared project: its seven blocks, the red line, and the scope a token re
   }
   async function session(title: string, extra: Record<string, unknown> = {}): Promise<string> {
     const id = randomUUID();
-    const fixtureStatus = (extra.status as RunStatus | undefined) ?? RunStatus.AWAITING_INPUT;
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
-        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, ...extra,
-        ...(isReleasedStatus(fixtureStatus) ? {
-          finishedAt: extra.finishedAt ?? new Date(),
-        } : {}),
+        turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, ...fixtureFacts(extra),
       } as never,
     });
     return id;

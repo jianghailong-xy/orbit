@@ -104,3 +104,7 @@ func parsePsCPU(out string, cores int) *float64 {
 	}
 	return &p
 }
+
+// availableMemory is not read on macOS: a managed runner is a Linux container, and the turn memory gate is only
+// armed there (memory_reserve.go).
+func availableMemory() (uint64, bool) { return 0, false }

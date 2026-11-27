@@ -1,0 +1,88 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,-apple-system,sans-serif;background:#f2f2f4;color:#1c1c1e;padding:32px 36px;width:1500px}
+h1{font-size:26px;margin-bottom:6px}
+.lead{font-size:15px;color:#555;margin-bottom:22px;line-height:1.55}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.panel{background:#fff;border:1px solid #dee0e3;border-radius:12px;padding:18px 20px 16px}
+.panel h2{font-size:16px;margin-bottom:12px;display:flex;gap:8px;align-items:center}
+.n{display:inline-block;background:#1c1c1e;color:#fff;border-radius:11px;width:22px;height:22px;text-align:center;line-height:22px;font-size:12px}
+.rec{font-size:11px;background:#e8f5e9;color:#2e7d32;border-radius:5px;padding:2px 7px;font-weight:600}
+.alt{font-size:11px;background:#f1f1f3;color:#666;border-radius:5px;padding:2px 7px;font-weight:600}
+.stage{background:#fafbfc;border:1px solid #eceef1;border-radius:10px;padding:16px;min-height:400px;position:relative}
+.bub{margin-left:auto;width:70%;background:#f0edff;border-radius:14px;padding:10px 13px;font-size:14px;line-height:1.45;color:#333}
+.foot{font-size:13.5px;color:#8a8f98;margin-top:8px;text-align:right;display:flex;gap:6px;justify-content:flex-end;align-items:center}
+.why{text-decoration:underline dotted;text-underline-offset:3px;color:#6b7079}
+.link{color:#3b6cf6;cursor:pointer}
+.pop{position:absolute;right:16px;top:118px;width:430px;background:#fff;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);padding:16px 18px;font-size:14px;line-height:1.55;color:#555}
+.pop b.t{display:block;color:#1c1c1e;font-size:15px;margin-bottom:6px}
+.acts{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.btn{border:1px solid #dee0e3;border-radius:7px;padding:5px 12px;font-size:13px;color:#1c1c1e;background:#fff}
+.btn.p{background:#3b6cf6;border-color:#3b6cf6;color:#fff}
+.btn.dis{opacity:.45}
+.note{font-size:12.5px;color:#8a8f98;margin-top:8px}
+.running{font-size:13.5px;color:#8a8f98;margin-top:8px;text-align:right}
+.over{display:inline-block;font-size:11.5px;border:1px solid #f0c36d;background:#fff8e6;color:#9a6700;border-radius:5px;padding:0 6px;margin-left:6px}
+.cap{font-size:13.5px;line-height:1.55;color:#333;margin-top:12px}
+.hl{outline:2.5px solid #ff9f0a;outline-offset:3px;border-radius:6px}
+.dec{margin-top:24px;background:#fff;border:1px solid #dee0e3;border-radius:12px;padding:18px 22px}
+.dec h2{font-size:17px;margin-bottom:10px}
+.dec table{border-collapse:collapse;width:100%;font-size:13.5px;line-height:1.5}
+.dec td,.dec th{border-top:1px solid #eceef1;padding:8px 10px;vertical-align:top;text-align:left}
+.dec th{color:#666;font-weight:600;border-top:none}
+.dec td:first-child{font-weight:600;width:170px}
+.dec td.r{color:#2e7d32}
+</style></head><body>
+<h1>Run a queued message now, over the runner's limit</h1>
+<div class="lead">The message waits because HPC is running 16 of 16 sessions. "Run now" lets the owner start this one message straight away as the 17th, a one-time pass for this turn only. The limit itself does not change. Drawn with the web console's light tokens and its real classes (<code>chat-runner-updating</code>, <code>runner-updating-pop</code>), the same way the "Runner updating" popover already offers "Update now".</div>
+<div class="grid">
+
+<div class="panel"><h2><span class="n">1</span>Popover: a "Run now" button <span class="rec">Recommended</span></h2>
+<div class="stage">
+ <div class="bub">Android: draw the session page the way iOS does…</div>
+ <div class="foot">Queued · <span class="why hl">runner full</span> · <span class="link">Cancel</span></div>
+ <div class="pop"><b class="t">Runner full</b>HPC is running 16 of 16 sessions. This message is sent as soon as one finishes.<br>Waiting 5 min.
+  <div class="acts"><span class="btn p hl">Run now</span></div>
+  <div class="note">Starts it as the 17th session on HPC. This turn only; the limit stays 16.</div></div>
+</div>
+<div class="cap">The action sits where the reason is explained, exactly as "Update now" does in the Runner updating popover. No confirmation dialog: the line under the button already states what will happen, and the pass covers only one turn.</div></div>
+
+<div class="panel"><h2><span class="n">2</span>After pressing: it runs, and says it is over the limit</h2>
+<div class="stage">
+ <div class="bub">Android: draw the session page the way iOS does…</div>
+ <div class="running">Running <span class="over">over limit · 17/16</span></div>
+ <div style="margin-top:18px;font-size:14px;color:#555;line-height:1.5">● Reading src/android/…/SessionPage.kt</div>
+</div>
+<div class="cap">The turn starts at once. While it runs, a small amber tag says it is the 17th of 16, with a tooltip that reads "Started over HPC's limit by you". When the turn ends the slot is returned, and the session's next message queues normally again.</div></div>
+
+<div class="panel"><h2><span class="n">3</span>Already at the extra cap: the button explains, it does not run</h2>
+<div class="stage">
+ <div class="bub">Android: draw the session page the way iOS does…</div>
+ <div class="foot">Queued · <span class="why">runner full</span> · <span class="link">Cancel</span></div>
+ <div class="pop" style="top:118px"><b class="t">Runner full</b>HPC is running 18 of 16 sessions. This message is sent as soon as one finishes.<br>Waiting 5 min.
+  <div class="acts"><span class="btn p dis">Run now</span></div>
+  <div class="note">HPC is already 2 over its limit, the most it can take. Wait, or stop another session.</div></div>
+</div>
+<div class="cap">Overflow is capped at <b>+2 sessions per runner</b> (an owner-set number, see decision C). HPC has run out of memory before (2026-08-31, five runner drops in one day), so the pass is not unlimited.</div></div>
+
+<div class="panel"><h2><span class="n">4</span>Alternative: "Run now" on the foot row itself <span class="alt">Not recommended</span></h2>
+<div class="stage">
+ <div class="bub">Android: draw the session page the way iOS does…</div>
+ <div class="foot">Queued · <span class="why">runner full</span> · <span class="link hl">Run now</span> · <span class="link">Cancel</span></div>
+</div>
+<div class="cap">One click fewer, but every queued message carries a button that skips the queue, and the cost (17 of 16) is never shown before the press. It also crowds the line on a phone.</div></div>
+</div>
+
+<div class="dec"><h2>Decisions, each with a recommendation</h2><table>
+<tr><th>Decision</th><th>Recommended</th><th>Other options</th></tr>
+<tr><td>A. Where the action lives</td><td class="r">Inside the popover (①), next to the explanation, the way "Update now" works.</td><td>On the foot row (④).</td></tr>
+<tr><td>B. What the pass covers</td><td class="r">This one turn. When it ends the slot is returned, and the session's next message queues normally.</td><td>The whole session, until it ends: easy to forget, and the runner stays over its limit for hours.</td></tr>
+<tr><td>C. How far over</td><td class="r">At most +2 per runner, set per runner on the runner's settings next to its limit ("Extra sessions on demand: 2"). 0 turns the button off.</td><td>Unbounded; or a fixed percentage.</td></tr>
+<tr><td>D. Which gates it lifts</td><td class="r">Runner full, Run full and Batch full: all three are slot limits. Offline, updating, low disk and clone-not-ready get no button, because a free slot would not help.</td><td>Runner full only.</td></tr>
+<tr><td>E. Who may press it</td><td class="r">People only: web, macOS/iOS and Android clients. No MCP tool or CLI flag, so agents cannot skip the queue for themselves.</td><td>Agents too, behind an approval card.</td></tr>
+<tr><td>F. Queue fairness</td><td class="r">The overflow turn counts as active. Messages already waiting still start only when the count drops below 16, so nobody behind is moved further back.</td><td>—</td></tr>
+</table>
+<div class="cap" style="margin-top:12px"><b>Under the hood (for the build):</b> the server's claim gate and the runner's pool (<code>session_pool.go</code>: turn permits and resident engines, both capped at <code>max</code>) each enforce the 16. The pass is a field on the queued turn, <code>overCapacity</code>, that the claim SQL accepts while <code>active &lt; limit + burst</code>. The runner admits a claimed overflow turn past <code>p.max</code>, up to <code>max + burst</code>, and never evicts another session's running turn for it. Older runners that do not support this keep queueing, and the button says so.</div>
+</div>
+</body></html>

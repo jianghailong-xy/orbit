@@ -15,6 +15,8 @@ test('reaper terminalization retires the generation then records leased CURRENT_
         order.push('terminal');
         return { count: 1 };
       },
+      // The released row, read back for the STATUS event's word.
+      findUnique: async () => null,
     },
     $executeRaw: async () => {
       order.push('retire');

@@ -472,8 +472,8 @@ async function scene(h: Harness, name: string): Promise<Scene> {
   // A project whose coordinator heard the owner's words, and whose task carries a delivery comment.
   const coordinator = randomUUID();
   await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'the coordinator','p',$2,$2,$3,$4,'RUNNING'::run_status,'USER',now())`,
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","turn_state","dispatch_origin","updated_at")
+     VALUES ($1,'the coordinator','p',$2,$2,$3,$4,'IN_FLIGHT','USER',now())`,
     [coordinator, ownerId, workspaceId, runnerId],
   );
   const projectId = randomUUID();

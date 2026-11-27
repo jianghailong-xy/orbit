@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { SESSION_CURRENT_WORK_ROUTING_V1 } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 

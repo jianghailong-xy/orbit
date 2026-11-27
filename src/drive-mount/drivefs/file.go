@@ -311,7 +311,7 @@ func (fs *FS) Write(cancel <-chan struct{}, input *fuse.WriteIn, data []byte) (u
 		// write() itself fails, so a caller that ignores close() (a shell redirection) still sees it (§5.7).
 		return 0, fs.refuse(fuse.EIO, "write", fs.pathForLog(h.node.ino, ""), "",
 			fmt.Sprintf("the drive's server cannot be reached (for %s now); the bytes written before this one are in the "+
-				"spool, where close() commits them or keeps them in unsent/; /run/orbit-files/status.json says since when", fs.opts.CloseWait))
+				"spool, where close() commits them or keeps them in unsent/; /run/orbit-drive/status.json says since when", fs.opts.CloseWait))
 	}
 	off := int64(input.Offset)
 	if h.append {

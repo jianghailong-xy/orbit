@@ -156,7 +156,9 @@ struct SessionSearchRow: View {
     let query: String
 
     var body: some View {
-        let glyph = SessionStatusGlyph.make(runState: hit.effectiveRunState)
+        // The state from `phase` (`SessionDisplay`), else, from an older server, the run state's glyph.
+        let glyph = SessionDisplay.state(hit.displayFacts)?.glyph ?? SessionStatusGlyph.make(runState: hit.effectiveRunState)
+        let marks = SessionDisplay.marks(hit.displayFacts) ?? []
         HStack(alignment: .top, spacing: 10) {
             StatusGlyphView(glyph: glyph)
             VStack(alignment: .leading, spacing: 2) {
@@ -174,6 +176,7 @@ struct SessionSearchRow: View {
                 HStack(spacing: 5) {
                     if let name = hit.agent?.name { Text(name) }
                     Text(glyph.label)
+                    if !marks.isEmpty { SessionMarkPills(marks: marks) }
                     if let what = matchLabel(hit.matchField) { Text("in \(what)") }
                 }
                 .font(.orbitListSubtitle)

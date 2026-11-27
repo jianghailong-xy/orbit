@@ -147,9 +147,9 @@ test('the owner stops one running bg_run job; ended, unknown, old-runner and for
   async function session(owner: string, runnerId: string, running: string[]): Promise<string> {
     const id = randomUUID();
     await sql.query(
-      `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","status","dispatch_origin","assigned_runner_id",
+      `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","turn_state","dispatch_origin","assigned_runner_id",
                              "running_bg_shells","running_bg_jobs","created_at","updated_at")
-       VALUES ($1,'background job stop','p',$2,$2,'AWAITING_INPUT'::run_status,'USER',$3,$4,$4,now(),now())`,
+       VALUES ($1,'background job stop','p',$2,$2,NULL,'USER',$3,$4,$4,now(),now())`,
       [id, owner, runnerId, running],
     );
     return id;

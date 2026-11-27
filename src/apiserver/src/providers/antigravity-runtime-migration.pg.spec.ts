@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { Client } from 'pg';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 /**
  * 0367 against a real server: `antigravity` stops being a slug anybody's provider can hold.
@@ -59,6 +60,9 @@ test('0367 moves whatever held `antigravity` aside and reserves the name', { ski
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The replayed migration predates deploy D4 (migration 1711), which dropped session.status: it runs on the
+  // database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   t.after(() => sql.end().catch(() => undefined));
 
   const one = async <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>
@@ -92,8 +96,8 @@ test('0367 moves whatever held `antigravity` aside and reserves the name', { ski
   const newSession = async (ownerId: string, provider: string, status = 'AWAITING_INPUT') => {
     const id = randomUUID();
     await sql.query(
-      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, status, updated_at)
-       VALUES ($1, 'agy', 'agy', $2, $2, $3, $4::run_status, now())`,
+      `INSERT INTO session (id, title, prompt, owner_id, creator_id, provider, turn_state, updated_at)
+       VALUES ($1, 'agy', 'agy', $2, $2, $3, (CASE ($4)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END), now())`,
       [id, ownerId, provider, status],
     );
     return id;
@@ -290,12 +294,14 @@ test('0367 moves whatever held `antigravity` aside and reserves the name', { ski
   });
 
   await t.test('only a claim that declares the Antigravity capability starts an Antigravity row', async () => {
+    // The guard here is 0367's, which fires on `status`: the claim is deploy 2's, which writes both spellings (since
+    // deploy D3 migration 1671 refuses the word alone and stores the facts' word, the same one).
     const claim = async (id: string, settings: string) => {
       await sql.query('BEGIN');
       try {
         if (settings) await sql.query(`SELECT ${settings}`);
         const claimed = await sql.query(
-          `UPDATE session SET status = 'RUNNING' WHERE id = $1 AND status = 'PENDING' RETURNING id`,
+          `UPDATE session SET "status" = 'RUNNING', "turn_state" = 'IN_FLIGHT' WHERE id = $1 AND "turn_state" = 'QUEUED' RETURNING id`,
           [id],
         );
         await sql.query('COMMIT');
@@ -324,7 +330,7 @@ test('0367 moves whatever held `antigravity` aside and reserves the name', { ski
     // Nothing else is touched: a Claude row claims as it always did, and an Antigravity row that is
     // already running parks without any capability.
     assert.equal(await claim(await newSession(ann, 'claude', 'PENDING'), ''), 1);
-    await sql.query(`UPDATE session SET status = 'AWAITING_INPUT' WHERE id = $1`, [agy]);
+    await sql.query(`UPDATE session SET "turn_state" = NULL WHERE id = $1`, [agy]);
     assert.equal((await one('SELECT status FROM session WHERE id = $1', [agy])).status, 'AWAITING_INPUT');
   });
 

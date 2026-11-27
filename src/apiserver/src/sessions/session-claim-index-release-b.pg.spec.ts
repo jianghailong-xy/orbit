@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
-import { CreatorType, PrismaClient, RunnerStatus, RunStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
@@ -19,6 +20,10 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { TasksService } from '../tasks/tasks.service';
 import { AutoRetryService } from './auto-retry.service';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
+import type { LegacyStatusFacts } from './session-legacy-words';
+import { WORD_SELECT, sessionWord, wordOf, fixtureFacts } from '../test-support/session-word';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 /**
  * ONE LIVE RUN PER TASK, RELEASE B: the rehearsal before 1444 drops 0130's index, and the drop itself.
@@ -217,7 +222,7 @@ async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus): P
     await tx.session.update({
       where: { id: sessionId },
       data: {
-        status, finishedAt: TERMINAL.includes(status) ? new Date() : null,
+        turnState: turnStateOfWord(status), finishedAt: TERMINAL.includes(status) ? new Date() : null,
         ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
       },
     });
@@ -270,7 +275,7 @@ async function populate(db: PrismaClient, tasksN: number): Promise<Population> {
       free.push(taskId);
     }
   });
-  for (let at = 0; at < rows.length; at += 500) await db.session.createMany({ data: rows.slice(at, at + 500) as never });
+  for (let at = 0; at < rows.length; at += 500) await db.session.createMany({ data: rows.slice(at, at + 500).map(fixtureFacts) as never });
   return { w, free, held, heldRuns, failed };
 }
 
@@ -341,7 +346,7 @@ async function rehearse(
     // A press on a task whose run is held: refused while that run is live; on an idle parked run (AWAITING_INPUT,
     // INTERRUPTED) the press is a turn on that run, which is its plan RESUME, and no second run.
     for (const taskId of take(population.held, 20)) {
-      const { status } = await a.db.session.findUniqueOrThrow({ where: { id: population.heldRuns.get(taskId)! }, select: { status: true } });
+      const status = await sessionWord(a.db, population.heldRuns.get(taskId)!);
       const press = await Promise.allSettled([a.tasks.execute(population.w.ownerId, taskId, undefined, randomUUID())]);
       const run = press[0].status === 'fulfilled' ? (press[0].value as { sessionId?: string }).sessionId : undefined;
       const onto = run === undefined ? '' : run === population.heldRuns.get(taskId) ? ' (onto the held run)' : ' (a new run)';
@@ -399,7 +404,7 @@ async function rehearse(
     }
     // One instant at a time: arm its rows, sweep, read them, disarm what is still armed, so a row re-armed after a
     // refusal never takes the next instant's slot (one release per runner and provider a sweep).
-    const byId = new Map<string, { status: RunStatus; finishedAt: Date | null }>();
+    const byId = new Map<string, LegacyStatusFacts>();
     const instants = [...new Set(armed.map((r) => r.at.getTime()))].sort((x, y) => x - y);
     for (const at of instants) {
       const rows = armed.filter((r) => r.at.getTime() === at);
@@ -413,13 +418,13 @@ async function rehearse(
         outcomes.push(...(await Promise.allSettled([a.autoRetry.sweep(now), b.autoRetry.sweep(now)])).map((r) => `sweep ${outcome(r)}`));
       }
       for (const row of await a.db.session.findMany({
-        where: { id: { in: rows.map((r) => r.id) } }, select: { id: true, status: true, finishedAt: true },
+        where: { id: { in: rows.map((r) => r.id) } }, select: { id: true, ...WORD_SELECT, finishedAt: true },
       })) byId.set(row.id, row);
       await a.db.session.updateMany({ where: { id: { in: rows.map((r) => r.id) }, retryAt: { not: null } }, data: { retryAt: null } });
     }
     for (const row of armed) {
       const now = byId.get(row.id)!;
-      outcomes.push(`${row.contended ? 'armed on a held task' : 'armed on a free task'}: ${now.finishedAt ? 'still released' : `revived (${now.status})`}`);
+      outcomes.push(`${row.contended ? 'armed on a held task' : 'armed on a free task'}: ${now.finishedAt ? 'still released' : `revived (${wordOf(now)})`}`);
     }
     const live = await liveRuns(sql, free);
     assert.ok(free.every((t) => live.get(t) === 1), `${label}, auto-retry: each free task was revived once, by one of its two armed runs`);
@@ -443,6 +448,9 @@ test('one live run per task, release B (migration 1444): rehearsal before and af
   ownClient = sql;
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The column session.status was dropped in deploy D4 (migration 1711): this file rehearses deploys it
+  // was part of, on the database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   const database = ((await sql.query('SELECT current_database() AS d')).rows[0] as { d: string }).d;
   const a = stack(url);
   const b = stack(url);
@@ -546,8 +554,8 @@ test('one live run per task, release B (migration 1444): rehearsal before and af
     // While it is so: a second live run is still refused, by the index that enforces the claim.
     const w = await world(a.db, 'between', false);
     const [taskId] = await tasks(a.db, w, 1, 'between');
-    await a.db.session.create({ data: ran(w, taskId, RunStatus.RUNNING) as never });
-    const second = await a.db.session.create({ data: ran(w, taskId, RunStatus.PENDING) as never }).then(() => null, (e: unknown) => e);
+    await a.db.session.create({ data: fixtureFacts(ran(w, taskId, RunStatus.RUNNING)) as never });
+    const second = await a.db.session.create({ data: fixtureFacts(ran(w, taskId, RunStatus.PENDING)) as never }).then(() => null, (e: unknown) => e);
     assert.equal((second as { code?: string })?.code, 'P2002', 'a second live run is refused while the old index is INVALID');
 
     const stopped = await prisma(url, ['migrate', 'deploy']);

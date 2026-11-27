@@ -4,8 +4,11 @@
  * string, the six SessionEndReason values and the two legacy ones), and the filing facts (open, filed through
  * `completed_at`, filed through the legacy `archived_at` mirror alone, trashed, filed and trashed).
  *
- * `finished_at` is set the way session_release_fact_chk holds them (set exactly on the three
- * released statuses). The projector does not read them; they are here so each row is one a database could hold.
+ * Beside the stored word each row carries the facts the words are derived from (sessions/session-legacy-words.ts), as
+ * a session that ran has them: `finished_at` set exactly on the three released statuses (session_release_fact_chk),
+ * the turn state of a held word (migration 1611), `last_turn_outcome` FAILED on a FAILED release (every failure
+ * writer records it; migration 1441 wrote it for the rest) and none otherwise, a start, no import marker, a
+ * conversation. The stored word is not read by the projector.
  *
  * No imports, so the golden table (session-state-legacy-fields.golden.json) can be generated from this file at the
  * base commit by the built projector alone.
@@ -31,6 +34,8 @@ const FILING: Record<string, { completedAt: string | null; archivedAt: string | 
 
 const RELEASED = new Set<string>(['SUCCEEDED', 'FAILED', 'CANCELLED']);
 
+const TURN_STATE: Record<string, string> = { PENDING: 'QUEUED', RUNNING: 'IN_FLIGHT', INTERRUPTED: 'ABANDONED' };
+
 export interface LegacyFieldsCase {
   key: string;
   row: {
@@ -40,6 +45,11 @@ export interface LegacyFieldsCase {
     archivedAt: string | null;
     deletedAt: string | null;
     finishedAt: string | null;
+    turnState: string | null;
+    lastTurnOutcome: string | null;
+    startedAt: string | null;
+    importSourceCwd: string | null;
+    sessionKind: string;
   };
 }
 
@@ -55,6 +65,11 @@ export function combinations(): LegacyFieldsCase[] {
             endReason,
             ...facts,
             finishedAt: RELEASED.has(status) ? AT : null,
+            turnState: TURN_STATE[status] ?? null,
+            lastTurnOutcome: status === 'FAILED' ? 'FAILED' : null,
+            startedAt: AT,
+            importSourceCwd: null,
+            sessionKind: 'CONVERSATION',
           },
         });
       }

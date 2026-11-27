@@ -48,6 +48,8 @@ object ManagementFixture {
     /** GET providers (the pickers' catalogue, no ids) and GET providers/mine (the account's own, with ids, endpoints and hasApiKey). */
     @Volatile var providerCatalog = "[]"
     @Volatile var providersMine = "[]"
+    /** GET account-health's body; POST account-health/:id/check clears it, as the server's Check again does. */
+    @Volatile var accountHealth = """{"blocks":[]}"""
     /** Each DeepSeek key's balance answer by provider id, and a gate that holds a key's read until it completes. */
     val balances = java.util.concurrent.ConcurrentHashMap<String, String>()
     val balanceGates = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
@@ -112,6 +114,9 @@ object ManagementFixture {
     @Volatile var setDefaultRefusal: String? = null
     @Volatile var setDefaultAnswer = """{"account":null,"status":"pending","message":null,"waitingOn":[],"foreignProcesses":[]}"""
     @Volatile var restoreFails = false
+    /** POST runners/:id/accounts/:engine/default/sign-out runs [onAccountWrite] with its path, then answers pending; given [signOutRefusal]
+     * it refuses 400 in those words. */
+    @Volatile var signOutRefusal: String? = null
     @Volatile var onAccountWrite: (String) -> Unit = {}
     /** POST runners/:id/engines/:engine/update-warning/dismiss runs this with the engine, then answers `{engine, latest}` with [dismissLatest],
      * as the server records the engine's current update.latest — so GET runners can serve the dismissal from then on. */
@@ -160,11 +165,11 @@ object ManagementFixture {
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         reorderRequests.clear(); runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
-        defaultRemoveRefusal = null; setDefaultRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
+        defaultRemoveRefusal = null; setDefaultRefusal = null; restoreFails = false; signOutRefusal = null; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
         agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
-        queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); terminalRequests = emptyList(); terminalRefusal = null; TerminalRequestStore.reset(); providerCatalog = "[]"; providersMine = "[]"
+        queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); terminalRequests = emptyList(); terminalRefusal = null; TerminalRequestStore.reset(); providerCatalog = "[]"; providersMine = "[]" ; accountHealth = """{"blocks":[]}"""
         balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"; project = "{}"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
@@ -283,6 +288,7 @@ object ManagementFixture {
             "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")
             "providers" -> ok(providerCatalog)
             "providers/mine" -> ok(providersMine)
+            "account-health" -> ok(accountHealth)
             "providers/subagent-tiers" -> ok(subagentTiers)
             "tasks/$TASK" -> ok(task)
             "tasks/$TASK/evidence" -> ok(evidence)
@@ -345,6 +351,9 @@ object ManagementFixture {
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/set-default") && api.method == HttpMethod.POST ->
                     setDefaultRefusal?.let { fail(409, it) } ?: run { onAccountWrite(path); ok(setDefaultAnswer) }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/sign-out") && api.method == HttpMethod.POST ->
+                    signOutRefusal?.let { fail(400, it) }
+                        ?: run { onAccountWrite(path); ok("""{"engine":"${path.split('/')[3]}","account":"default","status":"pending","message":null}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
                     if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->
@@ -368,6 +377,7 @@ object ManagementFixture {
                         "revokedAt" to JsonPrimitive(now.toString()), "revokedReason" to JsonPrimitive("USER"))) else it }
                     ok("""{"id":"$id","revokedAt":"$now","revokedReason":"USER"}""")
                 }
+                path.startsWith("account-health/") && path.endsWith("/check") && api.method == HttpMethod.POST -> { accountHealth = """{"blocks":[]}"""; ok("""{"cleared":1}""") }
                 path.startsWith("providers/mine/") && path.endsWith("/key-check") && api.method == HttpMethod.POST -> { onKeyCheck(); ok(keyCheckAnswer) }
                 path.startsWith("providers/mine/") && path.endsWith("/balance") -> {
                     val id = path.removePrefix("providers/mine/").removeSuffix("/balance")

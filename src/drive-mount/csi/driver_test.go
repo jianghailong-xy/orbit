@@ -56,15 +56,15 @@ type world struct {
 
 func newWorld(t *testing.T) *world {
 	w := &world{t: t, dir: t.TempDir(), secrets: fakeSecrets{}, bound: map[string]string{}, active: map[string]bool{}}
-	w.secrets["orbit-files-system/mrf-"+runnerA] = mountSecret(runnerA, "4", "orbit_drive_mount_a")
-	w.secrets["orbit-files-system/mrf-"+runnerB] = mountSecret(runnerB, "1", "orbit_drive_mount_b")
+	w.secrets["orbit-drive-system/mrf-"+runnerA] = mountSecret(runnerA, "4", "orbit_drive_mount_a")
+	w.secrets["orbit-drive-system/mrf-"+runnerB] = mountSecret(runnerB, "1", "orbit_drive_mount_b")
 	w.d = New(w.config())
 	return w
 }
 
 func (w *world) config() Config {
 	return Config{
-		NodeID: "node-a", ManagedNamespace: managed, SecretsNamespace: "orbit-files-system", Server: "https://orbit.invalid",
+		NodeID: "node-a", ManagedNamespace: managed, SecretsNamespace: "orbit-drive-system", Server: "https://orbit.invalid",
 		Root: filepath.Join(w.dir, "root"), SpoolRoot: filepath.Join(w.dir, "spool"), StateDir: filepath.Join(w.dir, "state"),
 		Daemon: "/bin/false", Secrets: w.secrets, MountTimeout: 2 * time.Second, Log: log.New(io.Discard, "", 0),
 		Probe: func(context.Context, string, string, string) error { return w.probe },
@@ -104,7 +104,7 @@ func (w *world) config() Config {
 func publishRequest(runnerID, podUID string, change func(r *csipb.NodePublishVolumeRequest)) *csipb.NodePublishVolumeRequest {
 	r := &csipb.NodePublishVolumeRequest{
 		VolumeId:   "csi-" + podUID,
-		TargetPath: "/var/lib/kubelet/pods/" + podUID + "/volumes/kubernetes.io~csi/orbit-files/mount",
+		TargetPath: "/var/lib/kubelet/pods/" + podUID + "/volumes/kubernetes.io~csi/orbit-drive/mount",
 		VolumeCapability: &csipb.VolumeCapability{
 			AccessType: &csipb.VolumeCapability_Mount{Mount: &csipb.VolumeCapability_MountVolume{}},
 		},
@@ -186,11 +186,11 @@ func TestPublishAnswersTheDoorsVerdict(t *testing.T) {
 
 func TestPublishWaitsForItsSecret(t *testing.T) {
 	w := newWorld(t)
-	delete(w.secrets, "orbit-files-system/mrf-"+runnerA)
+	delete(w.secrets, "orbit-drive-system/mrf-"+runnerA)
 	if err := w.publish(publishRequest(runnerA, "pod-1", nil)); codeOf(err) != codes.Unavailable {
 		t.Fatalf("no Secret yet: %v", err)
 	}
-	w.secrets["orbit-files-system/mrf-"+runnerA] = mountSecret(runnerB, "4", "x")
+	w.secrets["orbit-drive-system/mrf-"+runnerA] = mountSecret(runnerB, "4", "x")
 	if err := w.publish(publishRequest(runnerA, "pod-1", nil)); codeOf(err) != codes.PermissionDenied {
 		t.Fatalf("a Secret of another runner: %v", err)
 	}
@@ -327,7 +327,7 @@ func TestAdoptLeavesASupersededInstanceUnmounted(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.d.Shutdown()
-	w.secrets["orbit-files-system/mrf-"+runnerA] = mountSecret(runnerA, "5", "orbit_drive_mount_a5")
+	w.secrets["orbit-drive-system/mrf-"+runnerA] = mountSecret(runnerA, "5", "orbit_drive_mount_a5")
 	w.runs = nil
 	if n := New(w.config()).Adopt(context.Background()); n != 0 || len(w.runs) != 0 {
 		t.Fatalf("adopted %d, runs %v", n, w.runs)
@@ -339,7 +339,7 @@ func TestIdentity(t *testing.T) {
 	info, _ := w.d.GetPluginInfo(context.Background(), nil)
 	node, _ := w.d.NodeGetInfo(context.Background(), nil)
 	caps, _ := w.d.NodeGetCapabilities(context.Background(), nil)
-	if info.Name != "files.orbit.dev" || node.NodeId != "node-a" || len(caps.Capabilities) != 0 {
+	if info.Name != "drive.orbit.dev" || node.NodeId != "node-a" || len(caps.Capabilities) != 0 {
 		t.Fatalf("%v %v %v", info, node, caps)
 	}
 }

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   deriveSessionRunState,
   toUuid,
@@ -14,10 +14,12 @@ import {
   type LinkPreviewWatching,
   type LinkPreviewWiki,
   type LinkPreviewsResponse,
+  type RunStatus,
   type WikiAnchorInput,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { readProjectPanorama } from '../projects/project-panorama';
+import { legacySessionStatusSql } from '../sessions/session-legacy-words';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { currentWikiRollout, wikiOnFor } from '../wiki/wiki-rollout';
@@ -277,7 +279,7 @@ export class LinkPreviewsService {
         SELECT DISTINCT ON (s.task_id)
                s.task_id AS "taskId",
                (count(*) OVER (PARTITION BY s.task_id))::int AS "runs",
-               s.status, s.end_reason AS "endReason", s.num_turns AS "numTurns",
+               ${legacySessionStatusSql('s')} AS "status", s.end_reason AS "endReason", s.num_turns AS "numTurns",
                s.finished_at AS "endedAt"
           FROM session s
          WHERE s.owner_id = ${ownerId}::uuid

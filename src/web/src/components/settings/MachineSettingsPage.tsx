@@ -141,6 +141,7 @@ import { useToast } from '../../lib/toast';
 import { MachineResources } from './MachineResources';
 import { MachineSecrets } from './MachineSecrets';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../ui/Tooltip';
 import './Settings.css';
 
 /** What this page reads of a workspace: its row, and what Needs Attention and the disk bar read. */
@@ -312,7 +313,11 @@ export function MachineSettingsPage() {
   // into the runner list at once, so a control doesn't snap back to the old number while the save lands.
   const capacityMut = useMutation({
     mutationFn: (patch: { maxConcurrent?: number; burstConcurrent?: number; minFreeDiskMb?: number | null }) =>
-      api(`/runners/${runnerId}`, { method: 'PATCH', body: patch }),
+      api<{ notice?: string }>(`/runners/${runnerId}`, { method: 'PATCH', body: patch }),
+    // A managed runner's Max Concurrent is at most what its memory allows: the server says when it lowered the value.
+    onSuccess: (saved) => {
+      if (saved?.notice) message.info('Max Concurrent lowered', saved.notice);
+    },
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: ['runners'] });
       const previous = qc.getQueryData<Runner[]>(['runners']);
@@ -773,20 +778,22 @@ export function MachineSettingsPage() {
           <Menu
             align="end"
             items={kebab}
+            tooltip="Actions"
             trigger={
-              <Button ref={actionsButton} className="machine-more" icon={<MoreOutlined />} title="Actions" aria-label="Actions" />
+              <Button ref={actionsButton} className="machine-more" icon={<MoreOutlined />} aria-label="Actions" />
             }
           />
         </div>
         {(location || metaline.length > 0) && (
           <div className="machine-metaline">
             {location && runner.region && (
-              <span
-                data-testid="machine-location"
-                title={claudeRegionChecked(ago(runner.region.checkedAt, nowMs), runner.region.name, runner.region.viaProxy)}
-              >
-                {location}
-              </span>
+              <Tooltip content={claudeRegionChecked(ago(runner.region.checkedAt, nowMs), runner.region.name, runner.region.viaProxy)} side="bottom" align="start" delay={TEXT_TOOLTIP_DELAY_MS}>
+                <span
+                  data-testid="machine-location"
+                >
+                  {location}
+                </span>
+              </Tooltip>
             )}
             {location && metaline.length > 0 && RUNNER_LINE_SEPARATOR}
             {metaline.join(RUNNER_LINE_SEPARATOR)}
@@ -1100,6 +1107,7 @@ export function MachineSettingsPage() {
                   key={workspace.id}
                   to={`/settings/workspaces/${workspace.id}`}
                   className="machine-workspace-row"
+                  data-row-focus=""
                   data-workspace-id={workspace.id}
                 >
                   <SettingsRow

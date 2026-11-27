@@ -1,5 +1,5 @@
 /**
- * Files → Storage's total (docs/orbit-files-drive-technical-design.md §2.5; files/files.service.ts#driveUsage), over a real
+ * Files → Storage's total (docs/drive-technical-design.md §2.5; files/files.service.ts#driveUsage), over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-usage.pg.spec.ts
@@ -33,7 +33,7 @@ const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
-test('Orbit Files drive: usage — total = drive + other storage, each content once', { skip: !URL, concurrency: 1, timeout: 300_000 }, async (t) => {
+test('Documents drive: usage — total = drive + other storage, each content once', { skip: !URL, concurrency: 1, timeout: 300_000 }, async (t) => {
   const url = URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });

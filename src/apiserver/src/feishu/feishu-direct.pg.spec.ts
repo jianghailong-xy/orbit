@@ -31,7 +31,8 @@ import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { JwtService } from '@nestjs/jwt';
-import { RunStatus, SessionDispatchOrigin, SessionRunSource, type PrismaClient } from '@prisma/client';
+import { SessionDispatchOrigin, SessionRunSource, type PrismaClient } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -43,6 +44,7 @@ import { encryptSecret } from '../providers/provider-crypto';
 import { feishuDerivedUuid, feishuTurnKey } from './feishu-direct.service';
 import { FEISHU_TEST_OPEN_PLATFORM_ENV } from './feishu-open-platform';
 import { FakeOpenPlatform, type FakeConnection, type FakeRequest } from './test-support/fake-open-platform';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY = `feishu-direct-${randomUUID()}`;
@@ -178,7 +180,7 @@ test('Feishu: the owner replies to a session and starts one from their direct me
   /** A session parked in `status` on the owner's runner, as one that ran a turn. */
   const parked = async (title: string, status: RunStatus) => db.session.create({
     data: {
-      ownerId, creatorId: ownerId, workspaceId: main.id, assignedRunnerId: runnerId, title, prompt: title, provider: 'claude', status,
+      ownerId, creatorId: ownerId, workspaceId: main.id, assignedRunnerId: runnerId, title, prompt: title, provider: 'claude', turnState: turnStateOfWord(status),
       numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${randomUUID()}`,
       dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL,
       ...(status === RunStatus.SUCCEEDED ? { completedAt: new Date() } : {}),

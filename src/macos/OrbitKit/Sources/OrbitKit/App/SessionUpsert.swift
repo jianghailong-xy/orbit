@@ -16,7 +16,7 @@ public extension Session {
     ///
     /// Only the fields the summary carries are replaced. Everything the slim payload omits — the
     /// preview line (`lastAssistantText` / `lastToolUse` / `lastUserText`), tags, pin, runner,
-    /// background count (and how much of it is work in flight), whether a self-driven turn is
+    /// how much of the background work is a job with an end, whether a self-driven turn is
     /// generating, error text — is preserved from this row, which is what makes applying the event
     /// non-destructive; those fields stay the periodic snapshot's job. The rolling recap beside the
     /// previews is carried, and owns its field outright: null in the summary clears the row's.
@@ -97,7 +97,11 @@ public extension Session {
             coordinatorHandoff: summary.coordinatorHandoff,
             coordinatorHandoffReceived: summary.coordinatorHandoffReceived,
             // Owned by the summary like the handoff: the summary that ends a compaction is a null.
-            enginePhase: summary.enginePhase
+            enginePhase: summary.enginePhase,
+            // Owned by the summary: they are the Background mark's inputs, so a job that starts or ends has
+            // to show on the row without waiting for the next snapshot. An older server sends neither.
+            activity: summary.activity,
+            runningBgCount: summary.runningBgCount
         )
         row.phase = summary.phase
         row.released = summary.released
@@ -210,7 +214,10 @@ public extension Session {
                          // Doubly optional for the same reason: `.some(nil)` is "no handoff".
                          coordinatorHandoff: SessionCoordinatorHandoff?? = nil,
                          coordinatorHandoffReceived: SessionCoordinatorHandoffReceived?? = nil,
-                         enginePhase: String?? = nil) -> Session {
+                         enginePhase: String?? = nil,
+                         // Doubly optional: `.some(nil)` is "doing nothing beyond its status".
+                         activity: String?? = nil,
+                         runningBgCount: Int? = nil) -> Session {
         let mergedProjectId = projectId ?? self.projectId
         let mergedProjectTitle = mergedProjectId == nil ? nil : (projectTitle ?? self.projectTitle)
         var merged = Session(id: id,
@@ -254,7 +261,7 @@ public extension Session {
                 lastUserFromExternal: lastUserFromExternal,
                 recapText: recapText ?? self.recapText,
                 recapAt: recapAt ?? self.recapAt,
-                runningBgCount: runningBgCount,
+                runningBgCount: runningBgCount ?? self.runningBgCount,
                 // Read off this row like the fields above: the summary never carries it, so an
                 // event must not be able to stop the background glyph breathing mid-job.
                 runningBgJobCount: runningBgJobCount,
@@ -262,8 +269,7 @@ public extension Session {
                 runningSubagentCount: runningSubagentCount,
                 runningSubagentTitle: runningSubagentTitle,
                 engineTurnActive: engineTurnActive,
-                // The list's, which no event carries either.
-                activity: activity,
+                activity: activity ?? self.activity,
                 error: error,
                 endReason: endReason,
                 agent: agent ?? self.agent,

@@ -106,13 +106,16 @@ public struct SessionLine: Equatable, Sendable {
         }
         // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever
         // else it left running — not a background process (contract §9.2). Said in the strip's own
-        // line, so the row and the strip above its composer read the same (web parity).
-        if live, let watching, s.effectiveRunState == .awaitingInput {
+        // line, so the row and the strip above its composer read the same (web parity). Not for a
+        // session the server calls IDLE: a wake to come needs no words of its own (the owner,
+        // 2026-11-27; web `resumeWords`).
+        let idle = SessionDisplay.state(s.displayFacts) == .idle
+        if live, !idle, let watching, s.effectiveRunState == .awaitingInput {
             return SessionLine(text: watching.rowLine, tone: .watching)
         }
         // The same place for a wait the server reports and this caller holds no watch for — a
         // scheduled wake-up, an armed auto-retry (web `resumeWords`).
-        if live, s.resumesOnItsOwn {
+        if live, !idle, s.resumesOnItsOwn {
             return SessionLine(text: SessionHeader.waitingToResume, tone: .watching)
         }
         // A message that never got an answer — the turn was interrupted, or failed, before any
@@ -140,7 +143,9 @@ public struct SessionLine: Equatable, Sendable {
         // Nothing to preview at all (a run that died before even its user turn was recorded, or an
         // older row from before the server kept the pending message). Fall back to the run's own
         // state word — the same one the console header shows — so the row still says what happened
-        // instead of collapsing.
+        // instead of collapsing. An IDLE session something will resume says Idle, not the older
+        // "Waiting to resume" (the owner, 2026-11-27; web `statusLabel`, Android `statusWord`).
+        if idle && s.resumesOnItsOwn { return SessionLine(text: SessionDisplayState.idle.word, tone: .preview) }
         return SessionLine(text: SessionHeader.statusWord(for: s), tone: .preview)
     }
 

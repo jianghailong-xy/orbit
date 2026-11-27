@@ -93,11 +93,14 @@ type evalStep struct {
 type evalTurnLog struct {
 	Index int
 	// Spec is the scenario turn this log turn belongs to: a follow-up shares its turn's Spec.
-	Spec      int
-	Prompt    string
-	Mode      string
-	Before    string // "", "compact" or "resume": what happened to the context before this turn
-	FollowUp  bool   // the person's canned answer to a question the agent ended its previous turn with
+	Spec     int
+	Prompt   string
+	Mode     string
+	Before   string // "", "compact" or "resume": what happened to the context before this turn
+	FollowUp bool   // the person's canned answer to a question the agent ended its previous turn with
+	// Wake is the control plane's turn for owner waits a call handed to a runner-hosted job, which ended
+	// (agent_eval_wake_test.go): its words are the wake block, not the person's.
+	Wake      bool
 	Steps     []evalStep
 	Reply     string
 	Compacted bool // the engine reported a compaction during or before this turn

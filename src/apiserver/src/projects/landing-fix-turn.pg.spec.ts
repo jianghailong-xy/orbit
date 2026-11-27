@@ -6,11 +6,11 @@ import {
   CreatorType,
   Prisma,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus, uuidToBase62, type IntegrationJobCommand } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -44,6 +44,8 @@ import { landingFixMessage, landingFixTurnId, readLandingFixFacts } from './land
 import { canonicalRepoUrl } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { SessionAttemptService } from './session-attempt.service';
+import { wordOf } from '../test-support/session-word';
+import { turnStateFilter } from '../sessions/session-turn-state';
 
 /**
  * W6 (docs/project-integration-line-contract.md §12.5, revision 42, ruling R3, R2): a failed landing
@@ -189,7 +191,7 @@ async function world(stack: Stack, label: string, line: Line = 'PROJECT_BRANCH')
     data: {
       id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
       title: `coordinator: ${label}`, prompt: `coordinator: ${label}`, provider: 'claude',
-      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      turnState: null, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       titleManagedByProject: true, numTurns: 1, startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
     },
   });
@@ -246,7 +248,7 @@ async function finishedTask(
     data: {
       id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId, workspaceId: w.workspaceId,
       assignedRunnerId: w.runnerId, title: `work ${label}`, prompt: 'work', provider: 'claude',
-      status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'IN_FLIGHT', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       isolationStatus: 'worktree', branch: `orbit/${label}`, branchSha: sha('a'), baseSha: sha('b'), numTurns: 1,
       startedAt: minutesAgo(30), createdAt: minutesAgo(30), runtimeSessionId: randomUUID(),
       changedFiles: [{ path: 'src/a.ts', status: 'M', additions: 1, deletions: 0 }] as Prisma.InputJsonValue,
@@ -255,7 +257,7 @@ async function finishedTask(
   const t = { taskId, sessionId, title };
   if (beforeDone) await beforeDone(t);
   // Its turn ends and it parks, idle on its branch.
-  await stack.db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+  await stack.db.session.update({ where: { id: sessionId }, data: { turnState: null } });
   const receipt = await stack.confirmations.decide(
     w.ownerId, taskId, { door: 'USER', userId: w.ownerId }, { decision: 'CONFIRM' } as never,
   );
@@ -415,13 +417,15 @@ test('W6: a conflict\'s landing-fix turn names the phase, the commit and the fil
     const w = await world(stack, 'words-conflict');
     const t = await finishedTask(stack, w, 'words-conflict');
     const command = await claimJob(stack, w, 'LAND_TASK');
-    const itemId = await fail(stack, w, command, conflict('MAIN_SYNC'));
+    // A REBASE conflict: since revision 45 a MAIN_SYNC conflict is the line's and never reaches the work session
+    // (docs/design/project-line-upstream-sync.md §4.2; line-sync-hold.pg.spec.ts).
+    const itemId = await fail(stack, w, command, conflict('REBASE'));
     await deliver(stack, w, itemId);
     const [turn, ...more] = await turnOf(stack, t.sessionId, command.jobId);
     assert.deepEqual(more, []);
     const target = `project/${w.projectId}`;
     assert.ok(turn!.content!.includes(
-      `Conflict while syncing main into ${target} at ${sha('c')}:\nsrc/a.ts, src/b.ts\n`,
+      `Conflict while rebasing onto ${target} at ${sha('c')}:\nsrc/a.ts, src/b.ts\n`,
     ), turn!.content!);
     const item = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: itemId } });
     assert.equal(landingFixMessage((await readLandingFixFacts(stack.db, {
@@ -493,7 +497,7 @@ test('W6: a session that ended because its task was done is revived, and R2 clea
       await stack.db.session.create({
         data: {
           ownerId: w.ownerId, creatorId: w.ownerId, taskId: busy.id, workspaceId: w.workspaceId,
-          assignedRunnerId: w.runnerId, title: 'busy', prompt: 'busy', provider: 'claude', status: RunStatus.RUNNING,
+          assignedRunnerId: w.runnerId, title: 'busy', prompt: 'busy', provider: 'claude', turnState: 'IN_FLIGHT',
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true, startedAt: new Date(),
         },
       });
@@ -514,7 +518,7 @@ test('W6: a session that ended because its task was done is revived, and R2 clea
       assert.equal(session.endReason, null);
       assert.equal(session.cancelRequestedAt, null, 'the revive kept the end its task\'s DONE asked for');
       assert.equal(session.archivedAt, null);
-      assert.equal(session.status, RunStatus.PENDING);
+      assert.equal(wordOf(session), RunStatus.PENDING);
       assert.equal(session.assignedRunnerId, w.runnerId, 'the revival moved the session to another runner');
       // R2: cleared exactly with the turn; the task is still DONE.
       assert.deepEqual(await identityOf(stack, t.taskId), { status: TaskStatus.DONE, ...CLEARED });
@@ -610,10 +614,10 @@ test('1449: the projection trigger still refuses a managed task\'s unverified la
 /** The other ways a session ends, written onto a work session that was handed the failure. */
 const OTHER_ENDINGS: Record<string, Prisma.SessionUpdateInput> = {
   ended: { endReason: 'ended' },
-  cancelled: { status: RunStatus.CANCELLED, endReason: 'cancelled' },
+  cancelled: { turnState: null, endReason: 'cancelled' },
   completed: { endReason: 'completed', completedAt: new Date() },
   deleted: { endReason: 'deleted', deletedAt: new Date() },
-  failed: { status: RunStatus.FAILED, endReason: null },
+  failed: { turnState: null, endReason: null },
 };
 
 for (const [ending, write] of Object.entries(OTHER_ENDINGS)) {
@@ -636,7 +640,7 @@ for (const [ending, write] of Object.entries(OTHER_ENDINGS)) {
         assert.deepEqual(await turnOf(stack, t.sessionId, command.jobId), [], `a session ${ending} was handed the turn`);
         const after = await stack.db.session.findUniqueOrThrow({ where: { id: t.sessionId } });
         assert.ok(after.finishedAt, `a session ${ending} was revived`);
-        assert.equal(after.status, before.status);
+        assert.equal(wordOf(after), wordOf(before));
         assert.equal(after.endReason, before.endReason);
         assert.deepEqual(await identityOf(stack, t.taskId), identity, 'a refused delivery touched the identity');
         // W7 (R3): handed back SESSION_ENDED, and from then the coordinator's, delivered to it.
@@ -753,8 +757,8 @@ async function acrossTheTurn(label: string, withAttempt: boolean): Promise<void>
     await stack.db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
       await tx.session.updateMany({
-        where: { id: t.sessionId, status: { in: [RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
-        data: { status: RunStatus.RUNNING, inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation },
+        where: { id: t.sessionId, ...turnStateFilter(['QUEUED', null]) },
+        data: { turnState: 'IN_FLIGHT', inboxLeaseOwner: leaseOwner, inboxLeaseGeneration: generation },
       });
       await tx.inboxLeaseGeneration.updateMany({
         where: { sessionId: t.sessionId, retiredAt: null }, data: { retiredAt: new Date() },

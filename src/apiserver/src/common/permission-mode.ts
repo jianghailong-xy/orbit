@@ -65,7 +65,7 @@ export function resolvePermissionMode(
  * running in (session.actual_permission_mode, sessions/actual-permission-mode.ts), not the stored intent.
  *
  * The fallback, when no actual mode is recorded, is the stored mode resolved against the account default. Only a
- * session claimed before migration 1437 that has not been claimed since has none: every claim records the mode it
+ * session claimed before migration 1735 that has not been claimed since has none: every claim records the mode it
  * hands the runner, and a session that is calling has been claimed. For those few the stored mode is what their
  * claim handed the runner except where a model lacked Auto, and it is the comparison these rules made before R3, so
  * nothing they could do yesterday is refused or newly allowed by the fallback.

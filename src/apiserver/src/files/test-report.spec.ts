@@ -1,5 +1,5 @@
 /**
- * The two report readers of `file_upload --as test-report` (docs/orbit-files-design.md §2.5), against reports real runs
+ * The two report readers of `file_upload --as test-report` (docs/drive-design.md §2.5), against reports real runs
  * wrote. Each file in test-report-samples is one run's output with bodies taken out and nothing else changed: no case
  * was removed and no count edited.
  *

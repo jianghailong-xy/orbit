@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
-import { isAccountEngine, RunStatus, type AccountEngine, type RunnerEngineHealth } from '@orbit/shared';
+import { isAccountEngine, type AccountEngine, type RunnerEngineHealth } from '@orbit/shared';
 import { ACCOUNT_ENGINES, engineKeepsAccounts } from '../common/runner-engines';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { ACCOUNT_CHOICE, accountsOn, type AccountRunner, type ActiveSessions } from './account';
 import { isBuiltinProvider } from './custom-provider';
 import { accountBeforeDispatch, runAccount, type AccountMove, type AccountWorkspace } from './plan-usage-accounts';
@@ -40,10 +41,11 @@ export async function activeSessionsOn(
       assignedRunnerId: { in: choosing.map((runner) => runner.id) },
       deletedAt: null,
       OR: [
-        { status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } },
+        turnStateFilter(['QUEUED', 'IN_FLIGHT']),
         { retryAt: { not: null } },
+        // Held and idle (parked, or its turn abandoned), with a recent turn.
         {
-          status: { in: [RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
+          AND: [turnStateFilter([null, 'ABANDONED'])],
           lastTurnAt: { gte: new Date(now.getTime() - ACTIVE_SESSION_WINDOW_MS) },
         },
       ],

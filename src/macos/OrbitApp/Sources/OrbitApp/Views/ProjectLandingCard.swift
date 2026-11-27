@@ -64,6 +64,9 @@ struct ProjectLandingCardView: View {
             } else {
                 pressBody
             }
+            if let pullRequest = card.pullRequest, !several {
+                LandingPullRequestBlock(pullRequest: pullRequest, main: card.target ?? "main")
+            }
             if several {
                 jobRows
                 if let target = card.target { targetLine(target) }

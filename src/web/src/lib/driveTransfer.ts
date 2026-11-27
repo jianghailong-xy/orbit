@@ -1,5 +1,6 @@
 /**
- * An agent's transfers to and from Orbit Files (`drive_put` / `drive_get`), as the chat's transfer card draws them
+ * An agent's transfers to and from Drive (`drive_put` / `drive_get`, `documents_put` / `documents_get` while Drive was
+ * called Drive), as the chat's transfer card draws them
  * (DriveTransferCard, board docs/mocks/agent-drive-transfer).
  *
  * While a call runs, the runner sends its bytes as the call's live `tool_output`, one sentence restating the whole
@@ -13,6 +14,9 @@ export type DriveTransferKind = 'put' | 'get';
 const TOOLS: Record<string, DriveTransferKind> = {
   mcp__orbit__drive_put: 'put',
   mcp__orbit__drive_get: 'get',
+  // Their names while Drive was called Drive, which stored transcripts carry.
+  mcp__orbit__documents_put: 'put',
+  mcp__orbit__documents_get: 'get',
 };
 
 export function driveTransferKind(toolName: string): DriveTransferKind | null {
@@ -32,10 +36,11 @@ export function parseDriveProgress(content: unknown): { sent: number; size: numb
   return { sent: Math.min(sent, size), size };
 }
 
-/** A drive path as the owner reads it in Files: `~/Files/a` and the mount's `/run/orbit-files/drive/a` are `/a`. */
+/** A drive path as the owner reads it: `~/Drive/a`, `/home/orbit/Drive/a` and the mount's `/run/orbit-drive/drive/a`
+ * (or `/run/orbit-documents/drive/a` and `/run/orbit-files/drive/a` in an older Pod) are `/a`. */
 export function driveDisplayPath(raw: unknown): string {
   let p = typeof raw === 'string' ? raw.trim() : '';
-  for (const prefix of ['~/Files', '/run/orbit-files/drive']) {
+  for (const prefix of ['~/Drive', '/home/orbit/Drive', '/run/orbit-drive/drive', '/run/orbit-documents/drive', '/run/orbit-files/drive']) {
     if (p === prefix || p.startsWith(`${prefix}/`)) p = p.slice(prefix.length);
   }
   if (!p.startsWith('/')) p = `/${p}`;
@@ -53,7 +58,7 @@ export type DriveTransferFile = {
   sent: number;
   /** Null until the call has said how big the file is. */
   size: number | null;
-  /** `orbit-drive:<id>` once an upload is in. */
+  /** `orbit-drive:<id>` (`orbit-document:<id>` while Drive was called Drive) once an upload is in. */
   link?: string;
   error?: string;
   startedAt?: number;
@@ -81,15 +86,24 @@ export function driveTransferFile(input: {
     endedAt: timeOf(input.resultTs),
   };
   if (input.result) {
-    if (input.result.isError) return { ...file, status: 'failed', error: firstLine(input.result.text) };
-    const answer = parseAnswer(input.result.text);
+    const parsed = parseAnswer(input.result.text);
+    // A runner that answers with a receipt puts the call's own answer under `entity`, and says a refusal in `error`.
+    const refused = parsed.receiptVersion !== undefined && parsed.ok === false;
+    if (input.result.isError || refused) {
+      const said = (parsed.error as { message?: unknown } | undefined)?.message;
+      return { ...file, status: 'failed', error: typeof said === 'string' && said ? said : firstLine(input.result.text) };
+    }
+    const answer =
+      parsed.receiptVersion !== undefined && parsed.entity && typeof parsed.entity === 'object'
+        ? (parsed.entity as Record<string, unknown>)
+        : parsed;
     const size = typeof answer.sizeBytes === 'number' ? answer.sizeBytes : null;
     return {
       ...file,
       status: 'done',
       sent: size ?? 0,
       size,
-      ...(typeof answer.link === 'string' && answer.link.startsWith('orbit-drive:') ? { link: answer.link } : {}),
+      ...(typeof answer.link === 'string' && /^orbit-(?:document|drive):/.test(answer.link) ? { link: answer.link } : {}),
     };
   }
   const progress = parseDriveProgress(input.progress);
@@ -194,7 +208,7 @@ export function transferRate(samples: ReadonlyArray<{ at: number; bytes: number 
   return Math.max(0, (last.bytes - first.bytes) / (span / 1000));
 }
 
-/** As the Files page's upload tray says it (FilesUploadTray). */
+/** As the Drive page's upload tray says it (DriveUploadTray). */
 export function timeLeftText(leftBytes: number, rate: number): string | null {
   if (!rate) return null;
   const seconds = leftBytes / rate;

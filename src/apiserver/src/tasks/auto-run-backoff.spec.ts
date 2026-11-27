@@ -11,13 +11,15 @@ import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { recordingQueryRaw } from './query-raw-test-helper';
+import { failureClauseOf, matchesFailureFilter } from '../test-support/failure-kind-filter-double';
 
 interface FailureHistory {
   taskId: string;
   /** Failure count, when the failures' text doesn't matter. */
   failed?: number;
-  /** `session.error` of each failed run, when it does (usage-limit filtering); null records none. */
-  errors?: Array<string | null>;
+  /** `session.error` of each failed run, when it does (usage-limit filtering); null records none. A run whose
+   *  runner classified its failure gives its stored kind beside it. */
+  errors?: Array<string | null | { error: string | null; failureKind: string | null }>;
   lastFailedAt: Date;
 }
 
@@ -80,15 +82,12 @@ function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
   return new QueueService(prisma as never, {} as never, planUsage as never);
 }
 
-type ErrorClause = Array<{ error: { contains: string } }>;
 type GroupByArgs = {
   where: {
     taskId: { in: string[] };
-    /**
-     * The usage-limit query: count only failures matching a marker. The budget query: count a
-     * failure that recorded no error text, or one matching no marker.
-     */
-    OR?: Array<{ error: { contains: string } | null } | { NOT: { OR: ErrorClause } }>;
+    /** Released by a failure, and the failure-kind clause: the budget query counts what is not a usage limit, the
+     *  blind brake's query only what is (common/run-failure-kind-filter.ts). */
+    AND?: unknown[];
   };
 };
 
@@ -159,27 +158,17 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
     },
     session: {
       groupBy: async ({ where }: GroupByArgs) => {
-        const clauses = where.OR ?? [];
-        const included = clauses.flatMap((c) =>
-          'error' in c && c.error ? [c.error.contains.toLowerCase()] : []);
-        const excluded = clauses.flatMap((c) =>
-          'NOT' in c ? c.NOT.OR.map((m) => m.error.contains.toLowerCase()) : []);
-        // A NULL `error` matches no marker, and a negated match is not true of it either — so a
-        // query counts one only when it says so.
-        const countsNoText = clauses.some((c) => 'error' in c && c.error === null);
+        // The double answers the failure-kind clause the caller asked, NULLs as Postgres reads them.
+        const clause = failureClauseOf(where);
         // A `failed: n` fixture means n ordinary failures with no usage-limit wording, so it
         // stands in as n empty error strings — counted by the exclusion query, ignored by the
         // inclusion one. Modelling both directions is what lets a test assert that a quota
         // failure and a real failure are held back by different rules.
         const counted = (h: FailureHistory): number => {
           const errors = h.errors ?? Array.from({ length: h.failed ?? 0 }, () => '');
-          return errors.filter((e) => {
-            if (e === null) return countsNoText;
-            const lower = e.toLowerCase();
-            return included.length
-              ? included.some((m) => lower.includes(m))
-              : !excluded.some((m) => lower.includes(m));
-          }).length;
+          return errors
+            .map((e) => (e !== null && typeof e === 'object' ? e : { error: e, failureKind: null }))
+            .filter((row) => matchesFailureFilter(clause, row)).length;
         };
         return history
           .filter((h) => where.taskId.in.includes(h.taskId) && counted(h) > 0)
@@ -459,6 +448,38 @@ test('a genuine failure still counts when quota failures are mixed in', async ()
   );
   await sweep(service);
   // One real failure 30s ago -> still inside the first backoff window.
+  assert.deepEqual(executed, []);
+});
+
+// A runner that classifies its failures (docs/routing-account-health-design.md §5.4): its kind decides, the words
+// only when it sent none. An older runner's runs above are read through the markers exactly as before.
+test("a runner's USAGE_LIMIT kind keeps a run out of the budget even when its words carry no marker", async () => {
+  const { service, executed } = makeService(
+    [],
+    [
+      {
+        taskId: 'task-classified-quota',
+        errors: Array.from({ length: MAX_AUTO_RUN_FAILURES + 3 }, () => ({
+          error: 'Kimi Code failed this turn (QuotaExhausted)',
+          failureKind: 'USAGE_LIMIT',
+        })),
+        lastFailedAt: agoMs(30_000),
+      },
+    ],
+    { provider: 'codex', planUsage: quotaExhausted('codex', inHours(-1)) },
+  );
+  await sweep(service);
+  assert.deepEqual(executed, ['task-classified-quota']);
+});
+
+test("a runner's kind other than USAGE_LIMIT counts, even when its words read as a quota", async () => {
+  const { service, executed } = makeService(
+    [],
+    [{ taskId: 'task-classified-other', errors: [{ error: QUOTA_ERROR, failureKind: 'REQUEST_REFUSED' }], lastFailedAt: agoMs(30_000) }],
+    { provider: 'codex', planUsage: quotaExhausted('codex', inHours(-1)) },
+  );
+  await sweep(service);
+  // One counted failure 30s ago -> inside the first backoff window.
   assert.deepEqual(executed, []);
 });
 

@@ -15,7 +15,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { RunStatus, RunnerStatus } from '@prisma/client';
+import { RunnerStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -28,6 +29,8 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { QueueService } from './queue.service';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { WORD_SELECT, wordOf } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const PROVIDERS = [AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.OPENCODE, AgentProvider.ANTIGRAVITY].join(',');
@@ -83,7 +86,7 @@ suite('a drain-scoped claim, on real PostgreSQL', async (t) => {
     const at = new Date(Date.UTC(2026, 10, 12, 4, minute++));
     const session = await db.session.create({
       data: {
-        title, prompt: 'hello', status, ownerId, creatorId: ownerId, workspaceId: on.workspaceId,
+        title, prompt: 'hello', turnState: turnStateOfWord(status), ownerId, creatorId: ownerId, workspaceId: on.workspaceId,
         assignedRunnerId: on.runnerId, provider: AgentProvider.CLAUDE, providerBuiltin: true,
         engine: AgentProvider.CLAUDE, usesRuntimeDefaultModel: true, createdAt: at, lastTurnAt: at,
       },
@@ -91,7 +94,7 @@ suite('a drain-scoped claim, on real PostgreSQL', async (t) => {
     });
     return session.id;
   }
-  const status = async (id: string) => (await db.session.findUniqueOrThrow({ where: { id }, select: { status: true } })).status;
+  const status = async (id: string) => wordOf((await db.session.findUniqueOrThrow({ where: { id }, select: WORD_SELECT })));
   // The route as Nest calls it, its query parameter last. Typed loosely so this spec compiles, and goes red,
   // against a controller that has no drainScope parameter yet.
   const claimRoute = runnerApi.claim.bind(runnerApi) as (...args: unknown[]) => Promise<{ sessionId: string } | null>;

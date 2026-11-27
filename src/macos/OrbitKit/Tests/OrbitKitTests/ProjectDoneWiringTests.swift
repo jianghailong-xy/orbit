@@ -284,4 +284,47 @@ final class ProjectDoneWiringTests: XCTestCase {
                       "nobody asked: the owner's own row is a grey hint, title and dot alike")
         XCTAssertTrue(own.contains("Text(ProjectDone.notAskedYet)"))
     }
+
+    // MARK: Settings › Translation of the project's words
+
+    /// The done card (in the conversation and over the page) is handed the project as drawn, with one
+    /// foot for the project's words and the request together; the why-not-done card draws its rows
+    /// in the owner's language with its own foot; every press still reads the console's or page's
+    /// own subject.
+    func testTheDoneCardsDrawTheProjectsTranslatedWords() throws {
+        let approvals = try source(Self.approvals)
+        let card = code(try section(approvals, from: "private struct ProjectDoneCardView: View {",
+                                    to: "private struct ProjectNotDoneCardView: View {"))
+        XCTAssertTrue(card.contains("subject: subject.shown(owner: owner, showOriginal: showOriginal),"))
+        XCTAssertTrue(card.contains("translationFoot: OwnerCardTranslations.doneCardFoot(subject: subject, request: row, owner: owner,"))
+        let notDone = code(try section(approvals, from: "private struct ProjectNotDoneCardView: View {",
+                                       to: "/// The start card itself"))
+        XCTAssertTrue(notDone.contains("owner: OwnerCardTranslations.ownerLanguage(model.user),"))
+        let sheet = code(try section(try source(Self.projects), from: "private struct ProjectDoneSheet: View {",
+                                     to: "/// The merge check, where a command has room"))
+        XCTAssertTrue(sheet.contains("subject: subject.shown(owner: owner, showOriginal: showOriginal),"))
+        XCTAssertTrue(sheet.contains("translationFoot: OwnerCardTranslations.doneCardFoot(subject: subject, request: row, owner: owner,"))
+        XCTAssertTrue(sheet.contains("onRecord: { await recordDone(subject, row: row, digest: digest) },"),
+                      "Record as done reads the original subject")
+        let cards = try source(Self.cards)
+        let done = code(try section(cards, from: "struct ProjectDoneCard: View {",
+                                    to: "struct ProjectDoneGapList: View {"))
+        XCTAssertTrue(done.contains("if request == nil { TranslationFootView(parts: translationFoot) { _ in onFlipTranslation() } }"),
+                      "the card nobody asked for carries the foot under its meta line")
+        let why = code(try section(cards, from: "struct ProjectNotDoneCard: View {",
+                                   to: "struct ProjectDoneRequestRow: View {"))
+        XCTAssertTrue(why.contains("TranslationFootView(parts: subject.whyNotDoneFoot(why, owner: owner, showOriginal: showOriginal)) { _ in"))
+        XCTAssertTrue(why.contains("let item = subject.shown(owner: owner, showOriginal: showOriginal) .criterion(criterion.definitionId)"))
+
+        // The project page's own Acceptance criteria list: each row's words as drawn, one foot under
+        // the rows, and the row's presses still handed the criterion itself.
+        let page = try source(Self.projects)
+        let list = code(try section(page, from: "private func criteriaSection(", to: "private func criterionRow("))
+        XCTAssertTrue(list.contains("text: document.criterionText(criterion, owner: owner, showOriginal: criteriaShowOriginal),"))
+        XCTAssertTrue(list.contains("TranslationFootView(parts: document.criteriaTranslationFoot(owner: owner,"))
+        XCTAssertTrue(list.contains("criteriaShowOriginal.toggle()"))
+        let row = code(try section(page, from: "private func criterionRow(", to: "private func confirmationWork("))
+        XCTAssertTrue(row.contains("Text(text).font(.orbitSubtext)"))
+        XCTAssertFalse(row.contains("Text(criterion.text)"), "the row draws the shown words, not the original")
+    }
 }

@@ -43,6 +43,7 @@ Usage:
   orbit project request-start PROJECT_ID [--line LINE] [--automatic[=BOOL]] --max-concurrent-tasks N --why TEXT [options]
   orbit project request-promotion PROJECT_ID --reason TEXT [--json]
   orbit project request-done PROJECT_ID --judgment TEXT (--gaps JSON | --gaps-file -) [--json]
+  orbit project request-reopen PROJECT_ID --why TEXT --planned-work TEXT [--json]
   orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]
   orbit project skip-merge-check PROJECT_ID TASK_ID --reason TEXT [--json]
   orbit project create --title TITLE [options]
@@ -286,6 +287,20 @@ Options:
                         "coordinatorChecked":"...","evidenceRefs":["..."]}]
   --gaps-file -       read the gaps array from stdin
   --json              emit compact JSON
+`,
+	"request-reopen": `orbit project request-reopen — ask the account owner to reopen a DONE or CANCELLED project
+
+Usage:
+  orbit project request-reopen PROJECT_ID --why TEXT --planned-work TEXT [--json]
+
+Run it when a write was refused with PROJECT_REOPEN_REQUIRED and the work changes that project's
+acceptance criteria. It returns at once. When the owner answers you are told: on Reopen, retry your
+write; on a decline, do not ask again; tell the person. Any session may ask (ORBIT_SESSION_ID).
+
+Options:
+  --why TEXT           why the project should be reopened — shown to the owner on the card (required)
+  --planned-work TEXT  what you will do once it is reopened (required)
+  --json               emit compact JSON
 `,
 	"resolve-blocker": `orbit project resolve-blocker — end one open blocker, saying why it no longer blocks
 
@@ -583,6 +598,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectRequestStart(args[1:], out)
 	case "request-done":
 		return cliProjectRequestDone(args[1:], in, out)
+	case "request-reopen":
+		return cliProjectRequestReopen(args[1:], out)
 	case "merge-evidence":
 		return cliProjectMergeEvidence(args[1:], in, out)
 	case "skip-merge-check":
@@ -1078,6 +1095,44 @@ func cliProjectRequestDone(args []string, in io.Reader, out io.Writer) error {
 	raw, err := t.requestProjectDone(sessionID, id, body)
 	if err != nil {
 		return errors.New(projectDoneRequestRefusal(err))
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliProjectRequestReopen asks the account owner to reopen a DONE or CANCELLED project: the CLI half
+// of project_request_reopen. It acts for the session it runs in, so a terminal outside one is told so
+// here rather than by a 400.
+func cliProjectRequestReopen(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project request-reopen")
+	why := fs.String("why", "", "why the project should be reopened — shown to the owner on the card")
+	planned := fs.String("planned-work", "", "what you will do once it is reopened")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	sessionID := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+	if sessionID == "" {
+		return fmt.Errorf("orbit project request-reopen asks as the session that needs the project " +
+			"reopened (ORBIT_SESSION_ID), and there is none here: run it from inside that session")
+	}
+	body, err := projectReopenRequestBody(map[string]interface{}{"why": *why, "plannedWork": *planned})
+	if err != nil {
+		return err
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.requestProjectReopen(sessionID, id, body)
+	if err != nil {
+		return errors.New("request reopen failed: " + err.Error())
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

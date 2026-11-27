@@ -3,7 +3,7 @@ import { api, ApiError, authedFetch } from '../api';
 import { sha256Hex } from './sha256';
 
 /**
- * Resumable uploads into the drive (docs/orbit-files-drive-technical-design.md §4.1, board 02-web frame 3): each file is
+ * Resumable uploads into the drive (docs/drive-technical-design.md §4.1, board 02-web frame 3): each file is
  * opened with `POST /drive/uploads`, sent as chunks of at most 8 MiB with `PUT /drive/uploads/:id/chunks/:idx`, and
  * completed. What has arrived is asked of the server (`GET /drive/uploads/:id`), never assumed, so an upload goes on
  * from where it stopped: after a dropped connection on its own, and after a reload once the same file is picked again

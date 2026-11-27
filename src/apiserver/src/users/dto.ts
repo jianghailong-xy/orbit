@@ -207,6 +207,16 @@ export class UpdatePreferencesDto {
   subagentBlockedProviders?: string[];
 
   /**
+   * Whether a task pinned to an account that account health has set aside may run elsewhere
+   * (docs/routing-account-health-design.md §7.5, owner decision Q7 as amended): provider first, then engine, the
+   * tier kept, a named model never swapped, the providers blocked above never reached. One setting for the account,
+   * with no per-task override. Default OFF (absent = off): the pinned task holds, with the pin named.
+   */
+  @IsOptional()
+  @IsBoolean()
+  relaxBlockedPins?: boolean;
+
+  /**
    * How many tasks a session may create before its creates are put to the owner on a card
    * (runner-api/session-create-allowance.ts). Absent = unchanged; null = back to the default; 0 = every create
    * is carded.

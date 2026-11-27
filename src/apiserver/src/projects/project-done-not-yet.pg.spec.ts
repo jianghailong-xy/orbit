@@ -17,11 +17,11 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import {
   Prisma,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   type PrismaClient,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { DoneRequest, RequestProjectDoneBody } from '@orbit/shared';
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
@@ -147,7 +147,7 @@ test('the owner sends a done request back with a note', {
       title: 'Coordinating the closing question',
       prompt: 'Coordinate the closing question',
       provider: 'claude',
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
       runtimeSessionId: randomUUID(),

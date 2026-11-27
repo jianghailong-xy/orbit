@@ -157,6 +157,16 @@ the runner credential with no session header still writes the column, which the 
 answers on its next edge. As everywhere on this page, the record says a signed-in owner credential
 sent it, not that a person did.
 
+That press can also be made from a card (`docs/project-reopen-request-design.md` §4). **Ask to reopen a
+project** is any session's, and it is filing only: a session whose write was refused `PROJECT_REOPEN_REQUIRED`
+calls `project_request_reopen`, which files one `PROJECT_REOPEN` owner request per project
+(`POST /runner/projects/:id/reopen-requests`; later askers join it) and writes nothing to the project. The
+card's **Reopen** is `POST /owner-requests/:id/reopen-project` through the owner REST row, and it writes
+exactly the press above: `status: OPEN` with the same 0469 record, under the project's lock, settling every
+pending `PROJECT_REOPEN` of the project in the same transaction. It is refused to a request carrying an acting
+session (403 `REOPEN_OWNER_CHANNEL_ONLY`, so a session never answers its own card, even with the owner's login)
+and to a token (`OWNER_INTERACTIVE`). The **Reopen project** row itself is unchanged.
+
 The project standard-set confirmation row is the N22 addition, and since migration 0245 gave the
 action its one writer, the rule it states is no longer about a role.
 `refuseSessionAuthoredConfirmation` refuses ANY request that carries an acting session — code

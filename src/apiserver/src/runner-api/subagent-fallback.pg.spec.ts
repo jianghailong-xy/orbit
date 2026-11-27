@@ -28,7 +28,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, type Runner, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import type { SubagentAttempt, SubagentDecision } from '@orbit/shared';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Client } from 'pg';
@@ -136,7 +137,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId,
         title: 'fix the flaky test', prompt: 'fix the flaky test', provider: 'claude', engine: 'claude',
-        model: 'claude-sonnet-5-5', effort: 'medium', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        model: 'claude-sonnet-5-5', effort: 'medium', turnState: null, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       },
     });
@@ -366,7 +367,7 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
       data: {
         id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machineId,
         title: 'fix the flaky test', prompt: 'fix the flaky test', provider: 'claude', engine: 'claude',
-        model: 'claude-sonnet-5-5', effort: 'medium', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        model: 'claude-sonnet-5-5', effort: 'medium', turnState: null, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       },
     });

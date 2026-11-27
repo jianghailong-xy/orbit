@@ -16,6 +16,7 @@ import {
   deriveSessionLifecycleState,
   deriveSessionRunState,
   MAX_PROMPT_CHARS,
+  PROJECT_REOPEN_KIND,
   SessionLifecycleState,
   SessionRunState,
   WATCH_LIMITS,
@@ -24,9 +25,11 @@ import {
 import { sessionHasEnded } from '../common/session-release';
 
 import { ownerRequestResolutionTurn, ownerRequestTurnClientId } from '../owner-requests/owner-request';
+import { projectReopenAskers } from '../owner-requests/project-reopen';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { legacySessionStatus, LEGACY_STATUS_SELECT } from '../sessions/session-legacy-words';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import {
   countWatchDeadLetter,
@@ -192,9 +195,8 @@ export function watchEndTurnClientId(watchId: string, end: BareWatchEnd): string
 }
 
 const OBSERVER_SELECT = {
-  status: true,
-  finishedAt: true,
-  endReason: true,
+  // sessionHasEnded's, and the facts the run state in a refusal is derived from (session-legacy-words.ts).
+  ...LEGACY_STATUS_SELECT,
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
@@ -454,7 +456,8 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         ownerRequest: {
           select: {
             id: true, ownerId: true, askedBySessionId: true, kind: true, state: true, title: true,
-            options: true, secretSpec: true, answer: true, resolutionNote: true, resolvedAt: true, repoUrlNorm: true,
+            options: true, secretSpec: true, answer: true, resolutionNote: true, resolvedAt: true, repoUrlNorm: true, changeSpec: true,
+            payload: true,
             secretGrant: { select: { exposure: true, expiresAt: true } },
           },
         },
@@ -527,12 +530,29 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
   ): Promise<WatchDeliveryOutcome> {
     const asker: DeliveredWatch = { id: request.id, ownerId: request.ownerId, observerSessionId: request.askedBySessionId, mode: 'ONE_SHOT' };
     try {
+      // A PROJECT_REOPEN other sessions joined (docs/project-reopen-request-design.md §4.1 step 4): each of them is told
+      // too, under the same key on its own session, before the asking session's turn acknowledges the delivery. A retry
+      // replays the turns already queued, and a joined session whose life is over is skipped, not a failure of the rest.
+      for (const sessionId of joinedAskers(request)) {
+        await this.resumeJoinedAsker(request.ownerId, sessionId, ownerRequestTurnClientId(request.id), ownerRequestResolutionTurn(request));
+      }
       await this.resumeObserver(claim, asker, ownerRequestTurnClientId(request.id), ownerRequestResolutionTurn(request), false, false);
     } catch (error) {
       if (error instanceof DeliveryLeaseLost) return 'LEASE_LOST';
       return this.fail(claim, error);
     }
     return 'DELIVERED';
+  }
+
+  /** One joined asker's turn, outside the delivery's acknowledgement: refused sessions are skipped, faults thrown. */
+  private async resumeJoinedAsker(ownerId: string, sessionId: string, clientTurnId: string, content: string): Promise<void> {
+    if (observerRefusal(await readObserver(this.prisma, sessionId))) return;
+    try {
+      await this.sessions.createTurn(ownerId, sessionId, { clientTurnId, content, intent: 'NEXT_TURN' });
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof SessionNotSendable || error instanceof BadRequestException) return;
+      throw error;
+    }
   }
 
   private async resumeObserver(
@@ -741,6 +761,12 @@ function afterFailedAttempt(refused: boolean, retryBaseMs: number, retryMaxMs: n
     "updated_at" = now()`;
 }
 
+/** A PROJECT_REOPEN's askers other than the asking session (`payload.askers`), oldest first. */
+function joinedAskers(request: { kind: string; askedBySessionId: string; payload?: unknown }): string[] {
+  if (request.kind !== PROJECT_REOPEN_KIND) return [];
+  return projectReopenAskers(request.payload).map((a) => a.sessionId).filter((id) => id !== request.askedBySessionId);
+}
+
 async function readObserver(db: Prisma.TransactionClient | PrismaService, sessionId: string): Promise<ObserverRow | null> {
   return db.session.findUnique({ where: { id: sessionId }, select: OBSERVER_SELECT });
 }
@@ -759,7 +785,8 @@ export function observerRefusal(session: ObserverRow | null): DeliveryRefused | 
     return new DeliveryRefused('OBSERVER_SESSION_COMPLETED', 'the observer session was moved to Completed, and a watch does not reopen it');
   }
   if (session.cancelRequestedAt || sessionHasEnded(session)) {
-    const run = deriveSessionRunState(session);
+    // An observer is never a LANDING container (assertEngineSession), so no landing row.
+    const run = deriveSessionRunState({ status: legacySessionStatus(session), endReason: session.endReason });
     return new DeliveryRefused('OBSERVER_SESSION_ENDED', `the observer session's run is over (${run}), and a watch does not revive it`);
   }
   return null;

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,14 @@ type codexTurnResult struct {
 	// True only after Codex reports that this concrete turn started/produced an item/completed.
 	// It is the engine-read proof used for startup CURRENT_WORK, not the earlier local USER bubble.
 	PromptAcknowledged bool
+	// failureSaid and failureCode are what the turn's error said, in Codex's words before Orbit rewords them
+	// (asAuthError), and its codexErrorInfo's name: what codexTurnFailureOf classifies. sawWork: the turn
+	// started an item that is neither text nor reasoning (a command, an edit, a tool call).
+	failureSaid string
+	failureCode string
+	sawWork     bool
+	// admission is a SubAgent child's §5.2 measurement, taken where its end is merged (mergeCodexChildResult).
+	admission *bool
 }
 
 func codexContextTokens(usage *TokenUsage) int {
@@ -53,9 +62,67 @@ var codexCapacityRetryDelays = []time.Duration{60 * time.Second, 90 * time.Secon
 
 // isCodexCapacityError reports a turn error as that refusal. The match is deliberately loose about
 // the wording and nothing else. Keep it identical to MODEL_AT_CAPACITY_ERROR_MARKER in
-// src/apiserver/src/tasks/model-routing.ts.
+// src/shared/src/runFailureKind.ts.
 func isCodexCapacityError(msg string) bool {
 	return strings.Contains(strings.ToLower(msg), "at capacity")
+}
+
+// codexFailureRules is Codex's table (§5.3), first match wins; each row's recorded sample is in
+// codex_failure_test.go. The error is reported in Codex's own words, so Text is nil but for the refused
+// credential, which asAuthError rewords as a sign-in. Not mapped: "Not logged in" / "OAuth session expired" (no
+// turn of Codex's has been recorded saying either), a deactivated workspace, a plan without Codex.
+var codexFailureRules = []failureRule{
+	{Code: "usageLimitExceeded", Kind: failureUsageLimit},
+	{Prefix: "You've hit your usage limit.", Kind: failureUsageLimit},
+	{Prefix: "You\u2019ve hit your usage limit.", Kind: failureUsageLimit},
+	{Prefix: "Selected model is at capacity", Kind: failureCapacity, Scope: failureScopeModel},
+	{Prefix: "unexpected status 401 Unauthorized", Kind: failureCredentialRefused, Text: asAuthError},
+}
+
+// codexTurnFailureOf is what a failed Codex turn failed with; unclassified for any other end. A spent quota
+// names when it resets in the runner's own time ("… or try again at Aug 9th, 2026 1:26 PM."), which is Until.
+func codexTurnFailureOf(result codexTurnResult) engineFailure {
+	if result.Status != stFailed {
+		return engineFailure{}
+	}
+	failure := matchFailure(codexFailureRules, firstNonEmpty(result.failureSaid, result.Error), result.failureCode)
+	if failure.Kind == failureUsageLimit {
+		failure.Until = codexUsageLimitReset(failure.Said, time.Local)
+	}
+	return failure
+}
+
+// codexResetAt is how Codex names a spent quota's reset: a month, a day with its ordinal, a year and a 12-hour
+// time.
+var codexResetAt = regexp.MustCompile(`try again at ([A-Z][a-z]{2}) (\d{1,2})(?:st|nd|rd|th)?, (\d{4}) (\d{1,2}:\d{2} [AP]M)`)
+
+// codexUsageLimitReset is the reset said names, read in loc; zero when it names none Orbit can read.
+func codexUsageLimitReset(said string, loc *time.Location) time.Time {
+	m := codexResetAt.FindStringSubmatch(said)
+	if m == nil {
+		return time.Time{}
+	}
+	at, err := time.ParseInLocation("Jan 2 2006 3:04 PM", m[1]+" "+m[2]+" "+m[3]+" "+m[4], loc)
+	if err != nil {
+		return time.Time{}
+	}
+	return at
+}
+
+// codexErrorInfoName is a codexErrorInfo's name: the value itself ("usageLimitExceeded"), or the one key of an
+// object ({"responseTooManyFailedAttempts": {…}}).
+func codexErrorInfoName(info interface{}) string {
+	switch v := info.(type) {
+	case string:
+		return v
+	case map[string]interface{}:
+		if len(v) == 1 {
+			for name := range v {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 func codexTurnEndPayload(result codexTurnResult, numTurns int, costUsd float64, job *ClaimedSession) map[string]interface{} {
@@ -88,6 +155,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 	setTurn("")
 	var pendingShellCtx []string
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCtx, stopInbox := contextUntilEither(ctx, shutdownCtx)
 	defer stopInbox()
@@ -158,7 +226,8 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 				BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 				BranchMerged:   branchMergedInto(job.WT),
 				WorktreeBranch: currentBranch(job.WT),
-			}); err != nil {
+				// `codex exec` reports no item kinds this loop tracks, so the turn carries no admission.
+			}.withFailure(codexTurnFailureOf(result), nil)); err != nil {
 				logln("turn-complete failed for", job.SessionID+":", err)
 			}
 			inbox.clearInflight(resp.TurnID)
@@ -389,7 +458,7 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // Codex session started by another session waits as long as a root one, and can outlast the wait above it.
 // ORBIT_RUNNER_CHILD is the runner's mark on the processes it starts (runnerChildEnv): it is how Orbit's Plan gate
 // tells a session process with no socket, whose writes it refuses, from a terminal the runner did not start.
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_BROWSER","ORBIT_WORKFLOWS","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID","ORBIT_SUBAGENT_REMOTE_MODE"]`
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_DOCUMENTS","ORBIT_BROWSER","ORBIT_WORKFLOWS","ORBIT_SCHEDULE_RUN","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID","ORBIT_SUBAGENT_RUN_ID","ORBIT_SUBAGENT_REMOTE_MODE","ORBIT_TOOL_OOM_BASELINE"]`
 
 // codexOrbitSessionEnv is the session context both Codex spawn paths export, for `orbit mcp` to read: which
 // session, agent and task it acts for, what it may orchestrate, which optional tools it serves, that Claude's
@@ -404,6 +473,7 @@ func codexOrbitSessionEnv(job *ClaimedSession) []string {
 		"ORBIT_ALLOW_ORCHESTRATION=" + orchestrationEnv(job.AllowOrchestration),
 		envWatches + "=" + watchesEnv(job.WatchesDisabled),
 		envWiki + "=" + wikiEnv(job.WikiDisabled),
+		envDocuments + "=" + documentsEnv(job.DocumentsDisabled),
 		envBrowser + "=" + browserEnv(job.BrowserEnabled),
 		envWorkflows + "=" + workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun + "=" + scheduleRunEnv(job.ScheduleRun),
@@ -560,7 +630,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 		emit(evError, map[string]interface{}{"message": "failed to prepare codex stderr: " + err.Error()})
 		return result
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		result.Status = stFailed
 		result.Subtype = "spawn_failed"
 		result.Error = err.Error()

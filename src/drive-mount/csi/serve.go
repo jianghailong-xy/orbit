@@ -25,7 +25,7 @@ import (
 const serviceAccountDir = "/var/run/secrets/kubernetes.io/serviceaccount"
 
 // InClusterSecrets reads Secrets with the plugin's own service account, which may get Secrets in its namespace and
-// nothing else (files-csi/rbac.yaml).
+// nothing else (drive-csi/rbac.yaml).
 type InClusterSecrets struct {
 	host   string
 	client *http.Client

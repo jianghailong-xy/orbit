@@ -946,6 +946,22 @@ describe('How it runs — Delivers (board 01)', () => {
     expect(node.querySelector('.project-run-settings-summary')?.textContent).toContain('Non-code · 3 tasks at a time');
   });
 
+  it('names the server’s default project branch for a line on main', async () => {
+    server.view = viewOf({ line: 'MAIN', ref: 'main', locked: false, defaultProjectBranch: 'project/payments-api-34WvwUS8' });
+    const node = await mount();
+    await press(deliversInput(node, 'NOT_CODE'));
+    expect(node.querySelector('.project-run-non-code-consequence')?.textContent)
+      .toBe(RUN_TO_NOT_CODE.replace('{branch}', 'project/payments-api-34WvwUS8'));
+  });
+
+  it('names project/<id> for a line on main from a server that sends no default', async () => {
+    server.view = viewOf({ line: 'MAIN', ref: 'main', locked: false });
+    const node = await mount();
+    await press(deliversInput(node, 'NOT_CODE'));
+    expect(node.querySelector('.project-run-non-code-consequence')?.textContent)
+      .toBe(RUN_TO_NOT_CODE.replace('{branch}', 'project/34Wvw…'));
+  });
+
   it('quotes the reason the coordinator gave under who and when (board 01 B)', async () => {
     const node = await mount(projectOf({
       nonCode: true, nonCodeSetBy: 'COORDINATOR', nonCodeSetAt: '2026-11-11T10:20:00.000Z',

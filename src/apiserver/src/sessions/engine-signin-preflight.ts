@@ -323,7 +323,7 @@ function antigravityRefusal(health: RunnerEngineHealth, runner: EnginePreflightR
     case 'available':
       return `${head} Sign in with Google from the Machines & models page, or ${GEMINI_KEY_WAY_OUT}.`;
     case 'unsupported_platform':
-      return `${head} Signing in with Google works on Linux runners only for now, so ${GEMINI_KEY_WAY_OUT}.`;
+      return `${head} Signing in with Google works on Linux and macOS runners only for now, so ${GEMINI_KEY_WAY_OUT}.`;
     default:
       return `${head} Signing in with Google needs a newer Orbit runner there; until it updates, ${GEMINI_KEY_WAY_OUT}.`;
   }

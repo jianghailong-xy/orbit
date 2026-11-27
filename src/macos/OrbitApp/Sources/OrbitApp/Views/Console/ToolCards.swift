@@ -312,7 +312,12 @@ struct ToolCardView: View {
     private var liveActivity: String? {
         guard (isBackgroundTask || isDelegate), !isOpen else { return nil }
         guard taskRunning || card.status == .running else { return nil }
-        for item in nestedItems.reversed() {
+        return Self.liveActivity(in: nestedItems)
+    }
+    /// The last thing a sub-agent's transcript relayed, as one line; the Agents sheet's running row
+    /// says the same.
+    static func liveActivity(in items: [TranscriptItem]) -> String? {
+        for item in items.reversed() {
             switch item {
             case .toolCall(let child):
                 let last = ToolDisplay.describe(name: child.name, input: child.input, status: child.status, id: child.id)

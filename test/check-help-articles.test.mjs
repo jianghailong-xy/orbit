@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CATEGORIES, checkArticle, checkLibrary, parseFrontMatter } from '../scripts/check-help-articles.mjs';
+import { CATEGORIES, checkArticle, checkLibrary, checkTranslation, parseFrontMatter } from '../scripts/check-help-articles.mjs';
 
 const article = (fields = {}, body = 'Body.\n') => {
   const all = {
@@ -37,6 +37,24 @@ test('missing fields, unknown categories and platforms, and bad values fail', ()
   assert.match(checkArticle(file, article({}, '::: platform ios\nNever closed.\n')).join(), /never closed/);
   assert.match(checkArticle(file, article({}, '[Open](orbit:settings)\n')).join(), /orbit:\/path/);
   assert.match(checkArticle(file, article({ title: String.fromCodePoint(0x673a, 0x5668) })).join(), /English/);
+});
+
+test('a translation carries only title and summary, and names a real English article', () => {
+  const english = [{ file: 'docs/help/machines-and-engines/machine-offline.md', source: article() }];
+  const translation = (fields = {}, body = '机器**离线**时，会话会等待，恢复后继续。\n') => {
+    const all = { title: '机器显示为离线', summary: '为什么会这样，以及如何恢复。', ...fields };
+    const lines = Object.entries(all).filter(([, value]) => value !== undefined).map(([key, value]) => `${key}: ${value}`);
+    return `---\n${lines.join('\n')}\n---\n\n${body}`;
+  };
+  const file = 'docs/help/zh-Hans/machines-and-engines/machine-offline.md';
+  assert.deepEqual(checkTranslation(file, translation(), english), []);
+  assert.match(checkTranslation(file, translation({ category: 'machines-and-engines' }), english).join(), /belongs to the English article/);
+  assert.match(checkTranslation(file, translation({ title: undefined }), english).join(), /missing field: title/);
+  assert.match(checkTranslation(file, translation(), []).join(), /no English article named/);
+  assert.match(checkTranslation('docs/help/zh-Hans/wiki/machine-offline.md', translation(), english).join(), /no English article named wiki\/machine-offline/);
+  assert.match(checkTranslation(file, translation({}, ''), english).join(), /body must not be empty/);
+  assert.match(checkTranslation(file, translation({}, '::: platform ios\n永远不关。\n'), english).join(), /never closed/);
+  assert.match(checkTranslation(file, translation({}, '[看看](orbit:/help/wiki/gone)\n'), english).join(), /link to a missing article/);
 });
 
 test('the library needs 28 articles, every category, and unique slugs', () => {

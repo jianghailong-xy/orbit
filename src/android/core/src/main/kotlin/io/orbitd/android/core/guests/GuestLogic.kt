@@ -2,6 +2,9 @@ package io.orbitd.android.core.guests
 
 import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.directory.SessionDisplay
+import io.orbitd.android.directory.SessionDisplayState
+import io.orbitd.android.directory.SessionMark
 import java.time.Duration
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
@@ -17,6 +20,8 @@ object GuestCopy {
     const val SHARED_WITH_ME = "Shared with me"
     /** The badge beside the status in the guest view's head. */
     const val GUEST_BADGE = "Guest"
+    /** Where a filed session is filed, said after its state and marks (web `sessionLifecycleLabel`). */
+    const val COMPLETED = "Completed"
     /** What the guest door answers for every session the caller cannot reply in: removed, left, Trash or deleted. */
     const val NOT_SHARED = "This conversation is no longer shared with you."
     const val NOT_SHARED_DETAIL = "Ask the person who shared it if you need it again."
@@ -38,8 +43,9 @@ enum class GuestRunState { QUEUED, RUNNING, AWAITING_INPUT, INTERRUPTED, SUCCEED
     val isLive get() = this == QUEUED || this == RUNNING || this == AWAITING_INPUT || this == INTERRUPTED
 }
 
-/** The tone of the status pill, as the public page colours it (web `RUN_TONE`, plus `done` for a session filed Completed). */
-enum class GuestTone { QUEUED, RUNNING, AWAITING, DONE, FAILED, CANCELLED }
+/** The tone of the status pill, as the public page colours it (web `sharedStateTone`): from the facts, the state alone (QUEUED,
+ * RUNNING or IDLE); from an older server, `RUN_TONE`, plus `done` for a session filed Completed. */
+enum class GuestTone { QUEUED, RUNNING, IDLE, AWAITING, DONE, FAILED, CANCELLED }
 
 /** The run state, resolved the way every other surface resolves it: the new field first, then the raw run status, then the legacy
  * mixed state (`SessionRunState.resolveOptional`). Nothing at all reads as Ended. */
@@ -95,8 +101,16 @@ private val GuestState.displayRunState: GuestRunState get() {
 
 val GuestState.busy: Boolean get() = resolvedRunState.let { it == GuestRunState.QUEUED || it == GuestRunState.RUNNING }
 
-/** The status word (web `sessionStateWord`): `Completed` once filed, else the run's own word. */
-val GuestState.word: String get() = if (completed) "Completed" else when (displayRunState) {
+/** What [SessionDisplay]'s two functions read of a guest head or Shared with me row. */
+val GuestState.displayFacts: SessionDisplay.Facts get() = SessionDisplay.Facts(phase, released, lastTurnOutcome, waitingOn, endReason,
+    workFinished, activity, pendingApprovals, runningBgCount)
+
+/** The marks drawn after the state word ([SessionDisplay.marks]); null from an older server. */
+val GuestState.marks: List<SessionMark>? get() = SessionDisplay.marks(displayFacts)
+
+/** The status word (web `sessionStateWord`). With the facts it is the state ([SessionDisplay.state]) alone, and a filed session says
+ * Completed after it and its marks. From an older server: `Completed` once filed, else the run's own word. */
+val GuestState.word: String get() = SessionDisplay.state(displayFacts)?.word ?: if (completed) GuestCopy.COMPLETED else when (displayRunState) {
     GuestRunState.QUEUED -> if (waitingOn == "HOLD") "On hold" else "Queued"
     GuestRunState.RUNNING -> "Running"
     GuestRunState.AWAITING_INPUT -> "Awaiting reply"
@@ -106,7 +120,14 @@ val GuestState.word: String get() = if (completed) "Completed" else when (displa
     GuestRunState.ENDED -> "Ended"
 }
 
-val GuestState.tone: GuestTone get() = if (completed) GuestTone.DONE else when (displayRunState) {
+val GuestState.tone: GuestTone get() = when (SessionDisplay.state(displayFacts)) {
+    SessionDisplayState.QUEUED -> GuestTone.QUEUED
+    SessionDisplayState.RUNNING -> GuestTone.RUNNING
+    SessionDisplayState.IDLE -> GuestTone.IDLE
+    null -> legacyTone
+}
+
+private val GuestState.legacyTone: GuestTone get() = if (completed) GuestTone.DONE else when (displayRunState) {
     GuestRunState.QUEUED -> GuestTone.QUEUED
     GuestRunState.RUNNING -> GuestTone.RUNNING
     GuestRunState.AWAITING_INPUT -> GuestTone.AWAITING
@@ -153,7 +174,9 @@ object GuestFollow {
     /** The wait before the next read, after an answer that did ([moved]) or did not bring anything new; null once the conversation
      * has stopped and gone quiet. [expecting]: a message was just sent and the run it starts has not been seen yet. */
     fun delay(state: GuestState, moved: Boolean, expecting: Boolean = false): Long? = when {
-        moved || (state.released != true && (state.phase?.let { it == "PENDING" || it == "RUNNING" } ?: state.busy)) -> WORKING_MS
+        // PENDING on a wake is an armed retry, which can be hours out on a spent quota: it waits, as an idle one does.
+        moved || (state.released != true
+            && (state.phase?.let { it == "RUNNING" || (it == "PENDING" && state.waitingOn != "WAKE") } ?: state.busy)) -> WORKING_MS
         state.live -> WAITING_MS
         expecting -> WORKING_MS
         else -> null
@@ -187,8 +210,13 @@ object SharedWithMe {
     /** No group while there is none. */
     fun showsGroup(sessions: List<GuestSessionSummary>) = sessions.isNotEmpty()
 
-    /** The row's second line: who shared it and how it stands, `Ana · Running`. */
-    fun subtitle(session: GuestSessionSummary) = "${session.ownerName} · ${session.state.word}"
+    /** The row's second line: who shared it and how it stands, `Ana · Idle · Finished` — the state, its marks and, once filed,
+     * Completed (web `sharedWithMeStateText`); from an older server, `Ana · Running`. */
+    fun subtitle(session: GuestSessionSummary): String {
+        val state = session.state
+        val shown = SessionDisplay.text(state.displayFacts) ?: return "${session.ownerName} · ${state.word}"
+        return "${session.ownerName} · $shown" + if (state.completed) " · ${GuestCopy.COMPLETED}" else ""
+    }
 
     /** The row's title: the first non-blank line of the session's title (web `titleFirstLine`). */
     fun title(session: GuestSessionSummary) = firstLine(session.title)

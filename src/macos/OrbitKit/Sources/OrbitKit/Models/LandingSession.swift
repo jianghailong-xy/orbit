@@ -451,6 +451,8 @@ public struct SessionLandingView: Codable, Equatable, Sendable {
     public let generations: [SessionLandingGeneration]
     /// Absent on servers that predate the timeline (§2.9: a new field is optional).
     public let timeline: SessionLandingTimeline?
+    /// The pull request this landing waits on or ended in (design §8); nil from a server that predates it.
+    public var pullRequest: LandingPullRequestView? = nil
 
     public init(sessionId: String = "", projectId: String = "", subject: String = "",
                 taskId: String? = nil, promotionId: String? = nil, episode: Int = 0,
@@ -503,6 +505,7 @@ public struct SessionLandingView: Codable, Equatable, Sendable {
         todos = try c.decodeIfPresent([SessionLandingTodo].self, forKey: .todos) ?? []
         generations = try c.decodeIfPresent([SessionLandingGeneration].self, forKey: .generations) ?? []
         timeline = try? c.decodeIfPresent(SessionLandingTimeline.self, forKey: .timeline)
+        pullRequest = try? c.decodeIfPresent(LandingPullRequestView.self, forKey: .pullRequest)
     }
 
     /// Whether this is the list row's summary rather than the detail page's view.

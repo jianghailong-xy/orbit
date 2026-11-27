@@ -11,7 +11,8 @@
   font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); line-height: var(--orbit-line-height);
   box-shadow: var(--orbit-shadow-popup); outline: none; overflow-wrap: break-word;
 }
-.orbit-dialog, .orbit-confirm { padding: 20px 24px; border-radius: var(--orbit-radius-dialog); }
+/* Dialogs are drawn as the menus are: a rounder card with a hairline edge and a soft shadow (Floating.css). */
+.orbit-dialog, .orbit-confirm { padding: 20px 24px; border: 1px solid var(--border-subtle); border-radius: 18px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04); }
 .orbit-overlay-header { margin-bottom: 8px; }
 .orbit-overlay-title { margin: 0; color: var(--text-1); font-size: 16px; font-weight: 600; line-height: 24px; }
 .orbit-overlay-description { margin: 0; }
@@ -22,7 +23,7 @@
    title row (the project page's done and start dialogs) starts its content under it. */
 .orbit-overlay-close {
   display: inline-flex; align-items: center; justify-content: center; position: absolute; z-index: 10;
-  top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px;
+  top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 10px;
   color: var(--text-3); background: transparent; font-size: 16px; line-height: 1; cursor: pointer;
 }
 .orbit-overlay-close:hover:not(:disabled) { color: var(--text-1); background: var(--orbit-control-hover-bg); }
@@ -39,6 +40,12 @@
 }
 .orbit-drawer[data-placement='right'] { right: 0; top: 0; }
 .orbit-drawer[data-placement='bottom'] { bottom: 0; left: 0; box-shadow: var(--orbit-shadow-drawer-bottom); }
+/* Drawers are drawn as the menus are: the corners away from the screen's edge rounded, a hairline on that side, a soft
+   shadow. A right drawer as wide as a phone's screen keeps square corners, which would otherwise round off at its edge. */
+.orbit-drawer { overflow: hidden; }
+.orbit-drawer[data-placement='right'] { border-left: 1px solid var(--border-subtle); border-radius: 18px 0 0 18px; box-shadow: -12px 0 32px rgba(0, 0, 0, .08), -2px 0 6px rgba(0, 0, 0, .04); }
+.orbit-drawer[data-placement='bottom'] { border-top: 1px solid var(--border-subtle); border-radius: 18px 18px 0 0; box-shadow: 0 -12px 32px rgba(0, 0, 0, .08), 0 -2px 6px rgba(0, 0, 0, .04); }
+@media (max-width: 600px) { .orbit-drawer[data-placement='right'] { border-left: 0; border-radius: 0; } }
 .orbit-drawer > .orbit-overlay-header { display: flex; align-items: center; flex: none; padding: 16px 24px; margin: 0; border-bottom: 1px solid var(--orbit-border-split); }
 .orbit-drawer > .orbit-overlay-header > .orbit-overlay-title { flex: 1; min-width: 0; }
 .orbit-drawer > .orbit-overlay-header > .orbit-overlay-close { position: static; flex: none; width: 24px; height: 24px; margin-right: 8px; }

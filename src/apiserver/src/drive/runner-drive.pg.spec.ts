@@ -1,5 +1,5 @@
 /**
- * The runner drive door (docs/orbit-files-drive-technical-design.md §4.2, §4.3, §4.6, §8.2; drive/runner-drive.controller.ts,
+ * The runner drive door (docs/drive-technical-design.md §4.2, §4.3, §4.6, §8.2; drive/runner-drive.controller.ts,
  * drive/drive-mount-credential.ts), through the production apiserver (`node build/main.js`, every guard and pipe) over a
  * real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
@@ -16,7 +16,9 @@
  *   (4) a mount credential: accepted only here and only from the instance the manager recorded; a superseded generation
  *       loses write access (the guard, and the commit fence in the commit's own transaction); issuing a newer
  *       generation's credential revokes the older one;
- *   (5) a mount's deletes 2 s apart or less are one Trash group, a later one another.
+ *   (5) a mount's deletes 2 s apart or less are one Trash group, a later one another;
+ *   (6) the door answers at /runner/drive and at its /runner/documents alias, which runners and mount daemons already
+ *       deployed call: one class mounted under both, a file written through either read back through the other.
  *
  * Not destructive: every row belongs to accounts this run creates.
  */
@@ -46,6 +48,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { issueDriveMountCredential, fenceManagedInstance } from './drive-mount-credential';
 import { DriveService } from './drive.service';
+import { DriveEnabledGuard } from './drive-switch';
 import { RunnerDriveController } from './runner-drive.controller';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -99,7 +102,7 @@ const refused = (reply: Reply, status: number, code: string, what: string) => {
   assert.equal(reply.json?.code, code, `${what}: ${reply.text}`);
 };
 
-test('Orbit Files drive: the runner drive door — drive tools by path, no Trash or share, tenants, the mount credential', {
+test('Documents drive: the runner drive door — drive tools by path, no Trash or share, tenants, the mount credential', {
   skip: !URL, concurrency: 1, timeout: 600_000,
 }, async (t) => {
   const url = URL!;
@@ -132,14 +135,19 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
   const aliceRunner = await runnerOf(alice, 'alice-laptop');
   const bobRunner = await runnerOf(bob, 'bob-laptop');
 
-  const server = await startApiserver(url, `runner-drive-${RUN}`, { ORBIT_FILES_DIR: filesDir });
+  const server = await startApiserver(url, `runner-drive-${RUN}`, { ORBIT_DRIVE_DIR: filesDir });
   t.after(() => server.stop());
-  const as = (token: string, method: string, route: string, body?: unknown, headers: Record<string, string> = {}) =>
-    call(server, method, `/api/runner/drive${route}`, token, body, headers);
+  /** A door request under `prefix`: /runner/drive, or the /runner/documents alias deployed runners call. */
+  const at = (prefix: string) => (token: string, method: string, route: string, body?: unknown, headers: Record<string, string> = {}) =>
+    call(server, method, `/api/${prefix}${route}`, token, body, headers);
+  const as = at('runner/drive');
   const q = encodeURIComponent;
 
-  /** What `drive_put` does: mkdir -p of the folder, create or overwrite, one staging, its chunks, one commit. */
-  const put = async (token: string, drivePath: string, bytes: Buffer, commitId = randomUUID(), headers: Record<string, string> = {}) => {
+  /** What `documents_put` does: mkdir -p of the folder, create or overwrite, one staging, its chunks, one commit. */
+  const put = async (
+    token: string, drivePath: string, bytes: Buffer, commitId = randomUUID(), headers: Record<string, string> = {}, prefix = 'runner/drive',
+  ) => {
+    const as = at(prefix);
     const folder = drivePath.slice(0, drivePath.lastIndexOf('/')) || '/';
     if (folder !== '/') ok(await as(token, 'POST', '/mkdir', { path: folder, parents: true }, headers), `mkdir -p ${folder}`);
     const seen = await as(token, 'GET', `/stat?path=${q(drivePath)}`, undefined, headers);
@@ -154,7 +162,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
       mode = 'OVERWRITE';
     }
     const staging = ok(await as(token, 'POST', '/stagings', { entryId: entry.id }, headers), 'open a staging').json;
-    const chunk = await raw(server, 'PUT', `/api/runner/drive/stagings/${staging.id}/chunks/0`, token, bytes, {
+    const chunk = await raw(server, 'PUT', `/api/${prefix}/stagings/${staging.id}/chunks/0`, token, bytes, {
       'x-orbit-chunk-sha256': sha256(bytes), ...headers,
     });
     assert.equal(chunk.status, 200, chunk.body.toString());
@@ -283,7 +291,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
       .map((name) => String(Reflect.getMetadata(PATH_METADATA, proto[name] as object)));
     assert.ok(routes.length >= 15, `the door's routes: ${routes.join(', ')}`);
     for (const route of routes) assert.doesNotMatch(route, /trash|share|restore|purge/i, route);
-    assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, RunnerDriveController), [RunnerAuthGuard]);
+    assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, RunnerDriveController), [RunnerAuthGuard, DriveEnabledGuard]);
 
     for (const [method, route] of [['GET', '/trash'], ['POST', '/trash/restore'], ['POST', '/share'], ['POST', '/share-links']]) {
       const reply = await as(aliceRunner.token, method, route, {});
@@ -434,5 +442,38 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     const t2 = ok(await as(aliceRunner.token, 'POST', '/delete', { path: '/Burst/t2.txt' }), 'tool delete').json;
     const [r1, r2] = await Promise.all([t1, t2].map((g) => db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(g.id) } })));
     assert.notEqual(r1.trashGroupId, r2.trashGroupId);
+  });
+
+  await t.test('(6) /runner/drive and its /runner/documents alias answer the same handlers', async () => {
+    assert.deepEqual(Reflect.getMetadata(PATH_METADATA, RunnerDriveController), ['runner/drive', 'runner/documents']);
+    const documents = at('runner/documents');
+
+    // A runner already deployed writes through /runner/documents; the new runner reads it at /runner/drive.
+    const old = Buffer.from(`written by an older runner ${RUN}`);
+    const viaAlias = await put(aliceRunner.token, '/Alias/old.txt', old, randomUUID(), {}, 'runner/documents');
+    const committed = ok(viaAlias.reply, 'a commit through /runner/documents').json;
+    const stat = ok(await as(aliceRunner.token, 'GET', `/stat?path=${q('/Alias/old.txt')}`), 'stat at /runner/drive').json;
+    assert.equal(stat.id, committed.entryId);
+    assert.equal(stat.sizeBytes, old.length);
+    const bytes = await raw(server, 'GET', `/api/runner/drive/chunks/${sha256(old)}`, aliceRunner.token);
+    assert.deepEqual(bytes.body, old, 'its bytes at /runner/drive');
+
+    // And the other way round: written at /runner/drive, listed, moved and deleted through /runner/documents.
+    ok((await put(aliceRunner.token, '/Alias/new.txt', Buffer.from('new'))).reply, 'a commit at /runner/drive');
+    const listed = ok(await documents(aliceRunner.token, 'GET', `/list?path=${q('/Alias')}`), 'list through /runner/documents').json;
+    assert.deepEqual(listed.entries.map((e: { name: string }) => e.name).sort(), ['new.txt', 'old.txt']);
+    const chunk = await raw(server, 'GET', `/api/runner/documents/chunks/${sha256(Buffer.from('new'))}`, aliceRunner.token);
+    assert.equal(chunk.body.toString(), 'new', 'its bytes through /runner/documents');
+    ok(await documents(aliceRunner.token, 'POST', '/rename', { from: '/Alias/new.txt', to: '/Alias/moved.txt' }), 'rename through /runner/documents');
+    ok(await documents(aliceRunner.token, 'POST', '/delete', { path: '/Alias/moved.txt' }), 'delete through /runner/documents');
+    refused(await as(aliceRunner.token, 'GET', `/stat?path=${q('/Alias/moved.txt')}`), 404, 'DRIVE_ENTRY_NOT_FOUND', 'deleted through the alias');
+
+    // The alias holds the same rules: another account's entry is nothing there either.
+    const theirs = await documents(bobRunner.token, 'GET', `/stat?path=${q('/Alias/old.txt')}`);
+    assert.equal(theirs.status, 404, `bob through /runner/documents: ${theirs.text}`);
+    for (const [method, route] of [['GET', '/trash'], ['POST', '/share']]) {
+      const reply = await documents(aliceRunner.token, method, route, {});
+      assert.equal(reply.status, 404, `${method} /runner/documents${route}: ${reply.text}`);
+    }
   });
 });

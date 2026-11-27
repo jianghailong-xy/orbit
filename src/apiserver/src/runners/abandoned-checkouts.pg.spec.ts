@@ -24,7 +24,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { ConflictException } from '@nestjs/common';
 import { Client } from 'pg';
 
@@ -130,7 +131,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
     data: {
       id: finishedSessionId,
       ...common('A session that ended with its work in the checkout'),
-      status: RunStatus.SUCCEEDED, finishedAt: new Date(), 
+      turnState: null, finishedAt: new Date(), 
       branch: `orbit/${FINISHED}`,
       completedAt: new Date(),
     },
@@ -139,7 +140,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
     data: {
       id: parkedSessionId,
       ...common('A session at rest between turns'),
-      status: RunStatus.AWAITING_INPUT,
+      turnState: null,
       branch: `orbit/${PARKED}`,
     },
   });

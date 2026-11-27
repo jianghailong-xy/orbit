@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BranchCommit } from '@orbit/shared';
 import { getSessionDiff, refreshSessionDiff, type SessionDetail } from '../api';
 import { SessionOutputs } from './SessionOutputs';
+import { hoverTooltip } from '../test/tooltipHover';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -127,6 +128,11 @@ async function press(el: Element | null | undefined): Promise<void> {
   await settle();
 }
 
+/** The drawer's row for a file, by the name it shows (these paths' names are unique). */
+const fileRow = (list: Element, path: string) =>
+  [...list.querySelectorAll('.session-file-btn')]
+    .find((b) => b.querySelector('.session-file-name')?.textContent === path.split('/').at(-1));
+
 const bar = () => container!.querySelector('.wt-row-toggle')!;
 const commitRow = (scope: ParentNode, subject: string) =>
   [...scope.querySelectorAll('.wt-commit-row')].find((r) => r.querySelector('.wt-commit-subject')?.textContent === subject);
@@ -188,8 +194,8 @@ describe('the worktree bar counted in commits', () => {
     expect(head.textContent).toContain('feat(rows): paginate the row list');
     expect(head.textContent).toContain('timed out past 2,000');
     const list = document.querySelector('.wt-diff-list')!;
-    expect(list.querySelector(`button[title="View diff · ${HOOK}"]`)).toBeTruthy();
-    expect(list.querySelector(`button[title="View diff · ${API}"]`)).toBeNull();
+    expect(await hoverTooltip(fileRow(list, HOOK)!)).toBe(`View diff · ${HOOK}`);
+    expect(fileRow(list, API)).toBeUndefined();
     // RowList.tsx is changed by the newer commit too: its diff is the file's whole change, and the head says so.
     expect(head.textContent).toContain('whole change');
   });
@@ -202,7 +208,7 @@ describe('the worktree bar counted in commits', () => {
     expect(document.querySelector('.wt-commit-head')).toBeNull();
     const list = document.querySelector('.wt-diff-list')!;
     for (const path of [ROWS, HOOK, API]) {
-      expect(list.querySelector(`button[title="View diff · ${path}"]`), path).toBeTruthy();
+      expect(fileRow(list, path), path).toBeTruthy();
     }
   });
 

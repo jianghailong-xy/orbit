@@ -21,7 +21,6 @@ import {
   stripStaleLine,
   targetHref,
   targetName,
-  targetNoun,
   waitedOn,
   waitsBeyondTasks,
   watchBucket,
@@ -36,6 +35,7 @@ import { WatchEditorModal } from './WatchEditor';
 import { ObserverLink, WatchStatePill, useNow } from './WatchParts';
 import { Button } from './ui/Button';
 import { Popover } from './ui/Popover';
+import { Tooltip } from './ui/Tooltip';
 
 const rowsOf = (data: unknown): WatchView[] => (Array.isArray(data) ? (data as WatchView[]) : []);
 
@@ -135,36 +135,17 @@ export function TaskFollowedBy({ taskId, hideWhenEmpty = false }: { taskId: stri
 }
 
 /**
- * A session's two relations, in its header: Following — the live watches it is the observer of, so
- * what it is waiting on — and Followed by — the live watches that name it. Each opens its watch rows;
- * Follow creates a watch on this session.
+ * A session's Followed by, in its header: the live watches that name it, opening their watch rows;
+ * Follow creates a watch on this session. What the session itself waits on is not here: a task is an
+ * eye in its Tasks card, anything else is the Watching strip above the composer.
  */
-export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
+export function SessionWatchBadges({ sessionId, follow = true }: { sessionId: string; follow?: boolean }) {
   const watchesQ = useQuery(watchesQuery());
   const [following, setFollowing] = useState(false);
   const rows = rowsOf(watchesQ.data);
-  const waitingOn = watchesFollowing(rows, sessionId).filter(isLiveWatch);
   const watchedBy = watchesFollowedBy(rows, 'SESSION', sessionId).filter(isLiveWatch);
-  const targets = new Set(
-    waitingOn.flatMap((w) => w.targets.map((t) => `${t.targetKind}:${t.targetResourceId}`)),
-  ).size;
   return (
     <span className="watch-badges">
-      {waitingOn.length > 0 && (
-        <Popover
-          side="bottom"
-          align="start"
-          title="This session is waiting on"
-          popupClassName="watch-popover"
-          trigger={
-            <button type="button" className="watch-chip">
-              <EyeOutlined /> Following {targets} {targetNoun(waitingOn, targets)}
-            </button>
-          }
-        >
-          <WatchRowList watches={waitingOn} />
-        </Popover>
-      )}
       {watchedBy.length > 0 && (
         <Popover
           side="bottom"
@@ -180,14 +161,14 @@ export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
           <WatchRowList watches={watchedBy} />
         </Popover>
       )}
-      <button
+      {/* A wide session header offers Follow… in its ⋯ instead (docs/mocks/session-header-compact). */}
+      {follow && <Tooltip content="Follow this session: be notified, or resume another session, when it reaches a condition" side="bottom" align="end"><button
         type="button"
         className="watch-chip is-action"
-        title="Follow this session: be notified, or resume another session, when it reaches a condition"
         onClick={() => setFollowing(true)}
       >
         Follow
-      </button>
+      </button></Tooltip>}
       {following && (
         <WatchEditorModal
           mode={{ kind: 'create', targets: [{ kind: 'SESSION', id: sessionId }] }}
@@ -228,9 +209,11 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
         <span className="bg-tray-title ct-head">{STRIP_LABEL}</span>
         {single ? (
           <>
-            <span className="ct-one" title={targetName(single)}>
-              {targetName(single)}
-            </span>
+            <Tooltip content={targetName(single)} truncatedOnly>
+              <span className="ct-one">
+                {targetName(single)}
+              </span>
+            </Tooltip>
             <WatchTargetPill target={single} />
           </>
         ) : (
@@ -335,14 +318,17 @@ function StripWatch({ watch, now, listsTargets }: { watch: WatchView; now: numbe
           <Link
             key={`${t.targetKind}:${t.targetResourceId}`}
             className="ct-row"
+            data-row-focus=""
             to={targetHref(t.targetKind, t.targetResourceId)}
           >
             <span className="ct-pill">
               <WatchTargetPill target={t} />
             </span>
-            <span className="ct-title" title={targetName(t)}>
-              {targetName(t)}
-            </span>
+            <Tooltip content={targetName(t)} truncatedOnly>
+              <span className="ct-title">
+                {targetName(t)}
+              </span>
+            </Tooltip>
             <span className="ct-caret">›</span>
           </Link>
         ))}

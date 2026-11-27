@@ -44,6 +44,9 @@ export const OWNER_REQUEST_FIELDS = {
   verifyHint: true,
 } as const satisfies CardFields;
 
+/** A PROJECT_REOPEN request's agent-written fields: an owner request's, and the work it plans (`payload.plannedWork`). */
+export const PROJECT_REOPEN_FIELDS = { ...OWNER_REQUEST_FIELDS, plannedWork: true } as const satisfies CardFields;
+
 /** A START_REQUEST's (`ProjectStartRequest`, project_open_item.payload) agent-written field. */
 export const START_REQUEST_FIELDS = { why: true } as const satisfies CardFields;
 

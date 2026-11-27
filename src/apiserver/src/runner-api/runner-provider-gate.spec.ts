@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider, SESSION_SOURCE_PIN_V1 } from '@orbit/shared';
+import { turnStateFilter } from '../sessions/session-turn-state';
 import { RunnerApiController } from './runner-api.controller';
 import {
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
   OPENCODE_RUNNER_UPGRADE_ERROR,
 } from './runner-provider-support';
+import { turnStateOfWord } from '../sessions/session-turn-state';
 
 const RUNNER = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -114,7 +116,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
   assert.deepEqual(marked[0].where, {
     id: { in: ['agy-1'] },
     assignedRunnerId: RUNNER.id,
-    status: 'PENDING',
+    AND: [turnStateFilter(['QUEUED'])],
     sessionKind: 'CONVERSATION',
     OR: [
       { engine: AgentProvider.ANTIGRAVITY },
@@ -252,6 +254,7 @@ function reclaimRow(id: string, provider: AgentProvider, status: string) {
     providerBuiltin: true,
     engine: provider as string | null,
     status,
+    turnState: turnStateOfWord(status),
     cancelRequestedAt: null,
     error: null,
     workspace: null,

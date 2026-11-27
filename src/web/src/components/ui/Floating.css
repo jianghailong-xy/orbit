@@ -10,29 +10,31 @@
   box-shadow: var(--orbit-shadow-popup);
   outline: none;
 }
-.orbit-menu { min-width: var(--orbit-menu-anchor-width, var(--anchor-width)); max-width: var(--orbit-dropdown-room, var(--available-width)); max-height: var(--available-height); overflow-y: auto; padding: 4px; position: relative; left: var(--orbit-dropdown-subpixel, 0px); }
+.orbit-menu { min-width: var(--orbit-menu-anchor-width, var(--anchor-width)); max-width: var(--orbit-dropdown-room, var(--available-width)); max-height: var(--available-height); overflow-y: auto; padding: 8px; position: relative; left: var(--orbit-dropdown-subpixel, 0px); }
+/* Menus: a rounder card with a hairline edge, roomy rows with 16px icons, inset dividers. */
+.orbit-menu { border: 1px solid var(--border-subtle); border-radius: 18px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04); }
 /* A submenu is as wide as its items, as the replaced one was: not held to its item's width, and narrowed
    only to the room on its right, its labels wrapping (see useSubmenuPlacement). */
 .orbit-menu[data-nested] { min-width: 0; max-width: var(--orbit-submenu-room, none); }
 .orbit-menu[data-nested] .orbit-menu-item { white-space: normal; }
 /* With a footer (the merge-target menu's search) the items scroll in their own box and the footer stays under them. */
 .orbit-menu.orbit-menu-footed { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-.orbit-menu-list { min-height: 0; overflow-y: auto; padding: 4px; }
-.orbit-menu-footer { flex: none; }
+.orbit-menu-list { min-height: 0; overflow-y: auto; padding: 8px; }
+.orbit-menu-header, .orbit-menu-footer { flex: none; }
 .orbit-menu-item {
-  display: flex; align-items: center; gap: 8px; padding: 5px 12px; min-height: 32px;
-  border-radius: 4px; cursor: pointer; outline: none; white-space: nowrap;
+  display: flex; align-items: center; gap: 12px; padding: 7px 12px; min-height: 38px; font-size: 15px;
+  border-radius: 10px; cursor: pointer; outline: none; white-space: nowrap;
 }
 .orbit-menu-label { flex: 1; min-width: 0; }
-.orbit-menu-icon { display: inline-flex; min-width: 14px; font-size: 12px; }
+.orbit-menu-icon { display: inline-flex; justify-content: center; min-width: 18px; font-size: 16px; }
 .orbit-menu-icon > * { min-width: inherit; }
-.orbit-menu-submenu-icon { font-size: 10px; margin-left: 8px; }
+.orbit-menu-submenu-icon { font-size: 12px; margin-left: 8px; color: var(--text-3); }
 .orbit-menu-item[data-highlighted], .orbit-menu-item[data-popup-open] { background: var(--orbit-control-hover-bg); }
 .orbit-menu-item[data-selected], .orbit-menu-item[data-checked] { background: var(--orbit-menu-selected-bg); color: var(--orbit-control-primary); }
 .orbit-menu-item[data-danger] { color: var(--orbit-control-error); }
-.orbit-menu-item[data-danger][data-highlighted] { color: white; background: var(--orbit-control-error); }
+.orbit-menu-item[data-danger][data-highlighted] { background: var(--orbit-control-error-bg); }
 .orbit-menu-item[data-disabled] { color: var(--orbit-control-disabled-text); cursor: not-allowed; background: transparent; }
-.orbit-menu-separator { height: 1px; margin: 4px 0; line-height: 0; background: var(--orbit-border-split); }
+.orbit-menu-separator { height: 1px; margin: 6px 12px; line-height: 0; background: var(--orbit-border-split); }
 .orbit-menu-group-label { padding: 5px 12px; color: var(--text-3); }
 /* A group's items sit 8px in on each side, as in the replaced menu. */
 .orbit-menu-group-list { margin: 0 8px; }
@@ -54,7 +56,18 @@
 /* Filter belongs to the animated surface: opacity must composite its shadow
    together with the surface, rather than cast a shadow through fading content. */
 .orbit-popover, .orbit-tooltip { box-shadow: none; filter: var(--orbit-filter-popover); }
-.orbit-tooltip { --orbit-callout-bg: var(--orbit-tooltip-bg); position: relative; max-width: 250px; min-height: 32px; padding: 6px 8px; color: #fff; background: var(--orbit-tooltip-bg); border-radius: 6px; overflow-wrap: break-word; }
+/* A popover takes the menus' hairline edge and soft shadow as filters, so they follow its arrow too. Its corners stay
+   12px: the arrow of a popover aligned to one end sits 12px in, where a rounder corner would still be curving. */
+.orbit-popover { border-radius: 12px; filter: drop-shadow(0 0 .5px var(--orbit-popover-edge)) var(--orbit-popover-shadow); }
+.orbit-tooltip { --orbit-callout-bg: var(--orbit-tooltip-bg); position: relative; max-width: 250px; min-height: 32px; padding: 6px 10px; color: #fff; background: var(--orbit-tooltip-bg); border-radius: 10px; overflow-wrap: break-word; }
+/* A tip written on several lines (an error and when it was last tried) keeps its line breaks, as a title did. */
+.orbit-tooltip { white-space: pre-line; }
+/* The full words of a label that did not fit (docs/mocks/web-tooltips-c, Q3): wider, and a path, branch or command in
+   the monospace font. */
+.orbit-tooltip.orbit-tooltip-wide { max-width: 360px; }
+.orbit-tooltip.orbit-tooltip-mono { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12.5px; overflow-wrap: anywhere; }
+/* A tooltip takes the menus' soft shadow; its corners stay 10px, inside the 12px where an end-aligned arrow sits. */
+.orbit-tooltip { filter: var(--orbit-popover-shadow); }
 /* Retains Ant Design's rounded arrow geometry (MIT; the Ant Design license file in this directory). */
 .orbit-floating-arrow { position: absolute; width: 16px; height: 16px; overflow: hidden; pointer-events: none; }
 .orbit-floating-arrow::before { content: ''; position: absolute; bottom: 0; left: 0; width: 16px; height: 8px; background: var(--orbit-callout-bg); clip-path: path('M 0 8 A 4 4 0 0 0 2.82842712474619 6.82842712474619 L 6.585786437626905 3.0710678118654755 A 2 2 0 0 1 9.414213562373096 3.0710678118654755 L 13.17157287525381 6.82842712474619 A 4 4 0 0 0 16 8 Z'); }

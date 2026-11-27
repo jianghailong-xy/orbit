@@ -26,7 +26,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { ForbiddenException } from '@nestjs/common';
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
 import {
   AgentProvider,
   PERMISSION_MODE_CORRECTED_EVENT_SUBTYPE,
@@ -151,7 +151,7 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
         provider: AgentProvider.CLAUDE,
         engine: AgentProvider.CLAUDE,
         model: WITH_AUTO,
-        status: RunStatus.PENDING,
+        turnState: 'QUEUED',
         dispatchOrigin: SessionDispatchOrigin.USER,
         ...fields,
       },
@@ -401,7 +401,7 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
       refusedWith(PERMISSION_MODE_WIDER_THAN_SESSION),
       'a session running Default may not start one in Auto, whatever its stored mode says',
     );
-    const wider = await pending(w, { permissionMode: PermissionMode.AUTO, status: RunStatus.AWAITING_INPUT });
+    const wider = await pending(w, { permissionMode: PermissionMode.AUTO, turnState: null });
     await assert.rejects(
       sessions.assertMayReach(w.ownerId, settledLow, wider, 'end'),
       refusedWith(SESSION_WIDER_THAN_CALLER),
@@ -426,15 +426,15 @@ test('the stored mode, the mode running, and the ceiling on PostgreSQL', { skip,
     await say(w2, runsAuto, init('claude', PermissionMode.AUTO));
     await sessions.assertMayStartInMode(w2.ownerId, runsAuto, { engine: AgentProvider.CLAUDE, workspaceId: w2.workspaceId }, NEXT);
 
-    // No actual mode recorded (claimed before migration 1437): the stored mode decides, as before R3.
-    const unrecorded = await pending(w, { permissionMode: PermissionMode.DEFAULT, status: RunStatus.AWAITING_INPUT });
+    // No actual mode recorded (claimed before migration 1735): the stored mode decides, as before R3.
+    const unrecorded = await pending(w, { permissionMode: PermissionMode.DEFAULT, turnState: null });
     assert.equal((await row(unrecorded)).actualPermissionMode, null);
     await assert.rejects(
       sessions.assertMayStartInMode(w.ownerId, unrecorded, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT),
       refusedWith(PERMISSION_MODE_WIDER_THAN_SESSION),
       'the fallback is the stored mode',
     );
-    const unrecordedAuto = await pending(w, { permissionMode: PermissionMode.AUTO, status: RunStatus.AWAITING_INPUT });
+    const unrecordedAuto = await pending(w, { permissionMode: PermissionMode.AUTO, turnState: null });
     await sessions.assertMayStartInMode(w.ownerId, unrecordedAuto, { engine: AgentProvider.CLAUDE, workspaceId: w.workspaceId }, NEXT);
   });
 });

@@ -28,7 +28,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { AgentProvider, PermissionMode, type RunnerEngineHealth } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -152,7 +153,7 @@ test('P6b follow-up a Cursor CLI session’s claim across a workspace edit, on P
         model: engine === AgentProvider.CURSOR ? 'default[]' : null,
         usesRuntimeDefaultModel: true,
         permissionMode: PermissionMode.ACCEPT_EDITS,
-        status: RunStatus.FAILED, 
+        turnState: null, 
         dispatchOrigin: SessionDispatchOrigin.USER,
         startedAt: new Date(),
         finishedAt: new Date(),

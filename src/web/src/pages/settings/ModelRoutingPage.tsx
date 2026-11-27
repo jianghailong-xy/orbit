@@ -35,6 +35,7 @@ import {
 import { modelTierText, priceText, QUALITY_FOOT, subagentTiersQuery, tierText, type ProviderTierRow } from '../../lib/subagentTiers';
 import { usePreferences } from './preferences';
 import { PERSONAL_SETTINGS as S } from './settingsIndex';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from '../../components/ui/Tooltip';
 
 /** The Agent filter's value for every Agent: a public id is never this word. */
 const ALL_AGENTS = 'all';
@@ -135,6 +136,20 @@ export function ModelRoutingPage() {
               }
             />
           )}
+          {/* Absent means off (docs/routing-account-health-design.md §7.5): a pinned task whose account can't run holds. */}
+          <SettingsRow
+            anchor={S.relaxBlockedPins.anchor}
+            title={S.relaxBlockedPins.title}
+            description={S.relaxBlockedPins.description}
+            control={
+              <Switch
+                aria-label="Run pinned tasks elsewhere"
+                checked={prefs.relaxBlockedPins === true}
+                onCheckedChange={(v) => save.mutate({ relaxBlockedPins: v })}
+                loading={save.isPending}
+              />
+            }
+          />
         </SettingsCard>
       </SettingsSection>
 
@@ -415,13 +430,14 @@ function TierBar({ tiers, runs }: { tiers: TierRuns[]; runs: number }) {
     <div className="model-routing-bar" role="img" aria-label={`Ran at ${label}`}>
       {tiers.map((tier) => (
         <Fragment key={tier.tier}>
-          <i
-            className={`model-routing-bar-${tier.tier}${tier.outside ? ' is-outside' : ''}`}
-            style={{ flexGrow: tier.runs }}
-            title={`${tier.tier}: ${plural(tier.runs, 'run')}${percent(tier.done, tier.ended) === null ? '' : `, ${percent(tier.done, tier.ended)}% done`}`}
-          >
-            {tier.runs / runs >= 0.15 ? tier.tier : ''}
-          </i>
+          <Tooltip content={`${tier.tier}: ${plural(tier.runs, 'run')}${percent(tier.done, tier.ended) === null ? '' : `, ${percent(tier.done, tier.ended)}% done`}`} delay={TEXT_TOOLTIP_DELAY_MS}>
+            <i
+              className={`model-routing-bar-${tier.tier}${tier.outside ? ' is-outside' : ''}`}
+              style={{ flexGrow: tier.runs }}
+            >
+              {tier.runs / runs >= 0.15 ? tier.tier : ''}
+            </i>
+          </Tooltip>
         </Fragment>
       ))}
     </div>

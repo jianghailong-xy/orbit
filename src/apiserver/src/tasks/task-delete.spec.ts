@@ -273,7 +273,8 @@ test('only runs that could still be working the task are ended', async () => {
   assert.deepEqual(scan, {
     ownerId: OWNER_ID,
     taskId: { in: [TASK_A] },
-    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    // Held: TASK_OCCUPYING's rows, on `finished_at`.
+    finishedAt: null,
   });
 });
 

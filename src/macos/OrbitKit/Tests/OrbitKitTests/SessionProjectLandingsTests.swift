@@ -328,6 +328,13 @@ final class SessionProjectLandingsTests: XCTestCase {
                        "Wiki chat")
         XCTAssertEqual(SessionProjectLandings.targetName("refs/heads/project/\(uuid)", membership: byUUID),
                        "Wiki chat")
+        let short = String(PublicID.toPublic(uuid).prefix(8))
+        XCTAssertEqual(SessionProjectLandings.targetName("project/wiki-chat-\(short)", membership: byUUID),
+                       "Wiki chat")
+        XCTAssertEqual(SessionProjectLandings.targetName("refs/heads/project/\(short)", membership: byUUID),
+                       "Wiki chat")
+        XCTAssertEqual(SessionProjectLandings.targetName("project/wiki-chat-zzzzzzzz", membership: byUUID),
+                       "project/wiki-chat-zzzzzzzz")
         XCTAssertEqual(SessionProjectLandings.targetName("main", membership: byUUID), "main")
         XCTAssertEqual(SessionProjectLandings.targetName("project/other", membership: byUUID), "project/other")
         XCTAssertEqual(SessionProjectLandings.targetName("project/p1", membership: nil), "project/p1")

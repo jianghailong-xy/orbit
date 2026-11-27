@@ -41,6 +41,7 @@ import type { CreateWatchDto } from './dto';
 import { WatchDeliveryOptions, WatchDeliveryService } from './watch-delivery.service';
 import { WatchEvaluatorOptions, WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -391,10 +392,10 @@ async function insertTask(owner: string, status: string): Promise<string> {
 async function insertSession(owner: string, status: string, runnerId: string | null): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id", "finished_at")
-     VALUES ($1,'watch qa','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5,
-             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+     VALUES ($1,'watch qa','the opening prompt',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,'claude',TRUE,1,now(),$5,
+             CASE WHEN $3::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   await sql.query(
@@ -551,7 +552,7 @@ async function wakesOf(watchId: string): Promise<TurnRead[]> {
 }
 
 async function statusOf(sessionId: string): Promise<string> {
-  const { rows } = await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1`, [sessionId]);
+  const { rows } = await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1`, [sessionId]);
   return rows[0].status;
 }
 
@@ -856,7 +857,7 @@ qa('QA-04', 'notifications lost on purpose: events published on a replica whose 
     [randomUUID(), asking],
   );
   writer.hub.publish(asking, runEvent(RunEventType.APPROVAL_REQUEST, { approvalId: randomUUID() }));
-  await sql.query(`UPDATE "session" SET "status" = 'INTERRUPTED' WHERE "id" = $1`, [parking]);
+  await sql.query(`UPDATE "session" SET "turn_state" = 'ABANDONED' WHERE "id" = $1`, [parking]);
   writer.hub.publish(parking, runEvent(RunEventType.STATUS, { status: 'INTERRUPTED' }));
   await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [cancelled]);
   await sql.query(`DELETE FROM "task" WHERE "id" = $1`, [deleted]);
@@ -1150,7 +1151,7 @@ qa('QA-08', 'a RUNNING observer: two wakes and a person\'s message queue behind 
   const person = new SessionsService(prisma as unknown as PrismaService, { notifySessionQueued: () => undefined } as never, hub as never);
   const oneRun = invariant(async () => {
     const { rows: [row] } = await sql.query<{ status: string; inFlight: number }>(
-      `SELECT s."status",
+      `SELECT ${wordSql('s')} AS status,
               (SELECT count(*)::int FROM "conversation_turn" t
                 WHERE t."session_id" = s."id" AND t."kind" IN ('message','shell') AND t."status" = 'IN_FLIGHT') AS "inFlight"
          FROM "session" s WHERE s."id" = $1`,

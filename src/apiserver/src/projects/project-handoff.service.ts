@@ -58,7 +58,7 @@ import { returnSessionsToOpen } from '../sessions/return-to-open';
 import { CROSSING_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
-import { criterionKeyOf } from './project-acceptance';
+import { REQUEST_REOPEN_NEXT_STEP, criterionKeyOf } from './project-acceptance';
 import {
   HANDOFF_APPROVAL_TTL_MS,
   decideHandoffAcceptance,
@@ -746,8 +746,8 @@ export class ProjectHandoffService {
           message:
             (acceptance.refusal === 'MOVE_TASK_SERVES_SETTLED_CRITERION'
               ? 'this task serves an acceptance criterion of the settled project it would leave'
-              : 'a settled project takes no work until it is reopened')
-            + ' — nothing was written and no question was filed',
+              : 'a settled project takes no work until the account owner reopens it')
+            + ' — nothing was written and no question was filed. ' + REQUEST_REOPEN_NEXT_STEP,
         });
       }
       // Asked rather than assumed, and it can only come back a person's answer: the one row that

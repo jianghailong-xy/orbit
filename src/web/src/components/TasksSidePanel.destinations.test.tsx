@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { conversationProjectPage, setConversationProjectPage } from '../lib/conversationProjectPage';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
@@ -59,8 +60,12 @@ function RouterProbe() {
   return null;
 }
 
+// What /auth/capabilities answers: the Documents switch (ORBIT_DRIVE_ENABLED).
+let capabilities: unknown = { managedRunners: { enabled: false }, documents: { enabled: true } };
+
 function serve() {
   vi.mocked(api).mockImplementation((async (path: string) => {
+    if (path === '/auth/capabilities') return capabilities;
     if (path === '/runners') return [{ id: RUNNER, name: 'wikova', online: true }];
     if (path === '/workspaces') return WORKSPACES;
     if (path === '/projects/sidebar') return OPEN_PROJECTS;
@@ -119,6 +124,9 @@ async function click(element: HTMLElement): Promise<void> {
   if (location !== before) navigations += 1;
 }
 
+// A project's page open beside the conversation: the console's, not the conversation's address.
+const openBeside = (): void => setConversationProjectPage({ project: PROJECT, completed: false });
+
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -133,6 +141,8 @@ beforeEach(() => {
     dispatchEvent: () => false,
   }));
   navigations = 0;
+  setConversationProjectPage(null);
+  capabilities = { managedRunners: { enabled: false }, documents: { enabled: true } };
 });
 
 afterEach(async () => {
@@ -154,6 +164,33 @@ const phone = () => vi.stubGlobal('matchMedia', (query: string) => ({
   addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {},
   dispatchEvent: () => false,
 }));
+
+describe('the Drive row and the Drive switch', () => {
+  const labels = () => [...container!.querySelectorAll('.tp-section .tp-item .tp-label')].map((el) => el.textContent);
+  const driveCalls = () => vi.mocked(api).mock.calls.filter(([path]) => /^\/(drive|documents)/.test(String(path)));
+
+  it('is there when Drive is on', async () => {
+    serve();
+    await visit('/tasks');
+    expect(labels()).toContain('Drive');
+  });
+
+  it('is there when the server omits the member', async () => {
+    capabilities = { managedRunners: { enabled: false } };
+    serve();
+    await visit('/tasks');
+    expect(labels()).toContain('Drive');
+  });
+
+  it('is gone, and nothing asks /drive, when Drive is off', async () => {
+    capabilities = { managedRunners: { enabled: false }, documents: { enabled: false } };
+    serve();
+    await visit('/tasks');
+    expect(labels()).not.toContain('Drive');
+    expect(labels()).toContain('Tasks');
+    expect(driveCalls()).toEqual([]);
+  });
+});
 
 describe('the sidebar’s rows as destinations', () => {
   it('opens a project’s sessions page over the workspace showing on a phone, and lights the project instead of it', async () => {
@@ -180,7 +217,8 @@ describe('the sidebar’s rows as destinations', () => {
     serve();
     await visit(`/sessions/${MEMBER}`);
     await click(projectRow());
-    expect(location).toBe(`/sessions/${MEMBER}?project=${PROJECT}`);
+    expect(location).toBe(`/sessions/${MEMBER}`);
+    expect(conversationProjectPage()?.project).toBe(PROJECT);
   });
 
   // Owner's report (2026-11-16): from a session shared with you, a project's row did nothing — the guest view
@@ -200,25 +238,28 @@ describe('the sidebar’s rows as destinations', () => {
     const GUEST = encodeId('0000000b-0000-4000-8000-00000000000b');
     vi.mocked(getSession).mockImplementation(((id: string) =>
       id === GUEST ? Promise.reject(new Error('not found')) : new Promise(() => {})) as never);
-    await visit(`/sessions/${GUEST}?project=${PROJECT}`);
+    openBeside();
+    await visit(`/sessions/${GUEST}`);
     await click(projectRow());
     expect(location).toBe(`/workspaces/${A}?project=${PROJECT}`);
   });
 
-  // Wider than a phone `?project=` is a column beside the conversation, and the list beside the
+  // Wider than a phone the project's page is a column beside the conversation, and the list beside the
   // sidebar stays the workspace's, so the workspace's row stays lit — on a refresh too (owner 2026-11-14).
   it('keeps the workspace lit, not the project, while a wide screen shows the project’s column', async () => {
     serve();
     await visit(`/sessions/${MEMBER}`);
     await click(projectRow());
-    expect(location).toBe(`/sessions/${MEMBER}?project=${PROJECT}`);
+    expect(location).toBe(`/sessions/${MEMBER}`);
+    expect(conversationProjectPage()?.project).toBe(PROJECT);
     expect(projectRow().classList.contains('active')).toBe(false);
     expect(litWorkspaces()).toEqual(['bravo']);
   });
 
   it('lights the workspace, not the project, when a wide screen loads with the project’s column open', async () => {
     serve();
-    await visit(`/sessions/${MEMBER}?project=${PROJECT}`);
+    openBeside();
+    await visit(`/sessions/${MEMBER}`);
     expect(projectRow().classList.contains('active')).toBe(false);
     expect(litWorkspaces()).toEqual(['bravo']);
   });
@@ -226,9 +267,10 @@ describe('the sidebar’s rows as destinations', () => {
   it('goes nowhere when a wide screen’s project row is clicked while its column is open', async () => {
     serve();
     const onNavigate = vi.fn();
-    await visit(`/sessions/${MEMBER}?project=${PROJECT}`, onNavigate);
+    openBeside();
+    await visit(`/sessions/${MEMBER}`, onNavigate);
     await click(projectRow());
-    expect(location).toBe(`/sessions/${MEMBER}?project=${PROJECT}`);
+    expect(location).toBe(`/sessions/${MEMBER}`);
     expect(navigations).toBe(0);
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
@@ -244,7 +286,8 @@ describe('the sidebar’s rows as destinations', () => {
   it('keeps the project lit on a phone on a member’s conversation opened from its page', async () => {
     phone();
     serve();
-    await visit(`/sessions/${MEMBER}?project=${PROJECT}`);
+    openBeside();
+    await visit(`/sessions/${MEMBER}`);
     expect(projectRow().classList.contains('active')).toBe(true);
     expect(litWorkspaces()).toEqual([]);
   });
@@ -280,13 +323,13 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
   const litTopEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);
   const litRailEntries = () =>
-    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('title'));
+    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('aria-label'));
 
   it('is none of the fixed rows, which are the work, as on the iPhone drawer', async () => {
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki', 'Files']);
+    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki', 'Drive']);
   });
 
   it.each([
@@ -308,34 +351,34 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
   });
 });
 
-// Orbit Files (docs/mocks/orbit-files/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
+// Documents (docs/mocks/drive/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
 describe('Files, the row under the Wiki', () => {
   const litTopEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);
   const litRailEntries = () =>
-    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('title'));
+    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('aria-label'));
 
   it('sits directly under the Wiki, with neither a count nor a shortcut', async () => {
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels.indexOf('Files')).toBe(labels.indexOf('Wiki') + 1);
-    expect(topEntry('Files').querySelector('.tp-count')).toBeNull();
-    expect(topEntry('Files').querySelector('.sidebar-nav-icon-files')).not.toBeNull();
+    expect(labels.indexOf('Drive')).toBe(labels.indexOf('Wiki') + 1);
+    expect(topEntry('Drive').querySelector('.tp-count')).toBeNull();
+    expect(topEntry('Drive').querySelector('.sidebar-nav-icon-files')).not.toBeNull();
   });
 
   it('opens the Files page', async () => {
     serve();
     await visit('/tasks');
-    await click(topEntry('Files'));
-    expect(location).toBe('/files');
-    expect(litTopEntries()).toEqual(['Files']);
+    await click(topEntry('Drive'));
+    expect(location).toBe('/drive');
+    expect(litTopEntries()).toEqual(['Drive']);
   });
 
-  it.each(['/files', '/files?folder=x&file=y', '/files/trash'])('lights Files, in either form, on %s', async (path) => {
+  it.each(['/drive', '/drive?folder=x&file=y', '/drive/trash'])('lights Files, in either form, on %s', async (path) => {
     serve();
     await visit(path);
-    expect(litTopEntries()).toEqual(['Files']);
-    expect(litRailEntries()).toEqual(['Files']);
+    expect(litTopEntries()).toEqual(['Drive']);
+    expect(litRailEntries()).toEqual(['Drive']);
   });
 });

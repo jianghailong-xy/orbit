@@ -30,7 +30,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { type PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -42,6 +43,8 @@ import { enqueueForDoneTask, INTEGRATION_JOB_CLAIM } from '../projects/project-i
 import { configureProjectIntegration } from '../projects/project-integration-line';
 import { TasksService } from '../tasks/tasks.service';
 import '../test-support/daemon-routes-over-http';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -121,7 +124,7 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
       data: {
         id, ownerId: owner.id, creatorId: owner.id, workspaceId, assignedRunnerId: runnerId,
         title: `dispatch pause ${status.toLowerCase()}`, prompt: 'the work', provider: 'claude', engine: 'claude',
-        status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+        turnState: turnStateOfWord(status), dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
         ...(lease ? { inboxLeaseOwner: lease.owner, inboxLeaseGeneration: lease.generation } : {}),
         ...extra,
         ...(status === RunStatus.SUCCEEDED || status === RunStatus.FAILED
@@ -219,7 +222,7 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
       data: {
         ownerId: owner.id, creatorId: owner.id, taskId: task.id, workspaceId: projectWorkspaceId,
         assignedRunnerId: runnerId, title: `${name} work`, prompt: `${name} work`, branch,
-        isolationStatus: 'worktree', baseSha: 'b'.repeat(40), status: RunStatus.SUCCEEDED, startsTaskWork: true,
+        isolationStatus: 'worktree', baseSha: 'b'.repeat(40), turnState: null, startsTaskWork: true,
         finishedAt: new Date(Date.now() - 2 * 86_400_000), worktreeBranch: branch, worktreeDirty: false,
         changedFiles: [{ path: 'src/work.ts' }] as never,
       },
@@ -256,7 +259,7 @@ test('the runner dispatch pause holds new work, lets running work finish, and ha
   const heartbeat = () =>
     runner('POST', '/api/runner/heartbeat', { leaseOwner, status: 'ONLINE' }, { 'x-orbit-runner-capabilities': INTEGRATION_JOB_CLAIM });
   const statusOf = async (sessionId: string) =>
-    (await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
+    (await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [sessionId])).rows[0].status;
   const turnStatusOf = async (turnId: string) =>
     (await sql.query<{ status: string }>(`SELECT "status" FROM "conversation_turn" WHERE "id" = $1::uuid`, [turnId])).rows[0].status;
   const jobStateOf = async (jobId: string) =>

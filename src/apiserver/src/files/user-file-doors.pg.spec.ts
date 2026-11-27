@@ -74,7 +74,7 @@ const doorCases = (sql: Client, scratch: string, storage: 'local' | 's3', env: R
   const api = await bootScrubbedApiserver(scratch, storage, {
     DATABASE_URL: url,
     JWT_SECRET: randomBytes(32).toString('hex'),
-    ORBIT_FILES_DIR: path.join(scratch, `${storage}-files`),
+    ORBIT_DRIVE_DIR: path.join(scratch, `${storage}-files`),
     ...env,
   });
   server = api;
@@ -116,8 +116,8 @@ const doorCases = (sql: Client, scratch: string, storage: 'local' | 's3', env: R
   );
   const changedFiles = KINDS.map((kind) => ({ path: `shots/${kind.name}`, status: 'M' }));
   await sql.query(
-    `INSERT INTO session (id, owner_id, creator_id, workspace_id, title, prompt, status, dispatch_origin, assigned_runner_id, changed_files, updated_at)
-     VALUES ($1, $2, $2, $3, 'Doors', 'Doors', 'AWAITING_INPUT', 'USER', $4, $5::jsonb, now())`,
+    `INSERT INTO session (id, owner_id, creator_id, workspace_id, title, prompt, turn_state, dispatch_origin, assigned_runner_id, changed_files, updated_at)
+     VALUES ($1, $2, $2, $3, 'Doors', 'Doors', NULL, 'USER', $4, $5::jsonb, now())`,
     [sessionId, owner.id, workspaceId, runner.id, JSON.stringify(changedFiles)],
   );
   const scratchPath = (kind: Kind) => `/root/.orbit/uploads/${sessionId}/${kind.name}`;
@@ -196,7 +196,7 @@ const doorCases = (sql: Client, scratch: string, storage: 'local' | 's3', env: R
     }
   });
 
-  await t.test('a row from before Orbit Files, whose bytes are in its own column, is held to the same rule', async () => {
+  await t.test('a row from before Documents, whose bytes are in its own column, is held to the same rule', async () => {
     const id = randomUUID();
     await sql.query(
       `INSERT INTO attachment (id, owner_id, session_id, mime_type, size_bytes, file_name, data) VALUES ($1, $2, $3, 'text/html', 13, 'old.html', $4)`,
@@ -239,14 +239,14 @@ test('every door that answers with a user file holds it to the rule', { skip: !U
     await sql.end().catch(() => undefined);
     rmSync(scratch, { recursive: true, force: true });
   });
-  await t.test('local', doorCases(sql, scratch, 'local', { ORBIT_FILES_BACKEND: 'local' }));
+  await t.test('local', doorCases(sql, scratch, 'local', { ORBIT_DRIVE_BACKEND: 'local' }));
   const s3 = await startS3((fn) => t.after(fn));
   await t.test('s3', doorCases(sql, scratch, 's3', {
-    ORBIT_FILES_BACKEND: 's3',
-    ORBIT_FILES_S3_ENDPOINT: s3.endpoint,
-    ORBIT_FILES_S3_BUCKET: s3.bucket,
-    ORBIT_FILES_S3_ACCESS_KEY_ID: s3.accessKeyId,
-    ORBIT_FILES_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
-    ORBIT_FILES_S3_REGION: s3.region,
+    ORBIT_DRIVE_BACKEND: 's3',
+    ORBIT_DRIVE_S3_ENDPOINT: s3.endpoint,
+    ORBIT_DRIVE_S3_BUCKET: s3.bucket,
+    ORBIT_DRIVE_S3_ACCESS_KEY_ID: s3.accessKeyId,
+    ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+    ORBIT_DRIVE_S3_REGION: s3.region,
   }));
 });

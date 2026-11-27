@@ -85,7 +85,7 @@ test('wiki Trash: every door that names a wiki in Trash answers as for one that 
     ORBIT_WIKI: 'on',
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_DIR: filesDir,
+    ORBIT_DRIVE_DIR: filesDir,
   });
   const { api, ok, account, tenant } = censusFixtures({ run: RUN, db, sql, server, jwt });
   // An administrator, as the tenant census's A is, so the administrators' wiki routes are asked too.

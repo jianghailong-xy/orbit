@@ -7,10 +7,10 @@ import { promisify } from 'node:util';
 import {
   CreatorType,
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -403,7 +403,7 @@ test('a prerequisite DONE -> reopen -> DONE is two READY moments under one uncha
       // The run ends, the task is put back, and the prerequisite is reopened and finished again.
       // Every one of those is a `task` status write, so every one of them is a moment.
       await s.db.session.update({
-        where: { id: firstRun.sessionId! }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: firstRun.sessionId! }, data: { turnState: null, finishedAt: new Date() },
       });
       await setStatus(s.db, ids.taskId, TaskStatus.OPEN);
       await setStatus(s.db, prerequisite, TaskStatus.OPEN);
@@ -461,7 +461,7 @@ test('the task itself DONE -> reopen is a new moment, under the same unchanged e
       );
       assert.equal(first.ok, true);
       await s.db.session.update({
-        where: { id: first.sessionId! }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        where: { id: first.sessionId! }, data: { turnState: null, finishedAt: new Date() },
       });
 
       await setStatus(s.db, ids.taskId, TaskStatus.DONE);
@@ -543,7 +543,7 @@ test('a new moment opens its own receipt rather than continuing the previous one
       // A NEW moment on the same task: its own row, its own first attempt, its own answer.
       await s.db.session.update({
         where: { id: answers[0].sessionId! },
-        data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
+        data: { turnState: null, finishedAt: new Date() },
       });
       await s.db.task.update({
         where: { id: ids.taskId }, data: { runAt: new Date(Date.now() - 30 * 60_000) },

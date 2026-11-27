@@ -391,6 +391,10 @@ func claudeNoteEngineMode(job *ClaimedSession, msg map[string]interface{}) {
 	}
 }
 
+// ownerWaitJobDescriptionSuffix ends the description of every job startOwnerWait starts: what bg_list shows, and
+// what the live eval tells an owner wait's wake by (agent_eval_wake_test.go).
+const ownerWaitJobDescriptionSuffix = ": waiting for the owner's confirmation"
+
 // startOwnerWait is the one way a hosted job starts without passing the gate, and what it can do is fixed here
 // rather than asked for: it is `orbit mcp` serving a single call that puts a card in front of the owner and
 // blocks until it is answered (handOffOwnerWait), under this session's own identity. The caller names the call
@@ -450,7 +454,7 @@ func (s *bgJobService) startOwnerWait(args map[string]interface{}) bgSocketRespo
 		Kind:        bgKindWatch,
 		Dir:         s.execDir,
 		ScratchDir:  s.scratchDir,
-		Description: "Orbit " + name + ": waiting for the owner's confirmation",
+		Description: "Orbit " + name + ownerWaitJobDescriptionSuffix,
 		Env:         mergedBgEnv(s.env, nil),
 		SessionID:   s.sessionID,
 		WakeOnExit:  true,

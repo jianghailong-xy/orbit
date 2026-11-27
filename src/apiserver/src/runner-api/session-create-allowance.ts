@@ -15,6 +15,9 @@ import type { PrismaService } from '../prisma/prisma.service';
  *
  * Counted from `task.creator_session_id`, so every task the session created counts, however its card
  * was answered: a session that already filed five on the owner's say-so has three left, not eight.
+ * Except, since 2026-11-26 (the owner's rule), the tasks a coordinator filed into its own project
+ * before that project started: the start card reviews those (`unstarted-project-create.ts`), so they
+ * take nothing from the allowance, and a coordinator that filed a plan of twelve still has its eight.
  *
  * The allowance answers for a session that may start work in Auto. When Auto is wider than the
  * session's running mode, the card goes to a person, as in `coordinatorCreateAllowedBy`.
@@ -40,7 +43,7 @@ const TASK_CREATE_CARD = 'orbit_task_create';
 const TASK_BATCH_CARD = 'orbit_task_batch';
 
 export async function sessionCreateAllowedBy(
-  prisma: Pick<PrismaService, 'session' | 'task'>,
+  prisma: Pick<PrismaService, 'session' | 'task' | 'project'>,
   session: { id: string; ownerId: string },
   toolName: string,
   input: unknown,
@@ -56,7 +59,20 @@ export async function sessionCreateAllowedBy(
     // R3: the mode the session is actually running in.
     const starter = { mode: runningPermissionMode(row, row.owner), engine: row.engine ?? null };
     if (isWiderThanStarter(starter, PermissionMode.AUTO, null)) return null;
-    const created = await prisma.task.count({ where: { creatorSessionId: session.id } });
+    const coordinated = await prisma.project.findMany({
+      where: { coordinatorSessionId: session.id, ownerId: session.ownerId },
+      select: { id: true, startedAt: true },
+    });
+    const filedBeforeStart = coordinated.map((p) =>
+      p.startedAt === null ? { projectId: p.id } : { projectId: p.id, createdAt: { lt: p.startedAt } },
+    );
+    // `projectId: null` is spelled out: NOT (project_id = …) is NULL, not true, for a task in no project.
+    const created = await prisma.task.count({
+      where: {
+        creatorSessionId: session.id,
+        ...(filedBeforeStart.length > 0 ? { OR: [{ projectId: null }, { NOT: { OR: filedBeforeStart } }] } : {}),
+      },
+    });
     return created + adding <= cardFreeTaskCreates(row.owner?.preferences) ? SESSION_CREATE_ALLOWANCE_MESSAGE : null;
   } catch {
     return null;

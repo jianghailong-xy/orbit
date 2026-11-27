@@ -185,7 +185,7 @@ private fun PoolScreen(api: ManagementApi, revision: Long, ownId: String?, share
             when {
                 gone -> Text("That pool no longer exists.", Modifier.padding(24.dp), color = Ink.muted)
                 !loaded -> Text(error ?: "Loading…", Modifier.padding(24.dp), color = if (error != null) Ink.red else Ink.muted)
-                ownPool != null && !CodexLogins.isLoginPool(ownPool) && ownPool.engine != "codex" -> AccountPoolPage(ownPool, now) { member, minutes ->
+                ownPool != null && !CodexLogins.isLoginPool(ownPool) && ownPool.engine != "codex" -> AccountPoolPage(api, ownPool, now) { member, minutes ->
                     pauseMember(api, ownPool.id, member.id, minutes) { load() }
                 }
                 else -> {
@@ -213,7 +213,7 @@ private suspend fun pauseMember(api: ManagementApi, poolId: String, memberId: St
 
 /** AccountPoolPageView: a Claude account pool — its accounts, which is next, their quota, pause. */
 @Composable
-private fun AccountPoolPage(pool: Pool, now: Long, pause: suspend (PoolMember, Int?) -> String?) {
+private fun AccountPoolPage(api: ManagementApi, pool: Pool, now: Long, pause: suspend (PoolMember, Int?) -> String?) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.padding(vertical = 8.dp)) {
             Text(pool.label, style = MaterialTheme.typography.titleLarge)
@@ -242,6 +242,7 @@ private fun AccountPoolPage(pool: Pool, now: Long, pause: suspend (PoolMember, I
                             }
                         }
                     }
+                    AccountHealthProviderLine(api, member.id)
                     AccountPauseControls(member.label, member.pausedUntil, "Pool account · This pool") { minutes -> pause(member, minutes) }
                 }
             }
@@ -320,11 +321,13 @@ private fun CodexPoolPage(api: ManagementApi, page: CodexPoolView, now: Long, no
                     }
                     CodexAccountRow(member, login, CodexLogins.showsNext(member, pool), page.tagged, canSignInAgain, signedOutNote, canSignOut, contributor, now,
                         signInAgain = { sheet = PoolSheet.SignIn(login) }, signOut = { signingOut = login })
+                    AccountHealthLoginLine(api, pool.id, member.id)
                     AccountPauseControls(member.label, member.pausedUntil, if (page.people) "Pool account · Paused for everyone in this pool" else "Pool account · This pool",
                         canManage = canSignOut) { minutes -> pause(member, minutes) }
                 } else if (key != null && access != null) {
                     PoolKeyRow(key, access, member.next, page.tagged, replace = { sheet = PoolSheet.Replace(key) }, remove = { removingKey = key },
                         switch = { press(null) { api.patch("$accessPath/keys/${key.text("id")}", buildJsonObject { put("enabled", key.bool("enabled") != true) }) } })
+                    AccountHealthProviderLine(api, member.id)
                     AccountPauseControls(member.label, member.pausedUntil, if (page.people) "Pool account · Paused for everyone in this pool" else "Pool account · This pool",
                         canManage = PoolPage.canRemove(key, access)) { minutes -> pause(member, minutes) }
                 }

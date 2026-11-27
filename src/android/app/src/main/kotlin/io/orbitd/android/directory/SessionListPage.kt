@@ -72,6 +72,8 @@ internal object SessionListCopy {
     const val COORDINATOR_LABEL = "Project coordinator"
     const val PINNED_SHOWS = "Shows the pinned sessions"
     const val PINNED_HIDES = "Hides the pinned sessions"
+    const val NEEDS_YOU_SHOWS = "Shows the sessions waiting for you"
+    const val NEEDS_YOU_HIDES = "Hides the sessions waiting for you"
     const val FOLDER_ACTIONS = "Folder actions"
     const val FOLDER_EMPTY = "Nothing in this folder"
     const val FOLDER_RUNNING = "Session running"
@@ -95,10 +97,11 @@ internal object ScheduledRunsFolderCopy {
 }
 
 /** The time on a row's first line (OrbitKit `SessionListTime`): how long the turn has run while its spinner shows, nothing if the
- * server sent no start, and otherwise when it last moved. */
+ * server sent no start, and otherwise when it was listed. */
 internal object SessionListTime {
     fun format(session: DirectorySession, now: Instant = Instant.now()): String? =
         if (session.isRunning()) session.currentTurnStartedAt?.let { TaskTime.elapsed(it, now) }
+        // listedAt, not lastTurnAt: the time a row shows agrees with where it sits (owner 2026-11-26).
         else (session.listedAt ?: session.createdAt)?.let { WikiDate.relative(it, now) }
 }
 
@@ -123,7 +126,9 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
     val line = remember(session, deleted, watching, recaps, machine, cloneProgress) {
         SessionLine.make(session, live = !deleted, watching = watching, recaps = recaps, machine = machine, cloneProgress = cloneProgress)
     }
-    val word = remember(session, watching) { SessionHeader.statusWord(session, watching) }
+    // With the session facts, the row's value is the state and its marks ("Idle, Finished"); from an older server, today's word.
+    val word = remember(session, watching) { SessionDisplay.text(session.displayFacts, ", ") ?: SessionHeader.statusWord(session, watching) }
+    val marks = remember(session) { SessionDisplay.marks(session.displayFacts) }
     Column(Modifier.fillMaxWidth()
         .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${session.name}", onLongClick = onOptions, onClick = onOpen)
         .semantics { stateDescription = word }
@@ -139,8 +144,10 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
                 Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp, vertical = 1.dp)
                     .clearAndSetSemantics { contentDescription = SessionListCopy.COORDINATOR_LABEL },
                 style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
-            Text(line.text, Modifier.testTag("session-state:${session.id}"), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium, color = lineColor(line.tone))
+            Text(line.text, (if (marks.isNullOrEmpty()) Modifier else Modifier.weight(1f)).testTag("session-state:${session.id}"), maxLines = 1,
+                overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = lineColor(line.tone))
+            // The marks at the line's right end, two at most (the board's phone rows).
+            SessionMarkChips(marks, max = 2)
         }
     }
 }
@@ -151,6 +158,8 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
  * line and the row's value say them. */
 @Composable
 internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSummary?) {
+    // With the session facts, always one of the three state icons, from `phase` alone (the board); the facts are the marks on the line.
+    SessionDisplay.state(session.displayFacts)?.let { return SessionStateGlyph(it) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val parked = session.effectiveRunState == RunState.AWAITING_INPUT
     when {
@@ -239,13 +248,14 @@ private fun HeadingText(title: String, modifier: Modifier = Modifier) {
 
 private val HEADING_PADDING = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp)
 
-/** The Pinned section's title, the whole band being the button: a chevron down while its rows show and right once folded away. */
+/** A folding section's title (Pinned, Needs you), the whole band being the button: a chevron down while its rows show and right once folded
+ * away. [shows] and [hides] are what a tap does, read out as its action. */
 @Composable
-internal fun PinnedHeading(title: String, collapsed: Boolean, toggle: () -> Unit) {
-    val turn by animateFloatAsState(if (collapsed) 0f else 90f, label = "pinned")
+internal fun FoldHeading(title: String, collapsed: Boolean, shows: String, hides: String, tag: String, toggle: () -> Unit) {
+    val turn by animateFloatAsState(if (collapsed) 0f else 90f, label = tag)
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-        .clickable(role = Role.Button, onClickLabel = if (collapsed) SessionListCopy.PINNED_SHOWS else SessionListCopy.PINNED_HIDES, onClick = toggle)
-        .testTag("pinned-heading").padding(HEADING_PADDING), verticalAlignment = Alignment.CenterVertically) {
+        .clickable(role = Role.Button, onClickLabel = if (collapsed) shows else hides, onClick = toggle)
+        .testTag(tag).padding(HEADING_PADDING), verticalAlignment = Alignment.CenterVertically) {
         HeadingText(title, Modifier.weight(1f))
         Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp).rotate(turn), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -266,13 +276,14 @@ internal fun TagHeading(tag: Tag?) {
 internal fun tagColor(hex: String?): Color =
     hex?.removePrefix("#")?.takeIf { it.length == 6 }?.toLongOrNull(16)?.let { Color(0xFF000000 or it) } ?: Color.Gray
 
-/** Whether the Pinned section is folded to its heading: this phone's, across workspaces and launches (iOS `sessionList.pinnedCollapsed`). */
+/** Whether a section is folded to its heading, stored under [key] ("pinnedCollapsed", "needsYouCollapsed"): this phone's, across workspaces
+ * and launches (iOS `sessionList.pinnedCollapsed` / `sessionList.needsYouCollapsed`). */
 @Composable
-internal fun rememberPinnedCollapsed(): MutableState<Boolean> {
+internal fun rememberSectionCollapsed(key: String): MutableState<Boolean> {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("orbit.sessionList", Context.MODE_PRIVATE) }
-    val state = remember { mutableStateOf(preferences.getBoolean("pinnedCollapsed", false)) }
-    LaunchedEffect(state.value) { preferences.edit { putBoolean("pinnedCollapsed", state.value) } }
+    val state = remember { mutableStateOf(preferences.getBoolean(key, false)) }
+    LaunchedEffect(state.value) { preferences.edit { putBoolean(key, state.value) } }
     return state
 }
 

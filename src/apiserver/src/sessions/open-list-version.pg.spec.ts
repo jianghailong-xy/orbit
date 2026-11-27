@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -14,6 +15,7 @@ import { readOpenListVersion } from './open-list-version';
 import { EVIDENCE_REVIEW_TURN_KEY_PREFIX } from './watch-turn-key';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { turnStateOfWord } from './session-turn-state';
 
 /**
  * The Open list answers 304 from `readOpenListVersion` without building the list, so the version
@@ -90,7 +92,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }): Promise
     await db.session.create({
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: runnerId, title: `olv ${id}`,
-        prompt: 'olv', provider: 'claude', providerBuiltin: true, status, startedAt: new Date(),
+        prompt: 'olv', provider: 'claude', providerBuiltin: true, turnState: turnStateOfWord(status), startedAt: new Date(),
         ...(status === RunStatus.SUCCEEDED ? { finishedAt: new Date()} : {}),
         dispatchOrigin: SessionDispatchOrigin.USER,
       },
@@ -192,7 +194,7 @@ test('every source the Open list row shows moves its version', { skip }, async (
   await changes(f, 'a new session', () => db.session.create({
     data: {
       ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId, title: 'new', prompt: 'new',
-      status: RunStatus.PENDING, dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: 'QUEUED', dispatchOrigin: SessionDispatchOrigin.USER,
     },
   }));
   await changes(f, 'a session completed', () =>
@@ -291,7 +293,7 @@ async function parkedSession(f: Fixture): Promise<string> {
     data: {
       ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId, assignedRunnerId: f.runnerId,
       title: 'olv parked', prompt: 'olv', provider: 'claude', providerBuiltin: true,
-      status: RunStatus.AWAITING_INPUT, startedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
+      turnState: null, startedAt: new Date(), dispatchOrigin: SessionDispatchOrigin.USER,
     },
   });
   return row.id;
@@ -672,7 +674,7 @@ test('a landing insert and its settlement leave the flat Open list alone', { ski
   await db.session.create({
     data: {
       id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, title: 'Land the task',
-      prompt: 'Orbit runs this landing.', status: RunStatus.AWAITING_INPUT,
+      prompt: 'Orbit runs this landing.', turnState: null,
       sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, startsTaskWork: false,
       dispatchOrigin: SessionDispatchOrigin.USER,
     },
@@ -695,7 +697,7 @@ test('a landing insert and its settlement leave the flat Open list alone', { ski
   await db.projectLanding.update({
     where: { sessionId }, data: { settledAt: new Date(), settledAs: 'LANDED' },
   });
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() } });
+  await db.session.update({ where: { id: sessionId }, data: { turnState: null, finishedAt: new Date(), completedAt: new Date() } });
   const plainAfterSettlement = await poll(f, plain.etag);
   assert.equal(plainAfterSettlement.status, 304, 'a settlement moved the plain list');
   assert.equal(plainAfterSettlement.etag, plain.etag);

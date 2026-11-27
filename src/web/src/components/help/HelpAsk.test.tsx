@@ -4,23 +4,16 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HelpAskChoices, HelpAskStuck, HelpArticleMeta, HelpIndex } from '@orbit/shared';
+import type { HelpAskConversation, HelpAskMessage, HelpAskStuck, HelpArticleMeta, HelpIndex } from '@orbit/shared';
 import { HelpDrawerProvider, useHelpDrawer } from '../../lib/helpDrawer';
 import { HELP_ERROR_ATTR } from '../../lib/help/drawerArticles';
-import type { RunEvent } from '../../lib/useSessionStream';
 import { HelpDrawer } from '../HelpDrawer';
 
 /**
- * The help drawer's Ask tab (docs/mocks/help-center board 02 ①–③): with no machine that can answer, "Ask needs a
- * machine" with Add a machine and three Get started articles (③A); otherwise Runs on, suggested questions from the
- * page and its errors, the page chip, Read-only, asking; and an answer with its tool line, [n] chips, sources, link
- * buttons and Did this answer it?. The real drawer over a stand-in server; the session's event stream is stood in.
+ * The help drawer's Ask tab (docs/mocks/help-center board 02 ①–②): suggested questions from the page and its errors,
+ * the page chip, Read-only, asking; and an answer with its [n] chips, sources, link buttons and Did this answer it?.
+ * The server answers on its own DeepSeek key; here the real drawer runs over a stand-in server.
  */
-
-const streamed: { events: RunEvent[]; idle: boolean; streamingText: string } = { events: [], idle: true, streamingText: '' };
-vi.mock('../../lib/useSessionStream', () => ({
-  useSessionStream: () => streamed,
-}));
 
 const meta = (slug: string, over: Partial<HelpArticleMeta> = {}): HelpArticleMeta => ({
   slug,
@@ -52,20 +45,18 @@ const INDEX: HelpIndex = {
   ],
 };
 
-const claude = { engine: 'claude', label: 'Claude Code', askable: true, model: null };
-const codex = { engine: 'codex', label: 'Codex', askable: false, model: null };
-const MIA = { id: 'r-mia', name: 'mia-macbook', online: true, supported: true, engines: [claude, codex] };
-const BUILD = { id: 'r-build', name: 'build-box', online: false, supported: true, engines: [claude] };
+const AT = '2026-11-26T10:00:00.000Z';
+const said = (role: HelpAskMessage['role'], text: string, error?: string): HelpAskMessage => ({ role, text, at: AT, ...(error ? { error } : {}) });
+/** The Ask GET /api/help/ask/s-ask answers with. */
+let conversation: HelpAskConversation = { id: 's-ask', title: '', page: null, status: 'answered', messages: [], createdAt: AT };
+const ask = (messages: HelpAskMessage[], status: HelpAskConversation['status'] = 'answered') => {
+  conversation = { id: 's-ask', title: messages[0]?.text ?? '', page: null, status, messages, createdAt: AT };
+};
 
-let choices: HelpAskChoices = { machines: [], remembered: null };
 const STUCK: HelpAskStuck = {
   admin: { name: 'Alex Li' },
   sentToAdmin: null,
-  report: {
-    repository: 'jianghailong-xy/orbit',
-    machine: { name: 'mia-macbook', runnerVersion: '0.1.255', os: 'darwin', lastHeartbeatAt: new Date(Date.now() - 3 * 60_000).toISOString() },
-    privateNames: ['payments-api'],
-  },
+  report: { repository: 'jianghailong-xy/orbit', privateNames: ['payments-api'] },
 };
 let stuck: HelpAskStuck = STUCK;
 let posts: Array<{ url: string; body: unknown }> = [];
@@ -82,9 +73,7 @@ beforeEach(() => {
   posts = [];
   votes = [];
   stuck = STUCK;
-  streamed.events = [];
-  streamed.idle = true;
-  streamed.streamingText = '';
+  ask([]);
   // As Chromium answers it: a Promise. An effect that returns it hands React a cleanup that is not a function.
   Element.prototype.scrollIntoView = function scrollIntoView() {
     return Promise.resolve();
@@ -96,18 +85,20 @@ beforeEach(() => {
         votes.push(JSON.parse(String(init.body)));
         return new Response(null, { status: 204 });
       }
-      if (init?.method === 'POST') posts.push({ url, body: JSON.parse(String(init.body)) });
+      if (init?.method === 'POST') posts.push({ url, body: init.body === undefined ? undefined : JSON.parse(String(init.body)) });
+      if (url === '/api/help/ask/s-ask/messages' && init?.method === 'POST') {
+        const { content } = JSON.parse(String(init.body)) as { content: string };
+        ask([...conversation.messages, said('user', content)], 'working');
+      }
       const answer: [number, unknown] =
         url === '/api/help'
           ? [200, INDEX]
           : url === '/api/help/articles/a-machine-shows-offline'
             ? [200, { ...INDEX.articles[4], body: 'A machine that sleeps stops beating.' }]
-          : url === '/api/help/ask/choices'
-            ? [200, choices]
             : url === '/api/help/ask' && init?.method === 'POST'
-              ? [201, { sessionId: 's-ask' }]
-              : url === '/api/sessions/s-ask'
-                ? [200, { id: 's-ask', title: 'Why is build-box offline?', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', costUsd: 0.01, assignedRunnerId: 'r-mia', engine: 'claude', model: 'Sonnet 5.5' }]
+              ? [201, { id: 's-ask' }]
+              : url === '/api/help/ask/s-ask' || url === '/api/help/ask/s-ask/messages'
+                ? [url.endsWith('/messages') ? 201 : 200, conversation]
                 : url === '/api/users/me'
                   ? [200, { id: 'u1', email: 'ada@example.com', name: 'Ada', createdAt: '', role: 'MEMBER', preferences: {} }]
                   : url === '/api/runners'
@@ -118,9 +109,7 @@ beforeEach(() => {
                         ? [200, stuck]
                         : url === '/api/help/ask/s-ask/admin' && init?.method === 'POST'
                           ? [201, { taskId: 't-admin', adminName: 'Alex Li', at: '2026-11-16T12:00:00.000Z' }]
-                          : url === '/api/sessions/s-ask/turns' && init?.method === 'POST'
-                            ? [201, { id: 'turn-2' }]
-                            : [404, { statusCode: 404, message: `Cannot GET ${url}` }];
+                          : [404, { statusCode: 404, message: `Cannot GET ${url}` }];
       return new Response(JSON.stringify(answer[1]), { status: answer[0], headers: { 'content-type': 'application/json' } });
     }),
   );
@@ -189,46 +178,10 @@ const where = () => container.querySelector<HTMLElement>('[data-testid="where"]'
 const button = (name: string) =>
   [...container.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === name || b.getAttribute('aria-label') === name);
 
-describe('Ask with no machine that can answer (board 02 ③A)', () => {
-  it.each([
-    ['no machine at all', { machines: [], remembered: null }],
-    ['only an offline machine', { machines: [BUILD], remembered: null }],
-  ])('%s: Ask needs a machine, Add a machine, and three Get started articles', async (_what, given) => {
-    choices = given as HelpAskChoices;
-    await mount('/settings/machines');
-    expect(pane().dataset.helpAskState).toBe('needs-machine');
-    expect(pane().querySelector('h3')!.textContent).toBe('Ask needs a machine');
-    expect(pane().textContent).toContain('An agent answers your questions, and agents run on your machines.');
-    expect(pane().querySelector('textarea')).toBeNull();
-    const rows = [...pane().querySelectorAll('.help-ask-start-row')].map((r) => r.textContent?.replace(/^\d/u, ''));
-    expect(rows).toEqual(['Orbit in five minutes', 'Add a machine', 'Connect a model: subscription or API key']);
-
-    await click(button('Add a machine')!);
-    expect(where().path).toBe('/settings/machines/new');
-  });
-
-  it('a Get started article opens on the Articles tab', async () => {
-    choices = { machines: [], remembered: null };
-    await mount('/');
-    await click([...pane().querySelectorAll<HTMLElement>('.help-ask-start-row')][1]);
-    expect(where().tab).toBe('articles');
-    expect(where().slug).toBe('add-your-first-machine');
-  });
-
-  it('an online machine on a runner too old to answer read-only says to update it', async () => {
-    choices = { machines: [{ ...MIA, supported: false }], remembered: null };
-    await mount('/');
-    expect(pane().dataset.helpAskState).toBe('needs-machine');
-    expect(pane().textContent).toContain('Update the Orbit runner on one');
-  });
-});
-
 describe('a new question (board 02 ①)', () => {
-  it('Runs on, suggestions from the page and its errors, the page chip, Read-only, and asking', async () => {
-    choices = { machines: [MIA, BUILD], remembered: null };
+  it('suggestions from the page and its errors, the page chip, Read-only, and asking: no machine to pick', async () => {
     await mount('/settings/machines', { tab: 'ask' }, true);
-    expect(pane().querySelector('.help-ask-runs-on')!.textContent).toContain('mia-macbook');
-    expect(pane().querySelector('.help-ask-runs-on')!.textContent).toContain('Claude Code');
+    expect(pane().querySelector('.help-ask-runs-on')).toBeNull();
     const suggestions = [...pane().querySelectorAll('.help-ask-suggestion')].map((b) => b.textContent);
     expect(suggestions).toHaveLength(3);
     expect(suggestions[0]).toBe('Why is build-box offline?');
@@ -236,13 +189,12 @@ describe('a new question (board 02 ①)', () => {
     expect(pane().querySelector('[data-help-ask-chip]')!.textContent).toContain('Settings → Machines');
     expect(pane().querySelector('.help-ask-readonly')!.textContent).toBe('Read-only');
 
+    ask([said('user', 'Why is build-box offline?')], 'working');
     await click(pane().querySelectorAll<HTMLElement>('.help-ask-suggestion')[0]);
     expect(posts).toEqual([{
       url: '/api/help/ask',
       body: {
         content: 'Why is build-box offline?',
-        runnerId: 'r-mia',
-        engine: 'claude',
         page: { route: '/settings/machines', label: 'Settings → Machines', errors: ['runner.offline'] },
       },
     }]);
@@ -250,7 +202,6 @@ describe('a new question (board 02 ①)', () => {
   });
 
   it('the chip comes off and the question is sent without the page', async () => {
-    choices = { machines: [MIA], remembered: null };
     await mount('/settings/machines');
     await click(button('Remove Settings → Machines')!);
     expect(pane().querySelector('[data-help-ask-chip]')).toBeNull();
@@ -259,7 +210,6 @@ describe('a new question (board 02 ①)', () => {
   });
 
   it('takes a query handed over from the Articles tab, and an article as its chip', async () => {
-    choices = { machines: [MIA], remembered: { runnerId: 'r-mia', engine: 'claude' } };
     await mount('/', { tab: 'ask', query: 'pool account' });
     expect(pane().querySelector('textarea')!.value).toBe('pool account');
     await act(async () => root!.unmount());
@@ -278,37 +228,25 @@ describe('a new question (board 02 ①)', () => {
 });
 
 describe('an answer (board 02 ②)', () => {
-  it('the tool line, [n] chips opening the article, sources, link buttons, and Did this answer it?', async () => {
-    choices = { machines: [MIA], remembered: null };
-    streamed.events = [
-      { seq: 1, type: 'user', payload: { text: 'Why is build-box offline?' } },
-      { seq: 2, type: 'tool_use', payload: { id: 't1', name: 'Grep', input: { pattern: 'offline' } } },
-      { seq: 3, type: 'tool_use', payload: { id: 't2', name: 'Read', input: { file_path: '/h/articles/machines-and-engines/a-machine-shows-offline.md' } } },
-      { seq: 4, type: 'tool_use', payload: { id: 't3', name: 'Read', input: { file_path: '/h/articles/machines-and-engines/keep-a-machine-awake.md' } } },
-      { seq: 5, type: 'tool_use', payload: { id: 't4', name: 'mcp__orbit__help_machines', input: {} } },
-      {
-        seq: 6,
-        type: 'assistant',
-        payload: {
-          text: [
-            'build-box last checked in **2 h 4 min ago**, so it most likely went to sleep [1].',
-            '',
-            '1. Wake build-box [1].',
-            '2. Turn off sleep while plugged in [2].',
-            '',
-            '[Open build-box](orbit:/settings/machines/r-build)',
-            '',
-            'Sources:',
-            '[1] [A machine shows Offline](orbit:/help/machines-and-engines/a-machine-shows-offline)',
-            '[2] [Keep a machine awake for long tasks](orbit:/help/machines-and-engines/keep-a-machine-awake)',
-          ].join('\n'),
-        },
-      },
-    ];
+  it('[n] chips opening the article, sources, link buttons, and Did this answer it?', async () => {
+    ask([
+      said('user', 'Why is build-box offline?'),
+      said('assistant', [
+        'build-box last checked in **2 h 4 min ago**, so it most likely went to sleep [1].',
+        '',
+        '1. Wake build-box [1].',
+        '2. Turn off sleep while plugged in [2].',
+        '',
+        '[Open build-box](orbit:/settings/machines/r-build)',
+        '',
+        'Sources:',
+        '[1] [A machine shows Offline](orbit:/help/machines-and-engines/a-machine-shows-offline)',
+        '[2] [Keep a machine awake for long tasks](orbit:/help/machines-and-engines/keep-a-machine-awake)',
+      ].join('\n')),
+    ]);
     await mount('/', { tab: 'ask', askSession: 's-ask' });
     expect(pane().querySelector('.help-ask-question')!.textContent).toBe('Why is build-box offline?');
-    expect(pane().querySelector('.help-ask-tool-line')!.textContent).toContain('Read 2 articles · Checked machines');
-    expect(pane().querySelector('.help-ask-meta')!.textContent).toBe('mia-macbook · Claude Code · Sonnet 5.5 · $0.01');
+    expect(pane().querySelector('.help-ask-meta')).toBeNull();
     const chips = [...pane().querySelectorAll<HTMLElement>('.help-ask-answer-body .help-ask-cite')];
     expect(chips.map((c) => c.textContent)).toEqual(['1', '1', '2']);
     expect([...pane().querySelectorAll('.help-ask-source')].map((s) => s.textContent)).toEqual([
@@ -322,10 +260,10 @@ describe('an answer (board 02 ②)', () => {
     expect(pane().querySelector('[data-help-still-stuck]')).toBeNull();
     expect(votes).toEqual([]);
     await click(button('Yes')!);
-    // The answer's Yes / No, by the Ask and the question's turn, and nothing of either's words.
-    expect(votes).toEqual([{ kind: 'answer', id: 's-ask:1', helpful: true }]);
+    // The answer's Yes / No, by the Ask and the question's place in it, and nothing of either's words.
+    expect(votes).toEqual([{ kind: 'answer', id: 's-ask:0', helpful: true }]);
     await click(button('No')!);
-    expect(votes).toEqual([{ kind: 'answer', id: 's-ask:1', helpful: true }, { kind: 'answer', id: 's-ask:1', helpful: false }]);
+    expect(votes).toEqual([{ kind: 'answer', id: 's-ask:0', helpful: true }, { kind: 'answer', id: 's-ask:0', helpful: false }]);
     expect(pane().querySelector('[data-help-still-stuck]')).not.toBeNull();
 
     await click([...pane().querySelectorAll<HTMLElement>('.help-ask-answer-body .help-ask-cite')][2]);
@@ -334,40 +272,52 @@ describe('an answer (board 02 ②)', () => {
   });
 
   it('a link button goes where it points, inside Orbit', async () => {
-    choices = { machines: [MIA], remembered: null };
-    streamed.events = [
-      { seq: 1, type: 'user', payload: { text: 'Where are paused sessions?' } },
-      { seq: 2, type: 'assistant', payload: { text: 'They are under [Paused sessions](orbit:/sessions).' } },
-    ];
+    ask([said('user', 'Where are paused sessions?'), said('assistant', 'They are under [Paused sessions](orbit:/sessions).')]);
     await mount('/', { tab: 'ask', askSession: 's-ask' });
     expect(pane().querySelector('.help-ask-answer-body')!.textContent).toBe('They are under Paused sessions.');
     await click(pane().querySelector<HTMLElement>('.help-ask-button')!);
     expect(where().path).toBe('/sessions');
   });
+
+  it('while the server answers: Looking…, and no follow-up until it has', async () => {
+    ask([said('user', 'Why is build-box offline?')], 'working');
+    await mount('/', { tab: 'ask', askSession: 's-ask' });
+    expect(pane().querySelector('.help-ask-working')!.textContent).toBe('Looking…');
+    expect(pane().querySelector<HTMLTextAreaElement>('textarea[aria-label="Ask a follow-up"]')).not.toBeNull();
+    expect(button('Send')!.disabled).toBe(true);
+    expect(button('Yes')).toBeUndefined();
+  });
+
+  it('an answer that did not come says why, and the question can be asked again', async () => {
+    ask([said('user', 'Why is build-box offline?'), said('assistant', '', 'DeepSeek answered 503. Ask again in a moment.')], 'failed');
+    await mount('/', { tab: 'ask', askSession: 's-ask' });
+    expect(pane().querySelector('.help-ask-error')!.textContent).toBe('DeepSeek answered 503. Ask again in a moment.');
+    expect(button('Yes')).toBeUndefined();
+    const box = pane().querySelector<HTMLTextAreaElement>('textarea[aria-label="Ask a follow-up"]')!;
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+      set.call(box, 'Try again');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(button('Send')!.disabled).toBe(false);
+  });
 });
 
 describe('Still stuck (board 02 ② right frame, side note 5)', () => {
-  const ANSWERED: RunEvent[] = [
-    { seq: 1, type: 'user', payload: { text: 'Why is payments-api offline?' } },
-    {
-      seq: 2,
-      type: 'assistant',
-      payload: {
-        text: [
-          'mia-macbook went to sleep [1]. Your key OPENAI_API_KEY=sk-proj-Ab12Cd34Ef56Gh78Ij90Kl12 is fine.',
-          '',
-          'Sources:',
-          '[1] [A machine shows Offline](orbit:/help/machines-and-engines/a-machine-shows-offline)',
-        ].join('\n'),
-      },
-    },
+  const ANSWERED: HelpAskMessage[] = [
+    said('user', 'Why is payments-api offline?'),
+    said('assistant', [
+      'mia-macbook went to sleep [1]. Your key OPENAI_API_KEY=sk-proj-Ab12Cd34Ef56Gh78Ij90Kl12 is fine.',
+      '',
+      'Sources:',
+      '[1] [A machine shows Offline](orbit:/help/machines-and-engines/a-machine-shows-offline)',
+    ].join('\n')),
   ];
   const stuckCard = () => pane().querySelector<HTMLElement>('[data-help-still-stuck]');
   const row = (which: string) => pane().querySelector<HTMLButtonElement>(`[data-help-stuck="${which}"]`);
 
   async function answeredNo() {
-    choices = { machines: [MIA], remembered: null };
-    streamed.events = ANSWERED;
+    ask(ANSWERED);
     await mount('/', { tab: 'ask', askSession: 's-ask' });
     expect(stuckCard()).toBeNull();
     await click(button('No')!);
@@ -385,7 +335,7 @@ describe('Still stuck (board 02 ② right frame, side note 5)', () => {
     expect(row('github')!.textContent).toContain('Opens a prefilled issue. You review it first.');
   });
 
-  it("Tell it what's still wrong puts the cursor in this Ask's composer, and the follow-up is a turn of the same session", async () => {
+  it("Tell it what's still wrong puts the cursor in this Ask's composer, and the follow-up is the same Ask's next question", async () => {
     await answeredNo();
     await click(row('retry')!);
     const box = pane().querySelector<HTMLTextAreaElement>('textarea[aria-label="Ask a follow-up"]')!;
@@ -398,13 +348,13 @@ describe('Still stuck (board 02 ② right frame, side note 5)', () => {
       box.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await click(button('Send')!);
-    // A turn of this session (sendTurn's door, whichever of its routes it takes), and nothing else.
-    expect(posts).toHaveLength(1);
-    expect(posts[0].url.startsWith('/api/sessions/s-ask/turns')).toBe(true);
-    expect(posts[0].body).toEqual(expect.objectContaining({ content: 'It is awake and still shows Offline.' }));
-    // No new Ask was made: the follow-up went to the session already open.
-    expect(posts.some((p) => p.url === '/api/help/ask')).toBe(false);
+    expect(posts).toEqual([{ url: '/api/help/ask/s-ask/messages', body: { content: 'It is awake and still shows Offline.' } }]);
     expect(pane().dataset.helpAskSession).toBe('s-ask');
+    // The follow-up shows at once, being answered.
+    expect([...pane().querySelectorAll('.help-ask-question')].map((q) => q.textContent)).toEqual([
+      'Why is payments-api offline?', 'It is awake and still shows Offline.',
+    ]);
+    expect(pane().querySelector('.help-ask-working')!.textContent).toBe('Looking…');
   });
 
   it('Ask your admin is not offered to an admin (the server names no admin for one)', async () => {
@@ -416,18 +366,10 @@ describe('Still stuck (board 02 ② right frame, side note 5)', () => {
     expect(stuckCard()!.textContent).not.toContain('Ask your admin');
   });
 
-  it('Ask your admin sends the conversation to the admin as a task, and says so', async () => {
+  it('Ask your admin has the server send the conversation to the admin as a task, and says so', async () => {
     await answeredNo();
     await click(row('admin')!);
-    expect(posts).toEqual([{
-      url: '/api/help/ask/s-ask/admin',
-      body: {
-        exchanges: [{
-          question: 'Why is payments-api offline?',
-          answer: 'mia-macbook went to sleep [1]. Your key OPENAI_API_KEY=sk-proj-Ab12Cd34Ef56Gh78Ij90Kl12 is fine.',
-        }],
-      },
-    }]);
+    expect(posts).toEqual([{ url: '/api/help/ask/s-ask/admin', body: undefined }]);
     expect(row('admin')!.textContent).toContain('Sent to Alex Li. It is in their tasks.');
     expect(row('admin')!.disabled).toBe(true);
     // Nothing of the removed Waiting on you inbox: no /waiting route is asked for or gone to.
@@ -453,8 +395,7 @@ describe('Still stuck (board 02 ② right frame, side note 5)', () => {
     expect(pane().querySelector('[data-help-report]')!.textContent).toContain('What a report includes');
     expect(pane().querySelector('[data-help-report]')!.textContent).toContain('Not included: repository names, file contents, keys');
     expect(shown).toMatch(/^Orbit \S+ · web$/mu);
-    expect(shown).toContain('Machine: runner 0.1.255 · macOS');
-    expect(shown).toContain('Last heartbeat: 3m ago');
+    expect(shown).not.toContain('Machine:');
     expect(shown).toContain('Why is [name removed] offline?');
     expect(shown).toContain('mia-macbook went to sleep [1].');
     expect(shown).not.toContain('payments-api');

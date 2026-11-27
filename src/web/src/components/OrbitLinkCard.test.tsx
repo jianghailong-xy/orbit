@@ -19,6 +19,7 @@ import { orbitLinkStateWord, statusLabel } from './WorkspaceView';
 import { SharedSessionPage } from '../pages/SharedSessionPage';
 import type { OrbitLinkKind, OrbitLinkRef } from '../lib/orbitLink';
 import { decodeId } from '../lib/idCodec';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // The export inlines its stylesheets through Vite's `?raw`, and a worktree cannot read one of them
 // (it lives in node_modules, outside this checkout's root). What this case is about is the markup
@@ -257,7 +258,11 @@ describe('the cards, one per kind', () => {
     expect(text('.olc-state')).toEqual([error]);
     expect(container.querySelector('.olc-state')?.className).toContain('is-failed');
     // The pill truncates where the row runs out, so the whole error is kept for the hover.
-    expect(container.querySelector('.olc-state')?.getAttribute('title')).toBe(error);
+    const pill = container.querySelector('.olc-state')!;
+    // jsdom lays nothing out: give the label a cut-off box so its tip opens.
+    Object.defineProperty(pill, 'scrollWidth', { value: 500, configurable: true });
+    Object.defineProperty(pill, 'clientWidth', { value: 200, configurable: true });
+    expect(await hoverTooltip(pill)).toBe(error);
 
     // An armed retry says the glyph's sentence too, and a coordinator's failure reaches the project
     // card's foot in the same words.

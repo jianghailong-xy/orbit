@@ -62,7 +62,7 @@ data class SessionProjectRow(
     val needsYou: Boolean, val running: Boolean, val jobs: Boolean, val indicator: Indicator?, val line: SessionLine, val target: Target,
     val taskCounts: ProjectTaskCounts?, val runningCount: Int, val pause: ProjectPause = ProjectPause.NONE,
     val started: Boolean = true, val pauseLine: PauseLine? = null,
-    /** The newest listing among the members: the order key, as [DirectorySession.listedAt] is a session's. */
+    /** The newest listing among the members: the order key and the row's time, as [DirectorySession.listedAt] is a session's. */
     val listedAt: String? = null,
 ) {
     /** Which pause the second line says (design §4.2 2a, 2b), or null when it says something else. */
@@ -110,7 +110,7 @@ sealed interface SessionProjectEntry {
         override val createdAt get() = row.createdAt
     }
     /** The entry as the time sections file it (`timeGroupingSession`): a project under its own id, at its coordinator's pin and its
-     * members' latest activity. */
+     * members' newest listing. */
     val groupingSession: DirectorySession get() = when (this) {
         is Session -> session
         is Project -> DirectorySession(id, row.title, pinnedAt = pinnedAt, lastTurnAt = lastTurnAt, listedAt = listedAt, createdAt = createdAt,
@@ -227,25 +227,30 @@ object SessionProjectGrouping {
                 coordinator != null && coordinatorLine != null -> coordinatorLine to SessionProjectRow.Target.Session(coordinator.id)
                 else -> SessionLine(SessionProjectCopy.noCoordinator, SessionLine.Tone.PREVIEW) to SessionProjectRow.Target.Project(membership.projectId)
             }
-            val latest = members.drop(1).fold(members[0]) { newest, session -> if (instant(session.lastTurnAt ?: session.createdAt) > instant(newest.lastTurnAt ?: newest.createdAt)) session else newest }
+            // `latest` places and dates the row; the member that spoke last is carried as its liveness clock, which nothing orders or
+            // dates by.
+            val latest = members.maxBy { instant(it.listedAt ?: it.createdAt) }
+            val spoke = members.maxBy { instant(it.lastTurnAt ?: it.createdAt) }
             // Unlike the counted badges, the row shows a start request as amber too.
             val needsYou = members.any { lines[it.id]?.tone == SessionLine.Tone.APPROVAL }
             val runningCount = if (runnerOffline) 0 else members.count { it.isRunning() }
             val jobs = !runnerOffline && members.any { it.isRunningJob(watch(it)) }
             val counts = taskCounts(summary)
             rows += SessionProjectRow(membership.projectId, summary?.text("title") ?: membership.projectTitle, summary?.text("status") ?: membership.projectStatus,
-                members, content.size, coordinator, rowFolder, coordinator?.pinnedAt, latest.lastTurnAt ?: latest.createdAt, coordinator?.createdAt ?: latest.createdAt,
+                members, content.size, coordinator, rowFolder, coordinator?.pinnedAt, spoke.lastTurnAt ?: spoke.createdAt, coordinator?.createdAt ?: latest.createdAt,
                 needsYou, runningCount > 0, jobs, when { needsYou -> SessionProjectRow.Indicator.NEEDS_YOU; runningCount > 0 -> SessionProjectRow.Indicator.RUNNING
                     jobs -> SessionProjectRow.Indicator.JOBS; else -> null }, selected, target, counts,
                 if (summary != null) summary.obj("buckets")?.number("running") ?: 0 else runningCount, pause, ProjectPause.started(summary),
                 if (selected === pauseSaid) pauseLineKind else null,
-                members.maxByOrNull { instant(it.listedAt ?: it.createdAt) }?.let { it.listedAt ?: it.createdAt })
+                latest.listedAt ?: latest.createdAt)
         }
         val entries = (loose.map { SessionProjectEntry.Session(it) } + rows.map { SessionProjectEntry.Project(it) })
-            .map { it to instant(if (view == SessionView.OPEN) it.listedAt ?: it.createdAt else it.lastTurnAt ?: it.createdAt) }
+            .map { it to instant(it.listedAt ?: it.createdAt) }
             .sortedWith { a, b ->
                 if (view == SessionView.OPEN && (a.first.pinnedAt != null) != (b.first.pinnedAt != null)) (if (a.first.pinnedAt != null) -1 else 1)
-                else b.second.compareTo(a.second)
+                else b.second.compareTo(a.second).takeIf { it != 0 }
+                    ?: instant(b.first.createdAt).compareTo(instant(a.first.createdAt)).takeIf { it != 0 }
+                    ?: a.first.id.compareTo(b.first.id)
             }.map { it.first }
         return SessionProjectListing(assigned, rows, loose, entries, marks, held)
     }

@@ -19,8 +19,8 @@ import {
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
- * The mount credential (docs/orbit-files-drive-technical-design.md §4.3, §8.2): what the mount daemon of one
- * managed-runner generation presents at /runner/drive/*, and nowhere else.
+ * The mount credential (docs/drive-technical-design.md §4.3, §8.2): what the mount daemon of one
+ * managed-runner generation presents at /runner/drive/* (or its /runner/documents/* alias), and nowhere else.
  *
  *   - Issued per generation, beside that generation's runner credential; issuing one revokes every older generation's
  *     credential of the runner. Only the sha256 of the token is kept.

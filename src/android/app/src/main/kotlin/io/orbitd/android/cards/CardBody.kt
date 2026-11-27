@@ -97,7 +97,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
         }
         CardFamily.EVIDENCE -> {
             Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
-            Text("Evidence revision ${row.text("evidenceRevision") ?: ""}", style = MaterialTheme.typography.labelMedium)
+            Text(EvidenceDecisionLine.revisionLine(row), style = MaterialTheme.typography.labelMedium)
             Field("Criterion", row.obj("criterion")?.get("text"), open)
             // What the evidence is, right under what it is measured against, and only when this version cites a file (§2.6).
             EvidenceFilesArea(card)

@@ -2,11 +2,14 @@ package io.orbitd.android.translation
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.composer.ComposerShell
 import io.orbitd.android.composer.ComposerShellTest
 import io.orbitd.android.core.net.ApiResponse
+import io.orbitd.android.toast.OrbitToasts
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Test
@@ -244,6 +247,7 @@ class TranslationConversationTest : ComposerShellTest() {
         val line = bounds(text(sentence, substring = false))
         val retry = bounds(hasTestTag("translation-action:${TranslationCopy.RETRY}"))
         val asWritten = bounds(hasTestTag("translation-action:${TranslationCopy.SEND_AS_WRITTEN}"))
+        val cancel = bounds(hasTestTag("translation-action:${TranslationCopy.CANCEL}"))
         val foot = bounds(hasTestTag("translation-foot"))
         assertTrue("the foot is under the message: $message / $foot", foot.top >= message.bottom)
         assertTrue("the sentence wraps at 320dp: ${line.bottom - line.top}", (line.bottom - line.top) > (retry.bottom - retry.top))
@@ -251,7 +255,65 @@ class TranslationConversationTest : ComposerShellTest() {
         assertTrue("Retry keeps its width: $retry", retry.right - retry.left > 20.dp)
         assertTrue("Send as written keeps its width: $asWritten", asWritten.right - asWritten.left > 60.dp)
         assertTrue("Send as written is on screen: $asWritten", asWritten.right <= 320.dp)
+        assertTrue("Cancel keeps its width: $cancel", cancel.right - cancel.left > 20.dp)
+        assertTrue("Cancel is on screen: $cancel", cancel.right <= 320.dp)
         shot("11-held-timeout-wrapped-320dp")
+    }
+
+    private fun heldFailed(extra: String = "") {
+        ComposerShell.answers["GET sessions/$s/turns"] = { ApiResponse(200, """[
+            {"turnId":"t-j","kind":"message","placement":"queued","content":"再跑一遍全部测试","createdAt":"2026-11-12T01:06:00Z",
+             "attachments":[{"id":"att-1","mimeType":"text/plain","name":"notes.txt"}]$extra,
+             "translation":{"state":"FAILED","from":"zh-Hans","original":"再跑一遍全部测试"}}]""".encodeToByteArray()) }
+    }
+    private val heldCancel = hasTestTag("translation-action:${TranslationCopy.CANCEL}") and hasAnyAncestor(hasTestTag("queued:t-j"))
+    private fun box() = compose.onNodeWithTag("composer-input").fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text
+    private fun pressCancel() {
+        await { has(heldCancel, unmerged = true) }
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("queued:t-j"))
+        compose.onNode(heldCancel, useUnmergedTree = true).performClick()
+    }
+
+    /** Cancel (web 11ae4822b0): the held turn is withdrawn, and what the owner wrote goes back into the composer with its file —
+     *  read before the DELETE, which drops it with the turn, and uploaded again. */
+    @Test fun cancelWithdrawsAFailedMessageAndPutsItBackInTheComposer() {
+        translatedConversation()
+        heldFailed()
+        ComposerShell.attachments = mapOf("att-1" to "notes".encodeToByteArray())
+        ComposerShell.answers["DELETE sessions/$s/turns/t-j"] = {
+            ComposerShell.answers["GET sessions/$s/turns"] = { ApiResponse(200, "[]".encodeToByteArray()) }
+            ApiResponse(200, """{"ok":true}""".encodeToByteArray())
+        }
+        ComposerShell.answers["POST attachments"] = { ApiResponse(200, """{"id":"att-2"}""".encodeToByteArray()) }
+        signIn(); openSession()
+        pressCancel()
+        await { box() == "再跑一遍全部测试" && ComposerShell.calls.any { it.startsWith("POST attachments") } }
+        await { has(hasText("notes.txt", substring = true), unmerged = true) }
+        assertFalse(has(hasTestTag("queued:t-j")))
+        val calls = ComposerShell.calls.toList()
+        assertTrue("the file is read before the turn goes", calls.indexOf("GET attachments/att-1") in 0 until calls.indexOf("DELETE sessions/$s/turns/t-j"))
+    }
+
+    @Test fun aRefusedCancelSaysSoAndKeepsTheMessage() {
+        translatedConversation()
+        heldFailed()
+        ComposerShell.attachments = mapOf("att-1" to "notes".encodeToByteArray())
+        ComposerShell.answers["DELETE sessions/$s/turns/t-j"] = { ApiResponse(409, """{"message":"message already started or not found"}""".encodeToByteArray()) }
+        signIn(); openSession()
+        OrbitToasts.clear()
+        pressCancel()
+        await { OrbitToasts.feed.value.front?.message == "Couldn't cancel the message" }
+        await { has(heldCancel, unmerged = true) }
+        assertEquals("", box())
+    }
+
+    @Test fun aFailedOpeningPromptHasNoCancel() {
+        translatedConversation()
+        heldFailed(""","opening":true""")
+        signIn(); openSession()
+        val held = hasAnyAncestor(hasTestTag("queued:t-j"))
+        await { has(hasTestTag("translation-action:${TranslationCopy.SEND_AS_WRITTEN}") and held, unmerged = true) }
+        assertFalse(has(heldCancel, unmerged = true))
     }
 
     /** docs/mocks/prompt-suggestion-room (option B): the engine's guess takes the box's line, so the tag gives way while one is on

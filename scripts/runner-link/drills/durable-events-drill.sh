@@ -47,6 +47,7 @@
 set -euo pipefail
 # shellcheck source=../staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../staging-lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/session-word.sh"
 
 helper="$here/drills/drill-api.mjs"
 out="$state/client/durable-events"
@@ -241,7 +242,7 @@ load_session() {
   label=$1
   read -r sid suuid run ticks_total < "$drill/$1.session"
 }
-session_status() { psql_value "SELECT status FROM session WHERE id = '$suuid'"; }
+session_status() { psql_value "SELECT $(session_word_sql s) FROM session s WHERE s.id = '$suuid'"; }
 prompt_marker() { echo "[$label run $run]"; }
 # start_ticker FROM: the loaded session's ticks from FROM on, released every ORBIT_DURABLE_EVENTS_TICK seconds by a
 # systemd unit of its own, so that the stream goes on between phases run one at a time and whatever a fault does to the

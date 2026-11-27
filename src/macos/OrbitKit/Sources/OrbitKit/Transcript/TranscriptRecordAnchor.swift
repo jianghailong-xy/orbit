@@ -52,6 +52,8 @@ public enum TranscriptRecordAnchor {
                 return row.id
             case .agents(let cards) where cards.contains(where: { $0.id == itemID }):
                 return row.id
+            case .transfer(_, let cards) where cards.contains(where: { $0.id == itemID }):
+                return row.id
             // A turn Orbit opened, folded (`OrbitExchangeFold`): the fold's row, which opens to it.
             case .exchanges(let turns) where turns.contains(where: { $0.itemIDs.contains(itemID) }):
                 return row.id

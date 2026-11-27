@@ -19,6 +19,7 @@ import {
 } from '../lib/sessionMessage';
 import { AppLink } from './AppLink';
 import { ExportCtx, MD, REVEAL_EVENT, relTime } from './Transcript';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * Another Orbit session's message, drawn as "From [that session]" — instead of the account owner's
@@ -93,17 +94,19 @@ export function SessionMessageCard({
         data-seq={seq}
         data-orbit-round
       >
-        <div className="smc-head" title={SESSION_MESSAGE_NOT_YOU}>
-          <span className="smc-mark" aria-hidden><MessageOutlined /></span>
-          <span className="smc-not-you">{SESSION_MESSAGE_NOT_YOU}</span>
-          <span aria-hidden>{SESSION_MESSAGE_FROM}</span>
-          {sessionHref ? (
-            <AppLink className="smc-from" to={sessionHref}>{title}</AppLink>
-          ) : (
-            <span className="smc-from">{title}</span>
-          )}
-          {card.fromAgentName && <span className="smc-agent">{card.fromAgentName}</span>}
-        </div>
+        <Tooltip content={SESSION_MESSAGE_NOT_YOU} delay={TEXT_TOOLTIP_DELAY_MS} align="start">
+          <div className="smc-head">
+            <span className="smc-mark" aria-hidden><MessageOutlined /></span>
+            <span className="smc-not-you">{SESSION_MESSAGE_NOT_YOU}</span>
+            <span aria-hidden>{SESSION_MESSAGE_FROM}</span>
+            {sessionHref ? (
+              <AppLink className="smc-from" to={sessionHref}>{title}</AppLink>
+            ) : (
+              <span className="smc-from">{title}</span>
+            )}
+            {card.fromAgentName && <span className="smc-agent">{card.fromAgentName}</span>}
+          </div>
+        </Tooltip>
         <div className="smc-bubble">
           {text && (
             <div ref={bodyRef} className={`smc-body${clamped ? ' is-clamped' : ''}`}>

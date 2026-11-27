@@ -149,7 +149,7 @@ CREATE INDEX "provider_slug_alias_provider_id_idx" ON "provider_slug_alias" ("pr
 | 遗留 `runtime='dsh'` 行 | `dsh`、`claude`、`opencode` |
 | Claude 订阅 token（`sk-ant-oat…`） | 只有 `claude`；方言不是 Anthropic 时没有可用 engine |
 | OpenAI Responses key | `codex`、`opencode`；部署开关 `ORBIT_CLAUDE_OPENAI_GATEWAY=true` 时为 `codex`、`claude`、`opencode`（默认仍是 `codex`，D7） |
-| Moonshot key | `kimi`、`opencode` |
+| OpenAI-compatible (Chat Completions) key, `runtime='kimi'`, Moonshot's included | `kimi`, `opencode`; with `ORBIT_CLAUDE_OPENAI_GATEWAY=true` and an endpoint that passes the gateway's upstream rule, `kimi`, `claude`, `opencode` (the default stays `kimi`, D7) |
 | Gemini key | `antigravity`、`opencode` |
 | Cursor key（`runtime='cursor'`） | 只有 `cursor`：它不是模型 API，OpenCode 用不了（`keyEngines`，`openCodeDialect` 不认它） |
 | 方言未知的行 | 无 |
@@ -164,6 +164,7 @@ CREATE INDEX "provider_slug_alias_provider_id_idx" ON "provider_slug_alias" ("pr
 - OpenAI key 上的 `claude` 走 Orbit 自己的网关 `/api/gw/anthropic`（`docs/claude-engine-openai-gateway-design.md` §4.2），只在部署开关 `ORBIT_CLAUDE_OPENAI_GATEWAY` 为 `true` 时成立（`docs/configuration.md`，默认关，D6）：
   - 开关不是凭据的字段。持有开关的服务端在算 `engines` 时传 `EngineTableOptions { anthropicGateway: true }`（`key-gateway.ts` 的 `engineTableOptions()`）；不传等于全部关闭。`keyEngines`、`resolveProviderExec` 的兼容校验、`resolvedCredentialEngines`、领取时的 `pausedPendingSessions` 都读同一个 `engineTableOptions()`，领取 SQL 里 `claude` 也只在开关开时接受 `runtime='codex'` 的 key。
   - 关闭时，每类凭据的 `engines`、解析结果和派发环境与网关出现前逐字段相同，由 `src/apiserver/src/providers/gateway-flag-parity.spec.ts` 对照从改动前的 main（ccdef0955）录下的 `fixtures/gateway-flag-parity.json` 保证；打开时只有 OpenAI key 的 `engines` 和该 key 上 `claude` 会话的环境不同。
+  - Claude Code on an OpenAI-compatible key (`runtime='kimi'`) goes through the same gateway, which speaks Chat Completions to the key's `{baseUrl}/chat/completions` (`docs/claude-engine-openai-gateway-design.md` §10). It reads the same switch and the same `engineTableOptions(baseUrl)`, so a key on a host the gateway may not call (Moonshot's `api.moonshot.ai`, unless an admin lists it) is not offered `claude`. The claim SQL accepts `runtime='kimi'` for `claude` only with the switch on. With the switch on, `gateway-flag-parity.spec.ts` still finds only the OpenAI key's differences, because its Moonshot key's host is not listed.
   - Codex 登录池上的 `claude`（P2b，`docs/claude-engine-openai-gateway-design.md` §9，D4 修订）只在另一个部署开关 `ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY` 为 `true` 时成立，与 `ORBIT_CLAUDE_OPENAI_GATEWAY` 互不依赖：
     - 只限账号主人自己建、未共享（`shared=false`、`owner_id` 是会话主人）的 `codex` 池。共享池、别人把你加进去的池永远不给 `claude`。
     - 共享模块的凭据 `{ kind: 'pool', engine: 'codex', ownLogin: true }` 配 `EngineTableOptions { codexLoginGateway: true }`（`codex-login-claude.ts` 的 `poolTableOptions()`）才得到 `codex`、`claude`；`ownLogin` 只在开关开时由 `engine-provider.ts` 判定写入。`resolvedCredentialEngines`、`pausedPendingSessions`、`listUsable`、领取 SQL（`provider_pool` 分支）读同一开关；池视图（`GET /providers/pools`）只在开关开时多一个 `engines` 字段，客户端据它在 Claude Code 下列出该池。

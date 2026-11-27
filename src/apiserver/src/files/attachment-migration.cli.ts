@@ -1,6 +1,6 @@
 /**
  * Moving old attachments out of Postgres, from a shell (attachment-migration.ts; docs/self-hosting.md, "Moving old
- * attachments out of Postgres"), against DATABASE_URL and the deployment's ORBIT_FILES_* settings. In Compose that is
+ * attachments out of Postgres"), against DATABASE_URL and the deployment's ORBIT_DRIVE_* settings. In Compose that is
  * the apiserver's container, which has both and the files directory:
  *
  *   docker compose exec apiserver node src/apiserver/dist/files/attachment-migration.cli.js status

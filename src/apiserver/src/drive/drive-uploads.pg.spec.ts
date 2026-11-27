@@ -1,5 +1,5 @@
 /**
- * The owner's resumable upload and ranged download (docs/orbit-files-drive-technical-design.md §4.1;
+ * The owner's resumable upload and ranged download (docs/drive-technical-design.md §4.1;
  * drive/drive-uploads.service.ts, drive-content.service.ts, drive.controller.ts), over a real PostgreSQL that
  * `scripts/run-pg-spec.sh` migrates from empty, with the chunks on a files directory of this run's:
  *
@@ -49,12 +49,16 @@ import { DriveDownloadLinks } from './drive-download-links';
 import { DriveUploadsService } from './drive-uploads.service';
 import { DriveController, DriveDownloadController } from './drive.controller';
 import { DriveService } from './drive.service';
+import { DriveSyncsService } from './drive-syncs.service';
+
+// Drive is off unless switched on (drive-switch.ts); this harness mounts its controller, so it switches it on.
+process.env.ORBIT_DRIVE_ENABLED = 'true';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
-test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, concurrency: 1, timeout: 600_000 }, async (t) => {
+test('Documents drive: resumable upload and ranged download', { skip: !URL, concurrency: 1, timeout: 600_000 }, async (t) => {
   const url = URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
@@ -84,7 +88,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
       { provide: FilesService, useValue: files },
       // The controller's download-link route needs its signer; this spec does not call it.
       { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: `secret-${RUN}` }) },
-      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks,
+      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks, DriveSyncsService,
     ],
   })
   class DriveHarness {}
@@ -92,7 +96,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
   app.use(json());
   app.setGlobalPrefix('api');
   await app.listen(0, '127.0.0.1');
-  const base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/api/drive`;
+  const base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/api/documents`;
   t.after(async () => {
     await app.close();
     await db.$disconnect().catch(() => undefined);

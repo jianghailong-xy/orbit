@@ -61,10 +61,12 @@ test('the silent claim skip stays narrowed to PENDING -> RUNNING, on the recorde
   assert.match(guard, /NEW\."provider" = 'opencode'/);
   // The guard in force (migration 0414, docs/provider-engine-contract.md §5.5): a session recorded on
   // the runtime is gated whatever credential it spends, and one without an engine — an older
-  // replica's — by the slug rule above. Still only PENDING -> RUNNING, still the same capability.
+  // replica's — by the slug rule above. Still only PENDING -> RUNNING, still the same capability; since 1641
+  // (docs/session-status-retirement-plan.md §4.2) spelled as the turn state, QUEUED -> IN_FLIGHT, which is that word
+  // for every row the CHECKs admit (sessions/session-triggers-read-facts.pg.spec.ts).
   const current = guardInForce('guard_opencode_runner_claim');
-  assert.match(current, /OLD\."status" = 'PENDING'/);
-  assert.match(current, /NEW\."status" = 'RUNNING'/);
+  assert.match(current, /session_held_turn_state\(OLD\) = 'QUEUED'/);
+  assert.match(current, /session_held_turn_state\(NEW\) = 'IN_FLIGHT'/);
   assert.match(current, /NEW\."engine" = 'opencode' OR \(NEW\."engine" IS NULL AND NEW\."provider" = 'opencode'\)/);
   assert.match(current, /current_setting\('orbit\.runner_supports_opencode', true\)/);
 });

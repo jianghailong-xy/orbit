@@ -231,6 +231,20 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
                                           userInfo: ["kind": "crossing-request", "handoffID": "h1"]),
                      "nothing to open without a conversation or a project")
+
+        // A decision card that became the owner's opens the conversation its card is drawn in — a project's
+        // card too, whose payload also names the project — and names nothing to open without one.
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": Notifications.decisionCardKind, "cardKind": "EVIDENCE",
+                                                       "sessionID": "s4", "taskID": "t1"]),
+                       .open(.session("s4")))
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "decision-card", "cardKind": "DONE_REQUEST",
+                                                       "sessionID": "s5", "projectID": "p1"]),
+                       .open(.session("s5")), "the coordinator conversation, not the project page")
+        XCTAssertNil(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                          userInfo: ["kind": "decision-card", "cardKind": "STANDARD_SET", "projectID": "p1"]),
+                     "a decision card names the conversation its card is drawn in")
     }
 
     // MARK: menu-bar summary

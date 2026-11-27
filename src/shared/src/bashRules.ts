@@ -119,15 +119,67 @@ function endOfHeredocBodies(cmd: string, start: number, heredocs: Heredoc[]): nu
 }
 
 /**
+ * Where the command substitution whose body starts at `start` ends: just past the `)` that closes a
+ * `$(` (`backtick` false) or the backtick that closes one (`backtick` true), or at the end of the
+ * command when nothing closes it. Quotes and nested substitutions inside are read so an operator or
+ * paren in them does not end it early. Best-effort, like the rest of this file.
+ */
+function endOfSubstitution(cmd: string, start: number, backtick: boolean): number {
+  let depth = 1;
+  let i = start;
+  while (i < cmd.length) {
+    const c = cmd[i];
+    if (c === '\\') {
+      i += 2;
+    } else if (backtick) {
+      if (c === '`') return i + 1;
+      i++;
+    } else if (c === "'") {
+      const close = cmd.indexOf("'", i + 1);
+      i = close < 0 ? cmd.length : close + 1;
+    } else if (c === '"') {
+      i++;
+      while (i < cmd.length && cmd[i] !== '"') {
+        if (cmd[i] === '\\') i += 2;
+        else if (cmd[i] === '$' && cmd[i + 1] === '(') i = endOfSubstitution(cmd, i + 2, false);
+        else if (cmd[i] === '`') i = endOfSubstitution(cmd, i + 1, true);
+        else i++;
+      }
+      i++;
+    } else if (c === '`') {
+      i = endOfSubstitution(cmd, i + 1, true);
+    } else if (c === '(') {
+      depth++;
+      i++;
+    } else if (c === ')') {
+      if (--depth === 0) return i + 1;
+      i++;
+    } else {
+      i++;
+    }
+  }
+  return cmd.length;
+}
+
+/** Where a command substitution opens at `i`, as the index its body starts at, or -1. `$((` is arithmetic. */
+function substitutionBodyAt(cmd: string, i: number): number {
+  if (cmd[i] === '`') return i + 1;
+  return cmd[i] === '$' && cmd[i + 1] === '(' && cmd[i + 2] !== '(' ? i + 2 : -1;
+}
+
+/**
  * One pass over a shell line, by the rules that decide where a shell ends a command: nothing escapes
  * inside single quotes, a backslash escapes in double quotes and outside them, a `#` where a word
  * could start runs to the end of the line, and a heredoc's body runs from the next newline to its
  * terminator. `readable` is false when the line can be taken two ways, which a caller deciding whether
  * a rule covers it has to read as "ask".
  */
-function scanBashLine(cmd: string): { segments: string[]; readable: boolean } {
+function scanBashLine(cmd: string, forRules = false): { segments: string[]; heads: string[]; readable: boolean } {
   const segments: string[] = [];
+  const heads: string[] = [];
   let cur = '';
+  // Where in `cur` each command substitution sits, so `heads` can show the segment without them.
+  let substitutions: Array<[number, number]> = [];
   let quote: '"' | "'" | "$'" | null = null;
   let readable = true;
   let atWordStart = true;
@@ -136,6 +188,10 @@ function scanBashLine(cmd: string): { segments: string[]; readable: boolean } {
   let inArithmetic = false;
   const endSegment = () => {
     segments.push(cur);
+    let head = cur;
+    for (const [from, to] of [...substitutions].reverse()) head = head.slice(0, from) + '$_' + head.slice(to);
+    heads.push(head);
+    substitutions = [];
     cur = '';
     atWordStart = true;
     openBraces = 0;
@@ -150,6 +206,19 @@ function scanBashLine(cmd: string): { segments: string[]; readable: boolean } {
         // Closes here, but stays open in a shell that escapes inside single quotes.
         if (cmd[i - 1] === '\\') readable = false;
       }
+      continue;
+    }
+    const body = forRules && quote !== "$'" ? substitutionBodyAt(cmd, i) : -1;
+    if (body >= 0) {
+      // For a rule, a command substitution runs a second command to build this one: one piece of
+      // this sub-command, never split at what it holds, and no rule is taken from inside it. Anyone
+      // else keeps splitting inside it, so a deny pattern still sees the commands it runs.
+      const end = endOfSubstitution(cmd, body, cmd[i] === '`');
+      substitutions.push([cur.length, cur.length + end - i]);
+      cur += cmd.slice(i, end);
+      i = end - 1;
+      atWordStart = false;
+      readable = false;
       continue;
     }
     if (quote) {
@@ -247,8 +316,8 @@ function scanBashLine(cmd: string): { segments: string[]; readable: boolean } {
     atWordStart = WORD_BREAKS.has(c);
     if (atWordStart) openBraces = 0;
   }
-  segments.push(cur);
-  return { segments, readable: readable && quote === null };
+  endSegment();
+  return { segments, heads, readable: readable && quote === null };
 }
 
 // Split a shell command into its top-level sub-commands at unquoted ; && || | and
@@ -305,19 +374,90 @@ export function bashPrefix(segment: string): string | null {
   return next && /^[A-Za-z][\w-]*$/.test(next) ? `${prog} ${next}` : prog;
 }
 
+/** Words that lead a command without being its program: what follows them is judged instead. */
+const LEADING_KEYWORDS = new Set([...COMMAND_KEYWORDS, 'fi', 'done', 'esac', '!', '{', '}']);
+
+/** Words that open a construct whose next word is a name or a pattern, not a program to run. */
+const CONSTRUCT_HEADERS = new Set(['for', 'select', 'case', 'function']);
+
+/**
+ * Programs whose second word picks what they do, so a rule keeps it: `git status:*`, not `git:*`. For
+ * any other program the second word is an argument (`ls OrbitKitTests`, `echo APPLIED_OK`), and a rule
+ * naming it would cover only that one call. One of these with no clean second word (`git -C x diff`)
+ * remembers nothing: `git:*` would cover `git push` too.
+ */
+const SUBCOMMAND_PROGRAMS = new Set([
+  'git', 'gh', 'npm', 'pnpm', 'yarn', 'bun', 'npx', 'deno', 'node-gyp',
+  'docker', 'podman', 'kubectl', 'helm', 'terraform', 'gcloud', 'aws', 'az',
+  'go', 'cargo', 'rustup', 'swift', 'xcrun', 'dotnet', 'mvn', 'gradle', 'gradlew', 'flutter', 'adb',
+  'pip', 'pip3', 'uv', 'poetry', 'conda', 'brew', 'apt', 'apt-get',
+  'systemctl', 'launchctl', 'defaults', 'make', 'orbit',
+]);
+
+/**
+ * Programs that change files or the environment, or run whatever they are given. A standing grant for
+ * one (`cp:*`, `export:*`) covers every later call of it, wherever it writes, while the person approved
+ * one call; since 2026-11-08 a standing grant can also let a command out of the session sandbox. Such a
+ * command is allowed once, and Always allow saves nothing for it.
+ */
+const NEVER_REMEMBERED = new Set([
+  'cp', 'mv', 'rm', 'rmdir', 'ln', 'chmod', 'chown', 'chgrp', 'tee', 'dd', 'touch', 'truncate',
+  'mkdir', 'install', 'rsync', 'unlink', 'shred',
+  'export', 'env', 'set', 'unset', 'declare', 'typeset', 'readonly', 'local', 'alias', 'source', '.',
+  'eval', 'exec', 'sudo', 'doas', 'xargs', 'nohup', 'timeout', 'nice', 'command', 'builtin',
+  // Shells and interpreters: a rule for one covers every script it is given, whatever that script does.
+  'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'node', 'ruby', 'perl', 'php', 'osascript', 'awk', 'gawk', 'mawk',
+  // `find -delete`/`-exec` and `sed -i` change files, so a rule for them is as wide as `rm:*`.
+  'find', 'sed',
+]);
+
+/** `python`, `python3`, `python3.12`: interpreters, like the ones in `NEVER_REMEMBERED`. */
+const PYTHON = /^python[0-9.]*$/;
+
+/** Sub-commands that run any code or package they are given (`bun run x.ts`, `npm exec`), per program. */
+const RUNS_GIVEN_CODE: Record<string, string[]> = {
+  bun: ['run', 'x', 'exec', 'repl'],
+  deno: ['run', 'eval', 'repl', 'x'],
+  npm: ['exec'],
+  pnpm: ['exec', 'dlx'],
+  yarn: ['exec', 'dlx'],
+};
+
+/**
+ * The prefix "always allow" remembers for one sub-command, or null for none. Unlike `bashPrefix`, which
+ * reads a command a rule might cover, this decides what a person's one approval may stand for: it skips
+ * leading keywords (`then cd x` is `cd`), reads `heads` so nothing inside `$(…)` or backticks counts,
+ * keeps a second word only for `SUBCOMMAND_PROGRAMS` (none that `RUNS_GIVEN_CODE`), and refuses
+ * `NEVER_REMEMBERED` and Python.
+ */
+function rememberedPrefix(head: string): string | null {
+  const toks = head.trim().split(/\s+/);
+  let i = 0;
+  while (i < toks.length && (LEADING_KEYWORDS.has(toks[i]) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i]))) i++;
+  const prog = toks[i];
+  if (!prog || CONSTRUCT_HEADERS.has(prog) || !/^[A-Za-z./_-][\w./-]*$/.test(prog)) return null;
+  const name = prog.slice(prog.lastIndexOf('/') + 1);
+  if (NEVER_REMEMBERED.has(name) || PYTHON.test(name)) return null;
+  if (!SUBCOMMAND_PROGRAMS.has(name)) return prog;
+  const next = toks[i + 1];
+  if (!next || !/^[A-Za-z][\w-]*$/.test(next) || RUNS_GIVEN_CODE[name]?.includes(next)) return null;
+  return `${prog} ${next}`;
+}
+
 // One session-permission rule per distinct sub-command of a Bash line, so `cd x && git
 // add …` remembers both `cd` and `git add`, not just the leading `cd`. Empty when the
-// command is blank or no segment yields a clean prefix.
+// command is blank or no segment yields a prefix worth remembering.
 export function bashCommandRules(cmd: string): PermissionRule[] {
   if (!cmd.trim()) return [];
+  const { segments, heads } = scanBashLine(cmd, true);
   // Codex sends commands as `/bin/bash -lc '…'`. Remembering the wrapper would create a
   // rule equivalent to `Bash(/bin/bash:*)`, which is a standing grant for arbitrary shell code.
   // A compound command containing a wrapper is equally unsafe to summarize by prefixes.
-  if (bashSegments(cmd).some(isBashShellWrapperCommand)) return [];
+  if (segments.some(isBashShellWrapperCommand)) return [];
   const seen = new Set<string>();
   const rules: PermissionRule[] = [];
-  for (const seg of bashSegments(cmd)) {
-    const p = bashPrefix(seg);
+  for (const head of heads) {
+    const p = rememberedPrefix(head);
     if (p && !seen.has(p) && !isBashCommandKeyword(p)) {
       seen.add(p);
       rules.push({ toolName: 'Bash', ruleContent: `${p}:*` });

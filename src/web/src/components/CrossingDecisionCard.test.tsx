@@ -225,7 +225,7 @@ describe('the crossing decision card in a coordinator conversation', () => {
     expect(review).not.toContain('2wnd');
     expect(review).not.toContain('Moved task 4');
     expect(review).toContain('Show 2 more');
-    expect(review).toContain('“These tasks serve criteria here; their old project is done.”');
+    expect(review).toContain('Reason given by the requesting agent“These tasks serve criteria here; their old project is done.”');
     expect(review).toContain(MOVE_TASKS_APPROVE_CONSEQUENCE);
     await press('Show 2 more');
     expect(text()).toContain('Moved task 5');
@@ -257,6 +257,12 @@ describe('the crossing decision card in a coordinator conversation', () => {
     expect(preview.textContent).not.toContain('View details & act');
     expect(text()).toMatch(/Decision recorded · ✓ Approved by you at \S+/);
     expect(document.querySelector('[data-pointers]')!.textContent).toBe('');
+    // Answered, the review says what happened: no question, no "Confirming…", no per-row state.
+    openReview();
+    expect(text()).toContain('Tasks moved here');
+    expect(text()).not.toContain('Move these tasks here?');
+    expect(text()).not.toContain(MOVE_TASKS_APPROVE_CONSEQUENCE);
+    expect(document.querySelector('.crossing-decision-list')!.textContent).not.toMatch(/Applied|Approved/);
   });
 
   it('Refuse refuses a batch of task moves with one call too', async () => {
@@ -346,7 +352,8 @@ describe('the crossing decision card in a coordinator conversation', () => {
   it('draws a batch answered before this window opened as its receipt', async () => {
     rows = [row(1, { state: 'DENIED', decidedAt: '2026-11-09T09:00:00.000Z' })];
     await mount();
-    expect(text()).toContain('Move this task here?');
+    expect(text()).toContain('Move refused');
+    expect(text()).not.toContain('Move this task here?');
     expect(text()).toMatch(/Decision recorded · ✓ Refused by you at/);
   });
 

@@ -213,8 +213,6 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
      * A conversation's schedule cards and records, and — for a run's session — the run and its schedule (W2's `run`, else found
      * among the schedules by [scheduleRunId], the session's own read).
      */
-    fun loadSession(sessionId: String, scheduleRunId: String? = null) { scope.launch { loadSessionNow(sessionId, scheduleRunId) } }
-
     suspend fun loadSessionNow(sessionId: String, scheduleRunId: String? = null) {
         val read = try { api.sessionCards(sessionId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (!live()) return
@@ -271,10 +269,26 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         val settled: Boolean get() = this !is Refused
     }
 
-    suspend fun runNow(id: String) = control(id) { api.runNow(id) }
+    suspend fun runNow(id: String, openRun: (String) -> Unit = {}) = control(id) {
+        api.runNow(id)?.run?.sessionId?.let(openRun)
+    }
+
+    suspend fun cancelRun(run: ScheduleRunView, sessionId: String): String? {
+        val error = control(run.scheduleId) { api.stopRun(run.id) }
+        if (error == null) loadSessionNow(sessionId, run.id)
+        return error
+    }
     suspend fun pause(id: String) = control(id) { api.pause(id) }
     suspend fun resume(id: String) = control(id) { api.resume(id) }
     suspend fun undo(id: String, revision: Int) = control(id) { api.undo(id, revision) }
+    /** Rename (§8.4) what the dialog holds, over the name it opened with: nothing is sent while that is empty or unchanged. */
+    suspend fun rename(id: String, draft: String, from: String): String? {
+        val title = ScheduleDisplay.renameTitle(draft, from) ?: return null
+        return control(id) { api.rename(id, title) }
+    }
+    /** The dialogs' presses, on the store's scope: a dialog is gone once pressed. */
+    fun renameNow(id: String, draft: String, from: String) { scope.launch { rename(id, draft, from) } }
+    fun deleteNow(id: String) { scope.launch { delete(id) } }
     suspend fun delete(id: String): String? {
         val said = control(id) { api.delete(id) }
         if (said == null && ObjectId.same(mutable.value.inspectedId, id)) inspect(null)

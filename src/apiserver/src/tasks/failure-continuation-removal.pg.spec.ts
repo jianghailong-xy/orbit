@@ -4,11 +4,11 @@ import test from 'node:test';
 
 import {
   PrismaClient,
-  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -28,6 +28,8 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
 import '../test-support/dequeue-under-lease';
+import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordOf } from '../test-support/session-word';
 
 /**
  * The server half of the 0226 removal, against a real PostgreSQL that replayed every migration.
@@ -403,12 +405,12 @@ suite('(g)(h) ordinary task and session writes are unchanged', async (t) => {
     data: {
       id: sessionId, ownerId, creatorId: ownerId, taskId: first.id, workspaceId,
       assignedRunnerId: runnerId, title: 'work', prompt: 'work', provider: 'claude',
-      status: RunStatus.PENDING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      turnState: 'QUEUED', dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
     },
   });
   for (const status of [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.RUNNING]) {
-    const moved = await db.session.update({ where: { id: sessionId }, data: { status } });
-    assert.equal(moved.status, status);
+    const moved = await db.session.update({ where: { id: sessionId }, data: { turnState: turnStateOfWord(status) } });
+    assert.equal(wordOf(moved), status);
   }
   await db.session.update({ where: { id: sessionId }, data: { deletedAt: new Date() } });
   const answer = await tasks.execute(ownerId, first.id) as { ok: boolean; sessionId?: string };
@@ -440,7 +442,7 @@ suite('(i) an EXECUTABLE task still runs command -> verdict, failure included',
       data: {
         id: sessionId, ownerId, creatorId: ownerId, taskId: declared.id, workspaceId,
         assignedRunnerId: runnerId, title: 'exec', prompt: 'exec', provider: 'claude',
-        status: RunStatus.RUNNING, engineTurnActive: true,
+        turnState: 'IN_FLIGHT', engineTurnActive: true,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
       },
     });

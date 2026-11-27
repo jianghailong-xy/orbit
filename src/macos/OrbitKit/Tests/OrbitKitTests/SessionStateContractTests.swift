@@ -51,6 +51,11 @@ final class SessionStateContractTests: XCTestCase {
         "linkPreview": #"{"id":"s1","title":"Fix it","status":"PENDING","runStatus":"PENDING","runState":"QUEUED","sessionState":"QUEUED","lifecycleState":"OPEN","endReason":null,"error":"Account paused until 2099-01-01T00:00:00.000Z","retryAt":null,"engineTurnActive":false,"activity":null,"pendingApprovals":0,"waitingKind":null,"runningBgCount":0,"runningBgJobCount":0}"#,
         "guestRow": #"{"id":"s1","title":"Fix it","ownerName":"Ana","status":"AWAITING_INPUT","sessionState":"AWAITING_INPUT","lifecycleState":"OPEN","activity":"WAITING","addedAt":"2026-11-22T00:00:00.000Z","lastTurnAt":null}"#,
         "sharedHead": #"{"title":"Fix it","workspaceName":"orbit","status":"RUNNING","runStatus":"RUNNING","sessionState":"RUNNING","runState":"RUNNING","lifecycleState":"OPEN","filingState":"OPEN","createdAt":"2026-11-22T00:00:00.000Z","hasMore":false,"ownerName":"Ana","waitingOnOwner":true,"events":[]}"#,
+        // A run in the task detail's sessions[]: SessionRef decodes phase, released, lastTurnOutcome, waitingOn and
+        // workFinished; endReason is an old field of it, listed in the contract and not merged in here.
+        "taskRun": #"{"id":"s1","title":"Fix it","status":"PENDING","runStatus":"PENDING","runState":"QUEUED","sessionState":"QUEUED","endReason":null,"createdAt":"2026-11-22T00:00:00.000Z"}"#,
+        // One of GET /sessions/search's hits[]: SessionSearchHit decodes the facts; endReason is an old field of it.
+        "searchHit": #"{"id":"s1","title":"Fix it","status":"AWAITING_INPUT","runStatus":"AWAITING_INPUT","sessionState":"AWAITING_INPUT","runState":"AWAITING_INPUT","lifecycleState":"OPEN","agent":null,"endReason":null,"createdAt":"2026-11-22T00:00:00.000Z","matchField":"title","snippet":null}"#,
     ]
 
     private func check<T: Codable>(_ type: T.Type, _ before: Data, _ after: Data,
@@ -75,6 +80,8 @@ final class SessionStateContractTests: XCTestCase {
         case "sessionEnded": try check(ControlSessionEnded.self, old, new, fields: fields, label: label)
         case "linkPreview": try check(LinkPreviewSession.self, old, new, fields: fields, label: label)
         case "guestRow": try check(GuestSessionSummary.self, old, new, fields: fields, label: label)
+        case "taskRun": try check(SessionRef.self, old, new, fields: fields, label: label)
+        case "searchHit": try check(SessionSearchHit.self, old, new, fields: fields, label: label)
         case "sharedHead":
             let decoder = JSONDecoder()
             let before = try decoder.decode(GuestSession.self, from: old)

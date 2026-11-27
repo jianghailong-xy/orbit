@@ -8,6 +8,7 @@ import { findMatches, type FindSegment } from '../lib/findMatches';
 import { elementForSeq as elementForSeqIn } from '../lib/transcriptDeepLink';
 import { REVEAL_EVENT, relTime } from './Transcript';
 import { EXCHANGE_REVEAL_EVENT } from './OrbitExchangeFold';
+import { Tooltip, TEXT_TOOLTIP_DELAY_MS } from './ui/Tooltip';
 
 /**
  * Find within the open session (⌘F / Ctrl+F).
@@ -473,21 +474,26 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
           spellCheck={false}
           autoComplete="off"
         />
-        <span
-          className={`find-count${trimmed && !search.isFetching && total === 0 ? ' find-none' : ''}`}
-          title={capped ? `${totalLabel} matches — the newest ${hits.length} are listed` : undefined}
-        >
-          {jumping ? <LoadingOutlined spin /> : status}
-        </span>
-        <button type="button" className="find-btn" onClick={() => step(-1)} title="Previous match (⇧↵)">
-          <UpOutlined />
-        </button>
-        <button type="button" className="find-btn" onClick={() => step(1)} title="Next match (↵)">
-          <DownOutlined />
-        </button>
-        <button type="button" className="find-btn" onClick={close} title="Close (Esc)">
-          <CloseOutlined />
-        </button>
+        <Tooltip content={capped ? `${totalLabel} matches — the newest ${hits.length} are listed` : undefined} side="bottom" delay={TEXT_TOOLTIP_DELAY_MS}>
+          <span className={`find-count${trimmed && !search.isFetching && total === 0 ? ' find-none' : ''}`}>
+            {jumping ? <LoadingOutlined spin /> : status}
+          </span>
+        </Tooltip>
+        <Tooltip side="bottom" content="Previous match (⇧↵)">
+          <button type="button" className="find-btn" onClick={() => step(-1)} aria-label="Previous match (⇧↵)">
+            <UpOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip side="bottom" content="Next match (↵)">
+          <button type="button" className="find-btn" onClick={() => step(1)} aria-label="Next match (↵)">
+            <DownOutlined />
+          </button>
+        </Tooltip>
+        <Tooltip side="bottom" align="end" content="Close (Esc)">
+          <button type="button" className="find-btn" onClick={close} aria-label="Close (Esc)">
+            <CloseOutlined />
+          </button>
+        </Tooltip>
       </div>
 
       {hits.length > 0 && (

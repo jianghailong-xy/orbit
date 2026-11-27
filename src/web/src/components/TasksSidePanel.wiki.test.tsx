@@ -7,6 +7,17 @@ import type { WikiSpaceRow } from '../lib/wiki';
 import { wikiWaiting } from '../lib/wikiSpace';
 import { TasksSidePanel } from './TasksSidePanel';
 
+// The app Tooltip draws its words only while open: this file reads them off the trigger, as `data-tip`.
+vi.mock('./ui/Tooltip', async () => {
+  const { cloneElement } = await import('react');
+  return {
+    CONTROL_TOOLTIP_DELAY_MS: 100,
+    TEXT_TOOLTIP_DELAY_MS: 600,
+    Tooltip: ({ children, content }: { children: import('react').ReactElement; content?: import('react').ReactNode }) =>
+      cloneElement(children, (content ? { 'data-tip': content } : {}) as object),
+  };
+});
+
 // The panel is drawn in a browser and reads the browser's own state as it renders: the theme's
 // media query and the sidebar's stored width are both module-level reads, so the two stubs have to
 // exist BEFORE the imports are evaluated — which is what `vi.hoisted` is for.
@@ -77,23 +88,23 @@ describe('the sidebar’s Wiki entry', () => {
   it('sits under Projects, with the book mark and no shortcut of its own', () => {
     const html = paint([space(3)]);
     // The labels as the expanded nav spells them (`>Projects<` is the row's own label span; the
-    // collapsed rail carries the same words only in `title` attributes).
+    // collapsed rail carries the same words only in its tips and labels).
     const projects = html.indexOf('>Projects<');
     const wiki = html.indexOf('>Wiki<');
     expect(projects).toBeGreaterThan(-1);
     expect(wiki).toBeGreaterThan(projects);
     expect(html).toContain('sidebar-nav-icon-wiki');
     // Reachable and activatable by keyboard, which is what the row's `role="link"` promises.
-    expect(html).toContain('role="link" tabindex="0" title="Wiki"');
+    expect(html).toContain('role="link" tabindex="0" data-tip="Wiki"');
   });
 
   it('counts what waits on the owner, and explains the number on hover and to a screen reader', () => {
     const html = paint([space(3)]);
     expect(html).toContain('tp-count needs-you');
     expect(html).toContain('>3</span>');
-    expect(html).toContain('title="3 waiting on you" aria-label="3 waiting on you"');
+    expect(html).toContain('aria-label="3 waiting on you" data-tip="3 waiting on you"');
     // The collapsed rail's badge says the same.
-    expect(html).toContain('class="tp-rail-badge needs-you" title="3 waiting on you"');
+    expect(html).toContain('class="tp-rail-badge needs-you" aria-label="3 waiting on you" data-tip="3 waiting on you"');
     expect(html).not.toContain('proposals to review');
   });
 
@@ -109,13 +120,13 @@ describe('the sidebar’s Wiki entry', () => {
     const rows = [space(2, 1), { ...space(1, 2), id: 'other', slug: 'wikova', repoUrlNorm: 'github.com/jianghailong-xy/wikova' }];
     const html = paint(rows);
     expect(wikiWaiting(rows)).toBe(6);
-    expect(html).toContain('title="6 waiting on you"');
+    expect(html).toContain('data-tip="6 waiting on you"');
     expect(html).toContain('>6</span>');
   });
 
   it('counts a plan waiting when no proposal is', () => {
     const html = paint([space(0, 2)]);
-    expect(html).toContain('title="2 waiting on you"');
+    expect(html).toContain('data-tip="2 waiting on you"');
   });
 
   it('marks the row as the open one on a wiki route', () => {
@@ -128,7 +139,7 @@ describe('the sidebar, for an account the server has not switched the wiki on fo
   it('has no Wiki row in either form, and keeps every other row', () => {
     const html = paint(null);
     expect(html).not.toContain('>Wiki<');
-    expect(html).not.toContain('title="Wiki"');
+    expect(html).not.toContain('data-tip="Wiki"');
     expect(html).not.toContain('sidebar-nav-icon-wiki');
     expect(html).toContain('>Projects<');
     expect(html).toContain('>Tasks<');

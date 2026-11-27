@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiDocView, WikiDocsDirectory } from '@orbit/shared';
 import { wikiChatQuoteCounts, type WikiChatList, type WikiChatWorkspace } from '../lib/wikiChat';
 import { readSidebarFolded } from '../lib/sidebarFold';
+import { hoverTooltip } from '../test/tooltipHover';
 
 // A section's diagram is drawn by Mermaid, which jsdom cannot lay out.
 const mermaid = vi.hoisted(() => ({ initialize: vi.fn(), render: vi.fn() }));
@@ -611,7 +612,7 @@ describe('a selection on a document (design §2, comment design §2 step 1)', ()
     await press(document.querySelector('.wk-chat-ask'));
     const quote = document.querySelector('.wk-chat-chip.q')!;
     expect(quote.querySelector('.sub')?.textContent).toBe('20 sentences · 20 sources');
-    expect(quote.getAttribute('title')).toBe('The first 20 of 25 sentences');
+    expect(await hoverTooltip(quote)).toBe('The first 20 of 25 sentences');
   });
 });
 
@@ -856,7 +857,10 @@ describe('the composer: the session page’s own (board 43, plan A)', () => {
     // Typed while it runs, Send says where it goes: into the running turn, the way the session page sends it.
     await type('Read the lease from the config, not the constant.');
     const into = byLabel('Add to current work')!;
-    expect(into.getAttribute('title')).toMatch(/^Send into the current turn · .*Enter, or hold, to queue it for the next turn$/u);
+    // Its tip is the app's tooltip, not the browser's `title`.
+    expect(into.hasAttribute('title')).toBe(false);
+    await act(async () => { into.focus(); await new Promise((resolve) => setTimeout(resolve, 150)); });
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toMatch(/^Send into the current turn · .*Enter, or hold, to queue it for the next turn$/u);
     await press(into);
     expect(turns()[0]!.body).toMatchObject({ content: 'Read the lease from the config, not the constant.', intent: 'CURRENT_WORK' });
     // ⌥Enter queues it for the next turn instead.

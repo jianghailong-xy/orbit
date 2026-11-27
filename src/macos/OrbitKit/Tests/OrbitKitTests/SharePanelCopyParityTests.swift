@@ -307,7 +307,10 @@ final class SharePanelCopyParityTests: XCTestCase {
                        "`- Needs: ${t.title} — ${taskOutcomeChip(t).label}`",
                        "`- Unblocks: ${t.title} — ${taskOutcomeChip(t).label}`",
                        "'## Runs'", "'No runs yet'", "`${runs.length} run${runs.length === 1 ? '' : 's'}`",
-                       "`- ${sessionStatusMeta(s).label} · ${fmt(s.createdAt)}${s.workspace?.name ? ` · ${s.workspace.name}` : ''}`",
+                       // With the session facts the run's words are the state and its marks (web `sessionDisplayText`,
+                       // Apple `SessionDisplay.written`), else the run state's label, as before.
+                       "const runLabel = sessionDisplayText(s) ?? sessionStatusMeta(s).label;",
+                       "`- ${runLabel} · ${fmt(s.createdAt)}${s.workspace?.name ? ` · ${s.workspace.name}` : ''}`",
                        "`- …and ${runs.length - MARKDOWN_RUNS} earlier`",
                        "const MARKDOWN_RUNS = \(ShareMarkdown.listedRuns);",
                        "judged?.replace(' · ', ' ')", "month: 'short',"] {

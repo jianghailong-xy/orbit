@@ -77,6 +77,8 @@ type cursorTurn struct {
 	plans   int
 	// held is the session's own chunk shaped like Cursor CLI's error sentence, not yet put out.
 	held string
+	// produced: some agent of the turn put out text or thinking (the failure's sentence is held, never put out).
+	produced bool
 	// asked holds the cards a permission request was matched to by its subject (permissionAsk).
 	asked map[string]bool
 }
@@ -286,6 +288,7 @@ func (m *cursorEventMapper) flushMain(turn *cursorTurn) {
 	if text == "" {
 		return
 	}
+	turn.produced = true
 	if event == evAssistant {
 		turn.replies = append(turn.replies, text)
 	}
@@ -305,6 +308,7 @@ func (m *cursorEventMapper) flushAgent(turn *cursorTurn, session string) {
 	if text == "" {
 		return
 	}
+	turn.produced = true
 	m.emitParent(turn, parent)
 	m.emitFor(turn.id, event, map[string]interface{}{"text": text, "parentToolUseId": parent})
 }
@@ -455,10 +459,11 @@ func (m *cursorEventMapper) settle(turnID string, result map[string]interface{},
 	}
 	stop := firstString(result, "stopReason")
 	// A turn that ended on Cursor CLI's error sentence failed with it; one that ended any other way said it.
-	failure := ""
+	var classified engineFailure
 	if err == nil && stop == "end_turn" {
-		failure, turn.held = cursorTurnFailure(turn.held), ""
+		classified, turn.held = cursorTurnFailureOf(turn.held), ""
 	}
+	failure := classified.Text
 	m.release(turn)
 	m.flushMain(turn)
 	for _, session := range turn.spawned {
@@ -471,6 +476,7 @@ func (m *cursorEventMapper) settle(turnID string, result map[string]interface{},
 		request.Status, request.Subtype, request.Error = stFailed, "error", err.Error()
 	case stop == "end_turn" && failure != "":
 		request.Status, request.Subtype, request.Error = stFailed, "error", failure
+		request.Failure = classified.wire()
 	case stop == "end_turn":
 	case stop == "cancelled":
 		request.Status, request.Subtype = stInterrupted, "interrupted"
@@ -496,6 +502,10 @@ func (m *cursorEventMapper) settle(turnID string, result map[string]interface{},
 			m.emitToolResult(turn, tool, content, isError)
 		}
 		m.retired[id] = true
+	}
+	if request.Status == stFailed {
+		// Cursor reports no usage on ACP: nothing put out, no card and no plan is all a turn leaves.
+		request.Admission = turnAdmission(turn.produced || len(turn.order) > 0 || turn.plans > 0 || len(turn.spawned) > 0, nil, 0)
 	}
 	if request.Error != "" {
 		m.emitFor(turnID, evError, map[string]interface{}{"message": request.Error})
@@ -546,8 +556,31 @@ func cursorWithdrawnTool(status string) string {
 }
 
 // cursorTurnFailure is how Orbit reports a turn that ended on chunk, when chunk is the error sentence
-// Cursor CLI's prompt handler ends a failed turn with ("\n\n" and one sentence, §12; 6136.index.js@15087);
-// "" for anything else, which is the agent's own text. The sentences are the pinned build's fixed copy:
+// Cursor CLI's prompt handler ends a failed turn with ("\n\n" and one sentence, §12; 6136.index.js@15087):
+// the sentence, classified by cursorFailureRules; "" for anything else, which is the agent's own text.
+func cursorTurnFailure(chunk string) string {
+	return cursorTurnFailureOf(chunk).Text
+}
+
+// cursorTurnFailureOf is cursorTurnFailure with what the sentence says the failure was (§5.3); a zero value,
+// Text "" included, for a chunk that is not Cursor CLI's error sentence.
+func cursorTurnFailureOf(chunk string) engineFailure {
+	said, ok := strings.CutPrefix(chunk, "\n\n")
+	if !ok {
+		return engineFailure{}
+	}
+	failure := matchFailure(cursorFailureRules, said, "")
+	if failure.Kind != "" {
+		return failure
+	}
+	if strings.HasPrefix(failure.Text, "Error: ") {
+		return engineFailure{Said: failure.Text, Text: cursorFailedTurnText(failure.Text)}
+	}
+	return engineFailure{}
+}
+
+// cursorFailureRules is cursorTurnFailure's table: the pinned build's fixed sentences, first match wins
+// (docs/cursor-runtime-contract.md §12; each row's recorded sample is in cursor_failure_test.go):
 //   - "Upgrade your plan to continue": the account's usage limit, or a rate limit Cursor answers the
 //     same way (measured: the server's error was ERROR_RATE_LIMITED_CHANGEABLE, titled "You've hit your
 //     usage limit"). Reported in the words Orbit reads as a spent quota, so it is waited out, not failed
@@ -556,28 +589,31 @@ func cursorWithdrawnTool(status string) string {
 //     credential: a sign-in, in the words Orbit reads as one (isAuthError);
 //   - "Request blocked … usage guidelines …": the model provider refused the request (measured);
 //   - "Add a payment method to continue", "Check your settings to continue": the account needs a change;
-//   - "Error: <what failed>": anything else, a network gone mid-turn among them (unmeasured, §17.1).
-func cursorTurnFailure(chunk string) string {
-	said, ok := strings.CutPrefix(chunk, "\n\n")
-	if !ok {
-		return ""
-	}
-	said = strings.TrimSpace(said)
-	switch {
-	case said == "Upgrade your plan to continue":
-		return cursorUsageLimitText(said)
-	case said == "Please sign in to continue":
+//   - "Error: RetriableError: …": the connection dropped mid-turn (measured, p0c/network-drop-mid-turn);
+//   - "Error: <what failed>": anything else, unclassified (unmeasured, §17.1), which cursorTurnFailureOf
+//     reports as "Cursor CLI failed this turn".
+var cursorFailureRules = []failureRule{
+	{Equals: "Upgrade your plan to continue", Kind: failureUsageLimit, Text: cursorUsageLimitText},
+	{Equals: "Please sign in to continue", Kind: failureCredentialRefused, Text: func(string) string {
 		return `Failed to authenticate: Cursor said: "Please sign in to continue." Sign in to Cursor CLI again, or save a new Cursor API key, then send the message again.`
-	case strings.HasPrefix(said, "Error: [unauthenticated]"):
+	}},
+	{Prefix: "Error: [unauthenticated]", Kind: failureCredentialRefused, Text: func(said string) string {
 		return "Failed to authenticate: Cursor rejected this session's credential (" + strings.TrimPrefix(said, "Error: ") + ")"
-	case strings.HasPrefix(said, "Request blocked ") && strings.Contains(said, "usage guidelines"):
-		return "Cursor's model provider refused this request: " + said
-	case said == "Add a payment method to continue", said == "Check your settings to continue":
-		return `Cursor said: "` + said + `." The Cursor account needs this before the session can go on.`
-	case strings.HasPrefix(said, "Error: "):
-		return "Cursor CLI failed this turn: " + said
-	}
-	return ""
+	}},
+	{Prefix: "Request blocked ", AndContains: "usage guidelines", Kind: failureRequestRefused, Scope: failureScopeRequest,
+		Text: func(said string) string { return "Cursor's model provider refused this request: " + said }},
+	{Equals: "Add a payment method to continue", Kind: failureAccountAction, Text: cursorAccountActionText},
+	{Equals: "Check your settings to continue", Kind: failureAccountAction, Text: cursorAccountActionText},
+	{Prefix: "Error: RetriableError:", Kind: failureTransport, Text: cursorFailedTurnText},
+	// "Error: <anything else>" matches no rule: cursorTurnFailureOf gives it cursorFailedTurnText, unclassified.
+}
+
+func cursorAccountActionText(said string) string {
+	return `Cursor said: "` + said + `." The Cursor account needs this before the session can go on.`
+}
+
+func cursorFailedTurnText(said string) string {
+	return "Cursor CLI failed this turn: " + said
 }
 
 // cursorToolCall names a card after the Orbit tool it is, with that tool's input, the way the clients

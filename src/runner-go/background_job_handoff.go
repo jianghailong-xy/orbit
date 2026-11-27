@@ -184,6 +184,7 @@ func (b *bgTailer) adoptJobs(jobs []*bgJob) {
 			b.finishJob(job, *job.adoptedExit)
 			continue
 		}
+		trackMemoryRoots(b.sessionID, true, job.pid)
 		// Ended by the context it is hosted under, as a job this tailer starts is.
 		context.AfterFunc(jobCtx, func() {
 			if b.killable(job) {

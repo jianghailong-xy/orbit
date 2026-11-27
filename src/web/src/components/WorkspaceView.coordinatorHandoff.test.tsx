@@ -4,9 +4,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 import type { Runner } from './TasksSidePanel';
 import { ToastViewport } from './ToastViewport';
 import { clearToasts } from '../lib/toastStore';
+import { hoverTooltip } from '../test/tooltipHover';
 
 /**
  * Compact and Start a new coordinator in the Context popover (board 01), and the handoff as the
@@ -101,8 +104,11 @@ class FakeEventSource {
 }
 
 let pathname = '';
+let search = '';
+const visited: string[] = [];
 function Where() {
-  pathname = useLocation().pathname;
+  ({ pathname, search } = useLocation());
+  if (visited[visited.length - 1] !== pathname) visited.push(pathname);
   return null;
 }
 
@@ -220,6 +226,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       if (p === '/workspaces') {
         return reply([{ id: WORKSPACE, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z' }]);
       }
+      if (p.startsWith('/sessions/listing?')) return reply(answerListing(listingRules, [detail], [], p));
       if (p.startsWith('/sessions/')) {
         if (p.includes('/events/page')) return reply({ events: [], hasMore: false });
         if (p.includes('/diff')) return reply({ files: [] });
@@ -454,13 +461,92 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
         : null,
     });
     await mount();
-    const sub = () => mounted().querySelector('.workspace-sub')?.textContent ?? '';
-    await waitFor(() => expect(sub()).not.toBe(''));
+    // A wide header has no status line (docs/mocks/session-header-compact): the word rides beside the title.
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const badges = () => [...line()!.querySelectorAll('.coordinator-badge')].map((n) => n.textContent);
     if (shown) {
-      expect(sub().split(' · ')[0]).toBe('Handing over');
+      expect(badges()).toContain('Handing over');
     } else {
-      expect(sub()).not.toContain('Handing over');
+      expect(badges()).not.toContain('Handing over');
     }
+  });
+
+  it('links the header to the project through the Coordinator badge, with no second line repeating the title', async () => {
+    // docs/mocks/session-header-project-link (C): a coordinator session is named after its project.
+    detail = session({ projectId: PROJECT, projectTitle: 'Checkout redesign', projectMembership: coordinator });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    expect(mounted().querySelector('.workspace-header-main > .workspace-header-task')).toBeNull();
+    const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
+    expect(badge?.textContent).toBe('Coordinator');
+    expect(await hoverTooltip(badge!)).toBe('Open project · Checkout redesign');
+    expect(badge?.getAttribute('aria-label')).toBe('Coordinator · Open project Checkout redesign');
+    await act(async () => badge!.click());
+    // The test's one catch-all route keeps WorkspaceView mounted on /projects/…, which may route on from there.
+    await waitFor(() => expect(visited).toContain(`/projects/${PROJECT}`));
+  });
+
+  it('links a task session to its task through a Task badge, with no second line repeating the title', async () => {
+    // As the Coordinator badge does for a project: a task's session is named after its task.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    expect(mounted().querySelector('.workspace-header-task')).toBeNull();
+    const badge = line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link');
+    expect(badge?.textContent).toBe('Task');
+    expect(await hoverTooltip(badge!)).toBe('Open task · Fix the red checks');
+    expect(badge?.getAttribute('aria-label')).toBe('Task · Open task Fix the red checks');
+    await act(async () => badge!.click());
+    // Open beside the conversation, with the address left as it was (owner 2026-11-27).
+    await waitFor(() => expect(badge?.getAttribute('aria-pressed')).toBe('true'));
+    expect(new URLSearchParams(search).get('task')).toBeNull();
+  });
+
+  it('the title reads the same hovered as at rest: no tooltip, no ›, still Session settings to a screen reader', async () => {
+    // docs/mocks/session-title-hover (owner 2026-11-27): on hover the › took room and pushed the Task badge.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const title = line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
+    expect(title.getAttribute('aria-label')).toBe('Session settings');
+    expect(title.querySelector('.workspace-name-chevron, .anticon')).toBeNull();
+    expect(await hoverTooltip(title)).toBeNull();
+  });
+
+  it('the Task badge toggles its task beside the conversation, one column at a time with session settings', async () => {
+    // docs/mocks/session-task-column: pressed while the task is open, a second press closes it, and the
+    // task and session settings never stand side by side.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const badge = () => line()!.querySelector<HTMLButtonElement>('button.coordinator-badge-link')!;
+    const title = () => line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
+    const taskOpen = () => {
+      expect(new URLSearchParams(search).get('task')).toBeNull();
+      return badge().getAttribute('aria-pressed') === 'true';
+    };
+
+    await act(async () => title().click());
+    await waitFor(() => expect(title().getAttribute('aria-expanded')).toBe('true'));
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(true));
+    expect(title().getAttribute('aria-expanded')).toBe('false');
+    await waitFor(() => expect(badge().getAttribute('aria-pressed')).toBe('true'));
+
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(false));
+    expect(badge().getAttribute('aria-pressed')).toBe('false');
+
+    await act(async () => badge().click());
+    await waitFor(() => expect(taskOpen()).toBe(true));
+    await act(async () => title().click());
+    await waitFor(() => expect(taskOpen()).toBe(false));
+    expect(title().getAttribute('aria-expanded')).toBe('true');
   });
 
   it('02-3: opens the successor with the note card and the waits that moved here', async () => {

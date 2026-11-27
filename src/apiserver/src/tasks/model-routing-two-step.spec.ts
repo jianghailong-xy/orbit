@@ -71,7 +71,7 @@ const order = (d: ReturnType<typeof routeSubagent>) =>
   [[d.provider, d.model, d.pickLevel ?? null], ...d.fallbacks.map((f) => [f.provider, f.model, f.level ?? null])];
 
 test('the policy version names the two steps', () => {
-  assert.equal(SUBAGENT_ROUTING_POLICY_VERSION, 'p7-model-then-account-1');
+  assert.equal(SUBAGENT_ROUTING_POLICY_VERSION, 'p8-account-health-1');
   assert.equal(routeSubagent(input('balance', [signIn('claude')])).policyVersion, SUBAGENT_ROUTING_POLICY_VERSION);
 });
 

@@ -19,6 +19,7 @@ import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor'
 import { outsideThePoolGateway } from './providers/pool-gateway.controller';
 import { listenForMetricsScrapes } from './metrics/metrics-listener';
 import { listenForRunnerLinkCalls } from './runner-api/runner-link-call';
+import { GITHUB_WEBHOOK_PATH, type RawBodyRequest } from './github/github-webhook';
 
 declare global {
   interface BigInt {
@@ -54,7 +55,13 @@ async function bootstrap() {
   // Pasted-image turns carry base64 in the JSON body; Nest's default 100kb express
   // limit rejects them with 413. Match the gateway/web nginx client_max_body_size (10m).
   // Not for the shared pools' gateway, which forwards the body codex sent unread (pool-gateway.controller.ts).
-  app.use(outsideThePoolGateway(json({ limit: '10mb' })));
+  app.use(outsideThePoolGateway(json({
+    limit: '10mb',
+    // GitHub signs a webhook delivery's bytes (docs/design/protected-branch-landing.md §4.7): that one route keeps them.
+    verify: (req, _res, buf) => {
+      if ((req as { url?: string }).url?.startsWith(GITHUB_WEBHOOK_PATH)) (req as RawBodyRequest).rawBody = Buffer.from(buf);
+    },
+  })));
   app.use(outsideThePoolGateway(urlencoded({ extended: true, limit: '10mb' })));
 
   // The session-context headers carry public ids like every other id position. Before the guards,

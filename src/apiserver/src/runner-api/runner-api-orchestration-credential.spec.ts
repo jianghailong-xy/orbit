@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { RunStatus } from '@orbit/shared';
 import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
 import { RunnerApiController } from './runner-api.controller';
 
@@ -183,14 +183,7 @@ test('reclaim enables orchestration only when every live guard matches', async (
       assignedRunnerId: 'runner-1',
       ownerId: 'owner-1',
       sessionKind: 'CONVERSATION',
-      status: {
-        in: [
-          RunStatus.PENDING,
-          RunStatus.RUNNING,
-          RunStatus.AWAITING_INPUT,
-          RunStatus.INTERRUPTED,
-        ],
-      },
+      finishedAt: null,
     },
   ]);
 

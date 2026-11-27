@@ -156,13 +156,14 @@ services:
       # its own on the far side — the mirror deletes anything there it did not put there.
       ORBIT_BACKUP_SYNC_TARGET: "${ORBIT_BACKUP_SYNC_TARGET:-}"
       ORBIT_BACKUP_SYNC_SSH_PORT: "${ORBIT_BACKUP_SYNC_SSH_PORT:-22}"
-      # Optional one-way copy of the bucket's files/ prefix to the archive's -bucket sibling.
-      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"
-      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"
-      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"
-      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"
-      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"
-      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"
+      # Optional one-way copy of the bucket's files/ prefix to the archive's -bucket sibling. Each falls back to its
+      # ORBIT_DOCUMENTS_* and then ORBIT_FILES_* name from before the rename back to Drive.
+      ORBIT_DRIVE_S3_MIRROR: "${ORBIT_DRIVE_S3_MIRROR:-${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}}"
+      ORBIT_DRIVE_S3_ENDPOINT: "${ORBIT_DRIVE_S3_ENDPOINT:-${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}}"
+      ORBIT_DRIVE_S3_BUCKET: "${ORBIT_DRIVE_S3_BUCKET:-${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}}"
+      ORBIT_DRIVE_S3_ACCESS_KEY_ID: "${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"
+      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"
+      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -276,6 +277,11 @@ services:
       FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
+      # Web Push to browsers (docs/web-push-design.md): a VAPID key pair, base64url as `npx web-push generate-vapid-keys`
+      # prints it. Empty disables browser notifications. Keep the pair: a new one makes every browser subscribe again.
+      WEB_PUSH_PUBLIC_KEY: "${WEB_PUSH_PUBLIC_KEY:-}"
+      WEB_PUSH_PRIVATE_KEY: "${WEB_PUSH_PRIVATE_KEY:-}"
+      WEB_PUSH_SUBJECT: "${WEB_PUSH_SUBJECT:-}"
       # The runner link (docs/self-hosting.md, "Runner link"): the connection tokens a runner trades its runner token for,
       # to reach the link gateway. A fresh install and /upgrade generate them. This build serves runners only over the link,
       # so the signing key is required: without it Compose renders nothing, and says what to run, rather than start an
@@ -315,21 +321,22 @@ services:
       # The GitHub repository (owner/repo) this build was released from: where Help → Still stuck → Report on GitHub
       # opens a new issue. Empty is Orbit's own.
       ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"
-      # Orbit Files (docs/orbit-files-design.md §2.10): where attachment bytes are kept, one copy per content, named by
+      # Drive and attachments (docs/drive-design.md §2.10): where their bytes are kept, one copy per content, named by
       # its sha256; Postgres keeps only what describes each file. local (the default) is ./data/files, mounted below.
       # s3 is an S3-compatible bucket, addressed path-style at the endpoint, and needs the bucket and key pair below;
-      # the region defaults to us-east-1. Uploads are written to ./data/files/tmp first with either.
-      ORBIT_FILES_BACKEND: "${ORBIT_FILES_BACKEND:-local}"
-      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"
-      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"
-      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"
-      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"
-      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"
-      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"
-      # The most one account may keep in Orbit Files, in bytes: past it an upload is refused. Empty means no limit, a
+      # the region defaults to us-east-1. Uploads are written to ./data/files/tmp first with either. Each ORBIT_DRIVE_*
+      # falls back to its names from before, ORBIT_DOCUMENTS_* and then ORBIT_FILES_*, so a host .env written then still works.
+      ORBIT_DRIVE_BACKEND: "${ORBIT_DRIVE_BACKEND:-${ORBIT_DOCUMENTS_BACKEND:-${ORBIT_FILES_BACKEND:-local}}}"
+      ORBIT_DRIVE_S3_ENDPOINT: "${ORBIT_DRIVE_S3_ENDPOINT:-${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}}"
+      ORBIT_DRIVE_S3_BUCKET: "${ORBIT_DRIVE_S3_BUCKET:-${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}}"
+      ORBIT_DRIVE_S3_ACCESS_KEY_ID: "${ORBIT_DRIVE_S3_ACCESS_KEY_ID:-${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}}"
+      ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: "${ORBIT_DRIVE_S3_SECRET_ACCESS_KEY:-${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}}"
+      ORBIT_DRIVE_S3_REGION: "${ORBIT_DRIVE_S3_REGION:-${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}}"
+      ORBIT_DRIVE_S3_MIRROR: "${ORBIT_DRIVE_S3_MIRROR:-${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}}"
+      # The most one account may keep in Drive and attachments, in bytes: past it an upload is refused. Empty means no limit, a
       # self-hosted deployment's default. A hosted instance sets it.
-      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"
-      ORBIT_FILES_STORE_QUOTA_BYTES: "${ORBIT_FILES_STORE_QUOTA_BYTES:-}"
+      ORBIT_DRIVE_QUOTA_BYTES: "${ORBIT_DRIVE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-}}}"
+      ORBIT_DRIVE_STORE_QUOTA_BYTES: "${ORBIT_DRIVE_STORE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_STORE_QUOTA_BYTES:-${ORBIT_FILES_STORE_QUOTA_BYTES:-}}}"
       # The two values pgbackup keeps base backups by, with its defaults: an expired file's bytes go no sooner than
       # max(7 days, interval x (keep + 1)) after its tombstone, so restoring any retained backup finds the bytes its rows name.
       ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"
@@ -340,6 +347,10 @@ services:
       # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
       # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
       ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
+      # The drive (src/apiserver/src/drive/drive-switch.ts): off unless the host's .env says true, under ORBIT_DRIVE_ENABLED
+      # or its older names ORBIT_DOCUMENTS_ENABLED and ORBIT_FILES_ENABLED. A fresh install writes false, and an upgrade
+      # never writes it.
+      ORBIT_DRIVE_ENABLED: "${ORBIT_DRIVE_ENABLED:-${ORBIT_DOCUMENTS_ENABLED:-${ORBIT_FILES_ENABLED:-false}}}"
       # Orbit Cloud browser, off unless the host's .env says true (docs/runner-browser-design.md §2).
       ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"
       ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json
@@ -349,7 +360,7 @@ services:
       # The same directory at its path from before the rename, which channel.json and profile.json written by an
       # earlier install still name inside them.
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
-      # The files directory (ORBIT_FILES_DIR's default), the way ./data/postgres holds the database: the bytes of every
+      # The files directory (ORBIT_DRIVE_DIR's default), the way ./data/postgres holds the database: the bytes of every
       # attachment the local store keeps, and the temporary files uploads arrive in.
       - ./data/files:/var/lib/orbit/files
     depends_on:

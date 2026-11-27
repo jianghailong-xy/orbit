@@ -68,17 +68,31 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
   server can push to.
 - `{"delivered": false, "reason": "NOT_ACCEPTED"}`: APNs and FCM accepted it for none of your devices.
 
+## Paging a workspace’s session list
+
+`GET /api/sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limit=40][&after=<cursor>]`
+answers one page of the list as top-level entries, with an ETag answered `304` when nothing moved:
+
+| Field | Meaning |
+| --- | --- |
+| `folders` | The folder rows, `{ folderId, rowCount, needsYou, running, jobs }`: only on a first page without `folderId`. |
+| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator }`, in list order (in Open: Pinned, then Needs you, then Working, then the rest, each newest listed first, as the web's sections draw them); a project's `running` / `jobs` say whether a member it holds runs / has a background job moving. |
+| `next` | The `after` of the following page, or `null` at the end. |
+| `restarted` | `true` when `after` was written under an order the list no longer has (Completed switches order on whether any session is held by a project): this is the first page again, with its `folders`, and replaces the pages already read. Absent otherwise. |
+
+`limit` is 1 to 200 (40 when absent); a malformed `after` is refused `400`.
+
 ## Summary
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 39 |
-| `user` | 531 |
+| `public` | 41 |
+| `user` | 587 |
 | `admin` | 31 |
-| `runner` | 231 |
+| `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **836** |
+| **Total** | **922** |
 
 ## Public routes
 
@@ -95,16 +109,18 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/auth/methods` | — | `AuthController.methods` |
 | `POST` | `/api/auth/refresh` | body `RefreshDto` | `AuthController.refresh` |
 | `GET` | `/api/auth/setup-status` | — | `AuthController.setupStatus` |
+| `GET` | `/api/documents/dl/:token` | path `token` | `DriveDownloadController.open` |
 | `GET` | `/api/drive/dl/:token` | path `token` | `DriveDownloadController.open` |
 | `ALL` | `/api/gw/anthropic` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/anthropic/{*path}` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
 | `ALL` | `/api/gw/codex/{*path}` | — | `PoolGatewayController.forward` |
 | `GET` | `/api/health` | — | `HealthController.read` |
-| `GET` | `/api/help` | — | `HelpController.index` |
-| `GET` | `/api/help/articles/:slug` | path `slug` | `HelpController.article` |
-| `GET` | `/api/help/search` | query `q` | `HelpController.search` |
+| `GET` | `/api/help` | query `lang` | `HelpController.index` |
+| `GET` | `/api/help/articles/:slug` | path `slug`; query `lang` | `HelpController.article` |
+| `GET` | `/api/help/search` | query `lang`, `q` | `HelpController.search` |
 | `GET` | `/api/integrations/github/callback` | query `code`, `error`, `setup_action`, `state` | `GithubCallbackController.callback` |
+| `POST` | `/api/integrations/github/webhook` | — | `GithubWebhookController.receive` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
 | `POST` | `/api/runner/device/start` | body `Object` | `RunnerApiController.deviceStart` |
 | `POST` | `/api/runner/register` | body `Object` | `RunnerApiController.register` |
@@ -134,6 +150,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/access-tokens/device/:userCode` | path `userCode` | `PatDeviceLoginController.lookup` |
 | `POST` | `/api/access-tokens/device/:userCode/approve` | path `userCode` | `PatDeviceLoginController.approve` |
 | `POST` | `/api/access-tokens/device/:userCode/deny` | path `userCode` | `PatDeviceLoginController.deny` |
+| `GET` | `/api/account-health` | — | `AccountHealthController.list` |
+| `POST` | `/api/account-health/:id/check` | path `id` | `AccountHealthController.check` |
 | `GET` | `/api/account-secrets` | — | `AccountSecretsController.list` |
 | `POST` | `/api/account-secrets` | body `CreateAccountSecretDto` | `AccountSecretsController.create` |
 | `DELETE` | `/api/account-secrets/:id` | path `id`; query `revokeCopies` | `AccountSecretsController.remove` |
@@ -168,7 +186,52 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/auth/google/link` | body `GoogleLinkDto` | `GoogleAuthController.link` |
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
 | `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
+| `GET` | `/api/documents/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/documents/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
+| `POST` | `/api/documents/chats` | body `Object` | `DriveChatController.create` |
+| `GET` | `/api/documents/chats/:sessionId/groups` | path `sessionId` | `DriveChatChangesController.groups` |
+| `GET` | `/api/documents/chats/:sessionId/groups/:groupId` | path `groupId`, `sessionId` | `DriveChatChangesController.group` |
+| `POST` | `/api/documents/chats/:sessionId/groups/:groupId/apply` | path `groupId`, `sessionId` | `DriveChatChangesController.apply` |
+| `POST` | `/api/documents/chats/:sessionId/groups/:groupId/undo` | path `groupId`, `sessionId` | `DriveChatChangesController.undo` |
+| `GET` | `/api/documents/chats/:sessionId/questions` | path `sessionId` | `DriveChatChangesController.questions` |
+| `POST` | `/api/documents/chats/:sessionId/questions/:questionId` | body `AnswerDriveChatQuestionDto`; path `questionId`, `sessionId` | `DriveChatChangesController.answer` |
+| `GET` | `/api/documents/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
+| `DELETE` | `/api/documents/entries/:id` | path `id` | `DriveController.moveToTrash` |
+| `GET` | `/api/documents/entries/:id` | path `id` | `DriveController.get` |
+| `PATCH` | `/api/documents/entries/:id` | body `UpdateDriveEntryDto`; path `id` | `DriveController.update` |
+| `GET` | `/api/documents/entries/:id/content` | path `id` | `DriveController.download` |
+| `POST` | `/api/documents/entries/:id/download-link` | body `DriveDownloadLinkDto`; path `id` | `DriveController.downloadLink` |
+| `POST` | `/api/documents/entries/:id/share-check` | path `id` | `DriveController.shareCheck` |
+| `GET` | `/api/documents/entries/:id/versions` | path `id` | `DriveController.versions` |
+| `POST` | `/api/documents/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
+| `GET` | `/api/documents/resolve` | query `path` | `DriveController.resolve` |
+| `GET` | `/api/documents/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
+| `GET` | `/api/documents/syncs` | — | `DriveController.listSyncs` |
+| `GET` | `/api/documents/syncs/:id` | path `id` | `DriveController.getSync` |
+| `DELETE` | `/api/documents/trash` | — | `DriveController.emptyTrash` |
+| `GET` | `/api/documents/trash` | query `cursor`, `limit` | `DriveController.trash` |
+| `DELETE` | `/api/documents/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
+| `GET` | `/api/documents/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DriveController.trashGroup` |
+| `POST` | `/api/documents/trash/groups/:id/items/:entryId/restore` | path `entryId`, `id` | `DriveController.restoreItem` |
+| `POST` | `/api/documents/trash/groups/:id/restore` | path `id` | `DriveController.restoreGroup` |
+| `POST` | `/api/documents/uploads` | body `OpenDriveUploadDto` | `DriveController.openUpload` |
+| `DELETE` | `/api/documents/uploads/:id` | path `id` | `DriveController.abandonUpload` |
+| `GET` | `/api/documents/uploads/:id` | path `id` | `DriveController.uploadStatus` |
+| `PUT` | `/api/documents/uploads/:id/chunks/:idx` | path `id`, `idx` | `DriveController.putChunk` |
+| `POST` | `/api/documents/uploads/:id/complete` | path `id` | `DriveController.completeUpload` |
+| `GET` | `/api/documents/usage` | — | `DriveController.usage` |
+| `DELETE` | `/api/documents/versions/:id` | path `id` | `DriveController.deleteVersion` |
+| `GET` | `/api/documents/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
+| `POST` | `/api/documents/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
 | `GET` | `/api/drive/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/drive/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
+| `POST` | `/api/drive/chats` | body `Object` | `DriveChatController.create` |
+| `GET` | `/api/drive/chats/:sessionId/groups` | path `sessionId` | `DriveChatChangesController.groups` |
+| `GET` | `/api/drive/chats/:sessionId/groups/:groupId` | path `groupId`, `sessionId` | `DriveChatChangesController.group` |
+| `POST` | `/api/drive/chats/:sessionId/groups/:groupId/apply` | path `groupId`, `sessionId` | `DriveChatChangesController.apply` |
+| `POST` | `/api/drive/chats/:sessionId/groups/:groupId/undo` | path `groupId`, `sessionId` | `DriveChatChangesController.undo` |
+| `GET` | `/api/drive/chats/:sessionId/questions` | path `sessionId` | `DriveChatChangesController.questions` |
+| `POST` | `/api/drive/chats/:sessionId/questions/:questionId` | body `AnswerDriveChatQuestionDto`; path `questionId`, `sessionId` | `DriveChatChangesController.answer` |
 | `GET` | `/api/drive/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
 | `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
@@ -180,6 +243,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
 | `GET` | `/api/drive/resolve` | query `path` | `DriveController.resolve` |
 | `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
+| `GET` | `/api/drive/syncs` | — | `DriveController.listSyncs` |
+| `GET` | `/api/drive/syncs/:id` | path `id` | `DriveController.getSync` |
 | `DELETE` | `/api/drive/trash` | — | `DriveController.emptyTrash` |
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
@@ -208,10 +273,11 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `DELETE` | `/api/guest-sessions/:id/turns/:turnId` | path `id`, `turnId` | `GuestSessionsController.cancelTurn` |
 | `POST` | `/api/guest-sessions/:id/turns/:turnId/steer` | path `id`, `turnId` | `GuestSessionsController.steerTurn` |
 | `POST` | `/api/help/ask` | body `Object` | `HelpAskController.create` |
-| `POST` | `/api/help/ask/:id/admin` | body `Object`; path `id` | `HelpAskController.askAdmin` |
+| `GET` | `/api/help/ask/:id` | path `id` | `HelpAskController.get` |
+| `POST` | `/api/help/ask/:id/admin` | path `id` | `HelpAskController.askAdmin` |
+| `POST` | `/api/help/ask/:id/messages` | body `Object`; path `id` | `HelpAskController.followUp` |
 | `GET` | `/api/help/ask/:id/stuck` | path `id` | `HelpAskController.stuck` |
-| `GET` | `/api/help/ask/choices` | — | `HelpAskController.choices` |
-| `GET` | `/api/help/ask/sessions` | — | `HelpAskController.list` |
+| `GET` | `/api/help/ask/conversations` | — | `HelpAskController.list` |
 | `POST` | `/api/help/feedback` | body `HelpFeedbackDto` | `HelpFeedbackController.record` |
 | `DELETE` | `/api/integrations/feishu` | — | `FeishuController.remove` |
 | `GET` | `/api/integrations/feishu` | — | `FeishuController.read` |
@@ -243,10 +309,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
 | `GET` | `/api/owner-requests` | query `state` | `OwnerRequestsController.list` |
 | `GET` | `/api/owner-requests/:id` | path `id` | `OwnerRequestsController.get` |
+| `POST` | `/api/owner-requests/:id/apply` | body `ApplyOwnerRequestChangeDto`; path `id` | `OwnerRequestsController.applyChange` |
 | `POST` | `/api/owner-requests/:id/apply-settings` | path `id` | `OwnerRequestsController.applySettings` |
 | `POST` | `/api/owner-requests/:id/create-wiki` | path `id` | `OwnerRequestsController.createWiki` |
 | `POST` | `/api/owner-requests/:id/decline` | body `DeclineOwnerRequestDto`; path `id` | `OwnerRequestsController.decline` |
 | `POST` | `/api/owner-requests/:id/done` | body `CompleteOwnerRequestDto`; path `id` | `OwnerRequestsController.complete` |
+| `POST` | `/api/owner-requests/:id/reopen-project` | path `id` | `OwnerRequestsController.reopenProject` |
 | `POST` | `/api/owner-requests/:id/secret` | body `SubmitOwnerSecretDto`; path `id` | `OwnerRequestsController.submitSecret` |
 | `POST` | `/api/owner-requests/:id/secret/cancel` | path `id` | `OwnerRequestsController.cancelSecret` |
 | `POST` | `/api/owner-requests/:id/secret/revoke` | path `id` | `OwnerRequestsController.revokeSecret` |
@@ -360,6 +428,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/providers/test` | body `TestModelProviderDto` | `ProvidersController.test` |
 | `POST` | `/api/push/register` | body `RegisterDeviceTokenDto` | `PushController.register` |
 | `POST` | `/api/push/unregister` | body `UnregisterDeviceTokenDto` | `PushController.unregister` |
+| `GET` | `/api/push/web-config` | — | `PushController.webConfig` |
 | `GET` | `/api/runners` | — | `RunnersController.list` |
 | `DELETE` | `/api/runners/:id` | path `id` | `RunnersController.remove` |
 | `GET` | `/api/runners/:id` | path `id` | `RunnersController.get` |
@@ -372,6 +441,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `DELETE` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.dismissSetDefaultFailure` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.setDefaultAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
+| `POST` | `/api/runners/:id/accounts/:engine/default/sign-out` | body `SignOutDefaultDto`; path `engine`, `id` | `RunnersController.signOutDefault` |
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/browser` | path `id` | `ManagedRunnerBrowserController.state` |
 | `POST` | `/api/runners/:id/browser/clear` | path `id` | `ManagedRunnerBrowserController.clear` |
@@ -379,7 +449,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/runners/:id/claude-history` | path `id`; query `workDir` | `RunnersController.claudeHistory` |
 | `POST` | `/api/runners/:id/claude-history` | body `Object`; path `id` | `RunnersController.askClaudeHistory` |
 | `DELETE` | `/api/runners/:id/codex-accounts/:account` | path `account`, `id` | `RunnersController.removeCodexAccount` |
-| `GET` | `/api/runners/:id/codex-rate-limit-reset` | path `id` | `CodexRateLimitResetController.list` |
+| `GET` | `/api/runners/:id/codex-rate-limit-reset` | path `id`; query `accountFingerprint` | `CodexRateLimitResetController.list` |
 | `POST` | `/api/runners/:id/codex-rate-limit-reset` | body `Object`; path `id` | `CodexRateLimitResetController.create` |
 | `GET` | `/api/runners/:id/codex-rate-limit-reset/:operationId` | path `id`, `operationId` | `CodexRateLimitResetController.get` |
 | `GET` | `/api/runners/:id/dir-probe` | path `id`; query `path` | `RunnersController.dirProbe` |
@@ -417,6 +487,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/schedules/:id/change` | path `id` | `SchedulesController.change` |
 | `POST` | `/api/schedules/:id/change` | body `ScheduleChangeDto`; path `id` | `SchedulesController.openChange` |
 | `POST` | `/api/schedules/:id/pause` | path `id` | `SchedulesController.pause` |
+| `POST` | `/api/schedules/:id/rename` | body `ScheduleRenameDto`; path `id` | `SchedulesController.rename` |
 | `POST` | `/api/schedules/:id/resume` | path `id` | `SchedulesController.resume` |
 | `POST` | `/api/schedules/:id/run` | path `id` | `SchedulesController.runNow` |
 | `GET` | `/api/schedules/:id/runs` | path `id`; query `before`, `limit` | `SchedulesController.listRuns` |
@@ -509,9 +580,10 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/sessions/import` | body `Object` | `SessionsController.importSession` |
 | `POST` | `/api/sessions/import-batch` | body `Object` | `SessionsController.importBatch` |
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
+| `GET` | `/api/sessions/listing` | query `after`, `folderId`, `limit`, `view`, `workspaceId` | `SessionsController.listing` |
 | `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
-| `GET` | `/api/sessions/search` | query `limit`, `q` | `SessionsController.search` |
+| `GET` | `/api/sessions/search` | query `folderId`, `limit`, `q` | `SessionsController.search` |
 | `GET` | `/api/share-links` | query `kind` | `ShareLinksController.list` |
 | `POST` | `/api/share-links` | body `ShareDriveFileDto` | `ShareLinksController.shareDriveFile` |
 | `DELETE` | `/api/share-links/:id` | path `id` | `ShareLinksController.turnOff` |
@@ -718,8 +790,31 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/cursor-key-check-result` | body `CursorKeyCheckResultDto` | `RunnerApiController.cursorKeyCheckResult` |
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |
 | `POST` | `/api/runner/dir-probe-result` | body `Object` | `RunnerApiController.dirProbeResult` |
+| `POST` | `/api/runner/documents/batch` | body `RunnerDriveBatchDto` | `RunnerDriveController.batch` |
+| `GET` | `/api/runner/documents/changes` | query `since`, `wait` | `RunnerDriveController.changes` |
+| `GET` | `/api/runner/documents/chunks/:sha256` | path `sha256` | `RunnerDriveController.chunk` |
+| `POST` | `/api/runner/documents/chunks/held` | body `RunnerDriveHeldDto` | `RunnerDriveController.held` |
+| `POST` | `/api/runner/documents/commit` | body `RunnerDriveCommitDto` | `RunnerDriveController.commit` |
+| `GET` | `/api/runner/documents/commits/:commitId` | path `commitId` | `RunnerDriveController.commitStatus` |
+| `POST` | `/api/runner/documents/create` | body `RunnerDriveCreateDto` | `RunnerDriveController.create` |
+| `POST` | `/api/runner/documents/delete` | body `RunnerDriveDeleteDto` | `RunnerDriveController.remove` |
+| `GET` | `/api/runner/documents/list` | query `cursor`, `id`, `limit`, `path` | `RunnerDriveController.list` |
+| `GET` | `/api/runner/documents/manifest` | query `id`, `path` | `RunnerDriveController.manifest` |
+| `POST` | `/api/runner/documents/mkdir` | body `RunnerDriveMkdirDto` | `RunnerDriveController.mkdir` |
+| `POST` | `/api/runner/documents/rename` | body `RunnerDriveRenameDto` | `RunnerDriveController.rename` |
+| `POST` | `/api/runner/documents/stagings` | body `RunnerDriveStagingDto` | `RunnerDriveController.openStaging` |
+| `GET` | `/api/runner/documents/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.readChunk` |
+| `PUT` | `/api/runner/documents/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.putChunk` |
+| `POST` | `/api/runner/documents/stagings/:id/keepalive` | body `RunnerDriveKeepaliveDto`; path `id` | `RunnerDriveController.keepalive` |
+| `GET` | `/api/runner/documents/stat` | query `id`, `path` | `RunnerDriveController.stat` |
+| `POST` | `/api/runner/documents/syncs` | body `RunnerDriveSyncOpenDto` | `RunnerDriveSyncsController.open` |
+| `PATCH` | `/api/runner/documents/syncs/:id` | body `RunnerDriveSyncReportDto`; path `id` | `RunnerDriveSyncsController.report` |
+| `GET` | `/api/runner/documents/usage` | — | `RunnerDriveController.usage` |
+| `POST` | `/api/runner/documents/utimens` | body `RunnerDriveUtimensDto` | `RunnerDriveController.utimens` |
+| `POST` | `/api/runner/drive/batch` | body `RunnerDriveBatchDto` | `RunnerDriveController.batch` |
 | `GET` | `/api/runner/drive/changes` | query `since`, `wait` | `RunnerDriveController.changes` |
 | `GET` | `/api/runner/drive/chunks/:sha256` | path `sha256` | `RunnerDriveController.chunk` |
+| `POST` | `/api/runner/drive/chunks/held` | body `RunnerDriveHeldDto` | `RunnerDriveController.held` |
 | `POST` | `/api/runner/drive/commit` | body `RunnerDriveCommitDto` | `RunnerDriveController.commit` |
 | `GET` | `/api/runner/drive/commits/:commitId` | path `commitId` | `RunnerDriveController.commitStatus` |
 | `POST` | `/api/runner/drive/create` | body `RunnerDriveCreateDto` | `RunnerDriveController.create` |
@@ -733,6 +828,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.putChunk` |
 | `POST` | `/api/runner/drive/stagings/:id/keepalive` | body `RunnerDriveKeepaliveDto`; path `id` | `RunnerDriveController.keepalive` |
 | `GET` | `/api/runner/drive/stat` | query `id`, `path` | `RunnerDriveController.stat` |
+| `POST` | `/api/runner/drive/syncs` | body `RunnerDriveSyncOpenDto` | `RunnerDriveSyncsController.open` |
+| `PATCH` | `/api/runner/drive/syncs/:id` | body `RunnerDriveSyncReportDto`; path `id` | `RunnerDriveSyncsController.report` |
 | `GET` | `/api/runner/drive/usage` | — | `RunnerDriveController.usage` |
 | `POST` | `/api/runner/drive/utimens` | body `RunnerDriveUtimensDto` | `RunnerDriveController.utimens` |
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |
@@ -776,6 +873,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/projects/:id/owner-questions` | body `AskOwnerDto`; path `id` | `RunnerProjectsController.askOwner` |
 | `POST` | `/api/runner/projects/:id/promotions/:promotionId/integration/retry` | body `RetryIntegrationDto`; path `id`, `promotionId` | `RunnerProjectsController.retryPromotionCheck` |
 | `POST` | `/api/runner/projects/:id/promotions/request` | body `RequestPromotionDto`; path `id` | `RunnerProjectsController.requestPromotion` |
+| `POST` | `/api/runner/projects/:id/reopen-requests` | body `RequestProjectReopenDto`; path `id` | `RunnerProjectsController.requestReopen` |
 | `POST` | `/api/runner/projects/:id/rulings` | body `RecordProjectRulingDto`; path `id` | `RunnerProjectsController.recordRuling` |
 | `POST` | `/api/runner/projects/:id/start-requests` | body `RequestProjectStartDto`; path `id` | `RunnerProjectsController.requestStart` |
 | `POST` | `/api/runner/projects/:id/tasks/:taskId/integration/retry` | body `RetryIntegrationDto`; path `id`, `taskId` | `RunnerProjectsController.retryIntegration` |
@@ -835,7 +933,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.pin` |
 | `POST` | `/api/runner/sessions/:id/finalize` | body `Object`; path `id` | `RunnerApiController.finalize` |
 | `POST` | `/api/runner/sessions/:id/import-result` | body `Object`; path `id` | `RunnerApiController.importResult` |
-| `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
+| `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `draining`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
 | `POST` | `/api/runner/sessions/:id/interrupt` | body `Object`; path `id` | `RunnerSessionsController.interruptSession` |
 | `POST` | `/api/runner/sessions/:id/merge` | body `Object`; path `id` | `RunnerSessionsController.mergeSession` |
 | `GET` | `/api/runner/sessions/:id/merge-receipts` | path `id`; query `limit` | `RunnerSessionsController.listMergeReceipts` |
@@ -848,6 +946,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/sessions/:id/orchestration-credential` | path `id` | `RunnerApiController.refreshOrchestrationCredential` |
 | `POST` | `/api/runner/sessions/:id/release` | body `Object`; path `id` | `RunnerApiController.release` |
 | `POST` | `/api/runner/sessions/:id/release-leases` | body `Object`; path `id` | `RunnerApiController.releaseLeases` |
+| `POST` | `/api/runner/sessions/:id/return-slot` | body `Object`; path `id` | `RunnerApiController.returnSlot` |
 | `POST` | `/api/runner/sessions/:id/scheduled-wakeup` | body `ScheduledWakeupDto`; path `id` | `RunnerApiController.scheduledWakeup` |
 | `POST` | `/api/runner/sessions/:id/source/pin` | body `Object`; path `id` | `RunnerApiController.pinSessionSource` |
 | `POST` | `/api/runner/sessions/:id/subagents` | body `SubagentRunCreateDto`; path `id` | `RunnerSubagentsController.openSubagentRun` |
@@ -917,6 +1016,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/wiki/drafts` | body `Object` | `RunnerWikiController.draft` |
 | `GET` | `/api/runner/wiki/entries/:id` | path `id`; query `include` | `RunnerWikiController.getEntry` |
 | `POST` | `/api/runner/wiki/notes` | body `WikiSessionNoteDto` | `RunnerWikiController.note` |
+| `GET` | `/api/runner/wiki/read` | query `doc`, `draft`, `more`, `q`, `section` | `RunnerWikiController.read` |
 | `POST` | `/api/runner/wiki/repo-ops/:id/fragments` | body `Object`; path `id` | `RunnerApiController.wikiRepoOpFragment` |
 | `POST` | `/api/runner/wiki/repo-ops/:id/progress` | body `Object`; path `id` | `RunnerApiController.wikiRepoOpProgress` |
 | `POST` | `/api/runner/wiki/repo-ops/:id/result` | body `Object`; path `id` | `RunnerApiController.wikiRepoOpResult` |

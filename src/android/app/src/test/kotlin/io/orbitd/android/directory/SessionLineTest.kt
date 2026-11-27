@@ -269,6 +269,9 @@ class SessionLineTest {
         val waiting = DirectorySession("s", "t", status = "AWAITING_INPUT", activity = "WAITING")
         assertEquals(SessionLine("Waiting to resume", Tone.WATCHING), line(waiting))
         assertEquals("Waiting to resume", SessionHeader.statusWord(waiting, now = now))
+        // With the server's facts it is IDLE, and Idle needs no words of its own: the row shows its reply (the owner, 2026-11-27).
+        val idle = waiting.copy(lastAssistantText = "Checked.", phase = "IDLE", released = false, lastTurnOutcome = "ANSWERED", waitingOn = "WAKE")
+        assertEquals(SessionLine("Checked.", Tone.PREVIEW), line(idle))
         // Nothing is invented when the server says nothing, or says something else.
         for (activity in listOf(null, "BACKGROUND_JOB", "SOMETHING_NEW"))
             assertEquals("Waiting for your reply", SessionHeader.statusWord(DirectorySession("s", "t", status = "AWAITING_INPUT", activity = activity), now = now))

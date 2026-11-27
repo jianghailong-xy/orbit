@@ -49,6 +49,7 @@ import {
   runSettingsLine,
   shortBranch,
   startAskedLine,
+  startCardBranch,
   startBarCaption,
   startComesToYou,
   startExplanation,
@@ -553,7 +554,13 @@ describe('the words, as the copy table has them', () => {
 
   it('writes the settings line the way the receipts do', () => {
     expect(shortBranch('refs/heads/project/34WvwUS8YMXfOfWbMqVuu')).toBe('project/34Wvw…');
+    expect(shortBranch('project/352xNyEH2ocPve03J9jKb')).toBe('project/352xN…');
     expect(shortBranch('refs/heads/release/next')).toBe('release/next');
+    // A readable name is the name: shown whole, the 8-character form with no title words too.
+    expect(shortBranch('refs/heads/project/readable-project-branch-names-352xNyEH'))
+      .toBe('project/readable-project-branch-names-352xNyEH');
+    expect(shortBranch('project/352xNyEH')).toBe('project/352xNyEH');
+    expect(shortBranch('project/bg-jobs')).toBe('project/bg-jobs');
     expect(runSettingsLine(requestOf().settings))
       .toBe('project/34Wvw… · Automatic on · 3 tasks at a time · merge check set');
     expect(runSettingsLine({ line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null }))
@@ -764,6 +771,37 @@ describe('when the card is drawn', () => {
     await until(() => cardIn(node) !== null, 'the card');
     await until(() => reports.includes('START'), 'the router to report the start question');
     expect(document.querySelectorAll('.settlement-card'), 'another settlement card was drawn beside it').toHaveLength(1);
+  });
+});
+
+describe('the project branch the card names', () => {
+  const READABLE = 'refs/heads/project/runner-ios-macos-web-34WvwUS8';
+  const { projectBranchName: _named, ...unnamed } = requestOf().settings;
+
+  it('names the branch the request names, else the server’s default, else project/<id> from an older server', () => {
+    expect(startCardBranch(requestOf(), PROJECT)).toBe(`project/${PROJECT}`);
+    expect(startCardBranch(requestOf({ defaultProjectBranchName: READABLE }), PROJECT))
+      .toBe(`project/${PROJECT}`);
+    expect(startCardBranch(requestOf({ settings: unnamed, defaultProjectBranchName: READABLE }), PROJECT))
+      .toBe('project/runner-ios-macos-web-34WvwUS8');
+    expect(startCardBranch(requestOf({ settings: unnamed }), PROJECT)).toBe(`project/${PROJECT}`);
+  });
+
+  it('draws the server’s default in the line menu when the coordinator named none', async () => {
+    server.row = rowOf('item-1', requestOf({ settings: unnamed, defaultProjectBranchName: READABLE }));
+    const { card } = await delivered();
+    await pointerPress(settingRow(card(), 'Tasks land on').querySelector('[role="combobox"]'), 'the line menu');
+    await until(() => menuOptions().length === 2, 'the line menu');
+    expect(menuOptions()[0]!.querySelector('.start-card-branch')?.textContent)
+      .toBe('project/runner-ios-macos-web-34WvwUS8');
+  });
+
+  it('draws project/<id> from a server that sends no default', async () => {
+    server.row = rowOf('item-1', requestOf({ settings: unnamed }));
+    const { card } = await delivered();
+    await pointerPress(settingRow(card(), 'Tasks land on').querySelector('[role="combobox"]'), 'the line menu');
+    await until(() => menuOptions().length === 2, 'the line menu');
+    expect(menuOptions()[0]!.querySelector('.start-card-branch')?.textContent).toBe(`project/${PROJECT}`);
   });
 });
 
@@ -1363,6 +1401,18 @@ describe('the main branch on the card', () => {
     });
     await until(() => bodies.length === 1, 'the press');
     expect(bodies[0]).toMatchObject({ line: 'MAIN', upstreamRef: 'refs/heads/master', requestId: null });
+  });
+
+  it('names the server’s default project branch on the owner’s own Start…', async () => {
+    server.row = null;
+    server.integration = integrationOf({ defaultProjectBranch: 'project/payments-api-34WvwUS8' });
+    await mount({ own: true });
+    await until(() => document.querySelector('.start-card-dialog .start-card') !== null
+      && document.querySelector('.start-card-plan span') !== null, 'the card over the page');
+    const card = document.querySelector<HTMLElement>('.start-card')!;
+    await pointerPress(settingRow(card, 'Tasks land on').querySelector('[role="combobox"]'), 'the line menu');
+    await until(() => menuOptions().length === 2, 'the line menu');
+    expect(menuOptions()[0]!.querySelector('.start-card-branch')?.textContent).toBe('project/payments-api-34WvwUS8');
   });
 });
 

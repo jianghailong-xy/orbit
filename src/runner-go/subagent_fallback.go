@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// subagentMaxMoves is how many times one delegate call moves to another candidate after its child failed on a
-// usage limit, capacity or a failed login (docs/subagent-design.md §4.3). The server holds the same bound (SUBAGENT_MAX_MOVES).
-const subagentMaxMoves = 2
-
 // subagentUsageLimitMarkers are @orbit/shared USAGE_LIMIT_ERROR_MARKERS: the providers' own words for a spent
 // quota. Keep them identical.
 var subagentUsageLimitMarkers = []string{
@@ -39,10 +35,10 @@ func isUsageLimitText(text string) bool {
 }
 
 // subagentLoginFailureOpenings are how a sign-in failure may open when the engine does not wrap it in
-// "Failed to authenticate". Keep them identical to LOGIN_FAILURE_OPENINGS in apiserver subagent-run.ts.
+// "Failed to authenticate". Keep them identical to LOGIN_FAILURE_OPENINGS in @orbit/shared runFailureKind.ts.
 var subagentLoginFailureOpenings = []string{"not logged in", "oauth session expired"}
 
-// isSubagentLoginFailure is isLoginFailureText in apiserver subagent-run.ts: the runtime's "Failed to authenticate"
+// isSubagentLoginFailure is isLoginFailureText in @orbit/shared: the runtime's "Failed to authenticate"
 // (isAuthError, which leaves out a dropped connection), or a text that opens as one of subagentLoginFailureOpenings.
 func isSubagentLoginFailure(text string) bool {
 	if isAuthError(text) {
@@ -60,8 +56,23 @@ func isSubagentLoginFailure(text string) bool {
 // subagentLimitFailure is a child's end as §4.3 moves it, with the engine's own words for it: a spent quota or a
 // failed login — which Claude Code reports as its whole reply with a "success" result — or a model at capacity
 // (isCodexCapacityError), which only a failed end is read for. False for a run that ended any other way, whose
-// end is its result. The server decides whether a failed login moves (not when the caller named the model).
+// end is its result. The server decides whether a move is made (not on an account's failure when the caller named
+// the model) and holds the bound on moves (SUBAGENT_MAX_MOVES).
 func subagentLimitFailure(res ExecResult, err error) (string, bool) {
+	// What the child's adapter classified decides first (docs/routing-account-health-design.md §7.3): a spent
+	// quota, a model at capacity, and an account that refused the run — its credential, an action it needs, or a
+	// use it does not allow. Any other classified kind (a connection failure, a refused request) is the run's result.
+	if res.Failure != nil {
+		switch res.Failure.Kind {
+		case failureUsageLimit, failureCapacity, failureCredentialRefused, failureAccountAction, failureAccessDenied:
+			if text := strings.TrimSpace(firstNonEmpty(res.ErrorMsg, res.Result)); text != "" {
+				return text, true
+			}
+			return strings.TrimSpace(res.Failure.Said), true
+		default:
+			return "", false
+		}
+	}
 	var texts []string
 	if err != nil {
 		texts = append(texts, err.Error())
@@ -80,7 +91,27 @@ func subagentLimitFailure(res ExecResult, err error) (string, bool) {
 			return strings.TrimSpace(text), true
 		}
 	}
+	// An unclassified failure before the engine produced anything (§5.2) moves too: the account would not start it.
+	// Not a dropped connection, which says nothing of the account; the server reads the words the same way.
+	if res.Admission != nil && *res.Admission {
+		for _, text := range texts {
+			if isConnectionFailure(text) {
+				return "", false
+			}
+		}
+		if text := strings.TrimSpace(firstNonEmpty(res.ErrorMsg, res.Result, errorText(err))); text != "" {
+			return text, true
+		}
+	}
 	return "", false
+}
+
+// errorText is err's message, "" for none.
+func errorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // subagentFallbackResponse is the server's answer to the ask for the next candidate (SubagentFallbackResponse).
@@ -94,11 +125,8 @@ type subagentFallbackResponse struct {
 // nextSubagentCandidate asks the server where a run goes after its child failed on a limit: the next candidate of
 // its tier, from the decision the run opened with. The error is the refusal's own sentence when the server has
 // none to give (NO_SUBAGENT_PROVIDER, SUBAGENT_FALLBACK_SPENT, SUBAGENT_NOT_A_LIMIT_FAILURE).
-func (s *bgJobService) nextSubagentCandidate(runID, failure string, def subagentDefinition) (subagentFallbackResponse, error) {
-	body := map[string]interface{}{"error": failure, "readonly": def.Readonly}
-	if !def.builtin() && def.PermissionMode != "" {
-		body["permissionMode"] = def.PermissionMode
-	}
+func (s *bgJobService) nextSubagentCandidate(runID, failure string, child ExecResult, def subagentDefinition) (subagentFallbackResponse, error) {
+	body := subagentFallbackBody(failure, child, def)
 	var next subagentFallbackResponse
 	err := s.t.do(nil, "POST", "/runner/sessions/"+s.sessionID+"/subagents/"+runID+"/fallback", body, &next, 30*time.Second)
 	if err != nil {
@@ -112,6 +140,22 @@ func (s *bgJobService) nextSubagentCandidate(runID, failure string, def subagent
 		return next, errors.New("the server named no candidate to move to")
 	}
 	return next, nil
+}
+
+// subagentFallbackBody is the ask for the next candidate: the child's failure in its words (error, which an older
+// server reads), and what its adapter classified it as and its admission (§5.1), when it knows them.
+func subagentFallbackBody(failure string, child ExecResult, def subagentDefinition) map[string]interface{} {
+	body := map[string]interface{}{"error": failure, "readonly": def.Readonly}
+	if !def.builtin() && def.PermissionMode != "" {
+		body["permissionMode"] = def.PermissionMode
+	}
+	if child.Failure != nil {
+		body["failure"] = child.Failure
+	}
+	if child.Admission != nil {
+		body["admission"] = *child.Admission
+	}
+	return body
 }
 
 // refusalMessage is a refusal's own sentence, else its raw body.
