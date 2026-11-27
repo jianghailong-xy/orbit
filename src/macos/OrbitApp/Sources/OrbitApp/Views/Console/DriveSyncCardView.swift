@@ -2,14 +2,14 @@ import SwiftUI
 import OrbitKit
 
 /// An agent's `documents_sync` call as its sync's card (board docs/mocks/drive-sync-card): the same live numbers as
-/// the Drive popover, kept current after the agent's turn ends, since the sync runs in the background. A sync that
-/// ends cleanly folds to one line; failures, a stop and a failed sync stay open. The words are `DriveSyncCard`'s.
+/// the Drive popover, kept current after the agent's turn ends, since the sync runs in the background. The card stays
+/// open when the sync ends; Hide folds a clean one to one line. The words are `DriveSyncCard`'s.
 ///
 /// Web parity: `src/web/src/components/drive/DriveSyncCard.tsx`.
 struct DriveSyncCardView: View {
     let syncID: String
     @Environment(AppModel.self) private var app
-    @State private var open: Bool?
+    @State private var open = true
     @State private var allFailed = false
 
     private var drive: DriveModel? { app.drive }
@@ -18,7 +18,7 @@ struct DriveSyncCardView: View {
     var body: some View {
         Group {
             if let sync {
-                if DriveSyncCard.folds(sync) && !(open ?? false) {
+                if DriveSyncCard.folds(sync) && !open {
                     folded(sync)
                 } else {
                     card(sync)

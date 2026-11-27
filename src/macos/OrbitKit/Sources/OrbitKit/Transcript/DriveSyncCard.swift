@@ -2,7 +2,7 @@ import Foundation
 
 /// An agent's `drive_sync` call, as its sync's card in the transcript (board docs/mocks/drive-sync-card): the same
 /// live progress as the Drive popover, kept current after the agent's turn ends, since the sync runs in the
-/// background. A sync that ends cleanly folds to one line; failures, a stop and a failed sync stay open.
+/// background. The card stays open when the sync ends; Hide folds a clean one to one line.
 ///
 /// Web parity: `src/web/src/lib/driveSyncs.ts` (`driveSyncIdOf`) and
 /// `components/drive/DriveSyncCard.tsx`, whose words these are.
@@ -37,7 +37,7 @@ public enum DriveSyncCard {
     public static let openFolder = "Open folder"
     public static let hide = "Hide"
 
-    /// Whether the card folds to one line: the sync ended with everything sent.
+    /// Whether Hide can fold the card to one line: the sync ended with everything sent.
     public static func folds(_ sync: DriveSync) -> Bool { sync.status == "DONE" && sync.failedCount == 0 }
 
     public enum Icon: Equatable, Sendable { case running, ok, stopped, bad }
@@ -55,6 +55,7 @@ public enum DriveSyncCard {
         case "FAILED": return "Sync failed"
         case "STOPPED": return "Sync stopped"
         default:
+            if folds(sync) && sync.filesDone == 0 { return "Already up to date" }
             if sync.failedCount > 0 {
                 let total = sync.filesTotal ?? sync.filesDone + sync.failedCount
                 return "Synced \(sync.filesDone.formatted()) of \(total.formatted()) files"
@@ -102,9 +103,13 @@ public enum DriveSyncCard {
             }
             return (files, "\(stopped ? " synced" : "") · \(bytes)", pace)
         default:
+            let trashed = sync.filesDeleted > 0 ? " · \(sync.filesDeleted.formatted()) moved to Trash" : ""
+            if folds(sync) && sync.filesDone == 0 {
+                return ("\(sync.filesSame.formatted()) files checked", "\(took(sync))\(trashed)", nil)
+            }
             let lead = sync.failedCount > 0 ? "\(sync.failedCount.formatted()) failed" : DriveLogic.files(sync.filesDone)
             let same = sync.filesSame > 0 ? "\(sync.filesSame.formatted()) already the same" : nil
-            return (lead, " · \(DriveLogic.formatSize(sync.bytesSent))\(took(sync))", same)
+            return (lead, " · \(DriveLogic.formatSize(sync.bytesSent))\(took(sync))\(trashed)", same)
         }
     }
 

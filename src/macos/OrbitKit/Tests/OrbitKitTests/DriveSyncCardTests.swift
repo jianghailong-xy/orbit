@@ -63,7 +63,7 @@ final class DriveSyncCardTests: XCTestCase {
         XCTAssertFalse(DriveSyncCard.folds(uploading))
     }
 
-    func testACleanEndFoldsToOneLine() {
+    func testACleanEndCanFoldToOneLine() {
         let done = sync("DONE", done: 28701, ended: "2026-11-24T06:59:05Z")
         XCTAssertTrue(DriveSyncCard.folds(done))
         let line = DriveSyncCard.foldLine(done)
@@ -75,6 +75,14 @@ final class DriveSyncCardTests: XCTestCase {
         let nothing = sync("DONE", done: 0, same: 28701, deleted: 3, ended: "2026-11-24T06:57:41Z")
         XCTAssertEqual(DriveSyncCard.foldLine(nothing).lead, "Already up to date:")
         XCTAssertTrue(DriveSyncCard.foldLine(nothing).rest.contains("3 moved to Trash"))
+        // The card is open by default, so it says the same as the line it folds to.
+        XCTAssertEqual(DriveSyncCard.title(done), "Synced 28,701 files")
+        XCTAssertEqual(DriveSyncCard.stats(done, rate: nil).right, "4 already the same")
+        XCTAssertEqual(DriveSyncCard.title(nothing), "Already up to date")
+        let checked = DriveSyncCard.stats(nothing, rate: nil)
+        XCTAssertEqual(checked.lead, "28,701 files checked")
+        XCTAssertTrue(checked.rest.contains("3 moved to Trash"), checked.rest)
+        XCTAssertNil(checked.right)
     }
 
     func testFailuresAStopAndAFailedSyncStayOpen() {
