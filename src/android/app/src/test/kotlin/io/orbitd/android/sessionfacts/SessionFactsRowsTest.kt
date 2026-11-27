@@ -42,7 +42,8 @@ class SessionFactsRowsTest {
         assertEquals("Idle", shown(moved))
         assertEquals("Idle", word(moved))
         assertEquals(RunState.AWAITING_INPUT, moved.displayRunState)
-        assertEquals("Idle, Ended", shown(s("CANCELLED", "ended", true, "ANSWERED", workFinished = false, phase = "IDLE")))
+        // Ended is not drawn (the owner, 2026-11-27), so an ordinary release reads the same Idle; the move is told apart by releasedByMove.
+        assertEquals("Idle", shown(s("CANCELLED", "ended", true, "ANSWERED", workFinished = false, phase = "IDLE")))
         assertTrue(io.orbitd.android.core.protocol.SessionFacts.releasedByMove(true, "moved"))
         assertFalse(io.orbitd.android.core.protocol.SessionFacts.releasedByMove(false, "moved"))
     }
