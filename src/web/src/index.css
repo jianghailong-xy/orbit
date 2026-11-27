@@ -7988,6 +7988,10 @@ button.toast--pill:focus-visible {
 .composer-mode-arrow {
   opacity: 0.8;
 }
+/* The Mode menu with a reason at its head: wide enough for the reason to read as a sentence. */
+.composer-mode-popup {
+  min-width: 300px;
+}
 /* Pushes the model control, the gauges and Send to the right edge, leaving `+` and Mode on the
    left. */
 .composer-pill-spacer {
