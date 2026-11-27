@@ -184,6 +184,8 @@ final class WikiChatModel {
     private(set) var scheduledWaiting: [String: Int] = [:]
     /// The Scheduled page's workspace filter.
     private(set) var scheduledFilter: String?
+    /// On a Mac under 1200 points the chat slides over the inspector instead of standing beside it (design §6).
+    var scheduledOverlay = false
 
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?

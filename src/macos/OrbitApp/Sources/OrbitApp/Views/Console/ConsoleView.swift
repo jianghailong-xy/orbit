@@ -2734,13 +2734,15 @@ struct TranscriptItemView: View {
     /// Open another session's conversation, for the row that names the agent fixing a warning. Nil
     /// where there is no router (a preview, a guest page), which leaves the link out.
     var openSession: ((String) -> Void)? = nil
+    /// Set by a Scheduled page chat: an answer's words with the Run now links its cards stand for taken out.
+    @Environment(\.assistantTextFilter) private var assistantTextFilter
     var body: some View {
         switch item {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
             UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b), revealItemCard: { console?.revealOpenItemCard($0) ?? false })
-        case .assistant(let b): AssistantBubbleView(bubble: b)
+        case .assistant(let b): AssistantBubbleView(bubble: assistantTextFilter?(b) ?? b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c) where c.name == WorkflowBlock.toolName:
             // An Orbit workflow: its own block, opening to its calls by phase (board subagent-workflow part 4).

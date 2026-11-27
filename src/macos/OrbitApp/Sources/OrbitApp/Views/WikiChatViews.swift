@@ -849,12 +849,11 @@ private struct WikiChatRunningBody: View {
 
     private var session: Session? { model.session(id: sessionID) }
 
-    private func runNowCards(_ console: ConsoleModel) -> TranscriptChatCards {
-        let offers = ScheduledChatLogic.runNowOffers(console.state.items)
-        let byID = Dictionary(offers.map { ($0.id, $0.scheduleID) }, uniquingKeysWith: { a, _ in a })
-        return TranscriptChatCards(
-            cards: offers.map { TranscriptChatCard(id: $0.id, turnId: $0.turnID) },
-            render: { id in AnyView(ScheduledRunNowOffer(scheduleID: byID[id] ?? "")) })
+    /// The Run now cards of a Scheduled page chat (the session's own `chatOrigin`), each for a listed schedule that
+    /// has not ended and titled by the list (`ScheduledChatLogic.runNowCards`).
+    private func runNowCards(_ console: ConsoleModel) -> [ScheduledChatLogic.RunNowCard] {
+        ScheduledChatLogic.runNowCards(console.state.items, chatOrigin: session?.chatOrigin,
+                                       schedules: model.scheduled?.schedules ?? [])
     }
 
     private var driveCards: TranscriptChatCards {

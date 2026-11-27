@@ -1234,7 +1234,10 @@ final class AppModel {
     /// A schedule's name in a Scheduled chat's change line (board scheduled-chat 01 part 4 ③): in a column the
     /// schedule opens beside the chat; in a sheet the chat folds and the schedule's own sheet opens with ‹ Chat.
     func openScheduleFromChat(_ id: String) {
-        runScheduledChatSteps(ScheduledChatLogic.nameTapped(id, sheet: scheduledChat?.asSheet ?? false))
+        let chat = scheduledChat
+        let presentation: ScheduledChatLogic.Presentation = chat?.asSheet == true ? .sheet
+            : chat?.scheduledOverlay == true ? .overlay : .column
+        runScheduledChatSteps(ScheduledChatLogic.nameTapped(id, presentation: presentation))
     }
 
     /// ‹ Chat on a schedule's sheet: back to the conversation it was opened from.

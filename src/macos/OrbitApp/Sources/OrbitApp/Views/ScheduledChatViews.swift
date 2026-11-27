@@ -17,28 +17,50 @@ private struct ScheduledChatOpenScheduleKey: EnvironmentKey {
     static let defaultValue: ((String) -> Void)? = nil
 }
 
+private struct AssistantTextFilterKey: EnvironmentKey {
+    static let defaultValue: ((AssistantBubble) -> AssistantBubble)? = nil
+}
+
 extension EnvironmentValues {
     /// Set inside a Scheduled chat: a change line's schedule name opens the schedule as the page does (board 4 ③).
     var scheduledChatOpenSchedule: ((String) -> Void)? {
         get { self[ScheduledChatOpenScheduleKey.self] }
         set { self[ScheduledChatOpenScheduleKey.self] = newValue }
     }
+
+    /// Set inside a Scheduled chat: an answer as the transcript draws it, its Run now links taken out where their
+    /// cards stand (`ScheduledChatLogic.withoutDrawnOffers`).
+    var assistantTextFilter: ((AssistantBubble) -> AssistantBubble)? {
+        get { self[AssistantTextFilterKey.self] }
+        set { self[AssistantTextFilterKey.self] = newValue }
+    }
 }
 
-/// A Scheduled chat's transcript (`runNow` set): the Run now buttons after their answers, a change line's name opens
-/// its schedule on the page, and the `orbit-run-now:` link an answer carries does nothing of its own — the button after
-/// the answer is the press. Any other chat's transcript is left as it is.
+/// A Scheduled chat's transcript (`runNow` set): each Run now card after its answer, in the place of the link it stands
+/// for — the answer's words drop that link, so the offer reads once; a change line's name opens its schedule on the
+/// page; and a Run now link no card stands for does nothing of its own. Any other chat's transcript is left as it is.
 private struct ScheduledChatTranscript: ViewModifier {
     @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
-    let runNow: TranscriptChatCards?
+    let runNow: [ScheduledChatLogic.RunNowCard]?
 
     func body(content: Content) -> some View {
         if let runNow {
             let app = app
             let openURL = openURL
+            let byID = Dictionary(runNow.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let drawn = Self.drawn(runNow)
             content
-                .environment(\.transcriptChatCards, runNow)
+                .environment(\.transcriptChatCards, TranscriptChatCards(
+                    cards: runNow.map { TranscriptChatCard(id: $0.id, turnId: $0.turnID) },
+                    render: { id in byID[id].map { AnyView(ScheduledRunNowOffer(card: $0)) } ?? AnyView(EmptyView()) }))
+                .environment(\.assistantTextFilter, { bubble in
+                    guard let ids = drawn[bubble.id] else { return bubble }
+                    var shown = bubble
+                    shown.text = ScheduledChatLogic.withoutDrawnOffers(bubble.text, drawn: ids)
+                    shown.streamingText = ScheduledChatLogic.withoutDrawnOffers(bubble.streamingText, drawn: ids)
+                    return shown
+                })
                 .environment(\.scheduledChatOpenSchedule, { id in app.openScheduleFromChat(id) })
                 .environment(\.openURL, OpenURLAction { url in
                     if url.scheme != ScheduledChatLogic.runNowScheme { openURL(url) }
@@ -50,8 +72,19 @@ private struct ScheduledChatTranscript: ViewModifier {
     }
 }
 
+extension ScheduledChatTranscript {
+    /// Each answer's schedules whose cards are drawn, by the answer's id.
+    static func drawn(_ cards: [ScheduledChatLogic.RunNowCard]) -> [String: Set<String>] {
+        var drawn: [String: Set<String>] = [:]
+        for card in cards { drawn[card.messageID, default: []].insert(card.scheduleID) }
+        return drawn
+    }
+}
+
 extension View {
-    func scheduledChatTranscript(_ runNow: TranscriptChatCards?) -> some View { modifier(ScheduledChatTranscript(runNow: runNow)) }
+    func scheduledChatTranscript(_ runNow: [ScheduledChatLogic.RunNowCard]?) -> some View {
+        modifier(ScheduledChatTranscript(runNow: runNow))
+    }
 }
 
 /// The Run now button an answer offered (design §4.6, board 3 ③): the schedule's title from the page's list and ▶ Run
@@ -59,13 +92,15 @@ extension View {
 /// open run. Nothing is drawn for a schedule the list does not hold or one that has ended.
 struct ScheduledRunNowOffer: View {
     @Environment(AppModel.self) private var app
-    let scheduleID: String
+    let card: ScheduledChatLogic.RunNowCard
+    private var scheduleID: String { card.scheduleID }
     @State private var busy = false
     @State private var done = false
     @State private var run: String?
     @State private var said: String?
 
     var body: some View {
+        // Read again on every draw: a schedule that ended since the answer draws nothing.
         let schedule = app.scheduled?.schedule(scheduleID)
         if ScheduledChatLogic.runNowShown(schedule), let schedule {
             VStack(alignment: .leading, spacing: 6) {
@@ -255,18 +290,42 @@ extension View {
 // MARK: - the third column (Mac, iPad at a regular width)
 
 #if os(macOS)
-/// The Mac's detail column wears the chat as a third column beside the inspector (design §6: 400, dragged to 480).
+/// The Mac's detail column wears the chat (design §6): from 1200 points a third column beside the inspector (400,
+/// dragged to 480), the source list folding for it; narrower, the chat slides over the inspector from the right, so
+/// the inspector keeps its own width (at least 320) instead of being squeezed between list and chat. Which one is the
+/// window's width, read off the detail column's right edge (`ScheduledChatLogic.macLayout`).
 private struct ScheduledChatColumn: ViewModifier {
     @Environment(AppModel.self) private var app
 
     func body(content: Content) -> some View {
         if let chat = app.scheduledChat {
+            let overlay = ScheduledChatLogic.macLayout(windowWidth: Double(chat.windowWidth)) == .overlay
             content
-                .inspector(isPresented: Binding(get: { chat.presented }, set: { if !$0 { chat.closeByOwner() } })) {
+                .frame(minWidth: CGFloat(ScheduledChatLogic.inspectorMin))
+                .inspector(isPresented: Binding(get: { chat.presented && !overlay },
+                                                set: { if !$0 && !chat.scheduledOverlay { chat.closeByOwner() } })) {
                     WikiChatPanel(chat: chat, scope: ScheduledChatLogic.scope, compact: false)
                         .inspectorColumnWidth(min: 400, ideal: 400, max: 480)
                         .accessibilityIdentifier("scheduled-chat-panel")
                 }
+                .overlay(alignment: .trailing) {
+                    if chat.presented && overlay {
+                        HStack(spacing: 0) {
+                            Divider()
+                            WikiChatPanel(chat: chat, scope: ScheduledChatLogic.scope, compact: false)
+                                .accessibilityIdentifier("scheduled-chat-panel")
+                        }
+                        .frame(width: 400)
+                        .frame(maxHeight: .infinity)
+                        .background(Color.driveCardBackground)
+                        .shadow(color: .black.opacity(0.18), radius: 12, x: -4, y: 0)
+                        .transition(.move(edge: .trailing))
+                    }
+                }
+                .animation(.snappy(duration: 0.25), value: chat.presented)
+                // The detail column's right edge is the window's: what decides column or slide-over.
+                .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).maxX }) { chat.windowWidth = $0 }
+                .onChange(of: overlay, initial: true) { _, overlay in chat.scheduledOverlay = overlay }
                 .scheduledChatLive(chat, sheet: false)
         } else {
             content
