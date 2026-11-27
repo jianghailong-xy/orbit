@@ -93,6 +93,7 @@ import { listenForRunnerLinkCalls } from './runner-link-call';
 import { readRunnerLink, RUNNER_LINK, runnerLinkCredential, signRunnerLinkToken, type RunnerLinkState } from './runner-link-token';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -418,7 +419,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
 
   async function sessionRow(sessionId: string) {
     const { rows } = await sql.query<{ status: string; claimRequestId: string | null; runClaimedAt: Date | null }>(
-      `SELECT status, claim_request_id AS "claimRequestId", run_claimed_at AS "runClaimedAt" FROM "session" WHERE id = $1`,
+      `SELECT ${wordSql()} AS status, claim_request_id AS "claimRequestId", run_claimed_at AS "runClaimedAt" FROM "session" WHERE id = $1`,
       [sessionId],
     );
     return rows[0];
@@ -435,7 +436,7 @@ test('runner link calls: answers lost on the way back are made good, and nothing
   /** Takes this machine's queued sessions out of the claim queue, so a case claims only its own. */
   const clearQueue = () =>
     sql.query(
-      `UPDATE "session" SET "cancel_requested_at" = now() WHERE "assigned_runner_id" = $1 AND status = 'PENDING'`,
+      `UPDATE "session" SET "cancel_requested_at" = now() WHERE "assigned_runner_id" = $1 AND turn_state = 'QUEUED'`,
       [runnerId],
     );
 

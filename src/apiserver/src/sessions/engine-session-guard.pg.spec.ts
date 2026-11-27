@@ -47,7 +47,7 @@ import {
   ENGINE_SESSION_DOORS,
   ENGINE_SESSION_FIELD_CASES,
 } from './engine-session-cases';
-import { fixtureFacts, sessionWord, storedWord, WORD_SELECT, withWord, wordOf } from '../test-support/session-word';
+import { fixtureFacts, sessionWord, WORD_SELECT, withWord, wordOf } from '../test-support/session-word';
 
 /**
  * The engine-path guard and the kind census, against a real PostgreSQL (contract §2.9 LS1, LS6;
@@ -814,10 +814,8 @@ test('only a claimed subject gets a session row, and the compensation points ins
       {
         ...await stack.db.session.findUnique({ where: { id: resultId }, select: { sessionKind: true } }),
         status: await sessionWord(stack.db, resultId),
-        // The word migration 1671's trigger stored: the result settled the landing before it inserted the row.
-        stored: await storedWord(stack.db, resultId),
       },
-      { sessionKind: 'LANDING', status: RunStatus.SUCCEEDED, stored: RunStatus.SUCCEEDED },
+      { sessionKind: 'LANDING', status: RunStatus.SUCCEEDED },
       'the result did not insert the landing row',
     );
 
@@ -834,7 +832,6 @@ test('only a claimed subject gets a session row, and the compensation points ins
       where: { id: settled!.sessionId }, select: { ...WORD_SELECT, finishedAt: true},
     });
     assert.equal(await sessionWord(stack.db, settled!.sessionId), RunStatus.SUCCEEDED);
-    assert.equal(await storedWord(stack.db, settled!.sessionId), RunStatus.SUCCEEDED, 'settled first: the stored word too');
     // Released from the start, at the moment its landing settled (plan step 3.1).
     const settledAt = (await stack.db.projectLanding.findUniqueOrThrow({ where: { id: g.landingId } })).settledAt;
     assert.equal(settledRow.finishedAt?.getTime(), settledAt?.getTime(), 'the release column is the settlement time');

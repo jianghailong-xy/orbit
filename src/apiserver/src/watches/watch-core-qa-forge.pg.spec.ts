@@ -60,6 +60,7 @@ import type { CreateWatchDto } from './dto';
 import { WatchDeliveryResult, WatchDeliveryService } from './watch-delivery.service';
 import { WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -388,7 +389,7 @@ async function turnById(id: string): Promise<TurnRow | undefined> {
 }
 
 async function sessionStatus(id: string): Promise<string> {
-  const { rows } = await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1`, [id]);
+  const { rows } = await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1`, [id]);
   return rows[0].status;
 }
 

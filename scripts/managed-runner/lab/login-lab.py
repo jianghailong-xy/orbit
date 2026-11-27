@@ -453,7 +453,7 @@ def cmd_wait_session(args):
             break
         time.sleep(2)
     word = ('session_legacy_status(finished_at, turn_state, end_reason, last_turn_outcome, started_at, import_source_cwd, kind, '
-            '(select l.settled_as from project_landing l where l.session_id = session.id), session.status::text)')  # the fallback, until T14
+            '(select l.settled_as from project_landing l where l.session_id = session.id))')
     session_row = table_rows(f"select id, {word} as status, assigned_runner_id, provider, provider_builtin, engine, model, "
                              f"runtime_session_id, created_at from session where id = '{to_uuid(args.session)}'")
     kinds = {}

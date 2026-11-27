@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One pass of walk.mjs with the rehearsal stack's settings (rehearse.sh's defaults).
-#   walk.sh <label> <api base URL> d1|d2
+#   walk.sh <label> <api base URL> d1|d2|d3|d4
 set -euo pipefail
 HERE=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 export LM_PROJECT=${LM_PROJECT:-orbit-link-t16} LM_DIR=${LM_DIR:-/mnt/tmp/t16/lm}

@@ -98,7 +98,7 @@ test('managed runner idle sleep and wake against a fake cluster', {
     await sql.query(
       // started_at and updated_at by the database's clock: they are timestamps without a zone.
       `INSERT INTO "session" (${names.map((n) => `"${n}"`).join(', ')}, "started_at", "updated_at")
-       VALUES (${names.map((n, i) => (n === 'status' ? `$${i + 1}::"run_status"` : `$${i + 1}`)).join(', ')}, now(), now())`,
+       VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')}, now(), now())`,
       names.map((n) => columns[n]),
     );
     return id;

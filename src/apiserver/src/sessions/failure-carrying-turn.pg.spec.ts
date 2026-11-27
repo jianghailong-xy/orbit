@@ -58,7 +58,7 @@ import { releaseWasFailure } from '../common/session-release';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 import { SessionsService } from './sessions.service';
 import { turnStateOfWord } from './session-turn-state';
-import { fixtureFacts } from '../test-support/session-word';
+import { fixtureFacts, wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -215,7 +215,7 @@ async function turnRow(sql: Client, id: string): Promise<TurnRow> {
 
 async function sessionRow(sql: Client, id: string): Promise<SessionRow> {
   const row = (await sql.query(
-    `SELECT status::text AS status, finished_at, end_reason, error, last_turn_outcome
+    `SELECT ${wordSql()} AS status, finished_at, end_reason, error, last_turn_outcome
        FROM "session" WHERE id = $1::uuid`,
     [id],
   )).rows[0] as SessionRow;
@@ -478,7 +478,7 @@ test('every failure writer records FAILED and the error on the turn that carries
       const claimed = await sql.query(
         `UPDATE "session" SET "turn_state" = 'IN_FLIGHT', engine_turn_active = true, run_claimed_at = now(),
                 inbox_lease_owner = $2::uuid
-          WHERE id = $1::uuid AND status = 'PENDING'`, [id, leaseOwner]);
+          WHERE id = $1::uuid AND turn_state = 'QUEUED'`, [id, leaseOwner]);
       assert.equal(claimed.rowCount, 1, 'claimed');
       await sql.query('COMMIT');
     } catch (error) {

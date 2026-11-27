@@ -61,7 +61,7 @@ import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
 import { turnStateOfWord } from './session-turn-state';
-import { WORD_SELECT, withWord } from '../test-support/session-word';
+import { WORD_SELECT, withWord, wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -218,7 +218,7 @@ test('no session runs on a Default its owner removed from Orbit', {
   async function row(id: string) {
     const r = await sql.query(
       `SELECT codex_account, codex_account_pinned, claude_account, claude_account_pinned, pool_switch_notice,
-              status::text AS status, error, (EXTRACT(EPOCH FROM retry_at) * 1000)::float8 AS retry_ms
+              ${wordSql()} AS status, error, (EXTRACT(EPOCH FROM retry_at) * 1000)::float8 AS retry_ms
          FROM "session" WHERE id = $1::uuid`,
       [id],
     );

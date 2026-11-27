@@ -35,6 +35,7 @@ import { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { RunnerApiController } from './runner-api.controller';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -157,7 +158,7 @@ interface FailureRow {
 
 async function failureRow(sql: Client, id: string): Promise<FailureRow> {
   const row = (await sql.query(
-    `SELECT status::text AS status, error, failure_kind, failure_scope, failure_said, admission_failure
+    `SELECT ${wordSql()} AS status, error, failure_kind, failure_scope, failure_said, admission_failure
        FROM "session" WHERE id = $1::uuid`,
     [id],
   )).rows[0] as FailureRow;

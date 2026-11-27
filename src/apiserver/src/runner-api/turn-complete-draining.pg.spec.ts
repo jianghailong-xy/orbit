@@ -43,6 +43,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import '../test-support/daemon-routes-over-http';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -188,7 +189,7 @@ test('a turn ending on a draining runner returns its slot, and Stop on the sessi
     return reply.json?.sessionId ? toUuid(String(reply.json.sessionId)) : null;
   };
   const statusOf = async (id: string) =>
-    (await sql.query<{ status: string }>(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0].status;
+    (await sql.query<{ status: string }>(`SELECT ${wordSql()} AS status FROM "session" WHERE "id" = $1::uuid`, [id])).rows[0].status;
   const turnStatusOf = async (id: string) =>
     (await sql.query<{ status: string }>(`SELECT "status" FROM "conversation_turn" WHERE "id" = $1::uuid`, [id])).rows[0]?.status;
   const queued = async (s: Run) => (await sql.query<{ n: number }>(
