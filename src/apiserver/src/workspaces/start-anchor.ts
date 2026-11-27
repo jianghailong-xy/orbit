@@ -93,6 +93,17 @@ export async function taskRunAnchor(db: Prisma.TransactionClient, taskId: string
   return (await taskRunAnchors(db, [taskId])).get(taskId) ?? null;
 }
 
+/** The anchor an unpinned run of a task filed under this project would have: taskRunAnchors' rule, for a task
+ *  not written yet. */
+export async function projectTaskRunAnchor(db: Prisma.TransactionClient, projectId: string): Promise<AnchorSeed | null> {
+  const project = await db.project.findFirst({
+    where: { id: projectId, coordinatorSession: { deletedAt: null } },
+    select: { coordinatorSession: { select: ANCHOR_SESSION_SELECT } },
+  });
+  const session = project?.coordinatorSession;
+  return session ? anchorOf(db, session, ANCHOR_ROLE.coordinator) : null;
+}
+
 /** What a task's unpinned run starts on: its anchor, else its workspace's seed. */
 export async function taskRunSeed(
   db: Prisma.TransactionClient,

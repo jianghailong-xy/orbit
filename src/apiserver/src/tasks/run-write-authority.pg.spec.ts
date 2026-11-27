@@ -473,7 +473,8 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
       ok(await patch(conversation, sibling, { description: 'by a conversation' }), `${who} editing`);
       ok(await patch(conversation, sibling, { verdict: 'PASS' }), `${who} concluding`);
       const other = await taskOf(`a verifier for ${who}`, null, verifierExtra(lonelySubject));
-      ok(await pin(conversation, { taskIds: [b62(other)], model: 'pinned' }), `${who} pinning`);
+      // A model with Auto: a task runs only on one (task-run-auto.ts).
+      ok(await pin(conversation, { taskIds: [b62(other)], model: 'claude-opus-5-5' }), `${who} pinning`);
       const prerequisite = await taskOf(`a prerequisite for ${who}`, null);
       ok(await addEdge(conversation, other, prerequisite), `${who} adding an edge`);
       ok(await report(conversation, other, { phase: 'by a conversation' }), `${who} reporting`);
