@@ -213,6 +213,7 @@ describe("the composer's Stop ends the session's background work with the turn",
     // One request, for THIS session, with the explicit flag — the whole of what makes this Stop
     // more than an interrupt. No follow-up rides along: the composer was empty, and a follow-up
     // would be its own argument.
-    expect(interrupts()).toEqual([[SESSION_PUBLIC, undefined, { stopBackgroundWork: true }]]);
+    // The answer limit's signal rides along too (lib/pendingSend): what is asked for is the same.
+    expect(interrupts()).toEqual([[SESSION_PUBLIC, undefined, expect.objectContaining({ stopBackgroundWork: true })]]);
   });
 });

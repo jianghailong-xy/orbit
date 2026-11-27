@@ -669,6 +669,7 @@ import {
   markNotSent,
   newestSeq,
   SendNotAnsweredError,
+  STOP_NOT_ANSWERED,
   withPendingSend,
 } from '../lib/pendingSend';
 import { compatibleUuid } from '../lib/uuid';
@@ -7576,7 +7577,19 @@ export function WorkspaceView({
     // server or build the stopped turn left running is what the person pointing at Stop can still
     // see running — and it is the ONLY caller that asks for that: every other interrupt keeps a
     // plain interrupt's semantics (nothing killed; the engine and its conversation stay).
-    mutationFn: (id: string) => interruptSession(id, undefined, { stopBackgroundWork: true }),
+    // It waits SEND_ANSWER_TIMEOUT_MS for the server, as a send does, then ends the request and says so:
+    // a Stop nobody answered must not look like a Stop that is still on its way (lib/pendingSend).
+    mutationFn: async (id: string) => {
+      const deadline = answerDeadline();
+      try {
+        return await interruptSession(id, undefined, { stopBackgroundWork: true, signal: deadline.signal });
+      } catch (e) {
+        if (deadline.signal.aborted && isSendNotAnswered(e)) throw new Error(STOP_NOT_ANSWERED);
+        throw e;
+      } finally {
+        deadline.done();
+      }
+    },
     onSuccess: () => {
       // Interrupt drops queued follow-ups server-side. Rather than silently lose what the
       // user typed, fold their queued text back into the composer so it can be edited and
@@ -8919,7 +8932,11 @@ export function WorkspaceView({
       outlivingSessionWork(selectedSession ?? selected) !== null) &&
     !text.trim() &&
     readyImages.length === 0 &&
-    !replyTo;
+    !replyTo &&
+    // A message still on its way waits for its answer before Stop is offered: a Stop that reached the
+    // server first could drop it from the queue while its bubble read as sent. The box is empty from
+    // the press on (lib/pendingSend), so without this Stop would stand in for Send mid-send.
+    !send.isPending;
 
   // Holding Send while a turn runs offers the other way to send the message — queued for the next
   // turn instead of into this one — which ⌥Enter does from a keyboard (decided 2026-10-16,
@@ -13163,7 +13180,8 @@ export function WorkspaceView({
           shownProvider={shownProvider}
           configuredProviders={configuredProviders}
           showStop={showStop}
-          onStop={() => selected && control.mutate(selected.id)}
+          onStop={() => selected && !control.isPending && control.mutate(selected.id)}
+          stopping={control.isPending}
           canSend={canSend && !handingOver}
           // A send waiting as a bubble says Sending… there; the button need not say it too.
           sending={send.isPending && !send.variables?.pendingKey}
@@ -13353,6 +13371,8 @@ export interface SessionComposerProps {
   configuredProviders: ConfiguredProvider[];
   showStop: boolean;
   onStop: () => void;
+  /** Stop was pressed and the server has not answered yet. */
+  stopping?: boolean;
   canSend: boolean;
   sending: boolean;
   onSend: (intentOverride?: SessionTurnIntent) => void;
@@ -13428,6 +13448,7 @@ export function SessionComposer({
   configuredProviders,
   showStop,
   onStop,
+  stopping = false,
   canSend,
   sending,
   onSend,
@@ -14479,6 +14500,8 @@ export function SessionComposer({
             variant="primary"
             icon={<StopSquareIcon />}
             onClick={onStop}
+            disabled={stopping}
+            loading={stopping}
             aria-label="Stop"
           />
         ) : (

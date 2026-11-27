@@ -21,6 +21,9 @@ export class SendNotAnsweredError extends Error {
   }
 }
 
+/** The composer's Stop had no answer in time either: the same limit, said for a stop. */
+export const STOP_NOT_ANSWERED = "The server didn't answer in 20 seconds. Press Stop to try again.";
+
 /** A signal that ends the request when the answer is late, and `done` to call once it has come. */
 export function answerDeadline(ms = SEND_ANSWER_TIMEOUT_MS): { signal: AbortSignal; done: () => void } {
   const ctl = new AbortController();
