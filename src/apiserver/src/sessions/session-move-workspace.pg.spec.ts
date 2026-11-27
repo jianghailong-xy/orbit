@@ -619,6 +619,8 @@ test('moving a session to another workspace: the panel, the move, its refusals a
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
       assert.equal((await row(id)).workspace_id, ws.home, 'moved before it was released');
+      // Its own end reason, which every client draws as a held idle session rather than as ended.
+      assert.equal((await row(id)).end_reason, 'moved');
       await sql.query(
         "UPDATE session SET turn_state = NULL, finished_at = now() WHERE id = $1::uuid",
         [id],

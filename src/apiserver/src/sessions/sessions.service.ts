@@ -13776,7 +13776,9 @@ export class SessionsService {
     }
     if (!session.cancelRequestedAt) {
       if (!(sourceRunner && runnerIsOnline(sourceRunner))) throw new ConflictException(moveNeedsRunnerOnline(sourceRunner));
-      await this.endOpen(ownerId, id, SessionEndReason.ENDED);
+      // Its own reason, so every client draws the moved session as a held idle one rather than as ended (board
+      // docs/mocks/session-move-released). Everything else about the end is ENDED's.
+      await this.endOpen(ownerId, id, SessionEndReason.MOVED);
     }
     const deadline = Date.now() + SessionsService.moveReleaseWaitMs;
     for (;;) {
