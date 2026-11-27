@@ -30,9 +30,12 @@ public enum PendingTray {
     /// taken yet. What Orbit queued stays in the tail as its card, and a message whose delivery
     /// settled undelivered stays in the conversation with that outcome, and so does one held for its
     /// translation, with its chip or its failure (Settings › Translation, board frame 6): the tray only
-    /// waits for the engine. Web parity: `WorkspaceView.tsx`'s `inPendingTray`.
+    /// waits for the engine. A message the server has not taken yet (`UserBubble.isSending`) is not in
+    /// the tray either: it waits in the transcript's tail as its `Sending…` bubble until the answer says
+    /// where it went. Web parity: `WorkspaceView.tsx`'s `inPendingTray`.
     public static func holds(_ bubble: UserBubble) -> Bool {
-        !bubble.undelivered && !SteerDelivery.settles(bubble.delivery) && SteerDelivery.isReadersOwn(bubble)
+        !bubble.isSending && !bubble.undelivered && !SteerDelivery.settles(bubble.delivery)
+            && SteerDelivery.isReadersOwn(bubble)
             && bubble.translation?.held != true
     }
 

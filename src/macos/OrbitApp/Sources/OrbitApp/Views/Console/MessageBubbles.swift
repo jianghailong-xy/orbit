@@ -63,6 +63,8 @@ struct UserBubbleView: View {
         return foot
     }
 
+    /// The message dims while the server has not taken it; its foot row stays at full strength.
+    private var strength: Double { bubble.isSending ? UserBubble.sendingOpacity : 1 }
     private var images: [TurnAttachment] { bubble.attachments.filter(\.isImage) }
     /// This bubble's images as viewer pages, keyed the way `SessionPreviewImages` keys them.
     private var pages: [PreviewImage] {
@@ -107,10 +109,10 @@ struct UserBubbleView: View {
                         .font(.orbitMeta).foregroundStyle(.secondary)
                 }
                 if !images.isEmpty {
-                    imageBlock
+                    imageBlock.opacity(strength)
                 }
                 if !files.isEmpty {
-                    attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }
+                    attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }.opacity(strength)
                 }
                 // The bubble is the person's words; the note delivery appended stays out of it.
                 if !bubble.text.isEmpty {
@@ -128,6 +130,7 @@ struct UserBubbleView: View {
                         // the bubble where the address was), so the bubble grows to the row for it —
                         // where every other message still sizes to its own words.
                         .frame(maxWidth: showsCard ? .infinity : nil, alignment: .leading)
+                        .opacity(strength)
                 }
                 if long {
                     Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
@@ -341,7 +344,11 @@ struct UserBubbleView: View {
                 // Accepted, and held by a full runner or its update: the tag below says so.
                 EmptyView()
             } else if awaitingServer {
-                if bubble.queued { QueuedWord(label: "Queued for next turn") } else { Text("Sending…").font(.orbitMeta).foregroundStyle(.secondary) }
+                if bubble.queued, !bubble.isSending {
+                    QueuedWord(label: "Queued for next turn")
+                } else {
+                    Text(UserBubble.sendingLabel).font(.orbitMeta).foregroundStyle(.secondary)
+                }
                 // A queued message can be withdrawn until the runner leases it (web parity). Offered
                 // only once the server `turnId` is known — the DELETE keys on it — which lands a tick
                 // after send. `contentShape` widens the small hit target for touch.
