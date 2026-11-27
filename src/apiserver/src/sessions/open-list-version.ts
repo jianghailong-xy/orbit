@@ -5,7 +5,7 @@ import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { EVIDENCE_REVIEW_WINDOW_SECONDS } from '../tasks/evidence-review';
 import { freshRunningBgJobs } from './background-job-activity';
 import { sessionTurnStateSql } from './session-turn-state';
-import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, runnerLastBeatSql } from '../runners/runner-presence';
+import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, runnerPresenceSql } from '../runners/runner-presence';
 
 /**
  * A cheap stand-in for "would `SessionsService.list` answer the Open list differently now": the
@@ -101,7 +101,7 @@ export async function readOpenListVersionParts(
   // One statement, so one round trip and one plan.
   const [row] = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     WITH runners AS MATERIALIZED (
-      SELECT r.id, r.name, r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, ${runnerLastBeatSql('r')} AS beat
+      SELECT r.id, r.name, r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, ${runnerPresenceSql('r')} AS beat
         FROM runner r
        WHERE r.owner_id = ${o}
           -- Asked per runner (session_open_list_runner_idx is (owner_id, assigned_runner_id)): as an IN over the

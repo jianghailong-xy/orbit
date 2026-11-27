@@ -10,13 +10,17 @@ import (
 )
 
 // Frames of the runner link (contracts/runner-link/v1) as WebSocket messages: one message carries one encoded Frame
-// of at most linkMaxFrameBytes, and a larger frame travels as Chunks that the receiver joins in index order. The
+// of at most linkMaxFrameBytes (the runner writes none over linkSendPieceBytes), and a larger frame travels as Chunks that the receiver joins in index order. The
 // link gateway does the same on its side (src/link-gateway/chunk.go).
 
 const (
 	// linkMaxFrameBytes is Limits.max_frame_bytes in protocol v1 (docs/runner-link-design.md §5.1): the largest
 	// encoded Frame one WebSocket message carries, in either direction.
 	linkMaxFrameBytes = 256 << 10
+	// linkSendPieceBytes is the largest message the runner writes: a larger frame goes as Chunks (§15.15). On a slow
+	// path a heartbeat or a call waits behind one piece at most, never behind a whole 256 KiB message, and so does the
+	// WebSocket library's pong, whose write it bounds to 5 s. What the runner takes in stays linkMaxFrameBytes.
+	linkSendPieceBytes = 16 << 10
 	// Bounds on frames being joined from pieces. A frame that would outgrow them is a protocol error: nothing the
 	// gateway sends is legitimately that large, and memory held for one connection must not grow without limit.
 	linkMaxJoinedFrameBytes = 8 << 20
@@ -26,32 +30,51 @@ const (
 
 var errLinkChunk = errors.New("link chunk")
 
-// encodeLinkFrame encodes f as the WebSocket messages it travels in: one when it fits in limit bytes, otherwise
-// Chunks whose Frame ids are taken from nextID, each piece sized so that its own encoded Frame fits.
-func encodeLinkFrame(f *linkpb.Frame, limit int, nextID func() uint64) ([][]byte, error) {
+// linkPieces is one encoded frame on its way out as messages: whole when it fits in limit bytes, otherwise as Chunks
+// of it. Each message is encoded only as it is taken (next), so a sender that lets other frames go between the pieces
+// gives every message it writes the next id it holds.
+type linkPieces struct {
+	b       []byte // what is still to go of the encoded frame
+	frameID uint64
+	index   uint32
+	limit   int
+	whole   bool
+	over    bool // every message has been taken
+}
+
+// newLinkPieces encodes f, whose id is set, to go out in messages of at most limit bytes.
+func newLinkPieces(f *linkpb.Frame, limit int) (*linkPieces, error) {
 	b, err := proto.Marshal(f)
 	if err != nil {
 		return nil, err
 	}
-	if len(b) <= limit {
-		return [][]byte{b}, nil
+	return &linkPieces{b: b, frameID: f.GetId(), limit: limit, whole: len(b) <= limit}, nil
+}
+
+// done reports whether every message has been taken.
+func (p *linkPieces) done() bool { return p.over }
+
+// next is the next message: the whole frame, or the next Chunk of it in a Frame of its own whose id is id (unused for a
+// frame that goes whole).
+func (p *linkPieces) next(id uint64) ([]byte, error) {
+	if p.whole {
+		b := p.b
+		p.b, p.over = nil, true
+		return b, nil
 	}
-	// A piece's own Frame adds its id, the Chunk's frame_id, index and last flag, and two length prefixes: well
-	// under 64 bytes.
-	piece := limit - 64
-	var out [][]byte
-	for i := 0; len(b) > 0; i++ {
-		n := min(piece, len(b))
-		cb, err := proto.Marshal(&linkpb.Frame{Id: nextID(), Body: &linkpb.Frame_Chunk{Chunk: &linkpb.Chunk{
-			FrameId: f.GetId(), Index: uint32(i), Last: n == len(b), Data: b[:n],
-		}}})
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, cb)
-		b = b[n:]
+	// A piece's own Frame adds its id, the Chunk's frame_id, index and last flag, and two length prefixes: well under
+	// 64 bytes.
+	n := min(p.limit-64, len(p.b))
+	cb, err := proto.Marshal(&linkpb.Frame{Id: id, Body: &linkpb.Frame_Chunk{Chunk: &linkpb.Chunk{
+		FrameId: p.frameID, Index: p.index, Last: n == len(p.b), Data: p.b[:n],
+	}}})
+	if err != nil {
+		return nil, err
 	}
-	return out, nil
+	p.b = p.b[n:]
+	p.index++
+	p.over = len(p.b) == 0
+	return cb, nil
 }
 
 // linkReassembler joins one connection's chunked frames.
