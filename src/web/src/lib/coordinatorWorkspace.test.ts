@@ -77,10 +77,10 @@ describe('Change: the confirmations', () => {
   it('offers both ways where the conversation comes along', () => {
     expect(changeTitle('Website Revamp', 'orbit-prod')).toBe('Coordinate Website Revamp from orbit-prod?');
     expect(changeMoveParagraphs({
-      to: 'orbit-prod', from: 'orbit', needsEnd: true,
+      to: 'orbit-prod', from: 'orbit',
       files: '3 changed files aren’t merged into main yet. They stay on branch b in orbit.',
     })).toEqual([
-      'Move conversation: this conversation goes to orbit-prod and continues there. It ends first. 3 changed files aren’t merged into main yet. They stay on branch b in orbit.',
+      'Move conversation: this conversation goes to orbit-prod and continues there. 3 changed files aren’t merged into main yet. They stay on branch b in orbit.',
       'Start a new one there: this conversation is completed and stays readable in orbit, and a new, empty one opens in orbit-prod.',
       'Either way, its tasks keep running where they are.',
     ]);
