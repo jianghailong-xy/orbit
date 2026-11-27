@@ -1491,6 +1491,9 @@ struct NewSessionView: View {
                         .accessibilityIdentifier("draft-pending-bubble")
                 }
                 .fadesIntoComposerBand()
+                // The image cache a user bubble reads for its attachments; the live console injects it, and
+                // this page is not under one.
+                .environment(draft.attachments)
                 .environment(\.notSentActions, NotSentActions(
                     retry: { [draft] _ in Task { await draft.retryDraftPending() } },
                     putBack: { [draft] _ in draft.putBackDraftPending() },
