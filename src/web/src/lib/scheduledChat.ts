@@ -63,7 +63,8 @@ export const getScheduledChat = (): Promise<SchedulePageChatResponse> =>
 export const scheduledChatQuery = () =>
   queryOptions({
     queryKey: ['schedules', 'chat'] as const,
-    meta: { entities: ['schedule', 'session'] },
+    // What the schedules list is re-read on: the opening counts the same schedules, and names the open chat.
+    meta: { entities: ['session', 'workspace', 'scheduleCard'] },
     queryFn: getScheduledChat,
     staleTime: 15_000,
   });
