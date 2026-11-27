@@ -57,7 +57,8 @@ class ProjectRowWaitingShellTest {
     private val row get() = "project-row:${ProjectShell.LAUNCH}"
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
 
-    /** The card's first and last lines: a command taller than the screen, so the tail shows its foot and never its head. */
+    /** The command's first and last lines. The card is taller than the screen, so the tail never shows the command's head: the
+     * command itself folds, and the height under it is the Allow & remember label, which names every program the command runs. */
     private val headLine = "echo HEAD-OF-THE-WAITING-CARD"
     private val footLine = "echo FOOT-OF-THE-WAITING-CARD"
 
@@ -73,7 +74,7 @@ class ProjectRowWaitingShellTest {
                 add(Json.parseToJsonElement("""{"type":"assistant","seq":${2 * n},"turnId":"t-$n","ts":"${ago(60L - n)}","payload":{"text":"Step $n: the quota read came back. ${"It answered within its window and the counts matched. ".repeat(3)}"}}"""))
             }
         }.toString()
-        val command = (listOf(headLine) + (1..60).map { "echo retry-line-$it" } + footLine).joinToString("\n")
+        val command = (listOf(headLine) + (1..60).map { "retry-line-$it" } + footLine).joinToString("\n")
         ProjectShell.waitingApprovals = buildJsonArray {
             add(buildJsonObject {
                 put("id", "a-quota"); put("sessionId", ProjectShell.WAITING); put("toolName", "Bash"); put("status", "PENDING")
@@ -207,7 +208,7 @@ class ProjectRowWaitingShellTest {
         node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.removePrefix("$ ")?.startsWith(headLine) == true
     }, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
     /** Whether the command's own last line is on screen: its text runs down to the foot, which sits at the bottom of that text.
-     * Not the Allow & remember label, which quotes the whole command; and a folded command shows no foot at all. */
+     * Not just any node holding those words; and a folded command shows no foot at all. */
     private fun commandFootShown(list: Rect): Boolean = compose.onAllNodes(SemanticsMatcher("the command's own text, down to its foot") { node ->
         node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.let { it.removePrefix("$ ").startsWith(headLine) && it.contains(footLine) } == true
     }, useUnmergedTree = true).fetchSemanticsNodes().any { it.boundsInRoot.bottom > list.top && it.boundsInRoot.bottom <= list.bottom }
