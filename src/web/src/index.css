@@ -6411,12 +6411,15 @@ button.toast--pill:focus-visible {
   flex: none;
   opacity: 0.7;
 }
-/* Background work running, or a wake that will resume the session (lib/sessionDisplay sessionRowIcons): a grey glyph
-   beside the time. */
+/* A list row's title-line icons (lib/sessionDisplay sessionRowIcons): Failed, Retrying, On hold, background work
+   running, a wake that will resume it. Grey glyphs beside the time, Failed in red. */
 .session-row-icon {
   display: inline-flex;
   flex: none;
   color: var(--text-3);
+}
+.session-row-icon.tone-red {
+  color: var(--error);
 }
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {

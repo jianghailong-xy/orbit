@@ -70,6 +70,9 @@ const MARK_ICON: Record<SessionMark, ReactNode> = {
 };
 
 const ROW_ICON: Record<SessionRowIcon, ReactNode> = {
+  FAILED: MARK_ICON.FAILED,
+  RETRYING: MARK_ICON.RETRYING,
+  ON_HOLD: MARK_ICON.ON_HOLD,
   BACKGROUND: (
     <>
       <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
@@ -84,14 +87,18 @@ const ROW_ICON: Record<SessionRowIcon, ReactNode> = {
   ),
 };
 
-/** A list row's title-line icons (lib/sessionDisplay sessionRowIcons), beside the guests icon: each a grey glyph whose
- *  tip says what it means. */
+/** A list row's title-line icons (lib/sessionDisplay sessionRowIcons), beside the guests icon: each a glyph whose tip
+ *  says what it means, red for Failed (a failure nobody is retrying) and grey otherwise. */
 export function SessionRowIcons({ icons }: { icons: readonly SessionRowIcon[] }) {
   return (
     <>
       {icons.map((icon) => (
         <Tooltip key={icon} content={SESSION_ROW_ICON_TIPS[icon]} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
-          <span className="session-row-icon" data-icon={icon} aria-label={SESSION_ROW_ICON_TIPS[icon]}>
+          <span
+            className={`session-row-icon${icon === 'FAILED' ? ' tone-red' : ''}`}
+            data-icon={icon}
+            aria-label={SESSION_ROW_ICON_TIPS[icon]}
+          >
             {svg(ROW_ICON[icon], 12)}
           </span>
         </Tooltip>

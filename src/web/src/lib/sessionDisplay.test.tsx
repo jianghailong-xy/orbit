@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { LinkPreview } from '@orbit/shared';
-import { SESSION_MARKS, sessionDisplayState, sessionDisplayText, sessionMarks, sessionRowIcons } from './sessionDisplay';
+import { SESSION_MARKS, sessionDisplayState, sessionDisplayText, sessionMarks, sessionRowIcons, sessionRowMarks } from './sessionDisplay';
 import { sessionStateWord } from './sessionState';
 import { sessionIsWorking, sessionNeedsOwner } from './sessionGrouping';
 import { SITUATIONS } from './sessionPhaseFields.fixture';
@@ -54,19 +54,19 @@ const groupOf = (p: Record<string, any>): Group =>
   sessionNeedsOwner(p as never) ? 'Needs you' : sessionIsWorking(p as never) ? 'Working' : '-';
 
 /** The board's after column, per row with the facts: state, icon, marks, the list row's title-line icons (Interrupted,
- *  Finished and Ended are not drawn; Background and Will resume are icons: the owner, 2026-11-27); and the group, the
- *  same before and after. */
+ *  Finished and Ended are not drawn; Background and Will resume are icons, and a list row draws Failed, Retrying and
+ *  On hold as icons too: the owner, 2026-11-27); and the group, the same before and after. */
 const AFTER: Record<number, { state: string; icon: string; marks: string[]; icons?: string[]; group: Group }> = {
   1: { state: 'Queued', icon: 'clock', marks: [], group: 'Working' },
   3: { state: 'Running', icon: 'spinner', marks: [], group: 'Working' },
   5: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
   7: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
   9: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
-  11: { state: 'Idle', icon: 'circle', marks: ['Failed'], group: 'Needs you' },
+  11: { state: 'Idle', icon: 'circle', marks: ['Failed'], icons: ['FAILED'], group: 'Needs you' },
   13: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
   15: { state: 'Running', icon: 'spinner', marks: [], icons: ['BACKGROUND'], group: 'Working' },
   17: { state: 'Running', icon: 'spinner', marks: ['Needs you'], group: 'Needs you' },
-  19: { state: 'Queued', icon: 'clock', marks: ['On hold'], group: 'Working' },
+  19: { state: 'Queued', icon: 'clock', marks: ['On hold'], icons: ['ON_HOLD'], group: 'Working' },
   21: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
   23: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
   25: { state: 'Idle', icon: 'circle', marks: [], group: '-' },
@@ -141,6 +141,8 @@ describe('the board on web: facts present', () => {
       expect(sessionDisplayState(p)).toMatchObject({ word: want.state, icon: want.icon, phase: p.phase });
       expect(markWords(p)).toEqual(want.marks);
       expect(sessionRowIcons(p)).toEqual(want.icons ?? []);
+      // A list row draws Failed, Retrying and On hold as title-line icons, so its chips are the marks less those.
+      expect((sessionRowMarks(p) ?? []).map((m) => SESSION_MARKS[m].word)).toEqual(want.marks.filter((m) => m === 'Needs you'));
       const text = [want.state, ...want.marks].join(' · ');
       // Session list row: the state icon from phase alone, and the marks after its line.
       const glyph = renderToStaticMarkup(<StatusIcon session={p} />);
@@ -201,6 +203,8 @@ describe('the marks the fixture has no row for, on server-shaped payloads', () =
     const p = { ...failed, waitingOn: 'WAKE', retryAt: new Date(Date.now() + 30_000).toISOString() };
     expect(sessionDisplayState(p)?.word).toBe('Idle');
     expect(markWords(p)).toEqual(['Retrying']);
+    expect(sessionRowIcons(p)).toEqual(['RETRYING']);
+    expect(sessionRowMarks(p)).toEqual([]);
     expect(statusLabel(p)).toBe('Idle');
     expect(groupOf(p)).toBe('Working');
   });

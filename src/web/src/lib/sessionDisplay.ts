@@ -94,19 +94,35 @@ export function sessionMarks(session: SessionMarkSource): SessionMark[] | null {
   return out;
 }
 
-/** A fact a list row draws as an icon on its title line, not as a mark (the owner, 2026-11-27): background work still
- *  running, and a wake (a watch, a scheduled wake-up or an armed retry) that will resume it. */
-export type SessionRowIcon = 'BACKGROUND' | 'WILL_RESUME';
+/** A fact a list row draws as an icon on its title line instead of a chip (the owner, 2026-11-27): a release by a
+ *  failure (Failed, or Retrying when the server will retry it) and a held queued turn (On hold), which every other
+ *  surface still draws as marks; background work still running and a wake (a watch, a scheduled wake-up or an armed
+ *  retry) that will resume a held session, which no other surface draws. */
+export type SessionRowIcon = 'FAILED' | 'RETRYING' | 'ON_HOLD' | 'BACKGROUND' | 'WILL_RESUME';
 
 export const SESSION_ROW_ICON_TIPS: Record<SessionRowIcon, string> = {
+  FAILED: 'Failed',
+  RETRYING: 'Retrying',
+  ON_HOLD: 'On hold',
   BACKGROUND: 'Background work running',
   WILL_RESUME: 'Will resume',
 };
 
-/** The title-line icons of a held session, in drawing order. Interrupted, Finished and Ended are not drawn at all. */
+/** The marks a list row draws as icons rather than chips. */
+const ROW_ICON_MARKS: ReadonlySet<SessionMark> = new Set<SessionMark>(['FAILED', 'RETRYING', 'ON_HOLD']);
+
+/** The chips a list row draws after its line: the marks less those it draws as title-line icons, so Needs you alone.
+ *  Null from an older control plane. */
+export function sessionRowMarks(session: SessionMarkSource): SessionMark[] | null {
+  return sessionMarks(session)?.filter((mark) => !ROW_ICON_MARKS.has(mark)) ?? null;
+}
+
+/** The title-line icons of a list row, in drawing order: Failed / Retrying and On hold (the marks of those names), then
+ *  Background and Will resume for a held session. Interrupted, Finished and Ended are not drawn at all. */
 export function sessionRowIcons(session: SessionMarkSource): SessionRowIcon[] {
-  if (!hasFacts(session) || session.released === true) return [];
-  const out: SessionRowIcon[] = [];
+  const out: SessionRowIcon[] = (sessionMarks(session) ?? []).filter((mark): mark is SessionRowIcon & SessionMark =>
+    ROW_ICON_MARKS.has(mark));
+  if (!hasFacts(session) || session.released === true) return out;
   if (session.activity === 'BACKGROUND_JOB' || (session.runningBgCount ?? 0) > 0) out.push('BACKGROUND');
   if (session.waitingOn === 'WAKE') out.push('WILL_RESUME');
   return out;

@@ -642,6 +642,7 @@ import {
   sessionMarks,
   sessionReleasedByMove,
   sessionRowIcons,
+  sessionRowMarks,
   type SessionRowIcon,
 } from '../lib/sessionDisplay';
 import { SessionMarkChips, SessionRowIcons, SessionStateGlyph } from './SessionStateDisplay';
@@ -2145,7 +2146,7 @@ const SessionEntryRow = memo(function SessionEntryRow({
                   {line.text}
                 </div>
               </Tooltip>
-              <SessionMarkChips marks={sessionMarks(actionSession)} />
+              <SessionMarkChips marks={sessionRowMarks(actionSession)} />
             </div>
           </>
         )}
