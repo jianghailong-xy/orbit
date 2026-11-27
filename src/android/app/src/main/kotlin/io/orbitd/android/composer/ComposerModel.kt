@@ -37,6 +37,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     private val uploads = mutableMapOf<String, Job>()
     private val mutable = MutableStateFlow(ComposerState())
     val state: StateFlow<ComposerState> = mutable.asStateFlow()
+    /** The page's chat this composer sends for, while the page shows it (ChatDoor). */
+    @Volatile var door: ChatDoor? = null
 
     init { restore() }
     fun restore() {
@@ -236,8 +238,10 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                             "Session: ${detail.text("status") ?: "New session"} · Permission: ${detail.text("permissionMode") ?: CursorRuntime.unsetMode(engineId)}") }
                     persist(); return@launch
                 }
+                val door = door
                 val endpoint = if (target != null) {
-                    check(detail.flag("enabled") != false) { "Workspace is disabled." }; "create"
+                    check(detail.flag("enabled") != false) { "Workspace is disabled." }
+                    if (target.chat != null && door != null) CHAT_CREATE + door.createPath.joinToString("/") else "create"
                 } else sendEndpoint(detail)
                 val raw = draft.text.trim()
                 val shell = raw.startsWith("!")
@@ -248,7 +252,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 // a new session's opening message alike. Send never waits for the optimizer: a press still out, or a sheet still open, goes.
                 val optimizedTranslation = state.value.optimizer.optimizedTranslation(draft.text)
                 cancelOptimize(); dismissOptimization()
-                val body = PromptOptimizer.withOptimizedTranslation(if (target != null) {
+                val body = PromptOptimizer.withOptimizedTranslation(if (endpoint.startsWith(CHAT_CREATE)) {
+                    val config = state.value.draft.resumeConfig
+                    door!!.createBody(content, id, if (config["model"] == null && seedModel != null) JsonObject(config + ("model" to JsonPrimitive(seedModel))) else config,
+                        draft.attachments.mapNotNull { it.remoteId })
+                } else if (target != null) {
                     buildCreateBody(detail, content, shell, draft.attachments, seedModel)
                 } else buildJsonObject {
                     if (endpoint == "resume") {
@@ -258,6 +266,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     put("clientTurnId", id); put("content", content); put("kind", if (shell) "shell" else "message")
                     if (queueForNextTurn && endpoint == "turns") put("intent", "NEXT_TURN")
                     putJsonArray("attachmentIds") { draft.attachments.forEach { add(it.remoteId!!) } }
+                    door?.turnExtra?.invoke()?.forEach { (k, v) -> put(k, v) }
                 }, optimizedTranslation)
                 val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments)
                 mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList(), pending = pending)) }
@@ -306,7 +315,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         val pending = state.value.draft.pending ?: return
         // The existing create-session door has no public idempotency contract. Never replay an
         // ambiguous create and accidentally start a second agent. Existing turns remain replayable.
-        if (pending.endpoint == "create") return
+        if (isCreate(pending.endpoint)) return
         mutable.update { it.copy(busy = true, error = null) }
         launch { try { persist(); transmit(pending) } finally { mutable.update { it.copy(busy = false) } } }
     }
@@ -333,7 +342,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         }
         // Persist acknowledgement before removing the retry. If disk fails, replay is still safe.
         val previous = state.value.draft
-        val created = if (pending.endpoint == "create") accepted.text("id") ?: error("Creation response has no session id.") else null
+        val created = if (isCreate(pending.endpoint))
+            accepted.text("id") ?: accepted.text("sessionId") ?: error("Creation response has no session id.") else null
         mutable.update { it.copy(draft = it.draft.copy(pending = null, resumeConfig = JsonObject(emptyMap()), createdSessionId = created),
             acknowledgementPending = created != null) }
         try { persist() } catch (e: Exception) {
