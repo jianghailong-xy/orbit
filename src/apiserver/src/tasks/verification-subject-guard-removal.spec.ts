@@ -322,6 +322,9 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     // 0350's session-request close: a session's run ending, or the session being completed or
     // moved to Trash, closes the requests still waiting on it. Another SIBLING change.
     'session_request_recipient_ended',
+    // 1760's: a session is the Scheduled page's chat for its whole life or never; the column is written by the chat's
+    // create alone. Another SIBLING change.
+    'session_schedule_chat_guard',
     // 0231's SOURCE snapshot freeze guard: the selector and the pin are frozen facts, and this is
     // the database's own refusal of every later write to those columns. Added by a SIBLING change,
     // not by 0207 or 0224 — which is exactly what this list exists to make visible.
@@ -350,7 +353,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 69,
+  assert.equal(core.length, 70,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -384,7 +387,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'order key when a session ends or is completed, and 70 once 1611 added `session_aa_turn_state_from_status` and '
     + '`session_zz_phase` to `session`, which kept the row\'s own `turn_state` and `phase` from its stored word; 1671 '
     + 'replaced the first with `session_aa_status_from_facts`, which kept the stored word from the facts, and 69 once '
-    + '1711 dropped it with the column');
+    + '1711 dropped it with the column, and 70 once 1760 added `session_schedule_chat_guard` to `session`, which refuses a '
+    + 'write that would make a session the Scheduled page chat or not');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -412,7 +416,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
       'session_help_ask_guard',
       'session_listed_at_settle',
       'session_open_list_epoch_delete', 'session_open_list_epoch_insert', 'session_open_list_epoch_update',
-      'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
+      'session_request_asker_stopped', 'session_request_recipient_ended', 'session_schedule_chat_guard',
+      'session_source_freeze_guard',
       'session_wiki_chat_space_guard',
       'session_zz_phase',
       'task_fork_guard',
@@ -431,7 +436,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'and 0476\'s `session_wiki_chat_space_guard`. '
     + '0484\'s nine `open_list_epoch_*` triggers and `conversation_turn_evidence_review_deadline`, '
     + 'and 0615\'s `task_fork_guard`, and 0850\'s `session_help_ask_guard`, and 1060\'s `condition_ended_with_task`, '
-    + 'and 1434\'s `session_listed_at_settle` and 1611\'s `session_zz_phase`. '
+    + 'and 1434\'s `session_listed_at_settle` and 1611\'s `session_zz_phase`, and 1760\'s `session_schedule_chat_guard`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

@@ -799,6 +799,150 @@ export function scheduleChangeOpeningRows(opening: ScheduleChangeOpening): Array
   ];
 }
 
+/**
+ * The Scheduled page's chat (docs/scheduled-chat-design.md §4.1, board scheduled-chat 01): Orbit's opening, static
+ * words around the account's live counts, and the tag its session carries in a session list. Its own constant, not a
+ * group of SCHEDULE_COPY: that copy is contracts/schedule.contract.json's, generated into each native client.
+ */
+export const SCHEDULE_PAGE_CHAT_COPY = {
+  fromScheduled: 'From Scheduled',
+  summary: 'You have {count} scheduled {tasks}: {counts}.',
+  task: 'task',
+  tasks: 'tasks',
+  active: '{count} active',
+  paused: '{count} paused',
+  held: '{count} held',
+  failing: '{count} failing',
+  none: 'none',
+  next: 'Next: {title}, {when} on {workspace}.',
+  nextAt: '{day} at {time}',
+  /** The next run in its schedule's zone, when that zone's clock differs from the viewer's or the viewer's is unknown. */
+  nextAtZone: '{day} at {time} {zone}',
+  deletedWorkspace: 'a deleted workspace',
+  examplesLead: 'Ask about them, or tell me what to change. For example:',
+  examples: [
+    'Pause everything on orbit-ws04 until Monday',
+    'Why did the last run take so long?',
+    "Every weekday at 09:00, check a changelog and tell me what's new",
+  ],
+  envelope:
+    'Moving a time, rewording what a task checks or how it reports applies at once, and you can undo it. More runs, '
+    + 'longer runs, more access or another workspace need your Allow.',
+  empty: {
+    summary: 'You have no scheduled tasks yet.',
+    examplesLead: "Say what should happen and when, and I'll set it up. For example:",
+    examples: [
+      "Every weekday at 09:00, check a changelog and tell me what's new",
+      'Every hour until 18:00, watch the deploy and tell me if it fails',
+    ],
+    closing: 'Nothing runs until you say something.',
+  },
+} as const;
+
+/** The account's schedules as the page chat's opening counts them: every schedule that has not ended. */
+export interface SchedulePageChatCounts {
+  total: number;
+  active: number;
+  paused: number;
+  held: number;
+  /** ACTIVE with its last run failed (`consecutiveFailures > 0`), a part of `active`. */
+  failing: number;
+}
+
+/** The next run of an ACTIVE schedule, the soonest of them all. */
+export interface SchedulePageChatNext {
+  scheduleId: string;
+  title: string;
+  /** ISO instant. */
+  at: string;
+  timezone: string;
+  workspaceId: string;
+  workspaceName: string | null;
+}
+
+/**
+ * Orbit's opening of the Scheduled page's chat (docs/scheduled-chat-design.md §4.1): drawn from the account's schedules
+ * before any engine starts, and written nowhere. A client draws `summary` and `next` as the first paragraph, then
+ * `examplesLead` with `examples` as a list, then `closing`.
+ */
+export interface SchedulePageChatOpening {
+  counts: SchedulePageChatCounts;
+  next: SchedulePageChatNext | null;
+  /** "You have 4 scheduled tasks: 2 active, 2 paused, none failing." */
+  summary: string;
+  /** "Next: Engine version bump, tomorrow at 06:00 on orbit-ws01.", or null when nothing is due. */
+  nextText: string | null;
+  examplesLead: string;
+  examples: string[];
+  /** What applies at once and what needs Allow; on an empty account, that nothing runs until the person speaks. */
+  closing: string;
+}
+
+/**
+ * `GET /api/schedules/chat`: the account's open page chat, if any, and the opening a new one starts with.
+ * `POST /api/schedules/chat {text, workspaceId}` opens one with the person's first words and answers
+ * `SchedulePageChatOpenAnswer`.
+ */
+export interface SchedulePageChatResponse {
+  sessionId: string | null;
+  opening: SchedulePageChatOpening;
+}
+
+/** `POST /api/schedules/chat`: the chat the words went to, and whether this request made it. */
+export interface SchedulePageChatOpenAnswer {
+  sessionId: string;
+  created: boolean;
+}
+
+/**
+ * The opening's words, from the counts and the next run, read at `now`. The next run is worded in its schedule's own
+ * zone; `viewerTimezone` is the IANA zone of the device reading it (the server keeps none for an account), and the
+ * line names the schedule's zone unless the viewer's clock reads the same there, or when the viewer's is not known.
+ */
+export function schedulePageChatOpening(input: {
+  counts: SchedulePageChatCounts;
+  next: SchedulePageChatNext | null;
+  now: Date;
+  viewerTimezone?: string | null;
+}): SchedulePageChatOpening {
+  const T = SCHEDULE_PAGE_CHAT_COPY;
+  const { counts, next } = input;
+  if (counts.total === 0) {
+    return {
+      counts, next: null, summary: T.empty.summary, nextText: null,
+      examplesLead: T.empty.examplesLead, examples: [...T.empty.examples], closing: T.empty.closing,
+    };
+  }
+  const n = (count: number) => (count === 0 ? T.none : String(count));
+  const parts = [scheduleFill(T.active, { count: n(counts.active) })];
+  if (counts.paused > 0) parts.push(scheduleFill(T.paused, { count: counts.paused }));
+  if (counts.held > 0) parts.push(scheduleFill(T.held, { count: counts.held }));
+  parts.push(scheduleFill(T.failing, { count: n(counts.failing) }));
+  const summary = scheduleFill(T.summary, {
+    count: counts.total,
+    tasks: counts.total === 1 ? T.task : T.tasks,
+    counts: parts.join(', '),
+  });
+  let nextText: string | null = null;
+  if (next) {
+    const at = new Date(next.at);
+    const day = scheduleDayText(at, input.now, next.timezone);
+    const here = localParts(at, next.timezone);
+    const viewer = input.viewerTimezone ? localParts(at, input.viewerTimezone) : null;
+    const sameClock = viewer !== null && viewer.dayNumber === here.dayNumber && viewer.time === here.time;
+    nextText = scheduleFill(T.next, {
+      title: next.title,
+      when: scheduleFill(sameClock ? T.nextAt : T.nextAtZone, {
+        day: day === C.dates.today ? C.dates.todayLower : day === C.dates.tomorrow ? C.dates.tomorrowLower : day,
+        time: here.time,
+        zone: next.timezone,
+      }),
+      workspace: next.workspaceName ?? T.deletedWorkspace,
+    });
+  }
+  return { counts, next, summary, nextText, examplesLead: T.examplesLead, examples: [...T.examples], closing: T.envelope };
+}
+
 export interface ScheduleCardDecision {
   allow: string;
   decline: string;

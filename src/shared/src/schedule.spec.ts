@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { sessionOriginTag } from './driveChat';
 import {
+  SCHEDULE_PAGE_CHAT_COPY,
   SCHEDULE_RUN_STATES,
   type ScheduleCreateCard,
   type ScheduleListRow,
@@ -12,6 +14,7 @@ import {
   scheduleHeldWaiting,
   scheduleNeedsCount,
   scheduleNeedsYou,
+  schedulePageChatOpening,
   scheduleReportedText,
   scheduleRowCircle,
   scheduleRenamedText,
@@ -449,5 +452,67 @@ describe('a rename in the history (design §8.4 Rename)', () => {
     expect(scheduleRenamedText({
       changedBy: 'USER', before: { title: 'a', prompt: 'p' }, after: { title: 'b', prompt: 'q' },
     })).toBeNull();
+  });
+});
+
+describe('the Scheduled page chat opening (docs/scheduled-chat-design.md §4.1)', () => {
+  const now = new Date('2026-11-28T04:00:00Z');
+  const counts = (c: Partial<Parameters<typeof schedulePageChatOpening>[0]['counts']>) =>
+    ({ total: 0, active: 0, paused: 0, held: 0, failing: 0, ...c });
+
+  it('words the design example: active and paused, none failing, the next run tomorrow', () => {
+    const opening = schedulePageChatOpening({
+      counts: counts({ total: 4, active: 2, paused: 2 }),
+      next: {
+        scheduleId: 's', title: 'Engine version bump', at: '2026-11-28T22:00:00Z', timezone: 'Asia/Shanghai',
+        workspaceId: 'w', workspaceName: 'orbit-ws01',
+      },
+      now,
+      viewerTimezone: 'Asia/Shanghai',
+    });
+    expect(opening.summary).toBe('You have 4 scheduled tasks: 2 active, 2 paused, none failing.');
+    expect(opening.nextText).toBe('Next: Engine version bump, tomorrow at 06:00 on orbit-ws01.');
+    expect(opening.examples).toEqual([...SCHEDULE_PAGE_CHAT_COPY.examples]);
+    expect(opening.closing).toBe(SCHEDULE_PAGE_CHAT_COPY.envelope);
+  });
+
+  it('says one task, none active, a held one, and nothing next', () => {
+    const opening = schedulePageChatOpening({ counts: counts({ total: 1, held: 1 }), next: null, now });
+    expect(opening.summary).toBe('You have 1 scheduled task: none active, 1 held, none failing.');
+    expect(opening.nextText).toBeNull();
+  });
+
+  it('names a later day and a deleted workspace', () => {
+    const opening = schedulePageChatOpening({
+      counts: counts({ total: 1, active: 1, failing: 1 }),
+      next: { scheduleId: 's', title: 'Docs', at: '2026-12-01T01:00:00Z', timezone: 'UTC', workspaceId: 'w', workspaceName: null },
+      now,
+    });
+    expect(opening.summary).toBe('You have 1 scheduled task: 1 active, 1 failing.');
+    expect(opening.nextText).toBe('Next: Docs, Tuesday at 01:00 UTC on a deleted workspace.', 'no viewer zone: the zone is named');
+  });
+
+  it("names the schedule's zone when the viewer's clock reads differently, and not when it reads the same", () => {
+    const next = {
+      scheduleId: 's', title: 'Engine version bump', at: '2026-11-28T22:00:00Z', timezone: 'Asia/Shanghai',
+      workspaceId: 'w', workspaceName: 'orbit-ws01',
+    };
+    const at = (viewerTimezone: string) =>
+      schedulePageChatOpening({ counts: counts({ total: 1, active: 1 }), next, now, viewerTimezone }).nextText;
+    expect(at('Europe/Berlin')).toBe('Next: Engine version bump, tomorrow at 06:00 Asia/Shanghai on orbit-ws01.');
+    expect(at('Asia/Singapore')).toBe('Next: Engine version bump, tomorrow at 06:00 on orbit-ws01.', 'same clock, another name');
+  });
+
+  it('on an empty account offers what to say, and says nothing runs until then', () => {
+    const opening = schedulePageChatOpening({ counts: counts({}), next: null, now });
+    expect(opening.summary).toBe('You have no scheduled tasks yet.');
+    expect(opening.examples).toEqual([...SCHEDULE_PAGE_CHAT_COPY.empty.examples]);
+    expect(opening.closing).toBe('Nothing runs until you say something.');
+  });
+
+  it('tags the chat From Scheduled from the one origin table', () => {
+    expect(sessionOriginTag('SCHEDULE_CHAT')).toBe('From Scheduled');
+    expect(sessionOriginTag('WIKI_CHAT')).toBe('From Wiki');
+    expect(sessionOriginTag(null)).toBeNull();
   });
 });

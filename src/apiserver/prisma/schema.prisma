@@ -2795,6 +2795,11 @@ model Session {
   changeSchedule        Schedule? @relation("ScheduleChangeConversations", fields: [changeScheduleId], references: [id], onDelete: SetNull, map: "session_change_schedule_id_fkey")
   /// The opening Orbit drew for it, as the schedule was when the conversation was opened (`ScheduleChangeOpening`).
   scheduleChangeOpening Json?     @map("schedule_change_opening")
+  /// When the Scheduled page's chat was opened (migration 1760, docs/scheduled-chat-design.md §4.3): a session is the
+  /// page chat exactly when it is set. Written by `POST /api/schedules/chat` in this row's own INSERT and never
+  /// afterwards (a trigger refuses the UPDATE). An ordinary MANUAL session otherwise, listed in its workspace with
+  /// `chatOrigin: SCHEDULE_CHAT` (From Scheduled). Its partial index over (owner_id, created_at) is migration 1761's.
+  scheduleChatAt        DateTime? @map("schedule_chat_at")
 
   // "what did this workspace last run on", the derived seed a new session inherits when the
   // caller names no provider (workspaces/workspace-provider.ts).

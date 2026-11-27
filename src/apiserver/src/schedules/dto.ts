@@ -78,3 +78,9 @@ export class ScheduleDraftDto {
   @IsPublicId() workspaceId!: string;
   @IsString() @MaxLength(4000) text!: string;
 }
+
+/** The Scheduled page's chat (docs/scheduled-chat-design.md §4.3): the person's first words, and where it runs. */
+export class SchedulePageChatDto {
+  @IsPublicId() workspaceId!: string;
+  @IsString() @MaxLength(4000) text!: string;
+}

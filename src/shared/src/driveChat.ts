@@ -1,3 +1,4 @@
+import { SCHEDULE_PAGE_CHAT_COPY } from './schedule';
 import { WIKI_CHAT_COPY } from './wikiChat';
 
 /**
@@ -27,8 +28,12 @@ export const DRIVE_CHAT_COPY = {
   chooseWorkspace: 'Choose where Drive chats run',
 } as const;
 
-/** The session origins a session header tags, and what the tag reads. */
-export type SessionChatOrigin = 'WIKI_CHAT' | 'DRIVE_CHAT';
+/**
+ * The session origins a session header and a session list row tag, and what the tag reads: a Wiki chat, a Drive chat,
+ * and the Scheduled page's chat (`session.schedule_chat_at`, docs/scheduled-chat-design.md §4.3). Read as `chatOrigin`
+ * on a session's detail and on its list row; null on every other session.
+ */
+export type SessionChatOrigin = 'WIKI_CHAT' | 'DRIVE_CHAT' | 'SCHEDULE_CHAT';
 
 /**
  * The session header's origin tag (board ①): one table, so a chat opened from Drive reads "From Drive" wherever a Wiki
@@ -37,11 +42,12 @@ export type SessionChatOrigin = 'WIKI_CHAT' | 'DRIVE_CHAT';
 export const SESSION_ORIGIN_TAGS: Readonly<Record<SessionChatOrigin, string>> = {
   WIKI_CHAT: WIKI_CHAT_COPY.panel.fromWiki,
   DRIVE_CHAT: DRIVE_CHAT_COPY.fromDrive,
+  SCHEDULE_CHAT: SCHEDULE_PAGE_CHAT_COPY.fromScheduled,
 };
 
 /** The tag a session's header shows, or null for a session no chat door opened. */
 export function sessionOriginTag(origin: string | null | undefined): string | null {
-  return origin === 'WIKI_CHAT' || origin === 'DRIVE_CHAT' ? SESSION_ORIGIN_TAGS[origin] : null;
+  return origin === 'WIKI_CHAT' || origin === 'DRIVE_CHAT' || origin === 'SCHEDULE_CHAT' ? SESSION_ORIGIN_TAGS[origin] : null;
 }
 
 /**

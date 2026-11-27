@@ -87,12 +87,12 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 587 |
+| `user` | 589 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **922** |
+| **Total** | **924** |
 
 ## Public routes
 
@@ -492,6 +492,8 @@ answers one page of the list as top-level entries, with an ETag answered `304` w
 | `POST` | `/api/schedules/:id/run` | path `id` | `SchedulesController.runNow` |
 | `GET` | `/api/schedules/:id/runs` | path `id`; query `before`, `limit` | `SchedulesController.listRuns` |
 | `POST` | `/api/schedules/:id/undo` | body `ScheduleUndoDto`; path `id` | `SchedulesController.undo` |
+| `GET` | `/api/schedules/chat` | query `timezone` | `SchedulesController.pageChat` |
+| `POST` | `/api/schedules/chat` | body `SchedulePageChatDto` | `SchedulesController.openPageChat` |
 | `GET` | `/api/schedules/drafts` | — | `SchedulesController.drafts` |
 | `POST` | `/api/schedules/drafts` | body `ScheduleDraftDto` | `SchedulesController.draft` |
 | `GET` | `/api/session-folders` | — | `SessionFoldersController.list` |

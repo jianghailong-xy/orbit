@@ -1705,6 +1705,8 @@ export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     "a filter on the caller's own schedules (ownerId, then workspaceId), so another account's workspace id answers the empty list an id that names nothing does (schedules/schedule-reads.service.ts:71)",
   'POST /schedules/drafts body workspaceId':
     "handed to SessionsService.create, which reads the workspace by (id, the caller) and refuses one that is not the caller's before anything is written (sessions/sessions.service.ts:1244), as POST /sessions body workspaceId",
+  'POST /schedules/chat body workspaceId':
+    "the open page chat is looked up by (ownerId, workspaceId), so another account's workspace finds none; the create is then SessionsService.create, which refuses a workspace that is not the caller's before anything is written (schedules/schedule-page-chat.ts:58), as POST /schedules/drafts body workspaceId; schedule-page-chat.pg.spec.ts sends another account's",
   'POST /workspaces/:id/main-checkout/actions body targetSessionId':
     'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
   'POST /workspaces/:id/main-checkout/actions body initiatedFromSessionId':
