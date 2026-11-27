@@ -376,7 +376,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         val bubble = !isCreate(pending.endpoint)
         if (bubble) mutable.update { it.copy(sending = true, notSentReason = null) }
         val accepted = try {
-            if (bubble) withTimeout(PendingSendCopy.ANSWER_TIMEOUT_MS) { api.mutation(pending.endpoint, pending.body) }
+            // OkHttp's own 10 s read timeout would end a slow answer first, as "Can't reach Orbit": the transport waits past the
+            // deadline, so the 20 s rule is the one that ends it.
+            if (bubble) withTimeout(PendingSendCopy.ANSWER_TIMEOUT_MS) {
+                api.mutation(pending.endpoint, pending.body, answerSeconds = PendingSendCopy.ANSWER_TIMEOUT_MS / 1000 + 10)
+            }
             else api.mutation(pending.endpoint, pending.body)
         } catch (late: TimeoutCancellationException) {
             mutable.update { it.copy(sending = false, notSentReason = PendingSendCopy.NOT_ANSWERED) }

@@ -849,6 +849,8 @@ class ComposerModelTest {
         assertEquals(PendingSendCopy.NOT_ANSWERED, model.state.value.notSentReason)
         assertEquals("The server didn't answer in 20 seconds. Retry sends the same message again; it can't arrive twice.", model.state.value.notSentReason)
         assertEquals("the request was ended (owner decision 3)", 1, rig.turnsEnded)
+        val post = turnPosts(rig).single()
+        assertTrue("the transport's own read timeout never ends it before 20 s", post.readTimeoutSeconds!! > 20 && post.callTimeoutSeconds!! > 20)
         assertNotNull(model.state.value.draft.pending)
         assertNull(model.state.value.error)
         assertFalse(model.state.value.busy)

@@ -59,14 +59,16 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
             read = { readDirProbe(runnerId, path) },
             sleep = { ms -> delay(ms) },
         )
-    suspend fun mutation(endpoint: String, body: JsonObject? = null, method: HttpMethod = HttpMethod.POST): JsonObject {
+    /** [answerSeconds]: how long the transport itself may wait for the answer, where its own 10 s read timeout is too short — a
+     * message's send, which its 20 s deadline ends instead ([PendingSendCopy.ANSWER_TIMEOUT_MS]). */
+    suspend fun mutation(endpoint: String, body: JsonObject? = null, method: HttpMethod = HttpMethod.POST, answerSeconds: Long? = null): JsonObject {
         val path = when {
             endpoint == "create" -> listOf("sessions")
             endpoint.startsWith(CHAT_CREATE) -> endpoint.removePrefix(CHAT_CREATE).split('/')
             else -> listOf("sessions", sessionId) + endpoint.split('/')
         }
         val response = auth.request(handle, ApiRequest(path, method,
-            body = body?.toString()?.encodeToByteArray()))
+            body = body?.toString()?.encodeToByteArray(), readTimeoutSeconds = answerSeconds, callTimeoutSeconds = answerSeconds))
         return if (response.body.isEmpty()) JsonObject(emptyMap()) else Wire.json.parseToJsonElement(response.body.decodeToString()).jsonObject
     }
     /** The runner [id] as GET /runners lists it, or null where the list no longer holds it. */
