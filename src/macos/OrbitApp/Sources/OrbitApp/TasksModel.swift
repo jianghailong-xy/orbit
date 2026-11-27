@@ -847,14 +847,19 @@ final class TasksModel {
     /// a null `requestId` and refuses the moment a run starts waiting. The panel only offers it
     /// while the read says nothing is waiting, and this re-reads either way so a refusal for
     /// staleness turns the button into the pointer it should have been.
+    ///
+    /// `requestId` answers the run that is waiting instead: the task card's Accept, offered only while
+    /// that run's report has no reviewer (docs/task-run-sidebar-design.md).
     @discardableResult
-    func confirmOwner(_ id: String) async -> Bool {
+    func confirmOwner(_ id: String, requestId: String? = nil) async -> Bool {
         guard selectedDetailID == id else { return false }
         mutatingTaskIDs.insert(id)
         errorText = nil
         defer { mutatingTaskIDs.remove(id) }
         do {
-            _ = try await api.decideOwnerConfirmation(taskID: id, OwnerConfirmations.panelRequest())
+            _ = try await api.decideOwnerConfirmation(taskID: id, requestId.map {
+                OwnerDecisionRequest(decision: .confirm, requestId: $0)
+            } ?? OwnerConfirmations.panelRequest())
             await loadOwnerConfirmation(id)
             await refreshChangedTasks([id])
             _ = await loadDetail(id)
@@ -913,6 +918,14 @@ final class TasksModel {
             errorText = friendly(error)
             return false
         }
+    }
+
+    /// Re-run the check: the acceptance command once more, on the branch as it is now.
+    @discardableResult
+    func rerunCheck(_ id: String) async -> Bool {
+        let queued = await mutate(id) { try await self.api.rerunTaskCheck(id) }
+        if queued { _ = await loadDetail(id) }
+        return queued
     }
 
     func setStatus(_ id: String, _ status: TaskStatus) async {

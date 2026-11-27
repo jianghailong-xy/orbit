@@ -1166,6 +1166,14 @@ private struct TaskDetailContent: View {
     @State private var planOpen = false
     @State private var importingInputInSheet = false
     @State private var composeTo: ComposeTarget?
+    /// The task card over one of the task's own runs (docs/task-run-sidebar-design.md): the branch that
+    /// run works on, what is unfolded, and whether ⤢ asked for the whole page instead.
+    @State fileprivate var cardSession: SessionDetail?
+    @State fileprivate var cardDoneMeansShown = false
+    @State fileprivate var cardActivityShown = false
+    @State fileprivate var cardNoteShown = false
+    @State fileprivate var cardOutputShown: String?
+    @State fileprivate var cardFullPage = false
 
     private enum DependencyView: Hashable { case graph, list }
     private enum ComposeTarget: Hashable { case run, comment }
@@ -1444,12 +1452,23 @@ private struct TaskDetailContent: View {
 
     // MARK: the page
 
+    /// Opened from one of the task's own runs, the task card (`TaskRunCardLogic.hereRun`); anywhere
+    /// else, or once ⤢ asked for it, the whole page.
+    @ViewBuilder
+    private func page(_ task: TaskItem) -> some View {
+        if !cardFullPage, let here = TaskRunCardLogic.hereRun(task, path: model.nav.path) {
+            runCard(task, here)
+        } else {
+            fullPage(task)
+        }
+    }
+
     /// The web's `TaskDetailPanel`, block for block and in its order since the page leads with the
     /// agent's work (docs/mocks/task-detail-agent-first, boards 04–05): the head and its presses,
     /// [the check that settles the row], Now, Delivered, [Landing], Done means, the brief, In the plan,
     /// Runs with, [Inputs], [Attribution], [Followed by], Activity — and the comment box, which stays
     /// on screen. A bracketed block is drawn only when it has something to say.
-    private func page(_ task: TaskItem) -> some View {
+    private func fullPage(_ task: TaskItem) -> some View {
         List {
             ForEach(TaskDetailPageListLogic.rows(
                 hasVerifier: TaskJudgment.isGateRow(task) || task.verifier != nil,
@@ -3162,6 +3181,473 @@ private struct TaskDetailContent: View {
             trailing().font(.orbitControl).textCase(nil)
         }
         .textCase(nil)
+    }
+}
+
+// MARK: - the task card over one of the task's own runs
+
+/// The task card (docs/task-run-sidebar-design.md): the web column's blocks in its order —
+/// `TaskRunCardLogic.blocks` — drawn from the page's own sections, not a second look. The phone keeps
+/// its ⋯ → Open Task entry (owner ruling 2026-11-26), so the card is the page that entry opens.
+extension TaskDetailContent {
+    /// The owner's confirmation as the page reads it: the card's Needs you.
+    private func cardOwnerAction(_ task: TaskItem) -> OwnerConfirmations.PanelAction? {
+        let read = tasks.ownerConfirmation?.taskId == task.id ? tasks.ownerConfirmation : nil
+        return OwnerConfirmations.panelAction(
+            read,
+            taskIsOwnerConfirmed: task.completionCriterion == OwnerConfirmations.ownerConfirmedCriterion,
+            taskUnsettled: task.status == .open || task.status == .inProgress,
+            taskHasRuns: !(task.sessions ?? []).isEmpty)
+    }
+
+    private func cardState(_ task: TaskItem) -> TaskRunCardState? {
+        TaskRunCardLogic.state(status: task.status, needsYou: cardOwnerAction(task) != nil,
+                               running: TaskDetailLogic.liveRun(task) != nil)
+    }
+
+    func runCard(_ task: TaskItem, _ here: SessionRef) -> some View {
+        let state = cardState(task)
+        return List {
+            ForEach(TaskRunCardLogic.blocks(state: state, hasBranch: cardSession?.branch != nil,
+                                            hasRuns: !(task.sessions ?? []).isEmpty)) { block in
+                cardBlock(task, here, state, block)
+            }
+        }
+        .taskPageListStyle()
+        .refreshable {
+            await reload()
+            await loadCardSession(here.id)
+        }
+        .task(id: here.id) { await loadCardSession(here.id) }
+    }
+
+    /// The branch the conversation works on: its own detail, the read the session page already makes.
+    private func loadCardSession(_ id: String) async {
+        guard let baseURL = model.baseURL else { return }
+        if let detail = try? await APIClient(baseURL: baseURL, tokenStore: model.tokenStore).sessionDetail(id) {
+            cardSession = detail
+        }
+    }
+
+    @ViewBuilder
+    private func cardBlock(_ task: TaskItem, _ here: SessionRef, _ state: TaskRunCardState?,
+                           _ block: TaskRunCardBlock) -> some View {
+        switch block {
+        case .head:
+            Section {
+                cardHead(task, here, state)
+                banners(task)
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        case .state:
+            cardStateBlock(task, here, state)
+        case .branch:
+            if let session = cardSession { cardBranch(task, session, state) }
+        case .doneMeans:
+            cardDoneMeans(task, here)
+            if cardDoneMeansShown {
+                acceptanceSection(task)
+                briefSection(task)
+            }
+        case .runs:
+            cardRuns(task, here)
+        case .runsWith:
+            Section {
+                HStack(spacing: 8) {
+                    Text(cardRunsWithLine(task))
+                        .font(.orbitSubtext)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button(TaskRunCardCopy.edit) { editingEnvelope = true }
+                        .font(.orbitSubtext)
+                        .buttonStyle(.borderless)
+                }
+            }
+        case .activity:
+            Section {
+                Button { cardActivityShown.toggle() } label: {
+                    HStack(spacing: 8) {
+                        Text(TaskRunCardLogic.activityLine(count: TaskDetailLogic.activity(task, evidence: tasks.evidence).count,
+                                                           filedFrom: task.creatorSession))
+                            .font(.orbitSubtext)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.right")
+                            .font(.orbitLabel.weight(.semibold))
+                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .rotationEffect(.degrees(cardActivityShown ? 90 : 0))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("task-card-activity")
+                if cardActivityShown {
+                    ForEach(TaskDetailLogic.activity(task, evidence: tasks.evidence)) { item in
+                        activityRow(item, task)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: head
+
+    private func cardHead(_ task: TaskItem, _ here: SessionRef, _ state: TaskRunCardState?) -> some View {
+        let pill = TaskRunCardLogic.pill(task, state: state, run: here,
+                                         evidenceRevision: tasks.evidence.last?.revision)
+        let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)?.badge
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(TaskRunCardCopy.kicker)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button { cardFullPage = true } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.orbitLabel.weight(.semibold))
+                        .frame(minWidth: 32, minHeight: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Open the full task page")
+            }
+            Text(task.title)
+                .font(.title3.weight(.bold))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                TaskStatusPill(pill: pill)
+                    .accessibilityIdentifier("task-card-pill")
+                if state == .done, let landing {
+                    Text(landing.label)
+                        .font(.orbitMeta)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(cardTone(landing.tone).opacity(0.15), in: Capsule())
+                        .foregroundStyle(cardTone(landing.tone))
+                        .lineLimit(1)
+                }
+                if let meta = TaskRunCardLogic.meta(task, state: state, run: here, day: cardDay) {
+                    Text(meta).font(.orbitSubtext).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+    }
+
+    // MARK: the state block
+
+    @ViewBuilder
+    private func cardStateBlock(_ task: TaskItem, _ here: SessionRef, _ state: TaskRunCardState?) -> some View {
+        switch state {
+        case .running:
+            if let run = TaskDetailLogic.liveRun(task) { nowSection(task, run) }
+        case .needsYou:
+            cardTinted(.orange) {
+                Text(TaskRunCardCopy.reviewTheEvidence).font(.orbitSubtext.weight(.semibold))
+                let evidence = tasks.evidence.last?.evidence
+                if let claim = evidence?.claim?.trimmingCharacters(in: .whitespacesAndNewlines), !claim.isEmpty {
+                    Text(claim).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
+                }
+                ForEach(Array((evidence?.checks ?? []).enumerated()), id: \.offset) { _, check in
+                    cardCheckLine(check.succeeded == false ? "✕" : "✓", passed: check.succeeded != false,
+                                  Text(TaskDetailLogic.evidenceCheckText(check)))
+                }
+                HStack(spacing: 10) {
+                    Button(TaskRunCardCopy.accept) { cardAccept(task, here) }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(tasks.isMutating(task.id))
+                    Button(TaskRunCardCopy.sendBack) { cardOpenConfirmationCard(task, here) }
+                        .buttonStyle(.bordered)
+                }
+                .padding(.top, 2)
+            }
+        case .done:
+            let latest = tasks.evidence.last
+            let round = TaskRunCardLogic.newestRound(task, run: here)
+            let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)?.badge
+            cardTinted(.green) {
+                Text(TaskRunCardCopy.delivered).font(.orbitSubtext.weight(.semibold))
+                if let latest, latest.decision?.decision == "CONFIRM" {
+                    cardCheckLine("✓", passed: true, Text(TaskRunCardCopy.evidenceAccepted(
+                        latest.revision, cardClock(latest.decision?.decidedAt) ?? "")))
+                } else if let round, round.exitCode == round.expectedExitCode, let code = round.exitCode {
+                    cardCheckLine("✓", passed: true, Text(TaskRunCardCopy.checkExited(code, cardClock(round.finishedAt) ?? "")))
+                } else {
+                    cardCheckLine("✓", passed: true, Text(TaskRunCardCopy.done))
+                }
+                let landed = landing?.tone == "green"
+                cardCheckLine(landed ? "✓" : "○", passed: landed ? true : nil,
+                              Text(cardLandingLine(task, state)))
+            }
+        case .failed:
+            let rounds = here.acceptanceRounds ?? []
+            let note = task.comments?.last
+            let executable = task.completionCriterion == "EXECUTABLE"
+                && !(task.acceptanceCommand ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            cardTinted(.red) {
+                Text(TaskRunCardCopy.whyItFailed).font(.orbitSubtext.weight(.semibold))
+                if !rounds.isEmpty {
+                    ForEach(rounds) { round in cardRoundLine(round) }
+                } else if let error = here.error, !error.isEmpty {
+                    Text(error).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
+                }
+                if let note {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("↳").font(.orbitLabel).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            (Text(TaskRunCardCopy.latestNote(note.authorName ?? "Unknown", cardDay(note.createdAt) ?? ""))
+                                + Text(cardNoteShown ? note.body : TaskRunCardLogic.firstLine(note.body)))
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button(cardNoteShown ? TaskRunCardCopy.showLess : TaskRunCardCopy.read) { cardNoteShown.toggle() }
+                                .font(.orbitLabel)
+                                .buttonStyle(.borderless)
+                        }
+                    }
+                }
+                // Three presses, as the web column's: the check, the task, or closing it.
+                HStack(spacing: 8) {
+                    if executable {
+                        Button(TaskRunCardCopy.rerunTheCheck) { Task { _ = await tasks.rerunCheck(task.id) } }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    if executable {
+                        Button(TaskRunCardCopy.retryTheTask) { Task { _ = await tasks.execute(task.id) } }
+                            .buttonStyle(.bordered)
+                            .disabled(!canStart(task))
+                    } else {
+                        Button(TaskRunCardCopy.retryTheTask) { Task { _ = await tasks.execute(task.id) } }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!canStart(task))
+                    }
+                }
+                .disabled(tasks.isMutating(task.id))
+                .padding(.top, 2)
+                Button(TaskRunCardCopy.closeAsNotNeeded) { Task { await tasks.setStatus(task.id, .cancelled) } }
+                    .buttonStyle(.bordered)
+                    .disabled(tasks.isMutating(task.id))
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    /// One tinted card, the web column's `tdp-state`.
+    private func cardTinted<Content: View>(_ tint: Color, @ViewBuilder _ content: () -> Content) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 7) { content() }
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowBackground(tint.opacity(0.1))
+        }
+    }
+
+    /// A ✓ / ✕ / ○ line of the state block and the Done means checklist.
+    private func cardCheckLine(_ glyph: String, passed: Bool?, _ text: Text, code: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Text(glyph)
+                .font(.orbitSubtext.weight(.bold))
+                .foregroundStyle(passed == true ? Color.green : passed == false ? Color.red : Color.secondary)
+                .frame(width: 14)
+            text
+                .font(code ? .orbitMono : .orbitSubtext)
+                .foregroundStyle(passed == nil ? Color.secondary : Color.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// `Acceptance check · exit 1, expected 0 · 06:53 on 432e94c · Output`; Output unfolds the round's tail
+    /// (the conversation it scrolls to on the web is the page under this one).
+    private func cardRoundLine(_ round: TaskAcceptanceRound) -> some View {
+        let passed = round.exitCode == round.expectedExitCode
+        let line = TaskRunCardCopy.round(exit: round.exitCode, expected: round.expectedExitCode,
+                                         time: cardClock(round.finishedAt) ?? "")
+        return VStack(alignment: .leading, spacing: 4) {
+            cardCheckLine(passed ? "✓" : "✕", passed: passed,
+                          Text(line) + Text(round.branchSha.map { " on \($0.prefix(7))" } ?? ""))
+            Button(TaskRunCardCopy.output) { cardOutputShown = cardOutputShown == round.id ? nil : round.id }
+                .font(.orbitLabel)
+                .buttonStyle(.borderless)
+                .padding(.leading, 21)
+            if cardOutputShown == round.id {
+                Text((round.outputTail ?? "").isEmpty ? TaskRunCardCopy.printedNothing : (round.outputTail ?? ""))
+                    .font(.orbitMonoFine)
+                    .lineLimit(12)
+                    .padding(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+    }
+
+    /// Accept answers from here when nothing else has to be answered with it: the task's own confirmation,
+    /// or a waiting run whose report has no reviewer. A report under review is answered on its card.
+    private func cardAccept(_ task: TaskItem, _ here: SessionRef) {
+        let read = tasks.ownerConfirmation?.taskId == task.id ? tasks.ownerConfirmation : nil
+        if case .confirm = cardOwnerAction(task) {
+            Task { _ = await tasks.confirmOwner(task.id) }
+        } else if let waiting = read?.waiting, waiting.review == nil {
+            Task { _ = await tasks.confirmOwner(task.id, requestId: waiting.requestId) }
+        } else {
+            cardOpenConfirmationCard(task, here)
+        }
+    }
+
+    /// The confirmation card is the conversation's: back down to it when it is this run's, else to that run.
+    private func cardOpenConfirmationCard(_ task: TaskItem, _ here: SessionRef) {
+        let read = tasks.ownerConfirmation?.taskId == task.id ? tasks.ownerConfirmation : nil
+        if let waiting = read?.waiting, PublicID.storageKey(waiting.sessionId) != PublicID.storageKey(here.id) {
+            openRoute(.session(waiting.sessionId))
+        } else {
+            model.nav.pop()
+        }
+    }
+
+    // MARK: Branch, Done means, Runs
+
+    private func cardLandingLine(_ task: TaskItem, _ state: TaskRunCardState?) -> String {
+        TaskRunCardLogic.landingLine(
+            landing: TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue)?.badge?.label,
+            mergeStatus: cardSession?.mergeStatus, mergeTarget: cardSession?.mergeTarget,
+            main: cardMain(task), state: state)
+    }
+
+    private func cardMain(_ task: TaskItem) -> String { task.integration?.mainBranch ?? "main" }
+
+    private func cardBranch(_ task: TaskItem, _ session: SessionDetail, _ state: TaskRunCardState?) -> some View {
+        let main = cardMain(task)
+        let commits = session.branchCommits ?? []
+        let merged = session.branchMerged == true
+        return Section {
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 6) {
+                cardKV(TaskRunCardCopy.branch) {
+                    Text(session.branch ?? "").font(.orbitMono).lineLimit(1).truncationMode(.middle)
+                }
+                cardKV(TaskRunCardCopy.versus(main)) {
+                    Text(merged ? TaskRunCardCopy.inMain(main) : TaskRunCardCopy.ahead(commits.count))
+                }
+                if !commits.isEmpty && !merged {
+                    cardKV(TaskRunCardCopy.left) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            ForEach(commits.prefix(3)) { commit in
+                                (Text(commit.sha.prefix(7)).font(.orbitMono) + Text(" \(commit.subject)"))
+                                    .lineLimit(2)
+                            }
+                            if commits.count > 3 {
+                                Text(TaskRunCardCopy.more(commits.count - 3)).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                cardKV(TaskRunCardCopy.landing) { Text(cardLandingLine(task, state)) }
+            }
+            .font(.orbitSubtext)
+        } header: {
+            sectionHeader(TaskRunCardCopy.branch)
+        }
+    }
+
+    private func cardKV<Value: View>(_ label: String, @ViewBuilder _ value: () -> Value) -> some View {
+        GridRow {
+            Text(label).foregroundStyle(.secondary).gridColumnAlignment(.leading)
+            value().frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func cardDoneMeans(_ task: TaskItem, _ here: SessionRef) -> some View {
+        let executable = task.completionCriterion == "EXECUTABLE"
+        let rows = TaskRunCardLogic.doneMeans(
+            criteria: task.acceptanceCriteria,
+            command: executable ? task.acceptanceCommand : nil,
+            round: TaskRunCardLogic.newestRound(task, run: here),
+            status: task.status,
+            evidenceDecision: tasks.evidence.last?.decision?.decision)
+        return Section {
+            ForEach(rows) { row in
+                cardCheckLine(row.glyph, passed: row.mark == .passed ? true : row.mark == .failed ? false : nil,
+                              Text(row.code ? AttributedString(row.text) : cardInlineCode(row.text)), code: row.code)
+            }
+            HStack {
+                Text(TaskRunCardCopy.criteriaTextBrief).font(.orbitLabel).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Button(cardDoneMeansShown ? TaskRunCardCopy.hide : TaskRunCardCopy.show) { cardDoneMeansShown.toggle() }
+                    .font(.orbitLabel)
+                    .buttonStyle(.borderless)
+            }
+        } header: {
+            sectionHeader(TaskRunCardCopy.doneMeans)
+        }
+    }
+
+    /// A criterion line with its `code` spans drawn as code, as the Markdown it was written in would.
+    private func cardInlineCode(_ text: String) -> AttributedString {
+        var out = AttributedString()
+        for (i, part) in text.components(separatedBy: "`").enumerated() {
+            var piece = AttributedString(part)
+            if i % 2 == 1 { piece.swiftUI.font = Font.orbitMono }
+            out += piece
+        }
+        return out
+    }
+
+    private func cardRuns(_ task: TaskItem, _ here: SessionRef) -> some View {
+        let runs = task.sessions ?? []
+        return Section {
+            ForEach(Array(runs.enumerated()), id: \.element.id) { index, run in
+                let isHere = PublicID.storageKey(run.id) == PublicID.storageKey(here.id)
+                let sub = [cardDay(run.createdAt), TaskDetailLogic.costLabel(run.costUsd)].compactMap { $0 }
+                let line = HStack(spacing: 8) {
+                    Circle().fill(sessionColor(run)).frame(width: 8, height: 8)
+                    (Text(TaskRunCardCopy.run(runs.count - index)).fontWeight(.semibold)
+                        + Text(sub.isEmpty ? "" : " · " + sub.joined(separator: " · "))
+                        + Text(isHere ? " · \(TaskRunCardCopy.thisConversation)" : "").foregroundStyle(Color.secondary))
+                        .font(.orbitSubtext)
+                    Spacer(minLength: 0)
+                }
+                if isHere {
+                    line
+                } else {
+                    Button { openRoute(.session(run.id)) } label: { line.contentShape(Rectangle()) }
+                        .buttonStyle(.plain)
+                }
+            }
+        } header: {
+            sectionHeader(TaskRunCardCopy.runs)
+        }
+    }
+
+    /// `orbit-ws01 · Opus 5.5 · Claude Code`.
+    private func cardRunsWithLine(_ task: TaskItem) -> String {
+        let ranOn = task.model ?? (task.sessions ?? []).first(where: { $0.model != nil })?.model
+        return [task.assignee?.name ?? "Unassigned", ranOn.map { runModelName($0, task) },
+                ProviderEngines.cliName(runPin(task).runEngine)]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    // MARK: words
+
+    private func cardDay(_ iso: String?) -> String? {
+        iso.flatMap(RelativeTime.parse)?.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private func cardClock(_ iso: String?) -> String? {
+        iso.flatMap(RelativeTime.parse)?.formatted(date: .omitted, time: .shortened)
+    }
+
+    private func cardTone(_ tone: String) -> Color {
+        switch tone {
+        case "green": return .green
+        case "red": return .red
+        case "amber": return .orange
+        case "blue": return .blue
+        default: return .secondary
+        }
     }
 }
 

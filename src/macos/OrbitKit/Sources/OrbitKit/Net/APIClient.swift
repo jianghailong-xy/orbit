@@ -1550,6 +1550,12 @@ public final class APIClient: @unchecked Sendable {
     public func createTask(_ req: CreateTaskRequest) async throws -> TaskItem { try await post("tasks", body: req) }
     public func updateTask(_ id: String, _ req: UpdateTaskRequest) async throws -> TaskItem { try await patch("tasks/\(id)", body: req) }
     public func deleteTask(_ id: String) async throws { try await deleteRaw("tasks/\(id)") }
+    /// Re-run the check on a FAILED EXECUTABLE task (docs/task-run-sidebar-design.md, D3 = A): its acceptance
+    /// command runs once more in its latest run, and no agent turn starts. No body: the server names the press,
+    /// so a double press queues one round.
+    public func rerunTaskCheck(_ id: String) async throws {
+        try await postRaw("tasks/\(id)/rerun-check", body: Optional<Empty>.none)
+    }
     /// Run one owned task now, under the name of the press that asked for it — see `RunTaskRequest`.
     ///
     /// `triggerId` is REQUIRED rather than optional. The server still accepts the bodiless POST
