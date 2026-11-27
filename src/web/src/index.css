@@ -15406,24 +15406,58 @@ button.chat-jump-start:hover {
     width: 40px;
     height: 40px;
   }
-  .tdp-head-actions {
+  .tdp-head > .tdp-head-actions {
     order: 2;
     flex: 1 1 100%;
     flex-wrap: wrap;
     gap: 8px;
   }
-  .tdp-head-actions > * {
+  .tdp-head > .tdp-head-actions > * {
     flex: 1 1 0;
   }
-  .tdp-head-actions > .orbit-button {
+  .tdp-head > .tdp-head-actions > .orbit-button {
     height: 40px;
   }
   /* Run now sits in a span — the Tooltip needs it to still fire while the button is disabled —
      and the running-session case in a Link. Stretch what is inside those two as well. */
-  .tdp-head-actions > a > .orbit-button,
-  .tdp-head-actions > span > .orbit-button {
+  .tdp-head > .tdp-head-actions > a > .orbit-button,
+  .tdp-head > .tdp-head-actions > span > .orbit-button {
     flex: 1;
     height: 40px;
+  }
+}
+/* The task panel's header: a first row with the project (when there is one) on the left and the
+   presses on the right, and the title in the row below with the panel's whole width. Beside the
+   presses it was squeezed to ~180px in a 420px panel (docs/mocks/task-panel-header, A). */
+.tdp-head.has-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding-top: 12px;
+}
+.tdp-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 32px;
+  margin-bottom: 6px;
+}
+.tdp-toolbar > .tdp-project-line {
+  flex: 1 1 160px;
+  margin: 0;
+}
+.tdp-toolbar > .tdp-head-actions {
+  margin-left: auto;
+}
+/* Phone: the same rows, at the 40px touch target the composer's buttons take at this width. */
+@media (max-width: 600px) {
+  .tdp-toolbar > .orbit-button-icon-only,
+  .tdp-toolbar > .tdp-head-actions .orbit-button {
+    height: 40px;
+  }
+  .tdp-toolbar > .orbit-button-icon-only {
+    width: 40px;
   }
 }
 .tdp-title {
@@ -15431,7 +15465,8 @@ button.chat-jump-start:hover {
   font-weight: 600;
   color: var(--text-1);
   line-height: 1.4;
-  word-break: break-word;
+  /* Break inside a word only when the word is wider than the line. */
+  overflow-wrap: break-word;
 }
 .tdp-meta {
   display: flex;
@@ -15524,6 +15559,8 @@ button.chat-jump-start:hover {
   align-items: center;
   gap: 5px;
   width: fit-content;
+  max-width: 100%;
+  white-space: nowrap;
   margin-top: 10px;
   padding: 0 8px;
   border: 1px solid var(--border-subtle);
@@ -15532,6 +15569,11 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   font-size: 12px;
   line-height: 20px;
+}
+/* One line: a narrow panel cuts the method short rather than wrapping the pill. */
+.tdp-judgment > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tdp-judgment.is-judged .anticon {
   color: var(--success-solid);

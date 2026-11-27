@@ -1810,8 +1810,11 @@ export function TaskDetailPanel({
           onMouseDown={startResize}
         />
       )}
-      <div className="tdp-head">
-        <div className="tdp-head-main">
+      <div className="tdp-head has-toolbar">
+        {/* The header's first row: the project on the left, the presses on the right. The title is
+            the row below it and has the panel's whole width, which beside a conversation (420px)
+            beside the presses was ~180px and split identifiers mid-word (docs/mocks/task-panel-header). */}
+        <div className="tdp-toolbar">
           {/* The project it is filed under. Its tasks are not listed on the Tasks page, so a task
               opened from a link names the project, and says so when the project was cancelled. */}
           {q.data?.project && (
@@ -1823,6 +1826,172 @@ export function TaskDetailPanel({
               )}
             </div>
           )}
+          <div className="tdp-head-actions">
+            {ownerWaiting ? (
+              // A run is waiting on the owner: its card in that session is where this is answered,
+              // so the panel only takes the reader there. While its report is still with its reviewer
+              // the pointer says so, in the quieter tone, as the session's row does (contract §5 N3).
+              <Link
+                className={`tdp-owner-confirmation-pointer${
+                  ownerWaiting.review?.state === 'UNDER_REVIEW' ? ' is-under-review' : ''}`}
+                to={`/sessions/${encodeId(ownerWaiting.sessionId)}`}
+                state={{ revealOwnerConfirmation: true }}
+              >
+                {ownerWaiting.review?.state === 'UNDER_REVIEW' ? UNDER_REVIEW : WAITING_FOR_CONFIRMATION}
+              </Link>
+            ) : confirmHere ? (
+              <Button loading={confirmDone.isPending} onClick={() => confirmDone.mutate()}>
+                {OWNER_CONFIRM_ACTION}
+              </Button>
+            ) : null}
+            {/* A run of this task is going and this panel knows which one, so the header's press is
+                the way into it. It replaces a disabled button reading "Running" — true, and the one
+                thing a reader who wants to see it cannot act on. */}
+            {entry.kind === 'OPEN_RUN' && entry.href ? (
+              <Tooltip content={entry.hint}>
+                <Link to={entry.href}>
+                  <Button icon={<ArrowRightOutlined />} variant="primary">
+                    {entry.label}
+                  </Button>
+                </Link>
+              </Tooltip>
+            ) : stopped ? null : (
+              <Tooltip content={executeHint}>
+                <span style={{ display: 'inline-flex' }}>
+                  <Button
+                    variant="primary"
+                    icon={<PlayCircleOutlined />}
+                    loading={running}
+                    disabled={executeDisabled}
+                    onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
+                    style={executeDisabled ? { pointerEvents: 'none' } : undefined}
+                  >
+                    {running
+                      ? 'Running'
+                      : completionOwned
+                        ? verificationSubjectAction(q.data?.status, q.data?.verificationState).label
+                        : entry.kind === 'RETRY'
+                          ? entry.label
+                          : 'Run now'}
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+          </div>
+          {/* The panel's own two window buttons, siblings of the actions rather than part of them, so
+              they stay at the row's right end when a long action label wraps the actions.
+              The row's trash is hover-only, so without this a touch screen has no way to delete. */}
+          {/* Two words for two links (docs/share-links-design.md §8): Copy link is the signed-in
+              address, for yourself; Share… is the public one. Copy as Markdown needs neither. */}
+          <Menu
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            popupClassName="tdp-more-menu"
+            items={[
+                // Reopen and Run again: the presses a stopped task's header no longer draws.
+                ...(reopenable
+                  ? [{
+                      key: 'reopen',
+                      icon: <RollbackOutlined />,
+                      label: REOPEN_ACTION_LABEL,
+                      onSelect: () => {
+                        setMenuOpen(false);
+                        setReopening(true);
+                      },
+                    }]
+                  : []),
+                ...(stopped
+                  ? [{
+                      key: 'run-again',
+                      icon: <RedoOutlined />,
+                      label: 'Run again',
+                      disabled: executeDisabled,
+                      onSelect: () => {
+                        setMenuOpen(false);
+                        execute.mutate({ triggerId: newRunRequestToken() });
+                      },
+                    }]
+                  : []),
+                {
+                  key: 'follow',
+                  icon: <EyeOutlined />,
+                  label: 'Follow task',
+                  onSelect: () => {
+                    setMenuOpen(false);
+                    setFollowOpen(true);
+                  },
+                },
+                ...(hasDependencyRelations
+                  ? []
+                  : [{
+                      key: 'add-prerequisite',
+                      icon: <PlusOutlined />,
+                      label: 'Add a prerequisite',
+                      disabled: !q.data,
+                      onSelect: () => {
+                        setMenuOpen(false);
+                        setAddingPrereq(true);
+                      },
+                    }]),
+                { type: 'separator', key: 'sep-copy' },
+                {
+                  key: 'copy-link',
+                  icon: <LinkOutlined />,
+                  label: 'Copy link',
+                  onSelect: () => {
+                    setMenuOpen(false);
+                    void copyText(taskAppUrl(taskId)).then((ok) =>
+                      ok ? message.success('Link copied') : message.error("Couldn't copy the link"),
+                    );
+                  },
+                },
+                {
+                  key: 'share',
+                  icon: <GlobalOutlined className={liveLink ? 'session-share-icon-live' : undefined} />,
+                  textValue: 'Share…',
+                  label: liveLink ? (
+                    <span className="scope-menu-row">
+                      Share…<span className="scope-menu-value">Live link</span>
+                    </span>
+                  ) : (
+                    'Share…'
+                  ),
+                  onSelect: () => {
+                    setMenuOpen(false);
+                    setShareOpen(true);
+                  },
+                },
+                {
+                  key: 'copy-markdown',
+                  icon: <FileMarkdownOutlined />,
+                  label: 'Copy as Markdown',
+                  disabled: !q.data,
+                  onSelect: () => {
+                    setMenuOpen(false);
+                    if (!q.data) return;
+                    void copyText(taskMarkdown(q.data, taskAppUrl(taskId))).then((ok) =>
+                      ok ? message.success('Markdown copied') : message.error("Couldn't copy the Markdown"),
+                    );
+                  },
+                },
+                { type: 'separator', key: 'sep-delete' },
+                // The row's trash is hover-only, so on a touch screen this is the way to delete.
+                {
+                  key: 'delete',
+                  icon: <DeleteOutlined />,
+                  label: 'Delete task…',
+                  danger: true,
+                  onSelect: () => {
+                    setMenuOpen(false);
+                    setConfirmDelete(true);
+                  },
+                },
+            ]}
+            trigger={<Button ref={moreButton} variant="text" icon={<MoreOutlined />} aria-label="More actions" />}
+          />
+          <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
+        </div>
+        <div className="tdp-head-main">
           {q.data?.project?.status === 'CANCELLED' && (
             <div className="tdp-project-note">{PROJECT_CANCELLED_NOTE}</div>
           )}
@@ -1843,8 +2012,13 @@ export function TaskDetailPanel({
                 {task.assignee.name}
               </span>
             )}
-            {latestModel && <span className="tdp-meta-item muted">· {modelLabel(latestModel)}</span>}
-            {totalCost && <span className="tdp-meta-item muted">· {totalCost}</span>}
+            {/* Model and cost are one item with the dot between them, so a wrapped meta row never
+                starts a line with "·". */}
+            {(latestModel || totalCost) && (
+              <span className="tdp-meta-item muted">
+                {[latestModel && modelLabel(latestModel), totalCost].filter(Boolean).join(' · ')}
+              </span>
+            )}
           </div>
           {/* A task forked from a session says where its checkout came from, in the server's own
               words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
@@ -1869,171 +2043,6 @@ export function TaskDetailPanel({
             </div>
           )}
         </div>
-        <div className="tdp-head-actions">
-          {ownerWaiting ? (
-            // A run is waiting on the owner: its card in that session is where this is answered,
-            // so the panel only takes the reader there. While its report is still with its reviewer
-            // the pointer says so, in the quieter tone, as the session's row does (contract §5 N3).
-            <Link
-              className={`tdp-owner-confirmation-pointer${
-                ownerWaiting.review?.state === 'UNDER_REVIEW' ? ' is-under-review' : ''}`}
-              to={`/sessions/${encodeId(ownerWaiting.sessionId)}`}
-              state={{ revealOwnerConfirmation: true }}
-            >
-              {ownerWaiting.review?.state === 'UNDER_REVIEW' ? UNDER_REVIEW : WAITING_FOR_CONFIRMATION}
-            </Link>
-          ) : confirmHere ? (
-            <Button loading={confirmDone.isPending} onClick={() => confirmDone.mutate()}>
-              {OWNER_CONFIRM_ACTION}
-            </Button>
-          ) : null}
-          {/* A run of this task is going and this panel knows which one, so the header's press is
-              the way into it. It replaces a disabled button reading "Running" — true, and the one
-              thing a reader who wants to see it cannot act on. */}
-          {entry.kind === 'OPEN_RUN' && entry.href ? (
-            <Tooltip content={entry.hint}>
-              <Link to={entry.href}>
-                <Button icon={<ArrowRightOutlined />} variant="primary">
-                  {entry.label}
-                </Button>
-              </Link>
-            </Tooltip>
-          ) : stopped ? null : (
-            <Tooltip content={executeHint}>
-              <span style={{ display: 'inline-flex' }}>
-                <Button
-                  variant="primary"
-                  icon={<PlayCircleOutlined />}
-                  loading={running}
-                  disabled={executeDisabled}
-                  onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
-                  style={executeDisabled ? { pointerEvents: 'none' } : undefined}
-                >
-                  {running
-                    ? 'Running'
-                    : completionOwned
-                      ? verificationSubjectAction(q.data?.status, q.data?.verificationState).label
-                      : entry.kind === 'RETRY'
-                        ? entry.label
-                        : 'Run now'}
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-        </div>
-        {/* The panel's own two window buttons, siblings of the actions rather than part of them:
-            a phone has no room for four presses on one line, and the narrow-screen rule in
-            index.css keeps exactly these two beside the title while the actions drop below it.
-            The row's trash is hover-only, so without this a touch screen has no way to delete. */}
-        {/* Two words for two links (docs/share-links-design.md §8): Copy link is the signed-in
-            address, for yourself; Share… is the public one. Copy as Markdown needs neither. */}
-        <Menu
-          open={menuOpen}
-          onOpenChange={setMenuOpen}
-          popupClassName="tdp-more-menu"
-          items={[
-              // Reopen and Run again: the presses a stopped task's header no longer draws.
-              ...(reopenable
-                ? [{
-                    key: 'reopen',
-                    icon: <RollbackOutlined />,
-                    label: REOPEN_ACTION_LABEL,
-                    onSelect: () => {
-                      setMenuOpen(false);
-                      setReopening(true);
-                    },
-                  }]
-                : []),
-              ...(stopped
-                ? [{
-                    key: 'run-again',
-                    icon: <RedoOutlined />,
-                    label: 'Run again',
-                    disabled: executeDisabled,
-                    onSelect: () => {
-                      setMenuOpen(false);
-                      execute.mutate({ triggerId: newRunRequestToken() });
-                    },
-                  }]
-                : []),
-              {
-                key: 'follow',
-                icon: <EyeOutlined />,
-                label: 'Follow task',
-                onSelect: () => {
-                  setMenuOpen(false);
-                  setFollowOpen(true);
-                },
-              },
-              ...(hasDependencyRelations
-                ? []
-                : [{
-                    key: 'add-prerequisite',
-                    icon: <PlusOutlined />,
-                    label: 'Add a prerequisite',
-                    disabled: !q.data,
-                    onSelect: () => {
-                      setMenuOpen(false);
-                      setAddingPrereq(true);
-                    },
-                  }]),
-              { type: 'separator', key: 'sep-copy' },
-              {
-                key: 'copy-link',
-                icon: <LinkOutlined />,
-                label: 'Copy link',
-                onSelect: () => {
-                  setMenuOpen(false);
-                  void copyText(taskAppUrl(taskId)).then((ok) =>
-                    ok ? message.success('Link copied') : message.error("Couldn't copy the link"),
-                  );
-                },
-              },
-              {
-                key: 'share',
-                icon: <GlobalOutlined className={liveLink ? 'session-share-icon-live' : undefined} />,
-                textValue: 'Share…',
-                label: liveLink ? (
-                  <span className="scope-menu-row">
-                    Share…<span className="scope-menu-value">Live link</span>
-                  </span>
-                ) : (
-                  'Share…'
-                ),
-                onSelect: () => {
-                  setMenuOpen(false);
-                  setShareOpen(true);
-                },
-              },
-              {
-                key: 'copy-markdown',
-                icon: <FileMarkdownOutlined />,
-                label: 'Copy as Markdown',
-                disabled: !q.data,
-                onSelect: () => {
-                  setMenuOpen(false);
-                  if (!q.data) return;
-                  void copyText(taskMarkdown(q.data, taskAppUrl(taskId))).then((ok) =>
-                    ok ? message.success('Markdown copied') : message.error("Couldn't copy the Markdown"),
-                  );
-                },
-              },
-              { type: 'separator', key: 'sep-delete' },
-              // The row's trash is hover-only, so on a touch screen this is the way to delete.
-              {
-                key: 'delete',
-                icon: <DeleteOutlined />,
-                label: 'Delete task…',
-                danger: true,
-                onSelect: () => {
-                  setMenuOpen(false);
-                  setConfirmDelete(true);
-                },
-              },
-          ]}
-          trigger={<Button ref={moreButton} variant="text" icon={<MoreOutlined />} aria-label="More actions" />}
-        />
-        <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
       </div>
 
       {q.isLoading ? (
