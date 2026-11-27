@@ -37,6 +37,10 @@ import kotlinx.serialization.json.JsonObject
  * catalogue's. Nothing here guesses a mode: what runs is what the server recorded.
  */
 
+/** The clock Claude's report is read against: it reads as being switched back for a minute (PermissionModeDisplay.CORRECTION_WINDOW).
+ * A test of a payload captured from a server holds it at the payload's own moment, so the payload is drawn as the server sent it. */
+internal var modeClock: () -> Instant = Instant::now
+
 /** Whether the session's next run is still to start — a draft, one no claim has taken yet, or one whose run has ended, which the next
  * message resumes: then the control says what that run starts in, not what the last one ran in. */
 internal fun runStartsNext(detail: JsonObject, draft: Boolean): Boolean = draft || SessionFacts.released(detail) == true || terminal(detail) ||

@@ -239,13 +239,13 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     val startsNext = runStartsNext(detail, target != null)
     var modeTick by remember { mutableIntStateOf(0) }
     val capsule = remember(detail, effective, shownEngine, state.catalog, target, modeTick) {
-        modeCapsule(detail, effective, shownEngine, state.catalog, target != null, java.time.Instant.now())
+        modeCapsule(detail, effective, shownEngine, state.catalog, target != null, modeClock())
     }
     // Claude's report reads as being switched back for a minute; past that it is drawn again, as the gap it is.
     val correctingAt = PermissionModes.changes(detail).lastOrNull()?.at?.takeIf { capsule.gap == ModeCapsule.Gap.CORRECTING }
     LaunchedEffect(correctingAt) {
         val ends = correctingAt?.let(PermissionModeDisplay::correctionEnds) ?: return@LaunchedEffect
-        kotlinx.coroutines.delay(maxOf(0L, ends.toEpochMilli() - System.currentTimeMillis()) + 100); modeTick++
+        kotlinx.coroutines.delay(maxOf(0L, ends.toEpochMilli() - modeClock().toEpochMilli()) + 100); modeTick++
     }
     // A gap is explained by the model's name where it has no Auto, which the catalogue says: read it as the gap shows.
     LaunchedEffect(model, capsule.gap != null) { if (capsule.gap != null && state.catalog == null && !state.catalogLoading) model.loadCatalog() }

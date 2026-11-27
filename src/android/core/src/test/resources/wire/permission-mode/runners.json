@@ -1,0 +1,252 @@
+[
+  {
+    "id": "2tDLGb40pZ6nLyvgob80NT",
+    "name": "workstation-gpu",
+    "displayName": null,
+    "hostname": null,
+    "labels": [],
+    "status": "ONLINE",
+    "maxConcurrent": 20,
+    "burstConcurrent": 2,
+    "version": null,
+    "lastHeartbeatAt": "2026-11-27T08:58:22.106Z",
+    "enrolledAt": "2026-11-27T08:58:22.110Z",
+    "position": null,
+    "planUsage": null,
+    "modelCatalog": {
+      "claude": [
+        {
+          "label": "Opus 5.5",
+          "value": "claude-opus-5-5",
+          "permissionModes": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "dontAsk",
+            "bypassPermissions",
+            "auto"
+          ],
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "label": "Haiku 4.5",
+          "value": "claude-haiku-4-5",
+          "permissionModes": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "dontAsk",
+            "bypassPermissions"
+          ],
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      ]
+    },
+    "runsAsRoot": false,
+    "minFreeDiskMb": 10240,
+    "reposRoot": null,
+    "registerDir": null,
+    "capabilities": [],
+    "heartbeatLeaseOwner": null,
+    "heartbeatDraining": null,
+    "managed": false,
+    "runtimeDefaultModels": {},
+    "selfUpdate": null,
+    "region": null,
+    "engines": [
+      {
+        "engine": "claude",
+        "installed": true,
+        "auth": "yes",
+        "accounts": [
+          {
+            "id": "default",
+            "home": "/root/.claude",
+            "auth": "yes",
+            "activeSessions": 0
+          }
+        ]
+      }
+    ],
+    "engineUpdateDismissals": {},
+    "agentFix": {
+      "workspaceId": "7kQ2FUP094bLG2WSZlTQ2H",
+      "workspaceName": "orbit",
+      "engine": "claude",
+      "engineName": "Claude Code",
+      "blocked": null,
+      "fixing": [],
+      "handled": [],
+      "workspacePublicId": "7kQ2FUP094bLG2WSZlTQ2H",
+      "agentId": "7kQ2FUP094bLG2WSZlTQ2H",
+      "agentName": "orbit"
+    },
+    "antigravity": {
+      "supported": false,
+      "installed": null,
+      "version": null,
+      "envKeyAvailable": false,
+      "authSource": null,
+      "googleLogin": "needs_update"
+    },
+    "install": {
+      "status": null,
+      "engine": null,
+      "command": null,
+      "message": null,
+      "mode": null
+    },
+    "accountRemove": {
+      "engine": "codex",
+      "account": null,
+      "status": null,
+      "message": null
+    },
+    "claudeAccountSwap": {
+      "account": null,
+      "status": null,
+      "message": null,
+      "waitingOn": [],
+      "foreignProcesses": []
+    },
+    "online": true,
+    "activeSessions": 6,
+    "commands": [],
+    "skills": [],
+    "publicId": "2tDLGb40pZ6nLyvgob80NT"
+  },
+  {
+    "id": "3CuxsNRXKMZ6HUX9OJznLz",
+    "name": "root-runner",
+    "displayName": null,
+    "hostname": null,
+    "labels": [],
+    "status": "ONLINE",
+    "maxConcurrent": 20,
+    "burstConcurrent": 2,
+    "version": null,
+    "lastHeartbeatAt": "2026-11-27T08:58:22.122Z",
+    "enrolledAt": "2026-11-27T08:58:22.122Z",
+    "position": null,
+    "planUsage": null,
+    "modelCatalog": {
+      "claude": [
+        {
+          "label": "Opus 5.5",
+          "value": "claude-opus-5-5",
+          "permissionModes": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "dontAsk",
+            "bypassPermissions",
+            "auto"
+          ],
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high",
+            "max"
+          ]
+        },
+        {
+          "label": "Haiku 4.5",
+          "value": "claude-haiku-4-5",
+          "permissionModes": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "dontAsk",
+            "bypassPermissions"
+          ],
+          "reasoningLevels": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      ]
+    },
+    "runsAsRoot": true,
+    "minFreeDiskMb": 10240,
+    "reposRoot": null,
+    "registerDir": null,
+    "capabilities": [],
+    "heartbeatLeaseOwner": null,
+    "heartbeatDraining": null,
+    "managed": false,
+    "runtimeDefaultModels": {},
+    "selfUpdate": null,
+    "region": null,
+    "engines": [
+      {
+        "engine": "claude",
+        "installed": true,
+        "auth": "yes",
+        "accounts": [
+          {
+            "id": "default",
+            "home": "/root/.claude",
+            "auth": "yes",
+            "activeSessions": 0
+          }
+        ]
+      }
+    ],
+    "engineUpdateDismissals": {},
+    "agentFix": {
+      "workspaceId": "2KMAzkOmzBHIEXn5a1p4Ts",
+      "workspaceName": "orbit",
+      "engine": "claude",
+      "engineName": "Claude Code",
+      "blocked": null,
+      "fixing": [],
+      "handled": [],
+      "workspacePublicId": "2KMAzkOmzBHIEXn5a1p4Ts",
+      "agentId": "2KMAzkOmzBHIEXn5a1p4Ts",
+      "agentName": "orbit"
+    },
+    "antigravity": {
+      "supported": false,
+      "installed": null,
+      "version": null,
+      "envKeyAvailable": false,
+      "authSource": null,
+      "googleLogin": "needs_update"
+    },
+    "install": {
+      "status": null,
+      "engine": null,
+      "command": null,
+      "message": null,
+      "mode": null
+    },
+    "accountRemove": {
+      "engine": "codex",
+      "account": null,
+      "status": null,
+      "message": null
+    },
+    "claudeAccountSwap": {
+      "account": null,
+      "status": null,
+      "message": null,
+      "waitingOn": [],
+      "foreignProcesses": []
+    },
+    "online": true,
+    "activeSessions": 1,
+    "commands": [],
+    "skills": [],
+    "publicId": "3CuxsNRXKMZ6HUX9OJznLz"
+  }
+]

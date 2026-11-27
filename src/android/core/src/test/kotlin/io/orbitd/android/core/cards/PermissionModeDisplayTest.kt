@@ -66,7 +66,7 @@ class PermissionModeDisplayTest {
 
     @Test fun anyOtherGapSaysWhatWasAskedAndWhatSetTheModeRunning() {
         assertEquals("You asked for Plan. Mode set to Default by Orbit.",
-            capsule("plan", "default", change("plan", "default", "ORBIT_CHANGE")).head?.text)
+            capsule("plan", "default", change("plan", "default", "ORBIT_CHANGE", "orbit")).head?.text)
         assertEquals("You asked for Plan. Claude started in Default.",
             capsule("plan", "default", change("plan", "default", "ENGINE_REPORT")).head?.text)
         // A claim, or the runner, that put the engine in another mode than the one asked for since says nothing of why.
@@ -82,7 +82,7 @@ class PermissionModeDisplayTest {
     @Test fun aScheduledRunInAutoIsNotAGap() {
         assertEquals(ModeCapsule("Auto", head = ModeCapsule.Head("Running in Auto.", "Scheduled runs always use Auto.")),
             capsule("default", "auto", change(null, "auto", "CLAIM"), scheduled = true))
-        assertEquals(Gap.STANDING, capsule("plan", "default", change("auto", "default", "ORBIT_CHANGE"), scheduled = true).gap)
+        assertEquals(Gap.STANDING, capsule("plan", "default", change("auto", "default", "ORBIT_CHANGE", "orbit"), scheduled = true).gap)
     }
 
     @Test fun aLiveSessionWithNoModeRecordedSaysSoAndAnOlderServerShowsTheIntent() {
@@ -122,7 +122,7 @@ class PermissionModeDisplayTest {
             change("dontAsk", "auto", "OWNER_PICK", "android", at = "2026-11-22T12:00:04.000Z"),
             change("auto", "plan", "OWNER_PICK", "terminal", at = "2026-11-22T12:00:05.000Z"),
             change("plan", "auto", "OWNER_PICK", at = "2026-11-22T12:00:06.000Z"),
-            change("auto", "default", "ORBIT_CHANGE", at = "2026-11-22T12:00:07.000Z"),
+            change("auto", "default", "ORBIT_CHANGE", "orbit", at = "2026-11-22T12:00:07.000Z"),
             change("default", "plan", "CLAIM", at = "2026-11-22T12:00:08.000Z"),
             change("plan", "auto", "RESPAWN", at = "2026-11-22T12:00:09.000Z"),
             change("auto", "default", "ENGINE_REPORT", at = "2026-11-22T12:00:10.000Z"),

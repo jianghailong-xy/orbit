@@ -5,9 +5,12 @@ import android.graphics.Canvas
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.ui.test.*
+import io.orbitd.android.core.cards.PermissionModeDisplay
+import io.orbitd.android.core.protocol.PermissionModes
 import java.io.File
 import java.time.Instant
 import kotlinx.serialization.json.JsonPrimitive
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import org.robolectric.annotation.Config
@@ -15,36 +18,34 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The board docs/mocks/permission-mode-actual on Android, as the owner picked it (A1, B1, C1), drawn by the production app over
- * [ComposerShell]: the composer's mode control is the mode the server recorded the engine running in (①), a gap from the mode asked
- * for reads "Default → Auto" beside a spinner while the runner switches Claude back and as the running mode beside an amber dot where
- * it stands, its menu saying why (②, A1); the transcript has a quiet shield line for each change, saying who or what made it (③, B1);
- * before a start, Auto on a model with none stays the pick and says it starts in Default (④, C1). Each state is also drawn at the
- * board's phone size to app/build/evidence/permission-mode-actual (not committed).
+ * [ComposerShell] from payloads a real apiserver on PostgreSQL answered ([CapturedPayloads]): the composer's mode control is the mode
+ * the server recorded the engine running in (①), a gap from the mode asked for reads "Default → Auto" beside a spinner while the
+ * runner switches Claude back and as the running mode beside an amber dot where it stands, its menu saying why (②, A1); the transcript
+ * has a quiet shield line for each change, saying who or what made it (③, B1); before a start, Auto on a model with none stays the pick
+ * and says it starts in Default (④, C1). Each state is also drawn at the board's phone size to
+ * app/build/evidence/permission-mode-actual (not committed), named for the payload it draws.
  */
 @Config(qualifiers = "w393dp-h852dp-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PermissionModeShellTest : ComposerShellTest() {
-    private val haikuRunner = """{"id":"${ComposerShell.RUNNER}","name":"workstation-gpu","online":true,"status":"ONLINE","version":"0.1.261",
-        "runsAsRoot":ROOT,"engines":[{"engine":"claude","installed":true,"auth":"yes"}],
-        "modelCatalog":{"claude":[
-          {"value":"claude-opus-5-5","label":"Opus 5.5","reasoningLevels":["low","medium","high","max"],"permissionModes":["default","acceptEdits","plan","auto","dontAsk","bypassPermissions"]},
-          {"value":"claude-haiku-4-5","label":"Haiku 4.5","reasoningLevels":["low","medium","high"],"permissionModes":["default","acceptEdits","plan","dontAsk","bypassPermissions"]}]}}"""
+    @After fun realClock() { modeClock = Instant::now }
 
-    private fun runner(root: Boolean = false) { ComposerShell.runner = ComposerShell.obj(haikuRunner.replace("ROOT", "$root")) }
-
-    private fun change(from: String?, to: String, cause: String, at: String, client: String? = null) =
-        """{"fromMode":${from?.let { "\"$it\"" } ?: "null"},"toMode":"$to","cause":"$cause","client":${client?.let { "\"$it\"" } ?: "null"},"at":"$at"}"""
-
-    /** The session as the detail says it: the mode asked for, the one running, and how it came to be. */
-    private fun session(intent: String, actual: String?, vararg changes: String, model: String = "claude-opus-5-5", effort: String = "max") {
-        runner()
-        ComposerShell.session = ComposerShell.fields("""{"title":"Staging migration check","permissionMode":"$intent",
-            "actualPermissionMode":${actual?.let { "\"$it\"" } ?: "null"},"actualPermissionModeAt":"2026-11-22T09:00:00.000Z",
-            "model":"$model","effort":"$effort","permissionModeChanges":[${changes.joinToString()}]}""")
+    /** The captured session [name] as the shell's session, on the captured runner [runner]; the conversation's two messages are placed
+     * among its mode changes — the question after the claim, the reply after the change at [replyAfter] — as a real one runs. */
+    private fun session(name: String, runner: String = "workstation-gpu", replyAfter: Int = 0) {
+        ComposerShell.runner = CapturedPayloads.runner(runner)
+        ComposerShell.session = CapturedPayloads.session(name)
+        val changes = PermissionModes.changes(CapturedPayloads.detail(name))
+        val asked = Instant.parse(changes.first().at).plusMillis(300)
+        val answered = Instant.parse(changes[replyAfter].at).plusMillis(if (replyAfter == 0) 600 else 300)
         ComposerShell.events = listOf(
-            ComposerShell.obj("""{"type":"user","seq":1,"turnId":"t-1","ts":"2026-11-22T09:00:10.000Z","payload":{"text":"Run the staging migration check and tell me what fails."}}"""),
-            ComposerShell.obj("""{"type":"assistant","seq":2,"turnId":"t-1","ts":"2026-11-22T09:01:00.000Z","payload":{"text":"Ran it against staging: 14 of 14 checks passed."}}"""))
+            ComposerShell.obj("""{"type":"user","seq":1,"turnId":"t-1","ts":"$asked","payload":{"text":"Run the staging migration check and tell me what fails."}}"""),
+            ComposerShell.obj("""{"type":"assistant","seq":2,"turnId":"t-1","ts":"$answered","payload":{"text":"Ran it against staging: 14 of 14 checks passed."}}"""))
     }
+
+    /** The moment of [name]'s newest change, plus [seconds]: when a client reads the payload. */
+    private fun momentOf(name: String, seconds: Long) =
+        Instant.parse(PermissionModes.changes(CapturedPayloads.detail(name)).last().at).plusSeconds(seconds)
 
     private fun mode() = compose.onNodeWithTag("composer-mode")
     private fun openModeMenu() {
@@ -57,11 +58,12 @@ class PermissionModeShellTest : ComposerShellTest() {
     // ① The control is the mode running.
 
     @Test fun theControlIsTheModeRunningAndItsMenuTicksTheOneAskedFor() {
-        session("auto", "auto", change(null, "auto", "CLAIM", "2026-11-22T09:00:00.000Z"))
+        session("running-auto")
         signIn(); openSession()
         await { has(hasTestTag("composer-mode") and hasText("Auto")) }
         mode().assertContentDescriptionEquals("Permission mode Auto")
         assertFalse(has(hasTestTag("composer-mode-correcting"), unmerged = true) || has(hasTestTag("composer-mode-gap"), unmerged = true))
+        await { has(hasText("Started in Auto")) }
         shot("01-running-auto")
         openModeMenu()
         item("auto").assertTextContains("✓", substring = true)
@@ -71,23 +73,24 @@ class PermissionModeShellTest : ComposerShellTest() {
         shot("02-running-auto-menu")
     }
 
-    /** The control follows the engine, not the intent: a session asked for Plan whose engine still runs Auto says Auto. */
+    /** The control follows the record, not the intent: the owner's pick of Plan is stored, and until the engine takes it the session
+     * runs in Auto — the control says Auto, with the gap, and the menu ticks Plan. */
     @Test fun theControlFollowsTheRecordNotTheIntent() {
-        session("plan", "auto", change(null, "auto", "CLAIM", "2026-11-22T09:00:00.000Z"))
+        session("pick-on-its-way")
         signIn(); openSession()
         await { has(hasTestTag("composer-mode") and hasText("Auto")) }
         compose.onNodeWithTag("composer-mode-gap", useUnmergedTree = true).assertExists()
         openModeMenu()
         compose.onNodeWithTag("composer-mode-head").assertTextEquals("Running in Auto. You asked for Plan.")
         item("plan").assertTextContains("✓", substring = true)
+        shot("09-pick-on-its-way-menu")
     }
 
     // ② A1: a gap the runner is closing, and one that stands.
 
     @Test fun claudeStartingInDefaultReadsDefaultToAutoUntilTheRunnerSwitchesItBack() {
-        val now = Instant.now()
-        session("auto", "default", change(null, "auto", "CLAIM", now.minusSeconds(8).toString()),
-            change("auto", "default", "ENGINE_REPORT", now.minusSeconds(5).toString()))
+        modeClock = { momentOf("correcting", 5) }
+        session("correcting")
         signIn(); openSession()
         await { has(hasTestTag("composer-mode") and hasText("Default → Auto")) }
         compose.onNodeWithTag("composer-mode-correcting", useUnmergedTree = true).assertExists()
@@ -106,24 +109,24 @@ class PermissionModeShellTest : ComposerShellTest() {
     /** The runner's correction, heard on the session's stream, reads the session again: the control is Auto, and the report and the
      * correction are one line. */
     @Test fun theRunnersCorrectionIsReadAtOnceAndSaidInOneLine() {
-        val now = Instant.now()
-        val claim = change(null, "auto", "CLAIM", now.minusSeconds(8).toString())
-        val report = change("auto", "default", "ENGINE_REPORT", now.minusSeconds(5).toString())
-        session("auto", "default", claim, report)
+        modeClock = { momentOf("correcting", 5) }
+        session("correcting")
         signIn(); openSession()
         await { has(hasTestTag("composer-mode") and hasText("Default → Auto")) }
-        session("auto", "auto", claim, report, change("default", "auto", "RUNNER_CORRECTION", now.minusSeconds(4).toString()))
-        ComposerShell.push("""{"type":"system","seq":3,"turnId":"t-1","ts":"${now.minusSeconds(4)}","payload":{"subtype":"permission_mode_corrected","mode":"auto"}}""")
+        session("corrected")
+        val corrected = PermissionModes.changes(CapturedPayloads.detail("corrected")).last().at
+        ComposerShell.push("""{"type":"system","seq":3,"turnId":"t-1","ts":"$corrected","payload":{"subtype":"permission_mode_corrected","mode":"auto"}}""")
         await { has(hasTestTag("composer-mode") and hasText("Auto")) }
         await { has(hasText("Mode set back to Auto by the runner — Claude had started in Default")) }
         assertFalse(has(hasText("Claude started in Default")))
         assertFalse(has(hasTestTag("composer-mode-correcting"), unmerged = true))
+        shot("10-corrected")
     }
 
     /** A report the runner did not act on within the minute stands: the dot, and a pick of Auto asks for it again. */
     @Test fun aGapTheRunnerLeftStandsAndAutoCanBeAskedForAgain() {
-        session("auto", "default", change(null, "auto", "CLAIM", "2026-11-22T09:00:00.000Z"),
-            change("auto", "default", "ENGINE_REPORT", "2026-11-22T09:00:02.000Z"))
+        modeClock = { momentOf("correcting", 61) }
+        session("correcting")
         signIn(); openSession()
         await { has(hasTestTag("composer-mode") and hasText("Default")) }
         compose.onNodeWithTag("composer-mode-gap", useUnmergedTree = true).assertExists()
@@ -135,8 +138,7 @@ class PermissionModeShellTest : ComposerShellTest() {
     }
 
     @Test fun aModelWithNoAutoIsAGapThatStandsAndTheMenuSaysHowToGetAutoBack() {
-        session("auto", "default", change(null, "auto", "CLAIM", "2026-11-22T09:00:00.000Z"),
-            change("auto", "default", "OWNER_PICK", "2026-11-22T09:02:00.000Z", "android"), model = "claude-haiku-4-5", effort = "high")
+        session("no-auto-model")
         signIn(); openSession()
         await { has(hasTestTag("composer-mode") and hasText("Default")) && has(hasText("Haiku 4.5")) }
         compose.onNodeWithTag("composer-mode-gap", useUnmergedTree = true).assertExists()
@@ -153,26 +155,24 @@ class PermissionModeShellTest : ComposerShellTest() {
     // ③ B1: every change, and who or what made it, where it happened.
 
     @Test fun theTranscriptSaysEachChangeAndWhoMadeItWhereItHappened() {
-        session("auto", "default",
-            change(null, "auto", "CLAIM", "2026-11-22T09:00:00.000Z"),
-            change("auto", "default", "ENGINE_REPORT", "2026-11-22T09:00:12.000Z"),
-            change("default", "auto", "RUNNER_CORRECTION", "2026-11-22T09:00:13.000Z"),
-            change("auto", "plan", "OWNER_PICK", "2026-11-22T09:02:00.000Z", "web"),
-            change("plan", "acceptEdits", "OWNER_PICK", "2026-11-22T09:03:00.000Z", "ios"),
-            change("acceptEdits", "auto", "OWNER_PICK", "2026-11-22T09:04:00.000Z", "android"),
-            change("auto", "default", "ORBIT_CHANGE", "2026-11-22T09:05:00.000Z"),
-            change("default", "auto", "RESPAWN", "2026-11-22T09:06:00.000Z"),
-            change("auto", "default", "OWNER_PICK", "2026-11-22T09:07:00.000Z", "android"),
-            model = "claude-haiku-4-5", effort = "high")
+        // The reply comes after the runner's first correction (the payload's third change), as the board draws it.
+        session("every-cause", replyAfter = 2)
         signIn(); openSession()
         val said = listOf("Started in Auto", "Mode set back to Auto by the runner — Claude had started in Default",
             "Mode set to Plan by you, on the web", "Mode set to Accept Edits by you, on iOS", "Mode set to Auto by you, on Android",
-            "Mode set to Default by Orbit", "Claude restarted in Auto", "Mode now Default — you picked Haiku 4.5, which has no Auto")
-        await { said.all { has(hasText(it)) } }
-        // Claude's report is said by the correction, once.
-        assertFalse(has(hasText("Claude started in Default")))
-        // In time order, among the messages: the claim before the question, the correction before the reply, the rest after it.
-        val tops = said.map { text -> compose.onNode(hasText(text)).fetchSemanticsNode().boundsInRoot.top }
+            "Mode set back to Auto by the runner — Claude had restarted in Default", "Mode set to Default by Orbit",
+            "Mode set to Auto by you, on Android", "Mode now Default — you picked Haiku 4.5, which has no Auto")
+        // Each line by its change (the owner picked Auto on Android twice, so two lines say the same words).
+        val detail = CapturedPayloads.detail("every-cause")
+        val lines = PermissionModeDisplay.lines(PermissionModes.changes(detail), PermissionModes.intent(detail), PermissionModes.actual(detail),
+            noAutoModel = "Haiku 4.5", runsAsRoot = false, scheduledOnClaude = false)
+        assertEquals(said, lines.map { it.text })
+        await { lines.all { has(hasTestTag(it.key)) } }
+        lines.forEach { compose.onNodeWithTag(it.key).assertTextEquals(it.text) }
+        // Claude's reports are said by the corrections that followed them, once each.
+        assertFalse(has(hasText("Claude started in Default")) || has(hasText("Claude restarted in Default")))
+        // In time order, among the messages: the claim before the question, the first correction before the reply, the rest after it.
+        val tops = lines.map { top(it.key) }
         assertEquals(tops.sorted(), tops)
         assertTrue(tops[0] < top("event:1")); assertTrue(top("event:1") < tops[1]); assertTrue(tops[1] < top("event:2"))
         assertTrue(top("event:2") < tops[2])
@@ -181,8 +181,7 @@ class PermissionModeShellTest : ComposerShellTest() {
 
     /** A claim-time substitution says why: Bypass can't run on a root runner, so the claim handed Auto. */
     @Test fun aClaimOnARootRunnerSaysWhyItIsNotBypass() {
-        session("bypassPermissions", "auto", change(null, "auto", "CLAIM", "2026-11-22T09:00:00.000Z"))
-        runner(root = true)
+        session("root-runner", runner = "root-runner")
         signIn(); openSession()
         await { has(hasText("Started in Auto, not Bypass — Bypass can’t run on a root runner")) }
         await { has(hasTestTag("composer-mode") and hasText("Auto")) }
@@ -191,10 +190,10 @@ class PermissionModeShellTest : ComposerShellTest() {
         shot("06-root-runner-claim")
     }
 
-    // ④ C1: before the session starts.
+    // ④ C1: before the session starts, on the captured runner's catalogue.
 
     @Test fun beforeAStartAutoOnAModelWithItSaysNothingMore() {
-        runner()
+        ComposerShell.runner = CapturedPayloads.runner("workstation-gpu")
         signIn(); openDraft()
         await { has(hasTestTag("composer-mode") and hasText("Auto")) }
         openModeMenu()
@@ -205,7 +204,7 @@ class PermissionModeShellTest : ComposerShellTest() {
     }
 
     @Test fun beforeAStartAutoOnAModelWithNoneStaysThePickAndSaysItStartsInDefault() {
-        runner()
+        ComposerShell.runner = CapturedPayloads.runner("workstation-gpu")
         signIn(); openDraft()
         openModelMenu()
         compose.onNode(hasText("Haiku 4.5") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
