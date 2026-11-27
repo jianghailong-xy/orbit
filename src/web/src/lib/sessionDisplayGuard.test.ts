@@ -42,6 +42,9 @@ const NOT_AN_ICON_OR_WORD: Record<string, Record<string, string>> = {
   'lib/sessionGrouping.ts': { sessionFailed: 'Needs you group membership, which must not change' },
   'lib/claudeRegion.ts': { claudeRegionHeld: 'whether a queued turn is held for the Claude region (the queue line)' },
   'lib/runnerSlots.ts': { waitingNoticeFor: 'whether the starting/compacting notice shows (the row line, the notice)' },
+  'lib/queuedCapacity.ts': {
+    slotWaitGate: 'whether a claim a full runner keeps waiting reads as the runner-full queued wait (the row line, the message tag)',
+  },
   'components/RunNeverStartedCard.tsx': {
     applies: 'whether the never-started card shows',
     sourceRefused: 'the never-started card\'s foot sentence',

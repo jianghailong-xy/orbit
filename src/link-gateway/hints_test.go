@@ -28,7 +28,8 @@ import (
 const runnerB = "0190a0b0-0000-7000-8000-00000000000b"
 
 // natsStandIn is a NATS server as a subscribing client sees it: INFO first, PONG to PING, SUB and UNSUB, and a MSG for
-// every PUB on a subject a client subscribed to. Exact subjects only, which is all the gateway subscribes to.
+// every PUB on a subject a client subscribed to, with its reply subject. A subscription may end in a wildcard, as the
+// gateway's to the other nodes' asks for facts (lfx.*) and the inbox of its own asks (_LFX.<id>.*) do.
 type natsStandIn struct {
 	t       testing.TB
 	ln      net.Listener
@@ -122,7 +123,11 @@ func (s *natsStandIn) serve(c *natsClient) {
 				return
 			}
 			s.record(f[1], payload[:size])
-			s.publish(f[1], payload[:size])
+			reply := ""
+			if len(f) == 4 {
+				reply = f[2]
+			}
+			s.deliverMsg(f[1], reply, nil, payload[:size])
 		case "HPUB": // HPUB <subject> [reply] <header size> <total size>
 			hdr, _ := strconv.Atoi(f[len(f)-2])
 			total, _ := strconv.Atoi(f[len(f)-1])
@@ -152,7 +157,7 @@ func (s *natsStandIn) publish(subject string, payload []byte) int {
 	var targets []target
 	for c := range s.clients {
 		for sid, subj := range c.subs {
-			if subj == subject {
+			if subjectMatches(subj, subject) {
 				targets = append(targets, target{c, sid})
 			}
 		}
@@ -162,6 +167,21 @@ func (s *natsStandIn) publish(subject string, payload []byte) int {
 		t.c.write(fmt.Sprintf("MSG %s %s %d\r\n%s\r\n", subject, t.sid, len(payload), payload))
 	}
 	return len(targets)
+}
+
+// subjectMatches reports whether a subscription to pattern receives a message on subject: * stands for one token, and
+// > for the rest.
+func subjectMatches(pattern, subject string) bool {
+	p, t := strings.Split(pattern, "."), strings.Split(subject, ".")
+	for i, tok := range p {
+		if tok == ">" {
+			return len(t) > i
+		}
+		if i >= len(t) || (tok != "*" && tok != t[i]) {
+			return false
+		}
+	}
+	return len(p) == len(t)
 }
 
 func (s *natsStandIn) record(subject string, payload []byte) {
@@ -208,7 +228,7 @@ func (s *natsStandIn) deliverMsg(subject, reply string, header map[string]string
 	var targets []target
 	for c := range s.clients {
 		for sid, subj := range c.subs {
-			if subj == subject {
+			if subjectMatches(subj, subject) {
 				targets = append(targets, target{c, sid})
 			}
 		}
@@ -502,7 +522,7 @@ func TestTheSubscriptionLastsFromTheFirstConnectionToTheLast(t *testing.T) {
 	_ = second.ws.CloseNow()
 	eventually(t, 5*time.Second, "A's subject unsubscribed", func() bool { return nats.subscribers("rnr."+runnerA) == 0 })
 	eventually(t, 5*time.Second, "link_hint_subscriptions 0", func() bool { return h.g.metrics.hintSubscriptions.get() == 0 })
-	if got, want := nats.opsLog(), []string{"SUB rnr." + runnerA, "UNSUB rnr." + runnerA}; !slices.Equal(got, want) {
+	if got, want := nats.opsLog(), []string{"SUB " + factPeerSubjectPrefix + "*", "SUB rnr." + runnerA, "UNSUB rnr." + runnerA}; !slices.Equal(got, want) {
 		t.Fatalf("NATS saw %v, want %v", got, want)
 	}
 }

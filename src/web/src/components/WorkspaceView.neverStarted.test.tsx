@@ -155,6 +155,37 @@ const CURSOR_RUNNER = {
   ],
 } satisfies Runner;
 
+/**
+ * A claimed run the runner has no slot for (runner cdvn0, 2026-11-27): four sessions running background jobs filled
+ * its four slots, no engine was asked to start, and the page said "Getting the session ready" for half an hour. A full
+ * runner now gives such a claim back, and the session reads queued behind it (RUNNER_FULL_QUEUED); a claim it could
+ * not give back is named by the runner (enginePhase waiting_for_slot), with the runner's counts on the list row.
+ */
+const WAITING_FOR_SLOT = {
+  ...BASE,
+  title: 'V1 yield and exit: waits that loop',
+  status: 'RUNNING',
+  numTurns: 4,
+  engineStartedAt: null,
+  enginePhase: 'waiting_for_slot',
+  enginePhaseSince: '2026-11-27T08:00:31.000Z',
+  runClaimedAt: '2026-11-27T08:00:30.000Z',
+  slotWait: { active: 4, heldByJobs: 4, limit: 4 },
+};
+
+/** The same session once the full runner gave its claim back: queued, the server naming the full runner. */
+const RUNNER_FULL_QUEUED = {
+  ...BASE,
+  title: 'V1 yield and exit: waits that loop',
+  status: 'PENDING',
+  numTurns: 4,
+  engineStartedAt: '2026-11-27T07:58:02.000Z',
+  queuedReason: 'runner_at_capacity',
+  queuedActive: 4,
+  queuedLimit: 4,
+  queuedHeldByJobs: 4,
+};
+
 class FakeEventSource {
   onmessage: ((e: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -381,6 +412,39 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
     expect(page).not.toContain('Starting');
     // …and a wide header wears no run word at all (docs/mocks/session-header-compact), so no wait's either.
     expect(mounted().querySelector('.workspace-sub')).toBeNull();
+  });
+
+  it('says a claim the full runner keeps waiting is queued behind it, as the approved queued card says it', async () => {
+    // The message handed out under the claim, not on the transcript yet: the active view lists it, and the tray tags it.
+    vi.mocked(listQueuedTurns).mockImplementation(async () => [{
+      turnId: '0195c0de-0000-7000-8000-0000000000b1', kind: 'message', placement: 'accepted', status: 'IN_FLIGHT',
+      content: 'Carry on with the V1 yield loop.', createdAt: '2026-11-27T08:00:05.000Z', attachments: [],
+    }] as never);
+    await mount(WAITING_FOR_SLOT, false);
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().textContent).toContain('runner full'), { timeout: 20_000, interval: 50 });
+    });
+    const tag = mounted().querySelector('button.chat-runner-updating-reason');
+    expect(tag?.textContent).toBe('runner full');
+    expect(tag?.closest('.chat-runner-updating')?.textContent).toBe('Queued·runner full');
+    await act(async () => (tag as HTMLButtonElement).click());
+    expect(document.querySelector('.runner-updating-pop')?.textContent).toContain(
+      'is using all 4 slots: 0 sessions are running a turn and 4 hold a slot with a background job. This message is sent as soon as one frees up.',
+    );
+    expect(mounted().textContent).not.toContain('Getting the session ready');
+    expect(card()).toBeNull();
+  });
+
+  it('says a claim the full runner gave back is queued behind it, with its count, and nothing more', async () => {
+    await mount(RUNNER_FULL_QUEUED, false);
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().textContent).toContain('Runner at capacity (4/4)'), { timeout: 20_000, interval: 50 });
+    });
+    const page = mounted().textContent ?? '';
+    expect(page).toContain('Runner full');
+    expect(page).not.toContain('Getting the session ready');
+    expect(page).not.toContain('waiting_for_slot');
+    expect(card()).toBeNull();
   });
 
   /** Waits for the conversation's history to be on the page, then answers where the card stands. */

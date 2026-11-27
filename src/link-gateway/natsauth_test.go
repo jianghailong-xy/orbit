@@ -203,6 +203,39 @@ func TestNATSAuthorizationOnARealServer(t *testing.T) {
 	if m, err := held.NextMsg(300 * time.Millisecond); err == nil {
 		t.Fatalf("something the gateway may not say on api.held arrived: %s", m.Data)
 	}
+
+	// Two gateway nodes (facts.go): one asks on lfx.<runnerId> for a process's heartbeat facts and takes the answer on
+	// its own inbox, _LFX.>; the other answers. The apiserver may do neither, nor read either.
+	peer, err := connectAsWith(url, "gateway peer", gatewaySeed)
+	if err != nil {
+		t.Fatalf("a second gateway connection: %v", err)
+	}
+	defer peer.client.Close()
+	asker, err := connectAsWith(url, "gateway asker", gatewaySeed, nats.CustomInboxPrefix(factPeerInboxPrefix))
+	if err != nil {
+		t.Fatalf("a third gateway connection: %v", err)
+	}
+	defer asker.client.Close()
+	if _, err := peer.client.Subscribe(factPeerSubjectPrefix+"*", func(m *nats.Msg) { _ = m.Respond([]byte("facts")) }); err != nil {
+		t.Fatal(err)
+	}
+	flush(t, peer)
+	if reply, err := asker.client.Request(factPeerSubjectPrefix+runner, []byte("ask"), 5*time.Second); err != nil {
+		t.Fatalf("one gateway node's answer to another's ask for facts did not arrive: %v (peer errors %v, asker errors %v)", err, peer.errs, asker.errs)
+	} else if string(reply.Data) != "facts" {
+		t.Fatalf("the answer was %q", reply.Data)
+	}
+	api.denied(t, "subscription", factPeerSubjectPrefix+"*", func() error {
+		_, err := api.client.SubscribeSync(factPeerSubjectPrefix + "*")
+		return err
+	})
+	api.denied(t, "publish", factPeerSubjectPrefix+runner, func() error {
+		return api.client.Publish(factPeerSubjectPrefix+runner, []byte("forged"))
+	})
+	api.denied(t, "subscription", factPeerInboxPrefix+".>", func() error {
+		_, err := api.client.SubscribeSync(factPeerInboxPrefix + ".>")
+		return err
+	})
 }
 
 // natsUser is a connection as one of nats.conf's users, with the permission violations the server reported.
@@ -212,19 +245,21 @@ type natsUser struct {
 	errs   []string
 }
 
-func connectAs(url, name, seed string) (*natsUser, error) {
+func connectAs(url, name, seed string) (*natsUser, error) { return connectAsWith(url, name, seed) }
+
+func connectAsWith(url, name, seed string, opts ...nats.Option) (*natsUser, error) {
 	kp, err := natsUserKey(seed)
 	if err != nil {
 		return nil, err
 	}
 	pub, _ := kp.PublicKey()
 	u := &natsUser{}
-	u.client, err = nats.Connect(url, nats.Name("natsauth_test "+name), nats.MaxReconnects(0), nats.Nkey(pub, kp.Sign),
+	u.client, err = nats.Connect(url, append([]nats.Option{nats.Name("natsauth_test " + name), nats.MaxReconnects(0), nats.Nkey(pub, kp.Sign),
 		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
 			u.mu.Lock()
 			u.errs = append(u.errs, err.Error())
 			u.mu.Unlock()
-		}))
+		})}, opts...)...)
 	return u, err
 }
 

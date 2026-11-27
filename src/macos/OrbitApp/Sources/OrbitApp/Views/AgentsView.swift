@@ -2038,7 +2038,9 @@ struct SessionLiveIndicator: View {
             switch state {
             case .running: SpinnerGlyph(color: .secondary)
             case .queued:  Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
-            case .idle:    Image(systemName: "circle").font(.orbitGlyph).foregroundStyle(.secondary)
+            // Idle draws nothing (owner, 2026-11-27): a settled row is already said by its line and its
+            // VoiceOver value, and a hollow circle beside the time read as a control.
+            case .idle:    EmptyView()
             }
         } else {
             legacyCue

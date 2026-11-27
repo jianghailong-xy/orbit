@@ -246,6 +246,9 @@ type gatewayMetrics struct {
 	heartbeatForwards *counter
 	heartbeatDuration *histogram
 	heartbeatFacts    *counter
+	factProcesses     *gauge
+	factPeerAsks      *counter
+	factPeerAnswers   *counter
 	welcomeLookups    *counter
 	eventBatches      *counter
 	eventsStored      *counter
@@ -314,7 +317,10 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 		rpcDuration:       newHistogram("link_rpc_duration_seconds", "From a forwarded request's start to its route's answer.", linkDurationBounds...),
 		heartbeatForwards: newCounter("link_heartbeat_forwards_total", "Heartbeats forwarded, by what became of them.", "result"),
 		heartbeatDuration: newHistogram("link_heartbeat_forward_duration_seconds", "From a heartbeat's forwarding to the route's answer.", linkDurationBounds...),
-		heartbeatFacts:    newCounter("link_heartbeat_facts_total", "Heartbeat facts, by how the gateway read them: whole, cached (a digest it held), unknown_digest, invalid_json, digest_mismatch, ignored.", "result"),
+		heartbeatFacts:    newCounter("link_heartbeat_facts_total", "Heartbeat facts, by how the gateway read them: whole, cached (a digest it held), peer (a digest another node held), unknown_digest (asked of the runner), invalid_json, digest_mismatch, ignored.", "result"),
+		factProcesses:     newGauge("link_fact_processes", "Runner processes whose heartbeat facts this node holds: those with a connection here, and those whose last one ended less than 15 minutes ago."),
+		factPeerAsks:      newCounter("link_fact_peer_asks_total", "Asks of the other nodes for facts a beat sent by a digest this node did not hold, by outcome: answered (all of them), partial, no_answer, malformed.", "result"),
+		factPeerAnswers:   newCounter("link_fact_peer_answers_total", "Answers this node gave another node's ask for a process's facts."),
 		welcomeLookups:    newCounter("link_welcome_lookups_total", "What the welcome route answered for a Welcome; anything but answered sends a Welcome without its sessions and release.", "result"),
 		eventBatches:      newCounter("link_event_batches_total", "Event batches, by what became of them.", "result"),
 		eventsStored:      newCounter("link_events_stored_total", "Durable events the ingest route stored and the gateway acknowledged."),
@@ -376,6 +382,9 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 	for _, r := range []string{"forwarded", "want_facts", "failed", "refused", "superseded"} {
 		m.heartbeatForwards.preset(r)
 	}
+	for _, r := range []string{"answered", "partial", "no_answer"} {
+		m.factPeerAsks.preset(r)
+	}
 	for _, r := range []string{"stored", "credit_exceeded", "queue_full", "gap", "no_answer", "refused", "refused_retryable", "failed_behind"} {
 		m.eventBatches.preset(r)
 	}
@@ -407,7 +416,7 @@ func newGatewayMetrics(version string, deny *denyList) *gatewayMetrics {
 		m.tlsNotAfter, m.tlsReloads, m.tlsHandshakeErrors,
 		m.rpcs, m.hints, m.hintsSlow, m.hintSubscriptions, m.natsConnected, m.natsReconnects,
 		m.backendCalls, m.backendRetries, m.backendDuration, m.rpcResults, m.rpcDuration,
-		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts, m.welcomeLookups,
+		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts, m.factProcesses, m.factPeerAsks, m.factPeerAnswers, m.welcomeLookups,
 		m.eventBatches, m.eventsStored, m.eventAckDuration, m.ingestEvents, m.ingestBytes, m.ingestWaiting, m.creditReduced, m.creditChanges,
 		m.mergeCalls, m.mergeFlushes, m.mergeAlone, m.mergeBatches, m.mergeCallDuration, m.mergeHeld,
 		m.liveEvents, m.watchedSessions, m.prefixRequests, m.bgTailRequests, m.queueFull, m.streams, m.openStreams,
