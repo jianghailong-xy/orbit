@@ -1,6 +1,6 @@
 [
   {
-    "id": "2tDLGb40pZ6nLyvgob80NT",
+    "id": "AzxpGcrr2bt4FjniCqKgT",
     "name": "workstation-gpu",
     "displayName": null,
     "hostname": null,
@@ -9,8 +9,8 @@
     "maxConcurrent": 20,
     "burstConcurrent": 2,
     "version": null,
-    "lastHeartbeatAt": "2026-11-27T08:58:22.106Z",
-    "enrolledAt": "2026-11-27T08:58:22.110Z",
+    "lastHeartbeatAt": "2026-11-27T09:34:21.285Z",
+    "enrolledAt": "2026-11-27T09:34:21.420Z",
     "position": null,
     "planUsage": null,
     "modelCatalog": {
@@ -79,15 +79,15 @@
     ],
     "engineUpdateDismissals": {},
     "agentFix": {
-      "workspaceId": "7kQ2FUP094bLG2WSZlTQ2H",
+      "workspaceId": "5OvzQzYEzgbncxscEUaR19",
       "workspaceName": "orbit",
       "engine": "claude",
       "engineName": "Claude Code",
       "blocked": null,
       "fixing": [],
       "handled": [],
-      "workspacePublicId": "7kQ2FUP094bLG2WSZlTQ2H",
-      "agentId": "7kQ2FUP094bLG2WSZlTQ2H",
+      "workspacePublicId": "5OvzQzYEzgbncxscEUaR19",
+      "agentId": "5OvzQzYEzgbncxscEUaR19",
       "agentName": "orbit"
     },
     "antigravity": {
@@ -119,13 +119,13 @@
       "foreignProcesses": []
     },
     "online": true,
-    "activeSessions": 6,
+    "activeSessions": 5,
     "commands": [],
     "skills": [],
-    "publicId": "2tDLGb40pZ6nLyvgob80NT"
+    "publicId": "AzxpGcrr2bt4FjniCqKgT"
   },
   {
-    "id": "3CuxsNRXKMZ6HUX9OJznLz",
+    "id": "mYBwSXWkBqYWgzGb1KAex",
     "name": "root-runner",
     "displayName": null,
     "hostname": null,
@@ -134,8 +134,8 @@
     "maxConcurrent": 20,
     "burstConcurrent": 2,
     "version": null,
-    "lastHeartbeatAt": "2026-11-27T08:58:22.122Z",
-    "enrolledAt": "2026-11-27T08:58:22.122Z",
+    "lastHeartbeatAt": "2026-11-27T09:34:21.865Z",
+    "enrolledAt": "2026-11-27T09:34:21.865Z",
     "position": null,
     "planUsage": null,
     "modelCatalog": {
@@ -204,15 +204,15 @@
     ],
     "engineUpdateDismissals": {},
     "agentFix": {
-      "workspaceId": "2KMAzkOmzBHIEXn5a1p4Ts",
+      "workspaceId": "ysG6VKNCxmQ1eKcNQjZVF",
       "workspaceName": "orbit",
       "engine": "claude",
       "engineName": "Claude Code",
       "blocked": null,
       "fixing": [],
       "handled": [],
-      "workspacePublicId": "2KMAzkOmzBHIEXn5a1p4Ts",
-      "agentId": "2KMAzkOmzBHIEXn5a1p4Ts",
+      "workspacePublicId": "ysG6VKNCxmQ1eKcNQjZVF",
+      "agentId": "ysG6VKNCxmQ1eKcNQjZVF",
       "agentName": "orbit"
     },
     "antigravity": {
@@ -247,6 +247,6 @@
     "activeSessions": 1,
     "commands": [],
     "skills": [],
-    "publicId": "3CuxsNRXKMZ6HUX9OJznLz"
+    "publicId": "mYBwSXWkBqYWgzGb1KAex"
   }
 ]

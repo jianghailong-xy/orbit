@@ -107,7 +107,7 @@ class PermissionModeShellTest : ComposerShellTest() {
     }
 
     /** The runner's correction, heard on the session's stream, reads the session again: the control is Auto, and the report and the
-     * correction are one line. */
+     * correction are one line. The two payloads are one session, read before the runner acted and after. */
     @Test fun theRunnersCorrectionIsReadAtOnceAndSaidInOneLine() {
         modeClock = { momentOf("correcting", 5) }
         session("correcting")

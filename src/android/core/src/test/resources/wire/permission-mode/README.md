@@ -19,8 +19,8 @@ How they were made, on this branch's server code:
 | File | Session |
 |---|---|
 | `session-running-auto.json` | Asked for Auto, claimed in Auto. |
-| `session-correcting.json` | Asked for Auto; Claude's init frame said Default (ENGINE_REPORT). |
-| `session-corrected.json` | The same, then the runner's correction back to Auto (RUNNER_CORRECTION). |
+| `session-correcting.json` | Asked for Auto; Claude's init frame said Default (ENGINE_REPORT). Read before the runner acted. |
+| `session-corrected.json` | The same session read again after the runner's correction back to Auto (RUNNER_CORRECTION). |
 | `session-no-auto-model.json` | Asked for Auto; the owner picked Haiku 4.5 on Android, which has no Auto (OWNER_PICK to Default). |
 | `session-every-cause.json` | Every cause in turn: claim, Claude's report and the correction, the owner's picks on the web, iOS and Android, a re-spawn and its correction, Orbit's own model move, and the owner's Haiku 4.5 pick last. |
 | `session-root-runner.json` | Asked for Bypass on a root runner: the claim handed Auto. |

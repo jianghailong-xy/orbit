@@ -62,7 +62,7 @@ class PermissionModesWireTest {
 
     @Test fun theOpenListsRowsCarryTheModeRunningAndNoHistory() {
         val rows = fixture("sessions-open").let { it as? JsonArray ?: it.jsonObject["sessions"]!!.jsonArray }.map { it.jsonObject }
-        assertEquals(7, rows.size)
+        assertEquals(6, rows.size)
         for (row in rows) {
             assertTrue(PermissionModes.reported(row))
             assertNotNull(PermissionModes.intent(row)); assertNotNull(PermissionModes.actual(row)); assertNotNull(PermissionModes.actualAt(row))
@@ -76,7 +76,7 @@ class PermissionModesWireTest {
     @Test fun theBoardsControlForEachCapturedSession() {
         assertEquals(ModeCapsule("Auto"), capsule(session("running-auto")))
         assertEquals(ModeCapsule("Auto"), capsule(session("corrected")))
-        // Claude's report, read while the runner switches it back, and a minute on.
+        // Claude's report, read while the runner switches it back, and a minute on (the same session as "corrected", read earlier).
         val correcting = session("correcting")
         assertEquals(ModeCapsule("Default → Auto", Gap.CORRECTING, ModeCapsule.Head("Running in Default.",
             "Claude started below the Auto you asked for; the runner is switching it to Auto now.")), capsule(correcting))

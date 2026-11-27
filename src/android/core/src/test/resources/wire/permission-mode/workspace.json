@@ -1,5 +1,5 @@
 {
-  "id": "7kQ2FUP094bLG2WSZlTQ2H",
+  "id": "5OvzQzYEzgbncxscEUaR19",
   "name": "orbit",
   "description": null,
   "model": null,
@@ -19,7 +19,7 @@
   "modelRoutingProviders": [],
   "targetRunnerId": null,
   "targetLabels": [],
-  "runnerId": "2tDLGb40pZ6nLyvgob80NT",
+  "runnerId": "AzxpGcrr2bt4FjniCqKgT",
   "workDir": "/tmp/pm-capture",
   "repoUrl": null,
   "env": null,
@@ -47,15 +47,15 @@
   "cloneStartedAt": null,
   "cloneFinishedAt": null,
   "cloneCredential": null,
-  "ownerId": "354lh6bftY5h1QwYAjoO4",
-  "createdAt": "2026-11-27T08:58:22.116Z",
+  "ownerId": "354mZph6cAnuwk99vyYX8",
+  "createdAt": "2026-11-27T09:34:21.641Z",
   "deletedAt": null,
   "position": null,
   "runner": {
-    "id": "2tDLGb40pZ6nLyvgob80NT",
+    "id": "AzxpGcrr2bt4FjniCqKgT",
     "name": "workstation-gpu",
     "displayName": null,
-    "publicId": "2tDLGb40pZ6nLyvgob80NT"
+    "publicId": "AzxpGcrr2bt4FjniCqKgT"
   },
   "lastEngine": "claude",
   "lastProvider": "claude",
@@ -66,13 +66,13 @@
   "mainCheckoutActions": false,
   "repoCleanup": null,
   "antigravityKeyAvailableByRunner": {
-    "2tDLGb40pZ6nLyvgob80NT": false,
-    "3CuxsNRXKMZ6HUX9OJznLz": false
+    "AzxpGcrr2bt4FjniCqKgT": false,
+    "mYBwSXWkBqYWgzGb1KAex": false
   },
-  "lastActiveAt": "2026-11-27T08:58:39.633Z",
-  "sessionCount": 6,
-  "publicId": "7kQ2FUP094bLG2WSZlTQ2H",
-  "ownerPublicId": "354lh6bftY5h1QwYAjoO4",
-  "runnerPublicId": "2tDLGb40pZ6nLyvgob80NT",
+  "lastActiveAt": "2026-11-27T09:34:41.066Z",
+  "sessionCount": 5,
+  "publicId": "5OvzQzYEzgbncxscEUaR19",
+  "ownerPublicId": "354mZph6cAnuwk99vyYX8",
+  "runnerPublicId": "AzxpGcrr2bt4FjniCqKgT",
   "targetRunnerPublicId": null
 }
