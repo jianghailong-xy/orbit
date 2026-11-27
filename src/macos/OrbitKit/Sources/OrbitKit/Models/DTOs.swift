@@ -1404,6 +1404,9 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// A wiki chat's page and selection, beside the owner's words rather than in them (wiki contract
     /// `chat.turns`). Nil leaves the field out: any other session refuses one.
     public let wikiContext: WikiChatContext?
+    /// A Drive chat's folder and selection, beside the owner's words (`driveContext`, src/shared/src/driveChat.ts).
+    /// Nil leaves the field out: any other session refuses one.
+    public let driveContext: DriveChatContext?
     /// Prompt optimizer (D2): the text is the optimizer's prompt, sent exactly as inserted, so
     /// Translation neither holds nor translates it. Nil leaves the key out (`PromptOptimizerState.skipTranslation`).
     public let skipTranslation: Bool?
@@ -1412,14 +1415,15 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// (`PromptOptimizerState.optimizedTranslation`).
     public let optimizedTranslation: String?
     public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
-                intent: String? = nil, wikiContext: WikiChatContext? = nil, skipTranslation: Bool? = nil,
-                optimizedTranslation: String? = nil) {
+                intent: String? = nil, wikiContext: WikiChatContext? = nil, driveContext: DriveChatContext? = nil,
+                skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
         self.intent = intent
         self.wikiContext = wikiContext
+        self.driveContext = driveContext
         self.skipTranslation = skipTranslation
         self.optimizedTranslation = optimizedTranslation
     }
@@ -2318,6 +2322,8 @@ public struct ResumeRequest: Codable, Sendable {
     /// A wiki chat's page and selection: a chat's next message may revive it, and carries them here as on
     /// a live one (wiki contract `chat.turns`). Nil leaves the field out.
     public let wikiContext: WikiChatContext?
+    /// A Drive chat's folder and selection, which revive it too. Nil leaves the field out.
+    public let driveContext: DriveChatContext?
     /// Prompt optimizer (D2): a revive whose words are the optimizer's prompt, sent as inserted. Nil omits it.
     public let skipTranslation: Bool?
     /// Prompt optimizer (D2): a revive whose words are the reading copy Use inserted; this is its
@@ -2328,7 +2334,9 @@ public struct ResumeRequest: Codable, Sendable {
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
                 stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil,
+                driveContext: DriveChatContext? = nil,
                 skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
+        self.driveContext = driveContext
         self.skipTranslation = skipTranslation
         self.optimizedTranslation = optimizedTranslation
         self.clientTurnId = clientTurnId

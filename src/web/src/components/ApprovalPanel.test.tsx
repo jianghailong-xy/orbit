@@ -1285,5 +1285,7 @@ it('shows and remembers the complete command for a check-only scheduled approval
   const approval = { id: 'exact-card', toolName: 'Bash', input: { command, orbitScheduleCheckOnly: true }, status: 'PENDING' } as ApprovalInfo;
   expect(rememberRulesFor(approval)).toEqual([{ toolName: 'Bash', ruleContent: command }]);
   expect(render(approval)).toContain('print(open(&#x27;watched.txt&#x27;).read())');
-  expect(rememberRulesFor({ ...approval, input: { command } })).toEqual([{ toolName: 'Bash', ruleContent: 'python3:*' }]);
+  // An ordinary card remembers prefixes, and none for an interpreter: python3:* would cover every script.
+  expect(rememberRulesFor({ ...approval, input: { command: 'psql -c "select 1" db' } })).toEqual([{ toolName: 'Bash', ruleContent: 'psql:*' }]);
+  expect(rememberRulesFor({ ...approval, input: { command } })).toEqual([]);
 });

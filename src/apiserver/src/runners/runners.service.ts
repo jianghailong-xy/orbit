@@ -70,7 +70,7 @@ import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { clampManagedConcurrency, managedConcurrencyCeiling, managedConcurrencyClampNotice } from '../managed-runners/managed-runner-concurrency';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from '../managed-runners/managed-runner-runtime';
-import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
+import { RUNNER_BEATS, RUNNER_PRESENCE, runnerIsOnline, runnerPresentAt } from './runner-presence';
 import { runningSessionCounts } from './runner-background-holders';
 import { runnerResourcesAnswerOf } from './runner-resources';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
@@ -168,7 +168,7 @@ export class RunnersService {
         // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`, and the
         // sessions its background jobs hold slots for, which `activeSessions` counts while it is online.
         ...RUNNER_BEATS,
-        presence: { select: { lastBeatAt: true, backgroundJobSessionIds: true } },
+        presence: { select: { ...RUNNER_PRESENCE, backgroundJobSessionIds: true } },
         enrolledAt: true,
         position: true,
         availableCommands: true,
@@ -299,8 +299,9 @@ export class RunnersService {
     }, index) => ({
       ...r,
       managed: !!managedRunner,
-      // Its last beat, from either record of it: what every client reads "last seen" from.
-      lastHeartbeatAt: runnerLastBeatAt({ lastHeartbeatAt: r.lastHeartbeatAt, presence }),
+      // When it was last present — a beat from either record of it, or heard over the link: what every client reads
+      // "last seen", and offline, from.
+      lastHeartbeatAt: runnerPresentAt({ lastHeartbeatAt: r.lastHeartbeatAt, presence }),
       // Without the part of a removed Default, as the engines are.
       planUsage: usedPlanUsage(r.planUsage, used[index]),
       // Never expose null or malformed JSON: clients can always index this as a provider map.

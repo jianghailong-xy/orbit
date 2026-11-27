@@ -141,7 +141,12 @@ HeartbeatAck carries the `HintState`.
 - **Heartbeats** are counted, logged and [forwarded](#heartbeats), and each is answered with what the heartbeat route
   says, in a `HeartbeatAck` saying `MODE_LINK`.
 - **Pings.** The gateway pings every 20s and measures the round trip (`link_rtt_seconds`). A ping unanswered for 60s
-  closes the connection. Whether the runner process is alive is judged by its heartbeats (§6.1), which version 0
+  closes the connection. A runner that sent anything since the last 20s tick is not pinged: it is heard from, and on a
+  slow path its pong would wait behind its own upload. A ping that could not be written within the library's 5s
+  (`link_ping_write_blocked_total`) is tried again at the next tick when it only waited for the write lock, and ends
+  the connection as `write_timeout` when its own write stalled. The gateway writes no message over 16 KiB: a larger
+  frame goes in pieces. When a connection ends, its log line says the bytes read and written, the largest message
+  written and the longest single write (§15.15). Whether the runner process is alive is judged by its heartbeats (§6.1), which version 0
   only records.
 - **Token lifetime.** Version 0 cannot renew a token inside the connection (`TokenRefresh`). When the token expires,
   the connection is closed with `CLOSE_CODE_UNAUTHENTICATED`. A runner fetches a fresh token and opens its next
@@ -554,8 +559,9 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_handshakes_total` | counter | `result`: ok, unauthenticated, rate_limited, too_many_connections, draining, not_websocket, hello_timeout, protocol_error, upgrade_required, upgrade_failed |
 | `link_handshake_duration_seconds` | histogram | — (from the upgrade request to Welcome written) |
 | `link_token_refusals_total` | counter | `reason`: MISSING, MALFORMED, SIGNATURE, AUDIENCE, EXPIRED, CLAIMS, CELL, REVOKED |
-| `link_disconnects_total` | counter | `reason`: client_closed, connection_lost, superseded, ping_timeout, token_expired, revoked, protocol_error, slow_consumer, drained, shutdown, internal_error; drill_lost_answer only under `LINK_DRILL_LOSE_ANSWERS` |
+| `link_disconnects_total` | counter | `reason`: client_closed, connection_lost, superseded, ping_timeout, token_expired, revoked, protocol_error, slow_consumer, drained, shutdown, internal_error, write_timeout (a write passed its deadline and the library closed the connection); drill_lost_answer only under `LINK_DRILL_LOSE_ANSWERS` |
 | `link_rtt_seconds` | histogram | — (WebSocket ping round trips) |
+| `link_ping_write_blocked_total` | counter | — (pings not written within the library's 5 s: tried again after a wait for the write lock, write_timeout after a stalled write) |
 | `link_frames_received_total`, `link_frames_sent_total` | counter | `type`: the frame body |
 | `link_frame_decode_errors_total` | counter | — |
 | `link_heartbeats_total` | counter | — |

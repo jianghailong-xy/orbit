@@ -226,6 +226,38 @@
       "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\",\"filingState\":\"OPEN\"}"
     },
     {
+      "key": "released by a move / listRow",
+      "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "released by a move / detail",
+      "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "released by a move / sessionSummary",
+      "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "released by a move / sessionEnded",
+      "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "released by a move / linkPreview",
+      "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\"}"
+    },
+    {
+      "key": "released by a move / guestRow",
+      "legacy": "{\"status\":\"CANCELLED\",\"sessionState\":\"DORMANT\"}"
+    },
+    {
+      "key": "released by a move / sharedHead",
+      "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "released by a move / taskRun",
+      "legacy": "{\"status\":\"CANCELLED\",\"runStatus\":\"CANCELLED\",\"runState\":\"ENDED\",\"sessionState\":\"DORMANT\",\"filingState\":\"OPEN\"}"
+    },
+    {
       "key": "job running / listRow",
       "legacy": "{\"status\":\"AWAITING_INPUT\",\"runStatus\":\"AWAITING_INPUT\",\"runState\":\"AWAITING_INPUT\",\"sessionState\":\"AWAITING_INPUT\",\"filingState\":\"OPEN\"}"
     },

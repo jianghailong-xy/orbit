@@ -19,6 +19,33 @@ object ApprovalRules {
         WorkspaceWriteCards.createTool, WorkspaceWriteCards.updateTool, "orbit_browser_clear_logins")
     private val shells = setOf("bash", "/bin/bash", "/usr/bin/bash", "sh", "/bin/sh", "/usr/bin/sh", "zsh", "/bin/zsh", "/usr/bin/zsh")
     private val commandKeywords = setOf("if", "then", "elif", "else", "while", "until", "do", "time", "coproc")
+    /** Words that lead a command without being its program: what follows them is judged instead. */
+    private val leadingKeywords = commandKeywords + setOf("fi", "done", "esac", "!", "{", "}")
+    /** Words that open a construct whose next word is a name or a pattern, not a program to run. */
+    private val constructHeaders = setOf("for", "select", "case", "function")
+    /** Programs whose second word picks what they do (`git status`); any other program's second word is an argument. */
+    private val subcommandPrograms = setOf(
+        "git", "gh", "npm", "pnpm", "yarn", "bun", "npx", "deno", "node-gyp",
+        "docker", "podman", "kubectl", "helm", "terraform", "gcloud", "aws", "az",
+        "go", "cargo", "rustup", "swift", "xcrun", "dotnet", "mvn", "gradle", "gradlew", "flutter", "adb",
+        "pip", "pip3", "uv", "poetry", "conda", "brew", "apt", "apt-get",
+        "systemctl", "launchctl", "defaults", "make", "orbit")
+    /** Programs that change files or the environment, or run whatever they are given: allowed once, never remembered. */
+    private val neverRemembered = setOf(
+        "cp", "mv", "rm", "rmdir", "ln", "chmod", "chown", "chgrp", "tee", "dd", "touch", "truncate",
+        "mkdir", "install", "rsync", "unlink", "shred",
+        "export", "env", "set", "unset", "declare", "typeset", "readonly", "local", "alias", "source", ".",
+        "eval", "exec", "sudo", "doas", "xargs", "nohup", "timeout", "nice", "command", "builtin",
+        // Shells and interpreters: a rule for one covers every script it is given.
+        "sh", "bash", "zsh", "dash", "ksh", "fish", "node", "ruby", "perl", "php", "osascript", "awk", "gawk", "mawk",
+        // `find -delete`/`-exec` and `sed -i` change files.
+        "find", "sed")
+    /** `python`, `python3`, `python3.12`: interpreters too. */
+    private val python = Regex("^python[0-9.]*$")
+    /** Sub-commands that run any code or package they are given (`bun run x.ts`, `npm exec`), per program. */
+    private val runsGivenCode = mapOf(
+        "bun" to setOf("run", "x", "exec", "repl"), "deno" to setOf("run", "eval", "repl", "x"),
+        "npm" to setOf("exec"), "pnpm" to setOf("exec", "dlx"), "yarn" to setOf("exec", "dlx"))
     fun remember(tool: String, input: JsonObject): List<PermissionRule> = when {
         tool.isBlank() || tool in asks -> emptyList()
         tool == "Bash" && input.flag("orbitScheduleCheckOnly") -> input.text("command")?.takeIf { it.isNotBlank() }
@@ -83,9 +110,64 @@ object ApprovalRules {
         }
         return i
     }
+    /** Where a command substitution opens at [i], as the index its body starts at, or -1. `$((` is arithmetic. */
+    private fun substitutionBody(command: String, i: Int): Int = when {
+        command[i] == '`' -> i + 1
+        command[i] == '$' && command.getOrNull(i + 1) == '(' && command.getOrNull(i + 2) != '(' -> i + 2
+        else -> -1
+    }
+    /** Where the command substitution whose body starts at [start] ends: just past the `)` or backtick that closes it, or at
+     * the end of the command when nothing does. Quotes and nested substitutions inside are read so they do not end it early. */
+    private fun endOfSubstitution(command: String, start: Int, backtick: Boolean): Int {
+        var depth = 1
+        var i = start
+        while (i < command.length) {
+            val c = command[i]
+            when {
+                c == '\\' -> i += 2
+                backtick -> { if (c == '`') return i + 1; i++ }
+                c == '\'' -> i = command.indexOf('\'', i + 1).let { if (it < 0) command.length else it + 1 }
+                c == '"' -> {
+                    i++
+                    while (i < command.length && command[i] != '"') {
+                        val body = substitutionBody(command, i)
+                        i = when {
+                            command[i] == '\\' -> i + 2
+                            body >= 0 -> endOfSubstitution(command, body, command[i] == '`')
+                            else -> i + 1
+                        }
+                    }
+                    i++
+                }
+                c == '`' -> i = endOfSubstitution(command, i + 1, true)
+                c == '(' -> { depth++; i++ }
+                c == ')' -> { if (--depth == 0) return i + 1; i++ }
+                else -> i++
+            }
+        }
+        return command.length
+    }
+    /** The prefix "always allow" remembers for one sub-command, read with its substitutions replaced by `$_`, or null: leading
+     * keywords skipped, a second word only for a sub-command program, nothing for a program that changes files or the environment. */
+    private fun rememberedPrefix(head: String): String? {
+        val words = head.trim().split(Regex("\\s+"))
+        var i = 0
+        while (i < words.size && (words[i] in leadingKeywords || Regex("^[A-Za-z_][A-Za-z0-9_]*=.*").matches(words[i]))) i++
+        val program = words.getOrNull(i)?.takeIf { it !in constructHeaders && Regex("^[A-Za-z./_-][\\w./-]*$").matches(it) }
+            ?: return null
+        val name = program.substringAfterLast('/')
+        if (name in neverRemembered || python.matches(name)) return null
+        if (name !in subcommandPrograms) return program
+        val sub = words.getOrNull(i + 1)?.takeIf { Regex("^[A-Za-z][\\w-]*$").matches(it) && it !in runsGivenCode[name].orEmpty() }
+            ?: return null
+        return "$program $sub"
+    }
     fun bash(command: String): List<PermissionRule> {
         val segments = mutableListOf<String>()
+        val heads = mutableListOf<String>()
         val part = StringBuilder()
+        // The sub-command with each command substitution replaced by `$_`: what a rule is taken from.
+        val head = StringBuilder()
         // The quote that is open: ' and " as themselves, $ for ANSI-C $'...', which closes on '.
         var quote: Char? = null
         var wordStart = true
@@ -93,6 +175,16 @@ object ApprovalRules {
         var inArithmetic = false
         var i = 0
         while (i < command.length) {
+            val body = if (quote == null || quote == '"') substitutionBody(command, i) else -1
+            if (body >= 0) {
+                // A command substitution runs a second command to build this one: one piece of this sub-command, never split
+                // at what it holds, and no rule is taken from inside it.
+                val end = endOfSubstitution(command, body, command[i] == '`')
+                part.append(command, i, end); head.append("\$_")
+                i = end; wordStart = false
+                continue
+            }
+            val start = part.length
             val c = command[i++]
             val angles = quote == null && c == '<' && command.getOrNull(i) == '<' && !inArithmetic
             val hereString = angles && command.getOrNull(i + 1) == '<'
@@ -120,7 +212,7 @@ object ApprovalRules {
                 }
                 c == ';' || c == '\n' || c == '|' || (c == '&' && command.getOrNull(i) == '&') -> {
                     if ((c == '&' || c == '|') && command.getOrNull(i) == c) i++
-                    segments += part.toString(); part.clear(); wordStart = true; inArithmetic = false
+                    segments += part.toString(); part.clear(); heads += head.toString(); head.clear(); wordStart = true; inArithmetic = false
                     if (c == '\n' && heredocs.isNotEmpty()) { i = endOfHeredocBodies(command, i, heredocs); heredocs.clear() }
                 }
                 else -> {
@@ -130,16 +222,14 @@ object ApprovalRules {
                     part.append(c); wordStart = c in " \t&()<>"
                 }
             }
+            if (part.length > start) head.append(part, start, part.length)
         }
         segments += part.toString()
+        heads += head.toString()
         val tokens = segments.map { segment -> segment.trim().split(Regex("\\s+"))
             .dropWhile { Regex("^[A-Za-z_][A-Za-z0-9_]*=.*").matches(it) } }
         if (tokens.any { it.firstOrNull() in shells &&
                 (it.getOrNull(1) == "--command" || Regex("^-[A-Za-z]*c[A-Za-z]*$").matches(it.getOrNull(1) ?: "")) }) return emptyList()
-        return tokens.mapNotNull { words ->
-            val program = words.firstOrNull()?.takeIf { Regex("^[A-Za-z./_-][\\w./-]*$").matches(it) } ?: return@mapNotNull null
-            val sub = words.getOrNull(1)?.takeIf { Regex("^[A-Za-z][\\w-]*$").matches(it) }
-            if (sub == null) program else "$program $sub"
-        }.filter { it !in commandKeywords }.distinct().map { PermissionRule("Bash", "$it:*") }
+        return heads.mapNotNull(::rememberedPrefix).filter { it !in commandKeywords }.distinct().map { PermissionRule("Bash", "$it:*") }
     }
 }

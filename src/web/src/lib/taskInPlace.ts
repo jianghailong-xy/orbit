@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { matchPath, useLocation, useNavigate, type Location } from 'react-router-dom';
 import { routeId } from './idCodec';
 
@@ -17,6 +17,35 @@ import { routeId } from './idCodec';
  * still goes to TaskRoute.
  */
 export const TASK_PARAM = 'task';
+
+/**
+ * Beside a conversation the open task is held here, not in the address (owner 2026-11-27): pressing
+ * Task ›, or a task link in the conversation, opens it in the column without the URL changing. It
+ * belongs to the conversation it was opened on, and leaving that conversation forgets it. ✕, Esc and
+ * Task › close it; Back leaves the conversation, as it does with nothing open. A pasted address with
+ * `?task=` still opens its task, as on every page.
+ */
+interface HeldTask {
+  pathname: string;
+  taskId: string;
+}
+let held: HeldTask | null = null;
+const heldListeners = new Set<() => void>();
+function hold(next: HeldTask | null): void {
+  held = next;
+  for (const listener of heldListeners) listener();
+}
+function subscribeHeld(listener: () => void): () => void {
+  heldListeners.add(listener);
+  return () => heldListeners.delete(listener);
+}
+const readHeld = (): HeldTask | null => held;
+const useHeldTask = (): HeldTask | null => useSyncExternalStore(subscribeHeld, readHeld, readHeld);
+
+/** A conversation's own page, where a task opens beside it without touching the address. */
+export function isSessionPage(pathname: string): boolean {
+  return matchPath('/sessions/:id', pathname) != null;
+}
 
 const HOMES = ['/tasks', '/tasks/:id', '/lists/:key', '/projects/:id', '/projects/:id/tasks/:taskId'];
 
@@ -60,6 +89,8 @@ function withTask(location: Location, taskId: string | null) {
 /** The task open over this page, if any. */
 export function useTaskOverPage(): string | null {
   const location = useLocation();
+  const kept = useHeldTask();
+  if (kept && kept.pathname === location.pathname) return kept.taskId;
   const raw = new URLSearchParams(location.search).get(TASK_PARAM);
   return raw ? (routeId(raw) ?? raw) : null;
 }
@@ -74,10 +105,37 @@ export function useOpenTaskOverPage() {
   return useCallback(
     (taskId: string) => {
       const already = new URLSearchParams(location.search).has(TASK_PARAM);
+      if (isSessionPage(location.pathname)) {
+        hold({ pathname: location.pathname, taskId: routeId(taskId) ?? taskId });
+        // A task the address opened gives way to this one, so closing it leaves nothing behind.
+        if (already) navigate(withTask(location, null), { replace: true, state: location.state });
+        return;
+      }
       navigate(withTask(location, taskId), {
         replace: already,
         state: already ? location.state : ({ taskOverPage: true } satisfies TaskOverPageState),
       });
+    },
+    [location, navigate],
+  );
+}
+
+/**
+ * Show a task over this page in place of the address it has, adding no history entry: what a page
+ * opens by itself (a task's own run conversation opens its task beside it, lib/taskRunSidebar), so
+ * Back still leaves the page and ✕ takes the parameter off again. On a conversation's own page it is held
+ * beside it, as a pressed Task › is, and the address is left alone.
+ */
+export function useShowTaskOverPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  return useCallback(
+    (taskId: string) => {
+      if (isSessionPage(location.pathname)) {
+        hold({ pathname: location.pathname, taskId: routeId(taskId) ?? taskId });
+        return;
+      }
+      navigate(withTask(location, taskId), { replace: true, state: location.state });
     },
     [location, navigate],
   );
@@ -89,6 +147,10 @@ export function useCloseTaskOverPage() {
   const navigate = useNavigate();
   const location = useLocation();
   return useCallback(() => {
+    if (held && held.pathname === location.pathname) {
+      hold(null);
+      return;
+    }
     if (openedOverPage(location.state)) navigate(-1);
     else navigate(withTask(location, null), { replace: true });
   }, [location, navigate]);
@@ -104,6 +166,10 @@ export function useCloseTaskOverPage() {
 export function useTaskLinksOpenInPlace() {
   const location = useLocation();
   const open = useOpenTaskOverPage();
+  // Leaving the conversation forgets the task held beside it.
+  useEffect(() => {
+    if (held && held.pathname !== location.pathname) hold(null);
+  }, [location.pathname]);
   useEffect(() => {
     if (isTaskHome(location.pathname)) return;
     const onClick = (event: MouseEvent) => {

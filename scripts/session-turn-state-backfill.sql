@@ -1,3 +1,6 @@
+-- D2-era: this reads or writes session.status, which deploy D4 (migration 1711) dropped. It runs on a database of
+-- deploy D1 or D2 only, and is kept for the record of those deploys.
+--
 -- One batch of the turn_state / phase backfill (docs/session-status-retirement-plan.md §4.4; task T3 runs it on
 -- production, with the owner's go, between deploy D1 and deploy D2). It writes production rows.
 --

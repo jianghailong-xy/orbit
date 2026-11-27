@@ -422,7 +422,7 @@ final class ListFreshnessWiringTests: XCTestCase {
         XCTAssertTrue(try slice(source("WikiModel.swift"), from: "func nudge() {", to: "\n    }")
             .contains("VisibilityGate.app.read(\"wiki.loaded\")"))
         XCTAssertTrue(try slice(source("WikiChatModel.swift"), from: "func nudge() {", to: "\n    }")
-            .contains("VisibilityGate.app.read(\"wiki-chat.loaded\")"))
+            .contains("VisibilityGate.app.read(origin == .drive ? \"drive-chat.loaded\" : \"wiki-chat.loaded\")"))
     }
 
     /// The conversation on screen reads nothing while hidden, whatever asks: its stream's events and

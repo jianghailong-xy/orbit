@@ -7,6 +7,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { conversationProjectPage, setConversationProjectPage } from '../lib/conversationProjectPage';
 import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 import type { Runner } from './TasksSidePanel';
 import { SessionSearch } from './SessionSearch';
 import { hoverTooltip } from '../test/tooltipHover';
@@ -268,6 +270,10 @@ beforeEach(() => {
       const inScope = params.has('workspaceId') ? rows : [...rows, ...remoteRows];
       return reply(inScope.filter((r) => r.lifecycleState === lifecycle &&
         (!params.has('projectId') || r.projectMembership?.projectId === params.get('projectId'))));
+    }
+    if (path.startsWith('/sessions/listing?')) {
+      listCalls.push(path);
+      return reply(answerListing(listingRules, [...rows, ...remoteRows], folders, path));
     }
     if (path.startsWith('/sessions/project-placement?')) {
       // What the server answers (SessionsService.projectPlacement), from every workspace's rows.
@@ -838,7 +844,8 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     const here = withWorkspace(pid(823), 'slow workspace');
     rows = [{ ...TASK, ...here }, { ...OLDER, ...here }];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
-    // The placement read is held: until it answers, the member waits in a row like a folder's.
+    // The placement read is held. The listing has placed the member as its own row already (its coordinator runs
+    // elsewhere), and the list still lands only once the placement answers.
     let answer = (): void => {};
     const held = new Promise<void>((resolve) => { answer = resolve; });
     const fixtureApi = vi.mocked(apiModule.api).getMockImplementation()! as (...args: unknown[]) => Promise<unknown>;
@@ -846,7 +853,8 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
       path.startsWith('/sessions/project-placement?')
         ? held.then(() => fixtureApi(path, ...rest))
         : fixtureApi(path, ...rest)) as unknown as typeof apiModule.api);
-    await mount(() => expect(titles()).toEqual(['Project Alpha', 'Older conversation']), `/workspaces/${here.workspaceId}`);
+    await mount(() => expect(titles()).toEqual(['Build the package', 'Older conversation']), `/workspaces/${here.workspaceId}`);
+    await settle();
     expect(shown()).toBe(`/workspaces/${here.workspaceId}`);
     await act(async () => answer());
     await untilAt(`/sessions/${TASK.id}`);

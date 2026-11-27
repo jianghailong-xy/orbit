@@ -23,8 +23,11 @@ describe('a workspace’s session list', () => {
   });
 
   it('has one Scheduled runs row on the list, only while the view has a run, and no folder rows on its page', () => {
-    expect(SOURCE).toContain('{!listProjectId && !openFolder && !onScheduledRuns && scheduledRuns.length > 0 && scheduledRunsRowView()}');
-    expect(SOURCE).toContain('{!listProjectId && !onScheduledRuns && folderListing?.folders.map((row) =>');
+    // The column's items (docs/session-list-scale-design.md §4): the row, then the folder rows, off its own page.
+    expect(SOURCE).toContain('const hasScheduledRuns = scheduledRuns.length > 0;');
+    expect(SOURCE).toContain("...(!listProjectId && !openFolder && !onScheduledRuns && hasScheduledRuns\n      ? [{ kind: 'scheduled' as const, key: 'scheduled-runs' }] : []),");
+    expect(SOURCE).toContain("case 'scheduled':\n        return scheduledRunsRowView();");
+    expect(SOURCE).toContain('...(!listProjectId && !onScheduledRuns ? liveListing.folders.map((row): ColumnItem =>');
     // A run's start reaches no list's stream, so the row's read polls.
     expect(SOURCE).toMatch(/sessionsQuery\(\{ runnerId: runner\.id, workspaceId: scopeWorkspaceId, view: effectiveView, scheduled: true \}\),\n\s+enabled: [^\n]+,\n\s+refetchInterval: 30_000,/);
   });

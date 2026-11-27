@@ -1,0 +1,12 @@
+# The runner link the way ai-sg reaches its server (weak-link-drill.sh): through the web gateway's port in plain ws://,
+# RUNNER_LINK_URL=same-origin, as deploy/runner-link/behind-web-gateway.env sets a deployment up. Only weak-link-drill.sh
+# lays this file over the staging stack's own. DRILL_LINK_GATEWAY_IMAGE, when the drill sets it, runs another link
+# gateway image in place of the one the stack built: production's, for the compatibility runs.
+services:
+  link-gateway:
+    image: ${DRILL_LINK_GATEWAY_IMAGE:-${STAGING_PROJECT}-link-gateway:local}
+    environment:
+      LINK_TLS_MODE: "off"
+  apiserver:
+    environment:
+      RUNNER_LINK_URL: same-origin

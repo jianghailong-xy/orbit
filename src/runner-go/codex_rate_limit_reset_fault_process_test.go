@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,7 +119,7 @@ func TestCodexResetFaultProcess(t *testing.T) {
 			}
 			capabilities := runnerCapabilitiesV1
 			if cmd.Capable != nil && !*cmd.Capable {
-				capabilities = codexResetFaultWithout(runnerCapabilitiesV1, codexRateLimitResetCapabilityV1)
+				capabilities = codexResetFaultWithout(runnerCapabilitiesV1, codexRateLimitResetCapabilityV1, codexRateLimitResetCapabilityV2)
 			}
 			sent := time.Now()
 			var response HeartbeatResponse
@@ -216,11 +217,12 @@ func codexResetFaultMillis(name string, fallback time.Duration) time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
-// codexResetFaultWithout is the comma-separated capability list without one capability.
-func codexResetFaultWithout(list, capability string) string {
+// codexResetFaultWithout is the comma-separated capability list without the named capabilities. A process that
+// "lacks the capability" lacks every version of it: the server hands a v2 declarer the command whatever else it says.
+func codexResetFaultWithout(list string, capabilities ...string) string {
 	var kept []string
 	for _, token := range strings.Split(list, ",") {
-		if token != capability {
+		if !slices.Contains(capabilities, token) {
 			kept = append(kept, token)
 		}
 	}

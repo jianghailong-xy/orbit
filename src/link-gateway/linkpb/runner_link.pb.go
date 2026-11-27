@@ -900,12 +900,14 @@ func (*Frame_BackgroundJobTailRequest) isFrame_Body() {}
 
 func (*Frame_BackgroundJobTailResponse) isFrame_Body() {}
 
-// A piece of a frame too large for one WebSocket message (§5.1: a message carries at most
-// Limits.max_frame_bytes). The sender encodes the whole Frame, cuts the bytes into pieces and sends
-// each piece in a Frame of its own, in order, at the priority of the frame being cut up; other frames
-// may be written between the pieces. The receiver joins the pieces of one frame_id in index order
-// and decodes the result as the original Frame. Pieces left incomplete when the connection closes
-// are discarded.
+// A piece of a frame sent in several WebSocket messages. A message carries at most
+// Limits.max_frame_bytes (§5.1), and a frame that does not fit must be cut up; a sender may cut up a
+// smaller one too, and neither side sends more than 16 KiB in one message, so that a ping, a pong or
+// a control frame never waits long behind one on a slow path (§15.15). The sender encodes the whole
+// Frame, cuts the bytes into pieces and sends each piece in a Frame of its own, in order, at the
+// priority of the frame being cut up; other frames may be written between the pieces. The receiver
+// joins the pieces of one frame_id in index order, whatever their sizes, and decodes the result as
+// the original Frame. Pieces left incomplete when the connection closes are discarded.
 type Chunk struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The id of the frame these pieces make up (that Frame's id).

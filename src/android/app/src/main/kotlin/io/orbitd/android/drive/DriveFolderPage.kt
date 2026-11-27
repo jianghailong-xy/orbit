@@ -103,7 +103,9 @@ internal fun DriveFolderPage(store: DriveStore, route: OrbitRoute, open: (OrbitR
     var uploadsSheet by remember { mutableStateOf(false) }
     LaunchedEffect(store.showUploads) { if (store.showUploads) { uploadsSheet = true; store.showUploads = false } }
     var menu by remember { mutableStateOf(false) }
-    PageBar.Bind(route, title, actions = {
+    // The chat's sheet at its full height takes the screen, the bar with it (board frames 11, 12).
+    LaunchedEffect(folderId, title) { store.chat.here = DriveChatHere(folderId, title) }
+    PageBar.Bind(route, title, folds = store.chat.shown && store.chat.expanded, actions = {
         IconButton(onClick = { naming = true }, Modifier.testTag("drive-new-folder")) { Icon(painterResource(R.drawable.ic_folder_plus), DriveLogic.NEW_FOLDER) }
         Box {
             IconButton(onClick = { menu = true }) { Icon(painterResource(R.drawable.ic_more), "More") }
@@ -138,7 +140,8 @@ internal fun DriveFolderPage(store: DriveStore, route: OrbitRoute, open: (OrbitR
         (if (root) it.parentId == null else ObjectId.same(it.parentId, folderId)) }
     val going = uploads.any { it.state == DriveUploadState.UPLOADING || it.state == DriveUploadState.QUEUED } || store.syncs.any { it.running }
     Box(Modifier.fillMaxSize().testTag("drive-folder")) {
-        LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = 96.dp)) {
+        // Room under the rows for Upload and the chat's button over it.
+        LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = 168.dp)) {
             if (!root) item { Crumb(DriveLogic.crumb(path?.split("/")?.filter { it.isNotEmpty() } ?: listOf(title))) }
             if (root) item { SearchField(query) { query = it } }
             if (going) item { UploadsCard(store) { uploadsSheet = true } }
@@ -155,12 +158,15 @@ internal fun DriveFolderPage(store: DriveStore, route: OrbitRoute, open: (OrbitR
             error?.let { item { ErrorBlock(it) { error = null; store.changed() } } }
             if (listing == null && error == null) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(20.dp)) }
             items(entries, key = { it.id }) { entry ->
+                // A Drive chat's change marks the row until it is opened (board frame 9).
+                val mark = store.chat.markOf(entry.id)
+                val opening = { store.chat.opened(entry.id); openEntry(entry, open) }
                 if (entry.isFolder) DriveRow(entry.name, AnnotatedString(DriveLogic.folderLine(entry, store.counts[entry.id])),
                     Modifier.testTag("drive-entry:${entry.name}"), leading = { EntryIcon(DriveLogic.Icon.FOLDER) },
-                    onClick = { openEntry(entry, open) }, onLongClick = { sheetFor = entry })
+                    onClick = opening, onLongClick = { sheetFor = entry }, mark = mark)
                 else DriveRow(entry.name, writerLine(store, entry.lastWriter, DriveLogic.formatWhen(entry.lastWriter.at ?: entry.updatedAt), openSession),
                     Modifier.testTag("drive-entry:${entry.name}"), leading = { EntryThumb(store, entry) },
-                    trailing = DriveLogic.formatSize(entry.sizeBytes), onClick = { openEntry(entry, open) }, onLongClick = { sheetFor = entry },
+                    trailing = DriveLogic.formatSize(entry.sizeBytes), onClick = opening, onLongClick = { sheetFor = entry }, mark = mark,
                     end = {
                         IconButton(onClick = { sheetFor = entry }, Modifier.size(36.dp).testTag("drive-more:${entry.name}")) {
                             Icon(painterResource(R.drawable.ic_more), "Actions for ${entry.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -192,8 +198,9 @@ internal fun DriveFolderPage(store: DriveStore, route: OrbitRoute, open: (OrbitR
             icon = { Icon(painterResource(R.drawable.ic_upload), null) }, onClick = { uploadSheet = true },
             expanded = !list.isScrollInProgress, containerColor = MaterialTheme.colorScheme.secondaryContainer,
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer, shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp).testTag("drive-upload"))
-        DriveSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 90.dp))
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = DriveMetrics.uploadBottom).testTag("drive-upload"))
+        // Over Upload and the chat's round button stacked on it, so neither covers the snackbar's Undo.
+        DriveSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 166.dp))
     }
 
     sheetFor?.let { entry ->

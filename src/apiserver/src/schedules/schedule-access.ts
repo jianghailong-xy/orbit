@@ -29,6 +29,7 @@
 import {
   AgentProvider,
   bashCommandRules,
+  bashPrefix,
   bashSegments,
   CURSOR_PERMISSION_MODES,
   DSH_PERMISSION_MODES,
@@ -261,13 +262,22 @@ export function checkOnlyCommandRules(card: { toolName: string; input: unknown }
     : [];
 }
 
-/** Older clients send prefixes; accept those only as a request to remember this card's exact command. */
+/**
+ * Older clients send prefixes; accept those only as a request to remember this card's exact command. That
+ * includes the plain per-segment prefixes clients derived before they stopped remembering interpreters and
+ * file-changing programs (`python3:*`): only the exact command is ever written.
+ */
 export function checkOnlyRuleRefusal(
   card: { toolName: string; input: unknown },
   rules: readonly { toolName: string; ruleContent?: string }[],
 ): string | null {
   const exact = checkOnlyCommandRules(card);
-  const given = [...exact, ...bashCommandRules(exact[0]?.ruleContent ?? '')];
+  const command = exact[0]?.ruleContent ?? '';
+  const legacy = bashSegments(command).flatMap((segment) => {
+    const prefix = bashPrefix(segment);
+    return prefix ? [{ toolName: 'Bash', ruleContent: `${prefix}:*` }] : [];
+  });
+  const given = [...exact, ...bashCommandRules(command), ...legacy];
   for (const rule of rules) {
     if (exact.length && rule.toolName === 'Bash' && given.some((g) => g.ruleContent === rule.ruleContent)) continue;
     return `Always allow on a scheduled check's card covers only this exact command (${exact[0]?.ruleContent ?? 'nothing'}). Nothing was written.`;

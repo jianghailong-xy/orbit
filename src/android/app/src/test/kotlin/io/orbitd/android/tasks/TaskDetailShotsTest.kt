@@ -138,8 +138,8 @@ class TaskDetailShotsTest {
             TaskDetailCopy.planHeading, TaskDetailCopy.runsWithHeading, TaskDetailCopy.activityHeading), headings())
         // The status line: running with how long, who, what the run is on, and what it has cost.
         compose.onNodeWithText("Running · 1h 12m").assertExists()
-        compose.onNodeWithText("· Opus 5.5").assertExists()
-        compose.onNodeWithText("· $0.84").assertExists()
+        // Model and cost are one item, so a wrapped line never starts with "·" (docs/mocks/task-panel-header).
+        compose.onNodeWithText("Opus 5.5 · $0.84").assertExists()
         compose.onNodeWithText("Step 3 of 5").assertExists()
         compose.onNodeWithText(TaskDetailCopy.isWorking("orbit-develop")).assertExists()
         // The plan is a sentence, the graph folded in place.

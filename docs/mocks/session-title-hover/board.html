@@ -1,0 +1,67 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<style>
+@font-face { font-family: "Inter"; src: url("file:///var/tmp/landing-mock-render/fonts/Inter.ttf"); font-weight: 100 900; }
+@font-face { font-family: "Noto Sans SC"; src: url("file:///var/tmp/landing-mock-render/fonts/NotoSansSC.ttf"); font-weight: 100 900; }
+@font-face { font-family: "JetBrains Mono"; src: url("file:///var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf"); font-weight: 100 900; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 40px 48px 56px; background: #e6e6eb; color: #16161a; width: 1880px; font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; }
+h1 { font-size: 28px; margin: 0 0 10px; letter-spacing: -.02em; }
+h2 { font-size: 19px; margin: 34px 0 12px; }
+.lede, .foot { color: #4f4f58; max-width: 1780px; }
+.lede b, .foot b, .cap b { color: #16161a; }
+code { font: 13px "JetBrains Mono", monospace; background: rgba(0,0,0,.06); border-radius: 4px; padding: 0 4px; }
+.grid { display: grid; grid-template-columns: 150px 806px 806px; gap: 14px 24px; align-items: start; }
+.hd { font-weight: 650; }
+.lab { font-weight: 650; padding-top: 14px; }
+.shot { position: relative; }
+.shot img { width: 806px; display: block; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 10px 26px rgba(0,0,0,.10); background: #fff; }
+.tag { display: inline-flex; font-size: 12.5px; font-weight: 650; border-radius: 999px; padding: 2px 10px; }
+.now { background: #ffd9d4; color: #8f1d13; } .rec { background: #d6e4ff; color: #14428f; }
+.mk { position: absolute; border: 2px dashed #ff3b30; border-radius: 8px; }
+.num { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #ff3b30; color: #fff; font: 700 12px/22px "Inter"; text-align: center; box-shadow: 0 0 0 2px #fff; }
+.n { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: #ff3b30; color: #fff; font: 700 11px/18px "Inter"; justify-content: center; margin-right: 4px; }
+.cap { color: #4f4f58; font-size: 14px; }
+table { border-collapse: collapse; font-size: 14px; max-width: 1780px; }
+td { padding: 6px 14px 6px 0; vertical-align: top; color: #4f4f58; } td:first-child { font-weight: 650; color: #16161a; white-space: nowrap; }
+</style>
+<body>
+<h1>会话标题：悬停和不悬停一个样</h1>
+<p class="lede">owner 11-27：悬停和非悬停状态没对齐；悬停不需要显示提示和其它悬停效果。下面是真页面截图（今天 main 的构建，1440 宽窗口），「改后」是同一构建去掉标题的悬停效果后拍的。标题照样一按打开会话设置，只是悬停时不再变样。</p>
+
+<h2>今天 vs 改后</h2>
+<div class="grid">
+  <div></div><div class="hd"><span class="tag now">今天</span></div><div class="hd"><span class="tag rec">改后（推荐）</span></div>
+
+  <div class="lab">长标题 · 不悬停</div>
+  <div class="shot"><img src="shots/before-long-rest.png"></div>
+  <div class="shot"><img src="shots/after-long-rest.png"></div>
+
+  <div class="lab">长标题 · 悬停</div>
+  <div class="shot"><img src="shots/before-long-hover.png">
+    <div class="mk" style="left:0px;top:6px;width:656px;height:38px"></div><div class="num" style="left:-8px;top:-4px">1</div>
+    <div class="mk" style="left:-2px;top:46px;width:132px;height:38px"></div><div class="num" style="left:132px;top:52px">2</div></div>
+  <div class="shot"><img src="shots/after-long-hover.png"></div>
+
+  <div class="lab">短标题 · 不悬停</div>
+  <div class="shot"><img src="shots/before-short-rest.png">
+    <div class="mk" style="left:205px;top:11px;width:54px;height:24px"></div><div class="num" style="left:195px;top:1px">3</div></div>
+  <div class="shot"><img src="shots/after-short-rest.png"></div>
+
+  <div class="lab">短标题 · 悬停</div>
+  <div class="shot"><img src="shots/before-short-hover.png">
+    <div class="mk" style="left:222px;top:11px;width:54px;height:24px"></div><div class="num" style="left:278px;top:1px">3</div></div>
+  <div class="shot"><img src="shots/after-short-hover.png"></div>
+</div>
+<p class="cap" style="max-width:1780px;margin-top:16px"><span class="n">1</span>今天悬停时，标题铺一层灰底、末尾冒出 ›，长标题因此少显示一截（「its las…」变「its l…」）。<span class="n">2</span>同时弹出「Session settings」提示。<span class="n">3</span>短标题时 › 占地方，把「Task ›」往右推了 17px——就是你截图里的没对齐。改后四种情况都和不悬停时一模一样：不铺底、不出 ›、不弹提示，徽标不动。</p>
+
+<h2>规格</h2>
+<table>
+<tr><td>悬停</td><td>标题按钮悬停时不变样：去掉灰底、去掉 ›、去掉「Session settings」提示（<code>Tooltip</code> 外层拿掉）。光标仍是手形，表示能按。</td></tr>
+<tr><td>按下</td><td>不变：按标题打开/收起会话设置（和任务栏一次只开一栏也不变）。设置开着时标题也不变样（11-25 已定）。</td></tr>
+<tr><td>键盘</td><td>Tab 到标题时，今天是借悬停那层灰底和 › 表示焦点。改后用全站统一的焦点描边（<code>:focus-visible</code> 时一圈描边，鼠标点不出现），见待定 ②。</td></tr>
+<tr><td>读屏</td><td>按钮的名字仍是「Session settings」（<code>aria-label</code>），只是不再弹视觉提示。</td></tr>
+<tr><td>手机</td><td>手机会话页顶栏不显示标题（10-15），不涉及。</td></tr>
+</table>
+<p class="foot"><b>落地</b>：一个 web 改动——<code>index.css</code> 去掉 <code>.workspace-name-button</code> 的悬停底色和 › 规则、<code>WorkspaceView</code> 去掉标题外层的 <code>Tooltip</code>、加 <code>aria-label</code>；测试改成「悬停不出提示」。<br>
+<b>待你定</b>：① 去掉标题的悬停底色、› 和提示（推荐，即你说的）；② 键盘 Tab 到标题时用全站统一的焦点描边（推荐）/ 也什么都不显示；③ 光标保持手形（推荐）/ 改成普通箭头。</p>
+</body></html>

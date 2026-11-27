@@ -869,6 +869,15 @@ public enum EvidenceDecisions {
         OwnerConfirmations.receiptTime(decidedAt, now: now) ?? decidedAt
     }
 
+    /// When the card's version was submitted, as the card's head says it beside the provenance mark
+    /// (board evidence-waits-for-coordinator; web `evidenceSubmittedLine`). Nil for a card with no
+    /// row to read, a row from a server that sends no time, or a time that does not parse.
+    public static func submittedLine(_ standing: EvidenceDecisionStanding, now: Date = Date()) -> String? {
+        guard let at = standing.row?.submittedAt,
+              let time = OwnerConfirmations.receiptTime(at, now: now) else { return nil }
+        return "submitted \(time)"
+    }
+
     /// The receipt's line: which answer, to which revision, and when — web's `decisionReceiptLine`,
     /// word for word.
     public static func receiptLine(_ decided: RecordedEvidenceDecision,

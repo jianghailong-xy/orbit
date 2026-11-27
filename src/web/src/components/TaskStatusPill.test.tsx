@@ -51,10 +51,11 @@ describe('TaskStatusPill on a live run, as the board draws it', () => {
   };
 
   // taskRunOverlay answers WAITING for all three: a RESUME_SESSION watch, a scheduled wake-up, an armed retry.
-  it('reads "Idle" with Will resume for a parked run a watch or an armed retry will wake', () => {
+  // Will resume is not a mark (the owner, 2026-11-27: a list row's title-line icon instead), so the pill says Idle alone.
+  it('reads a plain "Idle" for a parked run a watch or an armed retry will wake', () => {
     const html = renderToStaticMarkup(<TaskStatusPill {...row} runReason="WAITING" />);
-    expect(html).toMatch(/^<span class="task-status-pill-run"><span class="status-pill todo">.*?data-state="IDLE".*?<circle .*?>Idle<\/span>/);
-    expect(draw({ ...row, runReason: 'WAITING' })).toEqual({ text: 'IdleWill resume', marks: ['WILL_RESUME'] });
+    expect(html).toMatch(/^<span class="status-pill todo">.*?data-state="IDLE".*?<circle .*?>Idle<\/span>$/);
+    expect(draw({ ...row, runReason: 'WAITING' })).toEqual({ text: 'Idle', marks: [] });
   });
   // A failed turn with a retry armed has released its session (Idle, Retrying on the session's own surfaces), so it
   // carries no task: the row says no run is live, and the pill keeps the task's own lifecycle word.
@@ -63,8 +64,8 @@ describe('TaskStatusPill on a live run, as the board draws it', () => {
     expect(draw(released)).toEqual({ text: 'In progress', marks: [] });
     expect(draw({ ...released, status: 'FAILED' })).toEqual({ text: 'Failed', marks: [] });
   });
-  it('reads "Running" with Background for a run held by a background job', () => {
-    expect(draw({ ...row, runReason: 'BACKGROUND_JOB' })).toEqual({ text: 'RunningBackground', marks: ['BACKGROUND'] });
+  it('reads a plain "Running" for a run held by a background job (Background is not a mark)', () => {
+    expect(draw({ ...row, runReason: 'BACKGROUND_JOB' })).toEqual({ text: 'Running', marks: [] });
   });
   it('reads a plain "Running" for a turn', () => {
     expect(draw({ ...row, runReason: 'TURN' })).toEqual({ text: 'Running', marks: [] });

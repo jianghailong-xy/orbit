@@ -240,6 +240,9 @@ final class ManagedRunnerWiringTests: XCTestCase {
         let icon = try slice(agents, from: "struct WorkspaceFolderIcon: View {", to: "\n}\n")
         XCTAssertTrue(icon.contains("managed.asleep ? \"moon.zzz.fill\""))
         XCTAssertTrue(icon.contains(".accessibilityLabel(managed?.label ?? \"Runner offline\")"))
+        // Board docs/mocks/workspace-machine-icon, B: a workspace on Orbit Cloud wears its cloud, every other the folder.
+        XCTAssertTrue(icon.contains("Image(systemName: cloud ? \"cloud\" : \"folder\")"))
+        XCTAssertTrue(row.contains("cloud: RunnerPageFormat.isManaged(agent.runnerId, managedRunnerID: app.managedRunner?.status?.runnerId)"))
         // The project page's Change workspace picker: Asleep rather than Runner offline.
         let picker = code(try source("Views/CoordinatorChangeSheet.swift"))
         XCTAssertTrue(picker.contains("ManagedRunnerLogic.row(runnerID: runnerID, status: app.managedRunner?.status)"))

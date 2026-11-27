@@ -1403,7 +1403,7 @@ async function landAgainAfterLandingFix(
 }
 
 /** The end reasons a person writes (`SessionEndReason`): ended, moved to Completed, deleted, stopped. */
-const PERSON_END_REASONS: ReadonlySet<string> = new Set(['ended', 'completed', 'deleted', 'cancelled']);
+const PERSON_END_REASONS: ReadonlySet<string> = new Set(['ended', 'moved', 'completed', 'deleted', 'cancelled']);
 
 /** The landing-fix turn's key (`landing-fix-turn.ts#landingFixTurnId`), spelled here: that module imports this one. */
 function landingFixTurnKey(jobId: string): string {

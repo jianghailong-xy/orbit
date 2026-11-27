@@ -15,6 +15,7 @@ import {
   AutoRetryCtx,
   EventFullCtx,
   LiveToolOutputsCtx,
+  PendingSendCtx,
   SandboxFixCtx,
   SessionNavCtx,
   SteerWithdrawCtx,
@@ -54,6 +55,7 @@ export function SessionConversation({
   sandboxFixHelp = null,
   restoreUndelivered,
   steerWithdrawal,
+  pendingSend = null,
   linkStateWord,
   linkRefreshKey,
   answeredQuestions,
@@ -77,6 +79,8 @@ export function SessionConversation({
   sandboxFixHelp?: ContextType<typeof SandboxFixCtx>;
   restoreUndelivered: ContextType<typeof UndeliveredCtx>;
   steerWithdrawal: ContextType<typeof SteerWithdrawCtx>;
+  /** Retry or take back a message the server has not taken (`PendingSendCtx`); null where nothing is sent. */
+  pendingSend?: ContextType<typeof PendingSendCtx>;
   /** The word a link card says for the session it links to. Pass a module-level function: it
    *  reaches every card, and a new one each render would re-render all of them. */
   linkStateWord: ComponentProps<typeof OrbitLinkCardsProvider>['stateWord'];
@@ -112,6 +116,7 @@ export function SessionConversation({
           <AutoRetryCtx.Provider value={autoRetryHelp}>
             <UndeliveredCtx.Provider value={restoreUndelivered}>
               <SteerWithdrawCtx.Provider value={steerWithdrawal}>
+              <PendingSendCtx.Provider value={pendingSend}>
                 <LiveToolOutputsCtx.Provider value={stream.liveToolOutputs}>
                   <TaskActivityCtx.Provider value={stream.taskActivity}>
                     <SubagentRunsCtx.Provider value={subagentRuns}>
@@ -150,6 +155,7 @@ export function SessionConversation({
                     </SubagentRunsCtx.Provider>
                   </TaskActivityCtx.Provider>
                 </LiveToolOutputsCtx.Provider>
+              </PendingSendCtx.Provider>
               </SteerWithdrawCtx.Provider>
             </UndeliveredCtx.Provider>
           </AutoRetryCtx.Provider>

@@ -53,7 +53,7 @@ import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
   RUNNER_SILENT_AFTER_MS,
   RunnerPresenceService,
-  runnerLastBeatAt,
+  runnerPresentAt,
   type CellLosses,
   type RunnerBeats,
 } from '../runners/runner-presence';
@@ -183,7 +183,7 @@ function massDisconnectOf(
   runner: RunnerBeats | null | undefined,
   now: number,
 ): MassDisconnect | undefined {
-  const beat = runnerLastBeatAt(runner)?.getTime();
+  const beat = runnerPresentAt(runner)?.getTime();
   if (beat === undefined || now - beat > MASS_DISCONNECT_HOLD_MS) return undefined;
   return disconnects.find((d) => d.from <= beat && beat <= d.to);
 }
@@ -252,7 +252,7 @@ function runnerLooksOffline(
   if (!runner) return true;
   if (claimedAt && now - claimedAt.getTime() <= RUNNER_REAP_AFTER_MS) return false;
   if (signedOff(runner)) return true;
-  return now - (runnerLastBeatAt(runner)?.getTime() ?? 0) > RUNNER_REAP_AFTER_MS;
+  return now - (runnerPresentAt(runner)?.getTime() ?? 0) > RUNNER_REAP_AFTER_MS;
 }
 
 /**
@@ -665,8 +665,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // Arming the other case does NOT put two retries on one task if the opt-in flips
               // to true in between. `session_task_execution_claim_idx_finished_at` (migration
               // 1426) is a partial UNIQUE index on `session(task_id)` over the sessions not
-              // released (`finished_at IS NULL`), which session_release_fact_chk makes exactly the
-              // TASK_OCCUPYING statuses of 0130's index beside it, so a task can hold ONE live
+              // released (`finished_at IS NULL`), which are exactly the TASK_OCCUPYING rows of 0130's
+              // index it replaced, so a task can hold ONE live
               // session and no more: whichever starts
               // first is seen by the scans' own `NOT EXISTS (occupying session)` clause, and a
               // resume that races past that read loses at the index — a 23505 the transaction

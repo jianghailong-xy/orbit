@@ -20,16 +20,18 @@ import UIKit
 
 /// The Workspace identity glyph shared by the iPhone drawer, the iPad sidebar and the Mac sidebar. Online/unknown is the
 /// calm native folder and stays decorative; an explicitly-offline Runner adds a small muted
-/// `wifi.slash` corner badge and exposes that state to VoiceOver.
+/// `wifi.slash` corner badge and exposes that state to VoiceOver. A workspace on Orbit Cloud wears its cloud in the
+/// folder's place: hosted, apart from your own machines' tools and keys (board docs/mocks/workspace-machine-icon, B).
 struct WorkspaceFolderIcon: View {
     let selected: Bool
     let offline: Bool
+    var cloud: Bool = false
     /// The account's managed runner, when this workspace runs on it (D4): Asleep is a moon, never the
     /// heartbeat's "Runner offline" slash.
     var managed: ManagedRunnerRow? = nil
 
     var body: some View {
-        Image(systemName: "folder")
+        Image(systemName: cloud ? "cloud" : "folder")
             .frame(width: 24)
             .foregroundStyle(selected ? Color.accentColor : .primary)
             .overlay(alignment: .bottomTrailing) {
@@ -98,7 +100,9 @@ struct WorkspaceNavigationRow: View {
         let status = WorkspaceNavigationStatusLogic.resolve(
             waiting: waiting, running: running, jobs: jobs, runnerOffline: offlineNow)
         HStack(spacing: 12) {
-            WorkspaceFolderIcon(selected: selected, offline: offlineNow, managed: managedRow)
+            WorkspaceFolderIcon(selected: selected, offline: offlineNow,
+                                cloud: RunnerPageFormat.isManaged(agent.runnerId, managedRunnerID: app.managedRunner?.status?.runnerId),
+                                managed: managedRow)
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
@@ -1437,9 +1441,6 @@ struct NewSessionView: View {
     let workspaceTitleInBar: Bool
     @State private var draft: ConsoleModel
     @Environment(AppModel.self) private var app
-    #if os(macOS)
-    @State private var showSwitcher = false
-    #endif
     @State private var showEnginePicker = false
 
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
@@ -1501,6 +1502,7 @@ struct NewSessionView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Engine: \(currentEngine.label). Switch")
+                        placePill
                     }
                     VStack(spacing: 5) {
                         // The draft moved off what the workspace last ran on, which can't run here
@@ -1546,10 +1548,6 @@ struct NewSessionView: View {
                             Text(blocker)
                                 .font(.callout).foregroundStyle(.secondary).lineLimit(2)
                                 .multilineTextAlignment(.center)
-                        } else {
-                            Text("Send a task to get started.")
-                                .font(.callout).foregroundStyle(.secondary)
-                            Text(heroSubtitle).font(.footnote).foregroundStyle(.tertiary).lineLimit(1)
                         }
                         // Nothing on this machine runs the draft (board ④): the send waits, and
                         // another provider's key is the way out here.
@@ -1561,13 +1559,6 @@ struct NewSessionView: View {
                                 .font(.callout).buttonStyle(.plain).foregroundStyle(Color.accentColor)
                         }
                     }
-                    #if os(macOS)
-                    // macOS renders this inline in the Agents detail pane, which has no navigation
-                    // bar to host the agent switcher, so it stays in the layout — demoted to a quiet
-                    // pill under the hero rather than competing with it.
-                    agentSwitcher
-                        .padding(.top, 2)
-                    #endif
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
@@ -1676,14 +1667,6 @@ struct NewSessionView: View {
         .task(id: defaultEffort) {
             draft.adoptDraftDefaultEffort(defaultEffort, legacyWorkspaceDefault: agent.effort)
         }
-        #if os(macOS)
-        .sheet(isPresented: $showSwitcher) {
-            AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id,
-                             configuredProviders: app.agents?.configuredProviders ?? []) { id in
-                app.composeWithAgent(id)
-            }
-        }
-        #endif
         .sheet(isPresented: $showEnginePicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
             // the machine this draft would run on, and the one whose engine page fixes a row.
@@ -1697,12 +1680,76 @@ struct NewSessionView: View {
         }
     }
 
-    #if os(macOS)
-    /// Switches the draft's workspace from below the hero on macOS.
-    private var agentSwitcher: some View {
-        WorkspaceTitleSwitcher(name: agent.name) { showSwitcher = true }
+    /// Where the session runs, under the engine (docs/mocks/new-session-place, option A's pill, board
+    /// 02 option D's menu; web's `PlacePill`): one bordered pill, `[workspace] / [folder] ▾`, naming the
+    /// folder only when one is picked — a folder is a sidebar group, so none is the quiet default. Its
+    /// menu lists the workspaces alone, this one first; a workspace with folders opens them one level
+    /// down under None, so a folder of any workspace is one pick.
+    private var placePill: some View {
+        let folder = app.sessionFolders.first { $0.workspaceId == agent.id && $0.id == folderID }
+        let label = folder.map { "\(agent.name) / \($0.name)" } ?? agent.name
+        let workspaces = [agent] + app.orderedAgents.filter { $0.id != agent.id }
+        return Menu {
+            ForEach(workspaces) { other in
+                let folders = app.sessionFolders.filter { $0.workspaceId == other.id }
+                let here = other.id == agent.id
+                if folders.isEmpty {
+                    Button { pick(other.id, folder: nil) } label: { placeRow(other.name, on: here) }
+                } else {
+                    Menu {
+                        Button { pick(other.id, folder: nil) } label: { placeRow("None", on: here && folder == nil) }
+                        ForEach(folders) { each in
+                            Button { pick(other.id, folder: each.id) } label: {
+                                placeRow(each.name, on: here && each.id == folder?.id)
+                            }
+                        }
+                    } label: {
+                        placeRow("\(other.name)  \(folders.count)", on: here)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal").foregroundStyle(.secondary)
+                Text(agent.name).lineLimit(1).frame(maxWidth: 200)
+                if let folder {
+                    Text("/").foregroundStyle(.tertiary)
+                    Image(systemName: "folder").foregroundStyle(.secondary)
+                    Text(folder.name).lineLimit(1).frame(maxWidth: 200)
+                }
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            .font(.callout).foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.35)))
+            .contentShape(Capsule())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel("Runs in: \(label)")
     }
-    #endif
+
+    /// A row of the place menu: its name, ticked when it is the draft's.
+    @ViewBuilder private func placeRow(_ name: String, on: Bool) -> some View {
+        if on { Label(name, systemImage: "checkmark") } else { Text(name) }
+    }
+
+    /// A workspace, and a folder of it or none: the draft for that place, with what was typed here.
+    private func pick(_ workspaceID: String, folder: String?) {
+        guard workspaceID != agent.id || folder != folderID else { return }
+        carryDraftText(to: workspaceID)
+        app.composeInFolder(folder, of: workspaceID)
+    }
+
+    /// The draft the pick opens is a new one (its identity names the workspace and the folder), so
+    /// the words typed here are handed to it as a main checkout line's are (`pendingDraftText`).
+    private func carryDraftText(to agentID: String) {
+        guard !draft.composerText.isEmpty else { return }
+        app.consoleRegistry?.pendingDraftText[agentID] = draft.composerText
+    }
 
     /// What the hero judges the engines and their credentials by: the draft's own snapshot — so the
     /// list matches the model space the pills are already resolving against — with this workspace's
@@ -1739,19 +1786,6 @@ struct NewSessionView: View {
         currentEngine.provider
             ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
     }
-
-    /// The full model name (the composer footer only carries a truncated one). No funding label:
-    /// for a configured provider it's a constant the user already set and isn't actionable here, so
-    /// the credential earns a line only when it's broken — matching web, where it surfaces solely as
-    /// the provider's `unavailable` warning (not yet modelled on the native ProviderChoice).
-    /// No account either (web parity): the composer's quota gauge names it in its detail.
-    private var heroSubtitle: String {
-        draft.providerCapabilitiesResolved
-            ? AgentDefaults.friendlyName(draft.modelID, engine: draft.engine, provider: draft.provider,
-                                         catalog: draft.modelCatalog,
-                                         configured: draft.configuredProviders)
-            : "Runtime default"
-    }
 }
 
 struct AgentSessionRow: View {
@@ -1785,6 +1819,10 @@ struct AgentSessionRow: View {
     /// which keeps the glyph and the value the row always had.
     private var displayState: SessionDisplayState? { SessionDisplay.state(session.displayFacts) }
     private var marks: [SessionMark] { SessionDisplay.marks(session.displayFacts) ?? [] }
+    /// The chips after the line: Needs you alone, the rest being title-line icons (`rowIcons`).
+    private var rowMarks: [SessionMark] { SessionDisplay.rowMarks(session.displayFacts) ?? [] }
+    /// Failed, Retrying, On hold, Background and Will resume, drawn at the end of the title line rather than as chips.
+    private var rowIcons: [SessionRowIcon] { SessionDisplay.rowIcons(session.displayFacts) }
     /// The row's VoiceOver value: "Idle, Interrupted", else, from an older server, `statusWord`.
     private var statusValue: String {
         if let displayState { return SessionDisplay.spoken(displayState, marks) }
@@ -1805,16 +1843,22 @@ struct AgentSessionRow: View {
             HStack(spacing: 8) {
                 StatusGlyphView(glyph: displayState?.glyph ?? .make(for: session, watching: watching, machine: machine))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(session.title ?? "Untitled session").lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(session.title ?? "Untitled session").lineLimit(1)
+                        if !rowIcons.isEmpty {
+                            Spacer(minLength: 4)
+                            SessionRowIconsView(icons: rowIcons)
+                        }
+                    }
                     HStack(spacing: 7) {
                         SessionCoordinatorBadge(session: session)
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                             // A full runner, run or batch: which one, and how its slots are taken.
                             .help(QueuedCapacity.rowHint(session, machine: machine, now: Date()) ?? "")
-                        if !marks.isEmpty {
+                        if !rowMarks.isEmpty {
                             Spacer(minLength: 4)
-                            SessionMarkPills(marks: marks)
+                            SessionMarkPills(marks: rowMarks)
                         }
                     }
                 }
@@ -1848,6 +1892,7 @@ struct AgentSessionRow: View {
                     .lineLimit(1)
                     .layoutPriority(1)
                 Spacer(minLength: 8)
+                SessionRowIconsView(icons: rowIcons)
                 liveIndicator
                 if let rel = relTime {
                     Text(rel)
@@ -1881,6 +1926,7 @@ struct AgentSessionRow: View {
             HStack(spacing: 8) {
                 Text(session.title ?? "Untitled session").lineLimit(1)
                 Spacer(minLength: 8)
+                SessionRowIconsView(icons: rowIcons)
                 liveIndicator
                 if let rel = relTime {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
@@ -1904,8 +1950,8 @@ struct AgentSessionRow: View {
 
     /// The marks at the right end of a phone row's second line: at most two, then "+N".
     @ViewBuilder private var phoneMarks: some View {
-        if !marks.isEmpty {
-            let row = SessionDisplay.phoneRowMarks(marks)
+        if !rowMarks.isEmpty {
+            let row = SessionDisplay.phoneRowMarks(rowMarks)
             Spacer(minLength: 4)
             SessionMarkPills(marks: row.shown, more: row.more)
         }
@@ -1992,7 +2038,9 @@ struct SessionLiveIndicator: View {
             switch state {
             case .running: SpinnerGlyph(color: .secondary)
             case .queued:  Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
-            case .idle:    Image(systemName: "circle").font(.orbitGlyph).foregroundStyle(.secondary)
+            // Idle draws nothing (owner, 2026-11-27): a settled row is already said by its line and its
+            // VoiceOver value, and a hollow circle beside the time read as a control.
+            case .idle:    EmptyView()
             }
         } else {
             legacyCue

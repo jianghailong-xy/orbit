@@ -63,6 +63,7 @@ import { MergeReceiptService } from './merge-receipt.service';
 import { SessionOwnerGuard } from './session-owner.guard';
 import { SessionsService } from './sessions.service';
 import { ifNoneMatchHits, isOpenListView, openListEtag } from './open-list-version';
+import { decodeListingCursor } from './session-listing';
 import { assertClientTurnIdNotReserved } from './watch-turn-key';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
@@ -346,6 +347,67 @@ export class SessionsController {
 
   /** More project ids than any workspace list shows; a longer list is refused rather than read. */
   private static readonly PLACEMENT_MAX_PROJECTS = 500;
+
+  /**
+   * One page of a workspace's session list as top-level entries (docs/session-list-scale-design.md §3.2,
+   * SessionsService.sessionListing): `{ folders, entries, next }`, `folders` on the first page of the
+   * workspace's own list only. Pass `next` back as `after` for the page that follows. When the list's order
+   * switched since `after` was written (the Completed view's does, on whether anything is held), the answer is
+   * the first page again, with `restarted: true` and the first page's `folders`.
+   *
+   * Conditional on the Open list's data version (open-list-version.ts), scoped by every parameter and by
+   * which folders the workspace has: a read that names the ETag it holds is answered 304 before anything
+   * is built, for the reason the flat list's is decided here. Above `@Get(':id')` for the reason `search` is.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: 'LIST' })
+  @Get('listing')
+  async listing(
+    @CurrentUser() user: AuthUser,
+    @Query('workspaceId', PublicIdPipe) workspaceId?: string,
+    @Query('view') view?: string,
+    @Query('folderId', PublicIdPipe) folderId?: string,
+    @Query('limit') limitParam?: string,
+    @Query('after') after?: string,
+    @Headers('if-none-match') ifNoneMatch?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    const lifecycle = view === undefined || view === 'open' ? 'open' : view === 'completed' ? 'completed' : null;
+    if (!lifecycle) throw new BadRequestException('view must be open or completed');
+    const parsed = limitParam === undefined ? SessionsController.LISTING_PAGE : Number(limitParam);
+    if (!Number.isInteger(parsed) || parsed < 1) throw new BadRequestException('limit must be a positive whole number');
+    const limit = Math.min(parsed, SessionsController.LISTING_MAX_PAGE);
+    const cursor = after ? decodeListingCursor(after) : null;
+    const confinedTo = workspaceConfinement(user);
+    if (res) {
+      const [version, folders] = await Promise.all([
+        this.sessions.openListVersion(user.userId),
+        this.sessions.sessionListingFolderMark(user.userId, workspaceId, confinedTo),
+      ]);
+      const etag = openListEtag(version, {
+        read: 'listing',
+        workspaceId,
+        view: lifecycle,
+        folderId,
+        limit,
+        after,
+        confinedTo: confinedTo?.join(','),
+        folders,
+      });
+      res.setHeader('ETag', etag);
+      if (ifNoneMatchHits(ifNoneMatch, etag)) {
+        res.status(304);
+        return undefined;
+      }
+    }
+    return this.sessions.sessionListing(user.userId, {
+      workspaceId, view: lifecycle, folderId: folderId || null, limit, after: cursor, confinedTo,
+    });
+  }
+
+  /** A page of the listing when the read names none, and the most one may ask for. */
+  private static readonly LISTING_PAGE = 40;
+  private static readonly LISTING_MAX_PAGE = 200;
 
   // Cross-scope search for the clients' ⌘K palette. MUST stay above `@Get(':id')` — Nest matches
   // routes in declaration order, so below it the literal path would be swallowed as an id.
@@ -881,7 +943,7 @@ export class SessionsController {
   }
 
   /** What the Move panel shows: this workspace's folders, the other workspaces the session can or
-   *  cannot move to and why, and whether it has to be ended first. See SessionsService.moveTargets. */
+   *  cannot move to and why, and whether the move releases it first. See SessionsService.moveTargets. */
   @PatScope('sessions:read', { workspaceConfinable: false })
   @Get(':id/move-targets')
   moveTargets(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
@@ -889,7 +951,7 @@ export class SessionsController {
   }
 
   /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted);
-   *  with a `workspaceId` other than its own, move an ended session to that workspace (and folder).
+   *  with a `workspaceId` other than its own, move the session to that workspace (and folder), releasing an idle one first.
    *  A move the rules refuse is a 409 with the reason. See SessionsService.move. */
   @PatScope('sessions:write', { workspaceConfinable: false })
   @Post(':id/move')

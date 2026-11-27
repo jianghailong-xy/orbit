@@ -13,7 +13,7 @@ import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { runnerIsOnline, runnerLastBeatSql } from '../runners/runner-presence';
+import { runnerIsOnline, runnerPresenceSql } from '../runners/runner-presence';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import { OWNER_SECRET_MAX_DAYS, OWNER_REQUEST_NOT_PENDING, type OwnerRequestSecretSpec } from './owner-request';
@@ -780,7 +780,7 @@ export class OwnerSecretsService implements OnModuleInit, OnModuleDestroy {
              g."file_path", g."runner_id"::text AS runner_id,
              COALESCE(runner."display_name", runner."name", g."runner_name") AS runner_name,
              runner."status"::text AS runner_status,
-             CASE WHEN runner."id" IS NULL THEN NULL ELSE ${runnerLastBeatSql('runner')} END AS runner_last_beat_at,
+             CASE WHEN runner."id" IS NULL THEN NULL ELSE ${runnerPresenceSql('runner')} END AS runner_last_beat_at,
              g."session_id"::text AS session_id, s."title" AS session_title,
              g."task_id"::text AS task_id, t."title" AS task_title,
              g."state",

@@ -68,17 +68,31 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
   server can push to.
 - `{"delivered": false, "reason": "NOT_ACCEPTED"}`: APNs and FCM accepted it for none of your devices.
 
+## Paging a workspace’s session list
+
+`GET /api/sessions/listing?workspaceId=<id>&view=open|completed[&folderId=<id>][&limit=40][&after=<cursor>]`
+answers one page of the list as top-level entries, with an ETag answered `304` when nothing moved:
+
+| Field | Meaning |
+| --- | --- |
+| `folders` | The folder rows, `{ folderId, rowCount, needsYou, running, jobs }`: only on a first page without `folderId`. |
+| `entries` | `{ kind: "session", session }` or `{ kind: "project", projectId, placedAt, spokeAt, memberCount, running, jobs, coordinator }`, in list order (in Open: Pinned, then Needs you, then Working, then the rest, each newest listed first, as the web's sections draw them); a project's `running` / `jobs` say whether a member it holds runs / has a background job moving. |
+| `next` | The `after` of the following page, or `null` at the end. |
+| `restarted` | `true` when `after` was written under an order the list no longer has (Completed switches order on whether any session is held by a project): this is the first page again, with its `folders`, and replaces the pages already read. Absent otherwise. |
+
+`limit` is 1 to 200 (40 when absent); a malformed `after` is refused `400`.
+
 ## Summary
 
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 571 |
+| `user` | 588 |
 | `admin` | 31 |
 | `runner` | 259 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **906** |
+| **Total** | **923** |
 
 ## Public routes
 
@@ -173,6 +187,14 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
 | `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
 | `GET` | `/api/documents/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/documents/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
+| `POST` | `/api/documents/chats` | body `Object` | `DriveChatController.create` |
+| `GET` | `/api/documents/chats/:sessionId/groups` | path `sessionId` | `DriveChatChangesController.groups` |
+| `GET` | `/api/documents/chats/:sessionId/groups/:groupId` | path `groupId`, `sessionId` | `DriveChatChangesController.group` |
+| `POST` | `/api/documents/chats/:sessionId/groups/:groupId/apply` | path `groupId`, `sessionId` | `DriveChatChangesController.apply` |
+| `POST` | `/api/documents/chats/:sessionId/groups/:groupId/undo` | path `groupId`, `sessionId` | `DriveChatChangesController.undo` |
+| `GET` | `/api/documents/chats/:sessionId/questions` | path `sessionId` | `DriveChatChangesController.questions` |
+| `POST` | `/api/documents/chats/:sessionId/questions/:questionId` | body `AnswerDriveChatQuestionDto`; path `questionId`, `sessionId` | `DriveChatChangesController.answer` |
 | `GET` | `/api/documents/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
 | `DELETE` | `/api/documents/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/documents/entries/:id` | path `id` | `DriveController.get` |
@@ -202,6 +224,14 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/documents/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
 | `POST` | `/api/documents/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
 | `GET` | `/api/drive/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/drive/chats` | query `offset`, `q`, `status` | `DriveChatController.list` |
+| `POST` | `/api/drive/chats` | body `Object` | `DriveChatController.create` |
+| `GET` | `/api/drive/chats/:sessionId/groups` | path `sessionId` | `DriveChatChangesController.groups` |
+| `GET` | `/api/drive/chats/:sessionId/groups/:groupId` | path `groupId`, `sessionId` | `DriveChatChangesController.group` |
+| `POST` | `/api/drive/chats/:sessionId/groups/:groupId/apply` | path `groupId`, `sessionId` | `DriveChatChangesController.apply` |
+| `POST` | `/api/drive/chats/:sessionId/groups/:groupId/undo` | path `groupId`, `sessionId` | `DriveChatChangesController.undo` |
+| `GET` | `/api/drive/chats/:sessionId/questions` | path `sessionId` | `DriveChatChangesController.questions` |
+| `POST` | `/api/drive/chats/:sessionId/questions/:questionId` | body `AnswerDriveChatQuestionDto`; path `questionId`, `sessionId` | `DriveChatChangesController.answer` |
 | `GET` | `/api/drive/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
 | `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
 | `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
@@ -550,6 +580,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/sessions/import` | body `Object` | `SessionsController.importSession` |
 | `POST` | `/api/sessions/import-batch` | body `Object` | `SessionsController.importBatch` |
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
+| `GET` | `/api/sessions/listing` | query `after`, `folderId`, `limit`, `view`, `workspaceId` | `SessionsController.listing` |
 | `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
 | `GET` | `/api/sessions/search` | query `folderId`, `limit`, `q` | `SessionsController.search` |

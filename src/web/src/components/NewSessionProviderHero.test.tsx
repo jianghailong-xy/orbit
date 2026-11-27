@@ -91,7 +91,9 @@ describe('NewSessionProviderHero', () => {
   it('uses the iOS empty-state hierarchy for an ordinary new session', () => {
     const html = markup('claude');
 
-    expect(html).toContain('<div class="np-empty-copy">Send a task to get started.</div>');
+    // Under the engine and where it runs, nothing more: no instruction line (owner 2026-11-27).
+    expect(html).not.toContain('Send a task to get started.');
+    expect(html).not.toContain('np-empty-copy');
     // The model is said once, in the composer (docs/mocks/new-session-top ③).
     expect(html).not.toContain('np-current-model');
     expect(html).not.toContain('Claude Opus 5');
@@ -130,38 +132,32 @@ describe('NewSessionProviderHero', () => {
     expect(html).not.toContain('Claude Opus 5');
   });
 
-  describe('where the session runs (docs/mocks/new-session-top)', () => {
+  describe('where the session runs (docs/mocks/new-session-place)', () => {
     const place = (over: Partial<NewSessionPlace> = {}): NewSessionPlace => ({
       workspace: { id: 'w1', name: 'orbit-ws01' },
       workspaces: [{ id: 'w1', name: 'orbit-ws01' }, { id: 'w2', name: 'orbit-ws02' }],
-      onPickWorkspace: () => {},
       folder: { id: 'f1', name: 'Orbit Session' },
-      folders: [{ id: 'f1', name: 'Orbit Session' }, { id: 'f2', name: 'Releases' }],
-      onPickFolder: () => {},
+      folders: [{ id: 'f1', name: 'Orbit Session', workspaceId: 'w1' }, { id: 'f2', name: 'Releases', workspaceId: 'w1' }],
+      onPick: () => {},
       ...over,
     });
 
-    it('says the workspace and the folder under the engine, each a menu', () => {
+    it('says the workspace and the folder in one pill under the engine', () => {
       const html = markup('claude', { place: place() });
       expect(html.indexOf('np-name')).toBeLessThan(html.indexOf('np-place'));
-      expect(html.indexOf('np-place')).toBeLessThan(html.indexOf('np-empty-copy'));
-      expect(html).toContain('aria-label="Workspace: orbit-ws01"');
-      expect(html).toContain('aria-label="Folder: Orbit Session"');
-      expect(html).toContain('<span class="np-place-in">in</span>');
+      expect(html.match(/np-place-pill/g)).toHaveLength(1);
+      expect(html).toContain('aria-label="Runs in: orbit-ws01 / Orbit Session"');
+      expect(html).toContain('np-place-slash');
     });
 
-    it('says No folder when the draft is in none', () => {
-      expect(markup('claude', { place: place({ folder: null }) })).toContain('aria-label="Folder: No folder"');
+    it('names the workspace alone when the draft is in no folder', () => {
+      const html = markup('claude', { place: place({ folder: null }) });
+      expect(html).toContain('aria-label="Runs in: orbit-ws01"');
+      expect(html).not.toContain('No folder');
+      expect(html).not.toContain('np-place-slash');
     });
 
-    it('names the workspace alone when it has no folders', () => {
-      const html = markup('claude', { place: place({ folder: null, folders: [] }) });
-      expect(html).toContain('aria-label="Workspace: orbit-ws01"');
-      expect(html).not.toContain('aria-label="Folder:');
-      expect(html).not.toContain('np-place-sep');
-    });
-
-    it('draws no place line before the workspace is known', () => {
+    it('draws no place pill before the workspace is known', () => {
       expect(markup('claude')).not.toContain('np-place');
     });
   });

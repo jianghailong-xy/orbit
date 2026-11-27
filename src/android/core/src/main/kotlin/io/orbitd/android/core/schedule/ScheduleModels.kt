@@ -600,7 +600,56 @@ data class ScheduleUpdateAnswer(val outcome: String, val schedule: ScheduleView?
     }
 }
 
-/** `GET /sessions/:id/schedule-cards`: the cards a conversation asked and the changes it made. */
+data class ScheduleRunTry(val sessionId: String, val startedAt: String, val claimed: Boolean, val reachedEngine: Boolean) {
+    companion object {
+        fun parse(json: JsonElement?): ScheduleRunTry? {
+            val o = json as? JsonObject ?: return null
+            return ScheduleRunTry(o.scheduleText("sessionId") ?: return null, o.scheduleText("startedAt") ?: return null,
+                o.scheduleBool("claimed") ?: return null, o.scheduleBool("reachedEngine") ?: return null)
+        }
+    }
+}
+
+data class ScheduleRunQueueGate(
+    val queuedReason: String,
+    val queuedActive: Int?,
+    val queuedLimit: Int?,
+    val queuedHeldByJobs: Int?,
+    val since: String,
+    val deadline: String,
+) {
+    companion object {
+        fun parse(json: JsonElement?): ScheduleRunQueueGate? {
+            val o = json as? JsonObject ?: return null
+            return ScheduleRunQueueGate(o.scheduleText("queuedReason") ?: return null, o.scheduleInt("queuedActive"),
+                o.scheduleInt("queuedLimit"), o.scheduleInt("queuedHeldByJobs"),
+                o.scheduleText("since") ?: return null, o.scheduleText("deadline") ?: return null)
+        }
+    }
+}
+
+data class ScheduleRunSessionStatus(
+    val tries: List<ScheduleRunTry>,
+    val thisTry: Int?,
+    val gaveUpAt: String?,
+    val notBeforeAt: String?,
+    val nextDueAt: String?,
+    val queue: ScheduleRunQueueGate?,
+) {
+    internal val currentTry: ScheduleRunTry? get() = thisTry?.takeIf { it > 0 }?.let { tries.getOrNull(it - 1) }
+
+    companion object {
+        fun parse(json: JsonElement?): ScheduleRunSessionStatus? {
+            val o = json as? JsonObject ?: return null
+            // thisTry indexes the original array, so dropping a malformed try would change its meaning.
+            val tries = (o["tries"] as? JsonArray)?.map { ScheduleRunTry.parse(it) ?: return null } ?: return null
+            return ScheduleRunSessionStatus(tries, o.scheduleInt("thisTry"), o.scheduleText("gaveUpAt"),
+                o.scheduleText("notBeforeAt"), o.scheduleText("nextDueAt"), ScheduleRunQueueGate.parse(o["queue"]))
+        }
+    }
+}
+
+/** `GET /sessions/:id/schedule-cards`: the cards a conversation asked, its changes, and its scheduled run. */
 data class SessionScheduleCardsResponse(
     /** A scheduled run's session: the run it serves, however old; null for any other session. */
     val run: ScheduleRunView? = null,
@@ -611,12 +660,16 @@ data class SessionScheduleCardsResponse(
      * and its first message. Null on every other session (and on servers before it).
      */
     val change: ScheduleChangeOpening? = null,
+    val runStatus: ScheduleRunSessionStatus? = null,
 ) {
+    val statusKind: ScheduleRunStatusKind? get() = run?.let { ScheduleRunStatusDisplay.kind(it, runStatus) }
+
     companion object {
         fun parse(json: JsonElement?): SessionScheduleCardsResponse? {
             val o = json as? JsonObject ?: return null
             return SessionScheduleCardsResponse(ScheduleRunView.parse(o["run"]), o.scheduleList("cards", ScheduleCard::parse).orEmpty(),
-                o.scheduleList("records", ScheduleChangeRecord::parse).orEmpty(), ScheduleChangeOpening.parse(o["change"]))
+                o.scheduleList("records", ScheduleChangeRecord::parse).orEmpty(), ScheduleChangeOpening.parse(o["change"]),
+                ScheduleRunSessionStatus.parse(o["runStatus"]))
         }
     }
 }

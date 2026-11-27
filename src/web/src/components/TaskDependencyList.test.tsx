@@ -42,14 +42,14 @@ describe('TaskDependencyList', () => {
   });
 
   // Nodes as the dependency-graph endpoint sends them: each task with the list's live overlays.
-  it('reads "Idle" with Will resume for a parked run something will wake', () => {
+  it('reads a plain "Idle" for a parked run something will wake (Will resume is not a mark)', () => {
     const nodes = graph.nodes.map((node) =>
       node.id === 'leaf' ? { ...node, running: true, queued: false, runReason: 'WAITING' as const, queuedOnHold: false } : node,
     );
     const html = renderToStaticMarkup(<TaskDependencyList graph={{ ...graph, nodes }} onOpenTask={() => undefined} />);
 
     expect(html).toMatch(/data-state="IDLE".*?>Idle<\/span>/);
-    expect(html).toContain('data-mark="WILL_RESUME"');
+    expect(html).not.toContain('data-mark=');
     expect(html).not.toContain('Running');
   });
 });

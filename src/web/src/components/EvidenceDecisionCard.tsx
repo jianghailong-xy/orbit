@@ -617,6 +617,11 @@ export function EvidenceDecisionCard({
         <span className="evidence-decision-heading">
           {recorded ? EVIDENCE_DECISION_RECORDED_HEADING : evidenceDecisionHeading(standing)}
         </span>
+        {/* When the version on the card was submitted, beside the mark (board
+            evidence-waits-for-coordinator: `FROM ORBIT · submitted 7:59 PM`). */}
+        {decidable?.submittedAt ? (
+          <span className="evidence-decision-submitted">{evidenceSubmittedLine(decidable.submittedAt)}</span>
+        ) : null}
         <Tooltip content={EVIDENCE_PROVENANCE_TITLE} align="end" delay={TEXT_TOOLTIP_DELAY_MS}>
           <span className="criteria-provenance">
             {PROVENANCE_LABEL}
@@ -965,6 +970,11 @@ export function decisionReceiptTime(decidedAt: string, now: Date = new Date()): 
   const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   if (at.toDateString() === now.toDateString()) return time;
   return `${at.toLocaleDateString([], { month: 'numeric', day: 'numeric' })} ${time}`;
+}
+
+/** When the card's version was submitted, as the card's head says it. */
+export function evidenceSubmittedLine(submittedAt: string, now?: Date): string {
+  return `submitted ${decisionReceiptTime(submittedAt, now)}`;
 }
 
 /** The receipt's line: which answer, to which version, and when. */

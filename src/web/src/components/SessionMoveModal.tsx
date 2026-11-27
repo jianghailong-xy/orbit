@@ -12,8 +12,6 @@ import { managedRowOf, useManagedRunner } from '../lib/managedRunner';
 import { ENGINE_CLI_NAMES, isEngine, type SessionMoveFolder, type SessionMoveTarget, type SessionMoveTargets } from '@orbit/shared';
 import {
   createSessionFolder,
-  endSession,
-  getSession,
   getSessionMoveTargets,
   moveSession,
   type SessionFolder,
@@ -24,7 +22,6 @@ import {
   folderNameDraft,
   folderNameFailure,
   foldersByName,
-  moveConfirmAction,
   moveConfirmParagraphs,
   moveConfirmTitle,
   moveFailureText,
@@ -33,13 +30,11 @@ import {
   moveTargetRows,
   movedToFolderToast,
   movedToWorkspaceToast,
-  runWorkspaceMove,
-  type MovePhase,
 } from '../lib/sessionFolders';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
-import { isSessionTerminal } from '../lib/sessionState';
 import { useToast } from '../lib/toast';
 import { useRefreshSessionLists } from '../lib/useControlPlane';
+import { fileInListings } from '../lib/sessionListingData';
 import { ProviderTile } from './ProviderGallery';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Dialog } from './ui/Dialog';
@@ -80,6 +75,9 @@ export function useSessionFolderFiling() {
     qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
       Array.isArray(old) ? old.map((s) => (s.id === session.id ? { ...s, folderId: destination } : s)) : old,
     );
+    // A list read a page at a time: the entry leaves the pages it is no longer filed in, and the folder rows'
+    // counts follow it (lib/sessionListingData).
+    fileInListings(qc, { id: session.id, from: session.folderId ?? null, to: destination });
     try {
       await moveSession(session.id, { folderId: destination });
       message.success(movedToFolderToast(folder, origin));
@@ -107,7 +105,7 @@ export const moveTargetsKey = (sessionId: string) => ['session', sessionId, 'mov
  * Move (docs/session-folders-move-design.md §4, §5): file a session in one of its workspace's
  * folders, or move it to another workspace and one of that workspace's folders. The same panel the
  * iOS list opens: the first group files immediately and closes; the second opens a workspace's step,
- * whose folder pick asks for confirmation (End and Move for an idle session) before the move. Whether
+ * whose folder pick asks for confirmation before the move. Whether
  * a session can move, and where to, is the server's answer (`move-targets`), shown as it is.
  */
 export function SessionMoveModal({
@@ -138,8 +136,8 @@ export function SessionMoveModal({
   const [made, setMade] = useState<SessionMoveFolder[]>([]);
   // New Folder…'s inline name field, on whichever step is showing.
   const [naming, setNaming] = useState<{ draft: string; error: string | null; saving: boolean } | null>(null);
-  // A move under way: filing in a folder, or End and Move's two steps. Everything waits for it.
-  const [phase, setPhase] = useState<MovePhase | 'filing' | null>(null);
+  // A move under way: filing in a folder, or moving to another workspace. Everything waits for it.
+  const [phase, setPhase] = useState<'moving' | 'filing' | null>(null);
   const sessionId = session?.id ?? '';
   const targetsQ = useQuery({
     queryKey: moveTargetsKey(sessionId),
@@ -188,16 +186,14 @@ export function SessionMoveModal({
     if (filed) onClose();
   };
 
-  // A workspace step's folder pick: confirm, then move — ending the session first when it is idle.
-  const runMove = async (target: SessionMoveTarget, folder: { id: string } | null, needsEnd: boolean): Promise<void> => {
-    setPhase(needsEnd ? 'ending' : 'moving');
-    const failure = await runWorkspaceMove({
-      endingFirst: needsEnd,
-      end: () => endSession(session.id),
-      ended: async () => isSessionTerminal(await getSession(session.id)),
-      move: () => moveSession(session.id, { folderId: folder?.id ?? null, workspaceId: target.workspaceId }),
-      phase: setPhase,
-    });
+  // A workspace step's folder pick: confirm, then move. An idle session is let go of by the server first, which
+  // waits for it (SessionsService.releaseForMove): one request, and nothing about it for the person to see.
+  const runMove = async (target: SessionMoveTarget, folder: { id: string } | null): Promise<void> => {
+    setPhase('moving');
+    const failure = await moveSession(session.id, { folderId: folder?.id ?? null, workspaceId: target.workspaceId }).then(
+      () => null,
+      moveFailureText,
+    );
     setPhase(null);
     refreshAfterMove();
     void qc.invalidateQueries({ queryKey: ['workspaces'] });
@@ -220,11 +216,11 @@ export function SessionMoveModal({
           ))}
         </div>
       ),
-      confirmText: moveConfirmAction(current),
+      confirmText: 'Move',
       cancelText: 'Cancel',
       // Closes at once: the move's progress and outcome are this dialog's to show, not the question's.
       onConfirm: () => {
-        void runMove(target, folder, current.needsEnd);
+        void runMove(target, folder);
       },
     });
   };
@@ -450,7 +446,7 @@ export function SessionMoveModal({
       {phase && phase !== 'filing' && (
         <div className="move-dialog-progress" role="status">
           <Spinner size="small" aria-hidden />
-          {phase === 'ending' ? MOVE_COPY.ending : MOVE_COPY.moving}
+          {MOVE_COPY.moving}
         </div>
       )}
       {confirmation}

@@ -17,6 +17,21 @@ import Foundation
 
 /// A local-only command result rendered inline with the conversation. It deliberately stays out of
 /// `TranscriptState`: `/status` never reaches the runner and therefore has no durable server event.
+/// A card a page's chat hangs under one of the conversation's turns — a Drive chat's change group or overwrite
+/// question (board drive-chat 02 ② ③, the web's `useDriveChatCards`): drawn after the last item of its turn, or under
+/// the conversation when its turn is not among the items loaded. The transcript only places it; the page that hosts
+/// the conversation draws it, by its id.
+public struct TranscriptChatCard: Identifiable, Equatable, Sendable {
+    public let id: String
+    /// The turn it belongs to: the `turnId` the turn's opening message carries.
+    public let turnId: String
+
+    public init(id: String, turnId: String) {
+        self.id = id
+        self.turnId = turnId
+    }
+}
+
 public struct LocalStatusCard: Identifiable, Equatable, Sendable {
     public let id: UUID
     public let rows: [ComposerStatusRow]
@@ -508,6 +523,8 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// into one group row (`OrbitExchangeFold`; web parity: `OrbitExchangeSolo` / `OrbitExchangeGroup`).
     case exchanges([OrbitExchange])
     case statusCard(LocalStatusCard)
+    /// A card the hosting page's chat hangs under a turn (`TranscriptChatCard`).
+    case chatCard(TranscriptChatCard)
     case decisionCard(DeliveredDecisionCard)
     case approval(PendingApproval)
     /// The conversation's last row while it is at rest (`RecapCard`): its recap, whole.
@@ -540,6 +557,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
         // bubble's own row, and a scroll aimed at it must still land somewhere.
         case .exchanges(let turns):  return turns.first?.id ?? "exchanges-empty"
         case .statusCard(let card):  return "local-status-\(card.id)"
+        case .chatCard(let card):    return "chat-card-\(card.id)"
         case .decisionCard(let card): return card.id
         case .approval(let appr):    return "approval-\(appr.id)"
         case .recap:                 return "session-recap"
@@ -578,7 +596,8 @@ public enum TranscriptRows {
                              foldExchanges: Bool = true,
                              watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
                              handoffReceived: SessionCoordinatorHandoffReceived? = nil,
-                             createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
+                             createdWorkspace: CreatedWorkspaceLine? = nil,
+                             chatCards: [TranscriptChatCard] = []) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
         // The note the conversation opened with, by the same rule: first, once the first page is in.
@@ -644,6 +663,25 @@ public enum TranscriptRows {
         // older than, so a record's moment being above the window must not hide the control that
         // pages the window back to it.
         if canPageOlder { rows.append(.loadOlder(cursor: state.oldestSeq ?? 0)) }
+        // A chat's cards go after the last item of their turn: a turn runs from the message that opened it (the one
+        // carrying its `turnId`) to the next one that opens another.
+        var anchoredChat: [String: [TranscriptChatCard]] = [:]
+        var trailingChat: [TranscriptChatCard] = []
+        if !chatCards.isEmpty {
+            var lastOfTurn: [String: String] = [:]
+            var turn: String?
+            for item in state.items {
+                if case .user(let bubble) = item, let id = bubble.turnId { turn = PublicID.storageKey(id) }
+                if let turn { lastOfTurn[turn] = item.id }
+            }
+            for card in chatCards {
+                if let anchor = lastOfTurn[PublicID.storageKey(card.turnId)] {
+                    anchoredChat[anchor, default: []].append(card)
+                } else {
+                    trailingChat.append(card)
+                }
+            }
+        }
         let turnHeads = TurnHead.lines(state)
         for item in state.items {
             // An AskUserQuestion / ExitPlanMode tool card duplicates the live interactive approval
@@ -670,6 +708,7 @@ public enum TranscriptRows {
             for card in anchoredDecisions.removeValue(forKey: item.id) ?? [] {
                 rows.append(.decisionCard(card))
             }
+            for card in anchoredChat.removeValue(forKey: item.id) ?? [] { rows.append(.chatCard(card)) }
         }
         // The accepted head waiting on its echo, drawn where that echo will land — after every item —
         // and as the transcript draws a user turn, so with no Cancel: the runner has it. Its row
@@ -697,6 +736,8 @@ public enum TranscriptRows {
         // Only under a conversation there is something of: a window with nothing loaded yet has
         // nothing for the recap to sum up.
         if let recap, !state.items.isEmpty { rows.append(.recap(recap)) }
+        // A chat's card whose turn is not among the items loaded: under the conversation, oldest first.
+        rows.append(contentsOf: trailingChat.map(TranscriptRow.chatCard))
         rows.append(contentsOf: trailingDecisions.map(TranscriptRow.decisionCard))
 
         // Approvals render as the agent's latest turn (web's AgentView puts the panel right after
