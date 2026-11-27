@@ -291,6 +291,9 @@ model User {
   // §5.5, migration 0396). A disabled account cannot sign in, refresh or use any credential it holds,
   // and nothing it owns is deleted: enabling it again lets it back in.
   disabledAt            DateTime? @map("disabled_at")
+  // This account's storage quota in bytes, in place of ORBIT_DRIVE_QUOTA_BYTES; null takes the deployment's. Set by
+  // the operator in SQL, nothing in the product writes it (migration 1760, FilesService.quotaFor).
+  driveQuotaBytes       BigInt?   @map("drive_quota_bytes")
   // DEPRECATED, unread: a Claude subscription token (`claude setup-token`) the control plane used
   // to hold and inject on every runner. Claude now authenticates per runner — a session that finds
   // no local login surfaces the sign-in card (RunnerSignIn) — so nothing writes or reads these.

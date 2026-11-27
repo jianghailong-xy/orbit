@@ -1007,6 +1007,27 @@ test('Documents retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, as
     const room = await upload(limited, 'POST', '/api/attachments', { authorization: `Bearer ${other.bearer}` }, { name: 'own.txt', type: 'text/plain', content: sized(900) });
     assert.equal(room.status, 201);
 
+    // The operator gives one account a quota of its own in SQL, larger or smaller than the deployment's, or where it sets none.
+    const setQuota = (ownerId: string, bytes: number | null) =>
+      db.$executeRaw`UPDATE "user" SET drive_quota_bytes = ${bytes === null ? null : BigInt(bytes)} WHERE id = ${ownerId}::uuid`;
+    const larger = await accountOf('limited-larger');
+    await setQuota(larger.ownerId, 2 * QUOTA);
+    const largerUsage = await call(limited, 'GET', '/api/attachments/usage', larger.bearer);
+    assert.equal(largerUsage.json.quotaBytes, 2 * QUOTA, 'Settings is told the account\'s own quota');
+    const big = await upload(limited, 'POST', '/api/attachments', { authorization: `Bearer ${larger.bearer}` }, { name: 'big.txt', type: 'text/plain', content: sized(1500) });
+    assert.equal(big.status, 201, `past the deployment's quota, within its own: ${big.text.slice(0, 300)}`);
+    const past = await upload(limited, 'POST', '/api/attachments', { authorization: `Bearer ${larger.bearer}` }, { name: 'past.txt', type: 'text/plain', content: sized(501) });
+    assert.equal(past.status, 413, 'its own quota is a limit too');
+    assert.equal(past.json.quotaBytes, 2 * QUOTA);
+    await setQuota(larger.ownerId, null);
+    assert.equal((await call(limited, 'GET', '/api/attachments/usage', larger.bearer)).json.quotaBytes, QUOTA, 'NULL is the deployment\'s again');
+    const unlimited = await accountOf('unlimited-but-capped');
+    assert.equal((await call(api, 'GET', '/api/attachments/usage', unlimited.bearer)).json.quotaBytes, null, 'a deployment with no quota');
+    await setQuota(unlimited.ownerId, 100);
+    const capped = await upload(api, 'POST', '/api/attachments', { authorization: `Bearer ${unlimited.bearer}` }, { name: 'capped.txt', type: 'text/plain', content: sized(101) });
+    assert.equal(capped.status, 413, 'an account quota applies where the deployment sets none');
+    await assert.rejects(setQuota(unlimited.ownerId, 0), /user_drive_quota_bytes_positive/, 'zero is refused, not read as no limit');
+
     // Expiry makes room.
     const firstRow = toUuid(first.json.id);
     await db.attachment.updateMany({ where: { ownerId: who.ownerId, sha256: (await row(firstRow)).sha256 }, data: { expiredAt: new Date() } });
