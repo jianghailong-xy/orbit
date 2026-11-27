@@ -12804,7 +12804,8 @@ export function WorkspaceView({
             // centering flex row, so once /status prints a card it would sit beside the hero instead
             // of under it. With cards the pane falls back to plain transcript flow.
             <div
-              className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
+              // A first message waiting for its session reads where the conversation it opens will: from the top.
+              className={`workspace-sessions${localStatusCards.length || draftPending ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
               {draftPending ? (
