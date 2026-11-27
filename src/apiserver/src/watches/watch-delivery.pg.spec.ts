@@ -49,6 +49,7 @@ import {
 } from './watch-delivery.service';
 import { WatchEvaluatorService } from './watch-evaluator.service';
 import { WatchesService } from './watches.service';
+import { wordSql } from '../test-support/session-word';
 import '../test-support/dequeue-under-lease';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -310,7 +311,7 @@ async function insertSession(owner: string, status: string, runnerId: string): P
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","turn_state","assigned_runner_id",
                            "provider","provider_builtin","num_turns","started_at","runtime_session_id", "finished_at")
      VALUES ($1,'watch observer','the opening prompt',$2,$2,now(),(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,'claude',TRUE,1,now(),$5,
-             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+             CASE WHEN $3::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;
@@ -422,7 +423,7 @@ async function sessionOf(id: string) {
     trashed: boolean;
     cancelling: boolean;
   }>(
-    `SELECT "status", "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
+    `SELECT ${wordSql()} AS status, "end_reason" AS "endReason", "completed_at" IS NOT NULL AS "completed",
             "deleted_at" IS NOT NULL AS "trashed", "cancel_requested_at" IS NOT NULL AS "cancelling"
        FROM "session" WHERE "id" = $1`,
     [id],
@@ -1109,7 +1110,7 @@ test('a wake still queued when its observer\'s runner is lost is a dead letter: 
   await (reaper as unknown as { sweep(): Promise<void> }).sweep();
 
   const { rows: [session] } = await sql.query<{ status: string; retryArmed: boolean }>(
-    `SELECT "status", "retry_at" IS NOT NULL AS "retryArmed" FROM "session" WHERE "id" = $1`,
+    `SELECT ${wordSql()} AS status, "retry_at" IS NOT NULL AS "retryArmed" FROM "session" WHERE "id" = $1`,
     [queued.observer],
   );
   assert.deepEqual(session, { status: 'FAILED', retryArmed: true }, 'the reaper finalized the observer, with its retry armed');

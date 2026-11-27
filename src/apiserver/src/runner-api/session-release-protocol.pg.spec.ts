@@ -60,7 +60,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import type { BackgroundWakeDto } from './background-job-wake';
 import { RunnerApiController } from './runner-api.controller';
 import { turnStateOfWord } from '../sessions/session-turn-state';
-import { WORD_SELECT, wordOf } from '../test-support/session-word';
+import { WORD_SELECT, wordOf, wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -183,7 +183,7 @@ interface Facts {
 /** The session's release facts and the named turn's, read over the second connection. */
 async function facts(sql: Client, sessionId: string, turnId: string): Promise<Facts> {
   const { rows } = await sql.query(
-    `SELECT s.status::text AS status, s.finished_at IS NOT NULL AS released, s.end_reason, s.last_turn_outcome,
+    `SELECT ${wordSql('s')} AS status, s.finished_at IS NOT NULL AS released, s.end_reason, s.last_turn_outcome,
             s.error, s.cancel_requested_at IS NOT NULL AS cancel_requested,
             t.status AS turn_status, t.outcome AS turn_outcome, t.error AS turn_error
        FROM "session" s JOIN "conversation_turn" t ON t.session_id = s.id

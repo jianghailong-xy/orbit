@@ -14,6 +14,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { readOpenListVersionParts } from './open-list-version';
 import { fixtureFacts } from '../test-support/session-word';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 /**
  * Migration 1464 (docs/list-freshness-scope-hints.md §5.1, §8.2): the Open-list counters of the sources that hang
@@ -405,6 +406,8 @@ test('8. rollout: the old aggregation sees every bump, and the per-base-source e
   await old.connect();
   t.after(() => old.end());
   await old.query('BEGIN');
+  // Those functions read session.status, dropped in deploy D4 (migration 1711): put back inside this transaction.
+  await restoreStatusColumn(old);
   await old.query(functionsBefore1464());
   const oldStart = await epochs(old, before.ownerId);
   await script(before, (sql, ...args) => old.query(sql, args));

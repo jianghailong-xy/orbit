@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# D2-era: this reads or writes session.status, which deploy D4 (migration 1711) dropped. It runs on a database of
+# deploy D1 or D2 only, and is kept for the record of those deploys.
+#
 # Run scripts/session-turn-state-backfill.sql batch after batch until one writes 0 rows (docs/session-status-retirement-plan.md
 # §4.4; task T3, with the owner's go: it writes production rows).
 #

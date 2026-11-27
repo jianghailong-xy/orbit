@@ -483,8 +483,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         workspaces.forEach { workspace ->
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
+                            val onCloud = runner != null && RunnerPage.isManaged(runner.id, managed = runner.managed)
                             DrawerWorkspaceRow(name = workspace.name,
-                                runner = runner?.let { if (RunnerPage.isManaged(it.id, managed = it.managed)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                runner = runner?.let { if (onCloud) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                cloud = onCloud,
                                 disabled = !workspace.enabled,
                                 stateLabel = if (runner?.online == false) ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                 waiting = sessions.sumOf { it.pendingApprovals },

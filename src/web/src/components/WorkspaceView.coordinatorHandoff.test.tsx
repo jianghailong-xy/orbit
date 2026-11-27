@@ -503,6 +503,18 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(new URLSearchParams(search).get('task')).toBeTruthy());
   });
 
+  it('the title reads the same hovered as at rest: no tooltip, no ›, still Session settings to a screen reader', async () => {
+    // docs/mocks/session-title-hover (owner 2026-11-27): on hover the › took room and pushed the Task badge.
+    detail = session({ title: 'Task: Fix the red checks', taskId: '0195c0de-0000-7000-8000-0000000000f1', taskTitle: 'Fix the red checks' });
+    await mount();
+    const line = () => mounted().querySelector('.workspace-title-line');
+    await waitFor(() => expect(line()?.querySelector('.workspace-name-text')).not.toBeNull());
+    const title = line()!.querySelector<HTMLButtonElement>('button.workspace-name-button')!;
+    expect(title.getAttribute('aria-label')).toBe('Session settings');
+    expect(title.querySelector('.workspace-name-chevron, .anticon')).toBeNull();
+    expect(await hoverTooltip(title)).toBeNull();
+  });
+
   it('the Task badge toggles its task beside the conversation, one column at a time with session settings', async () => {
     // docs/mocks/session-task-column: pressed while the task is open, a second press closes it, and the
     // task and session settings never stand side by side.
