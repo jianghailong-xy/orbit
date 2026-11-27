@@ -390,6 +390,7 @@ public enum ComposerLogic {
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
                                 attachmentIds: [String], queueForNextTurn: Bool = false,
                                 wikiContext: WikiChatContext? = nil,
+                                driveContext: DriveChatContext? = nil,
                                 skipTranslation: Bool = false,
                                 optimizedTranslation: String? = nil) -> SessionTurnRequest {
         SessionTurnRequest(clientTurnId: clientTurnId,
@@ -398,6 +399,7 @@ public enum ComposerLogic {
                            attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
                            intent: queueForNextTurn ? "NEXT_TURN" : nil,
                            wikiContext: wikiContext,
+                           driveContext: driveContext,
                            // Only ever `true` or absent: a body without it is what every send was.
                            skipTranslation: skipTranslation ? true : nil,
                            optimizedTranslation: optimizedTranslation)

@@ -1869,6 +1869,40 @@ public final class APIClient: @unchecked Sendable {
     public func createWikiChat(spaceID: String, _ req: WikiChatCreateRequest) async throws -> WikiChatCreateAnswer {
         try await post("wiki/spaces/\(spaceID)/chats", body: req)
     }
+    // MARK: Drive chat (src/shared/src/driveChat.ts; apiserver drive/drive-chat.controller.ts, drive-chat-changes.controller.ts)
+
+    /// `GET /drive/chats`: the owner's Drive chats, a page at a time (`q`, `offset`), the button's counts over all of them
+    /// and the workspace a new one runs in.
+    public func driveChats(q: String = "", offset: Int = 0) async throws -> DriveChatList {
+        var query: [URLQueryItem] = []
+        let words = q.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !words.isEmpty { query.append(URLQueryItem(name: "q", value: words)) }
+        if offset > 0 { query.append(URLQueryItem(name: "offset", value: String(offset))) }
+        return try await get("drive/chats", query: query)
+    }
+    /// `POST /drive/chats`: a chat made with the owner's first words, its first turn filed under the client's UUID.
+    public func createDriveChat(_ req: DriveChatCreateRequest) async throws -> DriveChatCreateAnswer {
+        try await post("drive/chats", body: req)
+    }
+    /// `GET /drive/chats/:id/groups`: what each of the chat's turns changed, oldest first.
+    public func driveChatGroups(sessionID: String) async throws -> [DriveChatChangeGroup] {
+        let read: DriveChatGroups = try await get("drive/chats/\(sessionID)/groups")
+        return read.groups
+    }
+    /// `POST /drive/chats/:id/groups/:groupId/undo` or `/apply`.
+    public func pressDriveChatGroup(sessionID: String, groupID: String, apply: Bool) async throws -> DriveChatChangeGroup {
+        try await postEmpty("drive/chats/\(sessionID)/groups/\(groupID)/\(apply ? "apply" : "undo")")
+    }
+    /// `GET /drive/chats/:id/questions`: the overwrites the chat asked the owner about.
+    public func driveChatQuestions(sessionID: String) async throws -> [DriveChatQuestion] {
+        let read: DriveChatQuestions = try await get("drive/chats/\(sessionID)/questions")
+        return read.questions
+    }
+    /// `POST /drive/chats/:id/questions/:questionId { choice }`: Keep both or Replace.
+    public func answerDriveChatQuestion(sessionID: String, questionID: String,
+                                        _ choice: DriveChatQuestion.Choice) async throws -> DriveChatQuestion {
+        try await post("drive/chats/\(sessionID)/questions/\(questionID)", body: DriveChatAnswerRequest(choice: choice))
+    }
     /// `GET /wiki/chats/:id/drafts`: every card of a chat (its session id), oldest first.
     public func wikiChatDrafts(sessionID: String) async throws -> WikiChatDrafts {
         try await get("wiki/chats/\(sessionID)/drafts")
