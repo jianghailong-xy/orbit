@@ -6,12 +6,12 @@ import XCTest
 /// §4, §5.2–5.4): the panel reads the server's answer and draws a row per other workspace — greyed
 /// with the server's reason where the session can't go, the whole group greyed when it can't leave —
 /// a workspace opens its page in the panel's own stack, a folder there asks Move to <workspace>? with
-/// Move or End and Move, and the app runs End and Move's steps, takes the row out of the list and
-/// says where it went. All of it iOS only, like the rest of the panel.
+/// Move, and the app sends the one move request (the server lets a held session go first), takes the
+/// row out of the list and says where it went. All of it iOS only, like the rest of the panel.
 ///
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the shells: each check reads the part of
-/// the source it is about. What the words say and how End and Move steps are tested in
-/// `SessionWorkspaceMoveTests`; this pins that the shells use them.
+/// the source it is about. What the words say is tested in `SessionWorkspaceMoveTests`; this pins
+/// that the shells use them.
 final class SessionWorkspaceMoveWiringTests: XCTestCase {
     private struct SourceMissing: Error, CustomStringConvertible {
         let path: String
@@ -165,13 +165,13 @@ final class SessionWorkspaceMoveWiringTests: XCTestCase {
     }
 
     /// A tap always asks (§5.3): Move to <workspace>?, the body OrbitKit puts together from the
-    /// server's answer, Cancel and Move — or End and Move for a session that has to end first.
+    /// server's answer, Cancel and Move — Move even for a session still held, which the server lets go.
     func testATapAsksMoveToTheWorkspace() throws {
         let page = code(try appSource("Views/SessionMoveTargetPage.swift"))
         let alert = try slice(page, from: ".alert(SessionMoveCopy.confirmTitle(current, answer), isPresented: confirming, presenting: picked) { pick in",
                               to: "Text(SessionMoveCopy.confirmMessage(answer, to: current, from: workspace.name))")
         let order = try positions(["Button(SessionMoveCopy.cancel, role: .cancel) {}",
-                                   "Button(SessionMoveCopy.confirmAction(answer)) { move(pick) }",
+                                   "Button(SessionMoveCopy.confirmAction) { move(pick) }",
                                    ".keyboardShortcut(.defaultAction)"], in: alert)
         XCTAssertEqual(order, order.sorted())
 
@@ -185,46 +185,44 @@ final class SessionWorkspaceMoveWiringTests: XCTestCase {
         XCTAssertEqual(steps, steps.sorted())
     }
 
-    /// Confirmed, the app moves the session; the page says which step it is on and can't be left
+    /// Confirmed, the app moves the session; the page says Moving… and can't be left
     /// meanwhile, closes the panel once the session is there, and otherwise says why in an alert and
     /// reads the server's answer again.
     func testTheConfirmedMoveRunsInTheAppAndTheOutcomeIsSaid() throws {
         let page = code(try appSource("Views/SessionMoveTargetPage.swift"))
         let move = try slice(page, from: "private func move(_ pick: Pick) {", to: "\n    }\n")
-        let order = try positions(["phase = answer.needsEnd ? .ending : .moving",
-                                   "await app.moveSession(session.id, to: current, folder: pick.folder?.id,",
-                                   "endingFirst: answer.needsEnd) { phase = $0 }",
-                                   "phase = nil", "if let refused {", "failure = refused", "await reload()",
+        let order = try positions(["moving = true",
+                                   "await app.moveSession(session.id, to: current, folder: pick.folder?.id)",
+                                   "moving = false", "if let refused {", "failure = refused", "await reload()",
                                    "} else {", "close()"], in: move)
         XCTAssertEqual(order, order.sorted())
 
         let body = try slice(page, from: "var body: some View {", to: "\n    }\n")
-        for part in [".disabled(creating || phase != nil)", ".navigationBarBackButtonHidden(phase != nil)",
-                     ".interactiveDismissDisabled(phase != nil)", "Text(SessionMoveCopy.progress(phase))",
-                     ".alert(SessionMoveCopy.couldNotMove, isPresented: failed) {", ".disabled(phase != nil)"] {
+        for part in [".disabled(creating || moving)", ".navigationBarBackButtonHidden(moving)",
+                     ".interactiveDismissDisabled(moving)", "Text(SessionMoveCopy.moving)",
+                     ".alert(SessionMoveCopy.couldNotMove, isPresented: failed) {", ".disabled(moving)"] {
             XCTAssertTrue(body.contains(part), "the page has `\(part)`")
         }
     }
 
     // MARK: the app
 
-    /// End and Move is OrbitKit's `SessionWorkspaceMove.run` over the real doors: end the session,
-    /// read its status until the run is over, then move it. Moved, every loaded copy of the row names
-    /// the new workspace before the toast says where it went; either way the lists are read again.
-    func testTheAppRunsEndAndMoveOverTheRealDoors() throws {
+    /// The move is one request over the real door, and never an end: the server lets a held session go
+    /// first. Moved, every loaded copy of the row names the new workspace before the toast says where it
+    /// went; either way the lists are read again.
+    func testTheAppMovesInOneRequestOverTheRealDoor() throws {
         let app = code(try appSource("AppModel.swift"))
-        let move = try slice(app, from: "func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?,",
+        let move = try slice(app, from: "func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?) async -> String? {",
                              to: "\n    }\n")
-        let steps = try positions(["SessionWorkspaceMove.run(", "endingFirst: endingFirst,",
-                                   "end: { try await api.endSession(id) },",
-                                   "session: { try await api.session(id) },",
-                                   "move: { try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID) },",
-                                   "phase: { phase($0) })",
+        let steps = try positions(["try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID)",
+                                   "failure = SessionMoveCopy.moveFailed(error)",
                                    "defer { Task { await reloadSessionLists() } }",
-                                   "case .moved:", "patchSessionWorkspace(id, to: target, folder: folderID)",
+                                   "if let failure { return failure }",
+                                   "patchSessionWorkspace(id, to: target, folder: folderID)",
                                    "showToast(SessionMoveCopy.movedToWorkspace(target.name),",
-                                   "return nil", "case .failed(let reason):", "return reason"], in: move)
+                                   "return nil"], in: move)
         XCTAssertEqual(steps, steps.sorted())
+        XCTAssertFalse(move.contains("endSession"), "the app never ends a session to move it")
 
         // Every loaded copy: the Open snapshot — whose agent filter takes the row out of the
         // workspace's Open list — the pane's Completed rows, and the detail cache.
@@ -248,9 +246,9 @@ final class SessionWorkspaceMoveWiringTests: XCTestCase {
         let app = code(try appSource("AppModel.swift"))
         for part in ["func createTargetFolder(named name: String, inWorkspace workspaceID: String)",
                      "private func patchSessionWorkspace(",
-                     "            patchSessionWorkspace(id, to: target, folder: folderID)",
+                     "        patchSessionWorkspace(id, to: target, folder: folderID)",
                      "func sessionMoveTargets(_ id: String) async throws -> SessionMoveTargets",
-                     "func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?,"] {
+                     "func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?) async -> String? {"] {
             XCTAssertEqual(try branches(of: part, in: app), [], "`\(part)` is every platform's")
         }
         let model = code(try appSource("AgentsModel.swift"))

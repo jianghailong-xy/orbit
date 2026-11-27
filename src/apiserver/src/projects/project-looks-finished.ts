@@ -46,7 +46,7 @@ import { openItemOwed, conversationIsOver } from './project-open-item';
 
 /** The fact a finished-looking project is delivered as: the settled-task fact, spent on the standing
  *  conversation rather than on a judgment. Read back by name here, never built. */
-const LOOKS_FINISHED_DELIVERY = 'PROJECT_TASKS_SETTLED' satisfies CoordinatorWakeEvent;
+export const LOOKS_FINISHED_DELIVERY = 'PROJECT_TASKS_SETTLED' satisfies CoordinatorWakeEvent;
 
 /** What a project whose tasks have all settled is waiting on, as the closing guardrail reads it. */
 export type ProjectFinish =

@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { accountsAfterMove, mergeTargetOf } from './session-move';
+import { AgentProvider } from '@orbit/shared';
+
+import {
+  MOVE_REFUSAL,
+  type SessionMoveFacts,
+  accountsAfterMove,
+  mergeTargetOf,
+  moveNeedsRunnerOnline,
+  sessionMoveVerdict,
+} from './session-move';
 
 const session = (over: Partial<{ mergeTarget: string | null; mergeTargets: string[] }> = {}) => ({
   mergeTarget: null,
@@ -72,4 +81,32 @@ test('P6b a workspace move keeps a Cursor CLI session on the account it runs on,
       cursorAccount: null, cursorAccountPinned: false,
     },
   );
+});
+
+/** An idle session of a person's, still held by its runner, as the move panel judges it. */
+function idleFacts(over: Partial<SessionMoveFacts> = {}): SessionMoveFacts {
+  return {
+    turnState: null, finishedAt: null, deletedAt: null, completedAt: null, importSourceCwd: null, taskId: null,
+    dispatchOrigin: 'USER', cancelRequestedAt: null, engineTurnActive: false, runningBgShells: [], liveApprovals: 0,
+    queuedTurns: 0, mergeStatus: null, commitStatus: null, mergeRecoveryOpen: false, retryAt: null,
+    runtime: AgentProvider.CLAUDE, ...over,
+  };
+}
+
+test('the move releases a held session itself: idle, or already being let go, it moves after its release', () => {
+  // Idle and held: movable, released by the move first.
+  assert.deepEqual(sessionMoveVerdict(idleFacts()), { reason: null, needsEnd: true });
+  // Released: moves at once.
+  assert.deepEqual(sessionMoveVerdict(idleFacts({ finishedAt: new Date() })), { reason: null, needsEnd: false });
+  // Its end already asked for — even mid-turn, with a job still running — is a release under way, which the move
+  // waits for rather than refusing with a word about ending.
+  for (const over of [{}, { turnState: 'IN_FLIGHT' as const }, { runningBgShells: ['toolu_bg'] }]) {
+    assert.deepEqual(sessionMoveVerdict(idleFacts({ cancelRequestedAt: new Date(), ...over })), { reason: null, needsEnd: true });
+  }
+  // Not asked to end, a running one still has to be stopped by the person first.
+  assert.equal(sessionMoveVerdict(idleFacts({ turnState: 'IN_FLIGHT' })).reason, MOVE_REFUSAL.STOP);
+  // No refusal of the move speaks of ending the session.
+  for (const sentence of Object.values(MOVE_REFUSAL)) assert.doesNotMatch(sentence, /\bend(ed|ing)?\b/i);
+  assert.equal(moveNeedsRunnerOnline({ name: 'ws04', displayName: 'Mac mini' }), 'Mac mini has to be online to move this session.');
+  assert.equal(moveNeedsRunnerOnline(null), 'Its runner has to be online to move this session.');
 });

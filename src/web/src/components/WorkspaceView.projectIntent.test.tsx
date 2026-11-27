@@ -165,9 +165,13 @@ async function mount(entry: string, expectedTitle: string): Promise<void> {
     );
   });
   await waitForUi(() => {
-    const selector = expectedTitle === 'Start a new session' ? '.np-empty-copy' : '.np-title';
-    const rendered = nextContainer.querySelector(selector)?.textContent;
-    expect(rendered).toBe(expectedTitle === 'Start a new session' ? 'Send a task to get started.' : expectedTitle);
+    // An ordinary new session's hero is the engine alone, with no title or instruction line under it.
+    if (expectedTitle === 'Start a new session') {
+      expect(nextContainer.querySelector('.np-card')).toBeTruthy();
+      expect(nextContainer.querySelector('.np-title')).toBeNull();
+    } else {
+      expect(nextContainer.querySelector('.np-title')?.textContent).toBe(expectedTitle);
+    }
   });
 }
 
@@ -195,18 +199,18 @@ describe('New Session project intent', () => {
     );
     expect(intent.querySelectorAll('button[aria-label="Dismiss project intent"]')).toHaveLength(1);
     // A project names its workspace and no folder.
-    await waitForUi(() => expect(one('.np-place button[aria-label="Workspace: orbit"]')).toBeTruthy());
-    expect(container?.querySelector('.np-place button[aria-label^="Folder:"]')).toBeNull();
+    await waitForUi(() => expect(one('.np-place button[aria-label="Runs in: orbit"]')).toBeTruthy());
+    expect(container?.querySelector('.np-place-slash')).toBeNull();
   });
 
   it('uses the empty-state hierarchy when the route has no intent', async () => {
     await mount(NEW_SESSION_PATH, 'Start a new session');
 
-    expect(one('.np-empty-copy').textContent).toBe('Send a task to get started.');
+    expect(mountedContainer().textContent).not.toContain('Send a task to get started.');
     // docs/mocks/new-session-top: the model is the composer's to say, where it runs is said under the
     // engine, and a wide window's draft has no header above them.
     expect(container?.querySelector('.np-current-model')).toBeNull();
-    await waitForUi(() => expect(one('.np-place button[aria-label="Workspace: orbit"]')).toBeTruthy());
+    await waitForUi(() => expect(one('.np-place button[aria-label="Runs in: orbit"]')).toBeTruthy());
     expect(container?.querySelector('.workspace-header')).toBeNull();
     expect(container?.querySelector('.composer-project-intent')).toBeNull();
     expect(container?.querySelector('.np-title')).toBeNull();
@@ -220,12 +224,12 @@ describe('New Session project intent', () => {
     await waitForUi(() => {
       expect(one('[data-testid="location"]').textContent).toBe(NEW_SESSION_PATH);
       expect(mountedContainer().querySelector('.composer-project-intent')).toBeNull();
-      expect(one('.np-empty-copy').textContent).toBe('Send a task to get started.');
+      expect(mountedContainer().querySelector('.np-title')).toBeNull();
     });
 
     expect(one('[data-testid="location"]').textContent).toBe(NEW_SESSION_PATH);
     expect(mountedContainer().querySelector('.composer-project-intent')).toBeNull();
-    expect(one('.np-empty-copy').textContent).toBe('Send a task to get started.');
+    expect(mountedContainer().querySelector('.np-title')).toBeNull();
     expect(container?.querySelector('.np-current-model')).toBeNull();
   });
 });

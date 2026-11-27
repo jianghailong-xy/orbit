@@ -175,6 +175,7 @@ func TestARunnerKilledWhileSendingItsSpoolOverTheLinkLosesNothing(t *testing.T) 
 	t.Cleanup(m.close)
 	m.work.client.api, m.work.client.dial = r.m.work.client.api, r.m.work.client.dial
 	m.work.pingEvery, m.work.pingTimeout = 200*time.Millisecond, 2*time.Second
+	m.work.youngBackoff = 0
 	welcomed := len(r.g.welcomed())
 	m.start()
 	r.g.waitWelcomed(t, welcomed+1)

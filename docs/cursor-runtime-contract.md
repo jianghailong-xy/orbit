@@ -569,11 +569,22 @@ Orbit may answer `allow-once` for inline interpreter scripts (`python3 -c`, `nod
 and Python/Node/Ruby/Perl/shell heredocs). The sandbox enforces writable roots.
 Without the sandbox, Auto retains the original conservative classifier: interpreter
 heredocs and the previously refused inline forms still get an approval card.
+Cursor Auto sandboxed reads (2026-11-20): with the sandbox in force, any command — not
+only an inline script — may name a path outside the workspace, since the sandbox already
+refuses a write outside the writable roots; the workspace-path check
+(`dshCommandStaysInWorkspace`) applies only without the sandbox. Read-only `git worktree list`
+is routine there, and a `$(…)` substitution is allowed when its inner command is: the markers
+below are matched against the whole line, inner commands included. Found on session
+4FwPbT4Fa0wz8VbxYjHfVz, whose six cards were all reads (`TestCursorAutoSandboxReads`).
 In both cases, git push/fetch/pull/clone, remote curl/wget, package installs, ssh/scp,
 sudo, recursive deletes outside temporary directories, secret files, other systems
-(`dshToolGateMatch`), and containers still require a card. Sandboxed Auto scans the
-entire script body for these markers, including quoted command arguments; an
-unterminated heredoc also gets a card. This does not change DSH's classifier.
+(`dshToolGateMatch`), containers and every other `git worktree` subcommand still require
+a card. Sandboxed Auto scans the entire command and script body for these markers, including quoted command arguments; an
+unterminated heredoc also gets a card. With the sandbox in force, package installs means each common form:
+npm/pnpm/bun `i`/`install`/`add`/`ci`, yarn `install`/`add` or a bare `yarn`, pip/pipx/uv `install` (uv also `add`),
+brew `install`/`reinstall`/`upgrade`, gem `install`, cargo `install`/`add` and go `install`/`get`. `osascript`
+(it drives other apps, which run outside the sandbox) and every `kubectl` call also require a card there.
+This does not change DSH's classifier.
 Owner decision (2026-11-08): the workspace's standing "Always allow" rule counts
 as owner approval. Such an answer escapes the sandbox through the same one-use,
 exact-command grant as a person's click (§8.5); runner classifier allows stay sandboxed.
@@ -1566,7 +1577,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | Orbit 模式 | 启动参数（`acp --disable-auto-update --disable-indexing` 之后） | Cursor 模式 | Orbit 对权限请求的处理 | 实测 |
 | --- | --- | --- | --- | --- |
 | `acceptEdits`（没指定模式时的默认，D6） | `--disable-project-configs` | agent | 审批卡；卡上的「总是允许」回 `allow-once`（§5.2） | `p5c/accept-edits-allow-deny`、`p5c/allow-always` |
-| `auto` | Same as above; no `--force` | agent | Routine commands receive `allow-once`; all others get a card. With the session sandbox in force, inline scripts and heredocs may run after high-impact marker checks over the full body. Without it, the original Codex Auto and workspace checks apply, including refusal of interpreter heredocs. See §5.4 for the retained card boundaries. | `p5c/auto`; `TestCursorAutoSandboxInline` |
+| `auto` | Same as above; no `--force` | agent | Routine commands receive `allow-once`; all others get a card. With the session sandbox in force, any command — inline scripts and heredocs included — may run after high-impact marker checks over the full command and body, and may read outside the workspace; `git worktree list` and `$(…)` around a routine command are routine. Without it, the original Codex Auto and workspace checks apply, including refusal of interpreter heredocs and of any path outside the workspace. See §5.4 for the retained card boundaries. | `p5c/auto`; `TestCursorAutoSandboxInline`, `TestCursorAutoSandboxReads` |
 | `plan` | 同上 | plan，每轮发 prompt 前核对 | 一律 `reject-once`，不出卡；提问和计划照常出卡；看到 `switch_mode` 工具卡就终止这一轮（§4.2） | `p5c/plan`、`p5c/plan-switch-mode` |
 | `dontAsk` | 同上 | agent | 一律 `reject-once`，不出卡；提问回 `skipped`，计划回 `rejected`；工作区内的写照样发生，模式说明如实写明 | `p5c/dont-ask` |
 | `bypassPermissions` | `--force --disable-project-configs` | agent | 不会来请求；团队否决 Run Everything 时来了就出卡问人，每个进程提示一次（§5.3） | `p5c/bypass`；团队否决只有回放 |

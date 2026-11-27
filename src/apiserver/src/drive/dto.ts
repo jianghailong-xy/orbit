@@ -19,6 +19,11 @@ export class RestoreDriveVersionDto {
   @IsIn(['CURRENT', 'COPY']) as!: 'CURRENT' | 'COPY';
 }
 
+/** `POST /drive/chats/:sessionId/questions/:id`: the owner's answer to a Drive chat's overwrite question. */
+export class AnswerDriveChatQuestionDto {
+  @IsIn(['KEEP_BOTH', 'REPLACE'], { message: 'choice is KEEP_BOTH or REPLACE' }) choice!: 'KEEP_BOTH' | 'REPLACE';
+}
+
 /** `POST /drive/uploads`: open a resumable upload (§4.1). */
 export class OpenDriveUploadDto {
   /** The folder it lands in; the root when absent. */

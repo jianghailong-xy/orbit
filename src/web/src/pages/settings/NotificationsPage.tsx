@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { endWebPushOffer } from '../../components/WebPushOffer';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
 import { Switch } from '../../components/ui/Switch';
 import { disableWebPush, enableWebPush, getWebPushConfig, getWebPushState, type WebPushState } from '../../lib/webPush';
@@ -16,6 +17,7 @@ const BROWSER_UNSUPPORTED =
  * this browser to Web Push and registers it as one more of your devices, or drops it.
  */
 function ThisBrowserCard({ publicKey }: { publicKey: string }) {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<WebPushState | null>(null);
   const [busy, setBusy] = useState(false);
   const [prompting, setPrompting] = useState(false);
@@ -38,6 +40,8 @@ function ThisBrowserCard({ publicKey }: { publicKey: string }) {
       if (on) {
         setPrompting(Notification.permission === 'default');
         setState(await enableWebPush(publicKey));
+        // The browser was asked here, so the one-time offer has nothing left to offer.
+        endWebPushOffer(queryClient);
       } else {
         await disableWebPush();
         setState('off');

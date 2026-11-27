@@ -50,20 +50,24 @@ class SessionDisplayRowDrawTest {
     private val baseline = Json.parseToJsonElement(File(dir, "legacy-baseline.android.json").readText()).jsonObject["rows"]!!.jsonArray
         .map { it.jsonObject["mark"]!!.jsonPrimitive.content }
 
-    /** The board's after column for the rows with the facts: the state icon, the marks and what TalkBack says. */
+    /** The board's after column for the rows with the facts: the state icon, the marks and what TalkBack says. Interrupted, Finished and
+     * Ended are not drawn; Failed, Retrying, On hold, Background and Will resume are the row's title-line icons ([iconsAfter]), not chips,
+     * though TalkBack still says the marks (the owner, 2026-11-27). */
     private val after = mapOf(
         1 to Triple("QUEUED", listOf(), "Queued"), 3 to Triple("RUNNING", listOf(), "Running"), 5 to Triple("IDLE", listOf(), "Idle"),
-        7 to Triple("IDLE", listOf("INTERRUPTED"), "Idle, Interrupted"), 9 to Triple("IDLE", listOf("FINISHED"), "Idle, Finished"),
-        11 to Triple("IDLE", listOf("FAILED"), "Idle, Failed"), 13 to Triple("IDLE", listOf("ENDED"), "Idle, Ended"),
-        15 to Triple("RUNNING", listOf("BACKGROUND"), "Running, Background"), 17 to Triple("RUNNING", listOf("NEEDS_YOU"), "Running, Needs you"),
-        19 to Triple("QUEUED", listOf("ON_HOLD"), "Queued, On hold"), 21 to Triple("IDLE", listOf("ENDED"), "Idle, Ended"),
-        23 to Triple("IDLE", listOf("ENDED"), "Idle, Ended"), 25 to Triple("IDLE", listOf("INTERRUPTED"), "Idle, Interrupted"),
+        7 to Triple("IDLE", listOf(), "Idle"), 9 to Triple("IDLE", listOf(), "Idle"),
+        11 to Triple("IDLE", listOf(), "Idle, Failed"), 13 to Triple("IDLE", listOf(), "Idle"),
+        15 to Triple("RUNNING", listOf(), "Running"), 17 to Triple("RUNNING", listOf("NEEDS_YOU"), "Running, Needs you"),
+        19 to Triple("QUEUED", listOf(), "Queued, On hold"), 21 to Triple("IDLE", listOf(), "Idle"),
+        23 to Triple("IDLE", listOf(), "Idle"), 25 to Triple("IDLE", listOf(), "Idle"),
         27 to Triple("RUNNING", listOf(), "Running"), 29 to Triple("RUNNING", listOf(), "Running"),
-        31 to Triple("IDLE", listOf("WILL_RESUME"), "Idle, Will resume"), 33 to Triple("IDLE", listOf(), "Idle"),
-        35 to Triple("IDLE", listOf("ENDED"), "Idle, Ended"),
+        31 to Triple("IDLE", listOf(), "Idle"), 33 to Triple("IDLE", listOf(), "Idle"),
+        35 to Triple("IDLE", listOf(), "Idle"),
     )
+    private val iconsAfter = mapOf(11 to listOf("FAILED"), 15 to listOf("BACKGROUND"), 19 to listOf("ON_HOLD"), 31 to listOf("WILL_RESUME"))
+    private val iconTags = listOf("FAILED", "RETRYING", "ON_HOLD", "BACKGROUND", "WILL_RESUME")
     private val stateTags = listOf("QUEUED", "RUNNING", "IDLE").map { "session-state-icon:$it" }
-    private val markTags = listOf("NEEDS_YOU", "FAILED", "RETRYING", "ON_HOLD", "INTERRUPTED", "BACKGROUND", "WILL_RESUME", "FINISHED", "ENDED")
+    private val markTags = listOf("NEEDS_YOU", "FAILED", "RETRYING", "ON_HOLD")
     private val legacyTags = listOf("needs-you", "review", "queued", "running", "watching", "jobs", "services", "failed")
 
     private fun present(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -77,6 +81,7 @@ class SessionDisplayRowDrawTest {
             compose.waitForIdle()
             val states = stateTags.filter(::present).map { it.substringAfter(':') }
             val marks = markTags.filter { present("session-mark:$it") }
+            val icons = iconTags.filter { present("session-row-icon:$it") }
             val legacy = legacyTags.filter { present("session-mark-$it") }
             val value = compose.onNodeWithTag("session-state:row$row", useUnmergedTree = true).fetchSemanticsNode().let { node ->
                 generateSequence(node) { it.parent }.firstNotNullOfOrNull { it.config.getOrNull(SemanticsProperties.StateDescription) }
@@ -85,11 +90,13 @@ class SessionDisplayRowDrawTest {
             if (expected != null) {
                 assertEquals("row $row state icon", listOf(expected.first), states)
                 assertEquals("row $row marks", expected.second, marks)
+                assertEquals("row $row title-line icons", iconsAfter[row].orEmpty(), icons)
                 assertEquals("row $row draws no legacy mark", listOf<String>(), legacy)
                 assertEquals("row $row TalkBack value", expected.third, value)
             } else {
                 assertEquals("row $row draws no state icon", listOf<String>(), states)
                 assertEquals("row $row draws no mark chip", listOf<String>(), marks)
+                assertEquals("row $row draws no title-line icon", listOf<String>(), icons)
                 val before = baseline[row / 2 - 1]
                 assertEquals("row $row legacy mark", if (before == "none") listOf() else listOf(before), legacy)
             }

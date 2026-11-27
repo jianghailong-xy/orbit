@@ -265,33 +265,12 @@ func TestALargeAnswerReachesTheRunnerInPieces(t *testing.T) {
 	tc, _ := h.connectLink(runnerA, processA)
 	tc.send(&linkpb.Frame{Body: &linkpb.Frame_Rpc{Rpc: &linkpb.Rpc{RequestId: "big-1",
 		Body: &linkpb.Rpc_Tunnel{Tunnel: &linkpb.TunnelRequest{Method: "GET", Path: "/runner/sessions/0190a0b0-0000-7000-8000-0000000000c1/events"}}}}})
-	var joined reassembler
-	pieces := 0
-	deadline := time.After(10 * time.Second)
-	for {
-		var f *linkpb.Frame
-		select {
-		case f = <-tc.frames:
-		case <-deadline:
-			t.Fatal("no answer")
-		}
-		c := f.GetChunk()
-		if c == nil {
-			t.Fatalf("got %s, want pieces", summarize(f))
-		}
-		pieces++
-		whole, err := joined.add(c)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if whole != nil {
-			if body := whole.GetRpcResult().GetTunnel().GetJsonBody(); string(body) != large {
-				t.Fatalf("joined %d bytes, want %d", len(body), len(large))
-			}
-			break
-		}
+	// The test runner joins the pieces as a runner does, and counts them.
+	f := tc.await("rpc_result", 10*time.Second, nil)
+	if body := f.GetRpcResult().GetTunnel().GetJsonBody(); string(body) != large {
+		t.Fatalf("joined %d bytes, want %d", len(body), len(large))
 	}
-	if pieces < 3 {
+	if pieces := tc.pieces.Load(); pieces < 3 {
 		t.Fatalf("%d pieces", pieces)
 	}
 }

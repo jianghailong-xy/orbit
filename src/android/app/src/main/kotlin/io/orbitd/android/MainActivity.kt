@@ -483,8 +483,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         workspaces.forEach { workspace ->
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
+                            val onCloud = runner != null && RunnerPage.isManaged(runner.id, managed = runner.managed)
                             DrawerWorkspaceRow(name = workspace.name,
-                                runner = runner?.let { if (RunnerPage.isManaged(it.id, managed = it.managed)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                runner = runner?.let { if (onCloud) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                cloud = onCloud,
                                 disabled = !workspace.enabled,
                                 stateLabel = if (runner?.online == false) ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                 waiting = sessions.sumOf { it.pendingApprovals },
@@ -603,7 +605,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 Destination.GUEST_SESSION -> route.id?.let { GuestSessionPage(app, signedIn.handle, route, it) }
                                 Destination.DRIVE, Destination.DRIVE_FILE, Destination.DRIVE_TRASH, Destination.DRIVE_STORAGE ->
-                                    DriveDestination(app, signedIn.handle, route, ::open) { navigation = navigation.back() }
+                                    DriveDestination(app, signedIn.handle, route, api, data, ::open) { navigation = navigation.back() }
                                 // The timeline (board 01 ②) has its own bottom sheet. Change… opens the schedule's draft
                                 // change conversation (§8.2), no longer a blank new session.
                                 // A scheduled task's and a condition's pending items head the page (no Waiting on you page): the account's

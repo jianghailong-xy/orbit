@@ -277,6 +277,17 @@ describe('the composer tag (6A)', () => {
     await waitForUi(() => expect(tag()?.textContent).toBe('English → Chinese'));
   });
 
+  it('is drawn only on the empty box: typed words take the line and the tag goes', async () => {
+    await mount();
+    await waitForUi(() => expect(tag()?.textContent).toBe('Chinese → English'));
+    await act(async () => {
+      const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'Testing it');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(tag(), 'the tag stayed over typed words').toBeNull();
+  });
+
   it('is not there with translation off, or on a server that cannot translate', async () => {
     preferences = {};
     await mount();

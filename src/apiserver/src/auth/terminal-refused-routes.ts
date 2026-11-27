@@ -190,6 +190,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'GET /sessions/compact',
   'GET /sessions/counts',
   'GET /sessions/imported',
+  'GET /sessions/listing',
   'GET /sessions/project-placement',
   'GET /sessions/search',
   'GET /share-links',
@@ -577,5 +578,15 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
     'GET /drive/entries/:id/content',
     'GET /drive/versions/:id/content',
     'POST /drive/entries/:id/share-check',
+    // The Drive chat (drive/drive-chat.controller.ts): the owner's, as the wiki chat's routes are.
+    'GET /drive/chats',
+    'POST /drive/chats',
+    // A Drive chat's changes and questions (drive/drive-chat-changes.controller.ts): the owner's, as the chat's are.
+    'GET /drive/chats/:sessionId/groups',
+    'GET /drive/chats/:sessionId/groups/:groupId',
+    'POST /drive/chats/:sessionId/groups/:groupId/undo',
+    'POST /drive/chats/:sessionId/groups/:groupId/apply',
+    'GET /drive/chats/:sessionId/questions',
+    'POST /drive/chats/:sessionId/questions/:questionId',
   ].flatMap(underEveryDrivePrefix),
 ];

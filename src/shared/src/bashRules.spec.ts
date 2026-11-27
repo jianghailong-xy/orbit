@@ -47,6 +47,11 @@ describe('bashSegments', () => {
     expect(bashSegments(cmd)).toHaveLength(1);
   });
 
+  it('still splits inside $(…) and backticks, so a deny pattern sees the commands they run', () => {
+    expect(bashSegments('echo $(true; gh pr merge 1)').map((s) => s.trim())).toEqual(['echo $(true', 'gh pr merge 1)']);
+    expect(bashSegments('echo `true; gh pr merge 1`').map((s) => s.trim())).toEqual(['echo `true', 'gh pr merge 1`']);
+  });
+
   it('splits on newlines', () => {
     expect(bashSegments('a\nb').map((s) => s.trim())).toEqual(['a', 'b']);
   });
@@ -112,6 +117,14 @@ describe('readableBashSegments', () => {
     expect(trimmed('ls -la # list the files')).toEqual(['ls -la']);
     expect(trimmed('git commit -m "one\n\ntwo"')).toEqual(['git commit -m "one\n\ntwo"']);
     expect(trimmed('  ls  \n')).toEqual(['ls']);
+  });
+
+  it("keeps a redirection's `&` inside its sub-command: only `&&` separates", () => {
+    expect(trimmed('ls 2>&1 | head')).toEqual(['ls 2>&1', 'head']);
+    expect(trimmed('ls &>/dev/null; rg x 2>/dev/null')).toEqual(['ls &>/dev/null', 'rg x 2>/dev/null']);
+    expect(trimmed('ls >/dev/null 2>&1 && head x 1>/dev/null')).toEqual(['ls >/dev/null 2>&1', 'head x 1>/dev/null']);
+    // A trailing `&` is no separator either, so the matcher still sees it in the sub-command.
+    expect(trimmed('ls 2>&1 &')).toEqual(['ls 2>&1 &']);
   });
 
   it('refuses an assignment ahead of a program, in any sub-command', () => {
@@ -293,8 +306,49 @@ describe('bashCommandRules', () => {
       '<<- lets tabs indent the terminator',
       'more than one heredoc on a line',
       'a here-string is not a heredoc',
+      'recorded card 1 of session 4FwPbT4Fa0wz8VbxYjHfVz',
+      'recorded card 6 of session 4FwPbT4Fa0wz8VbxYjHfVz',
+      'nothing inside $(…) is remembered',
+      'nothing inside backticks is remembered',
+      'an argument is never part of the name',
+      'file-changing programs are never remembered',
+      'environment-changing programs are never remembered',
+      'shells and interpreters are never remembered',
+      "a runner's sub-command that runs any code",
     ]) {
       expect(names.some((n) => n.startsWith(required)), required).toBe(true);
+    }
+  });
+  it('remembers exactly these rules from the six cards recorded on 2026-11-18', () => {
+    // Production saved `then cd`, `fi`, `worktree list` (from inside `$(…)`), `ls OrbitKitTests`,
+    // `echo APPLIED_OK`, `cp` and `export` from these; the commands are verbatim from the approval rows.
+    const recorded = fixture.cases.filter((c) => c.name.startsWith('recorded card '));
+    expect(recorded.map((c) => prefixesOf(c.command))).toEqual([
+      ['git worktree', 'rg', 'echo', 'cd', 'git status', 'git diff', 'ls', 'head'],
+      ['git apply', 'echo', 'git status', 'wc'],
+      ['ls', 'xcode-select', 'echo', 'which', 'head', 'rg'],
+      ['ls', 'rg', 'head', 'mdfind', 'echo'],
+      ['ls', 'head', 'file', 'defaults read'],
+      ['ls', 'rg', 'head'],
+    ]);
+  });
+
+  it('never remembers a keyword-led, argument-named, file- or environment-changing or interpreter prefix', () => {
+    const keywords = ['if', 'then', 'elif', 'else', 'fi', 'do', 'done', 'while', 'until', 'for', 'case', 'esac'];
+    const neverRemembered = ['cp', 'mv', 'rm', 'ln', 'chmod', 'chown', 'export', 'env', 'tee', 'dd', 'find', 'sed'];
+    const interpreters = ['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'node', 'ruby', 'perl', 'php', 'osascript', 'awk', 'source', '.'];
+    const subcommandPrograms = ['git', 'npm', 'pnpm', 'bun', 'deno', 'docker', 'go', 'swift', 'defaults'];
+    for (const c of fixture.cases) {
+      for (const prefix of prefixesOf(c.command)) {
+        const [program, second] = (prefix ?? '').split(' ');
+        const name = program.slice(program.lastIndexOf('/') + 1);
+        expect(keywords, `${c.name}: ${prefix}`).not.toContain(program);
+        expect(neverRemembered, `${c.name}: ${prefix}`).not.toContain(name);
+        expect(interpreters, `${c.name}: ${prefix}`).not.toContain(name);
+        expect(name, `${c.name}: ${prefix}`).not.toMatch(/^python[0-9.]*$/);
+        if (['bun', 'deno'].includes(name)) expect(['run', 'x', 'eval', 'exec', 'repl'], `${c.name}: ${prefix}`).not.toContain(second);
+        if (second !== undefined) expect(subcommandPrograms, `${c.name}: ${prefix}`).toContain(name);
+      }
     }
   });
 });

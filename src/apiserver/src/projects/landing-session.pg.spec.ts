@@ -62,7 +62,7 @@ import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
 import { landingFixWorkSession, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 import { turnStateOfWord } from '../sessions/session-turn-state';
-import { sessionWord, storedWord, wordOf } from '../test-support/session-word';
+import { sessionWord, wordOf } from '../test-support/session-word';
 
 /**
  * Landing subjects and LANDING sessions (docs/project-integration-line-contract.md §2.9 LS1–LS3,
@@ -764,8 +764,6 @@ test('one merge round: superseded candidates, the Automatic re-check and the own
       assert.ok(settled.settledAt);
       // MERGED closed the container the round's first claim opened.
       assert.equal(await sessionWord(stack.db, settled.sessionId), RunStatus.SUCCEEDED);
-      // The word migration 1671's trigger stored: the landing row was settled before the container (deploy D3).
-      assert.equal(await storedWord(stack.db, settled.sessionId), RunStatus.SUCCEEDED);
 
       // The next candidate after MERGED opens a new round with a new subject.
       const d = await doneTask(stack, w, 'round-d');
@@ -879,7 +877,6 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       const session = await stack.db.session.findUniqueOrThrow({ where: { id: landing.sessionId } });
       assert.equal(session.sessionKind, 'LANDING');
       assert.equal(wordOf(session), RunStatus.AWAITING_INPUT);
-      assert.equal(await storedWord(stack.db, landing.sessionId), RunStatus.AWAITING_INPUT);
       assert.equal(session.startsTaskWork, false);
       assert.equal(session.assignedRunnerId, null);
       assert.equal(session.taskId, null);
@@ -909,8 +906,6 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       assert.equal((await report(stack, w, job, LANDED)).accepted, true);
       const settledSession = await stack.db.session.findUniqueOrThrow({ where: { id: landing.sessionId } });
       assert.equal(await sessionWord(stack.db, landing.sessionId), RunStatus.SUCCEEDED);
-      // The word migration 1671's trigger stored: the settle writes the landing row, then the container (deploy D3).
-      assert.equal(await storedWord(stack.db, landing.sessionId), RunStatus.SUCCEEDED);
       assert.ok(settledSession.completedAt);
       // Released in the same write (plan step 3.1): the release column and its cause beside the status.
       assert.equal(settledSession.finishedAt?.getTime(), settledSession.completedAt.getTime());
@@ -936,7 +931,6 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       await stack.tasks.update(w.ownerId, task.taskId, { status: TaskStatus.CANCELLED } as never);
       const cancelled = await stack.db.session.findUniqueOrThrow({ where: { id: episode2.sessionId } });
       assert.equal(await sessionWord(stack.db, episode2.sessionId), RunStatus.CANCELLED);
-      assert.equal(await storedWord(stack.db, episode2.sessionId), RunStatus.CANCELLED);
       assert.ok(cancelled.completedAt);
       assert.equal(cancelled.finishedAt?.getTime(), cancelled.completedAt.getTime());
       assert.equal((await stack.db.projectLanding.findUniqueOrThrow({ where: { id: episode2.id } })).settledAs, 'CANCELLED');

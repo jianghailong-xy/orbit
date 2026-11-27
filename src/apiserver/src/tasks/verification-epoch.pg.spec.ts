@@ -225,7 +225,7 @@ async function addCheck(
        VALUES ($1,$2,$3,$4,'check run','run the check',$2,'claude',(CASE ($5)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$6,
          CASE WHEN $7 THEN now() END, CASE WHEN $8 THEN now() END,
          CASE WHEN $9 THEN now() END, true, 'USER'::"session_dispatch_origin", now(),
-             CASE WHEN $5::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+             CASE WHEN $5::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
       randomUUID(), OWNER, agentId, checkId, run.status ?? 'SUCCEEDED',
       run.endReason === undefined ? 'task_done' : run.endReason,
       run.completedAt ?? true, run.archivedAt ?? false, run.deleted ?? false,

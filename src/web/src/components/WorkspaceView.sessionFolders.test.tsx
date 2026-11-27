@@ -8,11 +8,13 @@ import type { SessionMoveTargets } from '@orbit/shared';
 import type { Runner } from './TasksSidePanel';
 import { ToastViewport } from './ToastViewport';
 import { clearToasts } from '../lib/toastStore';
+import * as listingRules from '../../../apiserver/src/sessions/session-listing';
+import { answerListing } from '../test/sessionListingAnswer';
 
 /**
  * Session folders and Move on the web (docs/session-folders-move-design.md §3–§5, §7), through the
  * real WorkspaceView: the folder rows over the list, a folder's page, New Folder… / Rename… /
- * Delete Folder…, the row's Move… into a folder, and End and Move to another workspace.
+ * Delete Folder…, the row's Move… into a folder, and Move to another workspace.
  */
 
 // These call api() from inside api.ts, where mocking the export cannot reach them, so each one the
@@ -112,6 +114,7 @@ let client: QueryClient | null = null;
 let folders: Array<{ id: string; workspaceId: string; name: string }> = [];
 let rows: Array<ReturnType<typeof row>> = [];
 let listCalls: string[] = [];
+let listingCalls: string[] = [];
 let ended = false;
 let location = '';
 
@@ -294,6 +297,7 @@ beforeEach(() => {
   folders = [RELEASE, WIKI, ELSEWHERE];
   rows = [LOOSE, NOTES, BUILD, CURSOR];
   listCalls = [];
+  listingCalls = [];
   ended = false;
   location = '';
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
@@ -349,6 +353,10 @@ beforeEach(() => {
     if (path.startsWith('/sessions?')) {
       listCalls.push(path);
       return reply(path.includes('view=open') || !path.includes('view=') ? rows : []);
+    }
+    if (path.startsWith('/sessions/listing?')) {
+      listingCalls.push(path);
+      return reply(answerListing(listingRules, rows, folders, path));
     }
     if (path.startsWith('/sessions/')) {
       if (path.includes('/events/page')) return reply({ events: [], hasMore: false });
@@ -420,8 +428,11 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     expect(wiki.querySelector('.session-folder-count')?.textContent).toBe('1');
     expect(wiki.querySelector('.session-folder-needs')).toBeNull();
     expect(wiki.querySelector('.session-folder-activity')).toBeNull();
-    // A workspace with folders reads its whole list: a folder's count and page need every session.
-    expect(listCalls.some((p) => !p.includes('limit='))).toBe(true);
+    // A workspace with folders reads its listing a page at a time, the folder rows' counts the server's: never
+    // its whole list.
+    expect(listingCalls.length).toBeGreaterThan(0);
+    expect(listingCalls.every((p) => p.includes('limit=40'))).toBe(true);
+    expect(listCalls.filter((p) => !p.includes('scheduled=1') && !p.includes('limit='))).toEqual([]);
   });
 
   it('pages the list as before in a workspace without folders', async () => {
@@ -664,7 +675,7 @@ describe('Move', { timeout: 60_000 }, () => {
     await until(() => expect(folderRow('Wiki').querySelector('.session-folder-count')?.textContent).toBe('2'));
   });
 
-  it('moves the open session to another workspace with End and Move, after saying what stays behind', async () => {
+  it('moves the open idle session to another workspace in one request, after saying what stays behind', async () => {
     await mountOnLoose();
     await click(mounted().querySelector('.workspace-header button[aria-label="More actions"]'), 'the header ⋯');
     await until(() => expect(menuItem('Move…')).toBeTruthy());
@@ -693,21 +704,20 @@ describe('Move', { timeout: 60_000 }, () => {
     expect([...confirm.querySelectorAll('.move-confirm-body p')].map((p) => p.textContent)).toEqual([
       'The conversation moves with it. Your next message continues it in wikova-develop.',
       '3 changed files aren’t merged into main yet. They stay on branch orbit/review-import-3fa21c in orbit.',
-      'The session ends first.',
     ]);
-    const ok = [...confirm.querySelectorAll<HTMLElement>('button')].find((button) => button.textContent === 'End and Move')!;
+    const ok = [...confirm.querySelectorAll<HTMLElement>('button')].find((button) => button.textContent === 'Move')!;
     expect(ok.classList.contains('orbit-button-primary')).toBe(true);
-    await click(ok, 'End and Move');
+    await click(ok, 'Move');
 
+    // Still held (needsEnd): the server lets it go before it moves it. The client sends the move alone, and never
+    // says the session is ending.
     await until(() => expect(apiModule.moveSession).toHaveBeenCalled());
-    expect(apiModule.endSession).toHaveBeenCalledWith(LOOSE.id);
+    expect(apiModule.endSession).not.toHaveBeenCalled();
     expect(apiModule.moveSession).toHaveBeenCalledWith(LOOSE.id, {
       folderId: pid(931),
       workspaceId: OTHER_WORKSPACE_ID,
     });
-    expect(vi.mocked(apiModule.endSession).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(apiModule.moveSession).mock.invocationCallOrder[0],
-    );
+    expect(document.body.textContent).not.toMatch(/Ending|End and Move/);
     await until(() => expect(document.body.textContent).toContain('Moved to wikova-develop'));
   });
 });

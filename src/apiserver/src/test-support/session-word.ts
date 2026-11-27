@@ -1,7 +1,7 @@
 /**
- * The word a session row answers with, for specs that asserted the stored `session.status`. Since deploy D3 the field
- * is not in the Prisma model (docs/session-status-retirement-plan.md §4.3, task T14): the word is the projector's over
- * the row's facts (sessions/session-legacy-words.ts), which migration 1671's trigger also stores, for rollback only.
+ * The word a session row answers with, for specs that asserted the stored `session.status`. The field left the Prisma
+ * model in deploy D3 and the column was dropped in D4 (docs/session-status-retirement-plan.md §4.3, tasks T14 and T15):
+ * the word is the projector's over the row's facts (sessions/session-legacy-words.ts).
  * Select the facts with WORD_SELECT; a full row has them. A released LANDING container reads its project_landing
  * settlement: pass it, or read the word with sessionWord.
  */
@@ -19,6 +19,15 @@ import { turnStateOfWord } from '../sessions/session-turn-state';
 
 /** The columns wordOf reads. */
 export const WORD_SELECT = LEGACY_STATUS_SELECT;
+
+/**
+ * SQL text for the word of the `session` row a raw query names `row` (a constant, never input): the projector's SQL
+ * twin over the row's facts, a LANDING container's settlement included. What the specs' raw reads of the word ask.
+ */
+export const wordSql = (row = 'session'): string =>
+  `session_legacy_status(${row}.finished_at, ${row}.turn_state, ${row}.end_reason, ${row}.last_turn_outcome, `
+  + `${row}.started_at, ${row}.import_source_cwd, ${row}.kind, `
+  + `(SELECT l.settled_as FROM project_landing l WHERE l.session_id = ${row}.id))`;
 
 /** The word of a row read with WORD_SELECT (or whole). */
 export function wordOf(row: LegacyStatusFacts, landing?: LandingSettlement | null): `${RunStatus}` {
@@ -62,16 +71,6 @@ export function wordOfWrite(data: Record<string, unknown>): `${RunStatus}` {
 export function writtenWord(data: Record<string, unknown> | null | undefined): `${RunStatus}` | undefined {
   if (!data || !('turnState' in data || 'finishedAt' in data)) return undefined;
   return wordOfWrite(data);
-}
-
-/**
- * The word in the column session.status, which since deploy D3 only migration 1671's trigger writes, from the facts,
- * for a rollback to deploy-2 code. Read only by the specs that show that trigger keeps it equal to the projector's
- * word; it goes with the column in deploy D4 (task T15).
- */
-export async function storedWord(db: Pick<Prisma.TransactionClient, '$queryRaw'>, id: string): Promise<string | null> {
-  const rows = await db.$queryRaw<Array<{ word: string }>>`SELECT "status"::text AS word FROM "session" WHERE "id" = ${id}::uuid`;
-  return rows[0]?.word ?? null;
 }
 
 const RELEASED_WORDS: ReadonlySet<string> = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);

@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	mrand "math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,8 +31,10 @@ import (
 // or a Close's retry_after_ms (linkRetryWait). The backoff starts over only once a connection has carried a heartbeat
 // the control plane reconciled: until then each connection that ends, or cannot be had, is followed by a longer wait,
 // so a runner whose connections keep ending without the link working end to end does not reconnect in a tight loop,
-// and a fleet does not stampede POST /api/runner/link-token. A connection is taken for dead when its pings say its
-// transport is (pinger), never because the control plane is slow to answer what it carries (link_heartbeat.go). Its
+// and a fleet does not stampede POST /api/runner/link-token; and a connection that ends within a minute is followed by
+// a wait of up to 8 s at least, even once the backoff has started over. A connection is taken for dead when its pings
+// say its transport is (pinger), or when a write on its socket has made no progress, with nothing read, for 45 s
+// (linkConn.watch), never because the control plane is slow to answer what it carries (link_heartbeat.go). Its
 // Hello says where each session stands (Hello.sessions: the last event seq sent, the turn being executed), so the
 // gateway resumes them. A token is renewed before it expires, a Drain is followed after its delay, both make before
 // break: the next connection is opened and welcomed first, and the gateway closes the old one. A TokenRefresh renews
@@ -61,6 +65,10 @@ const (
 	linkRPCBackoffMax = 2 * time.Second
 	// linkLogQuiet is how long a connection failure that repeats goes unlogged.
 	linkLogQuiet = 10 * time.Minute
+	// A connection that ends younger than linkYoungConn is followed by a wait of up to linkYoungBackoff at least,
+	// whatever the backoff (linkLostBackoff).
+	linkYoungConn    = time.Minute
+	linkYoungBackoff = 8 * time.Second
 )
 
 var (
@@ -81,6 +89,9 @@ type linkWork struct {
 	// How often it pings, how long a ping may wait, and how long a beat may go unanswered on a connection that
 	// answers pings (linkBeatStuckAfter). Tests shorten them.
 	pingEvery, pingTimeout, beatStuckAfter time.Duration
+	// A connection that ends younger than youngConn is followed by a wait of up to youngBackoff at least
+	// (linkLostBackoff). Tests shorten them; guarded by mu.
+	youngConn, youngBackoff time.Duration
 	// beatSeq numbers the beats of this process (Heartbeat.beat_id).
 	beatSeq atomic.Uint64
 
@@ -129,11 +140,10 @@ type linkWorkConn struct {
 	// keeps them per connection, so they go by digest alone until it asks for one (want_facts).
 	facts map[string]string
 
-	// heard is when a frame was last read from the gateway, in Unix nanoseconds: with the pongs, what says the
-	// connection's transport still carries (pinger).
-	heard      atomic.Int64
-	pingFailed atomic.Pointer[string]
-	retired    atomic.Pointer[string] // why the runner itself ended the connection
+	retired atomic.Pointer[string] // why the runner itself ended the connection
+	// welcomedAt is when the connection was welcomed: one that ends younger than linkYoungConn is followed by a wait
+	// of up to linkYoungBackoff at least (lost).
+	welcomedAt time.Time
 }
 
 // linkCall is a call waiting for its RpcResult.
@@ -152,8 +162,8 @@ type linkWorkEvent struct {
 func newLinkWork(m *linkMode, client *linkClient, log func(...any)) *linkWork {
 	w := &linkWork{
 		m: m, client: client, log: log, now: time.Now, pingEvery: linkWorkPingEvery, pingTimeout: linkWorkPingTimeout,
-		beatStuckAfter: linkBeatStuckAfter,
-		changed:        make(chan struct{}), calls: map[string]*linkCall{}, events: make(chan linkWorkEvent, 16),
+		beatStuckAfter: linkBeatStuckAfter, youngConn: linkYoungConn, youngBackoff: linkYoungBackoff,
+		changed: make(chan struct{}), calls: map[string]*linkCall{}, events: make(chan linkWorkEvent, 16),
 	}
 	w.streams = newLinkStreams(w)
 	return w
@@ -390,7 +400,6 @@ func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
 	conn := &linkWorkConn{work: w, ready: make(chan struct{}), acks: make(chan *linkpb.HeartbeatAck, 1), facts: map[string]string{}}
 	lc, err := w.client.connect(ctx, func(_ *linkConn, f *linkpb.Frame) {
 		<-conn.ready
-		conn.heard.Store(time.Now().UnixNano())
 		w.onFrame(conn, f)
 	})
 	if err != nil {
@@ -398,6 +407,7 @@ func (w *linkWork) dial(ctx context.Context) (*linkWorkConn, error) {
 		return nil, err
 	}
 	conn.linkConn = lc
+	conn.welcomedAt = w.now()
 	close(conn.ready)
 	go w.pinger(conn)
 	return conn, nil
@@ -490,8 +500,13 @@ func (w *linkWork) failed(err error) time.Duration {
 
 // lost records the end of conn, the current connection, and returns the wait before the next attempt.
 func (w *linkWork) lost(conn *linkWorkConn) time.Duration {
+	lasted := w.now().Sub(conn.welcomedAt)
 	w.mu.Lock()
-	wait := linkBackoff(w.attempt)
+	youngConn, youngBackoff := w.youngConn, w.youngBackoff
+	if !conn.judgedDead() {
+		youngBackoff = 0
+	}
+	wait := linkLostBackoff(w.attempt, lasted, youngConn, youngBackoff)
 	w.attempt++
 	if w.lostAt.IsZero() {
 		w.lostAt = w.now()
@@ -501,10 +516,8 @@ func (w *linkWork) lost(conn *linkWorkConn) time.Duration {
 	switch {
 	case conn.retired.Load() != nil:
 		why = "ended by the runner: " + *conn.retired.Load()
-	case conn.pingFailed.Load() != nil:
-		why += ": " + *conn.pingFailed.Load()
-	case conn.err != nil:
-		why += ": " + conn.err.Error()
+	case conn.endReason() != "":
+		why += ": " + conn.endReason()
 	}
 	if cl := conn.closed.Load(); cl != nil {
 		why = fmt.Sprintf("closed by the gateway: %s %q", cl.GetCode(), cl.GetMessage())
@@ -523,8 +536,38 @@ func (w *linkWork) lost(conn *linkWorkConn) time.Duration {
 	w.mu.Lock()
 	w.lastErr = errors.New(why)
 	w.mu.Unlock()
-	w.log(fmt.Sprintf("runner link: connection %s ended (%s); reconnecting in %s", conn.id, why, wait.Round(time.Millisecond)))
+	young := ""
+	if lasted < youngConn && youngBackoff > 0 {
+		young = fmt.Sprintf(", within %s at least after a connection that lasted %s", youngBackoff, lasted.Round(time.Millisecond))
+	}
+	w.log(fmt.Sprintf("runner link: connection %s ended (%s); reconnecting in %s%s", conn.id, why, wait.Round(time.Millisecond), young))
 	return wait
+}
+
+// judgedDead reports whether this side ended the connection on its transport: a ping unanswered, a write without
+// progress (fail), or the WebSocket library closing it on a deadline, which leaves the read loop with the closed
+// connection's error. What the gateway ends (a Close, the peer's EOF or reset) and what the runner retires are not:
+// the gateway cuts a young connection on purpose (a drain, a drill's lost answer), and the call it cut is to be sent
+// again on the next connection at once (§5.6).
+func (c *linkWorkConn) judgedDead() bool {
+	if c.retired.Load() != nil || c.closed.Load() != nil {
+		return false
+	}
+	return c.failure.Load() != nil || c.sock.closedWriting.Load() > 0 || errors.Is(c.err, net.ErrClosed)
+}
+
+// linkLostBackoff is the wait after a connection that lasted for lasted ends, at reconnect attempt n: the backoff, and
+// after a connection that ended younger than young, a ceiling of floor at least, even with the backoff started over by
+// a reconciled heartbeat. A path that carries a connection long enough to reconcile one beat and then ends it, again
+// and again, is not reconnected to in under a second each time. lost passes a floor only for a connection this side
+// judged dead (judgedDead).
+func linkLostBackoff(n int, lasted, young, floor time.Duration) time.Duration {
+	if lasted < young {
+		for n < 6 && linkBackoffMin<<n < floor {
+			n++
+		}
+	}
+	return linkBackoff(n)
 }
 
 // upgradeRequired takes a gateway that speaks no protocol version this binary does: the runner checks its release now.
@@ -553,6 +596,11 @@ func (w *linkWork) finish() {
 // and nothing else was read from the gateway since it was sent either. The gateway answers pings itself, whatever its
 // backends do, so how long the control plane takes to answer a heartbeat or a call has no part in it. The WebSocket
 // library gives up on a pong without ending the connection, so this ends it.
+//
+// Only bytes read count (link_socket.go). While the socket's writes block it does not ping at all: a ping written into
+// a full send buffer stalls in the flush, and the library closes the connection once its 5 s for a control frame pass.
+// The connection's watchdog watches a blocked write instead (linkConn.watch): no progress and nothing read for
+// linkWriteStallLimit ends it. A ping whose pong is late while a write blocks is left to the watchdog too.
 func (w *linkWork) pinger(conn *linkWorkConn) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -567,23 +615,34 @@ func (w *linkWork) pinger(conn *linkWorkConn) {
 			return
 		case <-tick.C:
 		}
-		sent := time.Now()
-		_, err := conn.ping(w.pingTimeout)
-		// A ping that could not even be written in time (another write holds the connection) proves nothing yet, and a
-		// connection that ended is the read loop's to report.
-		if err == nil || !errors.Is(err, context.DeadlineExceeded) || time.Since(sent) < w.pingTimeout || conn.heardSince(sent) {
+		if conn.sock.blocking() {
 			continue
 		}
-		why := "no answer to a ping within " + w.pingTimeout.String() + ", and nothing else read from the gateway since"
-		conn.pingFailed.Store(&why)
+		sent := time.Now()
+		read := conn.sock.read.Load()
+		_, err := conn.ping(w.pingTimeout)
+		if err != nil && linkControlWriteExpired(err) {
+			// The ping could not be written within the library's 5 s, and the library has closed the connection.
+			conn.fail("a ping could not be written within the WebSocket library's 5s, which closed the connection: the socket's writes were blocked")
+			return
+		}
+		// A ping that could not even be written in time (another write holds the connection) proves nothing yet, and a
+		// connection that ended is the read loop's to report.
+		if err == nil || !errors.Is(err, context.DeadlineExceeded) || time.Since(sent) < w.pingTimeout ||
+			conn.sock.read.Load() != read || conn.sock.writing.Load() > 0 {
+			continue
+		}
+		conn.fail("no answer to a ping within " + w.pingTimeout.String() + ", and nothing else read from the gateway since")
 		_ = conn.ws.CloseNow()
 		return
 	}
 }
 
-// heardSince reports whether a frame was read from the gateway at or after t.
-func (c *linkWorkConn) heardSince(t time.Time) bool {
-	return c.heard.Load() >= t.UnixNano()
+// linkControlWriteExpired reports whether err is the WebSocket library's own deadline for writing a control frame (5 s)
+// passing once the write had begun, which closes the connection; not its wait for the write lock, which does not.
+// The wording is the library's (coder/websocket 1.8.15, write.go writeFrame), pinned by a test.
+func linkControlWriteExpired(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) && strings.Contains(err.Error(), "failed to write frame")
 }
 
 // reconciled takes a heartbeat the control plane reconciled on conn: the link works end to end, so the reconnect

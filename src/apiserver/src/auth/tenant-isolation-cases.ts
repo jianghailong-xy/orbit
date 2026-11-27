@@ -149,6 +149,14 @@ export interface Tenant {
   driveUploadId: string;
   /** An agent's directory sync this account's runner opened. */
   driveSyncId: string;
+  /**
+   * A Drive chat (drive/drive-chat-changes.ts): the session, a group of its changes made, a group held for Apply (both
+   * empty, so A's own Undo and Apply change nothing in its drive), and an overwrite question of two files of its own.
+   */
+  driveChatId: string;
+  driveChatGroupId: string;
+  driveChatHeldGroupId: string;
+  driveChatQuestionId: string;
   /** Objects a destructive route takes away, one each, so that no other case loses its own. */
   spare: {
     accessTokenId: string;
@@ -347,6 +355,26 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     'POST /drive/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
     'GET /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
     'POST /drive/entries/:id/download-link': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    // A Drive chat's changes and questions, found by (session, owner) and then by the group or question under that
+    // session. A's own Undo, Apply and answer are made once; the alias's second one is a 409, which is not a refusal.
+    'GET /drive/chats/:sessionId/groups': { request: (of) => ({ params: { sessionId: of.driveChatId } }) },
+    'GET /drive/chats/:sessionId/groups/:groupId': {
+      request: (of) => ({ params: { sessionId: of.driveChatId, groupId: of.driveChatGroupId } }),
+      nested: ['groupId'],
+    },
+    'POST /drive/chats/:sessionId/groups/:groupId/undo': {
+      request: (of) => ({ params: { sessionId: of.driveChatId, groupId: of.driveChatGroupId } }),
+      nested: ['groupId'],
+    },
+    'POST /drive/chats/:sessionId/groups/:groupId/apply': {
+      request: (of) => ({ params: { sessionId: of.driveChatId, groupId: of.driveChatHeldGroupId } }),
+      nested: ['groupId'],
+    },
+    'GET /drive/chats/:sessionId/questions': { request: (of) => ({ params: { sessionId: of.driveChatId } }) },
+    'POST /drive/chats/:sessionId/questions/:questionId': {
+      request: (of) => ({ params: { sessionId: of.driveChatId, questionId: of.driveChatQuestionId }, body: { choice: 'KEEP_BOTH' } }),
+      nested: ['questionId'],
+    },
   }),
   // Each of these spends a spare of A's, so it is held under /drive alone; its /documents alias is read by hand
   // (DRIVE_SPARE_SPENDING_ALIASES).
@@ -1376,6 +1404,17 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     'PATCH /drive/entries/:id body parentId': {
       request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),
     },
+    // A Drive chat named into another account's workspace: no such workspace for this one (DriveChat.ownedWorkspace).
+    'POST /drive/chats body workspaceId': {
+      request: (of) => ({ params: {}, body: { workspaceId: of.workspaceId, text: 'from the census', clientTurnId: CENSUS_CHAT_TURN } }),
+    },
+    // Its first message sent with another account's upload: no such file for this one, as for a new session.
+    'POST /drive/chats body attachmentIds': {
+      request: (of, mine) => ({
+        params: {},
+        body: { workspaceId: mine.workspaceId, text: 'from the census', clientTurnId: CENSUS_CHAT_TURN, attachmentIds: [of.attachmentId] },
+      }),
+    },
   }),
 
   // ── providers, phones, runners ───────────────────────────────────────────────────────────────
@@ -1422,6 +1461,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'GET /sessions query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
   'GET /sessions query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
   'GET /sessions/search query folderId': { request: (of) => ({ params: {}, query: { folderId: of.folderId } }) },
+  'GET /sessions/listing query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
+  'GET /sessions/listing query folderId': {
+    request: (of, mine) => ({ params: {}, query: { workspaceId: mine.workspaceId, folderId: of.folderId } }),
+  },
   'GET /sessions query runnerId': { request: (of) => ({ params: {}, query: { runnerId: of.runnerId } }) },
   // The attempt a landing page names: B reads its own landing with A's job in the query, and is
   // answered as if it named nothing — the job is resolved within that landing and nowhere else.

@@ -564,7 +564,7 @@ func (cl *client) readLoop(ctx context.Context, cc *clientConn) {
 func (cl *client) send(cc *clientConn, f *linkpb.Frame) error {
 	cc.outID++
 	f.Id = cc.outID
-	msgs, err := encodeFrame(f, maxFrameBytes, func() uint64 { cc.outID++; return cc.outID })
+	msgs, err := encodeFrame(f, sendPieceBytes, func() uint64 { cc.outID++; return cc.outID })
 	if err != nil {
 		return err
 	}

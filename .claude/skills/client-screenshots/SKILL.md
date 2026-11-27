@@ -143,8 +143,8 @@ Its `project.yml` uses `../src` paths, so it must live at the repository root. I
            write(app.debugDescription, "\(name)-tree.txt")
            return app
        }
-       func test01NewSessionLight() { _ = open(["-probe.draft"], until: "Send a task to get started.", "new"); shot("ios-new-session-draft") }
-       func test02NewSessionDark() { _ = open(["-probe.draft", "-dark"], until: "Send a task to get started.", "new-dark"); shot("ios-new-session-draft-dark") }
+       func test01NewSessionLight() { _ = open(["-probe.draft"], until: "Runs in:", "new"); shot("ios-new-session-draft") }
+       func test02NewSessionDark() { _ = open(["-probe.draft", "-dark"], until: "Runs in:", "new-dark"); shot("ios-new-session-draft-dark") }
    }
    ```
    Check `ProbeCase.swift` for the exact helper names before you use them, and adjust if they differ.

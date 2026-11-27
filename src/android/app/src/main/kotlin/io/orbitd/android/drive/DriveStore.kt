@@ -56,6 +56,9 @@ class DriveStore private constructor(val app: OrbitApplication, val handle: Sess
 
     fun changed() { revision++ }
 
+    /** The Drive chat: its chats, their changes and the sheet (DriveChat.kt). A change it makes or undoes re-reads the pages. */
+    val chat = DriveChats(app, handle, scope) { changed() }
+
     /** `GET /auth/capabilities`, once per sign-in: a server from before the switch, or a failed read, counts as on. */
     fun loadCapability() {
         if (shown != null) return

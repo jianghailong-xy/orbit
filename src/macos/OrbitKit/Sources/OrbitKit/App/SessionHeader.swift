@@ -3,6 +3,9 @@ import Foundation
 extension SessionRunState {
     static func afterRelease(endReason: String?, lastTurnOutcome: SessionTurnOutcome?,
                              workFinished: Bool?, isLanding: Bool = false) -> SessionRunState {
+        // A move to another workspace let it go: to its reader it is the idle session it was
+        // (`SessionDisplay.releasedByMove`). Still released, so a send resumes it.
+        if endReason == SessionDisplay.movedEndReason { return .awaitingInput }
         if workFinished ?? (endReason == "task_done" || (endReason == nil && isLanding)) { return .succeeded }
         if endReason == nil && lastTurnOutcome == .failed { return .failed }
         return .ended

@@ -2862,7 +2862,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // The orphan sweep, last and on this timer for the reason at the top of this block: it reads
       // what the sweeps before it have just delivered, so it does not report as untold what this
       // same tick handed over. It runs every few ticks (`ORPHAN_SWEEP_INTERVAL_MS`) and never rejects.
-      .then(() => this.orphanSweep?.tick());
+      .then(() => this.orphanSweep?.tick())
+      // The decision cards that became the owner's since the last tick, pushed once each (push/owner-cards.ts): after
+      // the deliveries above, so a revision this tick just handed to its reviewer is held, not pushed. Never rejects.
+      .then(async () => { await this.push?.notifyDecisionCards(); });
   }
 
   onModuleDestroy(): void {

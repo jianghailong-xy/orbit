@@ -69,6 +69,13 @@ type conn struct {
 	link *linkState
 	// readError is why reading stopped; only the reading goroutine touches it.
 	readError error
+
+	// What the connection carried, logged when it ends (§15.15): the bytes of the messages read and written, the largest
+	// message written, and the longest single write, its wait for the library's write lock included.
+	bytesRead, bytesWritten, largestWrite, longestWrite atomic.Int64
+	// readAtPing is bytesRead when the ping timer last fired: a runner that sent anything since is heard from, and
+	// is not pinged (ping).
+	readAtPing atomic.Int64
 }
 
 type outItem struct {
@@ -272,6 +279,8 @@ func (c *conn) readFrame() (*linkpb.Frame, error) {
 		c.readError = err
 		return nil, err
 	}
+	// Counted before it is decoded: what proves the runner alive is that it was heard (ping).
+	c.bytesRead.Add(int64(len(data)))
 	var f linkpb.Frame
 	if typ != websocket.MessageBinary || proto.Unmarshal(data, &f) != nil {
 		c.g.metrics.frameDecodeErrors.inc()
@@ -472,7 +481,7 @@ func (c *conn) offerTier(f *linkpb.Frame, t tier) bool {
 }
 
 // writeLoop writes what the queues hold, one WebSocket message at a time: the highest tier first, and within a tier
-// in order. A frame over Limits.max_frame_bytes goes out as several messages (Chunk), and between two of them the loop
+// in order. A frame over sendPieceBytes goes out as several messages (Chunk), and between two of them the loop
 // looks again, so a control frame queued meanwhile is written before the frame's next piece (§5.1).
 func (c *conn) writeLoop() {
 	// The pieces still to write of the frame each tier is in the middle of, and that frame.
@@ -496,7 +505,7 @@ func (c *conn) writeLoop() {
 				c.writerOver()
 				return
 			}
-			msgs, err := encodeFrame(it.frame, maxFrameBytes, func() uint64 { return c.outID.Add(1) })
+			msgs, err := encodeFrame(it.frame, sendPieceBytes, func() uint64 { return c.outID.Add(1) })
 			if err != nil {
 				c.queued.Add(-it.size)
 				c.log.Error("a frame does not encode; not sent", "frame", summarize(it.frame), "err", err)
@@ -505,10 +514,15 @@ func (c *conn) writeLoop() {
 			rest[t], current[t] = msgs, it
 		}
 		if err := c.writeMessage(rest[t][0]); err != nil {
-			// A write cut short because the connection is ending is finish's to close; any other failure is the
-			// connection lost.
+			// A write cut short because the connection is ending is finish's to close. One that ran out of time has had
+			// its connection closed by the library already (a write whose context ends closes it); any other failure
+			// is the connection lost.
 			if c.ctx.Err() == nil {
-				c.setReason("connection_lost")
+				if errors.Is(err, context.DeadlineExceeded) {
+					c.setReason("write_timeout")
+				} else {
+					c.setReason("connection_lost")
+				}
 				_ = c.ws.CloseNow()
 			}
 			c.writerOver()
@@ -633,12 +647,29 @@ func (q *outQueues) stop() bool {
 func (c *conn) writeMessage(b []byte) error {
 	ctx, cancel := context.WithTimeout(c.ctx, writeTimeout)
 	defer cancel()
-	return c.writeWS(ctx, b)
+	start := time.Now()
+	err := c.writeWS(ctx, b)
+	if err == nil {
+		c.bytesWritten.Add(int64(len(b)))
+		storeMax(&c.largestWrite, int64(len(b)))
+	}
+	storeMax(&c.longestWrite, int64(time.Since(start)))
+	return err
+}
+
+// storeMax raises v to n if n is larger.
+func storeMax(v *atomic.Int64, n int64) {
+	for {
+		old := v.Load()
+		if n <= old || v.CompareAndSwap(old, n) {
+			return
+		}
+	}
 }
 
 // writeFrameWhole writes a frame's every piece back to back: the Close frame, after which nothing else is written.
 func (c *conn) writeFrameWhole(f *linkpb.Frame) error {
-	msgs, err := encodeFrame(f, maxFrameBytes, func() uint64 { return c.outID.Add(1) })
+	msgs, err := encodeFrame(f, sendPieceBytes, func() uint64 { return c.outID.Add(1) })
 	if err != nil {
 		return err
 	}
@@ -723,23 +754,54 @@ func (c *conn) pings() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.ctx.Err() == nil {
+		c.readAtPing.Store(c.bytesRead.Load())
 		c.pingTimer = time.AfterFunc(c.g.cfg.PingInterval, c.ping)
 	}
 }
 
+// ping pings a runner the gateway has not heard from since the timer last fired (§15.15). A runner that sent anything
+// meanwhile is alive, and is not asked for a pong: an uploading runner on a slow path would write it behind its own
+// upload, and the library gives a pong 5 s, its wait for the write lock included.
 func (c *conn) ping() {
+	read := c.bytesRead.Load()
+	if c.readAtPing.Swap(read) != read {
+		c.rearmPing()
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.ctx, c.g.cfg.PingTimeout)
 	start := time.Now()
 	err := c.ws.Ping(ctx)
 	cancel()
 	if err != nil {
-		if c.ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+		if c.ctx.Err() != nil || !errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		// The library gives a ping's write 5 s at most, the wait for its write lock included, and words the three ways
+		// a ping runs out of time apart; TestPingWrittenBehindABlockedWrite and TestAPingWhoseWriteStallsIsAWriteTimeout
+		// hold it to the wording.
+		switch msg := err.Error(); {
+		case strings.Contains(msg, "failed to acquire lock"):
+			// The writer's message held the lock all that time: the ping was never written, and the connection is open.
+			// The writer's own write timeout ends a connection that does not move.
+			c.g.metrics.pingWriteBlocked.inc()
+			c.rearmPing()
+		case strings.Contains(msg, "failed to wait for pong"):
 			c.closeWith(linkpb.CloseCode_CLOSE_CODE_UNSPECIFIED, "no answer to a ping within "+c.g.cfg.PingTimeout.String(), 0,
 				websocket.StatusPolicyViolation, "ping_timeout")
+		default:
+			// The ping's own write passed its deadline, and the library has closed the connection.
+			c.g.metrics.pingWriteBlocked.inc()
+			c.setReason("write_timeout")
+			_ = c.ws.CloseNow()
 		}
 		return
 	}
 	c.g.metrics.rtt.observe(time.Since(start))
+	c.rearmPing()
+}
+
+// rearmPing sets the next ping, unless the connection has ended.
+func (c *conn) rearmPing() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.ctx.Err() == nil {
@@ -800,7 +862,8 @@ func (c *conn) finish() {
 	}
 	c.g.metrics.connections.add(-1)
 	c.g.metrics.disconnects.inc(reason)
-	c.log.Info("connection closed", "reason", reason)
+	c.log.Info("connection closed", "reason", reason, "bytesRead", c.bytesRead.Load(), "bytesWritten", c.bytesWritten.Load(),
+		"largestWrite", c.largestWrite.Load(), "longestWrite", time.Duration(c.longestWrite.Load()).String())
 }
 
 // logFrame writes a frame's summary when LINK_FRAME_LOG asks for it: "all" for every frame, "lifecycle" for those

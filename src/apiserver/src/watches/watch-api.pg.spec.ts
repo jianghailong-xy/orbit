@@ -215,7 +215,7 @@ async function session(h: Harness, ownerId: string, shape: SessionShape = {}): P
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","turn_state","end_reason",
                            "completed_at","archived_at","deleted_at","updated_at", "finished_at")
      VALUES ($1,'watched session','p',$2,$2,(CASE ($3)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$4,$5,$5,$6,now(),
-             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
+             CASE WHEN $3::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, ownerId, shape.status ?? 'RUNNING', shape.endReason ?? null, shape.completedAt ?? null, shape.deletedAt ?? null],
   );
   for (let n = 0; n < (shape.pendingApprovals ?? 0); n += 1) {

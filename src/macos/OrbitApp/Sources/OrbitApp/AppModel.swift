@@ -569,6 +569,9 @@ final class AppModel {
     /// The wiki chat beside every wiki page: its round button, its panel and the cards it draws
     /// (docs/wiki-chat-design.md §9).
     private(set) var wikiChat: WikiChatModel?
+    /// The Drive chat beside the drive's files (board docs/mocks/drive-chat/02-native): the Wiki chat's model, panel and
+    /// button, docked on Drive (`ChatOrigin.drive`).
+    private(set) var driveChat: WikiChatModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
     /// What the next cold launch draws first (`persistLaunchSnapshot` / `restoreLaunchSnapshot`),
@@ -685,6 +688,7 @@ final class AppModel {
         driveModel.openSession = { [weak self] id in self?.route(to: .session(id)) }
         drive = driveModel
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
+        driveChat = WikiChatModel(baseURL: url, tokenStore: tokenStore, origin: .drive)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
         launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
@@ -1408,6 +1412,8 @@ final class AppModel {
         if selectedSection == .wiki {
             if let wiki { Task { await wiki.reloadLoaded() } }
             if let wikiChat { Task { await wikiChat.reloadLoaded() } }
+        } else if selectedSection == .drive, let driveChat {
+            Task { await driveChat.reloadLoaded() }
         } else if let wiki, wiki.spacesState.hasLoaded {
             Task { await wiki.loadSpaces() }
         }
@@ -1538,7 +1544,11 @@ final class AppModel {
             if syncs {
                 drive?.nudge(syncs: true)
             } else {
-                whenSeen("drive") { $0.drive?.nudge(syncs: false) }
+                whenSeen("drive") {
+                    $0.drive?.nudge(syncs: false)
+                    // A Drive chat's write: its change cards and the list's marks are read again.
+                    $0.driveChat?.nudge()
+                }
             }
         case .wiki:
             whenSeen("wiki") {
@@ -1909,7 +1919,8 @@ final class AppModel {
         // The console on top of the stack, else the wiki chat a panel beside a wiki page shows: it streams
         // while the panel is open on the Wiki, as a console on top would (`WikiChatHost` re-syncs as the
         // panel moves, and as the Wiki comes and goes).
-        let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID : nil)
+        let id = focusedConsoleSessionID ?? (selectedSection == .wiki ? wikiChat?.focusedSessionID
+            : selectedSection == .drive ? driveChat?.focusedSessionID : nil)
         // Every focused console needs an exact-detail fallback, not only cold deep links. If an
         // Open row is filed or purged on another client, the next list refresh removes it; retaining
         // this last loaded snapshot makes `needsExactRefresh` detect that absence and GET the new
@@ -2618,6 +2629,17 @@ final class AppModel {
     /// from belongs to the old workspace, so the reborn draft files in none.
     func composeWithAgent(_ id: String) {
         show(.compose(agentID: id, folderID: nil), agent: id)
+    }
+
+    /// A place picked from the draft's place pill (docs/mocks/new-session-place 02, option D): this
+    /// workspace's draft refiled in `folderID` or in none, or another workspace's draft opened in one of
+    /// its folders — the hero's workspace switch, landing in the folder in the same move.
+    func composeInFolder(_ folderID: String?, of agentID: String) {
+        if agentID != selectedAgentID {
+            show(.compose(agentID: agentID, folderID: folderID), agent: agentID)
+        } else {
+            nav.fileDraft(agentID: agentID, folderID: folderID)
+        }
     }
 
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
@@ -4080,35 +4102,29 @@ final class AppModel {
 
 
     /// Move a session to another workspace, filed in one of its folders or in none — the
-    /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
-    /// ended, then move it (`SessionWorkspaceMove.run`). `phase` follows those steps for the panel.
+    /// confirmation's Move (§5.3–5.4). One request: the server lets a held session go first and waits
+    /// for its runner to commit what it left (`POST /sessions/:id/move`), so nothing here ends it.
     ///
     /// Nil once the session is there: every loaded copy of the row names the new workspace, which
     /// takes it out of the list it was moved from at once, the toast says where it went, and the
     /// lists are read again behind it. Otherwise why not, as the sentence the panel shows — the lists
-    /// are read again all the same, since an End and Move stopped after the end has still ended the
-    /// session.
-    func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?,
-                     endingFirst: Bool,
-                     phase: @escaping (SessionWorkspaceMove.Phase) -> Void) async -> String? {
+    /// are read again all the same, since a move that stopped waiting may have left the session released.
+    func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?) async -> String? {
         guard let api else { return SessionMoveCopy.moveFailed(APIError.notConfigured) }
         let name = toastSessionTitle(id)
-        let outcome = await SessionWorkspaceMove.run(
-            endingFirst: endingFirst,
-            end: { try await api.endSession(id) },
-            session: { try await api.session(id) },
-            move: { try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID) },
-            phase: { phase($0) })
-        defer { Task { await reloadSessionLists() } }
-        switch outcome {
-        case .moved:
-            patchSessionWorkspace(id, to: target, folder: folderID)
-            showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
-                      tone: .info, icon: "folder")
-            return nil
-        case .failed(let reason):
-            return reason
+        let failure: String?
+        do {
+            try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID)
+            failure = nil
+        } catch {
+            failure = SessionMoveCopy.moveFailed(error)
         }
+        defer { Task { await reloadSessionLists() } }
+        if let failure { return failure }
+        patchSessionWorkspace(id, to: target, folder: folderID)
+        showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
+                  tone: .info, icon: "folder")
+        return nil
     }
 
     /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`

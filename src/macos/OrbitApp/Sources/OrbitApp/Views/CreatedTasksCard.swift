@@ -82,7 +82,7 @@ struct CreatedTasksCard: View {
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if row.watched { eye(stale: row.stale) }
-                if let pill = row.pill { TaskStatusPill(pill: pill).fixedSize() }
+                trailing(row.pill)
             } else {
                 Text(SessionCreatedTasksCopy.title)
                     .font(.orbitLabel.weight(.semibold))
@@ -106,7 +106,7 @@ struct CreatedTasksCard: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if let pill = band.row.pill { TaskStatusPill(pill: pill).fixedSize() }
+                    trailing(band.row.pill)
                 } else {
                     Spacer(minLength: 4)
                 }
@@ -121,6 +121,18 @@ struct CreatedTasksCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(open ? "Hides the tasks" : "Shows the tasks")
+    }
+
+    /// The line's right edge: a running task is the spinner alone, in the column where the Agents and
+    /// Background rows draw theirs; any other state is its pill. The opened list keeps every pill.
+    @ViewBuilder private func trailing(_ pill: TaskPill?) -> some View {
+        if let pill {
+            if pill.kind == .running {
+                SpinnerGlyph(color: .accentColor).accessibilityLabel(pill.label)
+            } else {
+                TaskStatusPill(pill: pill).fixedSize()
+            }
+        }
     }
 
     /// A watched row's eye: the session waits on the task; orange while that watch goes unchecked.

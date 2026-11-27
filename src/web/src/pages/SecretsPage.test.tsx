@@ -24,7 +24,11 @@ globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {
 
 const MINUTE = 60_000;
 const DAY = 86_400_000;
-const at = (ms: number) => new Date(Date.now() + ms).toISOString();
+// The page writes a time for today and a date otherwise, so the fixtures hang off a fixed local noon, and
+// the page reads that clock too: from the real clock, "saved 10 minutes ago" fell on yesterday from local
+// midnight to 00:10 and the row read a date where the test expects a time.
+const NOW = new Date(2026, 10, 18, 12, 0, 0).getTime();
+const at = (ms: number) => new Date(NOW + ms).toISOString();
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 function grant(n: number, extra: Partial<SecretGrant>): SecretGrant {
@@ -88,6 +92,9 @@ let grants: SecretGrant[] = [];
 let saved: SavedSecret[] = [];
 
 beforeEach(() => {
+  // Only Date: the page's waits and the test's own waitFor keep real timers.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
   toast.success.mockReset();
   toast.error.mockReset();
   grants = [ACTIVE, NOT_FETCHED, FETCHED, OFFLINE, REMOVING, UNCONFIRMED, REMOVED];
@@ -112,6 +119,7 @@ let root: Root | null = null;
 let host: HTMLElement;
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root?.unmount());
   root = null;
   host?.remove();

@@ -228,7 +228,7 @@ async function session(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id",
                             "task_id","turn_state","last_turn_at","dispatch_origin","created_at","updated_at", "finished_at")
      VALUES ($1,'a session','p',$2,$2,$3,$4,$5,(CASE ($6)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$7,'USER',$8,now(),
-             CASE WHEN $6::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN $7::timestamp END)`,
+             CASE WHEN $6::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN $7::timestamp END)`,
     [id, ownerId, shape.workspaceId, shape.runnerId ?? null, shape.taskId ?? null, shape.status ?? 'SUCCEEDED',
       utc(shape.lastTurnAt ?? minutesAgo(30)), utc(minutesAgo(24 * 60 * 3))],
   );

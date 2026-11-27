@@ -256,7 +256,7 @@ async function session(h: Harness, ownerId: string, shape: SessionShape): Promis
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id",
                             "task_id","turn_state","last_turn_at","dispatch_origin","created_at","updated_at","wiki_chat_space_id", "finished_at")
      VALUES ($1,$2,'p',$3,$3,$4,$5,$6,(CASE ($7)::text WHEN 'PENDING' THEN 'QUEUED' WHEN 'RUNNING' THEN 'IN_FLIGHT' WHEN 'INTERRUPTED' THEN 'ABANDONED' END),$8,'USER',$9,now(),$10,
-             CASE WHEN $7::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN COALESCE($8::timestamp, $9::timestamp) END)`,
+             CASE WHEN $7::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN COALESCE($8::timestamp, $9::timestamp) END)`,
     [
       id,
       shape.title ?? 'a session',

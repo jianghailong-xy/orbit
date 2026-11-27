@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { Client } from 'pg';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { restoreStatusColumn } from '../test-support/session-d3-database';
 
 /**
  * 0372 against a real server: the Gemini preset's rows leave Codex for the Antigravity CLI.
@@ -34,6 +35,9 @@ test('0372 moves the Gemini preset onto Antigravity', { skip, concurrency: 1, ti
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
+  // The replayed migration predates deploy D4 (migration 1711), which dropped session.status: it runs on the
+  // database deploy D3 left, as the D4 down script restores it.
+  await restoreStatusColumn(sql);
   t.after(() => sql.end().catch(() => undefined));
 
   const one = async <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>

@@ -1240,15 +1240,17 @@ final class ConsoleModel {
     /// persisted because no corresponding runner event exists.
     private(set) var localStatusCards: [LocalStatusCard] = []
 
-    /// Newest persisted events pulled for the initial paint (web parity — `TAIL_PAGE`). See `run()`.
+    /// Newest persisted events pulled for the initial paint, and the one page a reopen reads to
+    /// close its gap (web parity — `TAIL_PAGE`). See `run()` and `catchUpOnReopen()`.
     private static let tailPage = 200
     /// Page size for scroll-up history fetches (web parity — `OLDER_PAGE`). See `loadOlder()`.
     private static let olderPage = 200
-    /// How many `olderPage`-sized pages a reconnect will spend closing its gap over REST before it
-    /// re-seeds from the tail instead (5 × 200). Deliberately the server's own budget: it answers a
-    /// gap wider than `SSE_GAP_CAP` (1000) with `resync` rather than replaying it, so a client that
-    /// paged past 1000 and kept going would be spending transfers on events the server would have
-    /// already told it to drop. See `catchUpToTail`.
+    /// How many `olderPage`-sized pages a DROPPED stream's catch-up will spend closing its gap over
+    /// REST before it re-seeds from the tail instead (5 × 200). Deliberately the server's own budget:
+    /// it answers a gap wider than `SSE_GAP_CAP` (1000) with `resync` rather than replaying it, so a
+    /// client that paged past 1000 and kept going would be spending transfers on events the server
+    /// would have already told it to drop. A reopen never pages through its gap — it reads one page
+    /// and re-seeds from the tail when wider (`catchUpOnReopen`). See `catchUpToTail`.
     private static let catchUpPages = 5
     /// Per-request timeout for the small page reads that gate a first paint or a reconnect's
     /// catch-up (see `APIClient.makeRequest`). 20s is several times a healthy gzipped page on a
@@ -1276,13 +1278,14 @@ final class ConsoleModel {
     let attachments: AttachmentImageStore
 
     init(sessionID: String, agentID: String? = nil, baseURL: URL, tokenStore: TokenStore,
-         attachments: AttachmentImageStore, restoring reducer: TranscriptReducer? = nil) {
+         attachments: AttachmentImageStore, restoring reducer: TranscriptReducer? = nil,
+         session: URLSession = .orbitREST) {
         self.sessionID = sessionID
         self.agentID = agentID
         self.draftAgent = nil
         self.draftFolderID = nil
         self.attachments = attachments
-        let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+        let api = APIClient(baseURL: baseURL, tokenStore: tokenStore, session: session)
         self.api = api
         self.worktree = WorktreeModel(sessionID: sessionID, api: api)
         self.mainCheckout = MainCheckoutModel(sessionID: sessionID, api: api)
@@ -1600,11 +1603,15 @@ final class ConsoleModel {
                 Task { [weak self] in await self?.loadContextIfUnread() }
             }
             isReconnect = true
-            // Close a large gap over compressed REST pages BEFORE the stream opens — see
-            // `catchUpToTail` for why a big gap must not ride the SSE replay. Runs on the first
-            // connect of a restored window and after any failed attempt; the healthy reconnects
-            // (`ended`, a kick, a just-re-seeded `resync`) have nothing to close.
-            if catchUpPending || catchUpAfterFailure {
+            // Close a large gap BEFORE the stream opens. A restored window reads its gap in one
+            // page (`catchUpOnReopen`, web parity 4e53172f02); only a failed attempt pages through
+            // what it missed (`catchUpToTail`). See each for why a big gap must not ride the SSE
+            // replay. Runs on the first connect of a restored window and after any failed attempt;
+            // the healthy reconnects (`ended`, a kick, a just-re-seeded `resync`) have nothing to
+            // close.
+            if catchUpPending {
+                await catchUpOnReopen()
+            } else if catchUpAfterFailure {
                 await catchUpToTail()
             }
             catchUpPending = false
@@ -1716,6 +1723,34 @@ final class ConsoleModel {
                 try? await Task.sleep(nanoseconds: UInt64(300 * (attempt + 1)) * 1_000_000)
             }
         }
+    }
+
+    /// Bring a restored window up to the session's newest event in ONE page read before the stream
+    /// opens (web parity — 4e53172f02, `catchUp`). A gap that fits one page lands in a single
+    /// publish and the stream opens past its new max seq. A gap wider than one page is NOT walked a
+    /// page and a publish at a time — the reader watched that as the conversation fast-forwarding
+    /// (owner report 2026-11-23) — so at the tail the kept window is dropped and re-seeded from a
+    /// tail page, exactly as a cold open seeds, and the reader goes straight to the latest message.
+    /// The dropped middle is history the reader pages back to by scrolling up.
+    ///
+    /// A reader who has scrolled up keeps today's paged catch-up (`catchUpToTail`): it folds the gap
+    /// below what they are reading instead of swapping the window under them. A failed read leaves
+    /// the window untouched and returns, so the stream resumes from the kept max seq and replays the
+    /// gap — today's fallback.
+    func catchUpOnReopen() async {
+        guard !sessionID.isEmpty, reducer.state.maxSeq > 0 else { return }
+        if readingHistory {
+            await catchUpToTail()
+            return
+        }
+        guard let page = try? await api.eventPageAfter(sessionID: sessionID, after: reducer.state.maxSeq,
+                                                       limit: Self.tailPage, timeout: Self.pageTimeout) else { return }
+        if page.after != nil, !readingHistory {
+            await replaceWindow()
+            return
+        }
+        reducer.appendNewer(page)
+        publishStateNow()
     }
 
     /// Close a large gap between the loaded window and the session's newest event BEFORE the live
@@ -3235,7 +3270,8 @@ final class ConsoleModel {
     func send(authoritative: RunStatus? = nil, overrideText: String? = nil,
               overrideAttachments: [TurnAttachment]? = nil, takesStagedAttachments: Bool = false,
               queueForNextTurn: Bool = false,
-              wikiContext: WikiChatContext? = nil, accepted onAccepted: (@MainActor () -> Void)? = nil) async {
+              wikiContext: WikiChatContext? = nil, driveContext: DriveChatContext? = nil,
+              accepted onAccepted: (@MainActor () -> Void)? = nil) async {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
         let fromComposer = overrideText == nil
@@ -3245,6 +3281,7 @@ final class ConsoleModel {
         // A wiki chat's composer: the page and the selection its attachment row shows go beside the words, and leave
         // the row once the server took them. A sentence handed in (a card's own) carries neither.
         let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)
+        let driveContext = driveContext ?? (fromComposer ? wikiChat?.driveContext() : nil)
         let onAccepted = onAccepted ?? (fromComposer ? wikiChat?.accepted : nil)
         // A chip is staged the moment an image is picked, while its bytes are still going up (see
         // `attach`). Sending in that window would leave the image behind for good: only chips that
@@ -3427,6 +3464,7 @@ final class ConsoleModel {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds,
                                               queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
+                                              driveContext: driveContext,
                                               skipTranslation: skipTranslation,
                                               optimizedTranslation: optimizedTranslation)
             if fromComposer { promptOptimizer.sent() }
@@ -3729,6 +3767,7 @@ final class ConsoleModel {
     private func postTurn(resuming: Bool, clientTurnId: String, text: String, shell: Bool,
                           attachmentIds: [String], queueForNextTurn: Bool = false,
                           wikiContext: WikiChatContext? = nil,
+                          driveContext: DriveChatContext? = nil,
                           skipTranslation: Bool = false,
                           optimizedTranslation: String? = nil) async throws -> TurnAccepted {
         // Built once, for the same reason the endpoint is chosen once: every attempt must send the
@@ -3752,11 +3791,13 @@ final class ConsoleModel {
                                           stopSessionId: confirmedStopSessionID,
                                           // A wiki chat's page and selection, which revive it too.
                                           wikiContext: wikiContext,
+                                          driveContext: driveContext,
                                           skipTranslation: skipTranslation ? true : nil,
                                           optimizedTranslation: optimizedTranslation)
         let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
                                                  shell: shell, attachmentIds: attachmentIds,
                                                  queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
+                                                 driveContext: driveContext,
                                                  skipTranslation: skipTranslation,
                                                  optimizedTranslation: optimizedTranslation)
         // A run that is letting go frees the task within a couple of seconds, so this waits it out
@@ -7114,6 +7155,8 @@ func composerThumbnail(from data: Data, maxDimension: CGFloat = 96) -> Data? {
 /// the create its first message goes through instead of a session's.
 struct WikiChatComposing {
     let context: @MainActor () -> WikiChatContext?
+    /// A Drive chat's folder and files (board drive-chat 02), beside the words; nil on the Wiki.
+    var driveContext: @MainActor () -> DriveChatContext? = { nil }
     let accepted: @MainActor () -> Void
     /// True once the chat is made; false when it was refused, which the panel says.
     var create: (@MainActor (WikiChatLogic.FirstMessage) async -> Bool)?

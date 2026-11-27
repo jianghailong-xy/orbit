@@ -16,7 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentRunner } from '../runner-api/current-runner.decorator';
 import { RUNNER_CALLER_HEADER } from '../runner-api/runner-link-required';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runner-presence';
+import { RUNNER_BEATS, runnerIsOnline, runnerPresentAt } from '../runners/runner-presence';
 import { legacySessionStatus, LEGACY_STATUS_SELECT, readLandingSettlements } from '../sessions/session-legacy-words';
 import { turnStateOf } from '../sessions/session-turn-state';
 
@@ -122,7 +122,7 @@ export async function readMachines(prisma: PrismaService, ownerId: string, now =
   });
   return {
     machines: runners.map((runner) => {
-      const beat = runnerLastBeatAt(runner);
+      const beat = runnerPresentAt(runner);
       return {
         id: runner.id,
         name: runner.displayName || runner.name,

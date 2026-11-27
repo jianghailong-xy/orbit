@@ -3,7 +3,7 @@ import { toUuid } from '@orbit/shared';
 
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import type { PrismaService } from '../prisma/prisma.service';
-import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from '../runners/runner-presence';
+import { RUNNER_BEATS, runnerIsOnline, runnerPresentAt } from '../runners/runner-presence';
 
 /**
  * The confirmation cards a session deletes one of the account's runners or workspaces through
@@ -106,7 +106,7 @@ export async function runnerToDelete(
     name: runner.name,
     displayName: runner.displayName,
     online: runnerIsOnline(runner, Date.now()),
-    lastHeartbeatAt: runnerLastBeatAt(runner)?.toISOString() ?? null,
+    lastHeartbeatAt: runnerPresentAt(runner)?.toISOString() ?? null,
     workspaces: runner.workspaces,
   };
 }

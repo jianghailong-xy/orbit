@@ -1093,9 +1093,7 @@ private struct EvidenceDecisionCard: View {
                            title: EvidenceDecisions.heading(standing), tone: .blue)
             // The ruler card's mark, for its reason: this card is Orbit's rather than the agent's
             // typing, and a press goes to the door rather than into the conversation.
-            Text(CriteriaDecisions.provenanceLabel)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            provenance(standing)
             facts(standing)
 
             ApprovalActions {
@@ -1115,9 +1113,7 @@ private struct EvidenceDecisionCard: View {
         ApprovalReviewLayout(title: EvidenceDecisions.heading(standing),
                              symbol: "checkmark.seal.fill", tone: .blue,
                              summary: EvidenceDecisions.heading(standing)) {
-            Text(CriteriaDecisions.provenanceLabel)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            provenance(standing)
             facts(standing)
             if case .sent(let sent) = standing.state {
                 SentToCoordinatorLine(sent: sent)
@@ -1135,6 +1131,20 @@ private struct EvidenceDecisionCard: View {
 
     /// The card's body: the row, or — once the read no longer publishes one — its address and why
     /// it can no longer be answered.
+    /// The mark, and when the version was submitted at the line's other end (board
+    /// evidence-waits-for-coordinator: `FROM ORBIT … submitted 7:59 PM`).
+    private func provenance(_ standing: EvidenceDecisionStanding) -> some View {
+        HStack(spacing: 8) {
+            Text(CriteriaDecisions.provenanceLabel)
+            Spacer(minLength: 0)
+            if let submitted = EvidenceDecisions.submittedLine(standing) {
+                Text(submitted).lineLimit(1)
+            }
+        }
+        .font(.orbitLabel).foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     @ViewBuilder private func facts(_ standing: EvidenceDecisionStanding) -> some View {
         if let row = standing.row {
             EvidenceDecisionFacts(console: console, row: row)

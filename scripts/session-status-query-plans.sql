@@ -1,3 +1,6 @@
+-- D2-era: this reads or writes session.status, which deploy D4 (migration 1711) dropped. It runs on a database of
+-- deploy D1 or D2 only, and is kept for the record of those deploys.
+--
 -- The query plans of docs/session-status-retirement-plan.md §4.5: every query it names, spelled on the stored word
 -- (`word`, what the code before deploy D2 sends) and on the facts (`facts`, the plan's §2.1 translation), run with
 -- EXPLAIN (ANALYZE, BUFFERS) for the runner with the most sessions.

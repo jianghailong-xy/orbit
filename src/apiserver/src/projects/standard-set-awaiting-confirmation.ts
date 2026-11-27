@@ -39,7 +39,20 @@ export async function projectsAwaitingStandardSetConfirmation(
   ownerId: string,
   projectIds: readonly string[],
 ): Promise<Set<string>> {
-  if (projectIds.length === 0) return new Set();
+  return new Set((await standardSetsAwaitingConfirmation(tx, ownerId, projectIds)).keys());
+}
+
+/**
+ * The same projects, each with the digest of the set standing now — the version its confirmation card
+ * asks about, which the push that tells the owner of it is keyed on (`push/owner-cards.ts`), so a set
+ * that moves again is asked about again and the same set is asked about once.
+ */
+export async function standardSetsAwaitingConfirmation(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  projectIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (projectIds.length === 0) return new Map();
 
   // Started ones only: an unstarted project's criteria are confirmed by the start itself, on the
   // start card, which `projectsReadyToStart` counts.
@@ -48,7 +61,7 @@ export async function projectsAwaitingStandardSetConfirmation(
     select: { id: true },
   });
   const ids = open.map((project) => project.id);
-  if (ids.length === 0) return new Set();
+  if (ids.length === 0) return new Map();
 
   // Three reads whatever the number of projects, the shape `countPendingEvidenceJudgments` next
   // door uses and for the same reason: the count is per page of the session list, and a per-project
@@ -98,12 +111,13 @@ export async function projectsAwaitingStandardSetConfirmation(
     }
   }
 
-  const awaiting = new Set<string>();
+  const awaiting = new Map<string, string>();
   for (const { projectId } of withTasks) {
     const criteria = criteriaFromDefinitions(stated.get(projectId) ?? []);
     if (criteria.length === 0) continue;
-    if (confirmedDigest.get(projectId) === standardSetVersion(criteria).digest) continue;
-    awaiting.add(projectId);
+    const { digest } = standardSetVersion(criteria);
+    if (confirmedDigest.get(projectId) === digest) continue;
+    awaiting.set(projectId, digest);
   }
   return awaiting;
 }

@@ -67,7 +67,7 @@
  * (PENDING, RUNNING), held-idle sets (AWAITING_INPUT, INTERRUPTED), the held set and slot counts. They name no released
  * value, and are counted because the project's criterion JGPQFXIZvP1MO137FGfPP counts every hand-written live or
  * terminal status set, not because they decide from a terminal value. INTERRUPTED is counted wherever it stands for the
- * same reason: session_release_fact_chk (migrations 1401, 1402) makes it a held status, never a released one.
+ * same reason: it is a held status, never a released one.
  *
  * The spec holds the split to the source: a file that names a released value (SUCCEEDED, FAILED or CANCELLED, or for
  * the derived states ENDED, COMPLETED, DORMANT or DELETED, through an enum or in a session set) is in one of sections
@@ -78,7 +78,7 @@
  *  the word: the refused source and the end of a queued session left this section with it; the rest still decide in
  *  the same statement from the word the runner or the reaper reports, and answer it. */
 export const RELEASE_WRITERS: Readonly<Record<string, number>> = {
-  // RELEASED_SESSION_STATUSES: the statuses a release writes, which session_release_fact_chk ties to `finished_at`
+  // RELEASED_SESSION_STATUSES: the words of a released row (`finished_at` set)
   // and the runner's finalize accepts (its TERMINAL); isReleasedStatus builds spec rows from it.
   'src/apiserver/src/common/session-release.ts': 4,
   // landingContainerStatus: the status both container writers write, and the LANDING detail shows before its row exists.

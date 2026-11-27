@@ -57,6 +57,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { KIMI_ACCOUNT_MOVE_V1, RunnerApiController } from './runner-api.controller';
 import '../test-support/dequeue-under-lease';
 import { turnStateOfWord } from '../sessions/session-turn-state';
+import { wordSql } from '../test-support/session-word';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -272,7 +273,7 @@ test('a Kimi session that has said something moves to another Kimi account only 
    *  timestamp without time zone holding UTC, which `pg` would read as local time: read as epoch. */
   async function row(sessionId: string) {
     const r = await sql.query(
-      `SELECT status, kimi_account, kimi_account_pinned, pool_switch_notice, error,
+      `SELECT ${wordSql()} AS status, kimi_account, kimi_account_pinned, pool_switch_notice, error,
               (EXTRACT(EPOCH FROM retry_at) * 1000)::float8 AS retry_ms
          FROM "session" WHERE id = $1::uuid`,
       [sessionId],

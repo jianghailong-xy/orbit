@@ -9,7 +9,7 @@ import { type Hit, readSchema, scanSessionStatus } from '../test-support/session
  * Criterion: no apiserver code reads or writes `session.status` (docs/session-status-retirement-plan.md §5, task T1).
  * The readers and writers moved onto `phase`, `turn_state` and the facts beside them (tasks T7 to T12, and T14 for the
  * writers, deploy D3), and the allow-list that counted the uses left on the way is gone: no product file may hold one.
- * The stored word is written only by migration 1671's trigger, for a rollback to deploy-2 code, until T15 drops it.
+ * Migration 1711 (task T15, deploy D4) dropped the column and its type; session-status-column.pg.spec.ts holds that.
  *
  * Read: every .ts file under src/apiserver/src except tests (.spec, .test, .it, .e2e), `.fixture(s).ts`, test-support
  * and __tests__. Comments are stripped first. What counts, each reported as `file:line: …`:
@@ -30,8 +30,8 @@ import { type Hit, readSchema, scanSessionStatus } from '../test-support/session
  * What text cannot see: a row handed to a function under another name and only compared with a bare word
  * (`run.status !== 'FAILED'`), a status copied into a differently named fact (`runStatus`), a query argument built
  * in another file with no `Prisma.` type, and Prisma rows spread into a payload. The field has left schema.prisma
- * (T14), so `tsc` refuses every such Prisma read or write, and the column-less PG spec (T15) closes the raw SQL;
- * session-status-column.pg.spec.ts holds the database's own objects.
+ * (T14), so `tsc` refuses every such Prisma read or write, and the column-less PG spec
+ * (session-status-column.pg.spec.ts, T15) closes the raw SQL and the database's own objects.
  */
 
 const REPO = path.resolve(__dirname, '../../../..');
@@ -104,6 +104,8 @@ test('a planted use of each kind is reported at its line', () => {
     ["db.$executeRaw`UPDATE session s SET status = 'RUNNING', turn_state = 'IN_FLIGHT'`;", ['1:write']],
     ['db.$executeRaw`INSERT INTO "session" ("id",\n  "status") VALUES (1, 2)`;', ['2:write', '2:alone']],
     ["const sql = (session) => `${session}.\"status\" <> 'AWAITING_INPUT'`;", ['1:read']],
+    // The Run now gate as deploy D3 left it: a lateral naming no table, its PENDING a word other tables share.
+    ["const gate = sql`SELECT ${count} FROM (SELECT s.batch_max_concurrent AS batch_limit) g\n  WHERE s.status = 'PENDING' AND s.cancel_requested_at IS NULL`;", ['2:read']],
     ["const sql = (s) => `${s}.\"status\" = 'RUNNING'::\"run_status\"`;", ['1:read']],
     ["const sql = 'SELECT 1 WHERE $1 = ANY($2::run_status[])';", ['1:read']],
   ];
