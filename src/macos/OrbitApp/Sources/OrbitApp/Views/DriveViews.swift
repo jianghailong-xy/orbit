@@ -136,7 +136,7 @@ private struct DriveListColumn: View {
         app.driveChat?.mark(entry.id) != nil && !model.selection.contains(entry.id)
     }
 
-        private var overlaysDetails: Bool {
+    private var overlaysDetails: Bool {
         guard let chat = app.driveChat, chat.presented, !chat.asSheet, model.selection.count == 1,
               overlayClosedFor != model.selection else { return false }
         return DriveChatLogic.detailsOverlay(chatOpen: true, windowWidth: Double(chat.windowWidth))

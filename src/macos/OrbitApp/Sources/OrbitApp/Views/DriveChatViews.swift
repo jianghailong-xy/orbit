@@ -149,7 +149,9 @@ struct DriveChatColumn: View {
                     panel(chat)
                     #endif
                 } else {
+                    // The whole column, so the button sits at its bottom right whatever the column draws (board ④).
                     base
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .overlay(alignment: .bottomTrailing) {
                             if shown { DriveChatButton(chat: chat, compact: false) }
                         }
