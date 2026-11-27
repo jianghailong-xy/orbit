@@ -257,6 +257,12 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
 .sent .to { color:var(--text-3); font-size:12.5px; margin-bottom:4px; display:flex; gap:5px; align-items:center; }
 .sent code { font:12px "JetBrains Mono",monospace; }
 .sent .ch { display:inline-flex; gap:5px; align-items:center; font-size:12.5px; color:var(--text-2); background:var(--fill-muted); border-radius:6px; padding:2px 8px; margin-bottom:6px; }
+
+.tbtn.prim { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:500; }
+.tbtn.prim.on { background:var(--brand-strong); border-color:var(--brand-strong); box-shadow:inset 0 1px 3px rgba(0,0,0,.25); }
+.tbtn.prim .badge { box-shadow:0 0 0 2px var(--brand); }
+.tbtn.prim.on .badge { box-shadow:0 0 0 2px var(--brand-strong); }
+.tbtn.prim .ring circle:first-child { stroke:rgba(255,255,255,.35); } .tbtn.prim .ring circle:last-child { stroke:#fff; }
 </style></head><body>
 <div class="board">
 <h1 class="bt">Drive · one type scale and rhythm with the session console</h1>
@@ -290,8 +296,8 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
         <span class="mk" style="margin-right:-4px">2</span>
         <div class="search"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
-        <div class="btn tint"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
-        <div class="tbtn" style="position:relative"><span class="mk abs" style="left:-10px;top:-12px">6</span><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div>
+        <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
+        <div class="tbtn prim" style="position:relative"><span class="mk abs" style="left:-10px;top:-12px">6</span><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div>
       </div>
     </div>
     <div class="body">
@@ -348,7 +354,7 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
 <h3>What changes, by mark</h3>
 <ol>
 <li><b>Header.</b> No full-width rule; padding 24px like the session column. The title shows the path: “Drive”, or “Drive / Books” inside a folder, with the parent in grey. It replaces the 12px breadcrumb line above the table, so the page names its place once and not three times.</li>
-<li><b>Controls</b>: Search, New folder, Upload, then the Agents toggle at the end, 34px with 14px text. Upload is tinted like the session list’s New session button, not solid blue. Search is named <b>“Search Drive”</b> (it said “Search all of Files”, an old name).</li>
+<li><b>Controls</b>: Search, New folder, Upload, then the Agents toggle at the end, 34px with 14px text. Agents is the page’s one primary (solid blue) button, because handing work to an agent is the main thing you do here; Upload and New folder are plain. Search is named <b>“Search Drive”</b> (it said “Search all of Files”, an old name).</li>
 <li><b>Tree</b> rows are 34px and 14px, with the same outline folder icons as the app nav. The selected row looks like a selected nav item.</li>
 <li><b>Rows</b> are 48px with 14px names. The table uses fixed column widths: Name takes the remaining space and the other columns stay together on the right, so a wide window no longer opens a gap of about 900px between “Last written by” and Size.</li>
 <li><b>Last written by</b> is grey (text-2), with a small agent glyph in place of the words “Agent in”. The session title turns into a blue underlined link only when you hover the row. Blue is left for selection and actions, as in the session list. The “···” menu also shows only on hover.</li>
@@ -396,8 +402,8 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
       <div class="acts">
         <div class="search"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
-        <div class="btn tint"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
-        <div class="tbtn"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents</div>
+        <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
+        <div class="tbtn prim"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents</div>
       </div>
     </div>
     <div class="body pane">
@@ -465,8 +471,8 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
       <div class="acts">
         <div class="search" style="width:220px"><svg class="ic sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Search Drive<kbd>/</kbd></div>
         <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5"/></svg>New folder</div>
-        <div class="btn tint"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
-        <div class="tbtn on"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div>
+        <div class="btn"><svg class="ic sm" viewBox="0 0 24 24"><path d="M12 16V5M7 10l5-5 5 5M5 19h14"/></svg>Upload</div>
+        <div class="tbtn prim on"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div>
       </div>
     </div>
     <div class="body" style="grid-template-columns:200px minmax(0,1fr)">
@@ -536,6 +542,10 @@ tr.pend td { color:var(--text-3); } .rowbar { display:inline-block; width:120px;
   <div class="fcard"><h5><span class="n2">4</span>Outcome</h5><p>Fixed: the row moves to Today. Stuck: it comes back to Needs you with the agent’s own question.</p><div class="win"><aside class="xpanel" style="height:auto"><div class="it"><svg class="ic st ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg><div style="min-width:0;flex:1"><div class="t1">books-stage/ <span class="to">→ Books</span></div><div class="t2">Fixed 4 files · synced again</div></div></div><div class="it att" style="border-top:1px solid var(--border-subtle)"><svg class="ic st warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><div style="min-width:0;flex:1"><div class="t1">books-stage/ <span class="to">→ Books</span></div><div class="t2">The agent needs you: <span style="color:var(--text-1)">0977/cover.png is owned by root. Allow sudo?</span></div><div class="acts2"><span class="sbtn pri">Answer in session</span></div></div></div></aside></div></div>
 </div>
 <div class="bstates" style="flex-wrap:wrap">
+    <div class="bs"><b>Closed</b><div class="win"><div class="tbtn prim"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents</div></div>Solid blue: the page’s primary action.</div>
+  <div class="bs"><b>Agents working</b><div class="win"><div class="tbtn prim"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" fill="none" stroke-width="2.4"/><circle cx="10" cy="10" r="7.5" fill="none" stroke-width="2.4" stroke-dasharray="28.7 47.1" transform="rotate(-90 10 10)" stroke-linecap="round"/></svg>Agents</div></div>A white ring in place of the icon.</div>
+  <div class="bs"><b>Needs you</b><div class="win"><div class="tbtn prim"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div></div>Amber count, ringed in the button’s blue.</div>
+  <div class="bs"><b>Open</b><div class="win"><div class="tbtn prim on"><svg class="ic sm" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9.5 13h.01M14.5 13h.01"/></svg>Agents<span class="badge">3</span></div></div>Darker blue, pressed in. Pressing it again closes the panel.</div>
   <div class="bs" style="width:100%"><b>Rules</b><div>
   ① <b>Agents</b> in the page header opens the right-hand panel on the chat (today’s Drive chat: chat picker ▾, New chat +, ×). ② The activity log is not in the chat. It is the <b>clock-list icon</b> in the panel’s top-right corner (mark 9), carrying the amber count; pressing it shows the log in the panel (frame 5), pressing it again goes back to the chat. ③ <b>Needs you</b> leaves only when acted on; held changes say <b>Review in chat</b> and open that chat. ④ <b>Have the agent fix it</b> (mark 10) sends the failures to the session that ran the sync with <code>POST /sessions/:id/turns</code>; that session’s machine is the only one that can read the source folder. If that session has ended or the sync has no session, the button reads <b>Fix in a new chat</b> and starts a Drive chat on the same workspace with the failures attached. ⑤ A handed-off failure shows under <b>Agents working on it</b>; it returns to Needs you if the agent asks something or fails again. ⑥ The sync list keeps ended syncs for 24 hours (<code>GET /drive/syncs</code>); an unfixed failure should stay longer than that, so Needs you needs it kept until it is handled.<br>
   <b>Server work:</b> the per-session log (as before), and keeping failed syncs past 24 h until handled. Sending the failures to a session needs nothing new.</div></div>
